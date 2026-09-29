@@ -39,7 +39,7 @@ struct TasksRowView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         if !row.projectHueKey.isEmpty {
                             Circle()
-                                .fill(Theme.color(AgendaHue.role(row.projectHueKey), scheme))
+                                .fill(Theme.color(KitHue.role(row.projectHueKey) ?? "cSlate", scheme))
                                 .frame(width: 6, height: 6)
                         }
                         Text(row.title)

@@ -128,6 +128,8 @@ Tests: `the_vault_seed_crosses_the_abi_and_a_malformed_one_is_refused`
 
 _Why this is a clause and not a schema note:_ clause 10 says five symbols and means it, and "backing up" is exactly the kind of flow that grows a symbol — it has a background half, a foreground half and a status. All three are arms on `call`. A shell adds a flow by encoding a different message, never by resolving a new name, and `buf breaking` governs the churn.
 
+**A restore takes the 24 words or the 64-byte seed, exactly one** (`RestoreRequest.phrase` or `.seed`, #1047 Q-1047-18): the seed is what a phone the synchronised keychain handed no words restores with. Both is `INVALID_REQUEST`, and so is a seed that is not 64 bytes; no refusal quotes a word or a byte. **A pair redeems the ticket's invite before it claims the lease** (#1047), because every signed call is `UnknownVault` until the laptop knows the vault.
+
 **A drain and a restore are cancellable; the other two are not**, and that follows from clause 4 rather than from a preference: `Cancel` names an unbounded operation, and a status read is a spool measurement. A drain has _two_ stops — `Cancel` is the member leaving the screen and `deadline_ms` is the operating system taking the window back — and they are different facts, which is why the deadline is not spelled as a cancellation the shell has to schedule.
 
 Test: `the_phones_four_flows_round_trip_through_call`
@@ -163,6 +165,14 @@ _Why this is a clause:_ a page read is one table, and Agenda's `upcoming` joins 
 **A denial is an answer and never an `Error`**: `denied` is an arm of `AppQueryResponse`, because a screen draws the ask. What a read cannot answer at all is the `Error` body: a search `limit` of zero is `BAD_ARGUMENT` with `ERROR_CODE_INVALID_REQUEST` (clause 4's rule for a page with no limit), as is a `tz` the bundled zone database does not know or an empty one on a vault whose settings name none — never an answer in UTC — and a read that reaches its own stated ceiling is `OK` with `ERROR_CODE_READ_BOUND_REACHED` — never a short answer that reads as a whole one.
 
 Test: `the_app_queries_round_trip_through_call` (and, below the ABI, `crates/core/src/app_query.rs`)
+
+## 4f. The 24 words are a request kind, and need no vault
+
+`phrase` (22) answers `PhraseResponse` and is **bounded** (#1047 E1). Its three ops are `mint {}` (24 BIP39 English words from the OS CSPRNG, `centraid_identity::RecoveryPhrase::generate`), `check { words }` (each cell trimmed, lowercased and judged a list word or not, up to four list words suggested for a prefix, and the phrase's verdict — `INCOMPLETE`, `TOO_MANY`, `UNKNOWN_WORD` with `first_unknown`, `BAD_CHECKSUM` or `VALID`, in that order) and `seed { words }` (the 64-byte seed, no passphrase). Like `restore`, it runs on a handle with **no vault** — `create: false` over a path with no file — because a first launch mints the words before any vault exists.
+
+`seed` over words that are not a phrase is `BAD_ARGUMENT` with an `ERROR_CODE_INVALID_REQUEST` body whose detail names a count or bip39's own reason, **never a word**; `phrase` is not a command and writes no receipt. The words and the seed cross only between this library and its own shell on the same device, to be shown once and to be stored in the synchronised secure store (clause 4b).
+
+Test: `the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault` (and, below the ABI, `crates/core/src/phone/phrase.rs`)
 
 ## 5. `next_event` surfaces bounded-queue backpressure as a health event
 

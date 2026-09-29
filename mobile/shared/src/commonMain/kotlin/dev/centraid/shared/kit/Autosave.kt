@@ -28,6 +28,9 @@ public interface AutosaveLens<S, D> : ContentLens<S, D> {
 
     public fun withAutosave(state: S, autosave: Autosave): S
 
+    /** The vault holds this subject: false for a new one its first save has not created. */
+    public fun stored(state: S): Boolean = true
+
     public fun baseline(state: S): D?
 
     public fun withBaseline(state: S, baseline: D?): S
@@ -80,7 +83,7 @@ public object AutosaveLaw {
         val a = l.autosave(s)
         val cleared = l.withSending(l.withBaseline(l.with(s, ReadContent.Loading(firstLoad = true)), null), null)
         return Step(
-            l.withAutosave(
+            put(l,
                 cleared,
                 Autosave(phase = Autosave.Phase.PHASE_CLEAN, edit_seq = a.edit_seq, saved_seq = a.edit_seq),
             ),
@@ -95,11 +98,11 @@ public object AutosaveLaw {
     public fun <S, D> loaded(l: AutosaveLens<S, D>, s: S, draft: D, revision: String): Step<S> {
         val a = l.autosave(s)
         if (unsaved(a) && l.dataOf(s) != null) {
-            return Step(l.withAutosave(s, a.copy(remote_changed = true)))
+            return Step(put(l, s, a.copy(remote_changed = true)))
         }
         val next = l.withSending(l.withBaseline(l.with(s, ReadContent.Data(draft)), draft), null)
         return Step(
-            l.withAutosave(
+            put(l,
                 next,
                 Autosave(
                     phase = Autosave.Phase.PHASE_CLEAN,
@@ -119,7 +122,7 @@ public object AutosaveLaw {
         val a = l.autosave(s)
         val seq = a.edit_seq + 1
         return Step(
-            l.withAutosave(
+            put(l,
                 l.with(s, ReadContent.Data(changed)),
                 a.copy(
                     phase = if (a.phase == Autosave.Phase.PHASE_SAVING) a.phase else Autosave.Phase.PHASE_DIRTY,
@@ -159,7 +162,7 @@ public object AutosaveLaw {
         if (!settled.committed) {
             // THE WORDS STAY. The sentence goes over them, never instead.
             return Step(
-                l.withAutosave(
+                put(l,
                     l.withSending(s, null),
                     a.copy(phase = Autosave.Phase.PHASE_REFUSED, failure = settled.failure, invoke_key = ""),
                 ),
@@ -171,16 +174,16 @@ public object AutosaveLaw {
         // Words typed while this save was in flight: save them now, their tick
         // has already come and gone against a SAVING editor.
         if (after.edit_seq > after.saved_seq) {
-            return save(l, l.withAutosave(cleared, after.copy(phase = Autosave.Phase.PHASE_DIRTY)))
+            return save(l, put(l, cleared, after.copy(phase = Autosave.Phase.PHASE_DIRTY)))
         }
         // Everything is saved. If the vault moved meanwhile, read it now.
         return if (after.remote_changed) {
             Step(
-                l.withAutosave(cleared, after.copy(phase = Autosave.Phase.PHASE_SAVED, remote_changed = false)),
+                put(l, cleared, after.copy(phase = Autosave.Phase.PHASE_SAVED, remote_changed = false)),
                 listOf(ScreenEffect.ReadPage(l.screenId, afterCursor = null)),
             )
         } else {
-            Step(l.withAutosave(cleared, after.copy(phase = Autosave.Phase.PHASE_SAVED)))
+            Step(put(l, cleared, after.copy(phase = Autosave.Phase.PHASE_SAVED)))
         }
     }
 
@@ -195,9 +198,19 @@ public object AutosaveLaw {
         if (keys.isNotEmpty() && l.subjectId(s) !in keys) return Step(s)
         val a = l.autosave(s)
         if (unsaved(a) || a.phase == Autosave.Phase.PHASE_SAVING) {
-            return Step(l.withAutosave(s, a.copy(remote_changed = true)))
+            return Step(put(l, s, a.copy(remote_changed = true)))
         }
         return Step(s, listOf(ScreenEffect.ReadPage(l.screenId, afterCursor = null)))
+    }
+
+    /**
+     * The autosave as the lens holds it, with its words ([Autosave.label]) for
+     * its phase. A subject the vault does not hold yet ([AutosaveLens.stored])
+     * is not "Saved" while it rests: nothing of it is anywhere (#1047 walk).
+     */
+    private fun <S, D> put(l: AutosaveLens<S, D>, s: S, a: Autosave): S {
+        val resting = a.phase == Autosave.Phase.PHASE_CLEAN && !l.stored(s)
+        return l.withAutosave(s, a.copy(label = if (resting) "" else KitWords.autosave(a)))
     }
 
     /** Are there words the vault does not have? */
@@ -208,17 +221,17 @@ public object AutosaveLaw {
         val a = l.autosave(s)
         val baseline = l.baseline(s)
         l.refusal(s, draft, baseline)?.let { failure ->
-            return Step(l.withAutosave(s, a.copy(phase = Autosave.Phase.PHASE_REFUSED, failure = failure)))
+            return Step(put(l, s, a.copy(phase = Autosave.Phase.PHASE_REFUSED, failure = failure)))
         }
         val input = l.input(s, draft, baseline)
             // NOTHING CHANGED against the baseline (an edit typed and undone):
             // saved, with no command.
             ?: return Step(
-                l.withAutosave(s, a.copy(phase = Autosave.Phase.PHASE_SAVED, saved_seq = a.edit_seq, failure = null)),
+                put(l, s, a.copy(phase = Autosave.Phase.PHASE_SAVED, saved_seq = a.edit_seq, failure = null)),
             )
         val key = InvokeKeys.of(l.command, l.subjectId(s), "seq=${a.edit_seq}")
         return Step(
-            l.withAutosave(
+            put(l,
                 l.withSending(s, draft),
                 a.copy(
                     phase = Autosave.Phase.PHASE_SAVING,

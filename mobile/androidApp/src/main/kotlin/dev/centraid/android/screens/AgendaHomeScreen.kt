@@ -29,17 +29,13 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
@@ -49,7 +45,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.collapse
+import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,6 +66,8 @@ import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.DeniedGate
+import dev.centraid.android.kit.hueColor
+import dev.centraid.android.kit.rememberFollowedText
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -181,11 +180,10 @@ private fun AgendaSearchField(
     chrome: AgendaChrome,
     onEvent: (AgendaHomeEvent) -> Unit,
 ) {
-    var typed by remember { mutableStateOf(state.search_term) }
-    // The machine can clear the term (search closed and reopened); follow it.
-    LaunchedEffect(state.search_term) {
-        if (state.search_term != typed) typed = state.search_term
-    }
+    // The machine can clear the term (search closed and reopened); follow it,
+    // and never a late echo of the typing.
+    val editor = rememberFollowedText(state.search_term)
+    val typed = editor.text.value
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     Row(
@@ -217,8 +215,7 @@ private fun AgendaSearchField(
             BasicTextField(
                 value = typed,
                 onValueChange = { next ->
-                    typed = next
-                    if (next != state.search_term) {
+                    if (editor.edited(next)) {
                         onEvent(AgendaHomeEvent(search_term = AgendaHomeEvent.SearchTermChanged(term = next)))
                     }
                 },
@@ -375,13 +372,14 @@ private fun AgendaList(
         state = listState,
         modifier = Modifier.fillMaxSize().testTag("agenda-list"),
     ) {
-        data.days.forEach { section -> daySection(section, onEvent) }
+        data.days.forEach { section -> daySection(section, state.chrome?.shelf_label.orEmpty(), onEvent) }
         item(key = "foot") { Spacer(Modifier.height(16.dp)) }
     }
 }
 
 private fun LazyListScope.daySection(
     section: AgendaDaySection,
+    shelfLabel: String,
     onEvent: (AgendaHomeEvent) -> Unit,
 ) {
     section.month_heading?.let { month ->
@@ -407,7 +405,7 @@ private fun LazyListScope.daySection(
                 DateColumn(section)
                 Column(Modifier.weight(1f).padding(start = 8.dp)) {
                     section.ribbon?.let { Ribbon(it) }
-                    if (section.due_count > 0) DueShelf(section, onEvent)
+                    if (section.due_count > 0) DueShelf(section, shelfLabel, onEvent)
                     if (section.items.isEmpty() && section.ribbon == null && section.due_count == 0) {
                         Spacer(Modifier.height(32.dp))
                     }
@@ -493,7 +491,7 @@ private fun Ribbon(label: String) {
 
 /** "{n} due", a toggle, and the titles read-only when it is open. */
 @Composable
-private fun DueShelf(section: AgendaDaySection, onEvent: (AgendaHomeEvent) -> Unit) {
+private fun DueShelf(section: AgendaDaySection, shelfLabel: String, onEvent: (AgendaHomeEvent) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         Text(
             section.due_label,
@@ -504,9 +502,17 @@ private fun DueShelf(section: AgendaDaySection, onEvent: (AgendaHomeEvent) -> Un
                 .clickable { onEvent(AgendaHomeEvent(due_toggled = AgendaHomeEvent.DueShelfToggled(day = section.day))) }
                 .padding(vertical = 6.dp)
                 .testTag("agenda-due-${section.day}")
+                // THE MACHINE'S WORDS (`AgendaChrome.shelf_label`) and its
+                // count; open or shut is said by the platform's own
+                // expand/collapse action, not by words spelt here.
                 .semantics {
                     role = Role.Button
-                    stateDescription = if (section.due_open) "expanded" else "collapsed"
+                    if (shelfLabel.isNotEmpty()) contentDescription = "$shelfLabel, ${section.due_label}"
+                    if (section.due_open) {
+                        collapse { onEvent(AgendaHomeEvent(due_toggled = AgendaHomeEvent.DueShelfToggled(day = section.day))); true }
+                    } else {
+                        expand { onEvent(AgendaHomeEvent(due_toggled = AgendaHomeEvent.DueShelfToggled(day = section.day))); true }
+                    }
                 },
         )
         if (section.due_open) {
@@ -815,18 +821,3 @@ private fun QuietButton(
 }
 
 private fun Modifier.clip8(): Modifier = this.then(Modifier.clip(RoundedCornerShape(8.dp)))
-
-
-/**
- * A party hue key (`rose` … `violet`) to its emitted colour role (`cRose`).
- * An unknown key draws slate, the machine's own neutral for "no calendar".
- */
-@Composable
-private fun hueColor(key: String): Color {
-    val known = key in PARTY_HUES
-    return centraidColor(if (known) "c" + key.replaceFirstChar { it.uppercase() } else "cSlate")
-}
-
-/** `packages/design`'s eight party hues — the only keys `calendar_hue_key` carries. */
-private val PARTY_HUES: Set<String> =
-    setOf("rose", "amber", "ochre", "forest", "teal", "slate", "indigo", "violet")

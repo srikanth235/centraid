@@ -236,6 +236,8 @@ fn every_seeded_document_carries_a_size_the_docs_tile_can_draw() {
                 with_note_body: false,
                 with_document_size: true,
                 with_minor_units: false,
+                local_day_columns: Vec::new(),
+                tz: String::new(),
             }),
             limit: 200,
             after: None,
@@ -291,4 +293,137 @@ fn every_seeded_document_carries_a_size_the_docs_tile_can_draw() {
             "`{title}` reported no bytes at all, and a seeded document has some"
         );
     }
+}
+
+/// The demo words the seeder prints and seals under (D-6).
+const DEMO_WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
+     abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+     abandon abandon abandon abandon abandon art";
+
+/// Open `path` as a phone would: a core holding `words`' seed at index 0.
+fn phone_over(path: &std::path::Path, words: &str) -> centraid_core::Handle {
+    let seed = centraid_identity::RecoveryPhrase::parse(words)
+        .expect("the words parse")
+        .seed();
+    centraid_core::Core::open(centraid_core::CoreConfig::new(path).with_seed(seed, 0))
+        .expect("the placed vault opens")
+}
+
+fn locker_step(
+    handle: &centraid_core::Handle,
+    step: wire::locker_session_request::Step,
+) -> wire::LockerSessionResponse {
+    let response = handle
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::Locker(wire::LockerSessionRequest {
+                step: Some(step),
+            })),
+        })
+        .expect("the session answers");
+    match response.kind {
+        Some(wire::response::Kind::Locker(answer)) => answer,
+        other => panic!("a session step answered as {other:?}"),
+    }
+}
+
+fn reveal(
+    handle: &centraid_core::Handle,
+    item_id: &str,
+    column: &str,
+) -> wire::LockerSessionResponse {
+    locker_step(
+        handle,
+        wire::locker_session_request::Step::Reveal(wire::LockerReveal {
+            item_id: item_id.to_owned(),
+            column: column.to_owned(),
+        }),
+    )
+}
+
+/// THE DEMO LOCKER OPENS ON A PHONE HOLDING THE DEMO WORDS, AND ONLY THERE.
+///
+/// The seeder seals its Locker items under the `K` the printed demo words
+/// derive (D-6), through the same `Handle::call` door a shell uses. So the
+/// placed file alone, opened by a core with those words, unlocks and reveals
+/// what was typed; another person's words derive another `K` and open nothing.
+#[test]
+fn the_demo_locker_reveals_under_the_demo_words_and_no_others() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let output = Command::new(env!("CARGO_BIN_EXE_seed-demo-vault"))
+        .arg(dir.path())
+        .args(["--file", "demo.sqlite3", "--only", "locker"])
+        .output()
+        .expect("the seeder binary runs");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "the seeder did not succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains(&format!("CENTRAID_DEMO_WORDS={DEMO_WORDS}")),
+        "the seeder did not print the words it sealed under: {stdout}"
+    );
+    // AND THEIR SEED, as the hex a debug phone is launched with (#1047 W2): a
+    // shell has no BIP-39 of its own, so the line must be the words' own seed.
+    let seed_hex: String = centraid_identity::RecoveryPhrase::parse(DEMO_WORDS)
+        .expect("the words parse")
+        .seed()
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    assert!(
+        stdout.contains(&format!("CENTRAID_DEMO_SEED={seed_hex}\n")),
+        "the seeder did not print the seed it sealed under: {stdout}"
+    );
+    // Five live items: the trashed one is not counted, as the tile does not.
+    assert!(stdout.contains(" locker=5"), "{stdout}");
+
+    let elsewhere = tempfile::tempdir().expect("a second temp dir");
+    let placed = elsewhere.path().join("placed.sqlite3");
+    std::fs::copy(dir.path().join("demo.sqlite3"), &placed).expect("the database file copies");
+
+    let phone = phone_over(&placed, DEMO_WORDS);
+    let locked = reveal(&phone, "demo-locker-bank", "password");
+    assert!(
+        locked.revealed.is_none(),
+        "a locked Locker revealed a secret"
+    );
+    locker_step(
+        &phone,
+        wire::locker_session_request::Step::Unlock(wire::LockerUnlock {}),
+    );
+    for (item, column, typed) in [
+        ("demo-locker-bank", "password", "Granite-Lake-47-Pine"),
+        ("demo-locker-card", "card_number", "4111111111111111"),
+        (
+            "demo-locker-cabin",
+            "content",
+            "Keypad 4417#. The spare key is under the blue planter.",
+        ),
+    ] {
+        let revealed = reveal(&phone, item, column)
+            .revealed
+            .unwrap_or_else(|| panic!("{item}.{column} did not reveal"));
+        assert_eq!(revealed.value, typed, "{item}.{column}");
+    }
+    phone.close();
+
+    let stranger = phone_over(
+        &placed,
+        "legal winner thank year wave sausage worth useful legal winner \
+         thank year wave sausage worth useful legal winner thank year wave sausage worth title",
+    );
+    locker_step(
+        &stranger,
+        wire::locker_session_request::Step::Unlock(wire::LockerUnlock {}),
+    );
+    let refused = reveal(&stranger, "demo-locker-bank", "password");
+    assert!(refused.revealed.is_none());
+    assert_eq!(
+        refused.refusal,
+        wire::LockerRevealRefusal::DidNotOpen as i32,
+        "another person's words derive another `K`"
+    );
 }

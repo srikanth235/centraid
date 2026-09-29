@@ -5,7 +5,7 @@
 //!
 //!   --file <name>   the file to write inside <dir>  (default demo-vault.sqlite3)
 //!   --name <text>   the vault's display name        (default "Demo vault")
-//!   --only <a,b,c>  seed only these apps            (default: all seven)
+//!   --only <a,b,c>  seed only these apps            (default: all eight)
 //!   --force         overwrite a file that is ALREADY a vault
 //! ```
 //!
@@ -17,15 +17,22 @@
 //! Photos and Tally as genuinely empty, which is a state the grid already knows
 //! how to say and does not have to invent.
 //!
-//! **One scenario across seven apps** — agenda, docs, notes, people, photos,
-//! tally and tasks: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
+//! **One scenario across eight apps** — agenda, docs, locker, notes, people,
+//! photos, tally and tasks: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
 //! Chris, with notes, a packing list and an uneven expense ledger. A demo
 //! corpus is for reading like somebody's life rather than like
 //! `Item 1, Item 2`.
 //!
-//! **Locker has no seed.** A demo vault that fabricates a member's saved passwords is a
-//! demo vault nobody should trust, and Locker's tile has something true to say
-//! either way — its body is a STATE, not a query result.
+//! **Locker's secrets are sealed under the demo words' `K`** (D-6). A Locker
+//! whose items carry no secret leaves reveal, copy and Review with nothing to
+//! walk, so this core is opened with [`DEMO_WORDS`] at index 0 — the public
+//! BIP39 all-`abandon` vector, printed as `CENTRAID_DEMO_WORDS` — and each
+//! item goes through the shell's own door: a Locker unlock, then
+//! `locker.add_item` through `Handle::call`, which seals the typed secret
+//! under `K` before the command plane sees it. A phone opened with those same
+//! words reveals them; any other words answer `DID_NOT_OPEN`. The secrets are
+//! test values (a published test card number, made-up passwords), never
+//! anybody's.
 //!
 //! **THROUGH THE REAL COMMAND PLANE, never SQL.** `sql-confinement` refuses SQL
 //! outside `crates/{ontology,vault,seat,search}` and `crates/apps/kit`, and the
@@ -216,13 +223,10 @@ struct Options {
 fn options() -> Options {
     let mut args = std::env::args().skip(1);
     let mut dir = None;
-    // `.sqlite3` AND NOT `.db`, BECAUSE THAT IS WHAT A SHELL ADOPTS.
-    // `Shelf.SUFFIX` (mobile/shared, `Shelf.kt`) takes every `*.sqlite3` in the
-    // vault directory as a vault and ignores everything else, so a fixture
-    // written as `demo-vault.db` and placed on a phone was a file the roster
-    // never looked at: the switcher said "this device holds one vault" and the
-    // re-seed changed nothing anyone could see. The suffix is the shell's, so
-    // the generator spells it the shell's way.
+    // A FLAT STAGING NAME. A shell adopts `<vault dir>/<name>/vault.db`, one
+    // directory per vault (`Shelf.VAULT_FILE`, #1047 Q-1047-17), and
+    // `mobile/scripts/demo-vault.sh` places `<stem>.sqlite3` there as
+    // `<stem>/vault.db`; the stem is what keeps two fixtures apart here.
     let mut file = "demo-vault.sqlite3".to_owned();
     let mut name = "Demo vault".to_owned();
     let mut wanted = Wanted(None);
@@ -333,8 +337,12 @@ fn main() {
     let bytes_dir = vault_path.with_extension("bytes");
     let _ = std::fs::remove_dir_all(&bytes_dir);
 
-    let handle = centraid_core::Core::open(centraid_core::CoreConfig::new(&vault_path))
-        .expect("a core opens");
+    // WITH THE DEMO WORDS' SEED, so Locker has a `K` to seal under (D-6).
+    // Index 0: the one vault the demo words' owner holds.
+    let handle = centraid_core::Core::open(
+        centraid_core::CoreConfig::new(&vault_path).with_seed(demo_seed(), 0),
+    )
+    .expect("a core opens");
 
     // THE ONE CONTENT STORE, SEEDED DIRECTLY (#1025 S3, D-1025-S3-1).
     //
@@ -391,9 +399,15 @@ fn main() {
                 refused: Vec::new(),
                 gaps: std::collections::BTreeSet::new(),
             };
-            if wanted.has("people") {
-                seed_people(&mut seeder);
-            }
+            // THE FRIENDS TALLY SPLITS WITH ARE THE PEOPLE (#1047): one human,
+            // one party. Tally enrolls the parties People made rather than
+            // minting a second "Maya", which is how the Home tile once counted
+            // eight people over a roster of four.
+            let people = if wanted.has("people") {
+                seed_people(&mut seeder)
+            } else {
+                std::collections::BTreeMap::new()
+            };
             if wanted.has("notes") {
                 seed_notes(&mut seeder);
             }
@@ -407,7 +421,7 @@ fn main() {
                 seed_tasks(&mut seeder, now);
             }
             if wanted.has("tally") {
-                seed_tally(&mut seeder, now, &founded.owner_party_id);
+                seed_tally(&mut seeder, now, &founded.owner_party_id, &people);
             }
             Ok(Report {
                 refused: seeder.refused,
@@ -459,6 +473,12 @@ fn main() {
             }
         }
     }
+    // LOCKER THROUGH THE SHELL'S DOOR, not `Vault::execute`: sealing is the
+    // core's, in `Handle::call`, so these writes need the handle free of the
+    // `with_vault` borrows above.
+    if wanted.has("locker") {
+        report.refused.extend(seed_locker(&handle));
+    }
     // WHAT HOME WILL DRAW, READ BACK BEFORE THE HANDLE CLOSES. Each number is
     // the row count of the table that app's Home tile pages (`HomeReads.READS`
     // in `mobile/shared`), read through the same door. It used to be a count of
@@ -466,7 +486,8 @@ fn main() {
     // for every app that writes more than one kind of row: Notes said 7 over
     // 5 notes and 2 notebooks, Docs 5 over 3 documents and 2 folders, and Tasks
     // said 9 while the tile drew 11, because two People gifts are tasks.
-    let seeded = SEEDED_TABLES.map(|(app, table, pk)| (app, count_rows(&handle, table, pk)));
+    let seeded =
+        SEEDED_TABLES.map(|(app, table, pk, filter)| (app, count_rows(&handle, table, pk, filter)));
     handle.close();
     // AND THE FILE IS FINISHED BEFORE THIS PROCESS GOES, for the same reason
     // the store is flushed below (#1020 wave A, and the run that found it).
@@ -488,11 +509,22 @@ fn main() {
 
     println!("CENTRAID_VAULT={}", vault_path.display());
     println!("CENTRAID_VAULT_NAME={vault_name}");
+    println!("CENTRAID_DEMO_WORDS={DEMO_WORDS}");
+    // THE SAME WORDS' 64-BYTE SEED, as the hex a phone's secure store holds
+    // (`CONTRACT.md` §4b). A shell has no BIP-39 of its own, so a debug build
+    // takes this at launch (`mobile/scripts/demo-vault.sh`, #1047 W2). It is
+    // the public all-`abandon` vector's seed, never anybody's.
+    let seed_hex: String = demo_seed()
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    println!("CENTRAID_DEMO_SEED={seed_hex}");
     let counts: Vec<String> = seeded
         .iter()
         .map(|(app, rows)| format!("{app}={rows}"))
         .collect();
-    println!("CENTRAID_SEEDED {} locker=0", counts.join(" "));
+    println!("CENTRAID_SEEDED {}", counts.join(" "));
     for gap in &report.gaps {
         println!(
             "CENTRAID_GAP={gap} — registered with no body yet, so the app it belongs to seeds nothing"
@@ -511,16 +543,26 @@ fn main() {
     }
 }
 
-/// Each app, the table its Home tile pages, and that table's primary key —
-/// the `from` and the `pk_column` of `HomeReads.READS`, in its order.
-const SEEDED_TABLES: [(&str, &str, &str); 7] = [
-    ("photos", "media_asset", "asset_id"),
-    ("docs", "core_document", "document_id"),
-    ("notes", "knowledge_note", "note_id"),
-    ("agenda", "core_event", "event_id"),
-    ("tasks", "schedule_task", "task_id"),
-    ("people", "core_party", "party_id"),
-    ("tally", "tally_group", "group_id"),
+/// Each app, the table its Home tile pages, that table's primary key and the
+/// tile's filter — the `from`, the `pk_column` and the `where` of
+/// `HomeReads.READS`, in its order. People pages `core_party` for the parties
+/// with a live `people_profile` (#1047), so its mirror counts the profiles —
+/// this seeder trashes none, so every profile is live. Locker counts live,
+/// unarchived items, as its tile does; the trashed demo item is not one.
+const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
+    ("photos", "media_asset", "asset_id", None),
+    ("docs", "core_document", "document_id", None),
+    ("notes", "knowledge_note", "note_id", None),
+    ("agenda", "core_event", "event_id", None),
+    ("tasks", "schedule_task", "task_id", None),
+    ("people", "people_profile", "profile_id", None),
+    ("tally", "tally_group", "group_id", None),
+    (
+        "locker",
+        "locker_item",
+        "item_id",
+        Some("deleted_at IS NULL AND archived_at IS NULL"),
+    ),
 ];
 
 /// Every row of a table, counted by paging it through the read door to the end.
@@ -528,7 +570,12 @@ const SEEDED_TABLES: [(&str, &str, &str); 7] = [
 /// There is no `COUNT(*)` on the door and `sql-confinement` refuses SQL here
 /// (see [`first_row`]), so the count is the rows the pages hand back — which is
 /// also exactly how a Home tile arrives at its number.
-fn count_rows(handle: &centraid_core::Handle, table: &str, pk: &str) -> usize {
+fn count_rows(
+    handle: &centraid_core::Handle,
+    table: &str,
+    pk: &str,
+    filter: Option<&str>,
+) -> usize {
     let mut rows = 0;
     let mut after = None;
     loop {
@@ -538,7 +585,7 @@ fn count_rows(handle: &centraid_core::Handle, table: &str, pk: &str) -> usize {
                     name: "seed.count".to_owned(),
                     select: vec![pk.to_owned()],
                     from: table.to_owned(),
-                    r#where: None,
+                    r#where: filter.map(str::to_owned),
                     bind: Vec::new(),
                     order: Some(wire::PageOrder {
                         sort_column: pk.to_owned(),
@@ -549,6 +596,8 @@ fn count_rows(handle: &centraid_core::Handle, table: &str, pk: &str) -> usize {
                     with_note_body: false,
                     with_document_size: false,
                     with_minor_units: false,
+                    local_day_columns: Vec::new(),
+                    tz: String::new(),
                 }),
                 limit: 500,
                 after,
@@ -591,6 +640,8 @@ fn first_row(handle: &centraid_core::Handle, table: &str, column: &str) -> Optio
                 with_note_body: false,
                 with_document_size: false,
                 with_minor_units: false,
+                local_day_columns: Vec::new(),
+                tz: String::new(),
             }),
             limit: 1,
             after: None,
@@ -613,13 +664,146 @@ struct Report {
 }
 
 // ---------------------------------------------------------------------------
+// Locker.
+//
+// "A few saved things for the trip, one of them overdue for a change."
+// ---------------------------------------------------------------------------
+
+/// The demo's 24 words: the public BIP39 all-`abandon` vector, so nobody
+/// mistakes them for a member's. A phone opened with them reveals what this
+/// seed sealed.
+const DEMO_WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+abandon abandon abandon abandon abandon art";
+
+fn demo_seed() -> centraid_core::Seed {
+    centraid_identity::RecoveryPhrase::parse(DEMO_WORDS)
+        .expect("the demo words are a valid phrase")
+        .seed()
+}
+
+/// The Locker items, each with the secrets the core seals on the way in.
+///
+/// One of each thing a member walks: a login with a password and an address,
+/// a card, a secure note, a Wi-Fi password, a login Review flags (marked
+/// compromised, on `http://`), and one item in the trash. Every secret is a
+/// test value.
+fn locker_items() -> Vec<(&'static str, Value)> {
+    vec![
+        (
+            "locker.add_item",
+            json!({
+                "item_id": "demo-locker-bank", "type": "login", "title": "Sierra Credit Union",
+                "username": "owner@example.com", "password": "Granite-Lake-47-Pine",
+                "url": "https://sierracu.example.com", "tags": ["finance"],
+                "notes": "Joint account for the cabin fund.",
+                // RFC 6238 Appendix B's own seed, as the QR code a bank shows
+                // would carry it, so the item page's code can be checked
+                // against any authenticator (Q-1047-16).
+                "otp_seed": "otpauth://totp/Sierra%20Credit%20Union:owner?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Sierra%20Credit%20Union"
+            }),
+        ),
+        (
+            "locker.add_item",
+            json!({
+                "item_id": "demo-locker-card", "type": "card", "title": "Travel Visa",
+                "cardholder": "Demo Owner", "card_number": "4111111111111111",
+                "expiry": "09/31", "cvv": "123", "brand": "Visa"
+            }),
+        ),
+        (
+            "locker.add_item",
+            json!({
+                "item_id": "demo-locker-cabin", "type": "note", "title": "Tahoe cabin door",
+                "content": "Keypad 4417#. The spare key is under the blue planter."
+            }),
+        ),
+        (
+            "locker.add_item",
+            json!({
+                "item_id": "demo-locker-wifi", "type": "wifi", "title": "Cabin Wi-Fi",
+                "network": "tahoe-cabin", "password": "snowmelt-2024"
+            }),
+        ),
+        (
+            "locker.add_item",
+            json!({
+                "item_id": "demo-locker-forum", "type": "login", "title": "Old ski forum",
+                "username": "owner", "password": "tahoe2019",
+                "url": "http://skiforum.example.org", "compromised": true
+            }),
+        ),
+        (
+            "locker.add_item",
+            json!({
+                "item_id": "demo-locker-gone", "type": "password", "title": "Old router",
+                "password": "admin1234"
+            }),
+        ),
+        (
+            "locker.trash_item",
+            json!({ "item_id": "demo-locker-gone" }),
+        ),
+        ("locker.star_item", json!({ "item_id": "demo-locker-bank" })),
+    ]
+}
+
+/// Seed Locker through `Handle::call`: unlock, write, relock. Answers the
+/// refusals, in the report's words.
+fn seed_locker(handle: &centraid_core::Handle) -> Vec<String> {
+    use wire::locker_session_request::Step;
+    let session = |step: Step| {
+        handle.call(&wire::Request {
+            kind: Some(wire::request::Kind::Locker(wire::LockerSessionRequest {
+                step: Some(step),
+            })),
+        })
+    };
+    let mut refused = Vec::new();
+    if let Err(error) = session(Step::Unlock(wire::LockerUnlock {})) {
+        eprintln!("seed-demo-vault: locker unlock refused: {error}");
+        refused.push(format!("locker.unlock: {error}"));
+        return refused;
+    }
+    for (index, (name, input)) in locker_items().into_iter().enumerate() {
+        let answer = handle.call(&wire::Request {
+            kind: Some(wire::request::Kind::Command(wire::Command {
+                name: name.to_owned(),
+                input: serde_json::to_vec(&input).expect("a seed input is JSON"),
+                invoke_key: format!("seed-demo-locker-{index}"),
+                ..wire::Command::default()
+            })),
+        });
+        let why = match answer.map(|response| response.kind) {
+            Ok(Some(wire::response::Kind::Command(outcome)))
+                if outcome.status == wire::CommandStatus::Executed as i32 =>
+            {
+                continue;
+            }
+            Ok(Some(wire::response::Kind::Command(outcome))) => outcome.reason,
+            Ok(other) => format!("answered as {other:?}"),
+            Err(error) => error.to_string(),
+        };
+        eprintln!("seed-demo-vault: {name} refused: {why}");
+        refused.push(format!("{name}: {why}"));
+    }
+    // LOCKED AGAIN, so nothing about the artifact depends on a session.
+    if let Err(error) = session(Step::Relock(wire::LockerRelock {})) {
+        refused.push(format!("locker.relock: {error}"));
+    }
+    refused
+}
+
+// ---------------------------------------------------------------------------
 // People.
 //
 // "A small living circle — people with contact cadences, logged interactions,
 // birthdays, canonical gift tasks and one outstanding debt."
 // ---------------------------------------------------------------------------
 
-fn seed_people(seeder: &mut Seeder) {
+/// The four people, and each one's party by first name — Tally's friends.
+fn seed_people(seeder: &mut Seeder) -> std::collections::BTreeMap<&'static str, String> {
+    let mut by_first_name = std::collections::BTreeMap::new();
     let mut ids = Vec::new();
     for (name, role, cadence) in [
         ("Maya Alvarez", "College friend", 30),
@@ -632,6 +816,9 @@ fn seed_people(seeder: &mut Seeder) {
             json!({ "display_name": name, "role": role, "cadence_days": cadence }),
         );
         if let Some(party) = Seeder::id(output.as_ref(), "party_id") {
+            if let Some(first) = name.split(' ').next() {
+                by_first_name.insert(first, party.clone());
+            }
             ids.push(party);
         }
     }
@@ -639,7 +826,7 @@ fn seed_people(seeder: &mut Seeder) {
         [maya, jake, grandpa, chris] => {
             (maya.clone(), jake.clone(), grandpa.clone(), chris.clone())
         }
-        _ => return,
+        _ => return by_first_name,
     };
 
     for (party, kind, text) in [
@@ -699,6 +886,7 @@ fn seed_people(seeder: &mut Seeder) {
             "reason": "His half of the cabin deposit",
         }),
     );
+    by_first_name
 }
 
 // ---------------------------------------------------------------------------
@@ -1368,7 +1556,8 @@ fn seed_album(seeder: &mut Seeder, asset_by_file: &std::collections::BTreeMap<&s
 // Tasks.
 //
 // "A believable week on the board — overdue errands, a project with subtasks,
-// done items, a someday idea."
+// done items, a someday idea." The project is a real `schedule_project` with a
+// section, so the project place is reachable (#1047).
 // ---------------------------------------------------------------------------
 
 fn seed_tasks(seeder: &mut Seeder, now: i64) {
@@ -1399,6 +1588,41 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) {
             "priority": 6,
         }),
     );
+    // A PROJECT, so Tasks' project place has something to open (#1047): the
+    // trip, filed under its "Booking" section, with a second task beside it.
+    let project = Seeder::id(
+        seeder
+            .run(
+                "schedule.save_project",
+                json!({ "name": "Tahoe trip", "color": "steelblue", "sort_order": 1 }),
+            )
+            .as_ref(),
+        "project_id",
+    );
+    if let Some(project) = project.as_ref() {
+        let section = Seeder::id(
+            seeder
+                .run(
+                    "schedule.save_section",
+                    json!({ "project_id": project, "name": "Booking", "sort_order": 1 }),
+                )
+                .as_ref(),
+            "section_id",
+        );
+        let lift = add(
+            seeder,
+            json!({ "title": "Buy lift tickets online", "due_at": at(now, 5, 9, 0), "priority": 4 }),
+        );
+        for (task, sort_order) in [(trip.as_ref(), 1), (lift.as_ref(), 2)] {
+            let Some(task) = task else { continue };
+            let mut input =
+                json!({ "task_id": task, "project_id": project, "sort_order": sort_order });
+            if let Some(section) = section.as_ref() {
+                input["section_id"] = json!(section);
+            }
+            seeder.run("schedule.organize_task", input);
+        }
+    }
     if let Some(trip) = trip.as_ref() {
         for input in [
             json!({ "title": "Compare cabins — South Lake vs Truckee", "parent_task_id": trip, "effort_min": 45 }),
@@ -1524,10 +1748,21 @@ fn even(amount: i64, parties: &[String], payer: &str) -> Vec<Value> {
         .collect()
 }
 
-fn seed_tally(seeder: &mut Seeder, now: i64, me: &str) {
+fn seed_tally(
+    seeder: &mut Seeder,
+    now: i64,
+    me: &str,
+    people: &std::collections::BTreeMap<&'static str, String>,
+) {
     let mut friends = Vec::new();
     for name in ["Maya", "Jake", "Chris"] {
-        let output = seeder.run("tally.add_friend", json!({ "name": name }));
+        // The People party when there is one — `add_friend`'s existing-party
+        // branch — so Tally and People name one human with one party.
+        let input = match people.get(name) {
+            Some(party_id) => json!({ "name": name, "party_id": party_id }),
+            None => json!({ "name": name }),
+        };
+        let output = seeder.run("tally.add_friend", input);
         if let Some(party) = Seeder::id(output.as_ref(), "party_id") {
             friends.push(party);
         }

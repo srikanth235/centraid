@@ -71,11 +71,6 @@
       },
       {
         "schema": "locker",
-        "table": "watchtower",
-        "verbs": "act"
-      },
-      {
-        "schema": "locker",
         "table": "totp_code",
         "verbs": "act"
       },
@@ -200,6 +195,11 @@
       },
       {
         "schema": "locker",
+        "table": "set_memo",
+        "verbs": "act"
+      },
+      {
+        "schema": "locker",
         "table": "counts",
         "verbs": "act"
       },
@@ -259,6 +259,10 @@
               "type": "string"
             }
           },
+          "compromised": {
+            "type": "boolean",
+            "description": "The member's compromised flag: Review lists the item for changing. Nothing produces it automatically; a changed password clears it unless the same write sets it (R-1047-F7)."
+          },
           "username": {
             "type": "string"
           },
@@ -267,10 +271,6 @@
           },
           "url": {
             "type": "string"
-          },
-          "url_match_policy": {
-            "type": "string",
-            "enum": ["registrable-domain", "exact-host"]
           },
           "otp_seed": {
             "type": "string"
@@ -343,7 +343,7 @@
     },
     {
       "name": "edit-item",
-      "description": "Rewrite an item's fields and tags through locker.edit_item. Refuses trashed items.",
+      "description": "Rewrite an item's fields, tags and compromised flag through locker.edit_item. A changed password clears the flag. Refuses trashed items.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -362,6 +362,10 @@
               "type": "string"
             }
           },
+          "compromised": {
+            "type": "boolean",
+            "description": "The member's compromised flag: Review lists the item for changing. Nothing produces it automatically; a changed password clears it unless the same write sets it (R-1047-F7)."
+          },
           "username": {
             "type": "string"
           },
@@ -370,10 +374,6 @@
           },
           "url": {
             "type": "string"
-          },
-          "url_match_policy": {
-            "type": "string",
-            "enum": ["registrable-domain", "exact-host"]
           },
           "otp_seed": {
             "type": "string"
@@ -793,7 +793,7 @@
     },
     {
       "name": "set-addresses",
-      "description": "Replace a login's ADDITIONAL addresses through locker.set_addresses, each with its own match policy — registrable domain or exact host. The item's primary address is unchanged.",
+      "description": "Replace a login's ADDITIONAL addresses through locker.set_addresses. The item's primary address is unchanged.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -810,10 +810,6 @@
                 "url": {
                   "type": "string",
                   "minLength": 1
-                },
-                "match_policy": {
-                  "type": "string",
-                  "enum": ["registrable-domain", "exact-host"]
                 }
               },
               "required": ["url"],
@@ -922,8 +918,42 @@
       "writes": ["locker.item_passkey"]
     },
     {
+      "name": "set-memo",
+      "description": "Write or clear an item's memo through locker.set_memo — the member's own plaintext remark, a knowledge.annotation on the item: searchable in the vault and never sealed, so it is not the place for a secret. An empty note clears it. Refuses a trashed item.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": ["item_id", "note"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["knowledge.annotation"]
+    },
+    {
       "name": "export",
-      "description": "Read every item out in the clear through locker.export, so this device can write a plaintext file. This is a mass reveal: it is confirmed, it is receipted as an unseal of every sealed column it touches, it is online-only, and asked for on a device that is not the owner's it parks for their confirmation. Anything that reads the file reads your secrets. With include_history it also unseals the passwords each item was rotated away from, out of the vault's own revision snapshots — the one path on which a previous password is readable at all, since no reveal reaches a revision.",
+      "description": "Read every item out in the clear through locker.export, so this device can write a plaintext file. This is a mass reveal: it is confirmed, and it is receipted as an unseal of every sealed column it touches. Anything that reads the file reads your secrets. With include_history it also unseals the passwords each item was rotated away from, out of the vault's own revision snapshots — the one path on which a previous password is readable at all, since no reveal reaches a revision.",
       "confirmation": "required",
       "input": {
         "type": "object",
@@ -959,56 +989,6 @@
     }
   ],
   "queries": [
-    {
-      "name": "autofill-candidates",
-      "description": "Secret-free live login metadata for Companion origin matching. OTP presence is a boolean; no password or OTP seed is returned.",
-      "input": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "candidates": {
-            "type": "array"
-          },
-          "vaultDenied": {
-            "type": "object"
-          }
-        }
-      }
-    },
-    {
-      "name": "autofill-item",
-      "description": "Explicit-gesture, origin-context fill for one login. Reveals password only and returns TOTP as a derivative; the seed never crosses the vault boundary.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "item_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "page_origin": {
-            "type": "string",
-            "minLength": 8
-          }
-        },
-        "required": ["item_id", "page_origin"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "fill": {
-            "type": ["object", "null"]
-          },
-          "vaultDenied": {
-            "type": "object"
-          }
-        }
-      }
-    },
     {
       "name": "items",
       "description": "A bounded window of non-trashed, non-archived items (caller-sized via limit, default 300, 2,000 at most), newest-updated first, each decorated with its favorite star, free-form tags, a safe subtitle, its connector alias and derived Watchtower status (weak / reused / compromised). `total` is the live count from the vault itself, so the foot line can say \"300 of 312\" without reading the ceiling back to count it. Pass archived:true for the archive shelf. Secrets are NEVER in this payload — passwords, card numbers, CVVs, OTP seeds and note bodies stay out; open a single item to read them.",
@@ -1123,35 +1103,6 @@
       }
     },
     {
-      "name": "watchtower",
-      "description": "The security review: compromised / weak / reused counts plus the needs-attention items (secret-free row shape), derived server-side from the passwords the vault holds.",
-      "input": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "compromised": {
-            "type": "integer"
-          },
-          "weak": {
-            "type": "integer"
-          },
-          "reused": {
-            "type": "integer"
-          },
-          "items": {
-            "type": "array"
-          },
-          "vaultDenied": {
-            "type": "object"
-          }
-        }
-      }
-    },
-    {
       "name": "trash",
       "description": "Trashed items with their purge dates (secret-free row shape).",
       "input": {
@@ -1173,7 +1124,7 @@
     },
     {
       "name": "access",
-      "description": "Locker's access history: every auth, every reveal and every fill, newest first, windowed — a Companion fill carries the page origin it happened on, and a refusal is listed like an allowance. Read from the vault's append-only consent receipts under a grant pinned to Locker's own objects. Online-only: receipts live in the journal, which the browser replica does not carry, and a cached answer would be a list of what this device happened to hold. No receipt has ever carried a secret value, and this adds none.",
+      "description": "Locker's access history: every unlock and every reveal, newest first, windowed, and a refusal is listed like an allowance. Read from the vault's append-only consent receipts under a grant pinned to Locker's own objects. No receipt has ever carried a secret value, and this adds none.",
       "input": {
         "type": "object",
         "properties": {
@@ -1246,7 +1197,7 @@
   ],
   "seats": {
     "byteBearing": true,
-    "originActs": ["autofill"],
+    "originActs": [],
     "disabledOn": [],
     "northStar": "1password"
   },

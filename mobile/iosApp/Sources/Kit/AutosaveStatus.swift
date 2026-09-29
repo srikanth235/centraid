@@ -16,19 +16,10 @@ struct AutosaveStatus: View {
 
     init(_ autosave: Centraid_Screen_V1_Autosave) { self.autosave = autosave }
 
-    /// The words, for the view and for a test.
+    /// The words, for the view and for a test: the machine's own
+    /// (`Autosave.label`, set by the kit's law with every phase — #1047).
     static func label(_ autosave: Centraid_Screen_V1_Autosave) -> String {
-        switch autosave.phase {
-        case .clean, .saved: return "Saved"
-        case .dirty: return "Edited"
-        case .saving: return "Saving\u{2026}"
-        case .refused:
-            return autosave.hasFailure && !autosave.failure.sentence.isEmpty
-                ? autosave.failure.sentence
-                : "Not saved"
-        case .conflict: return "Changed on another device"
-        case .unspecified, .UNRECOGNIZED: return ""
-        }
+        autosave.label
     }
 
     private var tone: String {

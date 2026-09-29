@@ -1,7 +1,8 @@
 {
-  "$generatedBy": "contracts/tools/export-copy.ts",
+  "$comment": "Hand-maintained source: no emitter writes this file (export-copy.ts left with v0's copy leaves in #1020 wave 6). Its twin is mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/PhotosCopy.kt; edit both, and KitTimeMoneyCopySpec fails when their strings disagree.",
   "app": "photos",
   "strings": {
+    "PHOTOGRAPH": "Photograph",
     "PHOTOS_ARCHIVE": "Archive",
     "PHOTOS_ARCHIVE_EMPTY": "Archive is empty.",
     "PHOTOS_EMPTY_DUPLICATES": "No near-identical clusters in your library.",
@@ -18,7 +19,9 @@
     "PHOTOS_UNARCHIVE": "Unarchive",
     "PHOTOS_VIDEO_STATUS": "Video · playing from the display copy on this device",
     "PLACE_NO_LOCATION": "No location yet",
-    "PLACE_UNNAMED": "A place with no name yet"
+    "PLACE_UNNAMED": "A place with no name yet",
+    "TILE_COUNT_MANY": "photographs",
+    "TILE_COUNT_ONE": "photograph"
   },
   "functions": [
     "duplicatesLede",

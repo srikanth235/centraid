@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if canImport(CentraidShared)
+import CentraidShared
+#endif
+
 // THE FOUR READ SHAPES, DRAWN ONCE (K5; DESIGN.md "The seven rooms").
 //
 // The room owns the empty, loading and error states; the app supplies the
@@ -49,7 +53,7 @@ extension ReadStateView where Skeleton == RowSkeleton {
     /// The common case: a list, so its skeleton is rows.
     init(
         content: ScreenContent<Value>,
-        loadingLabel: String = "Opening",
+        loadingLabel: String = KitWords.shared.OPENING,
         onRetry: (() -> Void)?,
         @ViewBuilder data: @escaping (Value) -> Content
     ) {
@@ -72,7 +76,7 @@ extension ReadStateView where Skeleton == RowSkeleton {
 struct RowSkeleton: View {
     var rows: Int = 8
     var meta: Bool = true
-    var label: String = "Opening"
+    var label: String = KitWords.shared.OPENING
 
     @Environment(\.colorScheme) private var scheme
 
@@ -117,7 +121,7 @@ struct RowSkeleton: View {
 struct FailureView: View {
     let sentence: String
     let remedy: String
-    var retryLabel: String = "Try again"
+    var retryLabel: String = KitWords.shared.RETRY
     let onRetry: (() -> Void)?
 
     @Environment(\.colorScheme) private var scheme

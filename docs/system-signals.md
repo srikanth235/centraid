@@ -32,16 +32,16 @@ Persisted route ids do not change. Member-facing names and default pins are:
 | Existing id | Member-facing destination | Default |
 | --- | --- | --- |
 | `home` | Home | pinned by law |
-| `notifs` / `approvals` | Notifications | pinned |
-| `stats` / `insights` | Activity | pinned |
-| `data` / `atlas` | Vault | pinned |
+| `notifs` / `approvals` | Notifications | dropped with its data plane ([#1029](https://github.com/srikanth235/centraid/issues/1029)) |
+| `stats` / `insights` | Activity | dropped with its data plane ([#1029](https://github.com/srikanth235/centraid/issues/1029)) |
+| `data` / `atlas` | Vault | not pinned until a shell can draw it ([R-1047-F7b](decisions.md#the-compromised-flag-and-the-default-band-1047-f7)) |
 | `autos` / `automations` | Automations | More; absent when capability is off |
 | `conn` / `connectors` | Connectors | More; absent when capability is off |
 | `devices` / `household` | Copies | Vault section with a retained deep link |
 | `gateway` | System | never default-pinned; absent from Origin launchers |
 | `storage` / phone-storage route | On this phone | Origin only |
 
-Launcher filtering is presentation, not authorization. A deep link to a destination omitted from a seat still resolves and explains where that seat's relevant facts live. Compact navigation shows up to five destinations including Home followed by a standing More control. The default is Home, Alerts, Activity, Vault, More; member pinning may fill the fifth destination without removing More or violating the touch target floor.
+Launcher filtering is presentation, not authorization. A deep link to a destination omitted from a seat still resolves and explains where that seat's relevant facts live. Compact navigation shows up to five destinations including Home followed by a standing More control. The default is Home and More, because no other place has a screen on the phone yet (`BandPolicy.DEFAULT_PINS`, R-1047-F7b); member pinning may fill the fifth destination without removing More or violating the touch target floor.
 
 Assistant opening is a local frame-state interaction with a 100ms perceived-latency budget from gesture to painted companion. The desktop UI-impact test measures that interval inside the renderer, excluding automation transport latency. Sending paints the member turn and working state synchronously before conversation creation or streaming begins; network first-token latency is reported by the existing run telemetry rather than hidden behind the opening budget.
 

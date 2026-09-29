@@ -3,7 +3,6 @@ package dev.centraid.shared.apps.agenda
 import centraid.core.v1.AgendaAttendee
 import centraid.core.v1.AgendaEvent
 import centraid.core.v1.AgendaEventDetail
-import centraid.core.v1.AgendaUpcoming
 import centraid.core.v1.AppQueryDenial
 import centraid.screen.v1.AgendaAction
 import centraid.screen.v1.AgendaEventChrome
@@ -25,7 +24,6 @@ import centraid.screen.v1.StatusChip
 import centraid.screen.v1.WriteSettled
 import centraid.screen.v1.WriteState
 import dev.centraid.design.copy.AgendaCopy
-import dev.centraid.shared.design.PartyHueWheel
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.kit.time.CivilWords
@@ -37,15 +35,15 @@ import dev.centraid.shared.screen.Step
 
 /**
  * WHAT THE DETAIL HOLDS BESIDE ITS SCREEN. [detail] is the raw `agenda.event`
- * answer and [answer] the `upcoming` one read for its calendars (the home's
- * reason: a local change re-folds without a read); [held] is the session's
+ * answer, its calendar row included (`AgendaEventDetail.calendar`, #1047 —
+ * no `upcoming` read beside it), kept for the home's reason: a local change
+ * re-folds without a read; [held] is the session's
  * [AgendaMarks] list; [sentPartstat] is the reply just sent, drawn before the
  * vault has it (optimistic); [cancelScope] the scope sheet's pick.
  * [reading]/[readQueued] keep one read in flight.
  */
 public data class AgendaEventScreen(
     public val screen: AgendaEventState,
-    public val answer: AgendaUpcoming? = null,
     public val detail: AgendaEventDetail? = null,
     public val held: List<AgendaMarks.Held> = emptyList(),
     public val sentPartstat: String? = null,
@@ -58,9 +56,8 @@ public data class AgendaEventScreen(
 public sealed interface AgendaEventInput {
     public data class View(public val event: AgendaEventEvent) : AgendaEventInput
 
-    /** `agenda.event`'s answer, and `upcoming`'s for the calendars; null where not answered. */
+    /** `agenda.event`'s answer, its calendar with it; null where not answered. */
     public data class Answered(
-        public val upcoming: AgendaUpcoming?,
         public val detail: AgendaEventDetail?,
     ) : AgendaEventInput
 
@@ -76,8 +73,8 @@ public sealed interface AgendaEventInput {
  * ## The occurrence is read by its key
  *
  * The read is `agenda.event` for the picked `event_id` and occurrence, so an
- * occurrence far from any window is found; `agenda.upcoming` over today only
- * rides beside it for the calendars' names and hues. An answer with no event
+ * occurrence far from any window is found, and the answer names its calendar
+ * (`AgendaEventDetail.calendar`) for the name and the hue. An answer with no event
  * is [AgendaGone]: cancelled, moved or deleted since.
  *
  * ## Writes
@@ -99,7 +96,7 @@ public sealed interface AgendaEventInput {
 public object AgendaEventMachine : ScreenMachine<AgendaEventScreen, AgendaEventInput> {
     public const val SCREEN_ID: String = "agenda.event"
 
-    /** The tables `agenda.event` and `agenda.upcoming` read for one event — its place's name too. */
+    /** The tables `agenda.event` reads for one event — its calendar's and its place's names too. */
     public val TABLES: Set<String> = setOf(
         "core_event",
         "schedule_event_ext",
@@ -143,7 +140,7 @@ public object AgendaEventMachine : ScreenMachine<AgendaEventScreen, AgendaEventI
     override fun reduce(state: AgendaEventScreen, event: AgendaEventInput): Step<AgendaEventScreen> {
         val step = when (event) {
             is AgendaEventInput.View -> view(state, event.event)
-            is AgendaEventInput.Answered -> answered(state, event.upcoming, event.detail)
+            is AgendaEventInput.Answered -> answered(state, event.detail)
             is AgendaEventInput.Denied -> if (state.readQueued) {
                 reissue(state)
             } else {
@@ -371,11 +368,10 @@ public object AgendaEventMachine : ScreenMachine<AgendaEventScreen, AgendaEventI
 
     private fun answered(
         state: AgendaEventScreen,
-        upcoming: AgendaUpcoming?,
         detail: AgendaEventDetail?,
     ): Step<AgendaEventScreen> {
         if (state.readQueued) return reissue(state)
-        if (upcoming == null || detail == null) {
+        if (detail == null) {
             return Step(
                 state.copy(
                     reading = false,
@@ -393,7 +389,7 @@ public object AgendaEventMachine : ScreenMachine<AgendaEventScreen, AgendaEventI
         val sent = state.sentPartstat?.takeUnless { sent ->
             found?.attendees?.any { it.is_you && it.partstat == sent } == true
         }
-        return Step(state.copy(answer = upcoming, detail = detail, reading = false, sentPartstat = sent))
+        return Step(state.copy(detail = detail, reading = false, sentPartstat = sent))
     }
 
     /** The answered event, when it is the series this screen is on. */
@@ -420,9 +416,8 @@ public object AgendaEventMachine : ScreenMachine<AgendaEventScreen, AgendaEventI
             },
             cancel_armed = screen.sheet == AgendaEventState.Sheet.SHEET_CANCEL_SCOPE && state.cancelScope != null,
         )
-        val answer = state.answer
         val detail = state.detail
-        if (answer == null || detail == null || screen.denied != null || (screen.failure != null && screen.data_ == null)) {
+        if (detail == null || screen.denied != null || (screen.failure != null && screen.data_ == null)) {
             return state.copy(screen = base)
         }
         val event = find(screen, detail)
@@ -445,7 +440,7 @@ public object AgendaEventMachine : ScreenMachine<AgendaEventScreen, AgendaEventI
                 loading = null,
                 failure = null,
                 gone = null,
-                data_ = data(state, event, answer, detail),
+                data_ = data(state, event, detail),
             ),
         )
     }
@@ -453,11 +448,10 @@ public object AgendaEventMachine : ScreenMachine<AgendaEventScreen, AgendaEventI
     private fun data(
         state: AgendaEventScreen,
         event: AgendaEvent,
-        answer: AgendaUpcoming,
         detail: AgendaEventDetail,
     ): AgendaEventData {
         val title = event.summary?.takeIf { it.isNotBlank() } ?: AgendaCopy.UNTITLED
-        val calendar = answer.calendars.firstOrNull { it.calendar_id == event.calendar_id }
+        val calendar = detail.calendar?.takeIf { it.calendar_id == event.calendar_id }
         val calendarName = when {
             event.calendar_id == null -> AgendaCopy.NO_CALENDAR
             else -> calendar?.name?.takeIf { it.isNotBlank() } ?: AgendaCopy.CALENDAR_UNNAMED
@@ -487,7 +481,7 @@ public object AgendaEventMachine : ScreenMachine<AgendaEventScreen, AgendaEventI
                 name = shown,
                 initial = name.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "",
                 reply_label = reply,
-                hue_key = PartyHueWheel.identityHueKey(attendee.party_id),
+                hue_key = AgendaFold.personHue(attendee.party_id),
                 is_you = attendee.is_you,
                 accessibility_label = "$shown, $reply",
             )
@@ -534,7 +528,7 @@ public object AgendaEventMachine : ScreenMachine<AgendaEventScreen, AgendaEventI
             date_label = dateLabel,
             when_label = when_,
             calendar_name = calendarName,
-            calendar_hue_key = AgendaFold.calendarHues(answer.calendars)(event.calendar_id),
+            calendar_hue_key = AgendaFold.calendarHues(listOfNotNull(calendar))(event.calendar_id),
             facts = facts,
             notes = event.description?.trim() ?: "",
             chip = chip,

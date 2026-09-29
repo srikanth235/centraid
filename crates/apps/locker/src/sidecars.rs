@@ -111,7 +111,6 @@ pub struct Field {
 pub struct Address {
     pub address_id: String,
     pub url: String,
-    pub match_policy: String,
     pub position: i64,
 }
 
@@ -206,7 +205,7 @@ pub fn fields_statement(item_id: &str) -> PageQuery {
 pub fn addresses_statement(item_id: &str) -> PageQuery {
     one_items_rows(
         "locker.sidecars.addresses",
-        "address_id, item_id, url, match_policy, position",
+        "address_id, item_id, url, position",
         "locker_item_address",
         "address_id",
         item_id,
@@ -332,12 +331,11 @@ pub fn fold_passkey(rows: &[Row]) -> Option<Passkey> {
 }
 
 /// THE PLAIN COLUMNS A REVISION MAY NAME, and the word it names each by.
-pub const REVISION_COLUMNS: [(&str, &str); 18] = [
+pub const REVISION_COLUMNS: [(&str, &str); 17] = [
     ("type", "type"),
     ("title", "title"),
     ("username", "username"),
     ("url", "url"),
-    ("url_match_policy", "url_match_policy"),
     ("notes", "notes"),
     ("cardholder", "cardholder"),
     ("expiry", "expiry"),

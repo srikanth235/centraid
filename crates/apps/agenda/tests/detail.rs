@@ -3,8 +3,9 @@
 //! detail never depends on a padded `upcoming` window. Against a real vault,
 //! written through the registered commands.
 
-use centraid_apps_agenda::detail::load_event;
+use centraid_apps_agenda::detail::{load_event, next_occurrence};
 use centraid_apps_agenda::queries::load_upcoming;
+use centraid_apps_kit::fixtures;
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_vault::Vault;
 use centraid_vault::access::Principal;
@@ -60,27 +61,29 @@ impl Scratch {
         outcome.output
     }
 
+    /// The founding calendar, read through the app's own `upcoming` query.
     fn calendar_id(&self) -> String {
         self.vault
             .read(|connection| {
-                Ok(connection.query_row(
-                    "SELECT calendar_id FROM schedule_calendar LIMIT 1",
-                    [],
-                    |row| row.get(0),
-                )?)
+                let door = TestDoor::new(connection);
+                let (data, _) =
+                    load_upcoming(&door, Some(FROM), Some(TO), NOW, &utc()).expect("upcoming");
+                Ok(data
+                    .calendars
+                    .first()
+                    .expect("founding makes a calendar")
+                    .calendar_id
+                    .clone())
             })
-            .expect("founding makes a calendar")
+            .expect("the read runs")
     }
 
     fn place(&self, place_id: &str, name: &str) {
         self.vault
             .commit(|tx| {
                 tx.set_producer("test.fixture");
-                tx.connection().execute(
-                    "INSERT INTO core_place (place_id, name, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, ?3)",
-                    rusqlite::params![place_id, name, NOW],
-                )?;
+                fixtures::seed_place(tx.connection(), place_id, name, NOW)
+                    .expect("the place row is written");
                 Ok(())
             })
             .expect("the place lands");
@@ -131,6 +134,14 @@ fn an_event_carries_its_place_name_on_upcoming_and_on_its_detail() {
             let event = detail.event.expect("the event is there");
             assert_eq!(event.location_name.as_deref(), Some("Blue Door Café"));
             assert_eq!(event.instance_key, event_id);
+            // THE CALENDAR ROW RIDES BESIDE IT (#1047), so a detail names the
+            // calendar without reading `upcoming`.
+            let calendar = detail.calendar.expect("the event's calendar");
+            assert_eq!(
+                Some(calendar.calendar_id.as_str()),
+                event.calendar_id.as_deref()
+            );
+            assert_eq!(calendar.calendar_id, scratch.calendar_id());
             Ok(())
         })
         .expect("the read runs");
@@ -194,6 +205,75 @@ fn the_detail_answers_one_occurrence_by_its_key_and_nothing_for_a_skip() {
                 let (detail, _) = load_event(&door, id, None, Some(local)).expect("event");
                 assert!(detail.event.is_none(), "{id} {local}");
             }
+            Ok(())
+        })
+        .expect("the read runs");
+}
+
+/// WHERE A REPEATING SEARCH HIT OPENS (#1047): the first occurrence at or
+/// after the vault clock; a one-off has none; a series that ended answers its
+/// last occurrence.
+#[test]
+fn a_series_next_occurrence_is_the_first_after_now_else_its_last() {
+    let scratch = Scratch::founded("next");
+    let weekly = scratch.propose(json!({
+        "summary": "Morning run",
+        "dtstart": "2099-05-04T07:00:00.000Z",
+        "dtend": "2099-05-04T08:00:00.000Z",
+        "rrule": "FREQ=WEEKLY",
+    }));
+    let ended = scratch.propose(json!({
+        "summary": "Evening class",
+        "dtstart": "2099-03-02T18:00:00.000Z",
+        "dtend": "2099-03-02T19:00:00.000Z",
+        "rrule": "FREQ=WEEKLY;COUNT=3",
+    }));
+    let one_off = scratch.propose(json!({
+        "summary": "Dentist",
+        "dtstart": "2099-06-10T09:00:00.000Z",
+        "dtend": "2099-06-10T10:00:00.000Z",
+    }));
+    scratch
+        .vault
+        .read(|connection| {
+            let door = TestDoor::new(connection);
+            let event = |event_id: &str| {
+                load_event(&door, event_id, None, None)
+                    .expect("event")
+                    .0
+                    .event
+                    .expect("the series")
+            };
+            // NOW is Monday 1 June 09:00Z; the run is Mondays 07:00Z, so the
+            // next one is 8 June.
+            let next = next_occurrence(&door, &event(&weekly), NOW)
+                .expect("expands")
+                .expect("a next occurrence");
+            assert!(
+                next.dtstart.starts_with("2099-06-08T07:00"),
+                "{}",
+                next.dtstart
+            );
+            assert_eq!(
+                next.instance_key,
+                format!(
+                    "{weekly}:{}",
+                    next.original_start_local.as_deref().unwrap_or_default()
+                )
+            );
+            let last = next_occurrence(&door, &event(&ended), NOW)
+                .expect("expands")
+                .expect("the last occurrence");
+            assert!(
+                last.dtstart.starts_with("2099-03-16T18:00"),
+                "{}",
+                last.dtstart
+            );
+            assert!(
+                next_occurrence(&door, &event(&one_off), NOW)
+                    .expect("no expansion")
+                    .is_none()
+            );
             Ok(())
         })
         .expect("the read runs");

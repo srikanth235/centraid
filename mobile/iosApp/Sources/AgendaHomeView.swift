@@ -428,7 +428,7 @@ private struct AgendaEventRowView: View {
             .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
             .overlay(alignment: .leading) {
                 Rectangle()
-                    .fill(Theme.color(AgendaHue.role(row.calendarHueKey), scheme))
+                    .fill(Theme.color(KitHue.role(row.calendarHueKey) ?? "cSlate", scheme))
                     .frame(width: 2)
                     .padding(.vertical, 6)
             }
@@ -440,14 +440,6 @@ private struct AgendaEventRowView: View {
         .accessibilityLabel(row.accessibilityLabel)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("agenda-row-\(row.rowKey)")
-    }
-}
-
-/// A calendar hue key (`slate`, `forest`…) is the `c<Hue>` colour role.
-enum AgendaHue {
-    static func role(_ key: String) -> String {
-        let role = "c" + key.prefix(1).uppercased() + key.dropFirst()
-        return centraidColorRoles.contains(role) ? role : "cSlate"
     }
 }
 
@@ -568,7 +560,7 @@ private struct AgendaMoreSheet: View {
                         } label: {
                             HStack(spacing: 8) {
                                 Circle()
-                                    .fill(Theme.color(AgendaHue.role(calendar.hueKey), scheme))
+                                    .fill(Theme.color(KitHue.role(calendar.hueKey) ?? "cSlate", scheme))
                                     .frame(width: 8, height: 8)
                                 Text(calendar.name)
                                     .centraidType("body")

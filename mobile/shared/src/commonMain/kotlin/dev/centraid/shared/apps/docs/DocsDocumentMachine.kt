@@ -43,7 +43,9 @@ import dev.centraid.shared.sync.ScreenWrites
  * facts for a kind the phone cannot render — and this screen draws that with
  * the facts, the versions and the activity under it. The head's writes are
  * the drive row's (star, rename inline, move, labels, trash behind a confirm),
- * plus restore on a trashed document and an earlier version made current.
+ * plus restore and delete forever (`core.purge_document`, behind the trash
+ * shelf's confirm; the page then leaves, `dismissed`) on a trashed document,
+ * and an earlier version made current.
  * Editing the text is `docs.editor`, pushed by the shell on `EditRequested`.
  */
 public object DocsDocumentMachine : ScreenMachine<DocsDocumentState, DocsDocumentEvent> {
@@ -60,6 +62,7 @@ public object DocsDocumentMachine : ScreenMachine<DocsDocumentState, DocsDocumen
             loading = Loading(first_load = true),
             write = WriteState(phase = WriteState.Phase.PHASE_IDLE),
             sheet = DocsSheet(kind = DocsSheet.Kind.KIND_NONE),
+            asking = DocsDocumentState.Asking.ASKING_NONE,
         ),
     )
 
@@ -86,6 +89,7 @@ public object DocsDocumentMachine : ScreenMachine<DocsDocumentState, DocsDocumen
                     seat = state.seat,
                     document_id = event.opened.document_id,
                     title_hint = event.opened.title,
+                    parent = event.opened.parent,
                     reading = state.reading,
                     read_queued = state.read_queued,
                 ),
@@ -153,27 +157,36 @@ public object DocsDocumentMachine : ScreenMachine<DocsDocumentState, DocsDocumen
         event.version_restore != null -> versionRestore(state, event.version_restore.content_id)
 
         event.confirmed != null -> {
-            val cleared = state.copy(confirm = null)
-            if (state.confirm == null || state.document_id.isEmpty()) {
+            val cleared = state.copy(confirm = null, asking = DocsDocumentState.Asking.ASKING_NONE)
+            val command = when (state.asking) {
+                DocsDocumentState.Asking.ASKING_TRASH -> DocsWrites.TRASH
+                DocsDocumentState.Asking.ASKING_PURGE -> DocsWrites.PURGE
+                else -> null
+            }
+            if (state.confirm == null || command == null || state.document_id.isEmpty()) {
                 Step(cleared)
             } else {
                 WriteLaw.submit(
                     Writes,
                     cleared,
-                    DocsWrites.TRASH,
+                    command,
                     DocsWrites.documentOnly(state.document_id),
-                    InvokeKeys.of(DocsWrites.TRASH, state.document_id),
+                    InvokeKeys.of(command, state.document_id),
                 )
             }
         }
 
-        event.dismissed != null -> Step(state.copy(confirm = null))
+        event.dismissed != null -> Step(state.copy(confirm = null, asking = DocsDocumentState.Asking.ASKING_NONE))
 
         event.write_settled != null ->
             if (DocsRenameLaw.owns(Rename, state, event.write_settled.invoke_key)) {
                 DocsRenameLaw.settled(Rename, state, event.write_settled)
             } else {
-                WriteLaw.settled(Writes, state, event.write_settled)
+                val step = WriteLaw.settled(Writes, state, event.write_settled)
+                // DELETED FOREVER: nothing is left to show, so the page leaves.
+                val purged = event.write_settled.committed &&
+                    event.write_settled.invoke_key == InvokeKeys.of(DocsWrites.PURGE, state.document_id)
+                if (purged) Step(step.state.copy(dismissed = true), step.effects) else step
             }
 
         // INTENTS, routed by the shell.
@@ -222,6 +235,19 @@ public object DocsDocumentMachine : ScreenMachine<DocsDocumentState, DocsDocumen
                         confirm_label = DocsCopy.TRASH_CONFIRM,
                         destructive = true,
                     ),
+                    asking = DocsDocumentState.Asking.ASKING_TRASH,
+                ),
+            )
+            // The trash shelf's own sentences (the kit's), for one document.
+            DocsWrites.KEY_PURGE -> Step(
+                state.copy(
+                    confirm = Confirm(
+                        title = DocsTrashSpec.copy.purgeTitle,
+                        body = DocsTrashSpec.copy.purgeBody,
+                        confirm_label = DocsTrashSpec.copy.purgeAction,
+                        destructive = true,
+                    ),
+                    asking = DocsDocumentState.Asking.ASKING_PURGE,
                 ),
             )
             // `edit` is the shell's route to the editor (`EditRequested`).
@@ -287,7 +313,8 @@ public object DocsDocumentMachine : ScreenMachine<DocsDocumentState, DocsDocumen
         }
         return shown.copy(
             chrome = DocsDocumentChrome(
-                back = DocsCopy.BACK,
+                // THE PARENT BY NAME (#1047): the page it was pushed from, else the app.
+                back = state.parent.ifEmpty { DocsCopy.APP_TITLE },
                 retry = DocsCopy.RETRY,
                 loading = DocsCopy.LOADING,
                 more = DocsCopy.MORE,

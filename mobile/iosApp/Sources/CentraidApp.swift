@@ -27,7 +27,7 @@ struct CentraidApp: App {
     ///
     /// What is left is the SWITCHER MASK, which was never about the network:
     /// a phone in the app switcher must not show a member's rows in a snapshot
-    /// the OS keeps (`docs/mobile-offline.md:253`).
+    /// the OS keeps.
     @Environment(\.scenePhase) private var scenePhase
 
     /// REGISTER THE BACKGROUND HANDLERS BEFORE ANYTHING SUBMITS ONE (#1029 W18-1).
@@ -214,15 +214,38 @@ struct CentraidApp: App {
                         .task(id: route) { shell.opened(route) }
                     }
             }
+            // EVERY APP'S ROOT WATCHER (#1047): Docs' filed-document push and
+            // its picker, Locker's prompt and lifecycle, Tally's save sheet.
+            .background { AppGlobals(shell: shell) }
+            // THE 24 WORDS (#1047 E2): `words.make` and `words.enter`, one
+            // sheet at the root so Locker's wall can raise it from any depth.
+            // A swipe is allowed only where the machine has a way out to hear.
+            .sheet(item: Binding(
+                get: { shell.wordsSheet },
+                set: { if $0 == nil { shell.wordsSwipedAway() } }
+            )) { sheet in
+                switch sheet {
+                case .make:
+                    VaultWordsView(data: shell.vaultWordsState, send: { shell.sendVaultWords($0) })
+                        .interactiveDismissDisabled(!shell.vaultWordsSwipeable)
+                case .enter:
+                    WordsEntryView(data: shell.wordsEntryState, send: { shell.sendWordsEntry($0) })
+                        .interactiveDismissDisabled(!shell.wordsEntrySwipeable)
+                // words.show's swipe is its Dismissed, always heard.
+                case .show:
+                    WordsShowView(data: shell.wordsShowState, send: { shell.sendWordsShow($0) })
+                case .pair:
+                    PairLaptopView(data: shell.pairLaptopState, send: { shell.sendPairLaptop($0) })
+                        .interactiveDismissDisabled(!shell.pairLaptopSwipeable)
+                }
+            }
             // THE SWITCHER MASK. Leaving the foreground paints an opaque mask
-            // (`docs/mobile-offline.md:253`) — not cosmetic: it is the visible
-            // half of a lock that has already happened.
+            // — not cosmetic: the snapshot iOS keeps for the app switcher is
+            // taken once the scene reaches `.background`, of whatever is on
+            // screen at that moment, and the mask is what it captures.
             .overlay { if shell.masked { Color.black.ignoresSafeArea() } }
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
-                // `inactive` IS ALREADY LEAVING: a phone in the app switcher is
-                // not a phone the member is looking at, and the snapshot the OS
-                // takes is of whatever is on screen at that moment.
                 case .active:
                     shell.unmask()
                     // AND DRAIN. The amendment's foreground half (#1029 W18-6):
@@ -231,8 +254,18 @@ struct CentraidApp: App {
                     // second pass while one runs, so an `inactive` → `active`
                     // flicker costs nothing.
                     shell.becameActive()
-                case .inactive, .background:
+                // `.background` ONLY, never `.inactive` (R-1047-L1's rule for
+                // the lock, applied to the mask): the Locker's own Face ID
+                // prompt makes the scene inactive, and a mask there blacked out
+                // the screen behind the prompt. What `.inactive` alone covered
+                // was the live card while the member's own finger holds the
+                // switcher open — nothing the OS keeps.
+                case .background:
                     shell.mask()
+                    // words.show drops its words on leaving (#1047 E5).
+                    shell.leftForeground()
+                case .inactive:
+                    break
                 @unknown default:
                     shell.mask()
                 }

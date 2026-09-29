@@ -88,25 +88,19 @@ mod tests {
         assert_eq!(
             manifest["seats"]["disabledOn"],
             serde_json::json!([]),
-            "Locker is ruled onto every seat including the PWA (#996 R13)"
+            "Locker is disabled on no seat (#996 R13)"
         );
     }
 
     #[test]
-    fn it_declares_eight_queries_and_sixteen_actions() {
+    fn it_declares_five_queries_and_seventeen_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 8);
-        assert_eq!(manifest.actions.len(), 16);
-        for name in [
-            "autofill-candidates",
-            "autofill-item",
-            "items",
-            "item",
-            "search",
-            "watchtower",
-            "trash",
-            "access",
-        ] {
+        // v0's eight less the two autofill queries, deleted with the fill
+        // plane (R-1047-D3), and the Watchtower review, deleted with the
+        // weak/reused scoring (Q-1047-16).
+        assert_eq!(manifest.queries.len(), 5);
+        assert_eq!(manifest.actions.len(), 17);
+        for name in ["items", "item", "search", "trash", "access"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
     }
@@ -167,12 +161,11 @@ mod tests {
     /// THE ONLY THREE `reveal` SCOPES IN THE PRODUCT, and they survive the
     /// custody change.
     ///
-    /// What changes in wave 4 is **who** enforces them: the reveal runs on the
-    /// seat that holds `K` (`crates/core::locker`), so the declared reach is a
-    /// clamp the seat applies rather than one the gateway does. The gateway's
-    /// own `reveal` refuses the `locker` schema structurally — see
-    /// `crates/vault::access` (D-1020-L2) — which is why these three scopes are
-    /// not a gateway permission any more and are still exactly three.
+    /// The reveal runs in the phone's core, the only holder of `K`
+    /// (`crates/core::locker::phone`), behind the member's unlock. The vault's
+    /// access plane has no reveal judgement at all (R-1047-D2), so these three
+    /// scopes are the manifest's declaration of what the app may ask the core
+    /// to open, and they are still exactly three.
     #[test]
     fn it_declares_thirty_seven_scopes_and_the_three_reveals_are_lockers_own() {
         let manifest = manifest();
@@ -242,7 +235,8 @@ mod tests {
         let raw = ours();
         assert_eq!(raw["seats"]["byteBearing"], serde_json::json!(true));
         assert_eq!(raw["seats"]["disabledOn"], serde_json::json!([]));
-        assert_eq!(raw["seats"]["originActs"], serde_json::json!(["autofill"]));
+        // No origin act: autofill was a browser extension's (R-1047-D3).
+        assert_eq!(raw["seats"]["originActs"], serde_json::json!([]));
         assert_eq!(raw["seats"]["northStar"], serde_json::json!("1password"));
     }
 

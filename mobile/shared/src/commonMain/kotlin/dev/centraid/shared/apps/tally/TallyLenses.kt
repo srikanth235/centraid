@@ -70,7 +70,7 @@ public object TallyRecurringMachine :
         val rows = answer.templates.map { template ->
             val schedule = template.schedule?.takeIf { it.isNotEmpty() } ?: TallyCopy.NO_PREVIEW
             val meta = listOf(
-                "${template.paid_by?.name ?: TallyCopy.SOMEONE} ${TallyCopy.PAYS_WORD}",
+                "${TallyFold.who(template.paid_by)} ${TallyFold.paysWord(template.paid_by)}",
                 template.group_name.ifEmpty { TallyCopy.NO_GROUP_LABEL },
                 template.tz,
             ).filter { it.isNotEmpty() }.joinToString(" · ")
@@ -250,6 +250,8 @@ public object TallySpendingMachine :
         next = TallyCopy.NEXT_MONTH,
         retry = TallyCopy.RETRY,
         loading = TallyCopy.LOADING,
+        // Pushed from the home's More sheet only.
+        back = TallyCopy.APP_TITLE,
     )
 
     private const val MONTH: Int = 7
@@ -350,7 +352,7 @@ public object TallySearchMachine :
         val answer = held.answers.search ?: return null
         val shownTerm = term(held)
         val rows = answer.results.map { TallyFold.expenseRow(it, today = null, withGroup = true) }
-        val total = answer.total_matches.toInt()
+        val total = answer.total_matches
         return TallySearchData(
             results = rows,
             count_label = when {
@@ -374,6 +376,8 @@ public object TallySearchMachine :
         close = TallyCopy.CLEAR,
         retry = TallyCopy.RETRY,
         loading = TallyCopy.LOADING,
+        // Pushed from the home's More sheet only.
+        back = TallyCopy.APP_TITLE,
     )
 
     private object Field : SearchLens<TallyHeld<TallySearchState>> {

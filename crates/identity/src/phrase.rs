@@ -135,6 +135,29 @@ impl RecoveryPhrase {
     }
 }
 
+/// Whether `word` is one of BIP39's 2,048 English words, as typed: the caller
+/// trims and lowercases, because a word-entry cell is judged one word at a time
+/// and the whole-phrase parse above does its own normalising (#1047 E1).
+pub fn is_word(word: &str) -> bool {
+    Language::English.find_word(word).is_some()
+}
+
+/// Up to `limit` list words that begin with `prefix`, in the list's order.
+///
+/// What a word-entry cell offers while a member is still typing: BIP39's
+/// English list is unique in its first four letters, so four typed letters
+/// narrow it to one word. An empty prefix offers nothing — every word would be
+/// a suggestion, which is no suggestion at all.
+pub fn words_starting_with(prefix: &str, limit: usize) -> Vec<&'static str> {
+    if prefix.is_empty() {
+        return Vec::new();
+    }
+    Language::English
+        .words_by_prefix_iter(prefix)
+        .take(limit)
+        .collect()
+}
+
 /// Deliberately not `Debug`-derived: a phrase that reaches a log or a panic
 /// message is every vault this person has.
 impl core::fmt::Debug for RecoveryPhrase {
@@ -240,6 +263,22 @@ mod tests {
         let phrase = RecoveryPhrase::parse(ZERO_ENTROPY_PHRASE).expect("parses");
         assert!(phrase.matches(&format!("  {}  ", ZERO_ENTROPY_PHRASE.to_uppercase())));
         assert!(!phrase.matches(&ZERO_ENTROPY_PHRASE.replace(" art", " zoo")));
+    }
+
+    #[test]
+    fn a_cell_is_judged_against_the_english_list_and_offers_its_prefix() {
+        assert!(is_word("abandon"));
+        assert!(is_word("zoo"));
+        assert!(!is_word("abandonn"));
+        assert!(!is_word(""));
+        // Four letters name one word; fewer offer the run the list holds.
+        assert_eq!(words_starting_with("aban", 4), vec!["abandon"]);
+        assert_eq!(
+            words_starting_with("ab", 3),
+            vec!["abandon", "ability", "able"]
+        );
+        assert!(words_starting_with("", 4).is_empty());
+        assert!(words_starting_with("qx", 4).is_empty());
     }
 
     #[test]

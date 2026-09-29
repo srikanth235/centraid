@@ -20,6 +20,18 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <!-- The camera, for pair.laptop's scan of the laptop's square only
+         (#1047 E6), asked for when the member taps Scan. Declaring it means
+         Docs' Scan capture intent needs the grant too, so Docs asks for it
+         the same way (`DocsRoutes`). Not required: a phone without a camera
+         pairs by paste and hides Scan. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
@@ -52,6 +64,21 @@
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/shared_copies" />
+        </provider>
+
+        <!-- Docs' Scan row (#1047): the system camera app writes its
+             photograph into `docs-scans/` through this, and nothing else.
+             Not exported; the grant rides the capture intent. CAMERA is
+             declared (pairing's scan), so the capture intent needs the grant
+             and Docs asks for it at Scan. -->
+        <provider
+            android:name="dev.centraid.android.screens.docs.DocsScanProvider"
+            android:authorities="${applicationId}.docsscans"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/docs_scans" />
         </provider>
     </application>
 </manifest>

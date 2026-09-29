@@ -2937,3 +2937,41 @@ and addresses still match is this.
 
 **Demonstrated red.** `TailResumeSpec`: looking + radio-up → reconnect;
 leave / our stop / radio-down → not; backoff 1s, 2s, … 30s cap.
+
+## What changed
+
+Added 2026-09-29 by slice F6 of [#1047](https://github.com/srikanth235/centraid/issues/1047), because this receipt rides in the same branch range and `receipt-per-issue` asks every receipt the range adds for this section. Nothing below is new evidence about #1025's work. It is an index of what the sections above already say, plus what git holds.
+
+- **Where each slice's changes are recorded.** Nine sections above have their own `### What changed`: S1–S5, the shelf (S7-9…12), Rust-core slice 3, and the live-notes and live-home lanes. The others describe their change in their own prose and path tables.
+- **What git holds.** This receipt enters this branch's history whole, 2,451 lines, in `da19af5c9` ("the member's transfer rule and fetch-this-original-now", 2026-09-15). The commits that wrote S1–S7 and the Rust-core slices are not in this clone's history, so they cannot be cited here. Ten commits on the branch carry `(#1025)` in their subject, from `da19af5c9` to `f2ee2b399` (2026-09-16).
+- **What is gone since.** [#1029](https://github.com/srikanth235/centraid/issues/1029)'s scope amendment struck seats, the seat link and the simulator. W16's cut deleted `crates/{seat,seat-link,sim}` (#1029's receipt, `28381e1d`). Most of the code this receipt describes no longer exists. The `D-1025-*` rulings stand in `docs/decisions.md` behind their supersession markers.
+
+## Verification
+
+The commands each slice ran are recorded in that slice's section, with outcomes. They cover 58 command rows, for example S1's table (`cargo test -p centraid-seat` "134 + 3 + 10 + 8 passed") and S2's (`cargo test -p centraid --tests --no-fail-fast`, "`gateway_install` 1 failed and `bin` 1 failed, both pre-existing"). Each ran on its own slice's tree.
+
+**They cannot be re-run on this tree.** The crates most of them name were deleted by #1029. F6 checked this on 2026-09-29:
+
+```
+$ ls crates | grep -c seat
+0
+$ git cat-file -t 4f75eb862   # the one commit this receipt cites by hash
+commit
+$ for d in $(grep -oE 'D-1025-S[0-9]+-[0-9]+' receipts/issue-1025-sync-model.md | sort -u); do grep -q "$d" docs/decisions.md || echo "missing $d"; done
+(no output: all 35 D-1025 rulings the receipt cites are in docs/decisions.md)
+```
+
+Outcome: **pass** for what can still be checked (the record's own citations). The recorded test runs are the only evidence of behaviour, and they are the slices' own.
+
+## Audit
+
+**Verdict: PASS**, scoped to the record, with one limitation.
+
+Retroactive, by slice F6 of #1047 on 2026-09-29. F6 did not write any of #1025's work. A behavioural audit is no longer possible: the seat, seat-link and simulator crates it would re-run were deleted by #1029's cut. So the audit checks that the record is intact and consistent with what replaced it.
+
+1. **Every `D-1025-S*` ruling the receipt cites exists in `docs/decisions.md`.** 35 of 35 found. **Holds.**
+2. **The one commit the receipt cites by hash resolves.** `4f75eb862` is a commit in this clone. **Holds.**
+3. **The crates the slices' verification tables name are gone, and the state layer says why.** `crates/` has no `seat*` or `sim` crate, and #1029's receipt names the cut that deleted them (W16, `28381e1d`). **Holds.**
+4. **The receipt says where current state lives.** Its header defers to `docs/decisions.md` and `docs/mobile-offline.md`, and both exist. **Holds.**
+
+**Limitation.** No #1025 behaviour claim was re-verified, because the code it describes no longer exists. The receipt's test outcomes are the slices' own, unverified by any independent run.

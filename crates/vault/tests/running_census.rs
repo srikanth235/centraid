@@ -219,3 +219,135 @@ fn the_running_census_equals_a_scan_after_every_commit_and_every_rollback() {
         );
     }
 }
+
+/// **EVERY WRITE PATH MOVES THE COUNTER, NOT ONLY THE COMMANDS** (#1047 R3).
+///
+/// The Locker's first unlock names a generation, and on a vault that has none
+/// it writes one `locker_key` row. That write went straight to the connection,
+/// outside [`centraid_vault::file::Vault::commit`] — so the `update_hook`
+/// never saw it, the running census kept saying 0, the generation manifest
+/// carried 0, and every restore of a phone that had ever opened Locker was
+/// refused by `census_matches` with the row sitting right there in the file.
+///
+/// The census has to be **seeded before** the write for this to be red: a
+/// counter seeded after it counts the row in its scan.
+#[test]
+fn the_locker_generation_row_is_counted_by_the_running_census() {
+    let scratch = common::Scratch::founded("census-locker-key").expect("a vault is founded");
+    let before = scratch.vault.census().expect("the census seeds");
+    assert_eq!(
+        before
+            .iter()
+            .find(|(table, _)| table == "locker_key")
+            .map(|(_, rows)| *rows),
+        Some(0),
+        "a founded vault names no Locker generation yet"
+    );
+
+    let key_id = scratch
+        .vault
+        .locker_generation()
+        .expect("the first unlock names a generation");
+    assert_eq!(
+        scratch
+            .vault
+            .locker_generation()
+            .expect("and names it again"),
+        key_id,
+        "a second unlock reuses the live generation"
+    );
+
+    let census = scratch.vault.census().expect("the census reads");
+    assert_eq!(
+        census,
+        scan(&scratch.vault, &census),
+        "the running census missed the locker_key row the first unlock wrote"
+    );
+}
+
+/// **`INSERT OR REPLACE` CAN DISPLACE A ROW THE HOOK NEVER HEARS ABOUT.**
+///
+/// SQLite's `update_hook` is not invoked for a row deleted by `REPLACE`
+/// conflict resolution when the table has no delete trigger and no foreign key
+/// pointing at it — the fast path. A REPLACE over an existing key there is
+/// `+1` with no `−1`, and the running census drifts up by one. Whether a given
+/// vault table takes the fast path depends on triggers and foreign keys any
+/// later rung may add or drop, so no vault writer uses `OR REPLACE`
+/// ([`no_vault_writer_resolves_a_conflict_by_replace`]); this test pins the
+/// SQLite behaviour that ban rests on, on a table with neither.
+#[test]
+fn sqlite_does_not_report_a_row_that_a_fast_path_replace_displaced() {
+    let scratch = common::Scratch::founded("census-replace").expect("a vault is founded");
+    scratch
+        .vault
+        .commit(|tx| {
+            tx.connection().execute_batch(
+                "CREATE TABLE probe_replace (k TEXT PRIMARY KEY, v TEXT NOT NULL) STRICT",
+            )?;
+            Ok(())
+        })
+        .expect("the probe table is made");
+    let _ = scratch.vault.census().expect("the census seeds");
+    for value in ["first", "second"] {
+        scratch
+            .vault
+            .commit(|tx| {
+                tx.connection().execute(
+                    "INSERT OR REPLACE INTO probe_replace (k, v) VALUES ('one', ?1)",
+                    params![value],
+                )?;
+                Ok(())
+            })
+            .expect("the commit lands");
+    }
+    let census = scratch.vault.census().expect("the census reads");
+    let counted = census
+        .iter()
+        .find(|(table, _)| table == "probe_replace")
+        .map(|(_, rows)| *rows);
+    assert_eq!(
+        counted,
+        Some(2),
+        "SQLite now reports a fast-path REPLACE's displaced row; the ban in \
+         `no_vault_writer_resolves_a_conflict_by_replace` can be re-judged"
+    );
+}
+
+/// **THE MECHANICAL HALF OF THE SWEEP.** No writer in the vault crate resolves
+/// a conflict by REPLACE, because the running census cannot see the row it
+/// displaces ([`sqlite_does_not_report_a_row_that_a_fast_path_replace_displaced`]). An
+/// upsert (`ON CONFLICT … DO UPDATE`) is an update, which the hook reports and
+/// which moves no count.
+#[test]
+fn no_vault_writer_resolves_a_conflict_by_replace() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut stack = vec![root];
+    let mut found = Vec::new();
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).expect("the source tree reads") {
+            let path = entry.expect("an entry").path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path
+                .extension()
+                .is_some_and(|ext| ext == "rs" || ext == "sql")
+            {
+                let text = std::fs::read_to_string(&path).expect("a source file reads");
+                for (line, content) in text.lines().enumerate() {
+                    let upper = content.to_uppercase();
+                    let code = upper.trim_start();
+                    if code.starts_with("//") || code.starts_with("--") {
+                        continue;
+                    }
+                    if upper.contains("OR REPLACE") || upper.contains("REPLACE INTO") {
+                        found.push(format!("{}:{}", path.display(), line + 1));
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "a REPLACE displaces a row the running census never hears about: {found:?}"
+    );
+}

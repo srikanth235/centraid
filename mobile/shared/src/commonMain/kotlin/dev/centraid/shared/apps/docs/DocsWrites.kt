@@ -9,8 +9,10 @@ import dev.centraid.shared.kit.jsonString
  * Every input is hand-built JSON (`commonMain` has no JSON library) naming
  * ONLY the schema's fields — each schema is `additionalProperties: false`.
  *
- * THERE IS NO DESTROY COMMAND. `core.empty_document_trash` ends every grace
- * window; nothing removes a trashed document (`docs.proto`'s header).
+ * DESTROYING IS `core.purge_document` (one trashed document) and
+ * `core.empty_document_trash` (all of them), both confirm-gated (D-1 of
+ * 2026-09-25). A new document is `core.add_document` over staged bytes
+ * ([upload]) or `core.create_text_document` ([createText]).
  */
 public object DocsWrites {
     public const val APP_ID: String = "docs"
@@ -22,6 +24,9 @@ public object DocsWrites {
     public const val TRASH: String = "core.trash_document"
     public const val RESTORE: String = "core.restore_document"
     public const val EMPTY_TRASH: String = "core.empty_document_trash"
+    public const val PURGE: String = "core.purge_document"
+    public const val ADD: String = "core.add_document"
+    public const val CREATE_TEXT: String = "core.create_text_document"
     public const val EDIT: String = "core.edit_document"
     public const val RESTORE_VERSION: String = "core.restore_document_version"
     public const val CREATE_FOLDER: String = "core.create_folder"
@@ -40,6 +45,7 @@ public object DocsWrites {
     public const val KEY_LABELS: String = "labels"
     public const val KEY_TRASH: String = "trash"
     public const val KEY_RESTORE: String = "restore"
+    public const val KEY_PURGE: String = "purge"
     public const val KEY_MORE: String = "more"
 
     // The More and Add sheets' keys.
@@ -84,6 +90,35 @@ public object DocsWrites {
         obj("subject_type" to DOCUMENT_TYPE, "subject_id" to documentId, "label" to label)
 
     public fun untag(tagId: String): String = obj("tag_id" to tagId)
+
+    /**
+     * `core.add_document` over bytes already staged (`Staging.stage`): the
+     * core names them by [stagedSha]; [documentId] is the row id this phone
+     * minted, so the key and the row agree; no [folderId] is the top level.
+     */
+    public fun upload(documentId: String, stagedSha: String, title: String, folderId: String): String =
+        obj(
+            *listOfNotNull(
+                "document_id" to documentId,
+                "staged_sha" to stagedSha,
+                "title" to title,
+                folderId.takeIf { it.isNotEmpty() }?.let { "folder_id" to it },
+            ).toTypedArray(),
+        )
+
+    /**
+     * `core.create_text_document`: an empty `text/plain` document the editor
+     * then fills — the core turns words into bytes, so no `data:` URI is
+     * spelled here (R-1047-Q4). No [folderId] is the top level.
+     */
+    public fun createText(documentId: String, title: String, folderId: String): String =
+        obj(
+            *listOfNotNull(
+                "document_id" to documentId,
+                "title" to title,
+                folderId.takeIf { it.isNotEmpty() }?.let { "folder_id" to it },
+            ).toTypedArray(),
+        )
 
     private fun obj(vararg fields: Pair<String, String>): String =
         fields.joinToString(",", prefix = "{", postfix = "}") { (k, v) -> "${jsonString(k)}:${jsonString(v)}" }

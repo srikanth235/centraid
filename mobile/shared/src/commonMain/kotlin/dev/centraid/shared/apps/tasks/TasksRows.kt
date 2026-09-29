@@ -140,8 +140,10 @@ public object TasksRows {
         }
         if (task.due_day.isEmpty() && isOpen(task)) {
             val age = task.age_days
-            val month = task.created_at?.let(::monthOf)
-            if (age != null && age >= SITTING_DAYS && !month.isNullOrEmpty()) {
+            // THE MEMBER'S MONTH: `created_local_day`, the core's civil day in
+            // the request's zone — never a UTC instant's (R-1047-Q3).
+            val month = monthOf(task.created_local_day)
+            if (age != null && age >= SITTING_DAYS && month.isNotEmpty()) {
                 parts += "${TasksCopy.SITTING_SINCE} $month"
             }
         }
@@ -181,8 +183,13 @@ public object TasksRows {
         else -> TasksCopy.PRIORITY_NOW
     }
 
+    /**
+     * A project's hue as the THEME'S COLOUR ROLE (`cTeal`), as People's and
+     * Agenda's are (#1047): the stored hue when it is a wheel hue, else the
+     * id's own. No view keeps a table from the wheel's word to the role.
+     */
     public fun hueOf(projectId: String, project: TasksProject?): String =
-        PartyHueWheel.partyHueKey(projectId, project?.color) ?: PartyHueWheel.identityHueKey(projectId)
+        PartyHueWheel.role(PartyHueWheel.partyHueKey(projectId, project?.color) ?: PartyHueWheel.identityHueKey(projectId))
 
     /** `March`, from an instant or a day. */
     public fun monthOf(stamp: String): String =

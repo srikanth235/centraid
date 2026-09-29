@@ -23,7 +23,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
-use centraid_apps_kit::reads::{JOIN_FAN_OUT, PageDoor, in_list, read_pages};
+use centraid_apps_kit::page::PageRequest;
+use centraid_apps_kit::reads::{JOIN_FAN_OUT, PageDoor, in_list, read_pages, read_window};
 use centraid_apps_kit::row::{integer_or_zero, text_of};
 use centraid_apps_kit::statement::{PageOrder, PageQuery};
 
@@ -31,7 +32,8 @@ use crate::Denial;
 use crate::cards::CardDoor;
 use crate::journal::read_journal_note_ids;
 use crate::queries::{
-    LibraryData, LibraryRow, NOTE_TARGET_TYPE, WINDOW_MIN, load_library, notebook_kind_bind,
+    LibraryData, LibraryRow, NOTE_TARGET_TYPE, SHELF_ROWS, WINDOW_DEFAULT, WINDOW_MIN,
+    load_library, notebook_kind_bind, pinned_statement, recent_statement,
 };
 
 /// How the shelf is ordered. Pinned notes lead under every order.
@@ -159,6 +161,12 @@ pub struct NotebookEntry {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NotebooksData {
     pub notebooks: Vec<NotebookEntry>,
+    /// The "Unfiled" row's count (#1047): live, non-journal notes filed in no
+    /// notebook, over the library's default window plus every pinned note —
+    /// the rows `LibraryFilter::unfiled_only` draws at that window.
+    pub unfiled_count: usize,
+    /// More live notes exist beyond that window.
+    pub unfiled_truncated: bool,
 }
 
 /// Every notebook, with its parent — `kind = 'notebook'`, never an album.
@@ -200,8 +208,14 @@ fn notebooks_body(door: &dyn PageDoor) -> KitResult<NotebooksData> {
         .iter()
         .filter_map(|row| text_of(row, "collection_id"))
         .collect();
+    let journal: BTreeSet<String> = read_journal_note_ids(door)?.into_iter().collect();
     if ids.is_empty() {
-        return Ok(NotebooksData::default());
+        let (unfiled_count, unfiled_truncated) = unfiled(door, &BTreeSet::new(), &journal)?;
+        return Ok(NotebooksData {
+            notebooks: Vec::new(),
+            unfiled_count,
+            unfiled_truncated,
+        });
     }
     let fragment = in_list("collection_id", &ids)?;
     let entries = read_pages(
@@ -224,10 +238,10 @@ fn notebooks_body(door: &dyn PageDoor) -> KitResult<NotebooksData> {
     note_ids.dedup();
     // A NOTE COUNTS WHEN IT IS ON THE SHELF: live, and not a journal entry
     // (D-1020-N3) — the same rows the library would draw in this notebook.
+    let filed: BTreeSet<String> = note_ids.iter().cloned().collect();
     let live: BTreeSet<String> = if note_ids.is_empty() {
         BTreeSet::new()
     } else {
-        let journal: BTreeSet<String> = read_journal_note_ids(door)?.into_iter().collect();
         let fragment = in_list("note_id", &note_ids)?;
         read_pages(
             door,
@@ -275,5 +289,32 @@ fn notebooks_body(door: &dyn PageDoor) -> KitResult<NotebooksData> {
     // `sort_order` is sibling-scoped, so it is a sort, not a key; the id read
     // order is the tie-break.
     notebooks.sort_by_key(|notebook| notebook.sort_order);
-    Ok(NotebooksData { notebooks })
+    let (unfiled_count, unfiled_truncated) = unfiled(door, &filed, &journal)?;
+    Ok(NotebooksData {
+        notebooks,
+        unfiled_count,
+        unfiled_truncated,
+    })
+}
+
+/// THE "UNFILED" COUNT, over the library's own reads: the default recent
+/// window plus every pinned note (read beside it, as the library does), minus
+/// the journal and every note filed in a notebook. Whether the window filled
+/// is the second half of the answer, so a count of a window never reads as a
+/// count of the vault.
+fn unfiled(
+    door: &dyn PageDoor,
+    filed: &BTreeSet<String>,
+    journal: &BTreeSet<String>,
+) -> KitResult<(usize, bool)> {
+    let recent = read_window(door, &recent_statement(), WINDOW_DEFAULT)?;
+    let pinned = door.page(&pinned_statement(), &PageRequest::first(SHELF_ROWS))?;
+    let shelf: BTreeSet<String> = recent
+        .rows
+        .iter()
+        .chain(&pinned.rows)
+        .filter_map(|row| text_of(row, "note_id"))
+        .filter(|id| !filed.contains(id) && !journal.contains(id))
+        .collect();
+    Ok((shelf.len(), recent.filled))
 }

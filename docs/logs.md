@@ -4,7 +4,7 @@ Every debugging session (human or agent) starts here. Do not invent alternate pa
 
 ## The `centraid` binary (first stop)
 
-Every verb of the one binary — `gateway`, `seat`, `pair`, `backup`, `doctor`, `recover`, `export`, `native-host` — writes its diagnostics to **stderr** — `tracing` events one line each, plus the plain `centraid: …` refusals some verbs print — so stdout stays parseable (`crates/centraid/src/run.rs`, `install_tracing`). The filter is `--log <filter>` or `CENTRAID_LOG`, in `tracing`'s `EnvFilter` syntax; the default is `centraid=info,centraid_net=info`, and a filter that does not parse falls back to `info`.
+Both verbs of the operator binary — `gateway install` and `doctor` — write its diagnostics to **stderr** — `tracing` events one line each, plus the plain `centraid: …` refusals some verbs print — so stdout stays parseable (`crates/centraid/src/run.rs`, `install_tracing`). The filter is `--log <filter>` or `CENTRAID_LOG`, in `tracing`'s `EnvFilter` syntax; the default is `centraid=info`, and a filter that does not parse falls back to `info`.
 
 ```sh
 centraid --log centraid=debug,centraid_net=debug,iroh=debug gateway --data-dir <dir>
@@ -26,7 +26,7 @@ Where stderr lands depends on who started the process:
 
 The unit paths are written by `crates/centraid/src/cmd/gateway_install.rs` through `crates/centraid/src/cmd/units.rs`.
 
-`centraid doctor --data-dir <dir> [--json]` is read-only and lock-free, so it is safe against a serving gateway; it is the first thing to run against a vault that is misbehaving. The laptop's gateway logs through the same filter; its sweeps log **counts only**, because a blind store may say how many objects it read and never which ([gateway.md](gateway.md#the-sweeps)).
+`centraid doctor --data-dir <dir> [--json]` is read-only and lock-free, so it never changes the file it judges; it is the first thing to run against a vault file that is misbehaving — a copy off the phone, or a drill's restore (the gateway holds no vault file). The laptop's gateway logs through the same filter; its sweeps log **counts only**, because a blind store may say how many objects it read and never which ([gateway.md](gateway.md#the-sweeps)).
 
 ## Mobile
 

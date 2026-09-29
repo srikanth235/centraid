@@ -48,12 +48,6 @@ fn generated() -> Value {
         // that helps open a chunk. Same key material, different context: if the
         // two ever produced one value, dedupe would leak.
         (format!("centraid-backup:dedup:{VAULT_ID}"), 32),
-        // `custody::member_key::envelope_cipher`. The `‖` is the separator the
-        // vault id is folded in with, because BLAKE3's KDF has no salt.
-        (
-            format!("centraid-member-key-envelope-v1\u{2016}{VAULT_ID}"),
-            32,
-        ),
         // A WAL nonce: 12 bytes off the same XOF, which is the length HKDF's
         // counter loop used to be asked for.
         (

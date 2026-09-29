@@ -21,10 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,6 +51,7 @@ import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.hueColor
+import dev.centraid.android.kit.rememberFollowedText
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.copy.TasksCopy
@@ -241,8 +239,13 @@ internal fun TasksQuickAddBar(
     onSubmit: () -> Unit,
 ) {
     if (quickAdd == null || !quickAdd.shown) return
-    var typed by remember { mutableStateOf(quickAdd.title) }
-    LaunchedEffect(quickAdd.title) { if (quickAdd.title != typed) typed = quickAdd.title }
+    // A LATE ECHO NEVER OVERWRITES WHAT IS TYPED NOW: the machine's title is
+    // adopted only when it is not an echo of this field's typing (a clear after
+    // Add, words handed in by Notes' "Send to Tasks"). Following every echo
+    // moved letters under a slow round trip ("Walk task" became "Wak task … l").
+    val editor = rememberFollowedText(quickAdd.title)
+    val typed = editor.text.value
+    val submit = { onSubmit() }
     // OPENED WITH WORDS IN IT (Notes' "Send to Tasks"): the field takes the keyboard.
     val focus = remember { FocusRequester() }
     LaunchedEffect(quickAdd.focused) { if (quickAdd.focused) focus.requestFocus() }
@@ -264,15 +267,12 @@ internal fun TasksQuickAddBar(
                 }
                 BasicTextField(
                     value = typed,
-                    onValueChange = {
-                        typed = it
-                        if (it != quickAdd.title) onChange(it)
-                    },
+                    onValueChange = { if (editor.edited(it)) onChange(it) },
                     singleLine = true,
                     textStyle = centraidType("body").copy(color = centraidColor("text")),
                     cursorBrush = SolidColor(centraidColor("text")),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { if (quickAdd.can_submit) onSubmit() }),
+                    keyboardActions = KeyboardActions(onDone = { if (quickAdd.can_submit) submit() }),
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focus)
@@ -281,7 +281,7 @@ internal fun TasksQuickAddBar(
                 )
             }
             if (quickAdd.can_submit) {
-                QuietButton(verb, testTag = "tasks-quick-add-verb", modifier = Modifier.padding(end = 4.dp), onPress = onSubmit)
+                QuietButton(verb, testTag = "tasks-quick-add-verb", modifier = Modifier.padding(end = 4.dp), onPress = submit)
             }
         }
         if (quickAdd.lands_label.isNotEmpty()) {

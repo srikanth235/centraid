@@ -76,7 +76,8 @@ final class ShellModel: ObservableObject {
     @Published var path: [Route] = []
     @Published var masked = false
 
-    /// PAINT THE SWITCHER MASK, and take it down (`docs/mobile-offline.md:253`).
+    /// PAINT THE SWITCHER MASK, and take it down: on `.background`, so the
+    /// snapshot iOS keeps for the app switcher shows no rows (`CentraidApp`).
     ///
     /// **`masked` had no writer.** `grep -n 'masked' mobile/iosApp/Sources/` on
     /// the commit before this one finds one line — this declaration — so the
@@ -128,6 +129,26 @@ final class ShellModel: ObservableObject {
     /// one out of an error: `Error.detail` is logs-only, and a shell that made
     /// its own sentence from a peer's words would be the hole in that rule.
     @Published var gatewayStatus = ""
+
+    /// WHICH 24-WORDS SCREEN IS UP (#1047 E2), if any: `words.make` or
+    /// `words.enter`. One sheet at the root for both, so switching from one to
+    /// the other (RESTORE_FIRST's "Restore my vaults") is an item change the
+    /// presentation handles, and Locker's wall can raise it from any depth.
+    @Published var wordsSheet: WordsSheet?
+    /// `words.make`'s and `words.enter`'s last states, as bytes.
+    @Published var vaultWordsState = Data()
+    @Published var wordsEntryState = Data()
+    /// `words.show`'s and `pair.laptop`'s last states (#1047 E5), as bytes.
+    @Published var wordsShowState = Data()
+    @Published var pairLaptopState = Data()
+
+    /// The root custody sheet: the two words screens (#1047 E2), and the two
+    /// the More sheet's rows open (#1047 E5) — showing the words again, and
+    /// pairing with the laptop.
+    enum WordsSheet: String, Identifiable {
+        case make, enter, show, pair
+        var id: String { rawValue }
+    }
 
     /// The last finished state for each screen, as encoded bytes.
     ///
@@ -187,6 +208,13 @@ final class ShellModel: ObservableObject {
     /// the app.
     private let photos = PhotosBridge()
 
+    /// THE 24 WORDS' TWO BRIDGES (#1047 E2), held for the life of the shell.
+    private let vaultWords = VaultWordsBridge()
+    private let wordsEntry = WordsEntryBridge()
+    /// `words.show` and `pair.laptop` (#1047 E5), held for the same reason.
+    private let wordsShow = WordsShowBridge()
+    private let pairLaptop = PairLaptopBridge()
+
     /// THE REGISTERED SCREENS' PORTS AND ROUTES (K5) — `ScreenRegistry.swift`.
     /// Filled once, in `init`, by `AppRegistry.apps`; held for the life of the
     /// shell for the same reason the Photos bridges below are.
@@ -217,6 +245,10 @@ final class ShellModel: ObservableObject {
             self?.homeState = bytes.data
         }
         photos.observe { [weak self] bytes in self?.photosState = bytes.data }
+        vaultWords.observe { [weak self] bytes in self?.vaultWordsChanged(bytes.data) }
+        wordsEntry.observe { [weak self] bytes in self?.wordsEntryChanged(bytes.data) }
+        wordsShow.observe { [weak self] bytes in self?.wordsShowChanged(bytes.data) }
+        pairLaptop.observe { [weak self] bytes in self?.pairLaptopChanged(bytes.data) }
         // ONE LINE PER APP lives in `AppRegistry.apps`, not here.
         for app in AppRegistry.apps { app.register(into: self) }
         photoShelf.observe { [weak self] bytes in
@@ -259,6 +291,9 @@ final class ShellModel: ObservableObject {
             self.session = session
             for port in self.ports.values { port.attach(session) }
             self.photos.attach(session: session)
+            self.vaultWords.attach(session: session)
+            self.wordsEntry.attach(session: session)
+            self.pairLaptop.attach(session: session)
             self.photoShelf.attach(session: session)
             self.photoLightbox.attach(session: session)
             self.photoPicker.attach(session: session)
@@ -314,7 +349,7 @@ final class ShellModel: ObservableObject {
         // item needs it in its own right. `VaultFileProtection` says why this
         // is the layer that can do it.
         VaultFileProtection.secure(directory: Self.vaultDirectory)
-        home.open(vaultDir: Self.vaultDirectory)
+        home.open(vaultDir: Self.vaultDirectory, devSeedHex: Self.devSeedHex)
         VaultFileProtection.secure(directory: Self.vaultDirectory)
         // AND AGAIN ON THE WAY TO THE BACKGROUND, which is the moment before
         // iOS would take a backup. Every file the core created while the app
@@ -376,39 +411,210 @@ final class ShellModel: ObservableObject {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
     }
 
+    /// THE DEMO VAULT'S SEED, HANDED TO A DEBUG BUILD AT LAUNCH (#1047 W2).
+    ///
+    /// `mobile/scripts/demo-vault.sh ios` relaunches the app with
+    /// `SIMCTL_CHILD_CENTRAID_DEV_SEED` set to what `seed-demo-vault` printed
+    /// as `CENTRAID_DEMO_SEED` — the public all-`abandon` words' seed — and the
+    /// shelf stores it where a real seed lives, so the demo Locker opens keyed.
+    /// A release build compiles `nil` here and carries nothing of the demo's.
+    static var devSeedHex: String? {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["CENTRAID_DEV_SEED"]
+        #else
+        nil
+        #endif
+    }
+
     #endif
 
-    /// MAKE A VAULT ON THIS PHONE (#1029 §1).
-    ///
-    /// What `pair(ticket:)` became. It took a pasted ticket, this device's name
-    /// and a platform string and redeemed them against a gateway; none of the
-    /// three has a reader now. The phone is the vault, so the only input is the
-    /// tap.
-    func found(done: @escaping () -> Void) {
+    // MARK: The 24 words (#1047 E2)
+
+    /// MAKE A VAULT, THROUGH ITS WORDS. What the make-vault control does now:
+    /// `words.make` decides whether this phone mints words, makes the next
+    /// vault from a seed it already holds, or must restore first. The vault
+    /// sheet goes first — one sheet at a time.
+    func makeVault() {
+        vaultSheetOpen = false
         #if canImport(CentraidShared)
-        home.found { [weak self] outcome in
-            // KOTLIN'S NESTED CLASSES FLATTEN IN OBJECTIVE-C. A sealed
-            // interface's members export as `FoundResultMade` and
-            // `FoundResultRefused`, not as nested types — so `FoundResult.Made`
-            // does not exist on this side and the compiler says so.
-            switch outcome {
-            case let made as FoundResultMade:
-                // THE NAME COMES OUT OF THE VAULT (#1025 S7-9). A ticket used
-                // to carry the gateway CLI's `--vault-name` flag and the sheet
-                // printed it as fact; this one is `core_vault.display_name`,
-                // read off the file that was just founded.
-                self?.gatewayStatus = "Made \(made.vaultName)."
-            case let refused as FoundResultRefused:
-                self?.gatewayStatus = refused.sentence
-            default:
-                self?.gatewayStatus = "Centraid is still opening."
-            }
-            done()
-        }
-        #else
-        gatewayStatus = "This build has no core."
-        done()
+        vaultWords.open()
         #endif
+        DispatchQueue.main.async { self.wordsSheet = .make }
+    }
+
+    /// RESTORE ONTO THIS PHONE from the 24 words (`words.enter`,
+    /// PURPOSE_RESTORE): the make-vault sheet's second door, the empty
+    /// shelf's, and words.make's RESTORE_FIRST intent.
+    func openRestore() {
+        vaultSheetOpen = false
+        #if canImport(CentraidShared)
+        wordsEntry.openRestore()
+        #endif
+        DispatchQueue.main.async { self.wordsSheet = .enter }
+    }
+
+    /// HAND THE WORDS BACK to this phone's vaults (`words.enter`,
+    /// PURPOSE_REKEY): Locker's wall's `WordsTapped` intent.
+    func openRekey() {
+        #if canImport(CentraidShared)
+        wordsEntry.openRekey()
+        #endif
+        wordsSheet = .enter
+    }
+
+    /// The same re-key from pair.laptop's `WordsTapped`: the screen explains
+    /// the words in pairing's terms, not Locker's (#1047 F5).
+    private func openRekeyForPairing() {
+        #if canImport(CentraidShared)
+        wordsEntry.openRekeyForPairing()
+        #endif
+        wordsSheet = .enter
+    }
+
+    /// An event for `words.make`. `RestoreTapped` is an INTENT the machine
+    /// ignores: the shell closes words.make (RESTORE_FIRST holds no words)
+    /// and opens words.enter for a restore in its place.
+    func sendVaultWords(_ event: Data) {
+        #if canImport(CentraidShared)
+        vaultWords.send(event: event.kotlin)
+        let decoded = (try? Centraid_Screen_V1_VaultWordsEvent(serializedBytes: event)) ?? .init()
+        if case .restore = decoded.kind {
+            // WHICH RESTORE IS THE STATE'S (#1047 E4): RESTORE_FIRST means
+            // this phone holds a seed, so words.enter opens RESTORE_HELD — no
+            // words to type, only the laptop's address.
+            let purpose = ((try? Centraid_Screen_V1_VaultWordsState(serializedBytes: vaultWordsState)) ?? .init()).restorePurpose
+            vaultWords.send(event: VaultWordsView.event { $0.dismissed = .init() }.kotlin)
+            if purpose == .restoreHeld {
+                wordsEntry.openRestoreHeld()
+            } else {
+                wordsEntry.openRestore()
+            }
+            wordsSheet = .enter
+        }
+        #endif
+    }
+
+    func sendWordsEntry(_ event: Data) {
+        #if canImport(CentraidShared)
+        wordsEntry.send(event: event.kotlin)
+        #endif
+    }
+
+    /// THE SHEET WAS SWIPED AWAY. words.make hears `Dismissed` (the words are
+    /// dropped); words.enter has no dismissal of its own and its swipe is its
+    /// Cancel — the sheet allows the swipe only while ENTERING.
+    func wordsSwipedAway() {
+        switch wordsSheet {
+        case .make:
+            sendVaultWords(VaultWordsView.event { $0.dismissed = .init() })
+        case .enter:
+            sendWordsEntry(WordsEntryView.event { $0.secondary = .init() })
+        case .show:
+            sendWordsShow(WordsShowView.event { $0.dismissed = .init() })
+        case .pair:
+            sendPairLaptop(PairLaptopView.event { $0.dismissed = .init() })
+        case nil:
+            break
+        }
+        wordsSheet = nil
+    }
+
+    // MARK: The More sheet's custody rows (#1047 E5)
+
+    /// SHOW THE 24 WORDS AGAIN (`words.show`): the More sheet's
+    /// `WordsCopy.SHOW_AGAIN_ROW`. The More sheet goes first — one sheet at a
+    /// time.
+    func openShowWords() {
+        send(screen: "home", event: HomeEvents.allApps(open: false))
+        #if canImport(CentraidShared)
+        wordsShow.open()
+        #endif
+        DispatchQueue.main.async { self.wordsSheet = .show }
+    }
+
+    /// PAIR WITH THE LAPTOP (`pair.laptop`): the More sheet's pairing row.
+    /// Whether this phone has a camera is the one fact the machine is told.
+    func openPairLaptop() {
+        send(screen: "home", event: HomeEvents.allApps(open: false))
+        #if canImport(CentraidShared)
+        pairLaptop.open(camera: PairScanner.available)
+        #endif
+        DispatchQueue.main.async { self.wordsSheet = .pair }
+    }
+
+    func sendWordsShow(_ event: Data) {
+        #if canImport(CentraidShared)
+        wordsShow.send(event: event.kotlin)
+        #endif
+    }
+
+    /// An event for `pair.laptop`. `WordsTapped` is an INTENT: the machine
+    /// closes the pairing and the shell opens words.enter's re-key in its
+    /// place — Locker's wall's door. The sheet swaps before the machine's
+    /// CLOSED arrives, so that arrival leaves the words sheet up.
+    func sendPairLaptop(_ event: Data) {
+        #if canImport(CentraidShared)
+        pairLaptop.send(event: event.kotlin)
+        if case .words = (try? Centraid_Screen_V1_PairLaptopEvent(serializedBytes: event))?.kind {
+            openRekeyForPairing()
+        }
+        #endif
+    }
+
+    /// THE APP LEFT THE FOREGROUND: words.show drops its words (`Dismissed`),
+    /// as a swipe would. `.background` only — the owner check's own prompt
+    /// makes the scene inactive, and that is not leaving.
+    func leftForeground() {
+        if wordsSheet == .show {
+            sendWordsShow(WordsShowView.event { $0.dismissed = .init() })
+        }
+    }
+
+    /// Pairing cannot be swiped away while the core is pairing.
+    var pairLaptopSwipeable: Bool {
+        ((try? Centraid_Screen_V1_PairLaptopState(serializedBytes: pairLaptopState)) ?? .init()).phase != .pairing
+    }
+
+    private func wordsShowChanged(_ data: Data) {
+        wordsShowState = data
+        let state = (try? Centraid_Screen_V1_WordsShowState(serializedBytes: data)) ?? .init()
+        if state.phase == .closed, wordsSheet == .show { wordsSheet = nil }
+    }
+
+    private func pairLaptopChanged(_ data: Data) {
+        pairLaptopState = data
+        let state = (try? Centraid_Screen_V1_PairLaptopState(serializedBytes: data)) ?? .init()
+        if state.phase == .closed, wordsSheet == .pair { wordsSheet = nil }
+    }
+
+    /// A swipe is a way out only where the machine hears one: not while the
+    /// key is being kept or the vault made, and not while words.enter works.
+    var vaultWordsSwipeable: Bool {
+        let phase = ((try? Centraid_Screen_V1_VaultWordsState(serializedBytes: vaultWordsState)) ?? .init()).phase
+        return phase != .checking && phase != .making
+    }
+
+    var wordsEntrySwipeable: Bool {
+        ((try? Centraid_Screen_V1_WordsEntryState(serializedBytes: wordsEntryState)) ?? .init()).phase == .entering
+    }
+
+    private func vaultWordsChanged(_ data: Data) {
+        vaultWordsState = data
+        let state = (try? Centraid_Screen_V1_VaultWordsState(serializedBytes: data)) ?? .init()
+        // THE MADE VAULT'S SENTENCE stays on the vault sheet, as `found`'s did.
+        if state.phase == .made { gatewayStatus = state.body }
+        if state.phase == .closed, wordsSheet == .make { wordsSheet = nil }
+    }
+
+    private func wordsEntryChanged(_ data: Data) {
+        wordsEntryState = data
+        let state = (try? Centraid_Screen_V1_WordsEntryState(serializedBytes: data)) ?? .init()
+        if state.phase == .closed, wordsSheet == .enter {
+            wordsSheet = nil
+            // THE GATE RE-READS `keyed` ON ITS NEXT EVENT: a re-key that just
+            // landed turns Locker's "Enter your 24 words" into "Unlock with …".
+            LockerLockSeam.attached(self)
+        }
     }
 
     /// FORGET A VAULT — the inverse of [found] (#1025 S7-9).

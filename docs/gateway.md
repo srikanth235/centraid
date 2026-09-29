@@ -8,13 +8,14 @@ It holds **no key, no plaintext byte and no schema**. It can tell you how many o
 
 ## The protocol
 
-Seven routes, all under `/v1`.
+Eight routes, all under `/v1`.
 
 | Route | What it does |
 | --- | --- |
 | `GET  /v1/health` | Answers on an empty server, before anybody has redeemed an invite, because a phone negotiates a version before it has an account. |
 | `POST /v1/vaults/{vault}/admit` | Redeems an invite and admits a device for a vault. |
-| `POST /v1/vaults/{vault}/lease` | Claims the writer lease, at an epoch. Claimed **once**, by pair or by restore — never per drain. |
+| `POST /v1/vaults/{vault}/lease` | Claims the writer lease, at an epoch. Claimed **once**, by pair or by restore — never per drain. Pair sends no body. A restore sends `{"head": "<hex>"}`, the head it fetched and checked, and the claim lands only while that is still the head: otherwise it is refused `GATEWAY_HEAD_CONFLICT` and the lease does not move (R-1047-R5). |
+| `GET  /v1/vaults/{vault}/head` | The lease's epoch and the manifest head, **without claiming**. A restore reads it, fetches and checks that generation, and claims the lease only for one that passed ([R-1047-R2](decisions.md#a-restore-that-holds-1047-r3)). Signed; a stranger and an unregistered vault are the same `UNKNOWN_VAULT`. |
 | `POST /v1/vaults/{vault}/declare` | Declares the objects a pass is about to upload and gets an upload target for each. |
 | `POST /v1/vaults/{vault}/commit` | Moves the manifest head under a `prev_head` compare-and-set, and advances the acked txid range. |
 | `POST /v1/vaults/{vault}/delete` | Asks for objects to be tombstoned, subject to the retention floor and the guards. |
@@ -86,7 +87,7 @@ centraid-gateway install --data-dir ~/vault [--dry-run]
 
 `centraid-gateway invite` prints three things: the invite code, a `pair` payload, and that payload as a **half-block Unicode QR** a phone camera can read straight off the terminal. The payload carries the laptop's endpoint id and the invite. The phone scans it, admits itself, claims the lease and stores the endpoint id in `backup/laptop.json` beside its vault — [device-local derived state, deliberately not in the vault](decisions.md#w15--the-phones-request-contract-1029).
 
-The member compares a **safety number** — 60 digits in 12 groups of 5, BLAKE3 over the two identity keys sorted by their bytes — and never a hex endpoint id, which is a string people check the first four characters of and stop ([W15-D5](decisions.md#w15--the-phones-request-contract-1029)).
+The member compares a **safety number** — 60 digits in 12 groups of 5, BLAKE3 over the two identity keys sorted by their bytes — and never a hex endpoint id, which is a string people check the first four characters of and stop ([W15-D5](decisions.md#w15--the-phones-request-contract-1029), [D-9](decisions.md#the-owners-rulings-of-2026-09-29-1047)). The two keys are the vault's identity key and the laptop's endpoint key, and both sides render them with one function, `centraid_identity::pairing_safety_number`. The laptop learns the vault's key only when the invite is redeemed, so `invite` cannot print the number: `serve` prints a `safety` line the moment an admit lands, and again for every paired vault on each start, and `invites` prints it beside each redeemed invite. `serve`'s `endpoint` line is the laptop's identity for the recovery runbook, not a thing to compare.
 
 An invite is one-use and expires; `centraid-gateway invites` lists what became of each.
 

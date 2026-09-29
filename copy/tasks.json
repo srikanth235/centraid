@@ -1,5 +1,5 @@
 {
-  "$generatedBy": "contracts/tools/export-copy.ts",
+  "$comment": "Hand-maintained source: no emitter writes this file (export-copy.ts left with v0's copy leaves in #1020 wave 6). Its twin is mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/TasksCopy.kt; edit both, and KitTimeMoneyCopySpec fails when their strings disagree.",
   "app": "tasks",
   "strings": {
     "ADD": "Add",
@@ -100,8 +100,6 @@
     "PILE_SITTING": "Sitting 90 days or more",
     "PRIORITY_NEXT": "Next",
     "PRIORITY_NONE": "None",
-    "PRIORITY_NOTE_A": "Optional.",
-    "PRIORITY_NOTE_B": "Most tasks never take one, and no layout reserves room for it.",
     "PRIORITY_NOW": "Now",
     "PRIORITY_SOON": "Soon",
     "PROJECTS_EMPTY": "No projects yet.",
@@ -161,7 +159,7 @@
     "TASK_RELEASED": "Task released",
     "TASK_REOPENED": "Task reopened",
     "TIME_NONE": "No time",
-    "TITLE_PLACEHOLDER": "Name it for Friday",
+    "TITLE_PLACEHOLDER": "Task name",
     "TITLE_REQUIRED": "A task needs a name.",
     "TODAY_DONE": "Everything due today is done.",
     "TODAY_EMPTY": "Nothing is scheduled for today.",

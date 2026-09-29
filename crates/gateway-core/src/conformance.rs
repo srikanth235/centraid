@@ -285,6 +285,7 @@ pub async fn run<H: Harness>(harness: &mut H) -> Report {
     head_race(harness, &mut report, quota).await;
     retention_abuse(harness, &mut report, quota).await;
     lease_refusals(harness, &mut report, quota).await;
+    claim_at_a_moved_head(harness, &mut report, quota).await;
     plan_and_quota(harness, &mut report).await;
     scrub_and_purge(harness, &mut report, quota).await;
     canary(harness, &mut report, quota).await;
@@ -833,6 +834,94 @@ async fn lease_refusals<H: Harness>(harness: &mut H, report: &mut Report, plan: 
         "lease/an-equal-epoch-is-refused",
         matches!(stale_claim, Err(Fault::Refused(Refusal::LeaseStale { .. }))),
         format!("two devices held the same epoch: {stale_claim:?}"),
+    );
+}
+
+/// A RESTORE CLAIMS ONLY THE HEAD IT CHECKED (#1047 L1).
+///
+/// The old phone commits between the restoring phone's read and its claim. The
+/// claim names the head the restoring phone checked, so it is refused with the
+/// head as it stands, the lease stays where it was — the old phone's next
+/// write is still accepted — and a claim at the new head then lands.
+async fn claim_at_a_moved_head<H: Harness>(harness: &mut H, report: &mut Report, plan: Plan) {
+    let name = "lease/a-restore-claim-at-a-moved-head-is-refused-and-moves-nothing";
+    if founded(harness, Policy::default(), plan).await.is_err() {
+        report.fail(name, "setup failed");
+        return;
+    }
+    let checked = ObjectName::of(b"the head the restoring phone checked");
+    let moved = ObjectName::of(b"the head the old phone committed after");
+    let first = land(
+        harness,
+        b"the checked generation",
+        ObjectKind::Base,
+        checked,
+        None,
+        START + 1,
+    )
+    .await;
+    let landed = match first {
+        Ok(()) => {
+            land(
+                harness,
+                b"the generation after it",
+                ObjectKind::Segment,
+                moved,
+                Some(checked),
+                START + 2,
+            )
+            .await
+        }
+        Err(fault) => Err(fault),
+    };
+    if let Err(fault) = landed {
+        report.fail(name, format!("setup failed: {fault:?}"));
+        return;
+    }
+    let restoring = Caller {
+        device: device(2),
+        epoch: 2,
+        ..caller(2, START + 3)
+    };
+    let stale = harness
+        .gateway()
+        .claim_lease_at_head(restoring, checked)
+        .await;
+    if !matches!(
+        stale,
+        Err(Fault::Refused(Refusal::HeadConflict { current: Some(head) })) if head == moved
+    ) {
+        report.fail(
+            name,
+            format!("a claim at a head that moved answered {stale:?}"),
+        );
+        return;
+    }
+    let old_phone = harness
+        .gateway()
+        .declare(
+            caller(1, START + 4),
+            &[declaration(
+                b"the old phone, still writing",
+                ObjectKind::Segment,
+            )],
+        )
+        .await;
+    if let Err(fault) = old_phone {
+        report.fail(
+            name,
+            format!("a refused claim moved the lease anyway: {fault:?}"),
+        );
+        return;
+    }
+    let current = harness
+        .gateway()
+        .claim_lease_at_head(restoring, moved)
+        .await;
+    report.check(
+        name,
+        current.as_ref().is_ok_and(|state| state.lease.epoch() == 2),
+        format!("a claim at the head as it stands answered {current:?}"),
     );
 }
 

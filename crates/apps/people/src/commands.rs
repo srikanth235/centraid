@@ -51,13 +51,6 @@
 //! sequence every time.
 //!
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10).
-//!
-//! **`online_only` is empty for People, and that is a checked claim.** Locker
-//! declares `ONLINE_ONLY_ACTIONS`; People declares none. So every People
-//! action may be queued offline — including `merge-people`, which is worth
-//! stating: the merge is irreversible, and it is still durable in the outbox
-//! rather than refused, because a member on a plane who has just noticed two
-//! cards for their grandfather is not doing anything the vault should lose.
 
 use std::collections::BTreeMap;
 
@@ -157,9 +150,6 @@ pub struct ActionRow {
     pub action: &'static str,
     pub command: &'static str,
     pub confirm: Confirm,
-    /// A seat refuses to QUEUE this offline. People declares none; see the
-    /// module note for the grep behind the claim.
-    pub online_only: bool,
 }
 
 const fn act(action: &'static str, command: &'static str) -> ActionRow {
@@ -167,7 +157,6 @@ const fn act(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::None,
-        online_only: false,
     }
 }
 
@@ -176,7 +165,6 @@ const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::Required,
-        online_only: false,
     }
 }
 
@@ -334,17 +322,6 @@ mod tests {
                 "delete-contact-channel",
                 "merge-people"
             ]
-        );
-    }
-
-    #[test]
-    fn no_action_is_withheld_offline() {
-        assert!(ACTIONS.iter().all(|row| !row.online_only));
-        // Including the merge, which is irreversible and still durable.
-        assert!(
-            !action_row("merge-people")
-                .expect("in the table")
-                .online_only
         );
     }
 

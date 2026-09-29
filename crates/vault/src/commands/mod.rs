@@ -231,9 +231,6 @@ pub struct CommandDefinition {
     pub handler: CommandHandler,
     /// Input keys whose values are secrets: tokenised before the journal.
     pub sealed_input: &'static [&'static str],
-    /// A seat refuses to QUEUE this offline, with a typed reason the shell
-    /// renders — a Locker reveal, an assistant turn, an export.
-    pub online_only: bool,
 }
 
 /// A command plus its compiled validator.

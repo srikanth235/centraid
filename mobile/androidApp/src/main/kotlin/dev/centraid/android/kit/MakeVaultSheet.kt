@@ -1,5 +1,8 @@
 package dev.centraid.android.kit
 
+import dev.centraid.design.copy.WordsCopy
+import dev.centraid.shared.shell.HomeWords
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,8 +29,10 @@ import dev.centraid.design.CentraidGeometry
  *
  * Same door as iOS `MakeVaultSheet`. Named apart from `HomeScreen`'s own private
  * `VaultSheet`, which is the SWITCHER: one lists the vaults this device holds,
- * this one adds to them. The sheet decides nothing — [onFound] is a
- * `HomeSession` call the activity owns.
+ * this one adds to them. The sheet decides nothing — [onMake] opens words.make
+ * (#1047 E3: the words come before the vault, and whether this phone mints
+ * them, makes from a seed it holds or must restore first is
+ * `VaultWordsMachine`'s), and [onRestore] opens words.enter for a restore.
  *
  * **R-SHELL-2:** [status] must name the foreground holding (or be empty), never
  * a vault this device has forgotten or switched away from.
@@ -35,8 +40,8 @@ import dev.centraid.design.CentraidGeometry
 @Composable
 public fun MakeVaultSheet(
     status: String,
-    working: Boolean,
-    onFound: (done: () -> Unit) -> Unit,
+    onMake: () -> Unit,
+    onRestore: () -> Unit,
     onOpenTransferRules: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -54,21 +59,26 @@ public fun MakeVaultSheet(
             color = centraidColor("text"),
         )
         Text(
-            "Make a vault on this phone",
+            HomeWords.VAULTS_MAKE_SPOKEN,
             style = centraidType("smallStrong"),
             color = centraidColor("text"),
         )
         TextButton(
-            onClick = { if (!working) onFound {} },
-            enabled = !working,
+            onClick = onMake,
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("vault-found-button"),
         ) {
-            Text(
-                if (working) "Making…" else "Make a vault",
-                color = centraidColor("link"),
-            )
+            Text(HomeWords.VAULTS_MAKE, color = centraidColor("link"))
+        }
+        // AND THE WAY BACK: a fresh install, or a phone told to restore first.
+        TextButton(
+            onClick = onRestore,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("vault-restore-button"),
+        ) {
+            Text(WordsCopy.RESTORE_FIRST_ACTION, color = centraidColor("link"))
         }
         TextButton(
             onClick = onOpenTransferRules,

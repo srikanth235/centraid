@@ -1,32 +1,26 @@
-//! THE EIGHT QUERIES, as statements-as-data plus pure folds.
+//! v0's QUERIES — less the retired autofill pair and Watchtower — as
+//! statements-as-data plus pure folds.
 //!
 //! Four facts run through all of them and are stated once, here:
 //!
 //! 1. **[`ITEM_COLUMNS`] is the browsable half, and no sealed cell is on it.**
 //!    `password`, `otp_seed`, `card_number`, `cvv` and `content` are absent **by
 //!    construction rather than stripped afterwards**, and every shelf — live,
-//!    archived, trash, watchtower, search, autofill — projects exactly this
+//!    archived, trash, search — projects exactly this
 //!    list, so there is one place to read to know what a Locker list can carry
 //!    (`queries/items.ts:27`-`:39`).
-//! 2. **Listing is not unlocking.** These statements run on a seat's own rows
-//!    under the app grant alone. That is why title, url and username are
-//!    plaintext at rest at all: a locked seat still lists and searches, which
-//!    is the whole reason Locker works on a phone in airplane mode
+//! 2. **Listing is not unlocking.** These statements run on the phone's own
+//!    rows under the app grant alone. That is why title, url and username are
+//!    plaintext at rest at all: listing and search need no `K`
 //!    (`locker-key-plane.ts:21`-`:23`).
 //! 3. **A stated window is walked, not clamped** (D-1020-D3-12, R-1020-35).
 //!    `MAX_PAGE_ROWS` clamps a page at 500, so v0's four 2,000-row shelves each
 //!    asked for their window as one page and got a quarter of it with a `next`
-//!    cursor nobody read — *Watchtower audited a quarter of the vault and
+//!    cursor nobody read — *v0's review audited a quarter of the vault and
 //!    reported it as all of it*. v0's own comments now say "WALKED, NOT
 //!    CLAMPED" at each of the four, and this port walks with
 //!    [`centraid_apps_kit::read_window`], which also **reports whether the
 //!    window filled**.
-//! 4. **A decoration that did not run is absent, not `false`.**
-//!    [`Decorated::watch`] is an `Option` per item and
-//!    [`ItemsAnswer::watchtower`] is an `Option` summary, because a zeroed
-//!    summary is this query telling the review screen that nothing is weak
-//!    (`queries/items.ts` — *"the keys themselves say whether the derivation
-//!    ran"*).
 //!
 //! ## The nullable sort key, and why these windows are honest about it
 //!
@@ -45,14 +39,12 @@ use centraid_apps_kit::reads::{PageDoor, Window, in_list, read_by_id, read_windo
 use centraid_apps_kit::row::{Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
-use crate::origin::{MatchPolicy, OriginCandidate, matches_origin};
 use crate::types::{AUTH_ENTITY_TYPE, ITEM_ENTITY_TYPE, degrade_type, degraded_from};
-use crate::watchtower::WatchEntry;
 
 /// THE BROWSABLE HALF OF A LOCKER ITEM (#996 wave 4, R8 and W6-D2).
 ///
 /// A statement names its columns, and **no sealed cell is on this list**.
-pub const ITEM_COLUMNS: &str = "item_id, type, title, username, url, url_match_policy, notes, \
+pub const ITEM_COLUMNS: &str = "item_id, type, title, username, url, notes, \
      cardholder, expiry, brand, fullname, email, phone, address, network, \
      compromised, password_set_at, created_at, updated_at, \
      archived_at, deleted_at, purge_at";
@@ -72,10 +64,6 @@ pub const ITEMS_MAX: usize = 2_000;
 pub const SEARCH_ROWS: usize = 500;
 /// `TRASH_ROWS` (`trash.ts:18`).
 pub const TRASH_ROWS: usize = 2_000;
-/// `WATCH_ROWS` (`watchtower.ts:20`).
-pub const WATCH_ROWS: usize = 2_000;
-/// `LOGIN_ROWS` (`autofill-candidates.ts:13`).
-pub const LOGIN_ROWS: usize = 2_000;
 /// `access.ts:20`-`:21` — the default and the ceiling of the audit window.
 pub const ACCESS_DEFAULT: usize = 200;
 pub const ACCESS_MAX: usize = 2_000;
@@ -180,72 +168,10 @@ pub fn trash_statement() -> PageQuery {
     .filter("deleted_at IS NOT NULL", Vec::new())
 }
 
-/// The review shelf: every non-trashed item, archived included.
-///
-/// Note the difference from [`Shelf::Live`]: Watchtower reviews **archived**
-/// items too, because an archived login's password is still a password
-/// somebody reused.
-#[must_use]
-pub fn watchtower_statement() -> PageQuery {
-    PageQuery::new(
-        "locker.watchtower.items",
-        ITEM_COLUMNS,
-        "locker_item",
-        PageOrder::desc("updated_at", "item_id"),
-    )
-    .filter("deleted_at IS NULL", Vec::new())
-}
-
-/// The browsable half PLUS one bit: whether the item carries a one-time code.
-///
-/// **PRESENCE, NEVER THE CELL** (#1020, D-1020-CL5). `ITEM_COLUMNS` carries no
-/// sealed column and must not, so `has_totp` was `false` for every item in
-/// every vault — the Companion was never told an item has a code. Asking for
-/// `otp_seed` would hand a browser ciphertext; asking whether it is set hands
-/// it a boolean, and the door's grammar now permits exactly that (a sealed
-/// column as the operand of `IS [NOT] NULL`, and nothing else).
-#[must_use]
-pub fn autofill_login_columns() -> String {
-    format!("{ITEM_COLUMNS}, otp_seed IS NOT NULL AS has_totp")
-}
-
-/// Every live login, for the Companion's candidate list.
-#[must_use]
-pub fn autofill_logins_statement() -> PageQuery {
-    PageQuery::new(
-        "locker.autofill.logins",
-        &autofill_login_columns(),
-        "locker_item",
-        PageOrder::desc("updated_at", "item_id"),
-    )
-    .filter(
-        "type = ? AND deleted_at IS NULL",
-        vec![PageBindValue::Text("login".to_owned())],
-    )
-}
-
-/// One live login by id, for a single fill.
-#[must_use]
-pub fn autofill_item_statement(item_id: &str) -> PageQuery {
-    PageQuery::new(
-        "locker.autofill.item",
-        ITEM_COLUMNS,
-        "locker_item",
-        PageOrder::asc("item_id", "item_id"),
-    )
-    .filter(
-        "item_id = ? AND type = ? AND deleted_at IS NULL",
-        vec![
-            PageBindValue::Text(item_id.to_owned()),
-            PageBindValue::Text("login".to_owned()),
-        ],
-    )
-}
-
 /// THE AUDIT WINDOW, AND THE INNER OF ITS TWO WALLS (census §A8).
 ///
 /// The manifest's `rowFilter` on `object_type` is the outer wall, carried per
-/// call as the gateway's execution clamp. This predicate names the same two
+/// call as the page door's execution clamp. This predicate names the same two
 /// types **in the statement**, so the page is filtered *before* the window
 /// rather than after — without it a busy vault's newest 200 receipts could be
 /// entirely someone else's and the clamp would hand this screen an empty
@@ -281,7 +207,6 @@ pub struct ItemRow {
     pub title: String,
     pub username: Option<String>,
     pub url: Option<String>,
-    pub url_match_policy: MatchPolicy,
     pub notes: Option<String>,
     pub cardholder: Option<String>,
     pub expiry: Option<String>,
@@ -291,7 +216,8 @@ pub struct ItemRow {
     pub phone: Option<String>,
     pub address: Option<String>,
     pub network: Option<String>,
-    /// The **one stored security fact**. Weak and reused are derived.
+    /// The **one stored security fact** (weak and reused are not scored,
+    /// Q-1047-16).
     pub compromised: bool,
     /// When the CURRENT password was set. `None` honestly says "unknown"
     /// rather than claiming an age Review would then reason from.
@@ -313,7 +239,6 @@ impl ItemRow {
             title: text_of(row, "title").unwrap_or_default(),
             username: text_of(row, "username"),
             url: text_of(row, "url"),
-            url_match_policy: MatchPolicy::of(text_of(row, "url_match_policy").as_deref()),
             notes: text_of(row, "notes"),
             cardholder: text_of(row, "cardholder"),
             expiry: text_of(row, "expiry"),
@@ -357,8 +282,6 @@ fn truthy(row: &Row, column: &str) -> bool {
 pub enum Severity {
     /// The breach flag. The one stored fact, and the loudest.
     Danger,
-    /// Derived: weak or reused.
-    Warn,
     /// Nothing to say.
     None,
 }
@@ -369,7 +292,6 @@ impl Severity {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Danger => "danger",
-            Self::Warn => "warn",
             Self::None => "",
         }
     }
@@ -381,15 +303,11 @@ pub struct Decorated {
     pub item_id: String,
     pub item_type: String,
     pub title: String,
-    /// A **secret-free** subtitle. A card's is `•••• 1234`, which comes from
-    /// the Watchtower derivation and therefore only when it ran.
+    /// A **secret-free** subtitle. A card's is the word `Card`: its last four
+    /// digits are sealed with the rest of the number.
     pub subtitle: String,
     pub favorite: bool,
     pub tags: Vec<String>,
-    /// ABSENT, not `false`, when the derivation did not run: *checked and found
-    /// nothing* and *not asked* are different sentences, and `servedFields`
-    /// reads exactly this difference off the row.
-    pub watch: Option<WatchEntry>,
     pub compromised: bool,
     pub severity: Severity,
     pub url: Option<String>,
@@ -402,30 +320,9 @@ pub struct Decorated {
     pub password_set_at: Option<String>,
 }
 
-impl Decorated {
-    /// `weak`, but only as an answer — `None` when nothing derived it.
-    #[must_use]
-    pub fn weak(&self) -> Option<bool> {
-        self.watch.as_ref().map(|entry| entry.weak)
-    }
-
-    /// `reused`, same rule.
-    #[must_use]
-    pub fn reused(&self) -> Option<bool> {
-        self.watch.as_ref().map(|entry| entry.reused)
-    }
-
-    /// Whether the review shelf lists this row. A row whose derivation did not
-    /// run is listed only if its **stored** flag says so.
-    #[must_use]
-    pub fn needs_attention(&self) -> bool {
-        self.compromised || self.weak().unwrap_or(false) || self.reused().unwrap_or(false)
-    }
-}
-
 /// A safe, secret-free subtitle for a list row (`items.ts`'s `subtitleOf`).
 #[must_use]
-pub fn subtitle_of(row: &ItemRow, watch: Option<&WatchEntry>) -> String {
+pub fn subtitle_of(row: &ItemRow) -> String {
     let or_dash = |value: &Option<String>| {
         value
             .as_deref()
@@ -435,10 +332,7 @@ pub fn subtitle_of(row: &ItemRow, watch: Option<&WatchEntry>) -> String {
     };
     match row.item_type.as_str() {
         "login" => or_dash(&row.username),
-        "card" => match watch.and_then(|entry| entry.last4.as_deref()) {
-            Some(last4) => format!("•••• {last4}"),
-            None => "Card".to_owned(),
-        },
+        "card" => "Card".to_owned(),
         "note" => "Secure note".to_owned(),
         "identity" => or_dash(&row.email),
         "wifi" => or_dash(&row.network),
@@ -451,10 +345,6 @@ pub fn subtitle_of(row: &ItemRow, watch: Option<&WatchEntry>) -> String {
 pub struct Decorations {
     pub tags: BTreeMap<String, Vec<String>>,
     pub starred: BTreeSet<String>,
-    /// `None` means **the derivation did not run**, which is not the same
-    /// answer as an empty map: a caller that folded the two together would
-    /// report an all-clear it never checked.
-    pub watch: Option<BTreeMap<String, WatchEntry>>,
     pub alias: BTreeMap<String, String>,
 }
 
@@ -463,16 +353,8 @@ pub struct Decorations {
 pub fn decorate(rows: &[ItemRow], decorations: &Decorations) -> Vec<Decorated> {
     rows.iter()
         .map(|row| {
-            let watch = decorations
-                .watch
-                .as_ref()
-                .map(|map| map.get(&row.item_id).cloned().unwrap_or_default());
-            let weak = watch.as_ref().is_some_and(|entry| entry.weak);
-            let reused = watch.as_ref().is_some_and(|entry| entry.reused);
             let severity = if row.compromised {
                 Severity::Danger
-            } else if weak || reused {
-                Severity::Warn
             } else {
                 Severity::None
             };
@@ -480,14 +362,13 @@ pub fn decorate(rows: &[ItemRow], decorations: &Decorations) -> Vec<Decorated> {
                 item_id: row.item_id.clone(),
                 item_type: row.item_type.clone(),
                 title: row.title.clone(),
-                subtitle: subtitle_of(row, watch.as_ref()),
+                subtitle: subtitle_of(row),
                 favorite: decorations.starred.contains(&row.item_id),
                 tags: decorations
                     .tags
                     .get(&row.item_id)
                     .cloned()
                     .unwrap_or_default(),
-                watch,
                 compromised: row.compromised,
                 severity,
                 url: row.url.clone(),
@@ -521,9 +402,6 @@ pub struct Counts {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ItemsAnswer {
     pub items: Vec<Decorated>,
-    /// ABSENT when the derivation did not run. A zeroed summary would be this
-    /// query telling the review screen that nothing is weak.
-    pub watchtower: Option<crate::watchtower::Summary>,
     /// The window is longer than what was read.
     pub truncated: bool,
     pub window: usize,
@@ -547,7 +425,6 @@ pub fn items_answer(
     let items = decorate(&rows, decorations);
     let archived = shelf == Shelf::Archived;
     ItemsAnswer {
-        watchtower: crate::watchtower::summarise(&items, decorations.watch.is_some()),
         truncated: read.filled,
         window,
         archived,
@@ -717,12 +594,12 @@ pub fn fold_starred(rows: &[Row], starred_concept: &str) -> BTreeSet<String> {
 
 /// What the `item` query answers: one item's full detail, sealed cells at rest.
 ///
-/// **There is no reveal here** (#996 R13, W6-D2). This query used to hand the
-/// gateway a session token and an item token and take plaintext off the answer.
-/// The gateway no longer unseals a Locker row for a client at all — the *seat*
-/// does, with `K`, behind the member's unlock — so what comes back is the
-/// browsable half plus the shape of each secret. That is also why this pane
-/// paints **while the Locker is locked**, which the permit could never allow.
+/// **There is no reveal here** (#996 R13, W6-D2). In v0 this query handed the
+/// gateway a session token and an item token and took plaintext off the
+/// answer. Nothing but the phone's core unseals a Locker cell — with `K`,
+/// derived from the seed, behind the biometric presence gate (D-5) — so what
+/// comes back is the browsable half plus the shape of each secret. That is
+/// also why this pane paints **while the Locker is locked**.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ItemDetail {
     pub row: ItemRow,
@@ -782,140 +659,13 @@ pub fn item_detail(
     }
 }
 
-/// ONE CANDIDATE FOR THE COMPANION — **secret-free live login metadata**.
-///
-/// *OTP presence is a boolean; no password or OTP seed is returned*
-/// (`locker/app.json`'s own description of the query). `has_totp` is therefore
-/// derived from whether the sealed cell is non-null, which the browsable
-/// projection cannot see — so the statement for this one query projects
-/// `otp_seed`'s **presence** and never its value: see
-/// [`AutofillCandidate::of`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AutofillCandidate {
-    pub item_id: String,
-    pub title: String,
-    pub username: Option<String>,
-    pub url: String,
-    pub policy: MatchPolicy,
-    pub has_totp: bool,
-    pub compromised: bool,
-    /// Compromised, weak or reused — the one bit the picker shows.
-    pub warning: bool,
-}
-
-impl AutofillCandidate {
-    /// Build a candidate from a row, its OTP presence and the warned set.
-    ///
-    /// `has_totp` is passed in rather than read off the row because
-    /// [`ITEM_COLUMNS`] does not carry `otp_seed` **and must not**: the
-    /// presence of a sealed cell is a fact the vault answers, not a column an
-    /// app projects.
-    #[must_use]
-    pub fn of(row: &ItemRow, has_totp: bool, warned: &BTreeSet<String>) -> Option<Self> {
-        let url = row.url.clone().filter(|url| !url.is_empty())?;
-        Some(Self {
-            item_id: row.item_id.clone(),
-            title: row.title.clone(),
-            username: row.username.clone(),
-            url,
-            policy: row.url_match_policy,
-            has_totp,
-            compromised: row.compromised,
-            warning: row.compromised || warned.contains(&row.item_id),
-        })
-    }
-}
-
-/// WHY A FILL DID NOT HAPPEN — and each of these is a different sentence.
-///
-/// A blank answer and "the page does not match" are different facts, and the
-/// Companion renders them differently: one is a bug report and the other is the
-/// policy working.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FillRefusal {
-    /// The caller sent no id, or an origin that is not an origin.
-    Malformed,
-    /// No live login of that id.
-    NoSuchLogin,
-    /// The login has no stored address to match against.
-    NoStoredOrigin,
-    /// The origin does not match this login. **The policy working.**
-    OriginMismatch,
-    /// The seat that holds `K` is not this process. The extension is not a
-    /// seat and must never become one (census §E seam 5).
-    NotThisSeat,
-}
-
-impl FillRefusal {
-    /// The member-facing sentence, v0's own wording where v0 had one.
-    #[must_use]
-    pub const fn sentence(self) -> &'static str {
-        match self {
-            Self::Malformed => "A login id and normalized page origin are required.",
-            Self::NoSuchLogin => "That login is not in this vault.",
-            Self::NoStoredOrigin => "This login has no stored origin to match against.",
-            Self::OriginMismatch => "Page origin does not match this login.",
-            Self::NotThisSeat => {
-                "Filling needs the seat that holds this vault's key — unlock Centraid on this \
-                 device and try again."
-            }
-        }
-    }
-}
-
-/// WHICH LOGIN WOULD BE FILLED, decided here; the value comes from the seat.
-///
-/// This is the app's half of D-1020-L8 and it is deliberately the **whole** of
-/// the app's half. The origin match runs here — defence in depth, over the
-/// vault's own stored policy, so a forged `page_origin` is refused by the row
-/// rather than by the caller — and the answer is an **address**, which
-/// `crates/core::locker`'s `reveal_for_fill` turns into a value with a 30-second
-/// life and a receipt. An app crate that could return the password would be an
-/// app crate holding a secret, which is the thing W6-D2 forbids.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FillMatch {
-    pub item_id: String,
-    pub username: Option<String>,
-    /// The normalised origin, for the receipt.
-    pub origin: String,
-}
-
-/// Decide a fill. `Ok` names the row to reveal; `Err` says why not.
-pub fn fill_match(
-    row: Option<&ItemRow>,
-    raw_origin: Option<&str>,
-) -> Result<FillMatch, FillRefusal> {
-    let origin = raw_origin
-        .and_then(crate::origin::page_origin)
-        .ok_or(FillRefusal::Malformed)?;
-    let row = row.ok_or(FillRefusal::NoSuchLogin)?;
-    if row.item_id.is_empty() {
-        return Err(FillRefusal::Malformed);
-    }
-    let stored = row
-        .url
-        .as_deref()
-        .filter(|url| !url.is_empty())
-        .ok_or(FillRefusal::NoStoredOrigin)?;
-    if !matches_origin(&OriginCandidate::new(stored, row.url_match_policy), &origin) {
-        return Err(FillRefusal::OriginMismatch);
-    }
-    Ok(FillMatch {
-        item_id: row.item_id.clone(),
-        username: row.username.clone(),
-        origin,
-    })
-}
-
-/// One audit entry, and which of the three things it records.
+/// One audit entry, and which of the two things it records.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccessKind {
     /// An unlock. `object_type = locker.auth`.
     Auth,
     /// A reveal in the app.
     Reveal,
-    /// A fill into a page, which is the only kind that carries an origin.
-    Fill,
 }
 
 impl AccessKind {
@@ -924,7 +674,6 @@ impl AccessKind {
         match self {
             Self::Auth => "auth",
             Self::Reveal => "reveal",
-            Self::Fill => "fill",
         }
     }
 }
@@ -941,8 +690,6 @@ pub struct AccessEntry {
     pub allowed: bool,
     pub item_id: Option<String>,
     pub occurred_at: Option<String>,
-    /// Only on a fill.
-    pub origin: Option<String>,
     pub columns: Option<Vec<String>>,
     pub reason: Option<String>,
 }
@@ -971,8 +718,6 @@ pub fn access_answer(window: usize, rows: &[Row]) -> AccessAnswer {
                 .unwrap_or(serde_json::Value::Null);
             let kind = if object_type == AUTH_ENTITY_TYPE {
                 AccessKind::Auth
-            } else if detail["context"]["kind"] == "fill" {
-                AccessKind::Fill
             } else {
                 AccessKind::Reveal
             };
@@ -987,11 +732,6 @@ pub fn access_answer(window: usize, rows: &[Row]) -> AccessAnswer {
                     None
                 },
                 occurred_at: text_of(row, "occurred_at"),
-                origin: if kind == AccessKind::Fill {
-                    detail["context"]["origin"].as_str().map(str::to_owned)
-                } else {
-                    None
-                },
                 columns: detail["columns"].as_array().map(|columns| {
                     columns
                         .iter()
@@ -1061,41 +801,19 @@ mod tests {
             items_statement(Shelf::Archived),
             search_statement(),
             trash_statement(),
-            watchtower_statement(),
-            autofill_item_statement("x"),
         ] {
             assert_eq!(query.select, ITEM_COLUMNS, "{} drifted", query.name);
             assert_eq!(query.from, "locker_item");
         }
-        // The Companion's candidate list is the browsable half plus ONE
-        // projected bit, and the bit is a presence test rather than a column
-        // (#1020, D-1020-CL5).
-        let candidates = autofill_logins_statement();
-        assert_eq!(candidates.from, "locker_item");
-        assert_eq!(candidates.select, autofill_login_columns());
-        assert!(candidates.select.starts_with(ITEM_COLUMNS));
-        assert!(
-            !candidates
-                .select
-                .split(',')
-                .any(|column| column.trim() == "otp_seed"),
-            "the seed itself must never be projected"
-        );
     }
 
-    /// The review shelf reviews ARCHIVED items and the live shelf does not
-    /// show them — two different predicates over one table, and collapsing
-    /// them would either hide an archived login's reused password or put
-    /// archived rows back in the list.
+    /// The live shelf does not show archived items and the archived shelf
+    /// shows only them — two predicates over one table.
     #[test]
-    fn archived_is_reviewed_and_not_listed() {
+    fn archived_is_its_own_shelf() {
         assert_eq!(
             items_statement(Shelf::Live).r#where.as_deref(),
             Some("deleted_at IS NULL AND archived_at IS NULL")
-        );
-        assert_eq!(
-            watchtower_statement().r#where.as_deref(),
-            Some("deleted_at IS NULL")
         );
         assert_eq!(
             items_statement(Shelf::Archived).r#where.as_deref(),
@@ -1133,97 +851,41 @@ mod tests {
         assert_eq!(access_window(Some(9_999)), 2_000);
     }
 
-    /// A DECORATION THAT DID NOT RUN IS ABSENT, and the summary refuses to
-    /// exist. This is the assertion that stops an all-clear nobody checked.
+    /// The breach flag is the one stored fact, and the only severity.
     #[test]
-    fn an_undecorated_shelf_has_no_watchtower_summary_and_no_weak_bit() {
-        let rows = vec![ItemRow {
-            item_id: "i1".to_owned(),
-            item_type: "login".to_owned(),
-            title: "Bank".to_owned(),
-            ..ItemRow::default()
-        }];
-        let bare = decorate(&rows, &Decorations::default());
-        assert_eq!(bare[0].weak(), None);
-        assert_eq!(bare[0].reused(), None);
-        assert!(!bare[0].needs_attention());
-        assert_eq!(bare[0].severity, Severity::None);
-
-        let mut watch = BTreeMap::new();
-        watch.insert(
-            "i1".to_owned(),
-            WatchEntry {
-                weak: true,
-                reused: false,
-                last4: None,
+    fn only_the_breach_flag_raises_a_row() {
+        let rows = vec![
+            ItemRow {
+                item_id: "i1".to_owned(),
+                item_type: "login".to_owned(),
+                compromised: true,
+                ..ItemRow::default()
             },
-        );
-        let decorated = decorate(
-            &rows,
-            &Decorations {
-                watch: Some(watch),
-                ..Decorations::default()
+            ItemRow {
+                item_id: "i2".to_owned(),
+                item_type: "login".to_owned(),
+                ..ItemRow::default()
             },
-        );
-        assert_eq!(decorated[0].weak(), Some(true));
-        assert!(decorated[0].needs_attention());
-        assert_eq!(decorated[0].severity, Severity::Warn);
-    }
-
-    /// The breach flag outranks the derivation, because it is the one STORED
-    /// fact and the loudest thing the screen can say.
-    #[test]
-    fn compromised_outranks_weak_and_reused() {
-        let rows = vec![ItemRow {
-            item_id: "i1".to_owned(),
-            item_type: "login".to_owned(),
-            compromised: true,
-            ..ItemRow::default()
-        }];
-        let mut watch = BTreeMap::new();
-        watch.insert(
-            "i1".to_owned(),
-            WatchEntry {
-                weak: true,
-                reused: true,
-                last4: None,
-            },
-        );
-        let decorated = decorate(
-            &rows,
-            &Decorations {
-                watch: Some(watch),
-                ..Decorations::default()
-            },
-        );
+        ];
+        let decorated = decorate(&rows, &Decorations::default());
         assert_eq!(decorated[0].severity, Severity::Danger);
+        assert_eq!(decorated[1].severity, Severity::None);
     }
 
-    /// A card's subtitle needs the derivation; without it the row still draws.
+    /// A card's subtitle is a word: its last four digits are sealed.
     #[test]
-    fn a_card_subtitle_needs_the_derivation_and_degrades_to_a_word() {
+    fn a_card_subtitle_is_a_word_and_a_bare_login_a_dash() {
         let card = ItemRow {
             item_type: "card".to_owned(),
             ..ItemRow::default()
         };
-        assert_eq!(subtitle_of(&card, None), "Card");
-        assert_eq!(
-            subtitle_of(
-                &card,
-                Some(&WatchEntry {
-                    weak: false,
-                    reused: false,
-                    last4: Some("4242".to_owned()),
-                })
-            ),
-            "•••• 4242"
-        );
+        assert_eq!(subtitle_of(&card), "Card");
         let login = ItemRow {
             item_type: "login".to_owned(),
             username: None,
             ..ItemRow::default()
         };
-        assert_eq!(subtitle_of(&login, None), "—");
+        assert_eq!(subtitle_of(&login), "—");
     }
 
     #[test]
@@ -1244,61 +906,7 @@ mod tests {
     }
 
     #[test]
-    fn a_fill_refusal_says_which_refusal_it_is() {
-        let row = ItemRow {
-            item_id: "i1".to_owned(),
-            url: Some("https://login.example.com".to_owned()),
-            ..ItemRow::default()
-        };
-        assert_eq!(
-            fill_match(Some(&row), Some("https://www.example.com")),
-            Ok(FillMatch {
-                item_id: "i1".to_owned(),
-                username: None,
-                origin: "https://www.example.com".to_owned()
-            })
-        );
-        assert_eq!(
-            fill_match(Some(&row), Some("https://attacker.test")),
-            Err(FillRefusal::OriginMismatch)
-        );
-        // A URL is not an origin.
-        assert_eq!(
-            fill_match(Some(&row), Some("https://www.example.com/login")),
-            Err(FillRefusal::Malformed)
-        );
-        assert_eq!(
-            fill_match(None, Some("https://a.example")),
-            Err(FillRefusal::NoSuchLogin)
-        );
-        let no_url = ItemRow {
-            item_id: "i2".to_owned(),
-            ..ItemRow::default()
-        };
-        assert_eq!(
-            fill_match(Some(&no_url), Some("https://a.example")),
-            Err(FillRefusal::NoStoredOrigin)
-        );
-    }
-
-    /// An exact-host login does not fill a sibling, over the vault's own
-    /// stored policy rather than the caller's word for it.
-    #[test]
-    fn the_stored_policy_decides_not_the_caller() {
-        let pinned = ItemRow {
-            item_id: "i1".to_owned(),
-            url: Some("https://accounts.example.com".to_owned()),
-            url_match_policy: MatchPolicy::ExactHost,
-            ..ItemRow::default()
-        };
-        assert_eq!(
-            fill_match(Some(&pinned), Some("https://www.example.com")),
-            Err(FillRefusal::OriginMismatch)
-        );
-    }
-
-    #[test]
-    fn a_fill_receipt_is_the_only_entry_that_carries_an_origin() {
+    fn an_auth_receipt_names_no_item_and_a_reveal_names_its_cell() {
         let rows = vec![
             row(&[
                 ("receipt_id", "r2"),
@@ -1309,7 +917,7 @@ mod tests {
                 ("occurred_at", "2026-01-02T00:00:00.000Z"),
                 (
                     "detail_json",
-                    r#"{"context":{"kind":"fill","origin":"https://bank.example"},"columns":["password"]}"#,
+                    r#"{"context":{"kind":"reveal"},"columns":["password"]}"#,
                 ),
             ]),
             row(&[
@@ -1326,11 +934,7 @@ mod tests {
         ];
         let answer = access_answer(200, &rows);
         assert_eq!(answer.entries.len(), 2);
-        assert_eq!(answer.entries[0].kind, AccessKind::Fill);
-        assert_eq!(
-            answer.entries[0].origin.as_deref(),
-            Some("https://bank.example")
-        );
+        assert_eq!(answer.entries[0].kind, AccessKind::Reveal);
         assert_eq!(
             answer.entries[0].columns.as_deref(),
             Some(&["password".to_owned()][..])
@@ -1340,29 +944,7 @@ mod tests {
         assert!(!answer.entries[1].allowed);
         // An auth receipt names no item, because it is about the vault.
         assert_eq!(answer.entries[1].item_id, None);
-        assert_eq!(answer.entries[1].origin, None);
         assert!(!answer.truncated);
-    }
-
-    /// A reveal that is not a fill carries no origin even when the detail has
-    /// one, because the *kind* is what the surface branches on.
-    #[test]
-    fn a_reveal_is_not_a_fill() {
-        let rows = vec![row(&[
-            ("receipt_id", "r1"),
-            ("action", "reveal"),
-            ("object_type", "locker.item"),
-            ("object_id", "i1"),
-            ("decision", "allow"),
-            ("occurred_at", "2026-01-01T00:00:00.000Z"),
-            (
-                "detail_json",
-                r#"{"context":{"origin":"https://bank.example"}}"#,
-            ),
-        ])];
-        let answer = access_answer(200, &rows);
-        assert_eq!(answer.entries[0].kind, AccessKind::Reveal);
-        assert_eq!(answer.entries[0].origin, None);
     }
 
     #[test]
@@ -1436,26 +1018,5 @@ mod tests {
         let vocabulary = Vocabulary::default();
         assert_eq!(vocabulary.starred_concept(), None);
         assert!(vocabulary.tag_labels().is_empty());
-    }
-
-    #[test]
-    fn an_autofill_candidate_needs_a_stored_address() {
-        let warned = BTreeSet::new();
-        let bare = ItemRow {
-            item_id: "i1".to_owned(),
-            ..ItemRow::default()
-        };
-        assert_eq!(AutofillCandidate::of(&bare, false, &warned), None);
-        let with_url = ItemRow {
-            item_id: "i1".to_owned(),
-            title: "Bank".to_owned(),
-            url: Some("https://bank.example".to_owned()),
-            compromised: true,
-            ..ItemRow::default()
-        };
-        let candidate = AutofillCandidate::of(&with_url, true, &warned).expect("a candidate");
-        assert!(candidate.has_totp);
-        assert!(candidate.warning);
-        assert_eq!(candidate.policy, MatchPolicy::RegistrableDomain);
     }
 }

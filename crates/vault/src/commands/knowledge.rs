@@ -395,7 +395,6 @@ fn create_note() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -515,7 +514,6 @@ fn edit_note() -> CommandDefinition {
             })
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -575,7 +573,6 @@ fn move_note() -> CommandDefinition {
             Ok(serde_json::json!({ "note_id": note_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -665,7 +662,6 @@ fn create_notebook() -> CommandDefinition {
             Ok(serde_json::json!({ "notebook_id": notebook_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -727,7 +723,6 @@ fn rename_notebook() -> CommandDefinition {
             Ok(serde_json::json!({ "notebook_id": notebook_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -807,7 +802,6 @@ fn delete_notebook() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -858,7 +852,6 @@ fn delete_note() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -920,7 +913,6 @@ fn restore_note() -> CommandDefinition {
             Ok(serde_json::json!({ "note_id": note_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -989,7 +981,6 @@ fn restore_note_version() -> CommandDefinition {
             Ok(serde_json::json!({ "note_id": note_id, "content_id": content_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1173,7 +1164,6 @@ mod tests {
     fn no_knowledge_command_carries_the_non_owner_park() {
         for definition in definitions() {
             assert!(!definition.confirm, "{}", definition.name);
-            assert!(!definition.online_only, "{}", definition.name);
             assert!(definition.sealed_input.is_empty(), "{}", definition.name);
             // `risk` is SALIENCE ONLY: every knowledge command is `low`,
             // including the two deletes, because both are reversible.

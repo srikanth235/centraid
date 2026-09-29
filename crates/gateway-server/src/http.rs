@@ -110,6 +110,7 @@ pub fn router(server: Shared) -> Router {
         .route("/v1/health", get(health))
         .route("/v1/vaults/{vault}/admit", post(admit))
         .route("/v1/vaults/{vault}/lease", post(lease))
+        .route("/v1/vaults/{vault}/head", get(head))
         .route("/v1/vaults/{vault}/declare", post(declare))
         .route("/v1/vaults/{vault}/commit", post(commit))
         .route("/v1/vaults/{vault}/delete", post(delete))
@@ -343,6 +344,12 @@ async fn admit(
     }
 }
 
+/// A restore's lease claim: the head it fetched and checked (#1047 L1).
+#[derive(Debug, Deserialize)]
+struct LeaseRequest {
+    head: String,
+}
+
 async fn lease(
     State(server): State<Shared>,
     Path(vault): Path<String>,
@@ -357,8 +364,62 @@ async fn lease(
         Ok(caller) => caller,
         Err(refusal) => return refused(&refusal),
     };
+    // AN EMPTY BODY IS PAIR'S CLAIM; A BODY NAMES THE HEAD A RESTORE CHECKED,
+    // and the claim lands only while it stands (#1047 L1). A body that names no
+    // readable head is not the same claim as no body, and collapsing them
+    // would let a restore that checked nothing claim as one that had.
+    let head = if body.is_empty() {
+        None
+    } else {
+        let Ok(request) = serde_json::from_slice::<LeaseRequest>(&body) else {
+            return refused(&Refusal::SignatureInvalid);
+        };
+        let Some(head) = key_of(&request.head) else {
+            return refused(&Refusal::SignatureInvalid);
+        };
+        Some(head)
+    };
     let mut server = server.lock().await;
-    match server.gateway.claim_lease(caller).await {
+    let claimed = match head {
+        None => server.gateway.claim_lease(caller).await,
+        Some(head) => server.gateway.claim_lease_at_head(caller, head).await,
+    };
+    match claimed {
+        Ok(state) => axum::Json(serde_json::json!({
+            "epoch": state.lease.epoch(),
+            "head": state.head.map(|head| head.hex()),
+        }))
+        .into_response(),
+        Err(fault) => faulted(&fault),
+    }
+}
+
+/// **READ THE HEAD WITHOUT TAKING THE LEASE** (#1047 R3).
+///
+/// A restoring phone has to know the head before it can fetch and check a
+/// generation, and until this route the only answer that carried it was a
+/// lease claim — so a restore moved the lease first and verified second, and a
+/// generation the phone then refused left the old phone frozen as
+/// `VAULT_MOVED` with nothing restored anywhere. A read changes nothing: the
+/// phone checks what it fetched, and claims only a generation that passed.
+///
+/// Signed like every vault route, so it answers only a holder of the vault's
+/// identity key, and a stranger and an unregistered vault are the same
+/// `UNKNOWN_VAULT` — the enumeration rule `Gateway::vault` keeps.
+async fn head(
+    State(server): State<Shared>,
+    Path(vault): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    let Some(vault) = key_of(&vault) else {
+        return refused(&Refusal::SignatureInvalid);
+    };
+    let path = format!("/v1/vaults/{}/head", vault.hex());
+    if let Err(refusal) = authenticate(&headers, "GET", &path, &[], vault) {
+        return refused(&refusal);
+    }
+    let server = server.lock().await;
+    match server.gateway.vault(&vault).await {
         Ok(state) => axum::Json(serde_json::json!({
             "epoch": state.lease.epoch(),
             "head": state.head.map(|head| head.hex()),

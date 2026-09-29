@@ -27,7 +27,7 @@ use centraid_apps_people::roster::{PeopleInput, RosterRow, SearchHit};
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
-use super::{VaultDoor, settle, zone_of};
+use super::{VaultDoor, settle, zone_if_any, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -195,13 +195,21 @@ pub(super) fn person(
     )
 }
 
-pub(super) fn trash(door: &VaultDoor<'_>) -> Result<Answer> {
+pub(super) fn trash(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    asked: &wire::PeopleTrashRequest,
+) -> Result<Answer> {
+    let zone = zone_if_any(vault, &asked.tz)?;
     settle(door, people::roster::load_trash(door), |data| {
         Answer::PeopleTrash(wire::PeopleTrash {
             people: data
                 .people
                 .into_iter()
                 .map(|row| wire::PeopleTrashRow {
+                    deleted_local_day: day_in(zone.as_ref(), row.deleted_at.as_deref()),
+                    purge_local_day: day_in(zone.as_ref(), row.purge_at.as_deref()),
+                    deleted_at: row.deleted_at.unwrap_or_default(),
                     party_id: row.party_id,
                     name: row.name,
                     role: row.role,
@@ -240,6 +248,7 @@ pub(super) fn search(
     let now_ms = people::dates::parse_instant(now).ok_or_else(|| CoreError::Invariant {
         context: format!("the vault clock's instant did not read: {now}"),
     })?;
+    let zone = zone_if_any(vault, &asked.tz)?;
     let limit = usize::try_from(asked.limit)
         .unwrap_or(usize::MAX)
         .min(people::queries::SEARCH_LIMIT);
@@ -296,7 +305,7 @@ pub(super) fn search(
                         &row.created_at,
                         now_ms,
                     );
-                    row_to_wire_with(row, cadence, &[])
+                    row_to_wire_with(row, cadence, &[], zone.as_ref())
                 })
                 .collect(),
         })
@@ -350,15 +359,25 @@ fn row_to_wire(row: RosterRow, clock: &Clock) -> wire::PeopleRosterRow {
             )
         })
         .collect();
-    row_to_wire_with(row, cadence, &reminders)
+    row_to_wire_with(row, cadence, &reminders, Some(&clock.zone))
+}
+
+/// An instant's civil day in `zone`; EMPTY with no zone or no instant.
+fn day_in(zone: Option<&FireZone>, instant: Option<&str>) -> String {
+    zone.zip(instant)
+        .and_then(|(zone, instant)| local::today(zone, instant))
+        .unwrap_or_default()
 }
 
 fn row_to_wire_with(
     row: RosterRow,
     cadence: phone::Cadence,
     reminders: &[wire::PeopleDate],
+    zone: Option<&FireZone>,
 ) -> wire::PeopleRosterRow {
     wire::PeopleRosterRow {
+        last_contacted_local_day: day_in(zone, row.last_contacted_at.as_deref()),
+        created_local_day: day_in(zone, Some(row.created_at.as_str())),
         party_id: row.party_id,
         name: row.name,
         role: row.role,
@@ -439,6 +458,7 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
             },
             cadence,
             &reminders,
+            Some(&clock.zone),
         )),
         nickname: profile.nickname,
         met: profile.met,
@@ -618,7 +638,9 @@ mod tests {
 
         fn trash(&self) -> wire::PeopleTrash {
             match self
-                .ask(Q::PeopleTrash(wire::PeopleTrashRequest {}))
+                .ask(Q::PeopleTrash(wire::PeopleTrashRequest {
+                    tz: TZ.to_owned(),
+                }))
                 .expect("the shelf answers")
             {
                 Answer::PeopleTrash(trash) => trash,
@@ -631,6 +653,7 @@ mod tests {
                 .ask(Q::PeopleSearch(wire::PeopleSearchRequest {
                     term: term.to_owned(),
                     limit: 10,
+                    tz: TZ.to_owned(),
                 }))
                 .expect("search answers")
             {
@@ -814,6 +837,26 @@ mod tests {
         let sheet = scratch.person(&ada).sheet.expect("a live person");
         assert_eq!(sheet.touches[0].occurred_local_day, "2099-10-01");
         assert_eq!(sheet.notes[0].created_local_day, "2099-10-01");
+        // THE LAST TOUCH IS THE MEMBER'S DAY on every row that carries it
+        // (#1047), never the UTC instant's first ten characters.
+        let header = sheet.person.expect("a header");
+        assert_eq!(header.last_contacted_local_day, "2099-10-01");
+        assert!(!header.created_local_day.is_empty());
+        let roster = scratch.roster(wire::PeopleRosterFilter::All);
+        assert_eq!(roster.people[0].last_contacted_local_day, "2099-10-01");
+        assert_eq!(
+            scratch.search("Ada").people[0].last_contacted_local_day,
+            "2099-10-01"
+        );
+        // AND THE TRASH SHELF'S DAYS, the same way.
+        scratch.run(
+            "people.trash_person",
+            serde_json::json!({ "party_id": ada }),
+        );
+        let row = &scratch.trash().people[0];
+        assert!(!row.deleted_at.is_empty());
+        assert_eq!(row.deleted_local_day, "2099-10-01");
+        assert!(!row.purge_local_day.is_empty());
     }
 
     /// DATES ACROSS THE YEAR BOUNDARY, IN THE DEVICE'S ZONE. On New Year's Eve
@@ -906,6 +949,7 @@ mod tests {
             .ask(Q::PeopleSearch(wire::PeopleSearchRequest {
                 term: "Ada".to_owned(),
                 limit: 0,
+                tz: TZ.to_owned(),
             }))
             .expect_err("a zero limit is refused");
         assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);

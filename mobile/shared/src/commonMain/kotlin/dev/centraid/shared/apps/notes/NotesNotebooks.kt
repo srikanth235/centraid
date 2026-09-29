@@ -117,15 +117,27 @@ public object NotesNotebooksMachine : ScreenMachine<NotesNotebooksState, NotesNo
         more_title = NotesCopy.MORE_TITLE,
     )
 
-    /** The rows, from the core's notebooks: "Unfiled" first. */
-    internal fun fold(notebooks: List<centraid.core.v1.NotesNotebook>): NotesNotebooksData {
-        val rows = notebooks.map { notebook ->
+    /**
+     * The rows, from the core's notebooks: "Unfiled" first, counted by the
+     * core (`unfiled_count`, over the library's recent window — "200+ notes"
+     * when more lie beyond it).
+     */
+    internal fun fold(answer: centraid.core.v1.NotesNotebooks): NotesNotebooksData {
+        val rows = answer.notebooks.map { notebook ->
             val name = NotesFold.nameOf(notebook)
             val count = NotesFold.notes(notebook.note_count)
             ListRow(id = notebook.notebook_id, title = name, trailing = count, accessibility_label = "$name, $count")
         }
+        val unfiled = NotesFold.notes(answer.unfiled_count, more = answer.unfiled_truncated)
         return NotesNotebooksData(
-            rows = listOf(ListRow(id = UNFILED, title = NotesCopy.UNFILED_ROW, accessibility_label = NotesCopy.UNFILED_ROW)) + rows,
+            rows = listOf(
+                ListRow(
+                    id = UNFILED,
+                    title = NotesCopy.UNFILED_ROW,
+                    trailing = unfiled,
+                    accessibility_label = "${NotesCopy.UNFILED_ROW}, $unfiled",
+                ),
+            ) + rows,
             empty = if (rows.isEmpty()) {
                 EmptyState(
                     headline = NotesCopy.NOTEBOOKS_EMPTY_HEADLINE,
@@ -182,7 +194,9 @@ public object NotesNotebooksReads :
 
     override fun arrived(answers: List<AppQueryResponse>): NotesNotebooksEvent = NotesNotebooksEvent(
         data_ = NotesNotebooksEvent.DataArrived(
-            data_ = NotesNotebooksMachine.fold(answers.firstNotNullOfOrNull { it.notes_notebooks }?.notebooks ?: emptyList()),
+            data_ = NotesNotebooksMachine.fold(
+                answers.firstNotNullOfOrNull { it.notes_notebooks } ?: centraid.core.v1.NotesNotebooks(),
+            ),
         ),
     )
 

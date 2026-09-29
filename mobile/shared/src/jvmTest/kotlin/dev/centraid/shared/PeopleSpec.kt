@@ -42,6 +42,7 @@ import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.people.PeoplePersonReads
 import dev.centraid.shared.apps.people.PeopleTrashMachine
 import dev.centraid.shared.apps.people.PeopleTrashReads
+import dev.centraid.shared.apps.people.PeopleFold
 import dev.centraid.shared.apps.people.PeopleWords
 import dev.centraid.shared.kit.AutosaveLaw
 import dev.centraid.shared.kit.WriteLaw
@@ -635,6 +636,8 @@ class PeopleSpec : StringSpec({
         PeopleEditorReads.requests(opened.state, clock).shouldBeNull()
         opened.state.chrome.shouldNotBeNull().title shouldBe "New person"
         opened.state.chrome.shouldNotBeNull().close_label shouldBe "Cancel"
+        // NOTHING IS SAVED YET, so the status line does not say "Saved" (#1047 walk).
+        opened.state.autosave.shouldNotBeNull().label shouldBe ""
         // Closing an untouched new person writes nothing.
         PeopleEditorMachine.reduce(opened.state, PeopleEditorMachine.left()).effects.shouldBeEmpty()
 
@@ -662,6 +665,43 @@ class PeopleSpec : StringSpec({
 
     // --- Trash -------------------------------------------------------------
 
+    "one person is a person, and one day is a day (#1047 walk: '1 people')" {
+        val landed = home(opened(), roster(person("p1", "Dana Reyes"), all = 1, due = 0, starred = 0))
+        landed.state.data_.shouldNotBeNull().roster.shouldNotBeNull().status_line shouldBe
+            "1 person · 0 to reconnect · 0 starred"
+        PeopleWords.people(1) shouldBe "1 person"
+        PeopleWords.people(0) shouldBe "0 people"
+        PeopleWords.people(12) shouldBe "12 people"
+        PeopleWords.cadence(1) shouldBe "Every day"
+        PeopleWords.cadence(14) shouldBe "Every 14 days"
+    }
+
+    "days are the member's: last touch counts local days, and a trashed person's purge day is local (#1047)" {
+        // 23:30 UTC yesterday is today in the member's zone: the core's day wins
+        // over its UTC `days_since_contact`.
+        val touched = person("p1", "Dana", {
+            it.copy(
+                last_contacted_at = "2026-06-14T23:30:00.000Z",
+                last_contacted_local_day = "2026-06-15",
+                days_since_contact = 1,
+            )
+        })
+        PeopleFold.row(touched, "2026-06-15").meta shouldBe PeopleCopy.META_TODAY
+        PeopleFold.row(touched.copy(last_contacted_local_day = "2026-06-03"), "2026-06-15").meta shouldBe
+            PeopleWords.lastTouch(true, 12)
+        // No local day answered: the core's count stands.
+        PeopleFold.row(touched.copy(last_contacted_local_day = ""), "2026-06-15").meta shouldBe PeopleCopy.META_YESTERDAY
+        PeopleTrashReads.requests(PeopleTrashMachine.initial(), clock).single().people_trash.shouldNotBeNull().tz shouldBe
+            "Europe/London"
+        PeopleTrashReads.rowOf(
+            PeopleTrashRow(party_id = "p1", name = "Dana", purge_at = "2026-07-15T23:30:00.000Z", purge_local_day = "2026-07-16"),
+        ).meta shouldBe "Erased Thu 16 July"
+        // NO LOCAL DAY ANSWERED, NO DAY SAID: `purge_at`'s UTC date is never drawn.
+        PeopleTrashReads.rowOf(
+            PeopleTrashRow(party_id = "p1", name = "Dana", purge_at = "2026-07-15T23:30:00.000Z"),
+        ).meta shouldBe ""
+    }
+
     "the trash is the kit's: restore, delete forever behind a confirm, and any profile change re-reads it" {
         val opened = PeopleTrashMachine.reduce(PeopleTrashMachine.initial(), TrashListEvent(opened = TrashListEvent.Opened()))
         opened.effects shouldBe listOf(ScreenEffect.ReadPage("people.trash", null))
@@ -672,14 +712,24 @@ class PeopleSpec : StringSpec({
                 listOf(
                     AppQueryResponse(
                         people_trash = PeopleTrash(
-                            people = listOf(PeopleTrashRow(party_id = "p1", name = "Dana", role = "Designer", purge_at = "2026-07-15T09:00:00.000Z")),
+                            people = listOf(
+                                PeopleTrashRow(
+                                    party_id = "p1",
+                                    name = "Dana",
+                                    role = "Designer",
+                                    purge_at = "2026-07-15T09:00:00.000Z",
+                                    deleted_at = "2026-06-15T09:00:00.000Z",
+                                    deleted_local_day = "2026-06-15",
+                                    purge_local_day = "2026-07-15",
+                                ),
+                            ),
                         ),
                     ),
                 ),
             ),
         ).state
         val data = landed.data_.shouldNotBeNull()
-        data.rows.single().meta shouldBe "Designer · Erased Wed 15 July"
+        data.rows.single().meta shouldBe "Designer · Deleted Mon 15 June · Erased Wed 15 July"
         // DELETE FOREVER is `people.purge_person`; there is no emptying.
         data.rows.single().purge_label shouldBe SharedCopy.TRASH_PURGE
         data.rows.single().restore_label shouldBe SharedCopy.TRASH_RESTORE

@@ -87,8 +87,26 @@ internal object TallyFold {
         return TallyHero(lines = listOf(figure), label = figure.label, sub = sub, tone = figure.tone)
     }
 
-    /** "You" for the owner, else the name the core resolved. */
-    private fun who(person: TallyPerson?): String = person?.name?.ifEmpty { TallyCopy.SOMEONE } ?: TallyCopy.SOMEONE
+    /**
+     * The owner as a sentence's FIRST word — "You" — else the name the core
+     * resolved. The core names the owner "You" itself; the copy decides the
+     * case, so it is never taken from the answer.
+     */
+    fun who(person: TallyPerson?): String =
+        if (person?.is_me == true) TallyCopy.YOU else person?.name?.ifEmpty { TallyCopy.SOMEONE } ?: TallyCopy.SOMEONE
+
+    /**
+     * The owner ANYWHERE BUT FIRST — "Maya pays you", never "Maya pays You"
+     * (#1047) — else the name the core resolved.
+     */
+    fun whom(person: TallyPerson?): String = if (person?.is_me == true) TallyCopy.YOU_MID else who(person)
+
+    /** A run of names as one phrase: "Maya, you". Only the first may be "You". */
+    fun names(people: List<TallyPerson?>): String =
+        people.mapIndexed { index, person -> if (index == 0) who(person) else whom(person) }.joinToString(", ")
+
+    /** "pays", or "pay" after "You" — the verb agrees with its subject (#1047). */
+    fun paysWord(person: TallyPerson?): String = if (person?.is_me == true) TallyCopy.PAY_WORD else TallyCopy.PAYS_WORD
 
     /** `Today` / `Yesterday` / `Wed 11 March` against [today], or `Wed 11 March`. */
     fun day(day: String, today: String?): String =
@@ -148,7 +166,7 @@ internal object TallyFold {
     /** A settlement: real cash, anyone to anyone. It does not open. */
     fun settlementRow(row: TallySettlementRow, groupName: String, today: String?): TallyLedgerRow {
         val mine = row.from?.is_me == true || row.to?.is_me == true
-        val line = "${who(row.from)} ${TallyCopy.PAID_WORD} ${who(row.to)}"
+        val line = "${who(row.from)} ${TallyCopy.PAID_WORD} ${whom(row.to)}"
         val meta = metaOf(
             groupName,
             day(row.paid_on ?: "", today),
@@ -172,7 +190,7 @@ internal object TallyFold {
     /** A proposed payment. [groupNames] names the group it settles. */
     fun transferRow(transfer: TallyTransfer, groupNames: Map<String, String>): TallyTransferRow {
         val groupId = transfer.group_id ?: ""
-        val line = "${who(transfer.from)} ${TallyCopy.PAYS_WORD} ${who(transfer.to)}"
+        val line = "${who(transfer.from)} ${paysWord(transfer.from)} ${whom(transfer.to)}"
         val meta = if (groupId.isEmpty()) TallyCopy.OUTSIDE_ANY_GROUP else groupNames[groupId] ?: ""
         val amount = money(transfer.amount)
         return TallyTransferRow(

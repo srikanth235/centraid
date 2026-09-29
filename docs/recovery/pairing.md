@@ -11,8 +11,8 @@ A vault is founded **on the phone**, at first launch. It mints 24 words, derives
 ## Ordinary pairing
 
 1. On the laptop: `centraid-gateway serve --data-dir <dir>` in one terminal, and `centraid-gateway invite --data-dir <dir> --quota-gib <n>` in another. The invite command prints the invite code, a `pair` payload, and that payload as a **half-block Unicode QR** a phone camera can read straight off the terminal. Both commands must point at the same `--data-dir`: the invite must be redeemable while `serve` is running, and two processes share it through the state file.
-2. On the phone: the `Pair` flow scans the QR. The phone admits itself, claims the lease and writes the laptop's endpoint id to `backup/laptop.json` beside its vault.
-3. **Compare the safety number.** 60 digits in 12 groups of 5, shown on both sides. It is BLAKE3 over the two identity keys sorted by their bytes, so both sides render the same digits without agreeing an order first. An empty safety number means the phone could not compute one and is drawn as that — never as "it matched". A hex endpoint id is **not** the thing to compare: it is a string people check the first four characters of and stop.
+2. On the phone: **Pair with your laptop** (the band's More sheet) takes the `pair` payload pasted, or its QR scanned ([R-1047-E12](../decisions.md#the-24-words-on-the-phone-1047-e1)). The phone admits itself, claims the lease and writes the laptop's endpoint id to `backup/laptop.json` beside its vault.
+3. **Compare the safety number.** 60 digits in 12 groups of 5: the phone's paired screen shows it, and the `serve` terminal prints it as a `safety` line the moment the phone redeems the invite (`invite` cannot — the laptop does not know the phone's key until then; `invites` prints it again beside each redeemed invite). It is BLAKE3 over the vault's identity key and the laptop's endpoint key sorted by their bytes, rendered on both sides by one function, so both sides show the same digits without agreeing an order first ([D-9](../decisions.md#the-owners-rulings-of-2026-09-29-1047)). Every group must match. An empty safety number means the core could not compute one, and the phone refuses that pairing ("Centraid could not check who answered") rather than show a blank — never "it matched". A hex endpoint id is **not** the thing to compare: it is a string people check the first four characters of and stop.
 4. `centraid-gateway invites --data-dir <dir>` lists the invites and what became of each.
 
 An invite is **one-use and expires**. A second phone needs a second invite.
@@ -37,7 +37,7 @@ Mint a new one: `centraid-gateway invite --data-dir <dir>`. Never try to revive 
 
 ### The phone cannot find the laptop
 
-1. Confirm `centraid-gateway serve` is running and printed its `endpoint` line. Compare that id against what the phone holds.
+1. Confirm `centraid-gateway serve` is running and printed its `endpoint` line. That id is the laptop's identity, and the phone dials the one it holds in `backup/laptop.json`; they differ only if `node.key` moved (step 3).
 2. `centraid-gateway health --url …` for the TCP carrier; under the iroh carrier the endpoint line `serve` prints on every start is the equivalent, and it is the same id on every start unless `node.key` moved.
 3. If `serve` warned that it **minted a fresh node key**, the laptop's identity changed and every phone must pair again. That happens only if `node.key` was deleted or could not be read.
 4. n0's DNS or relay being unreachable is a denial of service, not a compromise: the record is signed by the vault's identity key, so a hostile resolver can make a phone fail to find its laptop and cannot make it find the wrong one. Read [../logs.md](../logs.md).

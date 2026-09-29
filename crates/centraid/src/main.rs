@@ -71,8 +71,8 @@ enum Command {
         #[command(subcommand)]
         command: GatewayCommand,
     },
-    /// Check a vault and report. Read-only and lock-free, so it is safe against
-    /// a serving gateway — which is why the container health check runs it.
+    /// Check a vault file and report. Read-only and lock-free, so it never
+    /// changes the file it judges.
     Doctor {
         #[arg(long)]
         data_dir: Option<PathBuf>,

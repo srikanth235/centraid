@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if canImport(CentraidShared)
+import CentraidShared
+#endif
+
 // DOCS' PIECES, SHARED BY THE DRIVE AND THE DOCUMENT PAGE (#1046). The sheet
 // (one oneof: actions, choices, labels, new folder), the document row and the
 // inline rename. Every word and every enabled flag is the state's.
@@ -83,6 +87,7 @@ private struct DocsLabelsSheetView: View {
     let actions: DocsSheetActions
 
     @State private var draft = ""
+    @State private var echoes = TypedText(initial: "")
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -110,9 +115,15 @@ private struct DocsLabelsSheetView: View {
                 }
             }
         }
-        .onAppear { draft = labels.draft }
-        .onChange(of: draft) { _, text in if text != labels.draft { actions.onLabelDraft(text) } }
-        .onChange(of: labels.draft) { _, text in if text != draft { draft = text } }
+        .onAppear {
+            echoes = TypedText(initial: labels.draft)
+            draft = labels.draft
+        }
+        .onChange(of: draft) { _, text in if echoes.edited(next: text) { actions.onLabelDraft(text) } }
+        // A CLEAR AFTER ADD LANDS; a late echo of the typing never does.
+        .onChange(of: labels.draft) { _, text in
+            if let adopted = echoes.answer(value: text, shown: draft, open: true) { draft = adopted }
+        }
         .accessibilityIdentifier("docs-sheet-labels")
     }
 }

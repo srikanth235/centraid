@@ -351,6 +351,9 @@ fn the_detail_answers_the_family_and_the_filing() {
         Some("Europe/London"),
         "organize-task's `tz` lands"
     );
+    // THE DAY IT WAS MADE, in the request zone (#1047): the stopped clock's
+    // 02:00Z on 2 June is 1 June in New York.
+    assert_eq!(task.created_local_day, "2099-06-01");
     assert_eq!(detail.project.expect("filed").name, "House");
     assert_eq!(detail.section.expect("sectioned").name, "Kitchen");
     assert!(detail.parent.is_none());

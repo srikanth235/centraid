@@ -24,17 +24,26 @@ public class DocsDriveBridge : ScreenBridge<DocsDriveState, DocsDriveEvent>(
     events = DocsDriveEvent.ADAPTER,
     wire = { w -> w.session.attachQueries(w.host, DocsDriveReads, DocsDriveReads, left = w.left) },
 ) {
-    /** Land on [destination]; `DESTINATION_FOLDERS` with a [folderId] is that folder's page. */
-    public fun open(
-        destination: DocsDriveState.Destination = DocsDriveState.Destination.DESTINATION_ALL,
-        folderId: String = "",
-        folderName: String = "",
-    ) {
+    /**
+     * Land on [destination]; `DESTINATION_FOLDERS` with a [folderId] is that
+     * folder's page, and [parent] the pushing page's own title, which its
+     * back control says (#1047).
+     */
+    public fun open(destination: DocsDriveState.Destination, folderId: String, folderName: String, parent: String) {
         forward(
             DocsDriveEvent(
-                opened = DocsDriveEvent.Opened(destination = destination, folder_id = folderId, folder_name = folderName),
+                opened = DocsDriveEvent.Opened(
+                    destination = destination,
+                    folder_id = folderId,
+                    folder_name = folderName,
+                    parent = parent,
+                ),
             ),
         )
+    }
+
+    public fun open(destination: DocsDriveState.Destination, folderId: String, folderName: String) {
+        open(destination, folderId, folderName, "")
     }
 
     // SWIFT CANNOT OMIT A KOTLIN DEFAULT ARGUMENT: each overload below is the
@@ -54,13 +63,25 @@ public class DocsDocumentBridge : ScreenBridge<DocsDocumentState, DocsDocumentEv
     events = DocsDocumentEvent.ADAPTER,
     wire = { w -> w.session.attachQueries(w.host, DocsDocumentReads, DocsDocumentReads, left = w.left) },
 ) {
-    public fun open(documentId: String, title: String = "") {
-        forward(DocsDocumentEvent(opened = DocsDocumentEvent.Opened(document_id = documentId, title = title)))
+    /**
+     * Open [documentId]. [parent] is the pushing page's title from its own
+     * state (`DocsDriveChrome.title`), which the back control names.
+     */
+    public fun open(documentId: String, title: String = "", parent: String = "") {
+        forward(
+            DocsDocumentEvent(
+                opened = DocsDocumentEvent.Opened(document_id = documentId, title = title, parent = parent),
+            ),
+        )
     }
 
-    /** Swift cannot omit [title]'s default: this is the call without it. */
+    /** Swift cannot omit the defaults: these are the calls without them. */
     public fun open(documentId: String) {
-        open(documentId, "")
+        open(documentId, "", "")
+    }
+
+    public fun open(documentId: String, title: String) {
+        open(documentId, title, "")
     }
 }
 
@@ -83,7 +104,7 @@ public class DocsEditorBridge : ScreenBridge<DocsEditorState, DocsEditorEvent>(
     }
 }
 
-/** Docs' trash: the kit's trash screen, restore and Empty trash, no purge. */
+/** Docs' trash: the kit's trash screen — restore, Delete forever and Empty trash. */
 public class DocsTrashBridge : ScreenBridge<TrashListState, TrashListEvent>(
     machine = DocsTrashMachine,
     events = TrashListEvent.ADAPTER,

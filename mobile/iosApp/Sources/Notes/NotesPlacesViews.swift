@@ -231,6 +231,68 @@ struct NotesJournalView: View {
                 }
             }
         }
+        // THE NEW-ENTRY SHEET (`compose`): its words and whether Save is
+        // offered are the machine's; Save is People's journal command.
+        .background {
+            Color.clear.sheet(isPresented: Binding(
+                get: { state.hasCompose },
+                set: { open in
+                    guard !open, state.hasCompose else { return }
+                    send(NotesEvents.journal { $0.composeClosed = .init() })
+                }
+            )) {
+                NotesJournalComposeSheet(compose: state.compose, send: send)
+            }
+        }
+    }
+}
+
+/// The journal's new-entry sheet: a mood, a line, and Save.
+private struct NotesJournalComposeSheet: View {
+    let compose: Centraid_Screen_V1_NotesJournalCompose
+    let send: (Data) -> Void
+
+    @State private var mood = ""
+    @State private var text = ""
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        SheetRoom(
+            title: compose.title,
+            status: compose.statusLabel,
+            primary: compose.canSave
+                ? SheetPrimary(label: compose.save) { send(NotesEvents.journal { $0.composeSaved = .init() }) }
+                : nil,
+            titleIdentifier: "notes-journal-compose"
+        ) {
+            TextField(compose.moodPlaceholder, text: $mood)
+                .centraidType("body")
+                .foregroundStyle(Theme.color("text", scheme))
+                .padding(.vertical, 8)
+                .overlay(alignment: .bottom) { KitHairline() }
+                .disabled(compose.saving)
+                .accessibilityLabel(compose.moodPlaceholder)
+                .accessibilityIdentifier("notes-journal-mood")
+            TextField(compose.textPlaceholder, text: $text, axis: .vertical)
+                .centraidType("body")
+                .foregroundStyle(Theme.color("text", scheme))
+                .padding(.vertical, 8)
+                .overlay(alignment: .bottom) { KitHairline() }
+                .disabled(compose.saving)
+                .accessibilityLabel(compose.textPlaceholder)
+                .accessibilityIdentifier("notes-journal-text")
+        }
+        .onAppear {
+            mood = compose.mood
+            text = compose.text
+        }
+        .onChange(of: mood) { _, value in edited(value, text) }
+        .onChange(of: text) { _, value in edited(mood, value) }
+    }
+
+    private func edited(_ mood: String, _ text: String) {
+        guard mood != compose.mood || text != compose.text else { return }
+        send(NotesEvents.journal { $0.composeEdited = .with { $0.mood = mood; $0.text = text } })
     }
 }
 
@@ -260,7 +322,7 @@ struct NotesHistoryView: View {
     var body: some View {
         let state = state
         let chrome = state.chrome
-        PushedPage(title: chrome.title, parentTitle: state.noteTitle.isEmpty ? chrome.close : state.noteTitle, onBack: onBack) {
+        PushedPage(title: chrome.title, parentTitle: chrome.back, onBack: onBack) {
             EmptyView()
         } content: {
             VStack(spacing: 0) {

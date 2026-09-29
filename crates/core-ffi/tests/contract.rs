@@ -1058,6 +1058,7 @@ fn the_phones_four_flows_round_trip_through_call() {
                 phrase: "abandon abandon abandon".to_owned(),
                 endpoint: None,
                 direct_addrs: Vec::new(),
+                seed: None,
             }),
         ),
     );
@@ -1306,4 +1307,130 @@ fn the_pair_and_restore_answers_carry_a_safety_number_a_member_can_read_aloud() 
         wire::PairResponse::default().safety_number.is_empty(),
         "empty is 'could not compute', and is the default rather than a sentinel"
     );
+}
+
+/// CLAUSE 4f. The 24 words are a request kind, answered over a core that
+/// holds NO VAULT (#1047 E1).
+///
+/// A first launch mints the words before any vault exists, and a fresh
+/// install judges them before a restore lays one down — so the open here is
+/// `create: false` over a path with no file, which is a handle and a state
+/// rather than a refusal. Minted words check valid and seed to 64 bytes; a
+/// swapped last word is a checksum verdict; a `seed` over it is `BAD_ARGUMENT`
+/// with an `ERROR_CODE_INVALID_REQUEST` body that quotes no word.
+#[test]
+fn the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault() {
+    let dir = centraid_ontology::golden::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("the directory is made");
+    let config = format!(
+        r#"{{"path":{:?},"create":false}}"#,
+        dir.join("nothing-here.sqlite3").display().to_string()
+    );
+    let mut handle: *mut centraid_core::Handle = std::ptr::null_mut();
+    // SAFETY: `config` lives for the call, and `handle` is a live local.
+    let code = unsafe { centraid_open(config.as_ptr(), config.len(), &raw mut handle) };
+    assert_eq!(code, CENTRAID_OK, "a core over no vault opens: {config}");
+    assert!(
+        !dir.join("nothing-here.sqlite3").exists(),
+        "asking for the words founds nothing"
+    );
+
+    let phrase = |id: u64, op: wire::phrase_request::Op| -> (i32, wire::Envelope) {
+        let (code, bytes) = call(
+            handle,
+            &envelope(
+                id,
+                wire::request::Kind::Phrase(wire::PhraseRequest { op: Some(op) }),
+            ),
+        );
+        (code, answer(&bytes))
+    };
+    let answered = |envelope: wire::Envelope| -> wire::phrase_response::Answer {
+        let Some(wire::envelope::Body::Response(response)) = envelope.body else {
+            panic!("a phrase request is answered by a Response");
+        };
+        let Some(wire::response::Kind::Phrase(phrase)) = response.kind else {
+            panic!("a PhraseRequest is answered by a PhraseResponse");
+        };
+        phrase.answer.expect("an answer")
+    };
+
+    let (code, minted) = phrase(1, wire::phrase_request::Op::Mint(wire::PhraseMint {}));
+    assert_eq!(code, CENTRAID_OK);
+    let wire::phrase_response::Answer::Minted(minted) = answered(minted) else {
+        panic!("mint answers words");
+    };
+    assert_eq!(minted.words.len(), 24);
+
+    let (code, checked) = phrase(
+        2,
+        wire::phrase_request::Op::Check(wire::PhraseCheck {
+            words: minted.words.clone(),
+        }),
+    );
+    assert_eq!(code, CENTRAID_OK);
+    let wire::phrase_response::Answer::Checked(checked) = answered(checked) else {
+        panic!("check answers a verdict");
+    };
+    assert_eq!(checked.verdict, wire::phrase_checked::Verdict::Valid as i32);
+    assert_eq!(checked.words.len(), 24);
+
+    let (code, seeded) = phrase(
+        3,
+        wire::phrase_request::Op::Seed(wire::PhraseSeed {
+            words: minted.words.clone(),
+        }),
+    );
+    assert_eq!(code, CENTRAID_OK);
+    let wire::phrase_response::Answer::Seeded(seeded) = answered(seeded) else {
+        panic!("seed answers bytes");
+    };
+    assert_eq!(seeded.seed.len(), centraid_core::SEED_BYTES);
+    assert_eq!(
+        seeded.seed[..],
+        centraid_identity::RecoveryPhrase::parse(&minted.words.join(" "))
+            .expect("the minted words parse")
+            .seed()
+            .as_bytes()[..],
+        "the seed is the one the identity crate derives from the same words"
+    );
+
+    // THE BIP39 VECTOR WITH ITS LAST WORD SWAPPED: every word a list word, the
+    // checksum open. Judged, then refused as a seed with no word in the body.
+    let mut swapped = vec!["abandon".to_owned(); 23];
+    swapped.push("zoo".to_owned());
+    let (_, checked) = phrase(
+        4,
+        wire::phrase_request::Op::Check(wire::PhraseCheck {
+            words: swapped.clone(),
+        }),
+    );
+    let wire::phrase_response::Answer::Checked(checked) = answered(checked) else {
+        panic!("check answers a verdict");
+    };
+    assert_eq!(
+        checked.verdict,
+        wire::phrase_checked::Verdict::BadChecksum as i32
+    );
+    let (code, refused) = phrase(
+        5,
+        wire::phrase_request::Op::Seed(wire::PhraseSeed { words: swapped }),
+    );
+    assert_eq!(
+        code, CENTRAID_BAD_ARGUMENT,
+        "a phrase that is not one is refused"
+    );
+    let Some(wire::envelope::Body::Error(error)) = refused.body else {
+        panic!("a refusal comes back as an Error body");
+    };
+    assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
+    assert!(
+        !error.detail.contains("abandon") && !error.detail.contains("zoo"),
+        "a refusal names no word: {}",
+        error.detail
+    );
+
+    // SAFETY: the handle came from `centraid_open` and is closed once.
+    unsafe { centraid_close(handle) };
+    let _ = std::fs::remove_dir_all(&dir);
 }

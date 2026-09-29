@@ -1,6 +1,7 @@
 package dev.centraid.shared.apps.agenda
 
 import centraid.core.v1.AgendaEvent
+import centraid.core.v1.AgendaEventDetail
 import centraid.core.v1.AgendaParties
 import centraid.core.v1.AgendaUpcoming
 import centraid.core.v1.AppQueryDenial
@@ -18,7 +19,6 @@ import centraid.screen.v1.Loading
 import centraid.screen.v1.SeatState
 import centraid.screen.v1.WriteState
 import dev.centraid.design.copy.AgendaCopy
-import dev.centraid.shared.design.PartyHueWheel
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.kit.time.CivilWords
@@ -37,11 +37,15 @@ import dev.centraid.shared.screen.Step
  * loaded ([baseline] — what "changed" is measured against), the member's
  * [draft], the save scope picked, a save [attempt] count for the key, and
  * the device [zone] the last read was asked in — the zone a timed save's
- * wall clock is in.
+ * wall clock is in. [detail] is an edit's event read by id; [saveTried] is
+ * whether Save was pressed, which is when a blocked draft says why even
+ * before anything was typed.
  */
 public data class AgendaEditorScreen(
     public val screen: AgendaEditorState,
     public val upcoming: AgendaUpcoming? = null,
+    public val detail: AgendaEventDetail? = null,
+    public val saveTried: Boolean = false,
     public val zone: String = "",
     public val parties: AgendaParties? = null,
     public val baseline: AgendaDraft? = null,
@@ -55,11 +59,15 @@ public data class AgendaEditorScreen(
 public sealed interface AgendaEditorInput {
     public data class View(public val event: AgendaEditorEvent) : AgendaEditorInput
 
-    /** [zone] is the device zone the read was asked in ([AgendaEditorReads]). */
+    /**
+     * [zone] is the device zone the read was asked in ([AgendaEditorReads]);
+     * [detail] is an edit's event, read by id.
+     */
     public data class Answered(
         public val upcoming: AgendaUpcoming?,
         public val parties: AgendaParties?,
         public val zone: String = "",
+        public val detail: AgendaEventDetail? = null,
     ) : AgendaEditorInput
 
     public data class Denied(public val denial: AppQueryDenial) : AgendaEditorInput
@@ -489,6 +497,7 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
         }
         val held = state.copy(
             upcoming = upcoming,
+            detail = answer.detail,
             parties = parties,
             reading = false,
             zone = answer.zone.ifEmpty { state.zone },
@@ -501,8 +510,15 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
         return Step(held.copy(baseline = baseline, draft = baseline))
     }
 
-    private fun eventOf(state: AgendaEditorScreen): AgendaEvent? = state.upcoming?.events?.firstOrNull {
-        it.instance_key == state.screen.instance_key && it.event_id == state.screen.event_id
+    /**
+     * THE EVENT BEING EDITED: the by-id answer when there is one — absent
+     * there is gone, whatever the window lists — else the window's row.
+     */
+    private fun eventOf(state: AgendaEditorScreen): AgendaEvent? {
+        state.detail?.let { return it.event?.takeIf { e -> e.event_id == state.screen.event_id } }
+        return state.upcoming?.events?.firstOrNull {
+            it.instance_key == state.screen.instance_key && it.event_id == state.screen.event_id
+        }
     }
 
     /** The values an occurrence has, as the editor binds them. */
@@ -576,7 +592,7 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
     // ---------------------------------------------------------------------
 
     private fun save(state: AgendaEditorScreen): Step<AgendaEditorScreen> {
-        if (!canSave(state)) return Step(state)
+        if (!canSave(state)) return Step(state.copy(saveTried = state.draft != null))
         if (state.screen.mode == AgendaEditorState.Mode.MODE_CREATE) return submit(state, propose(state))
         val event = eventOf(state) ?: return Step(state)
         if (!isSeriesOccurrence(state, event)) {
@@ -845,7 +861,9 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
             val label = key.toIntOrNull()?.let(AgendaEventMachine::reminderLabel) ?: AgendaCopy.REMINDER_NONE
             AgendaChoice(key = key, label = label, selected = key == draft.reminder_key, accessibility_label = label)
         }
-        val blocked = blocked(state)
+        // WHY SAVE IS NOT ARMED, said once there is something to say it
+        // about: a change, or a Save pressed — never on a form nobody touched.
+        val blocked = blocked(state).takeIf { dirty(state) || state.saveTried } ?: ""
         val scopes = if (screen.sheet == AgendaEditorState.Sheet.SHEET_SCOPE) scopes(state) else emptyList()
         val data = AgendaEditorData(
             draft = draft,
@@ -874,7 +892,7 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
                     key = id,
                     label = name,
                     selected = id in draft.guest_ids,
-                    hue_key = PartyHueWheel.identityHueKey(id),
+                    hue_key = AgendaFold.personHue(id),
                     accessibility_label = name,
                 )
             },

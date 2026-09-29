@@ -34,7 +34,7 @@ public object TallyFriendMachine :
     override fun view(held: TallyHeld<TallyFriendState>, event: TallyFriendEvent): Step<TallyHeld<TallyFriendState>> =
         when {
             event.opened != null -> reload(
-                held.copy(screen = held.screen.copy(party_id = event.opened.party_id, title = event.opened.title)),
+                held.copy(screen = held.screen.copy(party_id = event.opened.party_id, title = event.opened.title, parent = event.opened.parent)),
             )
             event.refreshed != null -> read(overRows(held))
             else -> Step(held)
@@ -83,8 +83,11 @@ public object TallyFriendMachine :
         )
     }
 
-    override fun decorate(held: TallyHeld<TallyFriendState>): TallyFriendState =
-        held.screen.copy(chrome = TallyGroupMachine.CHROME)
+    // The friend's name once the read lands, as a group's title is its name.
+    override fun decorate(held: TallyHeld<TallyFriendState>): TallyFriendState = held.screen.copy(
+        title = held.screen.data_?.person?.name?.ifEmpty { null } ?: held.screen.title,
+        chrome = TallyGroupMachine.chrome(held.screen.parent),
+    )
 
     internal object Lens : ContentLens<TallyFriendState, TallyFriendData> {
         override fun content(state: TallyFriendState): ReadContent<TallyFriendData> = when {

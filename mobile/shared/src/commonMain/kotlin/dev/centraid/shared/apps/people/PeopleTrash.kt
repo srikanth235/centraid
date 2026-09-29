@@ -70,7 +70,7 @@ public object PeopleTrashReads :
     override val appId: String = "people"
 
     override fun requests(state: TrashListState, now: DeviceClock.Reading): List<AppQueryRequest> =
-        listOf(AppQueryRequest(people_trash = PeopleTrashRequest()))
+        listOf(AppQueryRequest(people_trash = PeopleTrashRequest(tz = now.zone)))
 
     override fun arrived(answers: List<AppQueryResponse>): TrashListEvent {
         val trash = answers.firstNotNullOfOrNull { it.people_trash } ?: PeopleTrash()
@@ -88,13 +88,16 @@ public object PeopleTrashReads :
     override fun settled(status: CommandStatus, sentence: String, invokeKey: String): TrashListEvent =
         TrashListEvent(write_settled = WriteLaw.settledOf(status, sentence, invokeKey))
 
-    /** `Dana`, `Designer · Erased Mon 12 October`. */
+    /** `Dana`, `Designer · Deleted Wed 11 March · Erased Mon 12 October`. */
     internal fun rowOf(row: centraid.core.v1.PeopleTrashRow): TrashRow {
-        val purge = row.purge_at?.let(PeopleTrashSpec.copy::purgeMeta)
+        // THE MEMBER'S DAYS: `deleted_local_day` and `purge_local_day`, read in
+        // the request's zone; none resolved says no day (R-1047-Q3).
+        val deleted = PeopleTrashSpec.copy.deletedMeta(row.deleted_local_day).ifEmpty { null }
+        val purge = PeopleTrashSpec.copy.purgeMeta(row.purge_local_day)
         return TrashRow(
             id = row.party_id,
             title = row.name,
-            meta = listOfNotNull(row.role.takeIf { it.isNotBlank() }, purge).joinToString(" · "),
+            meta = listOfNotNull(row.role.takeIf { it.isNotBlank() }, deleted, purge).joinToString(" · "),
             icon_key = "User",
         )
     }

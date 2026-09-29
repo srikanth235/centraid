@@ -9,7 +9,7 @@ Everything this crate used to hold — `gateway` as a serving role, `seat`, `pai
 | Verb | What it does |
 | --- | --- |
 | `centraid gateway install [--data-dir] [--dry-run] [--system] [--instance <name>]` | Writes an OS service unit for a gateway and prints the command that enables it. **It never enables it**: a background service that starts because a file was unpacked is a service nobody chose to run (D-1020-G1). `--dry-run` writes nothing. `--system` emits a templated systemd **system** unit — the VPS shape, because a user unit does not survive without a login session unless lingering is enabled. |
-| `centraid doctor --data-dir <dir> [--json]` | Checks a vault file: pages, foreign keys, receipt pointers, the seal-key fingerprint. **Read-only and lock-free**, so it is safe against a serving process — which is why the container health check runs it. |
+| `centraid doctor --data-dir <dir> [--json]` | Checks a vault file: pages, foreign keys, receipt pointers. **Read-only and lock-free**, so it never changes the file it judges. The vault lives on the phone, so what it checks is a copy or a drill's restore; the operator image runs it as its one-shot default command. |
 
 `centraid --version --json` prints the **artifact identity** (D-1020-G2): the version, the git sha, the artifact digest, the vault schema version, and whether this is a development build. It is intercepted before clap rather than modelled as a subcommand, because clap owns `--version` and `centraid version --json` would be a second spelling for everyone outside this file.
 

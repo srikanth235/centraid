@@ -16,7 +16,7 @@ enum TallyInk {
     }
 
     /// A person or group hue (`teal`, `slate`…) as its `c<Hue>` role.
-    static func hue(_ key: String) -> String { AgendaHue.role(key) }
+    static func hue(_ key: String) -> String { KitHue.role(key) ?? "cSlate" }
 }
 
 /// An amount, rendered by the kit, or nothing for an absent one.

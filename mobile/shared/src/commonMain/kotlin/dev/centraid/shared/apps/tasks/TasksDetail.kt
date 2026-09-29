@@ -652,7 +652,9 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
             key = PRIORITY,
             label = TasksCopy.FIELD_PRIORITY,
             value_ = TasksRows.priorityLabel(task.priority).ifEmpty { TasksCopy.PRIORITY_NONE },
-            note = "${TasksCopy.PRIORITY_NOTE_A} ${TasksCopy.PRIORITY_NOTE_B}",
+            // THE LABEL CARRIES IT (DESIGN.md, Copy): "None" is a choice on
+            // the row, so no note says that priority is optional.
+            note = "",
             choices = listOf(
                 chip(NONE, TasksCopy.PRIORITY_NONE, level == 0L),
                 chip("1", TasksCopy.PRIORITY_SOON, level == 1L),

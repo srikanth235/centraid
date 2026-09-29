@@ -28,7 +28,7 @@ cargo run -p centraid-vault --bin export-baseline -- \
 | `operations` | The domain operation layer every writer reaches a canonical table through. |
 | `time` | Civil time and recurrence — the one engine, beside the task lifecycle that calls it. |
 | `backup` | Generations, the WAL stream, the keyring, restore and the drill. |
-| `custody` | The sealed-cell envelopes and the member key — see [`src/custody/README.md`](src/custody/README.md). |
+| `custody` | The one sealed-value format (the Locker `lk1:` cell) and the phone's two Locker doors; no key material — see [`src/custody/README.md`](src/custody/README.md). |
 | `content` | Where a content item's bytes are, and what a reader reads them as. |
 | `converge` | The one CONVERGENCE comparator every caller uses. |
 | `ledger` | The `ledger` band — conversation ⊃ turn ⊃ item — and the machinery beside it. |

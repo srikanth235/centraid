@@ -17,6 +17,8 @@ struct DocsDriveView: View {
     /// `nil` on the drive (an app place with the band); the parent's name on a
     /// folder page (a pushed page).
     let parentTitle: String?
+    /// ADDING A DOCUMENT: the capture rows start it, its line is drawn here.
+    let ingest: DocsIngestHooks
     let send: (Data) -> Void
     let push: (ShellModel.Route) -> Void
     let onBack: () -> Void
@@ -137,6 +139,7 @@ struct DocsDriveView: View {
         VStack(spacing: 0) {
             if !content.isDenied { controls(state) }
             DocsWriteLine(write: state.write)
+            ingestLine
             if let rename = DocsRenameOpen.of(state.hasRename, state.rename) {
                 DocsRenameField(
                     rename: rename,
@@ -297,7 +300,7 @@ struct DocsDriveView: View {
     private func folderRow(_ node: Centraid_Screen_V1_DocsFolderNode) -> some View {
         Button {
             send(Self.event { $0.folderPicked = .with { $0.folderID = node.folderID; $0.name = node.name } })
-            push(DocsScreens.folderRoute(node.folderID, node.name))
+            push(DocsScreens.folderRoute(node.folderID, node.name, parent: state.chrome.title))
         } label: {
             HStack(spacing: 12) {
                 CentraidIconView(iconKey: "Folder", tint: Theme.color("textSoft", scheme), size: 20)
@@ -391,7 +394,8 @@ struct DocsDriveView: View {
         send(Self.event {
             $0.documentPicked = .with { $0.documentID = row.documentID; $0.title = row.title; $0.surface = row.surface }
         })
-        push(DocsScreens.documentRoute(row.documentID, row.title))
+        // THE PARENT'S NAME IS THE DRIVE'S OWN WORD: the document's back says it.
+        push(DocsScreens.documentRoute(row.documentID, row.title, parent: state.chrome.title))
     }
 
     private func emptyAction(_ action: Centraid_Screen_V1_DocsDriveData.EmptyAction) -> (() -> Void)? {
@@ -409,9 +413,9 @@ struct DocsDriveView: View {
                 // The keys are `DocsWrites.KEY_*`. Capture and the trash are
                 // the shell's; everything else is the machine's.
                 switch (state.sheet.kind, action.key) {
-                case (.add, "upload"): addRequested(.upload, state)
-                case (.add, "scan"): addRequested(.scan, state)
-                case (.add, "text"): addRequested(.text, state)
+                case (.add, "upload"): addRequested(action.key, .upload, state)
+                case (.add, "scan"): addRequested(action.key, .scan, state)
+                case (.add, "text"): addRequested(action.key, .text, state)
                 case (.more, "trash_shelf"):
                     send(Self.event { $0.trashOpened = .init() })
                     push(DocsScreens.trashRoute)
@@ -428,19 +432,38 @@ struct DocsDriveView: View {
         )
     }
 
-    /// CAPTURE IS THE OS'S. The event closes the sheet; the capture itself is
-    /// not wired: nothing on the shared side takes picked or scanned bytes
-    /// into `core.add_document` for Docs (Staging is Photos' pipe), and a file
-    /// importer whose file went nowhere would be a door that lies.
+    /// CAPTURE IS THE INGEST'S. The event puts the drive's sheet away; the
+    /// ingest bridge does the rest — the root answers its picker, stages the
+    /// bytes, files them, and pushes what it filed (`DocsIngestRoot`). The
+    /// filed document's back word is this page's own title.
     private func addRequested(
+        _ key: String,
         _ kind: Centraid_Screen_V1_DocsDriveEvent.AddRequested.Kind,
         _ state: Centraid_Screen_V1_DocsDriveState
     ) {
         send(Self.event { $0.addRequested = .with { $0.kind = kind; $0.folderID = state.folderID } })
-        // TODO(intent): AddRequested UPLOAD → `.fileImporter`; SCAN →
-        // VisionKit `VNDocumentCameraViewController`; TEXT → a new text
-        // document opened in `docs.editor`. Each needs an ingest (or create)
-        // call on the shared side before the shell can hand it anything.
+        ingest.request(key, state.folderID, state.chrome.title)
+    }
+
+    /// THE INGEST'S LINE (DESIGN.md: one line, at most one text action, never
+    /// clears itself): its words, a determinate bar while bytes move, Try again
+    /// on a failure, and the close key once there is something to put away.
+    @ViewBuilder
+    private var ingestLine: some View {
+        let line = (try? Centraid_Screen_V1_DocsIngestState(serializedBytes: ingest.state())) ?? .init()
+        if !line.statusLabel.isEmpty {
+            let moving = line.phase == .staging || line.phase == .filing
+            ProgressStatusLine(
+                sentence: line.statusLabel,
+                permille: moving ? line.progressPermille : nil,
+                refused: line.phase == .failed,
+                actionLabel: line.retryLabel,
+                onAct: ingest.retry,
+                closeLabel: line.dismissLabel,
+                onClose: ingest.dismiss,
+                identifier: "docs-ingest"
+            )
+        }
     }
 
     /// THE OS GRANTS, REPORTED (law 4): the Add sheet offers, greys or drops
@@ -481,4 +504,14 @@ enum DocsRenameOpen {
         guard present, !rename.closed, !rename.documentID.isEmpty else { return nil }
         return rename
     }
+}
+
+/// The drive's doors into the one ingest (`DocsScreens.ingestBridge`).
+struct DocsIngestHooks {
+    /// The ingest's state now, encoded.
+    let state: () -> Data
+    /// Start one: the Add sheet row's key, the folder, the page's title.
+    let request: (String, String, String) -> Void
+    let retry: () -> Void
+    let dismiss: () -> Void
 }

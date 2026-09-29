@@ -13,10 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,8 +36,9 @@ import dev.centraid.android.theme.centraidType
  *
  * Search is not a destination: it opens on the current surface, under the
  * header, and closing it clears the term (the kit `SearchLaw`). The one local
- * value is the text while the IME holds it; it reports only a DIFFERENCE from
- * [field]'s term, and follows the machine when the machine clears it.
+ * value is the text while the IME holds it; it reports each change, and
+ * follows the machine only when the machine says something that is not an echo
+ * of the typing ([rememberFollowedText]) — a clear, never a late echo.
  */
 @Composable
 public fun CentraidSearchField(
@@ -53,10 +51,8 @@ public fun CentraidSearchField(
     closeLabel: String = KitWords.CLOSE_SEARCH,
     testTag: String = "kit-search",
 ) {
-    var typed by remember { mutableStateOf(field.term) }
-    LaunchedEffect(field.term) {
-        if (field.term != typed) typed = field.term
-    }
+    val editor = rememberFollowedText(field.term)
+    val typed = editor.text.value
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     val shape = RoundedCornerShape(KitGeometry.RADIUS)
@@ -88,10 +84,7 @@ public fun CentraidSearchField(
             }
             BasicTextField(
                 value = typed,
-                onValueChange = { next ->
-                    typed = next
-                    if (next != field.term) onTerm(next)
-                },
+                onValueChange = { next -> if (editor.edited(next)) onTerm(next) },
                 singleLine = true,
                 textStyle = centraidType("body").copy(color = centraidColor("text")),
                 cursorBrush = SolidColor(centraidColor("text")),

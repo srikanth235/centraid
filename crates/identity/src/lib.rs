@@ -41,7 +41,9 @@ pub mod ticket;
 pub use certificate::{
     CERTIFICATE_CONTEXT, CertificateError, DeviceCertificate, DeviceKey, DeviceTrust, Epoch,
 };
-pub use derive::{BoxKey, DeriveError, VaultIdentityKey, VaultKeys, VaultMint, VaultRootKey};
+pub use derive::{
+    BoxKey, DeriveError, LockerKey, VaultIdentityKey, VaultKeys, VaultMint, VaultRootKey,
+};
 pub use discovery::{
     DEFAULT_DNS_SERVER, Discovery, DiscoveryError, Located, ResolutionSource, SourceUsed,
 };
@@ -50,5 +52,7 @@ pub use record::{
     CERT_ENTRY, GATEWAY_ENTRY, GatewayUrl, IdentityRecord, RECORD_NAME, RECORD_TTL_SECONDS,
     RecordError,
 };
-pub use safety_number::{SAFETY_NUMBER_DIGITS, SAFETY_NUMBER_GROUP, SafetyNumber, safety_number};
+pub use safety_number::{
+    SAFETY_NUMBER_DIGITS, SAFETY_NUMBER_GROUP, SafetyNumber, pairing_safety_number, safety_number,
+};
 pub use sealed_box::{AssociatedData, SealError, SealedBox};

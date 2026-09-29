@@ -136,7 +136,9 @@ class ChangeStreamSpec : StringSpec({
         TasksTrashMachine.machine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
         PhotosGridMachine.rowsChanged("schedule_task", listOf("t-1")).shouldBeNull()
         NotesEditorMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
-        HomeMachine.rowsChanged("locker_item", listOf("lck-1")).shouldBeNull()
+        // Home COUNTS Locker's items since #1047 (ids only), so `locker_item`
+        // is Home's table now; a Locker sidecar is not.
+        HomeMachine.rowsChanged("locker_item_field", listOf("fld-1")).shouldBeNull()
     }
 
     "every table Home counts is a table Home redraws on" {
@@ -152,8 +154,13 @@ class ChangeStreamSpec : StringSpec({
         HomeAgendaTile.TABLES.forEach { table ->
             HomeMachine.rowsChanged(table, listOf("x")).shouldNotBeNull()
         }
+        // A FILTER'S SUBQUERY TABLE REDRAWS TOO: trashing a person moves
+        // `people_profile`, never `core_party` (#1047).
+        HomeReads.READS.flatMap { it.alsoReads }.forEach { table ->
+            HomeMachine.rowsChanged(table, listOf("x")).shouldNotBeNull()
+        }
         HomeReads.TABLES shouldBe
-            HomeReads.READS.map { it.query.from }.toSet() + HomeAgendaTile.TABLES
+            HomeReads.READS.flatMap { listOf(it.query.from) + it.alsoReads }.toSet() + HomeAgendaTile.TABLES
     }
 
     "a change from the gateway never takes a member's typing" {

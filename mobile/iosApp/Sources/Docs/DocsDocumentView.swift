@@ -1,3 +1,5 @@
+import AVKit
+import PDFKit
 import SwiftUI
 
 /// ONE DOCUMENT'S PAGE (#1046): its surface — the reader (text), the stage
@@ -19,6 +21,16 @@ struct DocsDocumentView: View {
 
     private var state: Centraid_Screen_V1_DocsDocumentState {
         (try? Centraid_Screen_V1_DocsDocumentState(serializedBytes: data)) ?? .init()
+    }
+
+    /// The head's words — the row's title, else the route's hint — which a
+    /// folder pushed from here names as its parent.
+    private var headTitle: String {
+        let state = state
+        if case let .data(document)? = state.content, document.hasRow, !document.row.title.isEmpty {
+            return document.row.title
+        }
+        return state.titleHint
     }
 
     static func event(_ build: (inout Centraid_Screen_V1_DocsDocumentEvent) -> Void) -> Data {
@@ -125,6 +137,10 @@ struct DocsDocumentView: View {
             }
         }
         .onDisappear(perform: onDeparted)
+        // DELETED FOREVER here (`dismissed`): the machine says the page is done.
+        .onChange(of: state.dismissed) { _, dismissed in
+            if dismissed { onBack() }
+        }
         // THE STATE'S SHEET — More (`MoreOpened` → `KIND_MORE`), a move, the
         // labels — and, on a second host so they never share a presenter,
         // its confirm.
@@ -206,7 +222,7 @@ struct DocsDocumentView: View {
                     }
                     Button {
                         send(Self.event { $0.folderPicked = .with { $0.folderID = crumb.folderID; $0.name = crumb.name } })
-                        push(DocsScreens.folderRoute(crumb.folderID, crumb.name))
+                        push(DocsScreens.folderRoute(crumb.folderID, crumb.name, parent: headTitle))
                     } label: {
                         Text(crumb.name)
                             .centraidType("annotLabelOn")
@@ -287,12 +303,13 @@ struct DocsDocumentView: View {
 }
 
 /// THE STAGE: an image, a PDF, audio or video the vault holds — or why it
-/// does not.
+/// does not (#1047, R-1047-Q4).
 ///
-/// The bytes are not drawn yet: `DocsStage` names a `content_id` and no file
-/// path, and the byte door that answers Photos with a path is not exposed for
-/// Docs on the shared side. The card says what the stage holds (its spoken
-/// label) until a path arrives; an absent one says why.
+/// `bytes_path` is the file on this device, set by the core only when the
+/// bytes are here and the type may be drawn inline; the view hands it to the
+/// platform's renderer `media` names — an image view, `PDFView`, or the AV
+/// player. With no path, the card says what the stage holds (its spoken
+/// label) or, absent, why.
 struct DocsStageCard: View {
     let stage: Centraid_Screen_V1_DocsStage
 
@@ -304,31 +321,96 @@ struct DocsStageCard: View {
         case .pdf: return "FileText"
         case .audio: return "Music"
         case .video: return "Play"
-        case .unspecified, .UNRECOGNIZED: return "File"
+        case .unspecified, .UNRECOGNIZED: return "FileText"
         }
     }
 
     var body: some View {
-        VStack(spacing: 10) {
-            CentraidIconView(iconKey: iconKey, tint: Theme.color("textSoft", scheme), size: 32)
-                .accessibilityHidden(true)
-            Text(stage.held ? stage.accessibilityLabel : stage.absentReason)
-                .centraidType("small")
-                .foregroundStyle(Theme.color(stage.held ? "text" : "textSoft", scheme))
-                .multilineTextAlignment(.center)
-            // TODO(intent): draw the held bytes (`ContentImage` / the
-            // lightbox's `StageImage` for an image, `PDFView` for a PDF,
-            // `PlayerSurface` for video) once `DocsStage` carries a path.
+        if stage.held, !stage.bytesPath.isEmpty {
+            drawn
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                        .fill(Theme.color("bgSunken", scheme))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
+                .padding(CentraidGeometry.pageMargin)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(stage.accessibilityLabel)
+                .accessibilityIdentifier("docs-stage")
+        } else {
+            VStack(spacing: 10) {
+                CentraidIconView(iconKey: iconKey, tint: Theme.color("textSoft", scheme), size: 32)
+                    .accessibilityHidden(true)
+                Text(stage.held ? stage.accessibilityLabel : stage.absentReason)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color(stage.held ? "text" : "textSoft", scheme))
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, minHeight: 200)
+            .padding(CentraidGeometry.pageMargin)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                    .fill(Theme.color("bgSunken", scheme))
+            )
+            .padding(CentraidGeometry.pageMargin)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("docs-stage")
         }
-        .frame(maxWidth: .infinity, minHeight: 200)
-        .padding(CentraidGeometry.pageMargin)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                .fill(Theme.color("bgSunken", scheme))
-        )
-        .padding(CentraidGeometry.pageMargin)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("docs-stage")
+    }
+
+    @ViewBuilder
+    private var drawn: some View {
+        let url = URL(fileURLWithPath: stage.bytesPath)
+        switch stage.media {
+        case .image:
+            if let image = UIImage(contentsOfFile: stage.bytesPath) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 480)
+            } else {
+                Color.clear.frame(height: 200)
+            }
+        case .pdf:
+            DocsPDFStage(url: url).frame(height: 480)
+        case .video:
+            DocsPlayerStage(url: url).frame(height: 280)
+        case .audio:
+            DocsPlayerStage(url: url).frame(height: 88)
+        case .unspecified, .UNRECOGNIZED:
+            Color.clear.frame(height: 200)
+        }
+    }
+}
+
+/// Audio or video on the stage: one player for the file, held across redraws.
+struct DocsPlayerStage: View {
+    let url: URL
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        VideoPlayer(player: player)
+            .onAppear { if player == nil { player = AVPlayer(url: url) } }
+            .onDisappear { player?.pause() }
+    }
+}
+
+/// A PDF on the stage: PDFKit's own view, fitted to its width.
+struct DocsPDFStage: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> PDFView {
+        let view = PDFView()
+        view.autoScales = true
+        view.displayMode = .singlePageContinuous
+        view.backgroundColor = .clear
+        view.document = PDFDocument(url: url)
+        return view
+    }
+
+    func updateUIView(_ view: PDFView, context: Context) {
+        if view.document?.documentURL != url { view.document = PDFDocument(url: url) }
     }
 }
 

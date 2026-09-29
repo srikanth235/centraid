@@ -188,6 +188,40 @@ public fun NotesJournalScreen(
             onDismiss = { onEvent(NotesJournalEvent(more_closed = NotesJournalEvent.MoreClosed())) },
         )
     }
+    // THE NEW-ENTRY SHEET: every word, and whether Save is offered, is the machine's.
+    val compose = state.compose
+    if (compose != null) {
+        SheetRoom(
+            title = compose.title,
+            onDismiss = { onEvent(NotesJournalEvent(compose_closed = NotesJournalEvent.ComposeClosed())) },
+            primary = if (compose.can_save) {
+                SheetPrimary(label = compose.save, testTag = "notes-journal-save") {
+                    onEvent(NotesJournalEvent(compose_saved = NotesJournalEvent.ComposeSaved()))
+                }
+            } else {
+                null
+            },
+            status = compose.status_label,
+        ) {
+            EditableFieldRow(
+                key = "",
+                value = compose.mood,
+                reload = compose.day,
+                placeholder = compose.mood_placeholder,
+                testTag = "notes-journal-mood",
+                onEdit = { onEvent(NotesJournalEvent(compose_edited = NotesJournalEvent.ComposeEdited(mood = it, text = compose.text))) },
+            )
+            EditableFieldRow(
+                key = "",
+                value = compose.text,
+                reload = compose.day,
+                placeholder = compose.text_placeholder,
+                singleLine = false,
+                testTag = "notes-journal-text",
+                onEdit = { onEvent(NotesJournalEvent(compose_edited = NotesJournalEvent.ComposeEdited(mood = compose.mood, text = it))) },
+            )
+        }
+    }
 }
 
 /**

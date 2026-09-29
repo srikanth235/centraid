@@ -52,6 +52,16 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.work.runtime)
+    // Locker's unlock (#1047, D-5): `BiometricPrompt` needs a FragmentActivity,
+    // which `MainActivity` is for this reason alone.
+    implementation(libs.androidx.biometric)
+    // ...and a fragment runtime new enough to take Compose's request codes.
+    implementation(libs.androidx.fragment)
+    // Pairing's scan (#1047 E6): CameraX frames into ZXing's QR reader.
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.zxing.core)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
     // `debugImplementation`, NOT `androidRuntimeClasspath` (#1020, wave A).

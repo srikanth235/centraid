@@ -77,7 +77,7 @@ Evidence from the slices' own runs; the logs are in the root's scratchpad, not t
 | `cargo test -p centraid-api-proto`; `buf lint` | pass; `buf lint` reports only the existing `READ_MODE_NONE` in the Photos section |
 | `cargo test` over the workspace, the last full run of the pass | **1,794 passed, 3 failed** — all three macOS-only, below |
 | `xcodebuild … -scheme Centraid build` on the iOS 26 simulator | BUILD SUCCEEDED; Agenda home, event, editor, repeat sheet and cancel confirm walked on the seeded demo vault and screenshotted by the view wave |
-| `grep -rn 'FREQ=\|BYDAY\|INTERVAL=\|UNTIL=' mobile/shared/src/commonMain mobile/iosApp/Sources mobile/androidApp/src/main` | the only hits are the Agenda and Tasks editors' repeat presets — rule strings they **write**; nothing in Kotlin or Swift parses or expands an rrule |
+| `grep -rn 'FREQ=\|BYDAY\|INTERVAL=\|UNTIL=' mobile/shared/src/commonMain mobile/iosApp/Sources mobile/androidApp/src/main` | the only hits are the Agenda and Tasks editors' repeat presets — rule strings they **write**; nothing in Kotlin or Swift ~~parses or~~ expands an rrule. Corrected (audit L2, fixed in #1047 F6): `AgendaEditorMachine.repeatKeyOf` splits a stored rule on `;` to recognise which preset it is — a classification, never an expansion |
 
 ### Known failures, and why
 
@@ -92,6 +92,20 @@ Evidence from the slices' own runs; the logs are in the root's scratchpad, not t
 - **Android on an emulator.** `adb` hangs on the machine this ran on (the emulator's QEMU CPU thread stops responding), so Android is covered by `:androidApp:assembleDebug` and the JVM specs only.
 - **The gate profiles** (`cargo xtask gate --profile pr`, `--profile mobile-jvm`). Owed at close.
 - **The iOS test bundle** (`ScreenFixtureTests`). There are no `contracts/screens/agenda/` fixtures, so it would not cover Agenda anyway.
+
+### Commands re-run at close
+
+Run on the uncommitted close tree, 2026-09-29, after the `sql-confinement` fixes the [close](#close) records:
+
+```
+cargo xtask rules                                    # ok: all four rules; sql-confinement clean over 250 files
+cargo test -p centraid-apps-agenda                   # passed: every target, detail.rs 3/3
+cargo test -p centraid --test drain_wire             # passed: 7/7
+cargo test -p centraid-apps-docs                     # passed (after oxfmt reflowed manifest.json)
+cargo clippy -p centraid-apps-kit -p centraid-apps-agenda -p centraid --all-targets -- -D warnings   # exit 0
+cargo fmt --all --check                              # exit 0
+bun run format:check                                 # exit 0, 528 files
+```
 
 ## Open items at the doc pass
 
@@ -184,6 +198,121 @@ As of the doc pass, beside the shared hot spots (`screen.proto`, `nav/Navigation
   - `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/AgendaHomeSpec.kt` — new
   - `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ScreenQueryRuntimeSpec.kt` — new
 
+## Close
+
+Appended at the close pass on 2026-09-29, after #1047's last lanes; the sections above are left as the doc pass wrote them. The working tree was not yet committed when this was written, so the files below are named against `0a20e33a6`, the commit that landed the doc pass.
+
+### Checklist, reconciled
+
+Every box above still holds against the tree at close. The last one is now ticked: this section and the doc pass are the one receipt.
+
+- [x] Docs updated; one receipt — the doc pass above, the close's docs in [`issue-1047-app-ports.md`](issue-1047-app-ports.md#close), and this section
+
+What proves the boxes on a device is the [final walk](#final-walk).
+
+### The doc pass's open items, and how each ended
+
+**Landed in `0a20e33a6`** (they were in flight when the doc pass was written):
+
+- The editor writes a wall clock plus `tz` ([R-1046-9](../docs/decisions.md#agenda-on-the-phone-1046)). The event page reads `agenda_event` by id instead of a window padded around the picked day, and it shows `location_name`.
+- `AgendaDenied` is gone, and Agenda uses the kit's `Denied`.
+- `AgendaEventChrome.back` names its parent, "Agenda".
+- `call_uri` has a label (`AgendaCopy.JOIN_CALL`). Both shells hand the link to the OS: iOS in `AgendaEventView.swift`, Android in `AgendaEventScreen.kt`.
+
+**Landed after it** (they are uncommitted at close):
+
+- **A search hit on a repeating event opens the occurrence the member means.** Before, it opened the series' anchor, which could be years back.
+  - The fields are `AgendaEvent.next_instance_key`, `next_original_start_local` and `next_local_start` (34–36). They name the first occurrence still running at or after the vault clock, within a year, with the series' exceptions applied.
+  - The code is in `crates/apps/agenda/src/detail.rs`, tested in `crates/apps/agenda/tests/detail.rs`.
+- **The event page names its own calendar.** `AgendaEventDetail.calendar` (4) carries the calendar's row, so the page reads no `upcoming` to find it. This was seen on the iOS simulator (#1047 L2).
+- **An edit reads its event by id.** It uses the page's own `agenda_event` query, so an edit that starts from a search hit on a series finds its event. No padded window lists the series row (`AgendaEditorReads.kt`).
+- **The editor says why Save is blocked only when there is a reason to.** That is after a change, or after Save was pressed; an untouched form says nothing (`AgendaEditorMachine.kt`).
+- **The Home tile's count agrees in number:** `TILE_COUNT_ONE` and `TILE_COUNT_MANY` replace `TILE_COUNT_LABEL`.
+- **On Android, the due shelf's accessibility label is `AgendaChrome.shelf_label` plus the count.** It uses the platform's expand and collapse actions instead of the "expanded"/"collapsed" words it spelled itself (#1047 L3).
+
+**Still owed**, each with the reason it stays out of this umbrella:
+
+- There are no `contracts/screens/agenda/` fixtures, and `PerAppLayoutSpec` does not list `apps.agenda`. The fixture set is a per-app lane of its own, and the iOS test bundle covers no Agenda screen until those fixtures exist.
+- The editor's create mode has not been seen on a simulator. It is on the [final walk](#final-walk)'s list.
+- The issue leaves these out of scope: the month grid, the hour-grid Day, quick-create on a slot, attachments, birthday notifications and holidays.
+
+### Verification at close
+
+These are the #1047 lanes' runs over the shared tree, plus the close's own. The logs are in the root's scratchpad.
+
+| Check | Outcome |
+| --- | --- |
+| `:shared:jvmTest`, full (JDK 21), the close's run | **977 tests, 0 failures, 0 errors**. `AgendaHomeSpec`, `AgendaEventSpec` and `AgendaEditorSpec` are green. |
+| `:androidApp:compileDebugKotlin -Pcentraid.android=true` | BUILD SUCCESSFUL |
+| `xcodebuild … test` on the iOS 26.4 simulator (#1047 E5) | **TEST SUCCEEDED, 61 tests, 0 failures** |
+| `cargo test` for core, vault, the app crates and centraid (#1047 F3, D4) | all green except `vault/tests/disk_full.rs` (below) |
+| `cargo xtask rules`, after the fix below | **all four ok**: `sql-confinement` (250 files, clean), `abi-five-symbols`, `no-listening-socket` and `commonmain-no-platform-import`. |
+| `cargo test -p centraid-apps-agenda`, after the fix | green: `detail.rs` 3 passed, and every other test target |
+
+**Landed at close: `sql-confinement` on `crates/apps/agenda/tests/detail.rs`.** The fixture read `schedule_calendar` with a `SELECT` and wrote `core_place` with an `INSERT`, both string literals outside the four crates that may hold SQL; it was already there in `0a20e33a6`. The test now reads the founding calendar through the app's own `load_upcoming`, and seeds the place through a new kit fixture, `centraid_apps_kit::fixtures::seed_place`, which lives in an allowed crate. The rule was not touched.
+
+**Known failures:**
+
+| Failure | Status |
+| --- | --- |
+| `crates/vault` `a_full_disk_during_a_snapshot_build_leaves_no_partial_artifact` | macOS only: the test opens `/dev/full`, a Linux device |
+
+The gate profiles were not run by the close. The final walk and the PR push own them. `mobile-jvm` ends in `git diff --exit-code -- design copy mobile contracts/screens`, which cannot pass on an uncommitted tree.
+
+## Final walk
+
+The walk ran on 2026-09-29, on iOS sim 27BA36FC and Android AVD `centraid` (API 35), with both shells built fresh. Evidence: #1047's [final walk](issue-1047-app-ports.md#final-walk) and the `walk-ios-13…23` and `walk-android-07…16` screenshots.
+
+**PASS on both shells:**
+- Agenda's home (Day).
+- New event (create mode), with the repeat sheet → Every day → Save.
+- The event page.
+- Edit mode: a changed title, then the "This event repeats" scope sheet → The whole series → Save, and the page shows the new title.
+- The Cancel… confirm for a repeating event (This occurrence / This and the ones after / The whole series / Keep it) → Keep it.
+- Search "standup": the hit on the daily series opens the occurrence.
+- The event survived a restore from the 24 words: the home tile shows 7 events in the next 7 days on both shells.
+
+No Agenda defect was found.
+
+**Re-walk after #1047 F4** (2026-09-29; #1047's [re-walk](issue-1047-app-ports.md#the-re-walk-rw-after-f4)). F4 moved Android's Agenda search field onto the kit's `rememberFollowedText` (B1). On Android, "pick up the dry cleaning" typed at full `adb input` speed stayed exact and found "Pick up the dry cleaning, 17:00 to 17:30"; Close cleared the term, and reopening search showed an empty field. iOS Agenda was not touched. No Agenda defect was found.
+
 ## Audit
 
-Pending: the umbrella's independent review is the root's, at close.
+**Verdict: PASS**, with three low findings below. None of them refutes a claim the checklist or the close rests on. The independent auditor ran this on 2026-09-29 against the uncommitted close tree. The auditor did not write this work and changed no product code.
+
+**Commands the auditor re-ran:**
+
+| Check | Outcome |
+| --- | --- |
+| `cargo test --workspace --no-fail-fast` | 1,753 passed, **1 failed**, 7 ignored. The failure is `vault/tests/disk_full.rs:160` (`/dev/full`, macOS only), as the close records. The two install tests are no longer red. |
+| `cargo test -p centraid-apps-agenda` | pass. `detail.rs` 3/3, `trash.rs` 3, `lower_bound.rs` 2. `year3` is `#[ignore]`d by design. |
+| `:shared:jvmTest` (JDK 21) | **993 tests, 0 failures, 0 errors**, from the XML results. `AgendaHomeSpec`, `AgendaEventSpec` and `AgendaEditorSpec` are green. |
+| `cargo xtask rules` | ok: all four rules, and `sql-confinement` is clean over 250 files |
+| `cargo clippy --workspace --all-targets -- -D warnings` | exit 0 |
+| `cargo fmt --all --check` | exit 0 |
+| `bun run format:check` | exit 0, 528 files |
+
+**Claims sampled (9), each checked against the code:**
+
+1. **Tile route.** `AgendaScreens.tileRoute` and `AgendaRoutes.opens` exist. The final walk opens Agenda on both shells. **Holds.**
+2. **No rrule expansion outside Rust.** The receipt's grep reproduces: the only hits are the preset tables. See L2 for the wording. **Holds.**
+3. **Event by id, and the new fields.** `AgendaEventDetail.calendar = 4` is in `agenda.proto`, along with `next_instance_key`, `next_original_start_local` and `next_local_start` (34–36) and `location_name = 33`. `AgendaEventSpec` reads `agenda_event` by id and `tz`. **Holds.**
+4. **The kit's `Denied`.** `AgendaDenied` has no reference left in `mobile/` or `crates/`. **Holds.**
+5. **The event page's chrome.** `AgendaEventChrome.back` is `AgendaCopy.APP_TITLE` (`AgendaEventMachine.kt:688`). `JOIN_CALL` is twinned in `copy/agenda.json`. iOS routes the link through `openURL` (`AgendaEventView.swift:123`) and Android through `onCall` (`AgendaEventScreen.kt:139`). **Holds.**
+6. **The tile count agrees in number.** `TILE_COUNT_ONE` and `TILE_COUNT_MANY` are in `AgendaCopy` and `copy/agenda.json`, and no `TILE_COUNT_LABEL` is left. **Holds.**
+7. **The `sql-confinement` fix.** `tests/detail.rs` holds no SQL literal. It reads through `load_upcoming` and `fixtures::seed_place` (`crates/apps/kit/src/fixtures.rs:5196`), and the rule is untouched. **Holds.**
+8. **The zone rule.** `zone_of` takes the request's `tz`, then the vault's, else refuses with `InvalidRequest` (`crates/core/src/app_query.rs:230`). See L1. **Holds.**
+9. **The spec counts (21, 11, 9).** The tree now has 22, 12 and 10 cases, because later lanes added some. It is not a regression. **Holds.**
+
+**Findings:**
+
+- **L1 (low, cosmetic).** `crates/core/src/app_query.rs:238`: the `ZoneUnset::Missing` refusal is a multi-line string literal with no `\` continuations, so the detail carries two runs of 36 spaces. It was already in `0a20e33a6`.
+- **L2 (low, wording).** The Verification row says "nothing in Kotlin or Swift parses … an rrule". `AgendaEditorMachine.repeatKeyOf` (`AgendaEditorMachine.kt:586`) does tokenise a stored rule on `;` to recognise a preset. That is a classification, not an expansion, so R-1046-1 holds, but the sentence overstates what the grep proves.
+- **L3 (low, process).** "Commands re-run at close" was inserted inside the doc-pass `## Verification`, above sections the header says are never edited. `doc-integrity` allows this, because the receipt is new on this branch. It was placed there because `receipt-per-issue` reads only `## Verification` for a fence.
+
+**Governance front page** (`node .governance/law/run.mjs`, which reads the committed tree): 12 errors. For this receipt, two findings are measured against `HEAD`, where the fence and this verdict do not exist yet: "fence alone is not evidence" and "no PASS/REFUTED verdict". Both clear once this tree is committed. The remaining errors belong to the branch, not to #1046, and are listed in #1047's audit.
+
+**Owed, and not the auditor's to close:**
+- The gate profiles `pr` and `mobile-jvm`.
+- `contracts/screens/agenda/` fixtures.
+- Android Agenda's home on a quiet emulator.

@@ -15,7 +15,8 @@ import CentraidShared
 ///
 /// **INTENTS ARE THE SHELL'S** (`DocsBridges.kt`): `FolderPicked`,
 /// `DocumentPicked`, `EditRequested`, `TrashOpened` push here; `AddRequested`
-/// is the OS's (see `DocsDriveView.addRequested`).
+/// starts the ingest (`DocsIngestBridge`), whose picker and filed push are
+/// the root's (`DocsIngestRoot`).
 enum DocsScreens: AppScreens {
     static let appID = "docs"
 
@@ -28,21 +29,30 @@ enum DocsScreens: AppScreens {
     /// `DocsEditorMachine.SCREEN_ID`.
     static let editor = "docs.editor"
     static let trash = "docs.trash"
+    /// `DocsIngestMachine`: adding a document, observed at the app's root.
+    static let ingest = "docs.ingest"
+
+    #if canImport(CentraidShared)
+    /// ONE INGEST FOR THE APP'S LIFE: the drive and the folder page start it,
+    /// the root answers its picker and pushes what it files (`DocsIngestRoot`).
+    static let ingestBridge = DocsIngestBridge()
+    #endif
 
     static let driveRoute = ShellModel.Route.screen(
         drive,
         Centraid_Screen_V1_DocsDriveEvent.with { $0.opened = .with { $0.destination = .all } }.encoded
     )
 
-    static func folderRoute(_ folderID: String, _ name: String) -> ShellModel.Route {
+    /// `parent` is the PUSHING page's own title: the folder page's back says it (#1047).
+    static func folderRoute(_ folderID: String, _ name: String, parent: String = "") -> ShellModel.Route {
         .screen(folder, Centraid_Screen_V1_DocsDriveEvent.with {
-            $0.opened = .with { $0.destination = .folders; $0.folderID = folderID; $0.folderName = name }
+            $0.opened = .with { $0.destination = .folders; $0.folderID = folderID; $0.folderName = name; $0.parent = parent }
         }.encoded)
     }
 
-    static func documentRoute(_ documentID: String, _ title: String) -> ShellModel.Route {
+    static func documentRoute(_ documentID: String, _ title: String, parent: String = "") -> ShellModel.Route {
         .screen(document, Centraid_Screen_V1_DocsDocumentEvent.with {
-            $0.opened = .with { $0.documentID = documentID; $0.title = title }
+            $0.opened = .with { $0.documentID = documentID; $0.title = title; $0.parent = parent }
         }.encoded)
     }
 
@@ -63,7 +73,34 @@ enum DocsScreens: AppScreens {
         shell.register(.of(document, DocsDocumentBridge()))
         shell.register(.of(editor, DocsEditorBridge()))
         shell.register(.of(trash, DocsTrashBridge()))
+        shell.register(ScreenPort(
+            id: ingest,
+            send: { ingestBridge.send(event: $0.kotlin) },
+            attach: { ingestBridge.attach(session: $0) },
+            observe: { onState in ingestBridge.observe { onState($0.data) } }
+        ))
         #endif
+        /// The drive's capture rows start an ingest; its status line puts it away.
+        func ingestPort(_ shell: ShellModel?) -> DocsIngestHooks {
+            DocsIngestHooks(
+                state: { [weak shell] in shell?.state(ingest) ?? Data() },
+                request: { key, folderID, parent in
+                    #if canImport(CentraidShared)
+                    ingestBridge.requestFor(actionKey: key, folderId: folderID, parent: parent)
+                    #endif
+                },
+                retry: {
+                    #if canImport(CentraidShared)
+                    ingestBridge.retry()
+                    #endif
+                },
+                dismiss: {
+                    #if canImport(CentraidShared)
+                    ingestBridge.dismiss()
+                    #endif
+                }
+            )
+        }
 
         func push(_ shell: ShellModel?) -> (ShellModel.Route) -> Void {
             { [weak shell] route in shell?.path.append(route) }
@@ -94,6 +131,7 @@ enum DocsScreens: AppScreens {
                     data: shell.state(drive),
                     screen: drive,
                     parentTitle: nil,
+                    ingest: ingestPort(shell),
                     send: sender(shell, drive),
                     push: push(shell),
                     onBack: pop(shell),
@@ -109,6 +147,7 @@ enum DocsScreens: AppScreens {
                     data: shell.state(folder),
                     screen: folder,
                     parentTitle: folderParent(shell),
+                    ingest: ingestPort(shell),
                     send: sender(shell, folder),
                     push: push(shell),
                     onBack: pop(shell),
@@ -157,17 +196,16 @@ enum DocsScreens: AppScreens {
         )
     }
 
-    /// A folder page backs to its parent folder when the folder page's crumbs
-    /// name one, and to the drive otherwise.
+    /// A folder page's back words are the machine's (`chrome.back`, #1047).
     @MainActor
     static func folderParent(_ shell: ShellModel) -> String {
         let page = (try? Centraid_Screen_V1_DocsDriveState(serializedBytes: shell.state(folder))) ?? .init()
-        if case let .data(data)? = page.content, data.crumbs.count > 1 {
-            return data.crumbs[data.crumbs.count - 2].name
-        }
-        let home = (try? Centraid_Screen_V1_DocsDriveState(serializedBytes: shell.state(drive))) ?? .init()
-        return home.chrome.title.isEmpty ? page.chrome.title : home.chrome.title
+        return page.chrome.back
     }
 
     static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { driveRoute }
+
+    /// THE FILED PUSH AND THE PICKER, at the root (`DocsIngestRoot`).
+    @MainActor
+    static func global(_ shell: ShellModel) -> AnyView? { AnyView(DocsIngestRoot(shell: shell)) }
 }

@@ -1,5 +1,10 @@
 package dev.centraid.android.screens.docs
 
+import android.graphics.Bitmap
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -8,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -22,9 +28,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -48,6 +59,7 @@ import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.DocsEditorEvent
 import centraid.screen.v1.DocsEditorState
 import centraid.screen.v1.DocsFolderNode
+import centraid.screen.v1.DocsIngestState
 import centraid.screen.v1.DocsRename
 import centraid.screen.v1.DocsRowView
 import centraid.screen.v1.DocsSheet
@@ -69,6 +81,7 @@ import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
+import dev.centraid.android.kit.ProgressStatusLine
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
@@ -82,9 +95,16 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.screenContentOf
+import dev.centraid.android.screens.LightboxTransport
+import dev.centraid.android.screens.PlayerSurface
+import dev.centraid.android.screens.decodeUpright
+import dev.centraid.android.screens.rememberLightboxPlayer
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.shared.apps.docs.DocsWrites
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /*
  * DOCS' VIEWS (#1046, docs port). Every word, chip, enabled flag and sheet is
@@ -229,10 +249,30 @@ internal fun DocsDriveScreen(
     onEvent: (DocsDriveEvent) -> Unit,
     onHome: () -> Unit,
     folderPage: Boolean,
-    parentTitle: String,
     onBack: () -> Unit,
+    ingest: DocsIngestState? = null,
+    onIngestRetry: () -> Unit = {},
+    onIngestDismiss: () -> Unit = {},
 ) {
     val chrome = state.chrome
+    // ADDING A DOCUMENT: the ingest's own line in the room's status host —
+    // its words, a determinate bar while bytes move, Try again and Dismiss
+    // after a failure. Every word is `DocsIngestState`'s.
+    val adding: (@Composable () -> Unit)? = ingest?.takeIf { it.status_label.isNotEmpty() }?.let { line ->
+        {
+            val moving = line.phase == DocsIngestState.Phase.PHASE_STAGING || line.phase == DocsIngestState.Phase.PHASE_FILING
+            ProgressStatusLine(
+                sentence = line.status_label,
+                permille = if (moving) line.progress_permille else null,
+                refused = line.phase == DocsIngestState.Phase.PHASE_FAILED,
+                actionLabel = line.retry_label,
+                onAct = onIngestRetry,
+                closeLabel = line.dismiss_label,
+                onClose = onIngestDismiss,
+                testTag = "docs-ingest",
+            )
+        }
+    }
     val add = chrome?.add?.takeIf { it.isNotEmpty() }?.let { label ->
         RoomAction("Plus", label, "docs-add") { onEvent(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = DocsSheet.Kind.KIND_ADD))) }
     }
@@ -240,10 +280,12 @@ internal fun DocsDriveScreen(
     if (folderPage) {
         PushedPage(
             title = state.folder_name,
-            parentTitle = parentTitle,
+            // THE MACHINE NAMES THE PARENT (`chrome.back`, #1047).
+            parentTitle = chrome?.back.orEmpty(),
             onBack = onBack,
             trailing = add,
             status = refusal(state.write),
+            statusLine = adding,
             content = body,
         )
     } else {
@@ -261,6 +303,7 @@ internal fun DocsDriveScreen(
                 closeLabel = chrome?.search_close.orEmpty().ifEmpty { KitWords.CLOSE_SEARCH },
             ),
             status = refusal(state.write),
+            statusLine = adding,
             band = {
                 AppBand(
                     app = "docs",
@@ -546,7 +589,6 @@ private fun Pill(label: String, active: Boolean, a11y: String, tag: String, onTa
 @Composable
 internal fun DocsDocumentScreen(
     state: DocsDocumentState,
-    parentTitle: String,
     onEvent: (DocsDocumentEvent) -> Unit,
     onBack: () -> Unit,
     onFolder: (String, String) -> Unit,
@@ -557,7 +599,8 @@ internal fun DocsDocumentScreen(
     val row = data?.row
     PushedPage(
         title = row?.title?.ifEmpty { null } ?: state.title_hint,
-        parentTitle = parentTitle.ifEmpty { chrome?.back.orEmpty() },
+        // THE MACHINE NAMES THE PARENT (`chrome.back`, #1047).
+        parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
         // THE HEAD'S MORE: the verbs sheet opens on the machine's say
         // (`MoreOpened` → `DocsSheet.KIND_MORE`), every action a row in it.
@@ -687,14 +730,79 @@ private fun Heading(title: String) {
 }
 
 /**
- * THE STAGE. The bytes are held or they are not, and the state says why not.
- * SHARED-SIDE GAP: `DocsStage` carries a `content_id` and `held`, but no file
- * path — Photos' stage draws from `thumbnail_path`/original paths its reads
- * return, and no Docs read returns one — so a held image, PDF or video is
- * drawn as its card (kind and label) until the state carries a path.
+ * THE STAGE. The bytes are here to draw (`bytes_path`) or they are not, and
+ * the state says why not. An image decodes upright and no larger than the
+ * screen needs (Photos' `decodeUpright`); a PDF draws its first page through
+ * the platform's `PdfRenderer`; a video or a recording plays through Photos'
+ * player and transport, on the stage ground. A file that will not open draws
+ * the card, never a broken glyph.
  */
 @Composable
 private fun StageCard(stage: DocsStage) {
+    val path = stage.bytes_path.takeIf { stage.held && it.isNotEmpty() }
+    val drawn = when {
+        path == null -> false
+        stage.media == DocsStage.Media.MEDIA_IMAGE || stage.media == DocsStage.Media.MEDIA_PDF -> StageStill(stage, path)
+        stage.media == DocsStage.Media.MEDIA_VIDEO || stage.media == DocsStage.Media.MEDIA_AUDIO -> {
+            StagePlayer(stage, path)
+            true
+        }
+        else -> false
+    }
+    if (!drawn) StageFacts(stage)
+}
+
+/** An image or a PDF's first page, fit to the column; false while it will not open. */
+@Composable
+private fun StageStill(stage: DocsStage, path: String): Boolean {
+    val decoded by produceState<ImageBitmap?>(initialValue = null, path, stage.media) {
+        value = withContext(Dispatchers.IO) {
+            if (stage.media == DocsStage.Media.MEDIA_PDF) firstPdfPage(path) else decodeUpright(path, maxDimension = STAGE_DECODE)?.asImageBitmap()
+        }
+    }
+    val bitmap = decoded ?: return false
+    val shape = RoundedCornerShape(KitGeometry.RADIUS)
+    Image(
+        bitmap = bitmap,
+        contentDescription = stage.accessibility_label.ifEmpty { null },
+        contentScale = ContentScale.Fit,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(KitGeometry.GUTTER)
+            .clip(shape)
+            .border(KitGeometry.HAIRLINE, centraidColor("line"), shape)
+            .aspectRatio(bitmap.width.toFloat() / bitmap.height.coerceAtLeast(1))
+            .testTag("docs-stage"),
+    )
+    return true
+}
+
+/** A video (its first frame, then playback) or a recording: Photos' player and transport. */
+@Composable
+private fun StagePlayer(stage: DocsStage, path: String) {
+    val player = rememberLightboxPlayer(path, once = false)
+    val shape = RoundedCornerShape(KitGeometry.RADIUS)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(KitGeometry.GUTTER)
+            .clip(shape)
+            .background(centraidColor("stage"))
+            .padding(horizontal = 8.dp)
+            .testTag("docs-stage")
+            .semantics { contentDescription = stage.accessibility_label },
+    ) {
+        if (player == null) return@Column
+        if (stage.media == DocsStage.Media.MEDIA_VIDEO) {
+            Box(Modifier.fillMaxWidth().aspectRatio(VIDEO_ASPECT)) { PlayerSurface(player) }
+        }
+        LightboxTransport(player)
+    }
+}
+
+/** No file to draw: the kind, the label, and the state's reason. */
+@Composable
+private fun StageFacts(stage: DocsStage) {
     val shape = RoundedCornerShape(KitGeometry.RADIUS)
     Column(
         Modifier
@@ -726,6 +834,33 @@ private fun StageCard(stage: DocsStage) {
         }
     }
 }
+
+/**
+ * A PDF'S FIRST PAGE, rendered at [STAGE_DECODE] pixels wide on white (a PDF
+ * page is transparent where nothing is printed). Null when the file is not a
+ * PDF the platform can open — encrypted, damaged, or not a PDF at all.
+ */
+private fun firstPdfPage(path: String): ImageBitmap? = runCatching {
+    ParcelFileDescriptor.open(File(path), ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
+        PdfRenderer(descriptor).use { renderer ->
+            if (renderer.pageCount == 0) return@use null
+            renderer.openPage(0).use { page ->
+                val width = STAGE_DECODE
+                val height = (width.toLong() * page.height / page.width.coerceAtLeast(1)).toInt().coerceIn(1, STAGE_DECODE * 2)
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(android.graphics.Color.WHITE)
+                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                bitmap.asImageBitmap()
+            }
+        }
+    }
+}.getOrNull()
+
+/** The stage's decode ceiling: a column-wide image on any phone, not a 48 MP original. */
+private const val STAGE_DECODE = 1600
+
+/** A video's frame before its own size is known. */
+private const val VIDEO_ASPECT = 16f / 9f
 
 // ---------------------------------------------------------------------------
 // docs.editor — autosave, close = done

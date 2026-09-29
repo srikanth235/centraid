@@ -71,6 +71,8 @@ fn page_request() -> wire::Request {
                 with_note_body: false,
                 with_document_size: false,
                 with_minor_units: false,
+                local_day_columns: Vec::new(),
+                tz: String::new(),
             }),
             limit: PAGE_ROWS,
             after: None,

@@ -429,3 +429,143 @@ fn activity_answers_and_an_unknown_zone_is_refused() {
         .expect_err("a zero limit is refused");
     assert_eq!(zero.code(), wire::ErrorCode::InvalidRequest);
 }
+
+impl Scratch {
+    /// Stage bytes the way a shell does: begin, one chunk, end — the handle's
+    /// hash is what `core.add_document` names as `staged_sha`.
+    fn stage(&self, bytes: &[u8], media_type: &str) -> String {
+        let frame = |kind: wire::stage_request::Kind| match self
+            .handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::Stage(wire::StageRequest {
+                    kind: Some(kind),
+                })),
+            })
+            .expect("the stage frame is taken")
+            .kind
+        {
+            Some(wire::response::Kind::Stage(wire::StageResponse { kind: Some(kind) })) => kind,
+            other => panic!("a stage frame answered as {other:?}"),
+        };
+        let wire::stage_response::Kind::Begun(begun) =
+            frame(wire::stage_request::Kind::Begin(wire::StageBegin {
+                media_type: media_type.to_owned(),
+                byte_size: bytes.len() as u64,
+            }))
+        else {
+            panic!("begin answers begun");
+        };
+        frame(wire::stage_request::Kind::Chunk(wire::StageChunk {
+            staging_id: begun.staging_id.clone(),
+            seq: 0,
+            payload: bytes.to_vec(),
+        }));
+        let wire::stage_response::Kind::Handle(handle) =
+            frame(wire::stage_request::Kind::End(wire::StageEnd {
+                staging_id: begun.staging_id,
+            }))
+        else {
+            panic!("end answers a handle");
+        };
+        handle.content_hash
+    }
+}
+
+/// THE PHONE'S INGEST AND ITS STAGE (#1047): a file staged through the stage
+/// frames files through `core.add_document`'s `staged_sha`, and the document
+/// answer hands the media stage the held file's path; a text document written
+/// from words answers its body and no path.
+#[test]
+fn a_staged_file_files_and_its_document_answers_the_held_path() {
+    let scratch = Scratch::founded();
+    // The phone's own byte store, as the shell opens it; `Handle`'s `Drop`
+    // closes it (docs/traps/byte-store-lock.md).
+    scratch
+        .handle
+        .open_own_bytes(scratch.dir.join("vault.bytes"))
+        .expect("the byte store opens");
+    let pdf = b"%PDF-1.7\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n";
+    let sha = scratch.stage(pdf, "application/pdf");
+    let folder = scratch.folder("Scans", None);
+    let document_id = scratch.run(
+        "core.add_document",
+        serde_json::json!({ "title": "Receipt scan", "staged_sha": sha, "folder_id": folder }),
+    )["document_id"]
+        .as_str()
+        .expect("a document id")
+        .to_owned();
+
+    let answer = scratch.document(&document_id);
+    let row = answer.document.as_ref().expect("the document is there");
+    assert_eq!(row.kind, wire::DocsKind::Pdf as i32);
+    assert_eq!(row.surface, wire::DocsSurface::Stage as i32);
+    assert!(answer.bytes_held);
+    assert!(
+        !answer.bytes_path.is_empty(),
+        "the stage has a file to draw"
+    );
+    assert_eq!(
+        std::fs::read(&answer.bytes_path).expect("the path is a real file"),
+        pdf,
+        "and it holds exactly the staged bytes"
+    );
+
+    let text = scratch.run(
+        "core.create_text_document",
+        serde_json::json!({ "title": "Untitled" }),
+    )["document_id"]
+        .as_str()
+        .expect("a document id")
+        .to_owned();
+    let answer = scratch.document(&text);
+    assert_eq!(
+        answer.body.as_deref(),
+        Some(""),
+        "an empty text, not no text"
+    );
+    assert!(
+        answer.bytes_path.is_empty(),
+        "a text document's words are its body"
+    );
+}
+
+/// PURGE AND EMPTY-TRASH DESTROY (D-1, 2026-09-25): the document
+/// answers absent, the trash count falls, and its bytes are released.
+#[test]
+fn a_purged_document_is_gone_from_the_drive_and_its_bytes_released() {
+    let scratch = Scratch::founded();
+    let doomed = scratch.add("Old lease", "expired", None);
+    let emptied = scratch.add("Old receipt", "void", None);
+    scratch.add("Lease", "current", None);
+    for document_id in [&doomed, &emptied] {
+        scratch.run(
+            "core.trash_document",
+            serde_json::json!({ "document_id": document_id }),
+        );
+    }
+    assert_eq!(scratch.shelf(wire::DocsShelf::Trash).trash_count, 2);
+
+    let purged = scratch.run(
+        "core.purge_document",
+        serde_json::json!({ "document_id": doomed }),
+    );
+    assert_eq!(purged["content_released"], serde_json::json!(1));
+    assert!(
+        scratch.document(&doomed).document.is_none(),
+        "the row is gone"
+    );
+    let trash = scratch.shelf(wire::DocsShelf::Trash);
+    assert_eq!(trash.trash_count, 1);
+    assert_eq!(titles(&trash), ["Old receipt"]);
+
+    let emptied = scratch.run("core.empty_document_trash", serde_json::json!({}));
+    assert_eq!(emptied["documents_released"], serde_json::json!(1));
+    assert_eq!(
+        emptied["content_released"],
+        serde_json::json!(1),
+        "the emptied document's bytes are released too"
+    );
+    let all = scratch.shelf(wire::DocsShelf::All);
+    assert_eq!(all.trash_count, 0);
+    assert_eq!(titles(&all), ["Lease"], "the live document is untouched");
+}

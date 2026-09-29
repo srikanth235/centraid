@@ -24,6 +24,7 @@ import "centraid/core/v1/command.proto";
 import "centraid/core/v1/content.proto";
 import "centraid/core/v1/error.proto";
 import "centraid/core/v1/handshake.proto";
+import "centraid/core/v1/locker.proto";
 import "centraid/core/v1/originals.proto";
 import "centraid/core/v1/phone.proto";
 import "centraid/core/v1/query.proto";
@@ -86,6 +87,13 @@ message Request {
     // AN APP'S OWN QUERY, RUN IN THE CORE (#1046). See `app_query.proto` for
     // why a query that joins and expands cannot be a page read a shell writes.
     AppQueryRequest app_query = 20;
+    // THE LOCKER SESSION (#1047, D-5): unlock after the OS prompt, relock,
+    // the state, and one receipted reveal. See `locker.proto` for why the
+    // prompt is the shell's and the key is the core's.
+    LockerSessionRequest locker = 21;
+    // THE 24 WORDS (#1047 E1): minted, judged and turned into a seed in Rust,
+    // with no vault. See `phone.proto`.
+    PhraseRequest phrase = 22;
   }
 }
 
@@ -110,6 +118,8 @@ message Response {
     BackupStatusResponse backup_status = 18;
     OriginalsResponse originals = 19;
     AppQueryResponse app_query = 20;
+    LockerSessionResponse locker = 21;
+    PhraseResponse phrase = 22;
   }
 }
 

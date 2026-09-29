@@ -51,21 +51,36 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
             event.opened != null && event.opened.is_new -> {
                 val opened = AutosaveLaw.opened(
                     Lens,
-                    closeLink(state.copy(note_id = event.opened.note_id, is_new = true)),
+                    closeLink(
+                        state.copy(
+                            note_id = event.opened.note_id,
+                            is_new = true,
+                            opened_seq = state.autosave?.edit_seq ?: 0L,
+                        ),
+                    ),
                 ).state
                 val empty = NoteDraft(format = NoteDraft.Format.FORMAT_MARKDOWN)
                 Step(AutosaveLaw.loaded(Lens, opened, empty, "").state)
             }
 
             event.opened != null ->
-                AutosaveLaw.opened(Lens, closeLink(state.copy(note_id = event.opened.note_id, is_new = false)))
+                AutosaveLaw.opened(
+                    Lens,
+                    closeLink(
+                        state.copy(
+                            note_id = event.opened.note_id,
+                            is_new = false,
+                            opened_seq = state.autosave?.edit_seq ?: 0L,
+                        ),
+                    ),
+                )
 
             // Not in the vault yet: there is nothing of it to re-read.
             event.rows_changed != null && state.is_new -> Step(state)
 
             event.data_ != null -> {
                 val draft = event.data_.draft
-                if (draft == null) Step(state) else AutosaveLaw.loaded(Lens, state, draft, draft.base_revision_id)
+                if (draft == null) Step(state) else AutosaveLaw.loaded(Lens, state, keepDerived(state, draft), draft.base_revision_id)
             }
 
             // A CHANGE NEVER TAKES A MEMBER'S TYPING. Unsaved words or a save
@@ -106,7 +121,9 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
                     Step(
                         state.copy(
                             link_sheet_open = true,
-                            link_anchor = minOf(event.link_requested.caret, draft.body.length),
+                            // THE END OF THE NOTE, whatever `caret` says: no
+                            // shell's field reports one (#1047, one rule for both).
+                            link_anchor = draft.body.length,
                             link_replaces = false,
                         ),
                     )
@@ -214,13 +231,15 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
             Autosave.Phase.PHASE_REFUSED -> autosave.failure?.sentence ?: ""
             else -> ""
         }
-        val untouched = autosave == null || autosave.phase == Autosave.Phase.PHASE_CLEAN
+        // TOUCHED IS FOR THE VISIT: an edit since the note opened, whatever
+        // phase its saves have reached since.
+        val untouched = (autosave?.edit_seq ?: 0L) <= state.opened_seq
         return state.copy(
             body_editable = draft != null && !draft.body_unavailable,
             body_notice = if (draft?.body_unavailable == true) NotesCopy.BODY_NOT_HERE else "",
             chrome = NotesEditorChrome(
                 // #1015 D3: "Cancel" only before the first keystroke; after
-                // it, close = done.
+                // it, close = done, and an autosave does not undo that.
                 close = if (untouched) NotesCopy.CANCEL else NotesCopy.DONE,
                 title_placeholder = NotesCopy.TITLE_PLACEHOLDER,
                 body_placeholder = NotesCopy.BODY_PLACEHOLDER,
@@ -234,6 +253,23 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
                 menu_label = NotesCopy.ROW_MENU,
             ),
         )
+    }
+
+    /**
+     * A DERIVED TITLE STAYS DERIVED (#1047 F5). The vault stores the title a
+     * save derived from the body's first line, and the clean re-read after
+     * that save brings it back — which filled the field on the shell that
+     * follows the state, so a later first-line edit no longer renamed the
+     * note. While the draft's title is empty and the stored one is the
+     * body's first line, the field stays empty, draft and baseline both;
+     * a name from anywhere else is adopted. A fresh open (no draft yet)
+     * draws the stored title, on both shells.
+     */
+    internal fun keepDerived(state: NotesEditorState, incoming: NoteDraft): NoteDraft {
+        val current = state.draft ?: return incoming
+        val derived = current.title.isBlank() && incoming.title.isNotEmpty() &&
+            !incoming.body_unavailable && incoming.title == firstLine(incoming.body)
+        return if (derived) incoming.copy(title = "") else incoming
     }
 
     private fun closeLink(state: NotesEditorState): NotesEditorState =
@@ -253,13 +289,35 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
 
     private fun countOf(body: String): Int = body.windowed(2).count { it == BRACKETS }
 
-    /** `[[title]]` at [anchor], replacing a typed `[[` there when [replaces]. */
+    /**
+     * `[[title]]` at [anchor], replacing a typed `[[` there when [replaces].
+     *
+     * A LINK THE BUTTON PLACED IS ITS OWN WORD (#1047): "Middlemarch.[[Book]]"
+     * glued the link to the text before it. So a link that did not replace a
+     * typed `[[` is set apart — a space after text on the same line, a new
+     * line after a heading (a link is not part of the heading), nothing at
+     * the start of a line — and from text after it by a space. A typed `[[`
+     * is where the member put it, and is left exactly there.
+     */
     internal fun spliceLink(body: String, anchor: Int, replaces: Boolean, title: String): String {
         val at = anchor.coerceIn(0, body.length)
         val link = "[[${title.ifBlank { NotesCopy.UNTITLED }}]]"
-        val tail = if (replaces && body.startsWith(BRACKETS, at)) at + BRACKETS.length else at
-        return body.substring(0, at) + link + body.substring(tail)
+        if (replaces && body.startsWith(BRACKETS, at)) {
+            return body.substring(0, at) + link + body.substring(at + BRACKETS.length)
+        }
+        val head = body.substring(0, at)
+        val rest = body.substring(at)
+        val before = when {
+            head.isEmpty() || head.last().isWhitespace() -> ""
+            HEADING.containsMatchIn(head.substringAfterLast('\n')) -> "\n"
+            else -> " "
+        }
+        val after = if (rest.isEmpty() || rest.first().isWhitespace()) "" else " "
+        return head + before + link + after + rest
     }
+
+    /** A markdown heading line: one to six `#` and a space. */
+    private val HEADING = Regex("""^#{1,6}\s""")
 
     private const val BRACKETS: String = "[["
 
@@ -279,6 +337,8 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
         override val command: String = SAVE_COMMAND
 
         override fun subjectId(state: NotesEditorState): String = state.note_id
+
+        override fun stored(state: NotesEditorState): Boolean = !state.is_new
 
         override fun content(state: NotesEditorState): ReadContent<NoteDraft> = when {
             state.draft != null -> ReadContent.Data(state.draft)
@@ -366,7 +426,8 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
      * * **An empty title is DERIVED from the body's first line**, because
      *   `title` is `minLength: 1` too and a note with no title is still a note
      *   a member means to keep. The draft keeps its empty title; the vault gets
-     *   the derived one. No first line, no title sent.
+     *   the derived one, and a re-read does not put it back ([keepDerived]).
+     *   No first line, no title sent.
      * * **`base_revision_id` is not an input.** There is no vault-side
      *   revision check: the last save on this phone wins.
      * * `pinned` is 0 or 1 — SQLite has no boolean.

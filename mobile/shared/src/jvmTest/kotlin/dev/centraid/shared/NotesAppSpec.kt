@@ -58,6 +58,7 @@ import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.nav.withNotesPlace
 import dev.centraid.shared.platform.DeviceClock
+import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
@@ -66,6 +67,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 
@@ -85,6 +87,7 @@ class NotesAppSpec : StringSpec({
         title = title,
         pinned = pinned,
         updated_at = "2026-03-11T09:00:00.000Z",
+        updated_local_day = "2026-03-11",
         preview = "first line of $id\nsecond",
         notebook_ids = listOfNotNull(notebook),
         notebook_names = listOfNotNull(notebook?.let { "Book $it" }),
@@ -197,7 +200,7 @@ class NotesAppSpec : StringSpec({
         val empty = state.data_!!.empty.shouldNotBeNull()
         empty.headline shouldBe NotesCopy.EMPTY_DAY_ONE_HEADLINE
         empty.action_label shouldBe NotesCopy.NEW_NOTE
-        state.data_!!.sections.shouldBeEmpty()
+        state.data_.sections.shouldBeEmpty()
         // Filtered to nothing is not day one.
         val filtered = NotesLibraryMachine.run(
             state,
@@ -352,6 +355,98 @@ class NotesAppSpec : StringSpec({
         done.draft_name shouldBe ""
     }
 
+    "notebooks: the Unfiled row carries the core's count, and says when it is of the window only (#1047)" {
+        fun unfiled(answer: NotesNotebooks) = NotesNotebooksMachine.reduce(
+            NotesNotebooksMachine.initial(),
+            NotesNotebooksReads.arrived(listOf(AppQueryResponse(notes_notebooks = answer))),
+        ).state.data_!!.rows.first()
+        unfiled(NotesNotebooks(unfiled_count = 1)).let {
+            it.title shouldBe NotesCopy.UNFILED_ROW
+            it.trailing shouldBe "1 note"
+            it.accessibility_label shouldBe "${NotesCopy.UNFILED_ROW}, 1 note"
+        }
+        unfiled(NotesNotebooks(unfiled_count = 200, unfiled_truncated = true)).trailing shouldBe "200+ notes"
+    }
+
+    "dates are the member's: Edited, a search hit and a trashed note read the core's local day (#1047)" {
+        // 23:30 UTC on the 11th is the 12th in the member's zone.
+        val row = row("n-1", "Late").copy(updated_at = "2026-03-11T23:30:00Z", updated_local_day = "2026-03-12")
+        loadedLibrary(row).data_!!.sections.flatMap { it.rows }.single().meta shouldBe "${NotesCopy.EDITED} Thu 12 March"
+        // No zone resolved: no day at all — never the instant's UTC one.
+        loadedLibrary(row.copy(updated_local_day = "")).data_!!.sections.flatMap { it.rows }.single().meta shouldBe ""
+        val searching = NotesLibraryMachine.run(
+            openedLibrary(),
+            NotesLibraryEvent(search_opened = NotesLibraryEvent.SearchOpened()),
+            NotesLibraryEvent(search_term = NotesLibraryEvent.SearchTermChanged(term = "late")),
+        ).state
+        NotesLibraryReads.requests(searching, now).single().notes_search!!.tz shouldBe "Europe/Lisbon"
+        val hit = NotesSearchHit(note_id = "n-1", title = "Late", updated_at = "2026-03-11T23:30:00Z", updated_local_day = "2026-03-12")
+        NotesLibraryMachine.reduce(searching, NotesLibraryReads.arrived(listOf(AppQueryResponse(notes_search = NotesSearch(hits = listOf(hit))))))
+            .state.results!!.rows.single().meta shouldBe "${NotesCopy.EDITED} Thu 12 March"
+        val trashed = NotesTrashReads.arrived(
+            listOf(
+                AppQueryResponse(
+                    notes_trash = NotesTrash(
+                        notes = listOf(row.copy(deleted_at = "2026-03-11T23:30:00Z", deleted_local_day = "2026-03-12")),
+                    ),
+                ),
+            ),
+        )
+        trashed.data_!!.data_!!.rows.single().meta shouldBe "Deleted Thu 12 March"
+    }
+
+    "powerbox: a subtitle is a clean excerpt or the core's local day in words, never a raw column or a UTC slice (#1047)" {
+        fun sub(raw: String, day: String = "", entity: String = "core.event") =
+            NotesLinkPickerMachine.subtitleOf(NotesLinkTarget(entity = entity, subtitle = raw, subtitle_local_day = day, app_id = "agenda"))
+        // 23:30Z on 11 March is 12 March east of UTC: the core's day wins, never the date part.
+        sub("2026-03-11T23:30:00Z", day = "2026-03-12") shouldBe "Thu 12 March"
+        sub("2026-03-11", day = "2026-03-11") shouldBe "Wed 11 March"
+        sub("2026-03-11 09:00:00", day = "2026-03-11") shouldBe "Wed 11 March"
+        // A when the core could not place (no zone): what it is, not a sliced date.
+        sub("2026-03-11T09:00:00Z") shouldBe NotesCopy.LINK_KIND_EVENT
+        sub("\n## **Plans** for [[Ana]]\n- more", entity = "knowledge.note") shouldBe "Plans for Ana"
+        sub("- [ ] call the [bank](https://x.example) `today`", entity = "schedule.task") shouldBe "call the bank today"
+        sub("2026-03-11 standup notes", entity = "knowledge.note") shouldBe "2026-03-11 standup notes"
+        sub("snake_case stays") shouldBe "snake_case stays"
+        sub("People") shouldBe "People"
+        sub("x".repeat(100)) shouldBe "x".repeat(80) + "…"
+        val folded = NotesLinkPickerMachine.fold(
+            listOf(
+                NotesLinkTarget(
+                    entity = "core.event", id = "e-1", title = "Dentist", subtitle = "2026-03-11T09:00:00Z",
+                    subtitle_local_day = "2026-03-11", app_id = "agenda",
+                ),
+            ),
+        )
+        folded.domains.single().rows.single().let {
+            it.subtitle shouldBe "Wed 11 March"
+            it.accessibility_label shouldBe "Dentist, Wed 11 March, ${NotesCopy.DOMAIN_EVENTS}"
+        }
+        val state = NotesLinkPickerMachine.initial().copy(term = "den")
+        NotesLinkPickerReads.requests(state, now).single().notes_link_targets!!.tz shouldBe now.zone
+    }
+
+    "powerbox: a row whose subtitle is only its app key says what it is, never \"photos\" or \"docs\" (#1047)" {
+        val folded = NotesLinkPickerMachine.fold(
+            listOf(
+                NotesLinkTarget(entity = "core.document", id = "d-1", title = "Lease", subtitle = "docs", app_id = "docs"),
+                NotesLinkTarget(entity = "core.content_item", id = "p-1", title = "Beach", subtitle = "photos", app_id = "photos"),
+                NotesLinkTarget(entity = "tally.expense", id = "x-1", title = "Dinner", subtitle = "tally", app_id = "tally"),
+                NotesLinkTarget(entity = "some.thing", id = "o-1", title = "Odd", subtitle = "elsewhere", app_id = "elsewhere"),
+            ),
+        )
+        folded.domains.map { it.head!!.title to it.rows.single().subtitle } shouldBe listOf(
+            NotesCopy.DOMAIN_DOCS to NotesCopy.LINK_KIND_DOCUMENT,
+            NotesCopy.DOMAIN_PHOTOS to NotesCopy.LINK_KIND_PHOTOGRAPH,
+            NotesCopy.DOMAIN_TALLY to NotesCopy.LINK_KIND_EXPENSE,
+            NotesCopy.DOMAIN_OTHER to "",
+        )
+        // A REAL subtitle that is not the app key still reads as itself.
+        NotesLinkPickerMachine.fold(
+            listOf(NotesLinkTarget(entity = "knowledge.note", id = "n-2", title = "Plans", subtitle = "Call Ana", app_id = "notes")),
+        ).domains.single().rows.single().subtitle shouldBe "Call Ana"
+    }
+
     "notebooks: no notebook is one sentence and the create action" {
         val loaded = NotesNotebooksMachine.reduce(
             NotesNotebooksMachine.initial(),
@@ -386,10 +481,56 @@ class NotesAppSpec : StringSpec({
         days.map { it.head!!.title } shouldBe listOf("Today", "Yesterday", "Mon 2 March")
         days[0].rows.single().meta shouldBe "09:30"
         days[1].rows.single().title shouldBe "Call"
-        loaded.data_!!.today shouldBe "2026-03-11"
+        loaded.data_.today shouldBe "2026-03-11"
         loaded.chrome!!.new_entry shouldBe NotesCopy.NEW_ENTRY
         val empty = NotesJournalMachine.reduce(opened, NotesJournalReads.arrived(listOf(AppQueryResponse(notes_journal = NotesJournal(today = "2026-03-11"))))).state
         empty.data_!!.empty!!.headline shouldBe NotesCopy.JOURNAL_EMPTY_HEADLINE
+    }
+
+    "journal: new entry opens the sheet, and Save is People's journal command dated that day (#1047)" {
+        val opened = NotesJournalMachine.reduce(NotesJournalMachine.initial(), NotesJournalEvent(opened = NotesJournalEvent.Opened())).state
+        // No answer yet: no day to date it by, so nothing opens.
+        NotesJournalMachine.reduce(opened, NotesJournalEvent(new_entry = NotesJournalEvent.NewEntryRequested())).state.compose shouldBe null
+        val loaded = NotesJournalMachine.reduce(
+            opened,
+            NotesJournalReads.arrived(listOf(AppQueryResponse(notes_journal = NotesJournal(today = "2026-03-11")))),
+        ).state
+        val composing = NotesJournalMachine.reduce(loaded, NotesJournalEvent(new_entry = NotesJournalEvent.NewEntryRequested(day = "2026-03-11")))
+        composing.effects.shouldBeEmpty()
+        composing.state.compose!!.let {
+            it.day shouldBe "2026-03-11"
+            it.title shouldBe NotesCopy.NEW_ENTRY
+            it.mood_placeholder shouldBe NotesCopy.JOURNAL_MOOD
+            it.text_placeholder shouldBe NotesCopy.JOURNAL_LINE
+            it.save shouldBe NotesCopy.JOURNAL_SAVE
+            it.can_save shouldBe false
+        }
+        // Save with an empty field is nothing.
+        NotesJournalMachine.reduce(composing.state, NotesJournalEvent(compose_saved = NotesJournalEvent.ComposeSaved())).effects.shouldBeEmpty()
+        val typed = NotesJournalMachine.reduce(
+            composing.state,
+            NotesJournalEvent(compose_edited = NotesJournalEvent.ComposeEdited(mood = "Good", text = "Lunch with \"Ana\"")),
+        ).state
+        typed.compose!!.can_save shouldBe true
+        val saving = NotesJournalMachine.reduce(typed, NotesJournalEvent(compose_saved = NotesJournalEvent.ComposeSaved()))
+        saving.effects.filterIsInstance<ScreenEffect.SubmitWrite>().single().let {
+            it.command shouldBe "people.add_journal_entry"
+            it.inputJson shouldBe """{"mood":"Good","text":"Lunch with \"Ana\"","entry_date":"2026-03-11"}"""
+        }
+        saving.state.compose!!.saving shouldBe true
+        saving.state.compose.can_save shouldBe false
+        // While in flight the sheet stays.
+        NotesJournalMachine.reduce(saving.state, NotesJournalEvent(compose_closed = NotesJournalEvent.ComposeClosed())).state.compose shouldNotBe null
+        val key = saving.state.write!!.invoke_key
+        val refused = NotesJournalMachine.reduce(
+            saving.state,
+            NotesJournalEvent(write_settled = WriteSettled(invoke_key = key, committed = false, failure = Reads.refused("The vault is full."))),
+        ).state
+        refused.compose!!.status_label shouldBe "The vault is full."
+        refused.compose.can_save shouldBe true
+        NotesJournalMachine.reduce(saving.state, NotesJournalEvent(write_settled = WriteSettled(invoke_key = key, committed = true)))
+            .state.compose shouldBe null
+        NotesJournalMachine.reduce(refused, NotesJournalEvent(compose_closed = NotesJournalEvent.ComposeClosed())).state.compose shouldBe null
     }
 
     // --- History -----------------------------------------------------------
@@ -400,12 +541,31 @@ class NotesAppSpec : StringSpec({
             NotesHistoryEvent(opened = NotesHistoryEvent.Opened(note_id = "n-1", note_title = "A")),
         )
         opened.effects.single().shouldBeInstanceOf<ScreenEffect.ReadPage>()
+        // THE BACK WORD IS THE NOTE'S TITLE, else "Untitled note" — never the view's (#1047).
+        opened.state.chrome!!.back shouldBe "A"
+        NotesHistoryMachine.reduce(
+            NotesHistoryMachine.initial(),
+            NotesHistoryEvent(opened = NotesHistoryEvent.Opened(note_id = "n-2", note_title = " ")),
+        ).state.chrome!!.back shouldBe NotesCopy.UNTITLED
         NotesHistoryReads.requests(opened.state, now)!!.single().notes_history!!.note_id shouldBe "n-1"
         NotesHistoryReads.requests(NotesHistoryMachine.initial(), now).shouldBeNull()
         val history = NotesHistory(
             versions = listOf(
-                NotesVersion(content_id = "c-2", body = "new words", current = true, asserted_at = "2026-03-11T10:05:00.000Z"),
-                NotesVersion(content_id = "c-1", body = "old words", asserted_at = "2026-03-02T08:00:00.000Z"),
+                NotesVersion(
+                    content_id = "c-2",
+                    body = "new words",
+                    current = true,
+                    asserted_at = "2026-03-11T10:05:00.000Z",
+                    asserted_local_day = "2026-03-11",
+                    asserted_local = "2026-03-11T10:05",
+                ),
+                NotesVersion(
+                    content_id = "c-1",
+                    body = "old words",
+                    asserted_at = "2026-03-02T08:00:00.000Z",
+                    asserted_local_day = "2026-03-02",
+                    asserted_local = "2026-03-02T08:00",
+                ),
             ),
         )
         val loaded = NotesHistoryMachine.reduce(opened.state, NotesHistoryReads.arrived(listOf(AppQueryResponse(notes_history = history)))).state
@@ -413,6 +573,24 @@ class NotesAppSpec : StringSpec({
         rows[0].label shouldBe NotesCopy.CURRENT_VERSION
         rows[0].restore_label shouldBe ""
         rows[1].label shouldBe "Mon 2 March · 08:00"
+        // THE MEMBER'S DAY AND TIME, when the core read them in a zone (#1047).
+        NotesHistoryMachine.fold(
+            NotesHistory(
+                versions = listOf(
+                    NotesVersion(
+                        content_id = "c-1",
+                        body = "b",
+                        asserted_at = "2026-03-02T23:30:00.000Z",
+                        asserted_local_day = "2026-03-03",
+                        asserted_local = "2026-03-03T00:30",
+                    ),
+                ),
+            ),
+        ).rows.single().label shouldBe "Tue 3 March · 00:30"
+        // NO ZONE RESOLVED, NO DAY: `asserted_at`'s UTC reading is never drawn.
+        NotesHistoryMachine.fold(
+            NotesHistory(versions = listOf(NotesVersion(content_id = "c-1", body = "b", asserted_at = "2026-03-02T23:30:00.000Z"))),
+        ).rows.single().label shouldBe ""
         rows[1].restore_label shouldBe NotesCopy.RESTORE
         NotesHistoryMachine.reduce(loaded, NotesHistoryEvent(restore = NotesHistoryEvent.RestoreTapped(content_id = "c-2"))).effects.shouldBeEmpty()
         val restore = NotesHistoryMachine.reduce(loaded, NotesHistoryEvent(restore = NotesHistoryEvent.RestoreTapped(content_id = "c-1")))
@@ -450,13 +628,31 @@ class NotesAppSpec : StringSpec({
         // An existing `[[` does not reopen it.
         NotesEditorMachine.reduce(picked.state, NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = "hello [[Ana]] world!")))
             .state.link_sheet_open shouldBe false
-        // The button opens it at the caret, inserting.
+        // THE BUTTON'S LINK LANDS AT THE END: no shell reports a caret, and
+        // one sent is not read (#1047).
         val button = NotesEditorMachine.run(
             loadedEditor("ab"),
             NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested(caret = 1)),
-            NotesEditorEvent(link_picked = NotesEditorEvent.LinkPicked(target = NotesLinkTargetRow(title = "X"))),
         ).state
-        button.draft!!.body shouldBe "a[[X]]b"
+        button.link_anchor shouldBe 2
+        NotesEditorMachine.reduce(
+            button,
+            NotesEditorEvent(link_picked = NotesEditorEvent.LinkPicked(target = NotesLinkTargetRow(title = "X"))),
+        ).state.draft!!.body shouldBe "ab [[X]]"
+    }
+
+    "editor: the button's link is its own word — spaced after text, a new line after a heading (#1047)" {
+        fun splice(body: String, at: Int = body.length) = NotesEditorMachine.spliceLink(body, at, replaces = false, title = "Book")
+        splice("Middlemarch.") shouldBe "Middlemarch. [[Book]]"
+        splice("Middlemarch. ") shouldBe "Middlemarch. [[Book]]"
+        splice("Middlemarch.\n") shouldBe "Middlemarch.\n[[Book]]"
+        splice("") shouldBe "[[Book]]"
+        splice("# Reading") shouldBe "# Reading\n[[Book]]"
+        // Mid-text, it is spaced from what follows too.
+        splice("ab cd", at = 2) shouldBe "ab [[Book]] cd"
+        splice("abcd", at = 2) shouldBe "ab [[Book]] cd"
+        // A TYPED `[[` is where the member put it: replaced in place, never spaced.
+        NotesEditorMachine.spliceLink("Middlemarch.[[", 12, replaces = true, title = "Book") shouldBe "Middlemarch.[[Book]]"
     }
 
     "editor: the powerbox reads notes.link_targets and groups by domain" {
@@ -490,6 +686,30 @@ class NotesAppSpec : StringSpec({
         (titled.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe "{\"note_id\":\"n-1\",\"title\":\"New\"}"
     }
 
+    "editor: close stays Done after an autosave and the re-read that follows; a fresh open is Cancel (#1015 D3)" {
+        val loaded = loadedEditor("hello")
+        loaded.chrome!!.close shouldBe NotesCopy.CANCEL
+        val typed = NotesEditorMachine.reduce(loaded, NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = "hello there")))
+        val tick = (typed.effects.single() as ScreenEffect.Schedule).token
+        val saving = NotesEditorMachine.reduce(typed.state, NotesEditorEvent(tick = NotesEditorEvent.Ticked(token = tick)))
+        val key = (saving.effects.single() as ScreenEffect.SubmitWrite).invokeKey
+        val saved = NotesEditorMachine.reduce(
+            saving.state,
+            NotesEditorEvent(write_settled = WriteSettled(invoke_key = key, committed = true)),
+        ).state
+        saved.chrome!!.close shouldBe NotesCopy.DONE
+        // THE RE-READ AFTER THE SAVE puts the phase back to clean; close stays Done.
+        val reread = NotesEditorMachine.reduce(
+            saved,
+            NotesEditorEvent(data_ = NotesEditorEvent.DataArrived(draft = NoteDraft(title = "T", body = "hello there"))),
+        ).state
+        reread.autosave!!.phase shouldBe centraid.screen.v1.Autosave.Phase.PHASE_CLEAN
+        reread.chrome!!.close shouldBe NotesCopy.DONE
+        // Another visit starts over.
+        NotesEditorMachine.reduce(reread, NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "n-2")))
+            .state.chrome!!.close shouldBe NotesCopy.CANCEL
+    }
+
     "editor: a new note reads nothing, creates on first save under its minted id, then edits" {
         val id = "0b7e3a52-1c7d-4d5e-9f00-1234567890ab"
         val opened = NotesEditorMachine.reduce(
@@ -499,11 +719,13 @@ class NotesAppSpec : StringSpec({
         opened.effects.shouldBeEmpty()
         opened.state.draft.shouldNotBeNull()
         opened.state.chrome!!.close shouldBe NotesCopy.CANCEL
-        opened.state.chrome!!.history_enabled shouldBe false
+        opened.state.chrome.history_enabled shouldBe false
+        // NOTHING IS SAVED YET, so the status line does not say "Saved" (#1047 walk).
+        opened.state.autosave!!.label shouldBe ""
         // Not in the vault: a change event reads nothing.
         NotesEditorMachine.reduce(opened.state, NotesEditorMachine.rowsChanged("knowledge_note", emptyList())!!).effects.shouldBeEmpty()
-        opened.state.chrome!!.title shouldBe NotesCopy.NEW_NOTE
-        opened.state.chrome!!.menu_label shouldBe NotesCopy.ROW_MENU
+        opened.state.chrome.title shouldBe NotesCopy.NEW_NOTE
+        opened.state.chrome.menu_label shouldBe NotesCopy.ROW_MENU
         // Nothing to name it by: a line first.
         val blank = NotesEditorMachine.run(
             opened.state,
@@ -541,6 +763,50 @@ class NotesAppSpec : StringSpec({
         edit.inputJson shouldBe "{\"note_id\":\"$id\",\"body_text\":\"Buy milk and eggs\"}"
     }
 
+    "editor: a title derived from the body stays derived after the re-read — the field stays empty (#1047 F5)" {
+        val id = "0b7e3a52-1c7d-4d5e-9f00-1234567890ab"
+        val opened = NotesEditorMachine.reduce(
+            NotesEditorMachine.initial(),
+            NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = id, is_new = true)),
+        ).state
+        val typed = NotesEditorMachine.reduce(opened, NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = "Buy milk")))
+        val tick = (typed.effects.single() as ScreenEffect.Schedule).token
+        val create = NotesEditorMachine.reduce(typed.state, NotesEditorEvent(tick = NotesEditorEvent.Ticked(token = tick)))
+        val write = create.effects.single() as ScreenEffect.SubmitWrite
+        val committed = NotesEditorMachine.reduce(
+            create.state,
+            NotesEditorEvent(write_settled = WriteSettled(invoke_key = write.invokeKey, committed = true)),
+        ).state
+        // THE CLEAN RE-READ brings back the title the vault derived. The
+        // field is still the member's: empty, so the first line still names it.
+        val reread = NotesEditorMachine.reduce(
+            committed,
+            NotesEditorEvent(data_ = NotesEditorEvent.DataArrived(draft = NoteDraft(title = "Buy milk", body = "Buy milk"))),
+        ).state
+        reread.draft!!.title shouldBe ""
+        val renamed = NotesEditorMachine.run(
+            reread,
+            NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = "Groceries\nBuy milk")),
+            NotesEditorEvent(left = NotesEditorEvent.Left()),
+        )
+        (renamed.effects.last() as ScreenEffect.SubmitWrite).inputJson shouldBe
+            "{\"note_id\":\"$id\",\"title\":\"Groceries\",\"body_text\":\"Groceries\\nBuy milk\"}"
+        // A pin alone sends no title: nothing about the name changed.
+        val pinned = NotesEditorMachine.reduce(reread, NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
+        (pinned.effects.last() as ScreenEffect.SubmitWrite).inputJson shouldBe "{\"note_id\":\"$id\",\"pinned\":1}"
+        // A NAME FROM ELSEWHERE is not derived, and is adopted.
+        NotesEditorMachine.reduce(
+            committed,
+            NotesEditorEvent(data_ = NotesEditorEvent.DataArrived(draft = NoteDraft(title = "Shopping", body = "Buy milk"))),
+        ).state.draft!!.title shouldBe "Shopping"
+        // A FRESH OPEN draws the stored title, on both shells, as it always has.
+        NotesEditorMachine.run(
+            NotesEditorMachine.initial(),
+            NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = id)),
+            NotesEditorEvent(data_ = NotesEditorEvent.DataArrived(draft = NoteDraft(title = "Buy milk", body = "Buy milk"))),
+        ).state.draft!!.title shouldBe "Buy milk"
+    }
+
     // --- Routing -----------------------------------------------------------
 
     "routing: the tile's note, else a new note, and nothing while loading" {
@@ -568,7 +834,7 @@ class NotesAppSpec : StringSpec({
         val trashRow = loaded.data_!!.rows.single()
         trashRow.title shouldBe "Gone"
         trashRow.purge_label shouldBe ""
-        loaded.data_!!.empty_label shouldBe ""
+        loaded.data_.empty_label shouldBe ""
         val restore = NotesTrashMachine.reduce(loaded, TrashListEvent(restore = TrashListEvent.RestoreTapped(id = "n-1")))
         (restore.effects.single() as ScreenEffect.SubmitWrite).let {
             it.command shouldBe "knowledge.restore_note"

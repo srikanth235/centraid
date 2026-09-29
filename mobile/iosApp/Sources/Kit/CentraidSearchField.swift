@@ -1,4 +1,8 @@
 import SwiftUI
+
+#if canImport(CentraidShared)
+import CentraidShared
+#endif
 import UIKit
 
 // THE SEARCH FIELD, ONCE (K5). Lifted from `PhotosSearchBar`, which still draws
@@ -116,7 +120,7 @@ struct BareSearchField: UIViewRepresentable {
 struct CentraidSearchField: View {
     let field: Centraid_Screen_V1_SearchField
     let placeholder: String
-    var closeLabel: String = "Close search"
+    var closeLabel: String = KitWords.shared.CLOSE_SEARCH
     var identifier: String = "kit-search"
     let onTerm: (String) -> Void
     let onClose: () -> Void

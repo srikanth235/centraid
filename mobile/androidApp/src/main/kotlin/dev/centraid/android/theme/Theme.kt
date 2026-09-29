@@ -213,7 +213,7 @@ internal fun NativeTheme.color(role: String): Color = Color(
  */
 public fun formatMoney(money: Money): String {
     if (money.currency.isEmpty()) return ""
-    val exponent = money.exponent.toInt()
+    val exponent = money.exponent
     // AN EMPTY LOCALE IS THE DEVICE'S, as on iOS (`Money.render`) and as
     // `TallyReads` says: "und" was the ROOT locale — no grouping a member
     // recognises and a bare currency sign — so the two shells drew one amount

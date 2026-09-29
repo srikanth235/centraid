@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  THE FOLDER A DOCS SCAN LANDS IN (#1047, R-1047-Q4).
+
+  The system camera app writes the Scan row's photograph here through
+  `DocsScanProvider`'s content URI; `DocsIngestFiles.scanToPdf` turns it into
+  a one-page PDF and deletes it. Inbound only: nothing is served from here to
+  another app.
+-->
+<paths>
+    <cache-path name="docs_scans" path="docs-scans/" />
+</paths>

@@ -187,7 +187,7 @@ pub fn run_drill(
     // lenient: `restored-blob-custody` runs either way, and under F14 — the
     // vault owns its copy AND EVICTS IT — that is the check a restored phone
     // can actually pass.
-    let report = backup::restore_drill(&restored_file, None, member_bytes, Some(&census_at_head))
+    let report = backup::restore_drill(&restored_file, member_bytes, Some(&census_at_head))
         .map_err(|error| fail(error.to_string()))?;
     if !report.is_clean() {
         return Err(fail(format!(

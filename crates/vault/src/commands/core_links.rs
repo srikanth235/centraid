@@ -336,7 +336,6 @@ fn link_entities() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -442,7 +441,6 @@ fn unlink_entities() -> CommandDefinition {
             Ok(serde_json::json!({ "link_id": link_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -481,7 +479,6 @@ fn anchor_link() -> CommandDefinition {
             Ok(serde_json::json!({ "link_id": link_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -573,7 +570,6 @@ fn attach() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -700,7 +696,6 @@ fn detach() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -834,7 +829,6 @@ mod tests {
             jsonschema::validator_for(&schema)
                 .unwrap_or_else(|error| panic!("{}: {error}", definition.name));
             assert!(!definition.confirm, "{}", definition.name);
-            assert!(!definition.online_only, "{}", definition.name);
             assert!(definition.sealed_input.is_empty(), "{}", definition.name);
         }
     }

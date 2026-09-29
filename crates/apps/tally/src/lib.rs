@@ -36,6 +36,7 @@ pub mod balance;
 pub mod commands;
 #[cfg(feature = "vault-door")]
 pub mod door;
+pub mod export_file;
 pub mod manifest;
 pub mod phone;
 pub mod queries;

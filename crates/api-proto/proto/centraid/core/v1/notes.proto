@@ -86,6 +86,10 @@ message NotesJournalRequest {
 message NotesSearchRequest {
   // A blank term answers no hits, as does a term with no searchable word.
   string term = 1;
+  // The zone each hit's `*_local_day` is read in: the stated name, else the
+  // vault's. An unknown name is refused; no zone at all answers EMPTY days
+  // rather than failing a search over a decoration.
+  string tz = 2;
 }
 
 // `notes.trash`: the trash shelf, newest `deleted_at` first, at most 200.
@@ -104,11 +108,17 @@ message NotesHistoryRequest {
 // `notes.link_targets`: the powerbox — what a note can link to.
 message NotesLinkTargetsRequest {
   string term = 1;
+  // The zone `NotesLinkTarget.subtitle_local_day` is read in. A DECORATION's
+  // zone: none stated on a vault that names none leaves the days EMPTY
+  // rather than refusing the sheet; an unknown name is refused.
+  string tz = 2;
 }
 
 // `notes.note`: one note, whole, for the editor.
 message NotesNoteRequest {
   string note_id = 1;
+  // As `NotesSearchRequest.tz`: the zone of the note's local readings.
+  string tz = 2;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,6 +139,13 @@ message NotesLibrary {
 message NotesNotebooks {
   // By `sort_order`, then id.
   repeated NotesNotebook notebooks = 1;
+  // The "Unfiled" row's count: live, non-journal notes filed in no notebook,
+  // over the library's default recent window (200, newest `updated_at`) —
+  // the same rows `NotesLibraryRequest.unfiled_only` draws at that window.
+  uint32 unfiled_count = 2;
+  // More live notes exist beyond that window, so `unfiled_count` is of the
+  // window only.
+  bool unfiled_truncated = 3;
 }
 
 message NotesJournal {
@@ -186,6 +203,12 @@ message NotesNote {
   optional string purge_at = 13;
   // The one notebook it is filed in (v1 keeps one placement).
   optional string notebook_id = 14;
+  // `created_at`'s and `updated_at`'s civil days, and `updated_at`'s wall
+  // clock (`YYYY-MM-DDTHH:MM`), in the request's zone — what "Edited" says.
+  // EMPTY when no zone resolved (`NotesNoteRequest.tz`).
+  string created_local_day = 15;
+  string updated_local_day = 16;
+  string updated_local = 17;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +257,10 @@ message NotesSearchHit {
   repeated NotesAttachment attachments = 12;
   // The index's highlight, matches between `⟦` and `⟧`.
   string snippet = 13;
+  // The civil days of `created_at` and `updated_at` in the request's zone;
+  // EMPTY when the instant is absent or no zone resolved.
+  string created_local_day = 14;
+  string updated_local_day = 15;
 }
 
 // A notebook is a `core_collection` whose `kind` is `notebook` (#274, rung
@@ -323,6 +350,9 @@ message NotesVersion {
   string asserted_at = 5;
   // `asserted_at`'s civil day in the request's zone; EMPTY as `NotesRow`'s.
   string asserted_local_day = 6;
+  // `asserted_at`'s wall clock there, `YYYY-MM-DDTHH:MM`, for the history's
+  // time of day. EMPTY as `asserted_local_day`.
+  string asserted_local = 7;
 }
 
 message NotesLinkTarget {
@@ -334,4 +364,10 @@ message NotesLinkTarget {
   // The app a member would open it in.
   string app_id = 5;
   string snippet = 6;
+  // THE SUBTITLE'S CIVIL DAY, `YYYY-MM-DD`, when the subtitle is a when (an
+  // event's `dtstart`, a task's `due_at`, an expense's `spent_on`): a date or
+  // a floating wall clock is its own date part; an instant (a `Z` or an
+  // offset) is its day in the request's zone. EMPTY when the subtitle is not
+  // a when, or is an instant and no zone is known — never a UTC slice.
+  string subtitle_local_day = 7;
 }

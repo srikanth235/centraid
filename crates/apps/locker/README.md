@@ -1,45 +1,42 @@
 # `crates/apps/locker` — Locker, and the app that holds no key
 
-Locker is 8 queries, 16 actions and 37 scopes over three schemas, and holds **the only three `reveal` verbs in the product** ([#1020](https://github.com/srikanth235/centraid/issues/1020)). This crate is its read side and its action table. Almost everything here follows from one sentence: **the gateway is trusted for data and blind for secrets**.
+Locker is 8 v0 queries, 17 actions and 38 scopes over three schemas, holds **the only three `reveal` verbs in the product**, and answers the phone's four app queries ([#1047](https://github.com/srikanth235/centraid/issues/1047)). This crate is its read side and its action table. Almost everything here follows from one sentence: **the list is metadata; the secret is not.**
+
+## On the phone (#1047, D-5)
+
+The phone is the vault ([#1029](https://github.com/srikanth235/centraid/issues/1029)), so every read here runs on the phone's own rows through the core's page door. [`phone`](src/phone.rs) is what the core's `app_query` arms (`locker_items` 60, `locker_item` 61, `locker_search` 62, `locker_review` 63 in [`locker.proto`](../../api-proto/proto/centraid/core/v1/locker.proto)) ask:
+
+| Loader | What it answers |
+| --- | --- |
+| `load_items` | one shelf (live or archived), newest first, with stars, tags, the vault's own counts and whether the window filled |
+| `load_item` | one item — trashed too — with its sidecars and, for each sealed cell its type carries, **whether it holds a value** |
+| `load_search` | title, username and address, case-insensitively; never a note, never a secret, never the trash |
+| `load_review` | what metadata can show: compromised, `http://` addresses, expired and expiring cards against the device's day |
+
+A sealed cell reaches a loader only as its **presence** (`<cell> IS NOT NULL AS …`, the grammar's one sealed operand, which the page door now projects as an expression — `crates/vault/src/page.rs`). `no_phone_statement_projects_a_sealed_cell_except_as_its_presence` holds every phone statement to that.
+
+The secret is not this crate's. `K` is derived from the member's 24 words (`seed / vault'(i) / locker'`) and held in the core's memory, so a restore from the words reopens it, a secret the member typed is sealed by the core before the vault sees the command, and a reveal is receipted before its value exists — `crates/core/src/locker/phone.rs` ([R-1047-L3, L4, Q-1047-11](../../../docs/decisions.md#locker-on-the-phone-1047-d-5)). The lock itself — the biometric, the passcode fallback, the relock on leaving the foreground — is the shared machine's and the shell's ([R-1047-L1](../../../docs/decisions.md#locker-on-the-phone-1047-d-5)).
 
 ## What this crate does not contain, and what stops it
 
 | Not here | What stops it |
 | --- | --- |
 | SQL, in any form | `cargo xtask rules`' `sql-confinement`. A statement here is a `PageQuery` — a projection, a `from`, a predicate and an order, as data |
-| A hash, a codec, or a crypto primitive | nothing in the dependency set is one. `watchtower::derive` takes a digest function; `totp` takes an HMAC. The RFC 6238 parts an implementation gets wrong — base32, the counter, the dynamic truncation — are here and under test against RFC 4226's own vectors; the primitive is the seat's |
-| The member key `K` | `centraid-vault` is not a dependency. A reveal arrives as a value with a thirty-second life and a receipt id |
+| A hash, a codec, or a crypto primitive | nothing in the dependency set is one. `totp` takes an HMAC. The RFC 6238 parts an implementation gets wrong — base32, the counter, the dynamic truncation, reading an `otpauth://` link (`seed_of`) — are here and under test against RFC 4226's own vectors; HMAC-SHA-1 is the core's, which proves the chain against RFC 6238 Appendix B ([R-1047-D6](../../../docs/decisions.md#the-owners-rulings-on-the-locker-leftovers-1047)) |
+| The member key `K` | `centraid-vault` is not a dependency |
 | A denial turned into an error | `Denial` and `commands::Outcome::Denied` are states a surface renders |
-| A failed decoration folded into "all clear" | `Decorated::watch` is an `Option` and `watchtower::summarise` **refuses to build a summary** without being told the derivation ran |
+| A weak/reused score | nothing: the Watchtower fold is deleted, and Review is metadata only ([R-1047-D6](../../../docs/decisions.md#the-owners-rulings-on-the-locker-leftovers-1047)) |
 
-## The four facts every query is written around
+## The facts every query is written around
 
-1. **`ITEM_COLUMNS` is the browsable half, and no sealed cell is on it.** `password`, `otp_seed`, `card_number`, `cvv`, `content`, `value_sealed` and `private_key` are absent **by construction rather than stripped afterwards**, and every shelf projects exactly that list — so there is one place to read to know what a Locker list can carry.
-2. **Listing is not unlocking.** These statements run on a seat's own rows under the app grant alone. That is why title, url and username are plaintext at rest at all: a locked seat still lists and searches, which is the whole reason Locker works on a phone in airplane mode.
-3. **A stated window is walked, not clamped.** `MAX_PAGE_ROWS` clamps a page at 500, so a 2,000-row shelf read as one page would read a quarter of its window and discard the cursor that said so — Watchtower would audit a quarter of the vault and report it as all of it. Every shelf here walks, and reports whether the window filled.
-4. **`access` is online-only with two walls.** `access.receipt` is in the audit band, not the replica. The manifest's `rowFilter` on `object_type` is the outer wall; the statement's own predicate is the inner one, so the page is filtered **before** the window rather than after — without it a busy vault's newest 200 receipts could be entirely someone else's.
+1. **`ITEM_COLUMNS` is the browsable half, and no sealed cell is on it.** `password`, `otp_seed`, `card_number`, `cvv`, `content`, `value_sealed` and `private_key` are absent **by construction rather than stripped afterwards**.
+2. **Listing is not unlocking — in the vault.** Title, url and username are plaintext at rest so the list and search work. On the phone the shared machine still reads nothing while Locker is locked ([R-1047-L2](../../../docs/decisions.md#locker-on-the-phone-1047-d-5)); the core refuses only what needs `K`.
+3. **A stated window is walked, not clamped.** `MAX_PAGE_ROWS` clamps a page at 500, so every shelf walks with `read_window` and reports whether the window filled; a count that reached its ceiling is answered as unknown, never as the ceiling.
 
-## The manifest, and the two fields it must not carry (D-1020-L7)
+## The manifest
 
-`manifest::tests` asserts both as properties of `manifest.json`:
+`manifest::tests` asserts the properties that matter: no permit-era `auth_session` on `items`, `seats.disabledOn` empty, the two confirmed actions (`purge-item`, `export`), and one command per action. `set-memo` (#1047) exposes `locker.set_memo`, the memo command no action reached (the handoff's README §8 paper cut).
 
-- **No `auth_session` on the `items` query.** It is a permit-era parameter: the permit, the `authenticate` op and the permit screens were deleted by #996 R13, and a schema-first reader would turn a dead field into a required one.
-- **`seats.disabledOn` is empty.** #996 R13 enables Locker on **every** seat.
+## No match policy, and no matcher
 
-## Where the secret is, at each step
-
-| Step | Where the plaintext is |
-| --- | --- |
-| a list, a search, the trash, the item pane | nowhere. The sealed cells are ciphertext at rest and the payload carries their **shape** |
-| a reveal | on the seat, for thirty seconds, after the gateway wrote the receipt — `crates/core::locker` |
-| Watchtower, a one-time code | on the seat, inside the reveal window, folded by `watchtower` and `totp` here |
-| a fill into a page | on the seat, matched against the row's own stored policy by `origin`, then handed to the extension with a thirty-second life |
-| a plaintext export | on the seat, under a confirmed `locker.export` and its one receipt |
-
-## `online_only` is exactly five actions
-
-`add-item`, `edit-item`, `set-field`, `set-passkey`, `export` (`ONLINE_ONLY_ACTIONS` in `commands.rs`) — creating or editing a secret is online only. The eleven metadata actions queue, because a member on a train must be able to trash a login.
-
-## Origin matching, and the one dependency this crate adds
-
-`contracts/origin-matching-v1.json` is the origin-matching spec; all 24 vectors pass here, and the extension's tests read the same file for the eligibility half it owns. "Registrable domain" is not a string operation, so the Public Suffix List is embedded and pinned (`psl`, whose version number _is_ the list's date — the same shape `tldts` has on the TypeScript side). A suffix added to the list after the pin is a domain whose boundary this build computes one label too wide, so **the pin is a refresh obligation**; the receipt names the cadence.
+An address is a URL. The stored match policy (`url_match_policy`, and `match_policy` per extra address) is dropped by rung eight with its editor control ([R-1047-D5](../../../docs/decisions.md#the-owners-rulings-on-the-locker-leftovers-1047)); the origin matcher, its spec and `psl` went with the extension-fill plane ([R-1047-D3](../../../docs/decisions.md#the-extension-fill-plane-deleted-1047)).

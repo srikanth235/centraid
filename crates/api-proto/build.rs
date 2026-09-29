@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 25] = [
+const PROTOS: [&str; 26] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -65,6 +65,9 @@ const PROTOS: [&str; 25] = [
     "proto/centraid/core/v1/tally.proto",
     // Tasks' five answers (#1046), the same shape as Agenda's.
     "proto/centraid/core/v1/tasks.proto",
+    // Locker's four answers and its session (#1047, D-5): the queries the
+    // phone asks while unlocked, and the one request that loads `K`.
+    "proto/centraid/core/v1/locker.proto",
     "proto/centraid/core/v1/app_query.proto",
     "proto/centraid/screen/v1/screen.proto",
 ];
@@ -106,6 +109,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.screen.v1.TallyEditorState.content.data")
         .boxed(".centraid.core.v1.Response.kind.app_query")
         .boxed(".centraid.core.v1.AppQueryResponse.answer.tasks_task")
+        // The event detail carries its calendar row since #1047.
+        .boxed(".centraid.core.v1.AppQueryResponse.answer.agenda_event")
+        // One Locker item is thirty-one fields and its sidecars (#1047).
+        .boxed(".centraid.core.v1.AppQueryResponse.answer.locker_item")
+        .boxed(".centraid.screen.v1.LockerHomeState.content.data")
+        .boxed(".centraid.screen.v1.LockerItemState.content.data")
+        .boxed(".centraid.screen.v1.LockerEditorState.content.data")
         .compile_fds(descriptors)?;
     Ok(())
 }

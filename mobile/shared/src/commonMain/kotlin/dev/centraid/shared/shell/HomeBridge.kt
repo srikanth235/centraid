@@ -2,6 +2,7 @@ package dev.centraid.shared.shell
 
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.HomeState
+import dev.centraid.shared.custody.DevSeed
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.sync.DrainPass
 import dev.centraid.shared.sync.ShelfDrain
@@ -98,13 +99,16 @@ public class HomeBridge {
      * an error: Home draws the empty shelf, and the member's next move is
      * [found].
      */
-    public fun open(vaultDir: String) {
+    public fun open(vaultDir: String, devSeedHex: String?) {
         scope.launch {
             val opened = HomeSession.open(
                 vaultDir = vaultDir,
                 services = platformServices(),
                 dispatcher = Dispatchers.Default,
                 uiThreadName = "main",
+                // DEBUG BUILDS ONLY pass anything here (`#if DEBUG` in
+                // `ShellModel.swift`); a release build passes nil. See `DevSeed`.
+                devSeed = DevSeed.parse(devSeedHex),
             )
             session = opened
             // THE WAITERS BEFORE THE COLLECT, because `collect` on a
@@ -140,22 +144,6 @@ public class HomeBridge {
      */
     public fun send(event: ByteArray) {
         session?.send(HomeEvent.ADAPTER.decode(event))
-    }
-
-    /**
-     * MAKE A VAULT ON THIS PHONE, and call back with what happened (#1029 §1).
-     *
-     * What replaces `pair`, which took a ticket, a device name and a platform
-     * string and redeemed them against a gateway. None of the three has a
-     * reader any more: a vault is founded here, so the only input is the tap.
-     *
-     * Not `suspend`, for the same reason [send] is not: a SwiftUI button cannot
-     * await. The callback fires on the main dispatcher because its only caller
-     * is a `@Published` setter.
-     */
-    public fun found(onOutcome: (FoundResult) -> Unit) {
-        val session = this.session ?: return onOutcome(FoundResult.NoSession)
-        scope.launch { onOutcome(session.found()) }
     }
 
     /**

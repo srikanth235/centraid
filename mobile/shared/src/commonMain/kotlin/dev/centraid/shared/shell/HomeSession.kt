@@ -8,6 +8,7 @@ import centraid.screen.v1.VaultLockup
 import dev.centraid.core.CentraidCore
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.copy.SharedCopy
+import dev.centraid.shared.custody.DevSeed
 import dev.centraid.shared.platform.PlatformServices
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
@@ -210,6 +211,7 @@ public class HomeSession private constructor(
             // vault frozen while the member was mid-edit must refuse the save
             // they then press, and a value read at attach would not.
             readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
+            zone = { services.clock.read().zone },
         ).start()
     }
 
@@ -279,6 +281,7 @@ public class HomeSession private constructor(
         scope = scope,
         writes = null,
         readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
+        zone = { services.clock.read().zone },
     ).start()
 
     /**
@@ -360,6 +363,37 @@ public class HomeSession private constructor(
                 },
             )
         }
+
+    /**
+     * HOLD WHAT A RESTORE BROUGHT BACK, and bind Home to it (#1047 E1).
+     * See [Shelf.adoptRestored]; the seed is already stored.
+     */
+    public suspend fun adoptRestored(restored: List<Shelf.Restored>, deviceSecretHex: String): Int {
+        val added = shelf.adoptRestored(restored, deviceSecretHex)
+        rebind()
+        return added
+    }
+
+    /**
+     * REOPEN THIS PHONE'S VAULTS WITH THE WORDS HANDED BACK (#1047 E1). See
+     * [Shelf.rekey]; a foreground core that was replaced is rebound.
+     */
+    public suspend fun rekeyed(): Int {
+        val keyed = shelf.rekey()
+        rebind()
+        return keyed
+    }
+
+    /**
+     * THE FOREGROUND VAULT JUST PAIRED (#1047 E4): its device secret is
+     * stored, so its core is reopened to carry it, and the screens rebind to
+     * the new core. Answers whether the vault is keyed after.
+     */
+    public suspend fun paired(vaultId: String): Boolean {
+        val keyed = shelf.reopen(vaultId)
+        rebind()
+        return keyed
+    }
 
     /**
      * THIS VAULT MOVED TO THE MEMBER'S OTHER PHONE (#1029 F1).
@@ -678,12 +712,14 @@ public class HomeSession private constructor(
             services: PlatformServices,
             dispatcher: CoroutineDispatcher,
             uiThreadName: String,
+            /** A debug build's demo seed, or null — always null in release. See [DevSeed]. */
+            devSeed: DevSeed? = null,
         ): HomeSession {
             val scope = CoroutineScope(SupervisorJob() + dispatcher)
             val host = ScreenHost(HomeMachine)
             val shelf = Shelf(vaultDir, services, dispatcher, uiThreadName)
             // FIRST, and with nothing else open. See the header.
-            shelf.load()
+            shelf.load(devSeed)
             val session = HomeSession(
                 scope = scope,
                 host = host,

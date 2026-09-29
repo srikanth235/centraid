@@ -2,16 +2,15 @@
 //!
 //! ## One zone source, moved here so there is only one
 //!
-//! [`FireZone`] and [`ZoneUnset`] were `crates/automations::cron`'s. They are
-//! this module's now, and `crates/automations::cron` re-exports them, because
-//! recurrence needs the SAME resolution cron already had and a second reader
-//! would be exactly the drift `docs/cron-timezone.md` was written about. The
-//! direction is forced: `crates/automations` → `crates/assist` →
-//! `crates/vault`, so the shared type can only live at the bottom.
+//! [`FireZone`] and [`ZoneUnset`] are the one resolution of a zone name:
+//! recurrence, the task lifecycle and Agenda (`crates/apps/agenda`) all read
+//! it, and a second reader would be exactly the drift one zone source
+//! prevents. It lives at the bottom of the crate graph so every app above the
+//! vault can reach it.
 //!
-//! Two tiers, and a refusal where v0's third was (`docs/cron-timezone.md:17`
-//! -`:21`): the caller's own zone (a trigger's `tz`, a series' `start_tz`, a
-//! task's `tz`), then **the vault's** — `core_vault.settings_json`'s zone —
+//! Two tiers, and a refusal where v0's third was: the caller's own zone (a
+//! series' `start_tz`, a task's `tz`), then **the vault's** —
+//! `core_vault.settings_json`'s zone —
 //! and then nothing. v0's tier 3 read the HOST's clock, which on a VPS is UTC,
 //! so "every morning at seven" silently became seven in a place nobody lives.
 //!
@@ -20,10 +19,9 @@
 //! `tz-system`, so no code path — ours or the library's — can read `TZ` or
 //! `/etc/localtime`. The database is `tzdb-bundle-always`, compiled in.
 //!
-//! ## The DST policy, shared with cron
+//! ## The DST policy
 //!
-//! `docs/cron-timezone.md:13`, three sentences, and this module is the
-//! recurrence side of them:
+//! Three sentences, and this module is where they are enforced:
 //!
 //! - a **nonexistent** wall time (the spring-forward gap) is SKIPPED — it
 //!   exists at no instant, so nothing can deliver it;
@@ -134,9 +132,9 @@ impl FireZone {
 
     /// The resolved `jiff` zone.
     ///
-    /// Exposed because `crates/automations::cron` walks civil DATES through it
-    /// (a day's own span is 23, 24 or 25 hours, and that is how both copies of
-    /// a fall-back minute land in one walk). It is not a hole in the two-tier
+    /// Exposed for a caller that walks civil DATES through it (a day's own
+    /// span is 23, 24 or 25 hours, and that is how both copies of a fall-back
+    /// minute land in one walk). It is not a hole in the two-tier
     /// rule: a `TimeZone` can only be obtained by resolving one, and the
     /// bundled database is the only source this build links.
     #[must_use]
@@ -297,8 +295,7 @@ pub fn zone_of_settings(settings_json: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Cron's weekday numbering, from `jiff`'s. Exported because
-/// `crates/automations::cron` walks civil dates with it.
+/// Cron's weekday numbering (0 = Sunday), from `jiff`'s.
 #[must_use]
 pub const fn sunday_zero(weekday: Weekday) -> i8 {
     match weekday {

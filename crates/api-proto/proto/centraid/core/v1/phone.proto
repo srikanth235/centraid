@@ -27,10 +27,13 @@
 //
 // ## The gateway is blind, and so is this file
 //
-// Nothing here carries a key. `RestoreRequest` carries the 24 words INWARD —
-// from the member's own fingers into their own device's core — and carries
-// nothing back out but vault ids and paths. A restoring phone **derives**; it
-// never downloads a key (#1029 §0, §5).
+// Nothing here carries a key to or from the LAPTOP. `RestoreRequest` carries
+// the 24 words INWARD — from the member's own fingers into their own device's
+// core — and a restoring phone **derives**; it never downloads a key (#1029
+// §0, §5). Three secrets do cross this ABI, and only between the core and its
+// own shell on the same device: the device secret a pair or a restore mints
+// (for the device-only store), and the words and seed of `PhraseRequest`
+// (#1047 E1, for the screen that shows them once and the synchronised store).
 
 syntax = "proto3";
 
@@ -139,15 +142,17 @@ message PairResponse {
   bool record_published = 2;
   // WHAT THE MEMBER COMPARES, AND IT IS NOT A HEX ID (#1029 W15-D5).
   //
-  // `centraid_identity::safety_number` over this phone's vault identity key
-  // and the laptop's endpoint key, grouped for reading aloud. A 64-character
+  // `centraid_identity::pairing_safety_number` over this phone's vault
+  // identity key and the laptop's endpoint key, grouped for reading aloud —
+  // the one function `centraid-gateway serve` prints its digits with once the
+  // invite is redeemed, so the two screens agree. A 64-character
   // hex endpoint id is a string people check four characters of and stop —
   // which catches a typo and misses an attacker, who gets to choose the other
   // sixty. The safety number is short enough to be read out in full, and being
   // read out in full is the whole of what it is for.
   //
-  // Empty means this build could not compute one, and is drawn as that — never
-  // as "it matched".
+  // Empty means this build could not compute one; `pair.laptop` refuses such
+  // a pairing rather than show it — never "it matched".
   string safety_number = 4;
 }
 
@@ -185,6 +190,16 @@ message RestoreRequest {
   // Empty is the ordinary case: a relayed or DNS-resolvable laptop is reached
   // by its id.
   repeated string direct_addrs = 3;
+  // THE SEED IN PLACE OF THE WORDS (#1047, Q-1047-18, answered 2026-09-29).
+  //
+  // 64 raw bytes — what `RecoveryPhrase::seed` makes of the 24 words. A phone
+  // that received the seed through the platform's synchronised keychain holds
+  // no words and cannot type them; the seed is what every key derives from, so
+  // it restores exactly what the words would. EXACTLY ONE of `phrase` and
+  // `seed` is set: both is refused (two answers to "whose vaults"), and neither
+  // is refused as "not your 24 words". Like the phrase, it is never logged,
+  // never quoted in an error and never kept by the core past this request.
+  optional bytes seed = 4;
 }
 
 // One vault a restore brought back.
@@ -223,6 +238,31 @@ message RestoreResponse {
   // How many derivation indices were tried past the last one that answered.
   // The gap limit, reported, so "we looked" is checkable.
   uint32 gap_scanned = 2;
+  // VAULTS THAT CHECKED AND WHOSE LEASE WOULD NOT MOVE (#1047 M1).
+  //
+  // Every vault is fetched, laid down and checked before any lease is
+  // claimed, so a vault that fails its checks refuses the whole restore and
+  // moves nothing. What can still fail is a claim itself, after an earlier
+  // vault's claim landed — the laptop dropped, or refused. Refusing the whole
+  // restore then would drop the vaults already claimed and the device secret
+  // that drains them, and the old phone would be frozen on them with nothing
+  // restored anywhere. So the claimed vaults are answered in `vaults`, and
+  // each one that was not is named here: its file is removed, its lease is
+  // still the old phone's, and a second restore takes it. Empty is the
+  // ordinary answer. When no claim landed at all the restore is refused
+  // instead, with the first claim's refusal.
+  repeated UnclaimedVault unclaimed = 4;
+}
+
+// One vault a restore checked and could not claim (`RestoreResponse.unclaimed`).
+message UnclaimedVault {
+  // The derivation index, as `RestoredVault.index`.
+  uint32 index = 1;
+  // The vault's identity public key, hex, as `RestoredVault.vault_id`.
+  string vault_id = 2;
+  // Why the claim did not land, for a support log. Carries no key and no
+  // word.
+  string reason = 3;
 }
 
 // ----------------------------------------------------------------- status --
@@ -243,4 +283,99 @@ message BackupStatusResponse {
   // endpoint. **It is not a ping**: a status read that dialled would make
   // drawing a screen depend on somebody else's network.
   bool laptop_paired = 4;
+}
+
+// ----------------------------------------------------------------- phrase --
+
+// THE 24 WORDS, MINTED, JUDGED AND TURNED INTO A SEED — IN RUST (#1047 E1).
+//
+// BIP39 lives in `centraid_identity::phrase` and nowhere else: the shell has
+// no word list, no checksum and no PBKDF2, and a second implementation in
+// Kotlin would be a second opinion about which words are a member's vaults.
+// So the three things a words screen needs are one request kind. `mint` is 24
+// words from the operating system's CSPRNG, for the make-vault screen to show
+// ONCE. `check` judges each cell against the list, with suggestions, and gives
+// the whole phrase's verdict (count, unknown word, checksum) for the entry
+// grid. `seed` is the 64-byte seed the words derive, for the shell's
+// synchronised secure store (`CONTRACT.md` §4b), where every later open reads
+// it.
+//
+// **It needs no vault**, like `restore`: a phone making its first vault, or
+// restoring onto a fresh install, has none. It is bounded, and it is not a
+// command, so it writes no receipt — the words and the seed reach no row, no
+// log line and no error detail. A refused `seed` names the count or "not a
+// valid phrase", never a word.
+message PhraseRequest {
+  oneof op {
+    PhraseMint mint = 1;
+    PhraseCheck check = 2;
+    PhraseSeed seed = 3;
+  }
+}
+
+message PhraseMint {}
+
+// The cells as typed, in order. Each is trimmed and lowercased here, because
+// a keyboard's capital or a trailing space is not a wrong word.
+message PhraseCheck {
+  repeated string words = 1;
+}
+
+message PhraseSeed {
+  repeated string words = 1;
+}
+
+message PhraseResponse {
+  oneof answer {
+    PhraseMinted minted = 1;
+    PhraseChecked checked = 2;
+    PhraseSeeded seeded = 3;
+  }
+}
+
+// 24 lowercase English words, in order. Shown once and held by the shell only
+// until the seed they derive is stored.
+message PhraseMinted {
+  repeated string words = 1;
+}
+
+message PhraseChecked {
+  // One per cell sent, in order.
+  repeated PhraseWord words = 1;
+  Verdict verdict = 2;
+  // The 1-based position of the first cell that is not a list word, or 0.
+  uint32 first_unknown = 3;
+
+  enum Verdict {
+    VERDICT_UNSPECIFIED = 0;
+    // Fewer than 24 filled cells.
+    VERDICT_INCOMPLETE = 1;
+    // A filled cell is not on BIP39's English list; `first_unknown` names it.
+    VERDICT_UNKNOWN_WORD = 2;
+    // Every word is on the list and the checksum does not close: a word is
+    // in the wrong place, or is the wrong list word.
+    VERDICT_BAD_CHECKSUM = 3;
+    // A phrase `seed` will accept.
+    VERDICT_VALID = 4;
+    // More than 24 filled cells.
+    VERDICT_TOO_MANY = 5;
+  }
+}
+
+message PhraseWord {
+  // 1-based.
+  uint32 position = 1;
+  // The cell is empty.
+  bool empty = 2;
+  // The cell is a word on the list.
+  bool known = 3;
+  // Up to four list words beginning with what the cell holds, when it is
+  // filled and not yet a list word. Empty otherwise.
+  repeated string suggestions = 4;
+}
+
+// The 64-byte BIP39 seed, no passphrase (`phrase.rs`'s header). The shell
+// stores it in the synchronised secure store and drops it.
+message PhraseSeeded {
+  bytes seed = 1;
 }

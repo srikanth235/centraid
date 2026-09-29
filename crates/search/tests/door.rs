@@ -11,9 +11,9 @@
 //! independent properties, each with its own mechanism (#1020, D-1020-N1):
 //!
 //! 1. every sealed column the registry names really does hold a secret sealed
-//!    by `crates/vault::custody` — the vault's own `sealed:v1:` envelope and its
-//!    own `lk1:` member-key cell, not a hand-typed prefix — so the run is
-//!    neither vacuous nor a claim about a string;
+//!    by `crates/vault::custody` — the vault's own `lk1:` member-key cell, not
+//!    a hand-typed prefix — so the run is neither vacuous nor a claim about a
+//!    string;
 //! 2. no `Target` from any of the seven domains carries the PLAINTEXT or the
 //!    CIPHERTEXT, for a query that asks for each by name;
 //! 3. the entities that HAVE sealed columns are not domains at all, and asking
@@ -33,17 +33,17 @@ use rusqlite::Connection;
 /// THE SECRETS THIS FIXTURE PLANTS, AS THE PRODUCT WRITES THEM.
 ///
 /// Not a hand-made prefix: `crates/vault::custody` is what seals a cell, and a
-/// test that typed `"sealed:v1:…"` itself would be proving something about a
-/// string rather than about the vault. `seal_value` is the `sealed:v1:`
-/// envelope every sealed column takes; `encrypt_under_locker_key` is the `lk1:`
-/// form the Locker member key writes (wave 4 lane Locker) — and the two are
-/// different classes, so both are planted (census §D2).
+/// test that typed `"lk1:…"` itself would be proving something about a string
+/// rather than about the vault. `encrypt_under_locker_key` is the `lk1:` form
+/// the Locker member key writes, and it is the only cell encryption the vault
+/// has: the `sealed:v1:` envelope sealed only the connector credentials rung
+/// five dropped, and is deleted (R-1047-D2).
 ///
 /// The PLAINTEXT is what a member would search for and the CIPHERTEXT is what
 /// the column holds; the test asserts neither reaches a target.
 const PLAINTEXT: &str = "zqmarker recovery phrase seventeen";
 
-/// A key by value. There is no ambient seal key in the search crate, and there
+/// A key by value. There is no ambient Locker key in the search crate, and there
 /// is none here either: the bytes are the fixture's.
 const KEY: [u8; 32] = [7u8; 32];
 
@@ -63,7 +63,7 @@ fn vault() -> Connection {
 /// One row in every domain, plus a planted secret in every sealed column.
 #[expect(
     clippy::too_many_lines,
-    reason = "one fixture, one reading order: seven domains and four sealed tables"
+    reason = "one fixture, one reading order: seven domains and three sealed tables"
 )]
 fn seed(connection: &Connection) {
     let body = |id: &str, text: &str, sha: &str| {
@@ -202,8 +202,7 @@ fn seed(connection: &Connection) {
     // THE PLANTED SECRETS, sealed the way the product seals them.
     //
     // Locker's cells take the member key's `lk1:` form and the AAD binds them to
-    // their row and key id; the connector's take the `sealed:v1:` envelope whose
-    // AAD binds table, column and row. Neither is typed here: both come out of
+    // their row and key id. Nothing is typed here: the cells come out of
     // `crates/vault::custody`, so what the columns hold is what a real vault
     // holds.
     let locker = |column: &str| {

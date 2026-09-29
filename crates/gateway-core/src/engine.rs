@@ -124,6 +124,37 @@ impl<S: StateStore, B: ByteStore> Gateway<S, B> {
         Ok(state)
     }
 
+    /// Take the lease at `caller.epoch` **only while the head is `head`** —
+    /// the restore's claim (#1047 L1).
+    ///
+    /// A restoring phone reads the head, fetches and checks that generation,
+    /// and only then claims. An unconditional claim let the old phone commit
+    /// in between: the lease moved to a phone that had checked an older
+    /// generation, and if the newer one then failed its checks the lease had
+    /// moved with nothing restored. Conditioned on the head the phone checked,
+    /// the claim and the check are one step, and a moved head moves nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`Refusal::HeadConflict`] with the head as it stands, when it is not
+    /// `head` — judged before the epoch, so a refused claim changes nothing —
+    /// and [`Refusal::LeaseStale`] for an epoch at or below the one held.
+    pub async fn claim_lease_at_head(
+        &mut self,
+        caller: Caller,
+        head: ObjectName,
+    ) -> Result<VaultState, Fault> {
+        let mut state = self.vault(&caller.vault).await?;
+        if state.head != Some(head) {
+            return Err(Fault::Refused(Refusal::HeadConflict {
+                current: state.head,
+            }));
+        }
+        state.lease = lease::claim(state.lease, caller.epoch, caller.device, caller.now)?;
+        self.state.put_vault(&state).await?;
+        Ok(state)
+    }
+
     /// Declare objects and receive an upload target for each.
     ///
     /// The order is the rule: **lease, then quota, then the

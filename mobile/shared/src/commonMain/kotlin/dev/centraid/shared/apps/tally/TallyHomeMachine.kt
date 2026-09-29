@@ -145,7 +145,7 @@ public object TallyHomeMachine :
 
     override fun fold(held: TallyHeld<TallyHomeState>): TallyHomeData? {
         val dashboard = held.answers.dashboard ?: return null
-        return fold(dashboard, held.screen.activity_shown.toInt())
+        return fold(dashboard, held.screen.activity_shown)
     }
 
     /** The three tabs out of one answer. */
@@ -239,7 +239,7 @@ public object TallyHomeMachine :
         val sub = when {
             dayOne -> ""
             lines.isEmpty() -> TallyCopy.HERO_SETTLED_SUB
-            else -> derivedFrom(dashboard.expense_count.toInt(), dashboard.settlement_count.toInt())
+            else -> derivedFrom(dashboard.expense_count, dashboard.settlement_count)
         }
         return TallyHero(lines = lines, label = label, sub = sub, tone = tone)
     }

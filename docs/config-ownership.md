@@ -20,7 +20,6 @@ One layout, stated in [`crates/centraid/src/cmd/mod.rs`](../crates/centraid/src/
 | Path | Owner | Notes |
 | --- | --- | --- |
 | `<data-dir>/vault/<vaultId>/vault.db` | `centraid gateway`, the vault's one writer | Enrolled devices live here (`access_device`, `access_device_secret`). Direct SQL bypasses the command plane and its receipts, and is unsupported while the gateway runs |
-| `<data-dir>/keys/*` | `KeyStore` ([`crates/vault/src/custody`](../crates/vault/src/custody/README.md)) | Atomic `0600` envelopes. Export, backup and copy gestures never move this directory |
 | `<data-dir>/blobs/` | `centraid backup now` / `centraid recover` | The backup plane's content-addressed store |
 
 Operator inputs are flags and environment, read at start: `--data-dir`, `--vault-name`, `--relay` / `--no-relay`, `--print-qr`, `--log` / `CENTRAID_LOG`, and `CENTRAID_EXPECTED_CORE_DIGEST` (a shell's claim about which core it was built against; a mismatch is refused). There is no gateway config file and no prefs store.
@@ -29,7 +28,7 @@ Operator inputs are flags and environment, read at start: `--data-dir`, `--vault
 
 | Surface | Owner | Notes |
 | --- | --- | --- |
-| `core_vault.settings_json` and related rows | Journalled vault commands | The seal-key fingerprint is stamped here inside the sealing transaction. Direct SQL against `vault.db` bypasses consent and is unsupported |
+| `core_vault.settings_json` and related rows | Journalled vault commands | Direct SQL against `vault.db` bypasses consent and is unsupported |
 | `enrich_policy` | Vault founding ([`crates/vault/src/bootstrap.rs`](../crates/vault/src/bootstrap.rs)) | Seeded `gateway` for `photos` and `docs`; no command in this build changes it, and Photos reads it without being able to set it |
 
 ### Mobile — the platform secure store wins

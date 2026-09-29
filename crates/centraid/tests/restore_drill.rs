@@ -426,7 +426,7 @@ async fn restore_onto_a_fresh_phone(
         let door =
             centraid_blobs::ContentBytes::new(member_bytes, tokio::runtime::Handle::current());
 
-        let report = backup::restore_drill(&file, None, Some(&door), Some(&expected))
+        let report = backup::restore_drill(&file, Some(&door), Some(&expected))
             .expect("the restore check runs");
         let coverage = report
             .checks
@@ -1400,6 +1400,7 @@ mod phone_shaped {
                         .ip_addrs()
                         .map(|addr: &std::net::SocketAddr| addr.to_string())
                         .collect(),
+                    seed: None,
                 },
                 &runtime,
             )

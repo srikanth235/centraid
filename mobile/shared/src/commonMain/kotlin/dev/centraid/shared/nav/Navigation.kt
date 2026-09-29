@@ -186,7 +186,8 @@ public sealed interface Destination {
         val isNew: Boolean = false,
     ) : Destination
 
-    public data class DocsFolder(val folderId: String, val folderName: String) : Destination
+    /** [parent] is the pushing page's title: the back control's word (#1047). */
+    public data class DocsFolder(val folderId: String, val folderName: String, val parent: String = "") : Destination
 
     // --- Docs (#1046, docs port) ---------------------------------------
 
@@ -201,12 +202,17 @@ public sealed interface Destination {
     ) : Destination
 
     /** One document. The title rides along so the head has words at once. */
-    public data class DocsDocument(val documentId: String, val title: String = "") : Destination
+    public data class DocsDocument(
+        val documentId: String,
+        val title: String = "",
+        /** The pushing page's title (`DocsDriveChrome.title`): the back control's word. */
+        val parent: String = "",
+    ) : Destination
 
     /** A text document's editor: autosave, close = done, no band. */
     public data class DocsEditor(val documentId: String, val title: String = "") : Destination
 
-    /** Docs' trash: restore and Empty trash; there is no destroy path. */
+    /** Docs' trash: restore, Delete forever and Empty trash (D-1 of 2026-09-25). */
     public data object DocsTrash : Destination
 
     // --- Notes (#1029 port) ---
@@ -293,13 +299,16 @@ public sealed interface Destination {
         val destination: TallyHomeState.Destination = TallyHomeState.Destination.DESTINATION_BALANCES,
     ) : Destination
 
+    // `parent` on a pushed Tally page is the pushing page's title: the back
+    // control's word (#1047). Empty: "Tally".
+
     /** One group's ledger; the name rides along for the head. */
-    public data class TallyGroup(val groupId: String, val name: String = "") : Destination
+    public data class TallyGroup(val groupId: String, val name: String = "", val parent: String = "") : Destination
 
     /** One friend; the name rides along for the head. */
-    public data class TallyFriend(val partyId: String, val name: String = "") : Destination
+    public data class TallyFriend(val partyId: String, val name: String = "", val parent: String = "") : Destination
 
-    public data class TallyExpense(val expenseId: String) : Destination
+    public data class TallyExpense(val expenseId: String, val parent: String = "") : Destination
 
     /**
      * Add (no `expenseId`, preset with a group or a friend) or edit. No band:
@@ -312,7 +321,7 @@ public sealed interface Destination {
     ) : Destination
 
     /** Empty `groupId` is every group plus the group-less positions. */
-    public data class TallySettleUp(val groupId: String = "") : Destination
+    public data class TallySettleUp(val groupId: String = "", val parent: String = "") : Destination
 
     public data object TallyRecurring : Destination
 
@@ -322,6 +331,48 @@ public sealed interface Destination {
 
     /** Restore only: the sweep purges, and there is no destroy path. */
     public data object TallyTrash : Destination
+
+    /**
+     * A group's ledger as a file (#1047), from the home's More sheet (`export`)
+     * or a group page. Empty [groupId] asks the member to pick one. A shell
+     * calls `TallyExportBridge.open(groupId, parent)`.
+     */
+    public data class TallyExport(val groupId: String = "", val parent: String = "") : Destination
+
+    // --- Locker (#1047, D-5) ---
+    //
+    // EVERY LOCKER DESTINATION IS DRAWN UNDER THE LOCK WALL while
+    // `LockerLockState.cover` is set: a shell draws `LockerLockBridge`'s wall
+    // in place of any of these until the Locker opens, and nothing of them
+    // reads meanwhile.
+
+    /**
+     * Items · Review · Generate · Search, More as a sheet. A shell calls
+     * `LockerHomeBridge.open(destination)`; GENERATE draws the generator
+     * (`LockerGeneratorBridge`) in the band's slot.
+     */
+    public data class LockerHome(
+        val destination: centraid.screen.v1.LockerHomeState.Destination =
+            centraid.screen.v1.LockerHomeState.Destination.DESTINATION_ITEMS,
+    ) : Destination
+
+    /** One item. `parent` is the pushing page's title, the back control's word. */
+    public data class LockerItem(val itemId: String, val parent: String = "") : Destination
+
+    /**
+     * Add ([itemId] empty — the bridge mints one) or edit. [fromGenerator]
+     * is the generator's "Put it on an item": the shell opens the editor with
+     * `LockerEditorBridge.openAddFrom(generatorBridge)`, so the candidate
+     * password moves bridge to bridge and is never a navigation parameter
+     * (a v0 defect: a generated password in the route).
+     */
+    public data class LockerEditor(val itemId: String = "", val type: String = "", val fromGenerator: Boolean = false) : Destination
+
+    /** The generator on its own page (from the editor, or pushed). */
+    public data object LockerGenerator : Destination
+
+    /** The kit's trash, with Locker as its parameter: restore and Delete forever. */
+    public data object LockerTrash : Destination
 }
 
 /**

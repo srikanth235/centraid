@@ -71,7 +71,8 @@ struct NotesEditorView: View {
                     if state.bodyEditable {
                         Button(chrome.linkLabel) {
                             send(NotesEditorEvents.make {
-                                $0.linkRequested = .with { $0.caret = UInt32(typedBody.utf16.count) }
+                                // THE MACHINE PLACES IT (at the end of the note): no caret is sent.
+                                $0.linkRequested = .init()
                             })
                         }
                     }

@@ -3,7 +3,7 @@
 //! ## Two checks, and the second is the one that matters
 //!
 //! `restore_check` is **structural**: `integrity_check`, `foreign_key_check`,
-//! the receipt references, and the seal-key verdict. `restore_drill` is
+//! and the receipt references. `restore_drill` is
 //! **depth**, and it exists because of the sentence v0 wrote at the top of its
 //! own drill: *every structural check passes on a restored vault whose CONTENT
 //! is gone — `integrity_check` speaks about pages, not rows.* A restored file
@@ -90,35 +90,6 @@ impl std::fmt::Display for RecoverPhase {
     }
 }
 
-/// What the seal key says about the restored vault.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SealKeyVerdict {
-    /// This vault never sealed anything, so there is nothing to verify.
-    NotSealed,
-    /// The kit's key is the key the vault's cells were sealed under.
-    Ok,
-    /// The vault holds sealed cells and the kit carries no key for it — the
-    /// restore succeeds and the secrets do not open. Loud, not fatal: the rest
-    /// of the vault is still worth having.
-    Missing,
-    /// The kit carries a key and it is the wrong one. Refused at the check
-    /// rather than at the first reveal, because every sealed cell would turn
-    /// into GCM garbage one row at a time.
-    Mismatch,
-}
-
-impl SealKeyVerdict {
-    #[must_use]
-    pub const fn as_wire(&self) -> &'static str {
-        match self {
-            Self::NotSealed => "not-sealed",
-            Self::Ok => "ok",
-            Self::Missing => "missing",
-            Self::Mismatch => "mismatch",
-        }
-    }
-}
-
 /// The structural report.
 #[derive(Debug, Clone)]
 pub struct RestoredPairReport {
@@ -128,22 +99,14 @@ pub struct RestoredPairReport {
     pub receipts_checked: usize,
     /// Reported, never thrown — see the module docs.
     pub dangling_receipts: Vec<String>,
-    pub seal_key: SealKeyVerdict,
-    /// The fingerprint the restored vault carries, when it carries one.
-    pub seal_key_expected: Option<String>,
 }
 
 impl RestoredPairReport {
-    /// Clean means: pages sound, keys hold, and the seal key is either right or
-    /// irrelevant. Dangling receipts do **not** make a report dirty.
+    /// Clean means: pages sound and keys hold. Dangling receipts do **not**
+    /// make a report dirty.
     #[must_use]
     pub fn is_clean(&self) -> bool {
-        self.integrity == "ok"
-            && self.foreign_key_violations.is_empty()
-            && matches!(
-                self.seal_key,
-                SealKeyVerdict::NotSealed | SealKeyVerdict::Ok
-            )
+        self.integrity == "ok" && self.foreign_key_violations.is_empty()
     }
 }
 
@@ -153,8 +116,6 @@ pub enum RestoreError {
     Other(String),
     #[error(transparent)]
     Sqlite(#[from] rusqlite::Error),
-    #[error(transparent)]
-    Seal(#[from] crate::custody::seal::SealError),
 }
 
 type Result<T> = std::result::Result<T, RestoreError>;
@@ -176,9 +137,10 @@ fn open_restored(file: &Path) -> Result<rusqlite::Connection> {
 
 /// The structural check over a restored vault file.
 ///
-/// `seal_key` is the material the recovery kit carried, or `None` when it
-/// carried none — which is itself an answer, not an error.
-pub fn restore_check(file: &Path, seal_key: Option<&[u8]>) -> Result<RestoredPairReport> {
+/// There is no key verdict: the vault seals nothing under a key of its own
+/// (R-1047-D2), and the Locker's `lk1:` cells open under `K`, which a restore
+/// re-derives from the 24 words rather than carrying.
+pub fn restore_check(file: &Path) -> Result<RestoredPairReport> {
     let connection = open_restored(file)?;
     let integrity: String = connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
 
@@ -201,26 +163,11 @@ pub fn restore_check(file: &Path, seal_key: Option<&[u8]>) -> Result<RestoredPai
     // the reference crosses a band. Counted and listed.
     let (receipts_checked, dangling_receipts) = check_receipts(&connection)?;
 
-    let expected = crate::custody::seal::read_seal_key_fingerprint(&connection)?;
-    let verdict = match (&expected, seal_key) {
-        (None, _) => SealKeyVerdict::NotSealed,
-        (Some(_), None) => SealKeyVerdict::Missing,
-        (Some(expected), Some(key)) => {
-            if *expected == crate::custody::seal::seal_key_fingerprint(key) {
-                SealKeyVerdict::Ok
-            } else {
-                SealKeyVerdict::Mismatch
-            }
-        }
-    };
-
     Ok(RestoredPairReport {
         integrity,
         foreign_key_violations: violations,
         receipts_checked,
         dangling_receipts,
-        seal_key: verdict,
-        seal_key_expected: expected,
     })
 }
 
@@ -347,12 +294,11 @@ impl RestoreDrillReport {
 /// to compare them against.
 pub fn restore_drill(
     file: &Path,
-    seal_key: Option<&[u8]>,
     blobs: Option<&dyn BlobStore>,
     expected_census: Option<&std::collections::BTreeMap<String, i64>>,
 ) -> Result<RestoreDrillReport> {
     let started = std::time::Instant::now();
-    let structural = restore_check(file, seal_key)?;
+    let structural = restore_check(file)?;
     let connection = open_restored(file)?;
     let mut checks = Vec::new();
 
@@ -365,14 +311,6 @@ pub fn restore_drill(
         name: "foreign-keys".into(),
         ok: structural.foreign_key_violations.is_empty(),
         detail: format!("{} violation(s)", structural.foreign_key_violations.len()),
-    });
-    checks.push(DrillCheck {
-        name: "seal-key".into(),
-        ok: matches!(
-            structural.seal_key,
-            SealKeyVerdict::NotSealed | SealKeyVerdict::Ok
-        ),
-        detail: structural.seal_key.as_wire().to_owned(),
     });
 
     // `restored-census`: the check that catches a perfect page tree with
@@ -777,7 +715,6 @@ impl RestoredGeneration {
 mod tests {
     use super::*;
     use crate::backup::store::FsBlobStore;
-    use crate::custody::seal;
     use crate::file::Vault;
 
     fn restored_vault(dir: &Path) -> PathBuf {
@@ -805,47 +742,19 @@ mod tests {
     }
 
     #[test]
-    fn a_restored_vault_that_never_sealed_reports_not_sealed_and_is_clean() {
+    fn a_sound_restored_vault_is_clean() {
         let dir = tempfile::tempdir().unwrap();
         let file = restored_vault(dir.path());
-        let report = restore_check(&file, None).unwrap();
+        let report = restore_check(&file).unwrap();
         assert_eq!(report.integrity, "ok");
         assert!(report.foreign_key_violations.is_empty());
-        assert_eq!(report.seal_key, SealKeyVerdict::NotSealed);
-        assert_eq!(report.seal_key_expected, None);
         assert!(report.is_clean());
-    }
-
-    #[test]
-    fn the_seal_key_verdict_separates_missing_from_mismatch_from_ok() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = restored_vault(dir.path());
-        let key = [31_u8; 32];
-        {
-            let connection = rusqlite::Connection::open(&file).unwrap();
-            seal::stamp_seal_key_fingerprint(&connection, &key, "2026-01-01T00:00:00.000Z")
-                .unwrap();
-        }
-        // No key in the kit: the restore succeeds and the secrets do not open.
-        let missing = restore_check(&file, None).unwrap();
-        assert_eq!(missing.seal_key, SealKeyVerdict::Missing);
-        assert!(!missing.is_clean());
-        assert!(missing.seal_key_expected.is_some());
-        // The wrong key: refused at the check, not at the first reveal.
-        assert_eq!(
-            restore_check(&file, Some(&[32_u8; 32])).unwrap().seal_key,
-            SealKeyVerdict::Mismatch
-        );
-        // The right key.
-        let ok = restore_check(&file, Some(&key)).unwrap();
-        assert_eq!(ok.seal_key, SealKeyVerdict::Ok);
-        assert!(ok.is_clean());
     }
 
     #[test]
     fn a_missing_file_is_a_named_refusal_not_a_panic() {
         let dir = tempfile::tempdir().unwrap();
-        let error = restore_check(&dir.path().join("nothing.db"), None).unwrap_err();
+        let error = restore_check(&dir.path().join("nothing.db")).unwrap_err();
         assert!(error.to_string().contains("no vault file"), "{error}");
     }
 
@@ -857,7 +766,7 @@ mod tests {
         let file = restored_vault(dir.path());
 
         // A census taken before the "backup".
-        let full = restore_drill(&file, None, None, None).unwrap();
+        let full = restore_drill(&file, None, None).unwrap();
         assert!(full.is_clean(), "{:?}", full.checks);
         let expected = full.census.clone();
         assert!(expected.values().any(|count| *count > 0));
@@ -885,12 +794,12 @@ mod tests {
                 )
                 .unwrap();
         }
-        let structural = restore_check(&file, None).unwrap();
+        let structural = restore_check(&file).unwrap();
         assert!(
             structural.is_clean(),
             "integrity_check speaks about pages, not rows — so the STRUCTURAL check still passes"
         );
-        let drill = restore_drill(&file, None, None, Some(&expected)).unwrap();
+        let drill = restore_drill(&file, None, Some(&expected)).unwrap();
         assert!(!drill.is_clean(), "the depth check must catch it");
         let census = drill
             .checks
@@ -919,14 +828,14 @@ mod tests {
                 )
                 .unwrap();
         }
-        let drill = restore_drill(&file, None, Some(&store), None).unwrap();
+        let drill = restore_drill(&file, Some(&store), None).unwrap();
         assert_eq!(drill.blobs_sampled, 1);
         assert_eq!(drill.blobs_missing, vec![absent.clone()]);
         assert!(!drill.is_clean());
 
         // Ship the bytes and the same drill is clean.
         store.put(b"bytes that were never shipped").unwrap();
-        let again = restore_drill(&file, None, Some(&store), None).unwrap();
+        let again = restore_drill(&file, Some(&store), None).unwrap();
         assert!(again.blobs_missing.is_empty());
         assert!(again.is_clean(), "{:?}", again.checks);
         assert!(again.elapsed_ms < 60_000);
@@ -937,14 +846,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = restored_vault(dir.path());
         let store = FsBlobStore::open(dir.path().join("blobs")).unwrap();
-        let drill = restore_drill(&file, None, Some(&store), None).unwrap();
+        let drill = restore_drill(&file, Some(&store), None).unwrap();
         let names: Vec<&str> = drill.checks.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(
             names,
             vec![
                 "integrity",
                 "foreign-keys",
-                "seal-key",
                 "restored-census",
                 // Rung four's check, and it runs WITHOUT a store: under F14 the
                 // vault owns its copy and evicts it, so what a restore has to
@@ -995,7 +903,7 @@ mod tests {
     fn dangling_receipts_are_counted_and_never_fatal() {
         let dir = tempfile::tempdir().unwrap();
         let file = restored_vault(dir.path());
-        let report = restore_check(&file, None).unwrap();
+        let report = restore_check(&file).unwrap();
         // The founded vault has receipts or it has none; either way a clean
         // report is compatible with dangling ones, which is the rule.
         assert!(report.is_clean());

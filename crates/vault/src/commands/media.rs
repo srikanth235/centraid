@@ -372,7 +372,12 @@ pub(crate) fn release_content_if_unreferenced(
 
 /// Collapse the grace window to NOW when unrented. The handler has no CAS
 /// delete; the sweep reclaims the bytes.
-fn release_content_now(ctx: &CommandCtx<'_, '_>, content_id: &str) -> Result<bool> {
+///
+/// THE ONE DESTROY PATH FOR BYTES (#1047, ruling D-1 of 2026-09-25): Photos'
+/// `media.purge_asset` and Docs' `core.purge_document` /
+/// `core.empty_document_trash` both release through here, so "deleted
+/// forever" means one thing to the vault whichever app said it.
+pub(crate) fn release_content_now(ctx: &CommandCtx<'_, '_>, content_id: &str) -> Result<bool> {
     if !content_unreferenced(ctx, content_id)? {
         return Ok(false);
     }
@@ -483,7 +488,6 @@ fn add_asset() -> CommandDefinition {
         }],
         handler: add_asset_handler,
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -534,7 +538,6 @@ fn derive_missing() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1053,7 +1056,6 @@ fn update_asset() -> CommandDefinition {
             Ok(serde_json::json!({ "asset_id": asset_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1130,7 +1132,6 @@ fn promote_caption() -> CommandDefinition {
             Ok(serde_json::json!({ "asset_id": asset_id, "title": caption }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1202,7 +1203,6 @@ fn set_asset_place() -> CommandDefinition {
             Ok(serde_json::json!({ "asset_id": asset_id, "place_id": place_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1299,7 +1299,6 @@ fn name_place() -> CommandDefinition {
             Ok(serde_json::json!({ "place_id": place_id, "name": name, "kind": kind }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1360,7 +1359,6 @@ fn set_favorite() -> CommandDefinition {
             Ok(serde_json::json!({ "asset_id": asset_id, "favorite": favorite }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1414,7 +1412,6 @@ fn set_archived() -> CommandDefinition {
             Ok(serde_json::json!({ "asset_id": asset_id, "archived": archived }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1470,7 +1467,6 @@ fn delete_asset() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1536,7 +1532,6 @@ fn restore_asset() -> CommandDefinition {
             Ok(serde_json::json!({ "asset_id": asset_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1636,7 +1631,6 @@ fn purge_asset() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1737,7 +1731,6 @@ fn create_album() -> CommandDefinition {
             Ok(serde_json::json!({ "album_id": album_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1784,7 +1777,6 @@ fn rename_album() -> CommandDefinition {
             Ok(serde_json::json!({ "album_id": album_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1849,7 +1841,6 @@ fn set_album_cover() -> CommandDefinition {
             Ok(serde_json::json!({ "album_id": album_id, "asset_id": asset_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1977,7 +1968,6 @@ fn delete_album() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2088,7 +2078,6 @@ fn restore_album() -> CommandDefinition {
             Ok(serde_json::json!({ "album_id": album_id, "revision_id": revision_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2187,7 +2176,6 @@ fn add_to_album() -> CommandDefinition {
             Ok(serde_json::json!({ "entry_id": entry_id, "position": position }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2265,7 +2253,6 @@ fn remove_from_album() -> CommandDefinition {
             Ok(serde_json::json!({ "album_id": album_id, "asset_id": asset_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2384,7 +2371,6 @@ fn forget_person() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2511,7 +2497,6 @@ fn answer_face_proposal() -> CommandDefinition {
             Ok(serde_json::json!({ "region_id": region_id, "review_state": state }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2632,7 +2617,6 @@ fn set_place_gazetteer() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2704,9 +2688,8 @@ mod tests {
     }
 
     #[test]
-    fn no_media_command_is_online_only_and_none_seals_an_input() {
+    fn no_media_command_seals_an_input() {
         for definition in definitions() {
-            assert!(!definition.online_only, "{}", definition.name);
             assert!(definition.sealed_input.is_empty(), "{}", definition.name);
         }
     }

@@ -76,10 +76,7 @@ pub mod wal_persistence;
 /// query language.
 pub use rusqlite;
 
-pub use access::{
-    BLIND_SCHEMA, Decision, Principal, RevealUnrepresentable, SealedSubject, Verb, evaluate_access,
-    evaluate_reveal,
-};
+pub use access::{Decision, Principal, Verb, evaluate_access};
 pub use clock::{Clock, ClockIds, FixedClock, Ids, SeededIds, SystemClock};
 pub use commands::{
     Command, CommandDefinition, CommandOutcome, CommandStatus, Idempotency, Registry, Risk,

@@ -1,6 +1,6 @@
 # `centraid-apps-docs` — a drive as a projection of the vault
 
-Docs is 5 queries, 16 actions and 27 scopes over three schemas, plus a demo seed. This crate is the read plane and the action table; the writes are `crates/vault`'s `core` schema — **all sixteen of them** — and the bytes ride a door.
+Docs is 5 queries, 18 actions and 29 scopes over three schemas, plus a demo seed. This crate is the read plane and the action table; the writes are `crates/vault`'s `core` schema — **all eighteen of them** — and the bytes ride a door.
 
 | Module | What it is |
 | --- | --- |
@@ -9,7 +9,7 @@ Docs is 5 queries, 16 actions and 27 scopes over three schemas, plus a demo seed
 | `phone` | The phone's shelves (#1046): All, a folder, Starred, Recent and Trash cut from the one drive window, v0's Type/Modified/label filters, the sort, the rail's counts, and the civil-time readings in the device's zone. Pure; no read of its own. |
 | `kind` | What a document is to a member — its kind, which screen opens it (reader, stage, facts) and which Type pill it passes — media type first, title second. |
 | `bytes` | The three shell verbs as requests, plus the never-inline rule. No buffer, no filesystem, no socket. |
-| `commands` | The sixteen actions as `core.*` invocations, `invoke_key` mandatory. |
+| `commands` | The eighteen actions as `core.*` invocations, `invoke_key` mandatory. |
 
 ## The rulings this crate is shaped by
 
@@ -45,9 +45,13 @@ The second discovery read is `search`'s FTS read, which belongs to `crates/searc
 
 The phone asks `docs_drive`, `docs_search`, `docs_document` and `docs_activity` through `AppQueryRequest` (`crates/api-proto/proto/centraid/core/v1/docs.proto`), and `crates/core`'s `app_query::docs` runs these loaders over the page door. The shelf, the filters and the sort are the request's; `phone::shelve` cuts them from the one drive window, so **when the drive says `truncated`, every shelf and count is of the newest `limit` filed documents only** — v0's own limitation, carried and stated. Search is not windowed. The core adds the two facts only it can: the size phrase (`format_byte_size`, the formatter Home's tile reads) and whether the head's bytes are on this device (`Vault::content_location`).
 
-## Trash has no destroy path
+## Trash
 
-`core.trash_document` stamps `purge_at` thirty days out; `core.empty_document_trash` collapses `purge_at` onto `deleted_at` so "the next lifecycle sweep destroys them". **There is no such sweep in this build and no `core.purge_document` command**: the sweep was the gateway's, and it left with the gateway (#1029). So a trashed document — emptied or not — stays in Trash, and `core.restore_document` refuses it once its window has lapsed (`purge_at <= now`), which after "Empty trash" is immediately. Copy must not promise deletion: not "Delete forever", not "deleted on <date>", and "Empty trash" confirms only that the documents can no longer be restored. A destroy path is a vault command (every polymorphic reference — `core_tag`, `core_link`, annotations, collection entries, revisions, representations, `core_content_text` — plus content items no other owner holds and their blobs), which this crate cannot hold. The command's own schema `description` says "not yet" in those words, so every caller reads it.
+`core.trash_document` stamps `purge_at` thirty days out and `core.restore_document` brings a document back until then (it refuses once `purge_at <= now`). **"Delete forever" is `purge` → `core.purge_document`, and "Empty trash" is `empty-trash` → `core.empty_document_trash`, which does the same to every trashed document** — ruling D-1 of 2026-09-25 in [`docs/decisions.md`](../../../docs/decisions.md), which supersedes 2026-09-10's "the gateway's lifecycle sweep is the only destroyer" (that sweep left with the gateway, #1029). Both are confirm-gated in the manifest and destroy through the path Photos' `media.purge_asset` takes: the wrapper goes through the entity supertype, so its folder tag, star, labels, representation, links and collection entries cascade; its version occurrences go leaf-first (an occurrence is immutable, #916 R3); and every content item it ever named is released through `release_content_now` when nothing else rents it. No sweep runs on the phone, so a document whose window lapsed and that nobody purged stays in Trash, unrestorable, until one of the two destroys.
+
+## Adding a document on the phone
+
+A picked or scanned file is staged through the core's stage frames (`Request::Stage` begin/chunk/end, the Photos import's door) and filed by `upload` → `core.add_document` with the handle's `content_hash` as `staged_sha`, a title and an optional `folder_id`. The Add sheet's "Text" is `create-text` → `core.create_text_document` (`title`, optional `folder_id`, `media_type` `text/plain` or `text/markdown`, optional `body_text`): the core turns the words into the bytes, so a shell never spells a `data:` URI. A scan is an OS camera flow that produces a file, so it takes the upload path.
 
 ## What stops this crate doing more
 
@@ -58,4 +62,4 @@ The phone asks `docs_drive`, `docs_search`, `docs_document` and `docs_activity` 
 | A write from a query | `queries` holds statements and a `PageDoor`, whose one method reads |
 | An invocation with no `invoke_key` | the field is required (D-1020-D3-5) |
 | A denial turned into an error | `Reading` and `Outcome::Denied` are states a surface renders; the kit's `KitError` has no denial variant |
-| A widened scope | the manifest declares **sixteen `act` scopes, one per action**, and `it_declares_twenty_seven_scopes_with_one_act_scope_per_action` compares them against the action table. One `read+act` over `core` would hand Docs `core.merge_party` |
+| A widened scope | the manifest declares **eighteen `act` scopes, one per action**, and `it_declares_twenty_nine_scopes_with_one_act_scope_per_action` compares them against the action table. One `read+act` over `core` would hand Docs `core.merge_party` |

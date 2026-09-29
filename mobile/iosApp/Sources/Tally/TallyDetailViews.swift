@@ -74,7 +74,7 @@ struct TallyGroupView: View {
                                 hero: group.hero,
                                 verbs: state.chrome.settleUp.isEmpty ? [] : [(state.chrome.settleUp, {
                                     send(Self.event { $0.settleUp = .init() })
-                                    push(TallyScreens.settleUpRoute(state.groupID))
+                                    push(TallyScreens.settleUpRoute(state.groupID, parent: title))
                                 })]
                             )
                             SectionHeader(title: group.membersHeading, count: UInt32(group.members.count))
@@ -89,7 +89,7 @@ struct TallyGroupView: View {
                                     identifier: "tally-member-\(member.person.partyID)",
                                     onTap: member.person.isMe ? nil : {
                                         send(Self.event { $0.member = .with { $0.partyID = member.person.partyID } })
-                                        push(TallyScreens.friendRoute(member.person.partyID, member.person.name))
+                                        push(TallyScreens.friendRoute(member.person.partyID, member.person.name, parent: state.title))
                                     }
                                 )
                             }
@@ -156,7 +156,7 @@ struct TallyGroupView: View {
     private func openRow(_ row: Centraid_Screen_V1_TallyLedgerRow) {
         guard !row.expenseID.isEmpty else { return }
         send(Self.event { $0.expense = .with { $0.expenseID = row.expenseID } })
-        push(TallyScreens.expenseRoute(row.expenseID))
+        push(TallyScreens.expenseRoute(row.expenseID, parent: state.title))
     }
 }
 
@@ -224,7 +224,7 @@ struct TallyFriendView: View {
                                 hero: friend.hero,
                                 verbs: state.chrome.settleUp.isEmpty ? [] : [(state.chrome.settleUp, {
                                     send(Self.event { $0.settleUp = .init() })
-                                    push(TallyScreens.settleUpRoute())
+                                    push(TallyScreens.settleUpRoute(parent: title))
                                 })]
                             )
                             if !friend.parts.isEmpty {
@@ -237,7 +237,7 @@ struct TallyFriendView: View {
                                         identifier: "tally-part-\(part.groupID)",
                                         onTap: part.groupID.isEmpty ? nil : {
                                             send(Self.event { $0.group = .with { $0.groupID = part.groupID } })
-                                            push(TallyScreens.groupRoute(part.groupID, part.title))
+                                            push(TallyScreens.groupRoute(part.groupID, part.title, parent: state.title))
                                         }
                                     )
                                 }
@@ -249,7 +249,7 @@ struct TallyFriendView: View {
                                 TallyLedgerRowView(row: row) {
                                     guard !row.expenseID.isEmpty else { return }
                                     send(Self.event { $0.expense = .with { $0.expenseID = row.expenseID } })
-                                    push(TallyScreens.expenseRoute(row.expenseID))
+                                    push(TallyScreens.expenseRoute(row.expenseID, parent: state.title))
                                 }
                             }
                         }

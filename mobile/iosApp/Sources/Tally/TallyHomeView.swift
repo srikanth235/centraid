@@ -126,7 +126,7 @@ struct TallyHomeView: View {
             hero: home.hero,
             verbs: state.chrome.settleUp.isEmpty ? [] : [(state.chrome.settleUp, {
                 send(Self.event { $0.settleUp = .init() })
-                push(TallyScreens.settleUpRoute())
+                push(TallyScreens.settleUpRoute(parent: state.chrome.title))
             })]
         )
         SectionHeader(title: home.friendsHeading, count: UInt32(home.friends.count))
@@ -143,7 +143,7 @@ struct TallyHomeView: View {
                 identifier: "tally-friend-\(friend.person.partyID)",
                 onTap: {
                     send(Self.event { $0.friend = .with { $0.partyID = friend.person.partyID } })
-                    push(TallyScreens.friendRoute(friend.person.partyID, friend.person.name))
+                    push(TallyScreens.friendRoute(friend.person.partyID, friend.person.name, parent: state.chrome.title))
                 }
             )
         }
@@ -193,12 +193,12 @@ struct TallyHomeView: View {
     private func openRow(_ row: Centraid_Screen_V1_TallyLedgerRow) {
         guard !row.expenseID.isEmpty else { return }
         send(Self.event { $0.expense = .with { $0.expenseID = row.expenseID } })
-        push(TallyScreens.expenseRoute(row.expenseID))
+        push(TallyScreens.expenseRoute(row.expenseID, parent: state.chrome.title))
     }
 
     private func openGroup(_ group: Centraid_Screen_V1_TallyGroupRow) {
         send(Self.event { $0.group = .with { $0.groupID = group.groupID } })
-        push(TallyScreens.groupRoute(group.groupID, group.name))
+        push(TallyScreens.groupRoute(group.groupID, group.name, parent: state.chrome.title))
     }
 
     /// A More row: the machine closes the sheet (or opens the facts); the
@@ -206,16 +206,12 @@ struct TallyHomeView: View {
     private func more(_ row: Centraid_Screen_V1_TallyMoreRow, _ state: Centraid_Screen_V1_TallyHomeState) {
         send(Self.event { $0.more = .with { $0.key = row.key } })
         switch row.key {
-        case "settle": push(TallyScreens.settleUpRoute())
+        case "settle": push(TallyScreens.settleUpRoute(parent: state.chrome.title))
         case "recurring": push(TallyScreens.recurringRoute)
         case "spending": push(TallyScreens.spendingRoute)
         case "search": push(TallyScreens.searchRoute)
         case "trash": push(TallyScreens.trashRoute)
-        case "export":
-            // TODO(intent): ExportRequested — a share sheet of the ledger as
-            // CSV. No screen state carries the export rows (tally-report
-            // "Not done: the export screen"), so there is nothing to share yet.
-            break
+        case "export": push(TallyScreens.exportRoute(parent: state.chrome.title))
         default: break
         }
     }

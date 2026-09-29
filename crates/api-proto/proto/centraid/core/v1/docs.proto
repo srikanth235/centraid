@@ -31,15 +31,16 @@
 // formatter Home's Docs tile already reads through `with_document_size` — and
 // EMPTY when the document's bytes have no row, never "0 bytes".
 //
-// WHAT "TRASH" MEANS ON THIS PHONE. Trashing stamps `purge_at` thirty days out;
-// "Empty trash" (`core.empty_document_trash`) collapses `purge_at` onto
-// `deleted_at`. NOTHING IN THIS BUILD DESTROYS A TRASHED DOCUMENT — there is no
-// purge command and no sweep since the gateway's lifecycle sweep left — so a
-// trashed document stays in Trash after its `purge_local_day` has passed (or
-// the trash was emptied), and from then on `core.restore_document` refuses it.
-// `purge_in_days` can therefore be zero or negative. A screen must not say
-// "deleted forever" or "will be deleted on"; see `crates/apps/docs`'s README,
-// "Trash has no destroy path".
+// WHAT "TRASH" MEANS ON THIS PHONE. Trashing stamps `purge_at` thirty days out
+// and `core.restore_document` brings a document back until then.
+// `core.purge_document` destroys one trashed document at once — the path
+// Photos' `media.purge_asset` takes: the row, its folder tag, star, labels and
+// version occurrences go, and its bytes are released when nothing else rents
+// them — and `core.empty_document_trash` does that to every trashed document
+// (the 2026-09-25 ruling D-1 in `docs/decisions.md`). No sweep runs on the
+// phone, so a document whose window ran out and that nobody purged stays in
+// Trash, unrestorable, until "Delete forever" or "Empty trash";
+// `purge_in_days` can therefore be zero or negative.
 
 syntax = "proto3";
 
@@ -331,6 +332,15 @@ message DocsDocument {
   string bytes_absent_reason = 6;
   string today = 7;
   string now_local = 8;
+  // THE HEAD'S FILE ON THIS DEVICE, for the media stage (#1047): an absolute
+  // path a view hands its platform's image, PDF or video renderer, picked by
+  // the row's `kind`. The rule Photos' held thumbnails use
+  // (`Vault::content_location`): set only when the bytes are HERE and this
+  // document's media type may be drawn inline — never for `text/html`,
+  // `application/xhtml+xml` or `image/svg+xml`, which stay on the facts
+  // sheet. EMPTY otherwise, and always for a text document, whose words are
+  // `body`.
+  string bytes_path = 9;
 }
 
 message DocsActivity {

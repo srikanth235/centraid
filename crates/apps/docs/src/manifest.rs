@@ -45,10 +45,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_four_queries_and_sixteen_actions() {
+    fn it_declares_four_queries_and_eighteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 4);
-        assert_eq!(manifest.actions.len(), 16);
+        assert_eq!(manifest.actions.len(), 18);
         // The four are `drive`, `search`, `history`, `activity` — NOT the
         // directory listing: `queries/_shared.ts` and
         // `queries/document-origins.ts` are helpers beside the handlers, and
@@ -109,7 +109,7 @@ mod tests {
             .filter(|row| row.confirm == Confirm::Required)
             .map(|row| row.action)
             .collect();
-        assert_eq!(required, ["empty-trash"]);
+        assert_eq!(required, ["purge", "empty-trash"], "the two destroys");
     }
 
     #[test]
@@ -127,7 +127,7 @@ mod tests {
         }
     }
 
-    /// TWENTY-SEVEN SCOPES: eleven reads over three schemas, and **sixteen
+    /// TWENTY-NINE SCOPES: eleven reads over three schemas, and **eighteen
     /// `act` scopes, one per action** (census §A0's table). The eight reads
     /// over `share`, `social` and `core.party` left with the sharing plane
     /// (#1029's scope amendment); `core.content_text` is the reader's body
@@ -135,13 +135,13 @@ mod tests {
     ///
     /// The `act` half is compared against the action table rather than
     /// transcribed, because the whole point of the narrow form is that it
-    /// tracks the actions: a seventeenth action with no scope is an action the
+    /// tracks the actions: a nineteenth action with no scope is an action the
     /// grant does not cover, and a scope with no action is reach nothing uses.
     #[test]
-    fn it_declares_twenty_seven_scopes_with_one_act_scope_per_action() {
+    fn it_declares_twenty_nine_scopes_with_one_act_scope_per_action() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Docs declares its reach");
-        assert_eq!(vault.scopes.len(), 27);
+        assert_eq!(vault.scopes.len(), 29);
 
         let mut schemas: Vec<&str> = vault
             .scopes
@@ -165,7 +165,7 @@ mod tests {
             .collect();
         declared_acts.sort_unstable();
         assert_eq!(declared_acts, act_scope_tables());
-        assert_eq!(declared_acts.len(), 16);
+        assert_eq!(declared_acts.len(), 18);
 
         let reads = vault
             .scopes

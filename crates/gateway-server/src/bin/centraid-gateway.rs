@@ -30,6 +30,8 @@ use centraid_gateway_server::service::{DEFAULT_LABEL, Platform, UnitSpec};
 use centraid_gateway_server::{clock, serve, service, state, sweeps, tenancy};
 use centraid_identity::ticket;
 use clap::{Parser, Subcommand};
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -175,10 +177,21 @@ async fn main() -> anyhow::Result<()> {
             if let Ok(rendered) = ticket::qr(&encoded) {
                 println!("{rendered}");
             }
+            // WHAT TO COMPARE (W15-D5): not this laptop's id — the phone's key
+            // is not known until the invite is redeemed, so the safety number
+            // is `serve`'s to print, the moment the phone admits itself.
+            println!("{COMPARE_HINT}");
             Ok(())
         }
         Command::Invites { data_dir } => {
             let store = open_state(&data_dir)?;
+            // THE LAPTOP'S KEY, IF IT HAS ONE: listing invites never mints an
+            // identity, so a directory `serve` never ran in prints no number.
+            let endpoint = if serve::node_key_path(&data_dir).exists() {
+                Some(*serve::node_secret(&data_dir)?.public().as_bytes())
+            } else {
+                None
+            };
             for record in tenancy::list(&store).map_err(store_error)? {
                 println!(
                     "{}  {} GiB  {}",
@@ -186,9 +199,14 @@ async fn main() -> anyhow::Result<()> {
                     record.quota_bytes / centraid_gateway_server::config::GIB,
                     record.redeemed_at.map_or_else(
                         || "unredeemed".to_owned(),
-                        |at| format!("redeemed at {}", at.millis())
+                        |at| format!("redeemed {}", local_time(at.millis(), &TimeZone::system()))
                     )
                 );
+                if let (Some(endpoint), Some(account)) = (&endpoint, &record.redeemed_by)
+                    && let Some(number) = tenancy::safety_number(endpoint, account)
+                {
+                    println!("  safety  {number}");
+                }
             }
             Ok(())
         }
@@ -319,6 +337,23 @@ fn print_ticket(
     Ok(())
 }
 
+/// What `invite` says after the ticket: where the comparison happens.
+const COMPARE_HINT: &str =
+    "Once the phone pairs, `serve` prints a safety number. Check it matches the phone's.";
+
+/// ONE PAIRED VAULT'S SAFETY NUMBER, AS THE TERMINAL PRINTS IT (W15-D5).
+///
+/// The digits the phone's paired screen shows when both hold each other's
+/// real key, with the vault's first eight hex characters so a laptop holding
+/// two vaults says which is which. The vault prefix is a label, never the
+/// thing compared.
+fn print_safety(endpoint: &[u8; 32], account: &centraid_gateway_core::ids::AccountId) {
+    if let Some(number) = tenancy::safety_number(endpoint, account) {
+        let vault = account.hex();
+        println!("safety    {number}  (vault {}…)", &vault[..8]);
+    }
+}
+
 fn store_error(fault: StoreFault) -> anyhow::Error {
     anyhow::anyhow!("{fault}")
 }
@@ -372,10 +407,11 @@ async fn run(config: Config) -> anyhow::Result<()> {
         ListenerConfig::Iroh(iroh) => {
             let endpoint = serve::bind_iroh(&config.data_dir, iroh).await?;
             let store = state::SqliteState::open(&config.state_path()).map_err(store_error)?;
-            print_pairing(&endpoint, &store, &config)?;
+            let paired = print_pairing(&endpoint, &store, &config)?;
             tracing::info!(endpoint = %endpoint.id(), "the gateway is up");
             let shared = serve::shared(server);
             sweep(&shared, config.sweeps);
+            announce(&shared, *endpoint.id().as_bytes(), paired);
             serve::serve_iroh(endpoint, shared).await
         }
         // The self-hoster who has a domain. `acme.rs` is not deleted.
@@ -410,34 +446,41 @@ fn sweep(shared: &centraid_gateway_server::http::Shared, schedule: sweeps::Sched
 
 /// WHAT A MEMBER SEES WHEN THE LAPTOP STARTS.
 ///
-/// The endpoint id, then one pairing payload per invite that is still good,
-/// as text and as a QR. **A gateway with nothing on it mints the first
-/// invite itself**: an empty state directory means nobody has a vault here,
-/// and the one thing its owner needs next is the thing to scan. It is not
-/// minted again — a second start with a live invite prints that invite, and a
-/// gateway that has admitted a vault prints none.
+/// The endpoint id (the laptop's identity, for the recovery runbook's "is it
+/// the same laptop" — never the thing a member compares), the safety number
+/// of every vault already paired here, then one pairing payload per invite
+/// that is still good, as text and as a QR. **A gateway with nothing on it
+/// mints the first invite itself**: an empty state directory means nobody has
+/// a vault here, and the one thing its owner needs next is the thing to scan.
+/// It is not minted again — a second start with a live invite prints that
+/// invite, and a gateway that has admitted a vault prints none.
+///
+/// Answers the accounts already paired, so [`announce`] prints only the new.
 fn print_pairing(
     endpoint: &iroh::Endpoint,
     store: &state::SqliteState,
     config: &Config,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<centraid_gateway_core::ids::AccountId>> {
     println!("endpoint  {}", endpoint.id());
     let now = clock::now();
-    let mut live: Vec<_> = tenancy::list(store)
-        .map_err(store_error)?
+    let records = tenancy::list(store).map_err(store_error)?;
+    let paired: Vec<_> = records
+        .iter()
+        .filter_map(|record| record.redeemed_by)
+        .collect();
+    for account in &paired {
+        print_safety(endpoint.id().as_bytes(), account);
+    }
+    let mut live: Vec<_> = records
         .into_iter()
         .filter(|record| record.redeemed_at.is_none() && record.expires_at > now)
         .collect();
-    if live.is_empty()
-        && !tenancy::list(store)
-            .map_err(store_error)?
-            .iter()
-            .any(|r| r.redeemed_at.is_some())
-    {
+    if live.is_empty() && paired.is_empty() {
         let invite = tenancy::mint(store, config.default_quota.bytes, now).map_err(store_error)?;
         println!("invite    {}", invite.code);
         print_ticket(endpoint, &invite.code, invite.expires_at.millis())?;
-        return Ok(());
+        println!("{COMPARE_HINT}");
+        return Ok(paired);
     }
     live.sort_by_key(|record| record.expires_at.millis());
     for record in live {
@@ -446,5 +489,71 @@ fn print_pairing(
             hex::encode(&record.code_hash[..8])
         );
     }
-    Ok(())
+    Ok(paired)
+}
+
+/// **A MOMENT AS THE OPERATOR READS IT**: the laptop's own time zone, to the
+/// minute — `invites` printed raw epoch milliseconds (the #1047 walk). A value
+/// no clock can hold is printed as it is rather than refused.
+fn local_time(millis: i64, zone: &TimeZone) -> String {
+    Timestamp::from_millisecond(millis).map_or_else(
+        |_| format!("at {millis} ms"),
+        |at| {
+            at.to_zoned(zone.clone())
+                .strftime("%Y-%m-%d %H:%M %Z")
+                .to_string()
+        },
+    )
+}
+
+/// **THE SAFETY NUMBER, THE MOMENT A PHONE PAIRS** (W15-D5, #1047).
+///
+/// The laptop learns the phone's key only when an invite is redeemed, so the
+/// number cannot be printed with the QR; it is printed here, as soon as the
+/// admit lands, for the member to compare with the phone's paired screen. A
+/// short poll of the invite table rather than a hook in the admit route: the
+/// terminal is this binary's, and the library's handlers print nothing.
+fn announce(
+    shared: &centraid_gateway_server::http::Shared,
+    endpoint: [u8; 32],
+    already: Vec<centraid_gateway_core::ids::AccountId>,
+) {
+    let shared = shared.clone();
+    tokio::spawn(async move {
+        let mut seen: std::collections::HashSet<_> = already.into_iter().collect();
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
+        loop {
+            tick.tick().await;
+            let records = {
+                let server = shared.lock().await;
+                tenancy::list(&server.gateway.state)
+            };
+            let Ok(records) = records else { continue };
+            for account in records.iter().filter_map(|record| record.redeemed_by) {
+                if seen.insert(account) {
+                    println!("paired    a phone redeemed an invite");
+                    print_safety(&endpoint, &account);
+                }
+            }
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_redeemed_invite_says_its_time_in_words_not_milliseconds() {
+        let zone = TimeZone::get("Asia/Kolkata").expect("the bundled tzdb names it");
+        assert_eq!(local_time(1_790_674_539_189, &zone), "2026-09-29 15:05 IST");
+        assert_eq!(
+            local_time(1_790_674_539_189, &TimeZone::UTC),
+            "2026-09-29 09:35 UTC"
+        );
+        assert_eq!(
+            local_time(i64::MAX, &TimeZone::UTC),
+            format!("at {} ms", i64::MAX)
+        );
+    }
 }

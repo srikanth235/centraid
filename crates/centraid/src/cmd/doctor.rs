@@ -1,42 +1,42 @@
 //! `centraid doctor` (#1020, D-1020-G7).
 //!
-//! The verb an operator runs when something is wrong, and the verb the Docker
-//! image's `HEALTHCHECK` runs on a timer. **One definition of "sound", not
-//! two**: it calls `centraid_vault::backup::restore::restore_check`, the same
-//! function the restore drill asserts on a recovered vault (wave 2 lane R). A
-//! second set of checks written for the health check would be a second idea of
-//! what a healthy vault is, and the two would disagree on exactly the day it
-//! mattered.
+//! The verb an operator runs against a vault file when something is wrong —
+//! a copy taken off the phone, or a vault a restore drill produced — and the
+//! operator image's default command. The vault itself lives on the phone
+//! (#1029); the laptop's gateway holds only sealed objects and has no vault
+//! file for this to check. **One definition of "sound", not two**: it calls
+//! `centraid_vault::backup::restore::restore_check`, the same function the
+//! restore drill asserts on a recovered vault. A second set of checks written
+//! for this verb would be a second idea of what a healthy vault is, and the
+//! two would disagree on exactly the day it mattered.
 //!
 //! ## What it does and does not claim
 //!
-//! Clean means: `PRAGMA integrity_check` says `ok`, `PRAGMA foreign_key_check`
-//! is empty, and the seal-key fingerprint in the file is either absent (an
-//! unsealed vault is an answer, not a fault) or matches. Dangling receipts are
-//! **reported and do not make the report dirty** — that is `restore_check`'s
-//! ruling and this verb does not override it.
+//! Clean means: `PRAGMA integrity_check` says `ok` and `PRAGMA
+//! foreign_key_check` is empty. Dangling receipts are **reported and do not
+//! make the report dirty** — that is `restore_check`'s ruling and this verb
+//! does not override it. There is no key verdict: the vault seals nothing
+//! under a key of its own (R-1047-D2).
 //!
-//! It opens the vault file READ-ONLY and takes no lock, so running it against a
-//! gateway that is serving is safe. It therefore says nothing about whether a
-//! gateway is *running*: for the container health check that is the point, since
-//! the process being alive is what Docker already knows and the file being
-//! sound is what it cannot.
+//! It opens the vault file READ-ONLY and takes no lock, so it never changes
+//! the file it judges. It says nothing about a gateway: a gateway has no vault
+//! file, and whether one is running is its service manager's to say.
 //!
 //! Facts to stderr, one JSON document to stdout — `cmd/mod.rs`'s rule.
 //!
-//! Exit codes: 0 clean, 1 refused (no vault, or a dirty report). A health check
+//! Exit codes: 0 clean, 1 refused (no vault, or a dirty report). A script
 //! branches on those two numbers and nothing else.
 
 use std::path::PathBuf;
 
-use centraid_vault::backup::restore::{SealKeyVerdict, restore_check};
+use centraid_vault::backup::restore::restore_check;
 
 use crate::exit;
 
 pub struct DoctorArgs {
     pub data_dir: Option<PathBuf>,
     /// Print the JSON report on stdout even when it is clean. Off by default
-    /// for the health check, which wants an exit code and a quiet log.
+    /// for a script, which wants an exit code and a quiet log.
     pub json: bool,
 }
 
@@ -45,8 +45,8 @@ pub fn run(args: DoctorArgs) -> u8 {
         Some(dir) => dir,
         None => {
             eprintln!(
-                "centraid: doctor needs --data-dir: there is no default vault location for a \
-                 gateway that can hold several (see `centraid gateway --help`)."
+                "centraid: doctor needs --data-dir: it checks a vault file you name, and there \
+                 is no default location (the vault lives on the phone)."
             );
             return exit::REFUSED;
         }
@@ -59,11 +59,7 @@ pub fn run(args: DoctorArgs) -> u8 {
         }
     };
 
-    // `seal_key` is None: doctor is unprivileged by design. It reads the
-    // fingerprint the file carries and reports `missing` rather than unwrapping
-    // the keystore, because a health check that needed the keystore secret
-    // would be a privileged path running every thirty seconds.
-    let report = match restore_check(&file, None) {
+    let report = match restore_check(&file) {
         Ok(report) => report,
         Err(error) => {
             eprintln!("centraid: doctor: {error}");
@@ -71,19 +67,7 @@ pub fn run(args: DoctorArgs) -> u8 {
         }
     };
 
-    let seal = match report.seal_key {
-        SealKeyVerdict::NotSealed => "not-sealed",
-        SealKeyVerdict::Ok => "ok",
-        SealKeyVerdict::Missing => "missing",
-        SealKeyVerdict::Mismatch => "mismatch",
-    };
-    // A `missing` seal key means the file says it is sealed and doctor was not
-    // given the key. That is this verb's normal state, not a fault, and
-    // `is_clean()` would call it dirty — so the verdict is computed here and the
-    // difference is stated rather than hidden.
-    let clean = report.integrity == "ok"
-        && report.foreign_key_violations.is_empty()
-        && !matches!(report.seal_key, SealKeyVerdict::Mismatch);
+    let clean = report.is_clean();
 
     let document = serde_json::json!({
         "vault": file.to_string_lossy(),
@@ -92,12 +76,11 @@ pub fn run(args: DoctorArgs) -> u8 {
         "foreignKeyViolations": report.foreign_key_violations,
         "receiptsChecked": report.receipts_checked,
         "danglingReceipts": report.dangling_receipts,
-        "sealKey": seal,
     });
 
     if clean {
         eprintln!(
-            "centraid: doctor: clean — pages sound, {} foreign keys hold, {} receipt(s) checked, seal key {seal}",
+            "centraid: doctor: clean — pages sound, {} foreign keys hold, {} receipt(s) checked",
             report.foreign_key_violations.len(),
             report.receipts_checked
         );
@@ -113,13 +96,6 @@ pub fn run(args: DoctorArgs) -> u8 {
     }
     for violation in &report.foreign_key_violations {
         eprintln!("centraid:   foreign key: {violation}");
-    }
-    if matches!(report.seal_key, SealKeyVerdict::Mismatch) {
-        eprintln!(
-            "centraid:   seal key: the fingerprint in this vault is not the one the keystore \
-             holds. This is a vault restored from someone else's kit, or a keystore that was \
-             replaced — `centraid recover` is the verb, not a repair."
-        );
     }
     println!("{document:#}");
     exit::REFUSED

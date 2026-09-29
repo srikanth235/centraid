@@ -97,7 +97,7 @@ public object HomeAgendaTile {
                 app_id = APP_ID,
                 status = TileStatus.TILE_STATUS_EMPTY,
                 count = TileCount(value_ = 0),
-                count_label = AgendaCopy.TILE_COUNT_LABEL,
+                count_label = HomeReads.countNoun(0, false, AgendaCopy.TILE_COUNT_ONE, AgendaCopy.TILE_COUNT_MANY),
             ),
         )
         // A SERIES IS ONE THING ON A LAUNCHER. Its next occurrence is the
@@ -112,7 +112,7 @@ public object HomeAgendaTile {
                 // core's `READ_BOUND_REACHED`, which is a refusal and not a
                 // short count.
                 count = TileCount(value_ = count),
-                count_label = AgendaCopy.TILE_COUNT_LABEL,
+                count_label = HomeReads.countNoun(count, false, AgendaCopy.TILE_COUNT_ONE, AgendaCopy.TILE_COUNT_MANY),
                 body = TileBody(
                     agenda = TileBody.Agenda(
                         title = next.title(),

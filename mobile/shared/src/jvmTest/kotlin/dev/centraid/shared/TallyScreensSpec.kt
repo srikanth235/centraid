@@ -70,6 +70,7 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldStartWith
 
 /**
  * TALLY'S SCREENS (#1046 port): the folds from the core's typed answers, the
@@ -186,7 +187,7 @@ class TallyScreensSpec : StringSpec({
         data.members.last().meta shouldBe TallyCopy.DEPARTED_META
         data.hero?.label shouldBe TallyCopy.GROUP_HERO_OWED
         data.simplify?.summary shouldBe "3 debts become 2 payments"
-        data.simplify?.transfers?.single()?.line shouldBe "Sam pays You"
+        data.simplify?.transfers?.single()?.line shouldBe "Sam pays you"
         data.simplify?.toggle_label shouldBe TallyCopy.SIMPLIFY_STOP
         val toggled = TallyGroupMachine.reduce(group, view(TallyGroupEvent(simplify_toggled = TallyGroupEvent.SimplifyToggled())))
         val write = toggled.effects.single() as ScreenEffect.SubmitWrite
@@ -502,6 +503,53 @@ class TallyScreensSpec : StringSpec({
         write.inputJson shouldBe "{\"from_party\":\"dana\",\"to_party\":\"me\",\"amount_minor\":2000,\"currency\":\"EUR\",\"group_id\":\"g1\"}"
         TallySettleUpMachine.reduce(record.state, TallyInput.Settled(WriteSettled(invoke_key = write.invokeKey, committed = true)))
             .state.screen.draft.shouldBeNull()
+    }
+
+    "an empty typed division asks for its own figures; You pay, Dana pays (#1047)" {
+        val empty = listOf("me", "dana").map { TallySplit.Entry(it, true, "") }
+        fun problem(method: TallySplitMethod) = TallySplit.divide(method, 1000, 2, "me", empty, emptyList()).problem
+        problem(TallySplitMethod.TALLY_SPLIT_METHOD_PERCENTAGES) shouldBe "Type each person's percentage."
+        problem(TallySplitMethod.TALLY_SPLIT_METHOD_SHARES) shouldBe "Type each person's share."
+        problem(TallySplitMethod.TALLY_SPLIT_METHOD_EXACT) shouldBe "Type what each person owes."
+        // Choosing people is still the equal split's problem.
+        TallySplit.divide(TallySplitMethod.TALLY_SPLIT_METHOD_EQUALLY, 1000, 2, "me", empty.map { it.copy(included = false) }, emptyList())
+            .problem shouldBe TallyCopy.NOBODY_SHARES
+
+        val dana = person("dana", "Dana")
+        dev.centraid.shared.apps.tally.TallyFold.transferRow(TallyTransfer(from = me(), to = dana, amount = eur(500)), emptyMap())
+            .line shouldBe "You pay Dana"
+        dev.centraid.shared.apps.tally.TallyFold.transferRow(TallyTransfer(from = dana, to = me(), amount = eur(500)), emptyMap())
+            .line shouldStartWith "Dana pays "
+    }
+
+    "the owner is \"You\" first and \"you\" anywhere else — Maya pays you, you paid list (#1047)" {
+        val fold = dev.centraid.shared.apps.tally.TallyFold
+        val maya = person("maya", "Maya")
+        fold.transferRow(TallyTransfer(from = maya, to = me(), amount = eur(500)), emptyMap()).line shouldBe "Maya pays you"
+        fold.transferRow(TallyTransfer(from = me(), to = maya, amount = eur(500)), emptyMap()).line shouldBe "You pay Maya"
+        // THE COPY DECIDES THE CASE, never the core's name for the owner.
+        fold.who(me().copy(name = "YOU")) shouldBe TallyCopy.YOU
+        fold.whom(me()) shouldBe TallyCopy.YOU_MID
+        fold.whom(maya) shouldBe "Maya"
+        fold.names(listOf(maya, me())) shouldBe "Maya, you"
+        fold.names(listOf(me(), maya)) shouldBe "You, Maya"
+    }
+
+    "a pushed page's back names the page it was pushed from, else Tally — never a bare Back (#1047)" {
+        val group = open(TallyGroupMachine, TallyGroupEvent(opened = TallyGroupEvent.Opened(group_id = "g1", title = "Lisbon")))
+        group.screen.chrome?.back shouldBe TallyCopy.APP_TITLE
+        open(TallyGroupMachine, TallyGroupEvent(opened = TallyGroupEvent.Opened(group_id = "g1", parent = "Maya")))
+            .screen.chrome?.back shouldBe "Maya"
+        // The group's TITLE is its name once read: what a page pushed from it names.
+        answeredWith(TallyGroupMachine, group, AppQueryResponse(tally_group = groupLedger(optedIn = false))).screen.title shouldBe "Lisbon"
+        open(TallyExpenseMachine, TallyExpenseEvent(opened = TallyExpenseEvent.Opened(expense_id = "e1", parent = "Lisbon")))
+            .screen.chrome?.back shouldBe "Lisbon"
+        open(TallySettleUpMachine, TallySettleUpEvent(opened = TallySettleUpEvent.Opened(group_id = "g1", parent = "Lisbon")))
+            .screen.chrome?.back shouldBe "Lisbon"
+        open(TallyFriendMachine, centraid.screen.v1.TallyFriendEvent(opened = centraid.screen.v1.TallyFriendEvent.Opened(party_id = "p1", parent = "Lisbon")))
+            .screen.chrome?.back shouldBe "Lisbon"
+        open(TallySpendingMachine, TallySpendingEvent(opened = TallySpendingEvent.Opened())).screen.chrome?.back shouldBe TallyCopy.APP_TITLE
+        open(TallySearchMachine, TallySearchEvent(opened = TallySearchEvent.Opened())).screen.chrome?.back shouldBe TallyCopy.APP_TITLE
     }
 
     "spending steps by month, never past this one, and keeps each money apart" {

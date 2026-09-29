@@ -16,7 +16,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +40,7 @@ import centraid.screen.v1.SectionHead
 import centraid.screen.v1.StatusChip
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.shared.kit.TypedText
 
 /**
  * THE ONE ROW SHAPE (hand-off v17: "one row shape per app reused by every list
@@ -69,6 +69,7 @@ public fun CentraidRow(
     a11y: String = "",
     testTag: String = "kit-row",
     onTap: (() -> Unit)? = null,
+    metaRuns: androidx.compose.ui.text.AnnotatedString? = null,
     accessory: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val titleInk = if (dimmed) centraidColor("textFaint") else centraidColor("text")
@@ -112,7 +113,17 @@ public fun CentraidRow(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (meta.isNotEmpty()) {
+            // [metaRuns] is the same line with spans a machine marked (a
+            // search snippet's matches); it replaces [meta] when set.
+            if (metaRuns != null && metaRuns.isNotEmpty()) {
+                Text(
+                    metaRuns,
+                    style = centraidType("annotLabel"),
+                    color = softInk,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else if (meta.isNotEmpty()) {
                 Text(
                     meta,
                     style = centraidType("annotLabel"),
@@ -272,15 +283,46 @@ public fun FieldRow(key: String, value: String, modifier: Modifier = Modifier, n
  * typed while the last one was in flight. The machine's value replaces the
  * local text only when [reload] changes to a non-null value — the state's own
  * "this came from the vault" signal (for an autosave editor: the baseline,
- * while the phase is CLEAN) — so a remote load lands and typing never fights it.
+ * while the phase is CLEAN) — AND the value is not an echo of this field's own
+ * typing ([TypedText]): a save that lands mid-typing carries an older draft,
+ * and taking it back dropped every keystroke since (#1047 walk, B1).
+ */
+public class EditorText internal constructor(
+    public val text: MutableState<String>,
+    private val typed: TypedText,
+) {
+    /** The member typed [next]: `true` when it is to be sent as the edit. */
+    public fun edited(next: String): Boolean {
+        text.value = next
+        return typed.edited(next)
+    }
+
+    /** The machine says [value]; the local text follows only when it is not an echo. */
+    public fun heard(value: String, open: Boolean = true) {
+        typed.answer(value, shown = text.value, open = open)?.let { text.value = it }
+    }
+}
+
+@Composable
+public fun rememberEditorText(value: String, reload: Any?): EditorText {
+    val editor = remember { EditorText(mutableStateOf(value), TypedText(value)) }
+    val lastReload = remember { arrayOfNulls<Any?>(1) }
+    val open = reload != null && reload != lastReload[0]
+    lastReload[0] = reload
+    editor.heard(value, open)
+    return editor
+}
+
+/**
+ * A FIELD WITH NO RELOAD SIGNAL (a search term, a quick add): the local text
+ * follows every value the machine says that is not an echo of its typing — a
+ * clear after submit, a close, words handed in — and never a late echo.
  */
 @Composable
-public fun rememberEditorText(value: String, reload: Any?): MutableState<String> {
-    val text = remember { mutableStateOf(value) }
-    LaunchedEffect(reload) {
-        if (reload != null && text.value != value) text.value = value
-    }
-    return text
+public fun rememberFollowedText(value: String): EditorText {
+    val editor = remember { EditorText(mutableStateOf(value), TypedText(value)) }
+    editor.heard(value)
+    return editor
 }
 
 /**
@@ -299,7 +341,8 @@ public fun EditableFieldRow(
     style: String = "body",
     testTag: String = "kit-field",
 ) {
-    val text = rememberEditorText(value, reload)
+    val editor = rememberEditorText(value, reload)
+    val text = editor.text
     Column(modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)) {
         if (key.isNotEmpty()) Text(key, style = centraidType("eyebrow"), color = centraidColor("textSoft"))
         Box(Modifier.fillMaxWidth().heightIn(min = 36.dp), contentAlignment = Alignment.CenterStart) {
@@ -313,10 +356,7 @@ public fun EditableFieldRow(
             }
             BasicTextField(
                 value = text.value,
-                onValueChange = { next ->
-                    text.value = next
-                    if (next != value) onEdit(next)
-                },
+                onValueChange = { next -> if (editor.edited(next)) onEdit(next) },
                 singleLine = singleLine,
                 textStyle = centraidType(style).copy(color = centraidColor("text")),
                 cursorBrush = SolidColor(centraidColor("text")),
@@ -362,17 +402,11 @@ public fun ChoiceFieldRow(
     }
 }
 
-/** What an autosave says, in words: the status line an [EditorRoom] hosts. */
-public fun autosaveLabel(autosave: Autosave?): String {
-    if (autosave == null) return ""
-    return when (autosave.phase) {
-        Autosave.Phase.PHASE_DIRTY, Autosave.Phase.PHASE_SAVING -> KitWords.SAVING
-        Autosave.Phase.PHASE_REFUSED -> autosave.failure?.sentence?.ifEmpty { null } ?: KitWords.NOT_SAVED
-        Autosave.Phase.PHASE_CONFLICT -> KitWords.CHANGED_ELSEWHERE
-        Autosave.Phase.PHASE_CLEAN, Autosave.Phase.PHASE_SAVED -> KitWords.SAVED
-        Autosave.Phase.PHASE_UNSPECIFIED -> ""
-    }
-}
+/**
+ * What an autosave says, in words: the status line an [EditorRoom] hosts. The
+ * machine's own words (`Autosave.label`, the kit law's), never spelt here.
+ */
+public fun autosaveLabel(autosave: Autosave?): String = autosave?.label.orEmpty()
 
 /**
  * THE AUTOSAVE STATUS LINE. A refusal is `net` ink and its sentence, over the

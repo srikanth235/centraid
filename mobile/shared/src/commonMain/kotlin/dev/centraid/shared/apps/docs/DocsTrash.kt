@@ -9,29 +9,29 @@ import dev.centraid.shared.kit.TrashSpec
 /**
  * DOCS' TRASH: the kit's one trash screen with Docs as the parameter.
  *
- * NO DESTROY PATH (`docs.proto`'s header): there is no purge command, so
- * `purgeCommand` is null and no row offers "Delete forever". "Empty trash" is
- * `core.empty_document_trash`, which ends every grace window at once — after
- * it nothing in trash can be restored, and nothing is removed either.
+ * DOCS DESTROYS, ON PHOTOS' PATH (D-1 of 2026-09-25, `docs.proto`'s header):
+ * "Delete forever" is `core.purge_document` and "Empty trash" is
+ * `core.empty_document_trash`, each behind the kit's destructive confirm —
+ * the row goes now and its bytes are released when nothing else names them.
+ * So the kit's own sentences ("leaves this vault for good") are true here.
+ * No sweep runs on the phone, so no row says when it will be erased.
  */
 public val DocsTrashSpec: TrashSpec = TrashSpec(
     appId = DocsWrites.APP_ID,
     table = "core_document",
     restoreCommand = DocsWrites.RESTORE,
-    purgeCommand = null,
+    purgeCommand = DocsWrites.PURGE,
     emptyCommand = DocsWrites.EMPTY_TRASH,
     idColumn = "document_id",
     titleColumn = "title",
     purgeWindowDays = 30,
-    copy = TrashCopy(emptyBody = DocsCopy.TRASH_EMPTY_BODY, emptyStateBody = DocsCopy.TRASH_EMPTY_STATE_BODY),
+    copy = TrashCopy(emptyStateBody = DocsCopy.TRASH_EMPTY_STATE_BODY),
     backLabel = DocsCopy.APP_TITLE,
 )
 
 /**
- * The kit's machine, with Docs' own words where the kit's would be false: the
- * kit's empty-trash confirm says everything "leaves this vault for good", and
- * its empty state that deleted things "go for good" — neither is true of a
- * document here. Carried as [TrashSpec.copy]; every law is the kit's.
+ * The kit's machine. Docs' one word of its own is the empty state's 30-day
+ * window; every law and every confirm is the kit's.
  */
 public val DocsTrashMachine: TrashMachine = TrashMachine(DocsTrashSpec)
 

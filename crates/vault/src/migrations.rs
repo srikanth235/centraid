@@ -101,6 +101,31 @@ pub const THE_CUT_SQL: &str = include_str!("../../../contracts/migrations/005_th
 pub const COLLECTION_KIND_SQL: &str =
     include_str!("../../../contracts/migrations/006_collection_kind.sql");
 
+/// Rung seven: the Locker names one generation (#1047, R-1047-D2).
+///
+/// `locker_key` loses `retired_at` and `locker_key_live_idx`, whose only
+/// writer was the rotation R-1047-D1 deleted, and gains
+/// `locker_key_one_generation`, a unique index on a constant that makes a
+/// second row unrepresentable. A rebuild carrying the live row only.
+pub const LOCKER_KEY_ONE_GENERATION_SQL: &str =
+    include_str!("../../../contracts/migrations/007_locker_key_one_generation.sql");
+
+/// Rung eight: a login has no match policy (#1047, Q-1047-15).
+///
+/// `locker_item.url_match_policy` and `locker_item_address.match_policy`
+/// described how wide an address was for a matcher R-1047-D3 deleted; nothing
+/// read them. Two `DROP COLUMN`s, each column's CHECK being its own.
+pub const LOCKER_NO_MATCH_POLICY_SQL: &str =
+    include_str!("../../../contracts/migrations/008_locker_no_match_policy.sql");
+
+/// Rung nine: a vault keeps no notices (#1047).
+///
+/// `notifications_notice` had no writer since the planes that raised notices
+/// were deleted (#1029), and no reader since the inbox left with the v0 tree;
+/// rung five did not name it, so a new vault still founded it. One `DROP`: no
+/// trigger, view or foreign key names the table.
+pub const NO_NOTICES_SQL: &str = include_str!("../../../contracts/migrations/009_no_notices.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -136,6 +161,21 @@ pub const LADDER: &[Migration] = &[
         version: 6,
         name: "collection-kind",
         sql: COLLECTION_KIND_SQL,
+    },
+    Migration {
+        version: 7,
+        name: "locker-key-one-generation",
+        sql: LOCKER_KEY_ONE_GENERATION_SQL,
+    },
+    Migration {
+        version: 8,
+        name: "locker-no-match-policy",
+        sql: LOCKER_NO_MATCH_POLICY_SQL,
+    },
+    Migration {
+        version: 9,
+        name: "no-notices",
+        sql: NO_NOTICES_SQL,
     },
 ];
 

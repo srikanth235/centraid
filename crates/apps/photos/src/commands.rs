@@ -16,12 +16,6 @@
 //! sequence every time.
 //!
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10).
-//!
-//! **`online_only` is empty for Photos, and that is a checked claim**
-//! (`no_photos_action_is_online_only`, below). Locker declares
-//! `ONLINE_ONLY_ACTIONS`; Photos has no equivalent. So every Photos action
-//! may be queued offline, including `upload` — which is the whole point of a
-//! camera-roll backup that works on a plane.
 
 use std::collections::BTreeMap;
 
@@ -102,9 +96,6 @@ pub struct ActionRow {
     pub action: &'static str,
     pub command: &'static str,
     pub confirm: Confirm,
-    /// A seat refuses to QUEUE this offline. Photos declares none; see the
-    /// module note for the grep behind the claim.
-    pub online_only: bool,
 }
 
 const fn act(action: &'static str, command: &'static str) -> ActionRow {
@@ -112,7 +103,6 @@ const fn act(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::None,
-        online_only: false,
     }
 }
 
@@ -121,7 +111,6 @@ const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::Required,
-        online_only: false,
     }
 }
 
@@ -321,11 +310,6 @@ mod tests {
                 "enrich.request_enrichment"
             ]
         );
-    }
-
-    #[test]
-    fn no_photos_action_is_online_only() {
-        assert!(ACTIONS.iter().all(|row| !row.online_only));
     }
 
     #[test]

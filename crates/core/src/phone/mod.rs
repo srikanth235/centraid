@@ -43,6 +43,7 @@
 
 pub mod drain;
 pub mod link;
+pub mod phrase;
 pub mod restore;
 
 use std::path::{Path, PathBuf};
@@ -59,7 +60,9 @@ use crate::error::{CoreError, Result};
 /// [`link`]'s header for why the device key is a separate secret from the seed
 /// rather than derived from it.
 pub struct Keyring {
-    /// The vault's own keys, at its derivation index.
+    /// The vault's own keys, at its derivation index — including Locker's
+    /// `K` (`seed / vault'(i) / locker'`, #1047 Q-1047-11), which a Locker
+    /// unlock copies into its session and a relock zeroes there.
     pub vault: centraid_identity::VaultKeys,
     /// The two keys every sealed object is made with.
     pub objects: backup::ObjectKeys,
@@ -188,17 +191,6 @@ impl Laptop {
     }
 }
 
-/// The laptop's endpoint id, read as the Ed25519 key it is.
-///
-/// An iroh `EndpointId` **is** an Ed25519 public key, which is what lets a
-/// safety number be computed over it and this phone's identity key with no
-/// third value agreed in advance. `None` for anything that is not 32 bytes or
-/// not a point on the curve.
-fn laptop_identity(endpoint: &[u8]) -> Option<ed25519_dalek::VerifyingKey> {
-    let raw: [u8; 32] = endpoint.try_into().ok()?;
-    ed25519_dalek::VerifyingKey::from_bytes(&raw).ok()
-}
-
 /// THE BACKUP HOME IS UNDER THE VAULT'S OWN DIRECTORY, AND THE PATH IS STATED
 /// HERE ONCE (#1029 W13, F5 rows 6-7).
 ///
@@ -305,7 +297,8 @@ pub fn drain_now(
 /// **Redeem the pairing payload the member scanned** (#1029 W17, W15-D3).
 ///
 /// Parses the ticket, mints this device's key and certificate at epoch 1,
-/// claims the lease to prove the laptop answers and has enrolled nobody higher,
+/// redeems the ticket's invite so the laptop knows this vault, claims the
+/// lease to prove the laptop answers and has enrolled nobody higher,
 /// keeps the coordinate and the certificate beside the vault, and publishes the
 /// vault's identity record so a restore from another device can find the same
 /// laptop by DNS.
@@ -316,6 +309,8 @@ pub fn drain_now(
 /// version 1, or has expired — all three refused here rather than dialled on,
 /// because a ticket is the one message with no handshake in front of it.
 /// [`CoreError::Unavailable`] when the laptop cannot be reached.
+/// [`CoreError::GatewayRefused`] (`UNAUTHORIZED`) when it answered and refused
+/// the code or the lease.
 pub fn pair(
     vault_file: &Path,
     keyring: Option<&Keyring>,
@@ -376,11 +371,41 @@ pub fn pair(
             .map_err(|error| CoreError::Unavailable {
                 reason: format!("the laptop did not answer: {error}"),
             })?;
+        // THE INVITE IS REDEEMED FIRST (#1047). It is what makes this vault a
+        // tenant the laptop knows: until it is spent, every signed call — the
+        // lease claim below among them — is answered `UnknownVault`. The
+        // account the vault hangs off is its own identity key, because the
+        // scope amendment of 2026-09-21 struck the account and a gateway row
+        // still names one. A REFUSED ADMIT IS NOT YET A REFUSED PAIRING: a
+        // vault this laptop already holds (a re-pair after `laptop.json` was
+        // lost) has spent its invite, and the lease claim is what judges
+        // whether this device may write.
+        let vault_id = link::vault_id_of(&keyring.vault);
+        let admitted = match centraid_identity::ticket::invite_code(&ticket) {
+            Some(code) => client.admit(&vault_id, code).await.err(),
+            None => None,
+        };
+        // A LAPTOP THAT ANSWERED AND REFUSED IS NOT ONE THAT DID NOT ANSWER
+        // (#1047 E5): the first wants a new pairing code, the second wants
+        // waking, and the shell can only say which when the codes differ.
         client
             .claim_lease(link::now_ms())
             .await
-            .map_err(|error| CoreError::Unavailable {
-                reason: format!("the laptop refused this device: {error}"),
+            .map_err(|error| match (error, admitted) {
+                (centraid_gateway_client::ClientError::Transport(lost), _) => {
+                    CoreError::Unavailable {
+                        reason: format!("the laptop stopped answering: {lost}"),
+                    }
+                }
+                (_, Some(refused)) => CoreError::GatewayRefused {
+                    reason: format!(
+                        "the laptop did not take this pairing code ({refused}); show a new one \
+                         with `centraid-gateway invite`"
+                    ),
+                },
+                (error, None) => CoreError::GatewayRefused {
+                    reason: format!("the laptop refused this device: {error}"),
+                },
             })?;
         Ok::<(), CoreError>(())
     })?;
@@ -390,10 +415,11 @@ pub fn pair(
     // identity key and the laptop's endpoint key. Both are Ed25519 verifying
     // keys and `safety_number` sorts them, so the phone and the laptop render
     // the same digits without agreeing on an order first.
-    let safety_number =
-        laptop_identity(&ticket.gateway_endpoint).map_or_else(String::new, |laptop| {
-            centraid_identity::safety_number(&keyring.vault.identity.public(), &laptop).grouped()
-        });
+    let safety_number = centraid_identity::pairing_safety_number(
+        keyring.vault.identity.public().as_bytes(),
+        &ticket.gateway_endpoint,
+    )
+    .map_or_else(String::new, |number| number.grouped());
 
     Ok(wire::PairResponse {
         safety_number,
@@ -496,11 +522,72 @@ mod tests {
                 phrase: "abandon abandon abandon".to_owned(),
                 endpoint: None,
                 direct_addrs: Vec::new(),
+                seed: None,
             },
             runtime.handle(),
         )
         .expect_err("three words are not a phrase");
         assert!(matches!(refusal, CoreError::InvalidRequest { .. }));
+    }
+
+    /// THE SEED IN PLACE OF THE WORDS (#1047, Q-1047-18). A 64-byte seed is
+    /// taken with no phrase — it gets past the input check to the laptop id,
+    /// which is refused here so nothing dials. Both at once, and a seed of the
+    /// wrong length, are refused before anything is derived, and no refusal
+    /// quotes a word.
+    #[test]
+    fn a_restore_takes_the_words_or_the_seed_and_never_both() {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .expect("a runtime");
+        let never = Path::new("/tmp/centraid-1047-never-opened/vault.db");
+        let words = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                     abandon abandon abandon abandon abandon abandon abandon abandon \
+                     abandon abandon abandon abandon abandon abandon abandon art";
+        let seed = centraid_identity::RecoveryPhrase::parse(words)
+            .expect("the BIP39 vector parses")
+            .seed()
+            .as_bytes()
+            .to_vec();
+        let refuse = |phrase: &str, seed: Option<Vec<u8>>| {
+            restore::run(
+                never,
+                &wire::RestoreRequest {
+                    phrase: phrase.to_owned(),
+                    // Not 32 bytes: the check after the input, so an accepted
+                    // input is visible as THIS refusal and nothing is dialled.
+                    endpoint: Some(vec![0; 3]),
+                    direct_addrs: Vec::new(),
+                    seed,
+                },
+                runtime.handle(),
+            )
+            .expect_err("every case here is refused")
+        };
+        let detail = |error: CoreError| match error {
+            CoreError::InvalidRequest { detail } => detail,
+            other => panic!("an input refusal is InvalidRequest, not {other:?}"),
+        };
+
+        let alone = detail(refuse("", Some(seed.clone())));
+        assert!(
+            alone.contains("laptop id"),
+            "a seed alone is accepted as the input: {alone}"
+        );
+        let words_alone = detail(refuse(words, None));
+        assert!(
+            words_alone.contains("laptop id"),
+            "the words alone still are: {words_alone}"
+        );
+        let both = detail(refuse(words, Some(seed.clone())));
+        assert!(both.contains("not both"), "{both}");
+        assert!(!both.contains("abandon"), "a refusal names no word: {both}");
+        let short = detail(refuse("", Some(seed[..32].to_vec())));
+        assert!(short.contains("64 bytes"), "{short}");
+        let neither = detail(refuse("", None));
+        assert!(neither.contains("24 words"), "{neither}");
     }
 
     #[test]

@@ -283,6 +283,29 @@ class KitLawsSpec : StringSpec({
         AutosaveLaw.DEBOUNCE_MS shouldBe 900L
     }
 
+    "autosave: the status line's words ride in the state, the same on both shells (#1047)" {
+        loaded().autosave.shouldNotBeNull().label shouldBe "Saved"
+        val dirty = notes(loaded(), body("x")).state
+        dirty.autosave.shouldNotBeNull().label shouldBe "Edited"
+        val saving = notes(dirty, tick("save:1"))
+        saving.state.autosave.shouldNotBeNull().label shouldBe "Saving…"
+        val key = (saving.effects.single() as ScreenEffect.SubmitWrite).invokeKey
+        notes(
+            saving.state,
+            NotesEditorEvent(
+                write_settled = WriteSettled(
+                    invoke_key = key,
+                    committed = false,
+                    failure = centraid.screen.v1.ReadFailure(sentence = "The vault is read-only."),
+                ),
+            ),
+        ).state.autosave.shouldNotBeNull().label shouldBe "The vault is read-only."
+        notes(saving.state, settled(key, committed = false)).state.autosave.shouldNotBeNull().label shouldBe "Not saved"
+        notes(saving.state, settled(key, committed = true)).state.autosave.shouldNotBeNull().label shouldBe "Saved"
+        dev.centraid.shared.kit.KitWords.backTo("People") shouldBe "Back to People"
+        dev.centraid.shared.kit.KitWords.backTo("") shouldBe "Back"
+    }
+
     // --- Writes -----------------------------------------------------------
 
     "write law: the same key in flight is one write; a settle under another key is ignored" {
@@ -309,7 +332,7 @@ class KitLawsSpec : StringSpec({
         val machine = TrashMachine(tasksTrash)
         val shown = trash(machine, machine.initial(), TrashListData(rows = listOf(TrashRow(id = "t1", title = "Buy milk"))))
         shown.data_.shouldNotBeNull().rows.single().purge_label shouldBe "Delete forever"
-        shown.data_!!.empty_label shouldBe "Empty trash"
+        shown.data_.empty_label shouldBe "Empty trash"
 
         val restore = machine.reduce(shown, TrashListEvent(restore = TrashListEvent.RestoreTapped(id = "t1")))
         restore.effects.single() shouldBe ScreenEffect.SubmitWrite(
@@ -339,7 +362,7 @@ class KitLawsSpec : StringSpec({
         val machine = TrashMachine(tasksTrash.copy(appId = "docs", purgeCommand = null, emptyCommand = null))
         val shown = trash(machine, machine.initial(), TrashListData(rows = listOf(TrashRow(id = "d1", title = "Plan"))))
         shown.data_.shouldNotBeNull().rows.single().purge_label shouldBe ""
-        shown.data_!!.empty_label shouldBe ""
+        shown.data_.empty_label shouldBe ""
         machine.reduce(shown, TrashListEvent(purge = TrashListEvent.PurgeTapped(id = "d1"))).state shouldBe shown
         machine.reduce(shown, TrashListEvent(empty = TrashListEvent.EmptyTapped())).state shouldBe shown
         machine.screenId shouldBe "docs.trash"
@@ -384,18 +407,59 @@ class KitLawsSpec : StringSpec({
         reads.query(TrashMachine(spec).initial(), null).select shouldBe listOf("task_id", "title", "deleted_at", "purge_at")
         fun text(v: String) = Value(text = v)
         val event = reads.arrived(
-            listOf(Row(values = listOf(text("t1"), text(""), text("2026-03-11T10:00:00Z"), text("2026-04-10T10:00:00Z")))),
+            listOf(
+                Row(
+                    values = listOf(
+                        text("t1"), text(""), text("2026-03-11T10:00:00Z"), text("2026-04-10T10:00:00Z"),
+                        text("2026-03-11"), text("2026-04-10"),
+                    ),
+                ),
+            ),
             null,
         )
         val row = event.data_.shouldNotBeNull().data_.shouldNotBeNull().rows.single()
         row.title shouldBe TrashCopy().untitled
         row.meta shouldContain " · Erased "
-        row.meta.substringBefore(" · ") shouldBe TrashCopy().deletedMeta("2026-03-11T10:00:00Z")
+        row.meta.substringBefore(" · ") shouldBe TrashCopy().deletedMeta("2026-03-11")
         // Without the column nothing is said about a purge day.
         TrashReads(tasksTrash).arrived(
-            listOf(Row(values = listOf(text("t1"), text("A"), text("2026-03-11T10:00:00Z")))),
+            listOf(Row(values = listOf(text("t1"), text("A"), text("2026-03-11T10:00:00Z"), text("2026-03-11")))),
             null,
         ).data_.shouldNotBeNull().data_.shouldNotBeNull().rows.single().meta shouldNotContain " · "
+    }
+
+    "trash: the core is always asked for the member's days, and they are said — never a UTC slice (#1047)" {
+        val spec = tasksTrash.copy(purgeAtColumn = "purge_at", copy = TrashCopy(purgesOn = "Erased {day}"))
+        val reads = TrashReads(spec)
+        val zoned = reads.query(TrashMachine(spec).initial(), null, "Pacific/Auckland")
+        zoned.local_day_columns shouldBe listOf("deleted_at", "purge_at")
+        zoned.tz shouldBe "Pacific/Auckland"
+        // NO ZONE KNOWN IS THE VAULT'S ZONE, still asked: the days are the core's.
+        reads.query(TrashMachine(spec).initial(), null, "").let {
+            it.local_day_columns shouldBe listOf("deleted_at", "purge_at")
+            it.tz shouldBe ""
+        }
+        TrashReads(tasksTrash).query(TrashMachine(tasksTrash).initial(), null).local_day_columns shouldBe listOf("deleted_at")
+        fun text(v: String) = Value(text = v)
+        // 22:00 UTC on the 11th is the 12th in Auckland; the appended days win.
+        val row = reads.arrived(
+            listOf(
+                Row(
+                    values = listOf(
+                        text("t1"), text("A"), text("2026-03-11T22:00:00Z"), text("2026-04-10T22:00:00Z"),
+                        text("2026-03-12"), text("2026-04-11"),
+                    ),
+                ),
+            ),
+            null,
+        ).data_.shouldNotBeNull().data_.shouldNotBeNull().rows.single()
+        row.meta shouldBe "Deleted Thu 12 March · Erased Sat 11 April"
+        // A ROW WITH NO DAY FROM THE CORE SAYS NONE: the instant's own first
+        // ten characters are UTC's, and are never drawn.
+        reads.arrived(
+            listOf(Row(values = listOf(text("t1"), text("A"), text("2026-03-11T22:00:00Z"), text("2026-04-10T22:00:00Z")))),
+            null,
+        ).data_.shouldNotBeNull().data_.shouldNotBeNull().rows.single().meta shouldBe ""
     }
 
     "trash: a table keyed unlike its rows re-reads on any change" {

@@ -1,5 +1,6 @@
 package dev.centraid.shared
 
+import centraid.screen.v1.WriteSettled
 import centraid.core.v1.AppQueryDenial
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandStatus
@@ -35,6 +36,7 @@ import centraid.screen.v1.TrashListEvent
 import centraid.screen.v1.TrashRow
 import centraid.screen.v1.WriteState
 import dev.centraid.design.copy.DocsCopy
+import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.apps.docs.DocsDocumentMachine
 import dev.centraid.shared.apps.docs.DocsDocumentReads
 import dev.centraid.shared.apps.docs.DocsDriveMachine
@@ -152,8 +154,8 @@ class DocsSpec : StringSpec({
         var s = onScreen(driveAnswer())
         s = drive(DocsDriveEvent(band = DocsDriveEvent.BandPicked(key = DocsDriveMachine.BAND_MORE)), s).state
         s.sheet!!.kind shouldBe DocsSheet.Kind.KIND_MORE
-        s.sheet!!.actions!!.actions.map { it.key } shouldBe listOf(DocsWrites.KEY_RECENT, DocsWrites.KEY_TRASH_SHELF)
-        s.sheet!!.actions!!.actions.map { it.label } shouldBe listOf("Recently added", "Trash")
+        s.sheet.actions!!.actions.map { it.key } shouldBe listOf(DocsWrites.KEY_RECENT, DocsWrites.KEY_TRASH_SHELF)
+        s.sheet.actions.actions.map { it.label } shouldBe listOf("Recently added", "Trash")
         val recent = drive(DocsDriveEvent(action = DocsDriveEvent.ActionPicked(key = DocsWrites.KEY_RECENT)), s)
         recent.state.destination shouldBe DocsDriveState.Destination.DESTINATION_RECENT
         reads(recent).size shouldBe 1
@@ -218,7 +220,7 @@ class DocsSpec : StringSpec({
             drive(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = "due")), s).state,
         ).state
         searched.data_!!.mode shouldBe DocsDriveData.Mode.MODE_SEARCH
-        searched.data_!!.rows.single().snippet.map { it.text to it.match } shouldBe
+        searched.data_.rows.single().snippet.map { it.text to it.match } shouldBe
             listOf("rent is " to false, "due" to true, " monthly" to false)
     }
 
@@ -255,7 +257,7 @@ class DocsSpec : StringSpec({
     "every shelf has its own empty sentence and at most one action" {
         val all = onScreen(driveAnswer())
         all.data_!!.empty!!.headline shouldBe "No documents yet."
-        all.data_!!.empty_action shouldBe DocsDriveData.EmptyAction.EMPTY_ACTION_ADD
+        all.data_.empty_action shouldBe DocsDriveData.EmptyAction.EMPTY_ACTION_ADD
 
         onScreen(driveAnswer(), DocsDriveState.Destination.DESTINATION_STARRED).data_!!.let {
             it.empty!!.headline shouldBe "Nothing starred yet."
@@ -280,7 +282,7 @@ class DocsSpec : StringSpec({
         s = drive(DocsDriveEvent(choice = DocsDriveEvent.ChoicePicked(key = "audio")), s).state
         s = answered(s, driveAnswer())
         s.data_!!.empty!!.headline shouldBe DocsCopy.EMPTY_FILTERED
-        s.data_!!.empty_action shouldBe DocsDriveData.EmptyAction.EMPTY_ACTION_CLEAR_FILTERS
+        s.data_.empty_action shouldBe DocsDriveData.EmptyAction.EMPTY_ACTION_CLEAR_FILTERS
 
         // Beyond the window: said once, and search offered.
         onScreen(driveAnswer(rows = listOf(row("d-1", "Lease")), truncated = true)).data_!!.truncated_note shouldBe
@@ -323,7 +325,7 @@ class DocsSpec : StringSpec({
         var s = onScreen(driveAnswer(rows = listOf(row("d-1", "Lease"))))
         s = drive(DocsDriveEvent(row_menu = DocsDriveEvent.RowMenuOpened(document_id = "d-1")), s).state
         s.sheet!!.title shouldBe "Lease"
-        s.sheet!!.actions!!.actions.map { it.label } shouldBe listOf("Star", "Rename", "Move", "Labels", "Move to trash")
+        s.sheet.actions!!.actions.map { it.label } shouldBe listOf("Star", "Rename", "Move", "Labels", "Move to trash")
         val star = drive(DocsDriveEvent(action = DocsDriveEvent.ActionPicked(key = DocsWrites.KEY_STAR)), s)
         val write = writes(star).single()
         write.command shouldBe "core.star_document"
@@ -334,7 +336,7 @@ class DocsSpec : StringSpec({
 
         val refused = drive(settled(write.invokeKey, ok = false, sentence = "That document is in the trash."), star.state).state
         refused.write!!.phase shouldBe WriteState.Phase.PHASE_REFUSED
-        refused.write!!.failure!!.sentence shouldBe "That document is in the trash."
+        refused.write.failure!!.sentence shouldBe "That document is in the trash."
         refused.data_!!.rows.single().title shouldBe "Lease"
     }
 
@@ -448,10 +450,10 @@ class DocsSpec : StringSpec({
             driveAnswer(rows = listOf(row("d-1", "Lease", folder = "f-home")), folders = folders),
         )
         s.data_!!.folders.map { it.name to it.count_label } shouldBe listOf("Leases" to "1 document")
-        s.data_!!.crumbs.map { it.name } shouldBe listOf("Home")
+        s.data_.crumbs.map { it.name } shouldBe listOf("Home")
         var n = drive(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = DocsSheet.Kind.KIND_NEW_FOLDER)), s).state
         n.sheet!!.new_folder!!.where_label shouldBe "In Home"
-        n.sheet!!.new_folder!!.can_create shouldBe false
+        n.sheet.new_folder.can_create shouldBe false
         drive(DocsDriveEvent(folder_created = DocsDriveEvent.FolderCreated()), n).effects.shouldBeEmpty()
         n = drive(DocsDriveEvent(folder_name = DocsDriveEvent.FolderNameEdited(name = "Insurance")), n).state
         n.sheet!!.new_folder!!.can_create shouldBe true
@@ -517,6 +519,21 @@ class DocsSpec : StringSpec({
             s,
         ).state
 
+    "a document's back names the page it was pushed from, else Docs — never a bare Back (#1047)" {
+        docOpened().state.chrome.shouldNotBeNull().back shouldBe DocsCopy.APP_TITLE
+        doc(DocsDocumentEvent(opened = DocsDocumentEvent.Opened(document_id = "d-1", title = "Lease", parent = "Taxes")))
+            .state.chrome.shouldNotBeNull().back shouldBe "Taxes"
+    }
+
+    "a folder page's back names the page it was pushed from, else Docs; the drive's own top has no parent (#1047)" {
+        val folders = DocsDriveState.Destination.DESTINATION_FOLDERS
+        drive(DocsDriveEvent(opened = DocsDriveEvent.Opened(destination = folders, folder_id = "f-lease", folder_name = "Leases", parent = "Home")))
+            .state.chrome.shouldNotBeNull().back shouldBe "Home"
+        opened(folders, folder = "f-lease", name = "Leases").state.chrome.shouldNotBeNull().back shouldBe DocsCopy.APP_TITLE
+        // A parent sent with no folder is not a folder page's, and is dropped.
+        drive(DocsDriveEvent(opened = DocsDriveEvent.Opened(parent = "Home"))).state.parent shouldBe ""
+    }
+
     "a document asks for itself, its activity and the rail, and waits for an id" {
         DocsDocumentReads.requests(DocsDocumentMachine.initial(), now).shouldBeNull()
         val asked = DocsDocumentReads.requests(docOpened().state, now).shouldNotBeNull()
@@ -560,11 +577,31 @@ class DocsSpec : StringSpec({
         }
 
         docLanded(
-            DocsDocument(document = row("d-1", "Scan", kind = DocsKind.DOCS_KIND_IMAGE, surface = DocsSurface.DOCS_SURFACE_STAGE), bytes_held = true, today = TODAY),
+            DocsDocument(
+                document = row("d-1", "Scan", kind = DocsKind.DOCS_KIND_IMAGE, surface = DocsSurface.DOCS_SURFACE_STAGE),
+                bytes_held = true,
+                bytes_path = "/vault/content/ab/cdef",
+                today = TODAY,
+            ),
         ).data_!!.stage!!.let {
             it.media shouldBe DocsStage.Media.MEDIA_IMAGE
             it.held shouldBe true
             it.content_id shouldBe "c-d-1"
+            // THE FILE THE CORE HANDS OUT is what the view draws (#1047).
+            it.bytes_path shouldBe "/vault/content/ab/cdef"
+            it.absent_reason shouldBe ""
+        }
+        // HERE BUT NOT DRAWABLE INLINE (SVG, HTML): no path, and the stage says so.
+        docLanded(
+            DocsDocument(
+                document = row("d-1", "Logo", kind = DocsKind.DOCS_KIND_IMAGE, surface = DocsSurface.DOCS_SURFACE_STAGE),
+                bytes_held = true,
+                today = TODAY,
+            ),
+        ).data_!!.stage!!.let {
+            it.held shouldBe false
+            it.bytes_path shouldBe ""
+            it.absent_reason shouldBe DocsCopy.FACTS_ONLY
         }
         docLanded(
             DocsDocument(
@@ -585,12 +622,16 @@ class DocsSpec : StringSpec({
         docLanded(DocsDocument(today = TODAY)).data_!!.gone!!.headline shouldBe DocsCopy.GONE
     }
 
-    "a trashed document offers restore only, and never says it will be deleted" {
+    "a trashed document offers restore and delete forever, and never says it will be deleted" {
         val live = docLanded(
             DocsDocument(document = row("d-1", "Lease", trashed = true, purgeInDays = 3, purgeDay = "2026-03-14"), today = TODAY),
         )
-        live.data_!!.actions.map { it.key } shouldBe listOf("restore")
-        live.data_!!.trashed_note shouldBe "In trash · restorable until Sat 14 March"
+        live.data_!!.actions.map { it.key } shouldBe listOf("restore", "purge")
+        live.data_.actions.last().let {
+            it.label shouldBe SharedCopy.TRASH_PURGE
+            it.destructive shouldBe true
+        }
+        live.data_.trashed_note shouldBe "In trash · restorable until Sat 14 March"
         writes(doc(DocsDocumentEvent(action = DocsDocumentEvent.ActionPicked(key = "restore")), live)).single().command shouldBe
             "core.restore_document"
         // Keys the head does not offer are nothing.
@@ -600,8 +641,48 @@ class DocsSpec : StringSpec({
             DocsDocument(document = row("d-1", "Lease", trashed = true, purgeInDays = 0, purgeDay = "2026-03-11"), today = TODAY),
         )
         lapsed.data_!!.trashed_note shouldBe DocsCopy.IN_TRASH_LAPSED
-        lapsed.data_!!.actions.single().enabled shouldBe false
+        lapsed.data_.actions.first { it.key == "restore" }.enabled shouldBe false
         doc(DocsDocumentEvent(action = DocsDocumentEvent.ActionPicked(key = "restore")), lapsed).effects.shouldBeEmpty()
+    }
+
+    "delete forever on a trashed document asks first, purges it, and the page leaves (#1047)" {
+        val trashed = docLanded(
+            DocsDocument(document = row("d-1", "Lease", trashed = true, purgeInDays = 3, purgeDay = "2026-03-14"), today = TODAY),
+        )
+        val asked = doc(DocsDocumentEvent(action = DocsDocumentEvent.ActionPicked(key = "purge")), trashed)
+        asked.effects.shouldBeEmpty()
+        asked.state.asking shouldBe DocsDocumentState.Asking.ASKING_PURGE
+        asked.state.confirm!!.let {
+            it.title shouldBe SharedCopy.TRASH_PURGE_TITLE
+            it.body shouldBe SharedCopy.TRASH_PURGE_BODY
+            it.confirm_label shouldBe SharedCopy.TRASH_PURGE
+            it.destructive shouldBe true
+        }
+        // Dismissing asks nothing more.
+        doc(DocsDocumentEvent(dismissed = DocsDocumentEvent.Dismissed()), asked.state).state.let {
+            it.confirm shouldBe null
+            it.asking shouldBe DocsDocumentState.Asking.ASKING_NONE
+        }
+        val confirmed = doc(DocsDocumentEvent(confirmed = DocsDocumentEvent.Confirmed()), asked.state)
+        writes(confirmed).single().let {
+            it.command shouldBe "core.purge_document"
+            it.inputJson shouldBe """{"document_id":"d-1"}"""
+        }
+        confirmed.state.dismissed shouldBe false
+        val key = confirmed.state.write!!.invoke_key
+        doc(DocsDocumentEvent(write_settled = WriteSettled(invoke_key = key, committed = false)), confirmed.state)
+            .state.dismissed shouldBe false
+        doc(DocsDocumentEvent(write_settled = WriteSettled(invoke_key = key, committed = true)), confirmed.state)
+            .state.dismissed shouldBe true
+
+        // A live document's trash confirm still trashes, and the page stays.
+        val live = docLanded(DocsDocument(document = row("d-1", "Lease"), today = TODAY))
+        val trashing = doc(DocsDocumentEvent(action = DocsDocumentEvent.ActionPicked(key = "trash")), live)
+        trashing.state.asking shouldBe DocsDocumentState.Asking.ASKING_TRASH
+        val trashed2 = doc(DocsDocumentEvent(confirmed = DocsDocumentEvent.Confirmed()), trashing.state)
+        writes(trashed2).single().command shouldBe "core.trash_document"
+        doc(DocsDocumentEvent(write_settled = WriteSettled(invoke_key = trashed2.state.write!!.invoke_key, committed = true)), trashed2.state)
+            .state.dismissed shouldBe false
     }
 
     "a document's head writes: star, move and an earlier version made current" {
@@ -696,8 +777,8 @@ class DocsSpec : StringSpec({
 
     // --- Trash ------------------------------------------------------------------
 
-    "the trash has no destroy path: no purge, and Empty trash promises only that nothing can be restored" {
-        DocsTrashSpec.purgeCommand.shouldBeNull()
+    "the trash destroys on Photos' path: Delete forever and Empty trash, each behind a confirm (D-1)" {
+        DocsTrashSpec.purgeCommand shouldBe "core.purge_document"
         DocsTrashSpec.emptyCommand shouldBe "core.empty_document_trash"
         val opened = DocsTrashMachine.reduce(DocsTrashMachine.initial(), TrashListEvent(opened = TrashListEvent.Opened()))
         opened.state.app_id shouldBe "docs"
@@ -710,22 +791,31 @@ class DocsSpec : StringSpec({
                 ),
             ),
         ).state
-        landed.data_!!.rows.single().purge_label shouldBe ""
-        landed.data_!!.empty_label shouldBe "Empty trash"
-        DocsTrashMachine.reduce(landed, TrashListEvent(purge = TrashListEvent.PurgeTapped(id = "d-1"))).let {
-            it.effects.shouldBeEmpty()
-            it.state.confirm.shouldBeNull()
+        landed.data_!!.rows.single().purge_label shouldBe SharedCopy.TRASH_PURGE
+        landed.data_.empty_label shouldBe "Empty trash"
+        // DELETE FOREVER ASKS FIRST, then destroys that one document.
+        val purging = DocsTrashMachine.reduce(landed, TrashListEvent(purge = TrashListEvent.PurgeTapped(id = "d-1")))
+        purging.effects.shouldBeEmpty()
+        purging.state.confirm!!.let {
+            it.body shouldBe SharedCopy.TRASH_PURGE_BODY
+            it.destructive shouldBe true
         }
+        DocsTrashMachine.reduce(purging.state, TrashListEvent(confirmed = TrashListEvent.Confirmed())).effects
+            .filterIsInstance<ScreenEffect.SubmitWrite>().single().let {
+                it.command shouldBe "core.purge_document"
+                it.inputJson shouldBe """{"document_id":"d-1"}"""
+            }
+        // EMPTY TRASH SAYS WHAT IT DOES NOW: everything leaves for good.
         val asked = DocsTrashMachine.reduce(landed, TrashListEvent(empty = TrashListEvent.EmptyTapped())).state
-        asked.confirm!!.body shouldBe DocsCopy.TRASH_EMPTY_BODY
-        asked.confirm!!.body shouldNotContain "for good"
+        asked.confirm!!.body shouldBe SharedCopy.TRASH_EMPTY_BODY
+        asked.confirm.body shouldContain "for good"
         DocsTrashMachine.reduce(asked, TrashListEvent(confirmed = TrashListEvent.Confirmed())).effects
             .filterIsInstance<ScreenEffect.SubmitWrite>().single().command shouldBe "core.empty_document_trash"
         writes(DocsTrashMachine.reduce(landed, TrashListEvent(restore = TrashListEvent.RestoreTapped(id = "d-1")))).single().inputJson shouldBe
             """{"document_id":"d-1"}"""
         val empty = DocsTrashMachine.reduce(opened.state, TrashListEvent(data_ = TrashListEvent.DataArrived(data_ = TrashListData(), answered_cursor = ""))).state
         empty.data_!!.empty!!.body shouldBe DocsCopy.TRASH_EMPTY_STATE_BODY
-        empty.data_!!.empty_label shouldBe ""
+        empty.data_.empty_label shouldBe ""
     }
 
     "no Docs string promises deletion or names a gateway" {

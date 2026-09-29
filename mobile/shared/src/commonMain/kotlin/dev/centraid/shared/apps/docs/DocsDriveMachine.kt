@@ -64,9 +64,11 @@ import dev.centraid.shared.screen.Step
  * Star, move, labels, trash (behind a confirm) and a new folder go through
  * [WriteLaw]: one in flight, a refusal keeps the rows and says so. Rename is
  * inline and autosaves ([DocsRenameLaw]). Nothing is patched locally: the
- * vault's change event re-reads the shelf. Capture is the shell's — the Add
- * sheet's rows are intents (`AddRequested`), and whether they can be offered
- * is the OS grants the shell reports (`DocsCapture`, law 4).
+ * vault's change event re-reads the shelf. The Add sheet's Upload, Scan and
+ * Text rows are intents (`AddRequested`) the shell hands to
+ * [DocsIngestBridge] (#1047), which stages and files the document; whether
+ * they can be offered is the OS grants the shell reports (`DocsCapture`,
+ * law 4).
  *
  * ## Views decide nothing
  *
@@ -163,6 +165,7 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
                         destination = to,
                         folder_id = folder,
                         folder_name = if (folder.isEmpty()) "" else event.opened.folder_name,
+                        parent = if (folder.isEmpty()) "" else event.opened.parent,
                         search = SearchField(),
                         sheet = none(),
                         confirm = null,
@@ -661,6 +664,8 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
         starred = DocsCopy.STARRED,
         rename_placeholder = DocsCopy.RENAME_PLACEHOLDER,
         rename_done = DocsCopy.DONE,
+        // A folder page names the page it was pushed from (#1047).
+        back = state.parent.ifEmpty { DocsCopy.APP_TITLE },
     )
 
     /** The data as drawn: the folder level, the crumbs, the empty choice, a closing rename's title. */

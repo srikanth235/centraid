@@ -81,10 +81,18 @@ message PeopleSearchRequest {
   // REQUIRED: 0 is `ERROR_CODE_INVALID_REQUEST`. At most 50 are asked of the
   // index.
   uint32 limit = 2;
+  // The zone of each row's `*_local_day`: as `PeopleTrashRequest.tz`.
+  string tz = 3;
 }
 
 // `people.trash`: the reversible shelf.
-message PeopleTrashRequest {}
+message PeopleTrashRequest {
+  // The zone the rows' days are read in: the stated IANA name, else the
+  // vault's. A name the bundled database does not know is refused; a vault
+  // that names no zone and a request that states none answer EMPTY days,
+  // never UTC ones.
+  string tz = 1;
+}
 
 // ---------------------------------------------------------------------------
 // The shared rows.
@@ -132,6 +140,11 @@ message PeopleRosterRow {
   repeated PeopleDate reminders = 12;
   // The index's snippet, on a search row only.
   optional string snippet = 13;
+  // `last_contacted_at`'s and `created_at`'s civil days (`YYYY-MM-DD`) in the
+  // request's zone, so "last touch" is a day comparison against the answer's
+  // `today` and never a UTC slice. EMPTY when the instant is absent.
+  string last_contacted_local_day = 14;
+  string created_local_day = 15;
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +271,11 @@ message PeopleTrashRow {
   string name = 2;
   string role = 3;
   optional string purge_at = 4;
+  // When the person was trashed, and the two civil days (`YYYY-MM-DD`) in the
+  // request's zone. EMPTY when the instant is absent or no zone resolved.
+  string deleted_at = 5;
+  string deleted_local_day = 6;
+  string purge_local_day = 7;
 }
 
 message PeopleTrash {

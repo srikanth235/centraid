@@ -189,7 +189,7 @@ struct AgendaEventView: View {
                 .foregroundStyle(Theme.color("textSoft", scheme))
             HStack(spacing: 6) {
                 Circle()
-                    .fill(Theme.color(AgendaHue.role(detail.calendarHueKey), scheme))
+                    .fill(Theme.color(KitHue.role(detail.calendarHueKey) ?? "cSlate", scheme))
                     .frame(width: 8, height: 8)
                 Text(detail.calendarName)
                     .centraidType("annotLabel")
@@ -200,7 +200,7 @@ struct AgendaEventView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .leading) {
             Rectangle()
-                .fill(Theme.color(AgendaHue.role(detail.calendarHueKey), scheme))
+                .fill(Theme.color(KitHue.role(detail.calendarHueKey) ?? "cSlate", scheme))
                 .frame(width: 2)
                 .padding(.vertical, 12)
         }
@@ -259,7 +259,7 @@ struct AgendaEventView: View {
                 .centraidType("smallStrong")
                 .foregroundStyle(Theme.color("onAccent", scheme))
                 .frame(width: 28, height: 28)
-                .background(Circle().fill(Theme.color(AgendaHue.role(guest.hueKey), scheme)))
+                .background(Circle().fill(Theme.color(KitHue.role(guest.hueKey) ?? "cSlate", scheme)))
             Text(guest.name)
                 .centraidType("body")
                 .foregroundStyle(Theme.color("text", scheme))

@@ -326,14 +326,28 @@ pub(super) fn trash(
     })
 }
 
-pub(super) fn export(door: &VaultDoor<'_>, asked: &wire::TallyExportRequest) -> Result<Answer> {
+pub(super) fn export(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    now: &str,
+    asked: &wire::TallyExportRequest,
+) -> Result<Answer> {
     let limit = (asked.limit > 0).then(|| i64::from(asked.limit));
     let since = super::non_empty(asked.since.trim());
+    // THE FILE NAME'S DAY is the vault clock's in the device's zone; with no
+    // zone at all the file is named without a day rather than with a UTC one.
+    let today = super::zone_if_any(vault, &asked.tz)?
+        .and_then(|zone| local::today(&zone, now))
+        .unwrap_or_default();
     answered(
         door,
         phone::load_export(door, &asked.group_id, since, limit),
         |data| {
+            let csv = centraid_apps_tally::export_file::csv(&data);
+            let file_name = centraid_apps_tally::export_file::file_name(&data, &today);
             Answer::TallyExport(wire::TallyExport {
+                csv,
+                file_name,
                 group: data.group.map(group_meta),
                 members: data.members.into_iter().map(person).collect(),
                 expenses: data.expenses.into_iter().map(entry).collect(),

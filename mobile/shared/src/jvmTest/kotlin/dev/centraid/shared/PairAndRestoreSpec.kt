@@ -1,78 +1,206 @@
 package dev.centraid.shared
 
+import centraid.screen.v1.PairLaptopEvent
+import centraid.screen.v1.PairLaptopState
+import dev.centraid.design.copy.WordsCopy
 import dev.centraid.shared.custody.CustodyCopy
 import dev.centraid.shared.custody.PairAnswer
 import dev.centraid.shared.custody.PairDoor
-import dev.centraid.shared.custody.PairMachine
-import dev.centraid.shared.custody.RestoreAnswer
-import dev.centraid.shared.custody.RestoreDoor
-import dev.centraid.shared.custody.RestoreMachine
+import dev.centraid.shared.custody.PairEffect
+import dev.centraid.shared.custody.PairInput
+import dev.centraid.shared.custody.PairLaptopFlow
+import dev.centraid.shared.custody.PairLaptopMachine
+import dev.centraid.shared.custody.PairRefusal
+import dev.centraid.shared.custody.PairResult
+import dev.centraid.shared.custody.Pairing
+import dev.centraid.shared.custody.Readiness
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.types.shouldBeInstanceOf
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 
-/** The two flows a phone has that are not about a vault it already holds (#1029 W18-4). */
+/**
+ * Pairing (#1029 W18-4; the `pair.laptop` screen, #1047 E4). Restoring from the
+ * 24 words is `WordsEntrySpec` and `EnrollmentSpec` (#1047 E1).
+ */
 class PairAndRestoreSpec : StringSpec({
 
-    fun pairDoor(answer: PairAnswer?, seen: MutableList<String> = mutableListOf()) =
+    fun pairDoor(answer: PairResult, seen: MutableList<String> = mutableListOf()) =
         object : PairDoor {
-            override suspend fun pair(payload: String): PairAnswer? {
+            override suspend fun pair(payload: String): PairResult {
                 seen += payload
                 return answer
             }
         }
 
-    fun restoreDoor(answer: RestoreAnswer?, seen: MutableList<Pair<List<String>, String?>>) =
-        object : RestoreDoor {
-            override suspend fun restore(
-                words: List<String>,
-                endpoint: String?,
-            ): RestoreAnswer? {
-                seen += words to endpoint
-                return answer
-            }
-        }
+    // `contracts/crypto/identity-vectors.json`'s rendered safety number: the
+    // shape the core hands over, 60 digits in 12 groups of 5.
+    val number = "38394 36422 07209 27357 06879 57260 38834 97705 12477 24050 94056 44949"
 
-    "the payload is trimmed once and otherwise handed over untouched" {
-        runTest {
-            // W17 OWNS THE PAYLOAD'S SHAPE. A shell that validated it would be a
-            // second parser for a format it does not own.
-            val seen = mutableListOf<String>()
-            val machine = PairMachine(pairDoor(PairAnswer("ab".repeat(32), laptopName = "silver"), seen))
-            machine.offer("  eyJ2IjoxfQ  ")
-            seen shouldBe listOf("eyJ2IjoxfQ")
-        }
+    fun paired(id: String, safety: String = number): PairInput =
+        PairInput.Answered(PairResult.Paired(PairAnswer(id, safetyNumber = safety)))
+
+    fun refused(why: PairRefusal): PairInput = PairInput.Answered(PairResult.Refused(why))
+
+    fun reduce(model: Pairing, input: PairInput) = PairLaptopMachine.reduce(model, input)
+
+    fun event(event: PairLaptopEvent) = PairInput.View(event)
+
+    val opened = event(PairLaptopEvent(opened = PairLaptopEvent.Opened(camera = true)))
+    val primary = event(PairLaptopEvent(primary = PairLaptopEvent.Primary()))
+
+    fun typed(text: String) = event(PairLaptopEvent(typed = PairLaptopEvent.PayloadTyped(text = text)))
+
+    fun waiting(): Pairing {
+        val open = reduce(PairLaptopMachine.initial(), opened)
+        open.effects shouldBe listOf(PairEffect.Assess)
+        return reduce(open.model, PairInput.Readiness(Readiness.READY)).model
+    }
+
+    "opening asks whether the vault can pair; a keyed one waits for the code, an unkeyed one needs its words" {
+        val ready = waiting().state
+        ready.phase shouldBe PairLaptopState.Phase.PHASE_WAITING
+        ready.scan_label shouldBe CustodyCopy.PAIR_SCAN
+        ready.primary_enabled shouldBe false
+
+        val open = reduce(PairLaptopMachine.initial(), opened).model
+        val words = reduce(open, PairInput.Readiness(Readiness.NEEDS_WORDS)).model.state
+        words.phase shouldBe PairLaptopState.Phase.PHASE_NEEDS_WORDS
+        words.notice shouldBe CustodyCopy.PAIR_NEEDS_WORDS
+        reduce(open, PairInput.Readiness(Readiness.NO_VAULT)).model.state.notice shouldBe CustodyCopy.PAIR_NO_VAULT
+    }
+
+    "a vault that opened without its words is offered them back; `WordsTapped` closes the pairing for the re-key" {
+        // LOCKER'S WALL HAS THE SAME DOOR (#1047 E1): the label is the state's,
+        // so the view draws a control only where the machine put one.
+        val open = reduce(PairLaptopMachine.initial(), opened).model
+        val needs = reduce(open, PairInput.Readiness(Readiness.NEEDS_WORDS)).model
+        needs.state.words_label shouldBe WordsCopy.PAIR_WORDS_ACTION
+        needs.state.primary_label shouldBe CustodyCopy.DONE
+        val words = event(PairLaptopEvent(words = PairLaptopEvent.WordsTapped()))
+        val tapped = reduce(needs, words)
+        tapped.model.state.phase shouldBe PairLaptopState.Phase.PHASE_CLOSED
+        tapped.effects shouldBe emptyList()
+
+        // NO VAULT, NO WORDS TO ENTER: no door, and a stray tap changes nothing.
+        val none = reduce(open, PairInput.Readiness(Readiness.NO_VAULT)).model
+        none.state.words_label shouldBe ""
+        reduce(none, words).model.state.phase shouldBe PairLaptopState.Phase.PHASE_NEEDS_WORDS
+        // Nor anywhere else the door is not drawn.
+        waiting().state.words_label shouldBe ""
+        reduce(waiting(), words).model.state.phase shouldBe PairLaptopState.Phase.PHASE_WAITING
+    }
+
+    "a phone with no camera is paste-only: no scan control is drawn" {
+        val open = reduce(PairLaptopMachine.initial(), event(PairLaptopEvent(opened = PairLaptopEvent.Opened(camera = false)))).model
+        val ready = reduce(open, PairInput.Readiness(Readiness.READY)).model.state
+        ready.phase shouldBe PairLaptopState.Phase.PHASE_WAITING
+        ready.scan_label shouldBe ""
+        ready.payload_label shouldBe CustodyCopy.PAIR_PASTE_LABEL
+    }
+
+    "the code is trimmed, the terminal's `pair` label is dropped, and nothing else is judged here" {
+        // W17 OWNS THE PAYLOAD'S SHAPE. A shell that validated it would be a
+        // second parser for a format it does not own.
+        PairLaptopMachine.ticketOf("  eyJ2IjoxfQ  ") shouldBe "eyJ2IjoxfQ"
+        PairLaptopMachine.ticketOf("pair      eyJ2IjoxfQ\n") shouldBe "eyJ2IjoxfQ"
+        PairLaptopMachine.ticketOf("pairing-is-not-a-label") shouldBe "pairing-is-not-a-label"
+
+        val pairing = reduce(reduce(waiting(), typed("pair  abc")).model, primary)
+        pairing.model.state.phase shouldBe PairLaptopState.Phase.PHASE_PAIRING
+        (pairing.effects.single() as PairEffect.Pair).toString() shouldNotContain "abc"
     }
 
     "an empty box is answered here, because there is nothing to send" {
-        runTest {
-            val machine = PairMachine(pairDoor(null))
-            machine.offer("   ") shouldBe PairMachine.State.Refused(CustodyCopy.PAIR_EMPTY)
-        }
+        val step = reduce(reduce(waiting(), typed("   ")).model, primary)
+        step.effects shouldBe emptyList()
+        step.model.state.notice shouldBe CustodyCopy.PAIR_EMPTY
     }
 
-    "a pairing with nothing to compare is refused rather than shown" {
-        runTest {
-            // THE COMPARISON IS THE WHOLE SECURITY PROPERTY. A screen asking a
-            // member to compare a blank is worse than one that refused.
-            val machine = PairMachine(pairDoor(PairAnswer(gatewayEndpoint = " ")))
-            machine.offer("payload") shouldBe
-                PairMachine.State.Refused(CustodyCopy.PAIR_NOTHING_TO_COMPARE)
-        }
+    "a scan pairs at once" {
+        val step = reduce(waiting(), event(PairLaptopEvent(scanned = PairLaptopEvent.Scanned(payload = "eyJ2"))))
+        step.model.state.phase shouldBe PairLaptopState.Phase.PHASE_PAIRING
+        step.effects.single().shouldBeInstanceOf<PairEffect.Pair>()
     }
 
-    "the paired line carries every character of the id and says what to do with it" {
-        // NOT A SHORTENING. A fingerprint that dropped characters would be a
-        // comparison that passes on a collision somebody arranged.
+    "paired shows the core's safety number to compare, never the hex id; unreachable and nothing-to-compare are failures to retry" {
+        val pairing = reduce(reduce(waiting(), typed("eyJ2")).model, primary).model
         val id = "0123456789abcdef".repeat(4)
-        val line = CustodyCopy.pairedLine(PairAnswer(id, laptopName = "the kitchen laptop"))
-        val shown = CustodyCopy.fingerprint(id)
-        shown shouldBe "01234567 89abcdef 01234567 89abcdef 01234567 89abcdef 01234567 89abcdef"
-        shown.filterNot { it == ' ' }.length shouldBe id.length
-        line shouldContain shown
+        val paired = reduce(pairing, paired(id)).model.state
+        paired.phase shouldBe PairLaptopState.Phase.PHASE_PAIRED
+        // W15-D5: THE DIGITS, VERBATIM — every group, as the laptop prints them.
+        paired.safety_number shouldBe number
+        paired.body shouldNotContain id
+        paired.body shouldNotContain id.take(8)
+        paired.payload shouldBe ""
+        paired.primary_label shouldBe CustodyCopy.DONE
+
+        val unreachable = reduce(pairing, refused(PairRefusal.UNREACHABLE)).model
+        unreachable.state.phase shouldBe PairLaptopState.Phase.PHASE_FAILED
+        unreachable.state.notice shouldBe CustodyCopy.PAIR_UNREACHABLE
+        // THE SAME TEXT, AGAIN.
+        reduce(unreachable, primary).effects.single().shouldBeInstanceOf<PairEffect.Pair>()
+
+        // THE COMPARISON IS THE WHOLE SECURITY PROPERTY. A screen asking a
+        // member to compare a blank is worse than one that refused.
+        reduce(pairing, paired(id, safety = " ")).model.state.notice shouldBe
+            CustodyCopy.PAIR_NOTHING_TO_COMPARE
+    }
+
+    "a laptop that answered and refused is not one that did not answer: each refusal says its own remedy" {
+        // #1047 E5: a spent or unknown invite used to read "your laptop did not
+        // answer", which sends a member to wake a laptop that is awake.
+        val pairing = reduce(reduce(waiting(), typed("eyJ2")).model, primary).model
+        val notTaken = reduce(pairing, refused(PairRefusal.NOT_TAKEN)).model.state
+        notTaken.phase shouldBe PairLaptopState.Phase.PHASE_FAILED
+        notTaken.notice shouldBe WordsCopy.PAIR_NOT_TAKEN
+        notTaken.primary_label shouldBe CustodyCopy.TRY_AGAIN
+        reduce(pairing, refused(PairRefusal.NOT_A_CODE)).model.state.notice shouldBe WordsCopy.PAIR_NOT_A_CODE
+        reduce(pairing, refused(PairRefusal.UNREACHABLE)).model.state.notice shouldBe CustodyCopy.PAIR_UNREACHABLE
+        // THE MEMBER CAN PASTE A NEW CODE straight into the failed screen.
+        reduce(reduce(pairing, refused(PairRefusal.NOT_TAKEN)).model, typed("new")).model.state.notice shouldBe ""
+    }
+
+    "running: a pair that answered stores through the door and reopens the vault, once; a failed one reopens nothing" {
+        runTest {
+            val after = mutableListOf<String>()
+            var answer: PairResult = PairResult.Paired(PairAnswer("ab".repeat(32), safetyNumber = number))
+            val seen = mutableListOf<String>()
+            val flow = PairLaptopFlow(
+                readiness = { Readiness.READY },
+                door = { pairDoor(answer, seen) },
+                after = { after += "reopened" },
+                scope = CoroutineScope(Dispatchers.Unconfined),
+            )
+            flow.reduce(opened)
+            flow.reduce(typed("pair eyJ2"))
+            flow.reduce(primary)
+            seen shouldBe listOf("eyJ2")
+            after shouldBe listOf("reopened")
+            flow.state.value.phase shouldBe PairLaptopState.Phase.PHASE_PAIRED
+
+            answer = PairResult.Refused(PairRefusal.NOT_TAKEN)
+            flow.reduce(opened)
+            flow.reduce(typed("eyJ2"))
+            flow.reduce(primary)
+            after shouldBe listOf("reopened")
+            flow.state.value.phase shouldBe PairLaptopState.Phase.PHASE_FAILED
+        }
+    }
+
+    "the paired line says where the laptop's number is and what a mismatch means" {
+        val id = "0123456789abcdef".repeat(4)
+        val line = CustodyCopy.pairedLine(PairAnswer(id, safetyNumber = number, laptopName = "the kitchen laptop"))
+        line shouldContain "safety number"
+        line shouldContain "centraid-gateway serve"
         line shouldContain "the kitchen laptop"
         line shouldContain "do not carry on"
+        // The digits are the state's own field, drawn apart; the id is never shown.
+        line shouldNotContain id.take(8)
     }
 
     "an unpublished record is a warning about RESTORE, not a failed pairing" {
@@ -82,63 +210,5 @@ class PairAndRestoreSpec : StringSpec({
         val line = CustodyCopy.pairedLine(PairAnswer("ab".repeat(32), recordPublished = false))
         line shouldContain "Paired with"
         line shouldContain "restoring on a new phone"
-    }
-
-    "restore refuses a phrase that is not 24 words, and says how many there are" {
-        runTest {
-            val seen = mutableListOf<Pair<List<String>, String?>>()
-            val machine = RestoreMachine(restoreDoor(RestoreAnswer(2), seen))
-            val state = machine.restore(List(23) { "abandon" })
-            state shouldBe RestoreMachine.State.Refused(CustodyCopy.restoreWordCount(23))
-            // AND NOTHING REACHED THE CORE. A short phrase is not a request.
-            seen.size shouldBe 0
-        }
-    }
-
-    "words are forgiven their case and their spacing, because that is not the check" {
-        runTest {
-            val seen = mutableListOf<Pair<List<String>, String?>>()
-            RestoreMachine(restoreDoor(RestoreAnswer(1), seen))
-                .restore(List(24) { " Abandon " })
-            seen.single().first shouldBe List(24) { "abandon" }
-        }
-    }
-
-    "a typed endpoint reaches the core, and an empty one is an absence" {
-        runTest {
-            // THE ABSENCE IS THE NORMAL CASE: the phone finds the laptop by
-            // resolving the record the phrase derives, and a member types an
-            // address only when DNS cannot answer.
-            val seen = mutableListOf<Pair<List<String>, String?>>()
-            val machine = RestoreMachine(restoreDoor(RestoreAnswer(1), seen))
-            machine.restore(List(24) { "abandon" }, endpoint = "  ")
-            machine.restore(List(24) { "abandon" }, endpoint = " ab12 ")
-            seen.map { it.second } shouldBe listOf(null, "ab12")
-        }
-    }
-
-    "a laptop holding nothing is not the phrase being wrong, and the sentence says so" {
-        runTest {
-            val machine = RestoreMachine(restoreDoor(RestoreAnswer(vaults = 0), mutableListOf()))
-            val state = machine.restore(List(24) { "abandon" })
-            state shouldBe RestoreMachine.State.Refused(CustodyCopy.RESTORE_NOTHING_HELD)
-            CustodyCopy.RESTORE_NOTHING_HELD shouldContain "phrase is valid"
-        }
-    }
-
-    "an unreachable laptop is an answer with a next move, not a failure" {
-        runTest {
-            val machine = RestoreMachine(restoreDoor(null, mutableListOf()))
-            machine.restore(List(24) { "abandon" }) shouldBe
-                RestoreMachine.State.Refused(CustodyCopy.RESTORE_UNREACHABLE)
-            CustodyCopy.RESTORE_UNREACHABLE shouldContain "type the address"
-        }
-    }
-
-    "the restored line names the rows, because 'two vaults' reads the same over two empty ones" {
-        CustodyCopy.restoringLine(RestoreAnswer(vaults = 2, rows = 9_000)) shouldContain
-            "9,000 rows"
-        CustodyCopy.restoringLine(RestoreAnswer(vaults = 2, rows = 9_000)) shouldContain "2 vaults"
-        CustodyCopy.restoringLine(RestoreAnswer(vaults = 1)) shouldBe "Restored 1 vault."
     }
 })

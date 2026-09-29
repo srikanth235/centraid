@@ -6,6 +6,7 @@ import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandStatus
 import centraid.core.v1.TallyDashboard
 import centraid.core.v1.TallyExpense
+import centraid.core.v1.TallyExport
 import centraid.core.v1.TallyFriendLedger
 import centraid.core.v1.TallyGroupLedger
 import centraid.core.v1.TallyRecurring
@@ -68,6 +69,7 @@ public data class TallyAnswers(
     public val recurring: TallyRecurring? = null,
     public val spending: TallySpending? = null,
     public val search: TallySearch? = null,
+    public val export: TallyExport? = null,
 ) {
     /** These answers, with every arm [responses] carries replacing the held one. */
     public fun with(responses: List<AppQueryResponse>): TallyAnswers = TallyAnswers(
@@ -79,6 +81,7 @@ public data class TallyAnswers(
         recurring = responses.firstNotNullOfOrNull { it.tally_recurring } ?: recurring,
         spending = responses.firstNotNullOfOrNull { it.tally_spending } ?: spending,
         search = responses.firstNotNullOfOrNull { it.tally_search } ?: search,
+        export = responses.firstNotNullOfOrNull { it.tally_export } ?: export,
     )
 }
 
@@ -272,7 +275,8 @@ public open class TallyScreenBridge<S : Message<S, *>, E : Message<E, *>>(
     /** One host per bridge, never re-created (`ChangeStream.route` holds it). */
     public val host: ScreenHost<TallyHeld<S>, TallyInput<E>> = ScreenHost(machine)
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    /** The bridge's one queue; a screen with a platform hand-off (Export) launches on it. */
+    protected val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var onState: ((ByteArray) -> Unit)? = null
 
     @kotlin.concurrent.Volatile

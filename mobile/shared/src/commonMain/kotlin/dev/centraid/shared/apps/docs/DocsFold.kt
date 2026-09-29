@@ -30,6 +30,7 @@ import centraid.screen.v1.DocsSurfaceKind
 import centraid.screen.v1.DocsVersionRow
 import centraid.screen.v1.EmptyState
 import dev.centraid.design.copy.DocsCopy
+import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.kit.time.CivilWords
 import dev.centraid.shared.kit.time.plusDays
 import dev.centraid.shared.screen.Reads
@@ -264,9 +265,17 @@ public object DocsFold {
             else -> DocsStage.Media.MEDIA_UNSPECIFIED
         },
         media_type = row.media_type,
-        held = answer.bytes_held,
-        absent_reason = if (answer.bytes_held) "" else answer.bytes_absent_reason,
+        // THE FILE THE CORE HANDS OUT (R-1047-Q4): here AND drawable inline.
+        // Bytes that are here but may not be drawn (HTML, SVG) say so, and
+        // the facts below are the answer.
+        held = answer.bytes_path.isNotEmpty(),
+        absent_reason = when {
+            answer.bytes_path.isNotEmpty() -> ""
+            answer.bytes_held -> DocsCopy.FACTS_ONLY
+            else -> answer.bytes_absent_reason
+        },
         accessibility_label = "$title, ${row.kind_name}",
+        bytes_path = answer.bytes_path,
     )
 
     private fun facts(row: DocsDocumentRow, answer: DocsDocument, view: DocsRowView): List<DocsFact> = buildList {
@@ -338,10 +347,12 @@ public object DocsFold {
         ).joinToString(" · "),
     )
 
-    /** The head's actions: edit (text), star, rename, move, labels, then trash or restore. */
+    /** The head's actions: edit (text), star, rename, move, labels, then trash — or restore and delete forever. */
     internal fun actions(row: DocsDocumentRow): List<DocsAction> = buildList {
         if (row.trashed) {
             add(action(DocsWrites.KEY_RESTORE, DocsCopy.ACTION_RESTORE, "restore", enabled = row.purge_in_days > 0))
+            // DOCS DESTROYS (D-1 of 2026-09-25): one trashed document, behind a confirm.
+            add(action(DocsWrites.KEY_PURGE, SharedCopy.TRASH_PURGE, "trash", destructive = true))
             return@buildList
         }
         if (row.surface == DocsSurface.DOCS_SURFACE_READING) {

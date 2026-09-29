@@ -197,6 +197,21 @@ message AgendaEvent {
   // `core_place.name` of `location_place_id`, so a detail can say where.
   // Absent when the event names no place, or the place is gone.
   optional string location_name = 33;
+
+  // --- `search` only: where a repeating hit opens (#1047). ---
+  // A search hit is the SERIES, and its own start is the series' anchor —
+  // perhaps years back. These name the occurrence a member means: the first
+  // one still running at or after the vault clock, within a year, with the
+  // series' exceptions applied (a skipped one is passed over, a moved one is
+  // where it moved to); else the last one before it. `agenda_event` opens it
+  // by `next_instance_key` (or `event_id` + `next_original_start_local`), and
+  // an edit of "this one" is keyed on `next_original_start_local`. ALL THREE
+  // EMPTY on a one-off, on every non-search row, and on a series with no
+  // occurrence in that reach.
+  string next_instance_key = 34;
+  string next_original_start_local = 35;
+  // That occurrence's start in the request's `tz`, spelled as `local_start`.
+  string next_local_start = 36;
 }
 
 // One reminder: how long before the start it fires.
@@ -342,6 +357,11 @@ message AgendaEventDetail {
   // is not an occurrence of the series, or a SKIPPED occurrence. A state the
   // detail draws, not an error. A cancelled event is answered.
   optional AgendaEvent event = 3;
+  // THE EVENT'S CALENDAR ROW — its name and stored color, from which the
+  // shared calendar hue is derived — so the detail reads no `upcoming` to
+  // name it. ABSENT when there is no event, the event names no calendar, or
+  // the calendar is gone.
+  optional AgendaCalendar calendar = 4;
 }
 
 message AgendaSearch {

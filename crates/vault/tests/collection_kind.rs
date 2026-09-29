@@ -533,7 +533,11 @@ fn the_rung_classifies_a_vault_written_before_it() {
 
     // WIND THE FILE BACK TO RUNG FIVE: the column and its guard come off, and
     // the rows below are written in the shape rung five allowed — including
-    // the cross-app placements this rung ends.
+    // the cross-app placements this rung ends. `locker_key` goes back to its
+    // pre-rung-seven shape too, and `locker_item` and `locker_item_address`
+    // get back the match-policy columns rung eight drops, and
+    // `notifications_notice` comes back for rung nine to drop, because the
+    // climb runs every rung above five.
     {
         let raw = rusqlite::Connection::open(&path).expect("the file opens");
         raw.execute_batch("PRAGMA foreign_keys = ON;")
@@ -543,6 +547,21 @@ fn the_rung_classifies_a_vault_written_before_it() {
              PRAGMA defer_foreign_keys = ON;
              DROP TRIGGER core_collection_kind_is_immutable;
              ALTER TABLE core_collection DROP COLUMN kind;
+             CREATE TABLE notifications_notice (notice_id TEXT PRIMARY KEY) STRICT;
+             DROP TABLE locker_key;
+             CREATE TABLE locker_key (
+               key_id     TEXT PRIMARY KEY,
+               created_at TEXT NOT NULL,
+               retired_at TEXT
+             ) STRICT;
+             CREATE UNIQUE INDEX locker_key_live_idx
+               ON locker_key(retired_at IS NULL) WHERE retired_at IS NULL;
+             ALTER TABLE locker_item ADD COLUMN url_match_policy TEXT NOT NULL
+               DEFAULT 'registrable-domain'
+               CHECK (url_match_policy IN ('registrable-domain','exact-host'));
+             ALTER TABLE locker_item_address ADD COLUMN match_policy TEXT NOT NULL
+               DEFAULT 'registrable-domain'
+               CHECK (match_policy IN ('registrable-domain','exact-host'));
              INSERT INTO core_collection
                (collection_id, owner_party_id, name, cover_content_id,
                 parent_collection_id, sort_order, created_at, updated_at)
@@ -587,7 +606,7 @@ fn the_rung_classifies_a_vault_written_before_it() {
 
     // THE REAL PATH: `Vault::open` sees rung five, snapshots, and climbs.
     let migrated = Vault::open(&path).expect("the file migrates");
-    assert_eq!(migrated.schema_version(), 6);
+    assert_eq!(migrated.schema_version(), centraid_vault::head_version());
     let (kinds, entries, covers, fts, entities, orphans, objects) = migrated
         .read(|connection| {
             let kinds: BTreeMap<String, String> = connection

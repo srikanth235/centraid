@@ -266,6 +266,59 @@ class HomeReadsSpec : StringSpec({
         tasks.bind.map { it.text } shouldBe listOf("needs-action", "in-process")
     }
 
+    "the people tile counts the roster's people — a live profile — not every party (#1047)" {
+        val people = HomeReads.READS.single { it.appId == "people" }
+        people.query.where_.shouldNotBeNull() shouldContain
+            "party_id IN (SELECT party_id FROM people_profile WHERE deleted_at IS NULL)"
+        people.alsoReads shouldBe setOf("people_profile")
+        HomeReads.TABLES shouldContain "people_profile"
+    }
+
+    // --- the count's noun agrees with the number (#1047) --------------------
+
+    "every tile's count noun is singular at one row and plural otherwise — \"1 group\", never \"1 groups\"" {
+        fun row() = centraid.core.v1.Row(values = listOf(centraid.core.v1.Value(text = "id")))
+        val singular = mapOf(
+            "photos" to "photograph",
+            "docs" to "document",
+            "notes" to "note",
+            "tasks" to "task",
+            "people" to "person",
+            "tally" to "group",
+            "locker" to "item",
+        )
+        val plural = mapOf(
+            "photos" to "photographs",
+            "docs" to "documents",
+            "notes" to "notes",
+            "tasks" to "tasks",
+            "people" to "people",
+            "tally" to "groups",
+            "locker" to "items",
+        )
+        HomeReads.READS.map { it.appId }.toSet() shouldBe singular.keys
+        HomeReads.READS.forEach { read ->
+            val app = read.appId
+            withClue(app) {
+                HomeReads.arrived(app, listOf(row()), capped = false).tile.shouldNotBeNull()
+                    .count_label shouldBe singular.getValue(app)
+                HomeReads.arrived(app, listOf(row(), row()), capped = false).tile.shouldNotBeNull()
+                    .count_label shouldBe plural.getValue(app)
+                // ZERO IS PLURAL, and a capped one is a floor ("1+"), not one.
+                HomeReads.arrived(app, emptyList(), capped = false).tile.shouldNotBeNull()
+                    .count_label shouldBe plural.getValue(app)
+                HomeReads.arrived(app, listOf(row()), capped = true).tile.shouldNotBeNull()
+                    .count_label shouldBe plural.getValue(app)
+            }
+        }
+    }
+
+    "the agenda tile says \"1 event\" for one and \"events\" for none or many" {
+        tile(timed("evt-survey", "Survey walk-through", "2026-06-15T10:00", "2026-06-15T11:00"))
+            .count_label shouldBe "event in the next 7 days"
+        HomeAgendaTile.arrived(answer()).tile.shouldNotBeNull().count_label shouldBe "events in the next 7 days"
+    }
+
     // --- civil days: arithmetic, never a zone ------------------------------
 
     "a civil day's weekday, its date, and the day seven on" {

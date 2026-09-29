@@ -89,9 +89,14 @@ public data class TrashCopy(
     public fun purgeMeta(day: String): String? =
         purgesOn?.takeIf { day.length >= DAY }?.replace("{day}", CivilWords.dayMonth(day.take(DAY)))
 
-    /** `Deleted Wed 11 March` for an RFC 3339 [deletedAt], or empty. */
-    public fun deletedMeta(deletedAt: String): String =
-        if (deletedAt.length >= DAY) "$deleted ${CivilWords.dayMonth(deletedAt.take(DAY))}" else ""
+    /**
+     * `Deleted Wed 11 March`, from the civil day the core read the deletion
+     * on in the member's zone ([localDay], a `*_local_day` field or a page
+     * read's `local_day_columns` column). Empty when the core stated no day —
+     * never the first ten characters of a UTC instant (R-1047-Q3).
+     */
+    public fun deletedMeta(localDay: String): String =
+        if (localDay.length >= DAY) "$deleted ${CivilWords.dayMonth(localDay.take(DAY))}" else ""
 
     private companion object {
         const val DAY: Int = 10
@@ -296,12 +301,23 @@ public class TrashReads(public val spec: TrashSpec) :
 
     override val appId: String = spec.appId
 
-    override fun query(state: TrashListState, afterCursor: String?): PageQuery = PageQuery(
+    override fun query(state: TrashListState, afterCursor: String?): PageQuery = query(state, afterCursor, "")
+
+    /**
+     * THE MEMBER'S DAYS (#1047, R-1047-Q3): the core appends each instant's
+     * civil day in the device's [zone] (`PageQuery.local_day_columns`), after
+     * the selected columns and in the same order — so "Deleted Wed 11 March"
+     * is never the first ten characters of a UTC instant. An empty [zone] is
+     * the vault's; the days are always asked.
+     */
+    override fun query(state: TrashListState, afterCursor: String?, zone: String): PageQuery = PageQuery(
         name = "$screenId.rows",
         select = listOfNotNull(spec.idColumn, spec.titleColumn, spec.deletedAtColumn, spec.purgeAtColumn),
         from = spec.table,
         where_ = "${spec.deletedAtColumn} IS NOT NULL",
         order = PageOrder(sort_column = spec.deletedAtColumn, pk_column = spec.idColumn, descending = true),
+        local_day_columns = listOfNotNull(spec.deletedAtColumn, spec.purgeAtColumn),
+        tz = zone,
     )
 
     override fun arrived(rows: List<Row>, nextCursor: String?): TrashListEvent = page(rows, nextCursor, null)
@@ -323,16 +339,19 @@ public class TrashReads(public val spec: TrashSpec) :
         TrashListEvent(write_settled = WriteLaw.settledOf(status, sentence, invokeKey))
 
     private fun rowOf(row: Row): TrashRow {
-        val deletedAt = row.values.getOrNull(2)?.text ?: ""
+        // THE LOCAL DAYS FOLLOW THE SELECTED COLUMNS: `deleted_at`'s, then
+        // `purge_at`'s when the spec has one.
+        val selected = if (spec.purgeAtColumn == null) 3 else 4
+        val deletedDay = row.values.getOrNull(selected)?.text ?: ""
+        val purgeDay = row.values.getOrNull(selected + 1)?.text ?: ""
         return TrashRow(
             id = row.values.getOrNull(0)?.text ?: "",
             title = (row.values.getOrNull(1)?.text ?: "").ifBlank { spec.copy.untitled },
-            // `Deleted Wed 11 March · Erased Mon 12 October` — the days, in
-            // the kit's words. The columns are RFC 3339; the first ten
-            // characters are the day.
+            // `Deleted Wed 11 March · Erased Mon 12 October` — the core's
+            // civil days in the member's zone, in the kit's words.
             meta = listOfNotNull(
-                spec.copy.deletedMeta(deletedAt).ifEmpty { null },
-                spec.purgeAtColumn?.let { row.values.getOrNull(3)?.text }?.let(spec.copy::purgeMeta),
+                spec.copy.deletedMeta(deletedDay).ifEmpty { null },
+                spec.purgeAtColumn?.let { spec.copy.purgeMeta(purgeDay) },
             ).joinToString(" · "),
         )
     }

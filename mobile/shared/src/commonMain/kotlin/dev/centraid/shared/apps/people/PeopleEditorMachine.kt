@@ -250,7 +250,7 @@ public object PeopleEditorMachine : ScreenMachine<PeopleEditorState, PeopleEdito
             save_label = when {
                 autosave.phase == Autosave.Phase.PHASE_REFUSED ->
                     autosave.failure?.sentence?.ifEmpty { null } ?: PeopleCopy.WRITE_FAILED
-                cadenceRefused -> state.write?.failure?.sentence?.ifEmpty { null } ?: PeopleCopy.WRITE_FAILED
+                cadenceRefused -> state.write.failure?.sentence?.ifEmpty { null } ?: PeopleCopy.WRITE_FAILED
                 autosave.phase == Autosave.Phase.PHASE_SAVING -> PeopleCopy.SAVING
                 autosave.phase == Autosave.Phase.PHASE_SAVED -> PeopleCopy.SAVED
                 else -> ""
@@ -330,6 +330,8 @@ public object PeopleEditorMachine : ScreenMachine<PeopleEditorState, PeopleEdito
     /** `people.add_person` under the minted id, with the cadence it requires. */
     private object AddLens : Lens() {
         override val command: String = ADD_COMMAND
+
+        override fun stored(state: PeopleEditorState): Boolean = false
 
         override fun input(state: PeopleEditorState, draft: PeopleProfileDraft, baseline: PeopleProfileDraft?): String =
             buildString {

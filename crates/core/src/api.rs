@@ -13,7 +13,6 @@
 //! | [`parked`] | live | the outcomes waiting on somebody's decision |
 //! | [`search`] | **stub** | the FTS plane is wave 4 |
 //! | [`resolve`] | **stub** | entity resolution is wave 4 |
-//! | [`reveal`] | live, by ROLE | the gateway reveals a sealed COLUMN and cannot reveal a Locker cell at all; a seat unwraps `K` itself (D-1020-L2) |
 //! | [`content`] | **stub** | content path minting is wave 3 |
 
 use centraid_api_proto::core_v1 as wire;
@@ -101,6 +100,24 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                 .to_owned(),
         });
     }
+    // A LOCAL DAY OF A COLUMN THE SELECT DOES NOT NAME is the same caller's
+    // bug, refused the same way; the zone is resolved once, and only when a
+    // day is asked for (`query.proto`'s `local_day_columns`).
+    if let Some(missing) = query.local_day_columns.iter().find(|wanted| {
+        !query
+            .select
+            .iter()
+            .any(|column| output_name(column) == wanted.as_str())
+    }) {
+        return Err(CoreError::InvalidRequest {
+            detail: format!("local_day_columns names `{missing}`, which the select does not name"),
+        });
+    }
+    let day_zone = if query.local_day_columns.is_empty() {
+        None
+    } else {
+        Some(crate::app_query::zone_of(vault, &query.tz)?)
+    };
     // THE SHAPE CROSSES THE BOUNDARY; THE SQL DOES NOT. Rendering the statement
     // here would be `crates/core` knowing the query language, which the
     // `sql-confinement` rule catches — and it is right to: the statement's
@@ -212,6 +229,22 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                         kind: Some(wire::value::Kind::Integer(i64::from(exponent))),
                     });
                 }
+                // AND EACH NAMED INSTANT'S LOCAL DAY LAST, in the order the
+                // query names them (#1047). Same positional contract.
+                if let Some(zone) = &day_zone {
+                    for column in &query.local_day_columns {
+                        let day = image.get(column.as_str()).and_then(|value| match value {
+                            centraid_vault::value::Value::Text(text) => local_day_of(zone, text),
+                            _ => None,
+                        });
+                        values.push(wire::Value {
+                            kind: Some(day.map_or(
+                                wire::value::Kind::Null(wire::NullValue {}),
+                                wire::value::Kind::Text,
+                            )),
+                        });
+                    }
+                }
                 wire::Row { values }
             })
             .collect(),
@@ -219,6 +252,22 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
             .next
             .map(|(sort_key, pk)| wire::PageCursor { sort_key, pk }),
     })
+}
+
+/// The civil day a stored value falls on in `zone`: a date (`2026-10-12`) is
+/// its own day, and an instant is read there. Anything else is no day — never
+/// its first ten characters, which is the UTC slice this column replaces.
+fn local_day_of(zone: &centraid_vault::time::zone::FireZone, text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let is_date = bytes.len() == 10
+        && bytes.iter().enumerate().all(|(index, byte)| match index {
+            4 | 7 => *byte == b'-',
+            _ => byte.is_ascii_digit(),
+        });
+    if is_date {
+        return Some(text.to_owned());
+    }
+    centraid_apps_agenda::local::today(zone, text)
 }
 
 /// The column whose code `PageQuery.with_minor_units` states the exponent of.
@@ -321,10 +370,6 @@ pub fn describe(registry: &Registry, name: &str) -> Result<serde_json::Value> {
         "idempotency": entry.definition.idempotency.as_str(),
         "risk": entry.definition.risk.as_str(),
         "confirm": entry.definition.confirm,
-        // THE FLAG A SEAT READS to refuse a queue. It lives on the definition
-        // (D1's `CommandDefinition`) rather than in a list of action names,
-        // because a list is a second place to forget.
-        "onlineOnly": entry.definition.online_only,
         "sealedInput": entry.definition.sealed_input,
     }))
 }
@@ -350,11 +395,12 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
 // sealed column, the seat for a Locker cell — and the answer was the trust
 // premise: a Locker key must never be on a host the member does not hold.
 // There is one host (#1029 §6), so the question has one answer and nothing
-// ever called this function: a Locker reveal runs through `locker.reveal` in
-// `crates/vault/src/commands/locker.rs`, behind `crate::locker`'s unlock, and
+// ever called this function: a Locker reveal runs in `crate::locker::phone`,
+// behind the unlock, after `locker.reveal_receipt` writes its receipt, and
 // the SEALED-COLUMN arm served connector tokens, which leave with the
-// connectors. `SealedSubject` still has no Locker representation, so the
-// structural half of the rule is where it always was — in `crates/vault`.
+// connectors. The access plane's reveal judgement went with that arm
+// (R-1047-D2): `centraid_vault::Verb` is `read` and `act`, so no access path
+// can be written that opens a Locker cell even by mistake.
 
 /// MAKE THIS FILE A VAULT (#1029 W5, hand-off 1).
 ///
@@ -412,7 +458,83 @@ mod tests {
             with_note_body: false,
             with_document_size: false,
             with_minor_units: false,
+            local_day_columns: Vec::new(),
+            tz: String::new(),
         }
+    }
+
+    /// EACH NAMED INSTANT'S DAY IN THE STATED ZONE, appended last (#1047): the
+    /// trash's "Deleted" day is the member's, never a UTC slice. A column the
+    /// select does not name is refused, and so is a day asked with no zone on a
+    /// vault that names none.
+    #[test]
+    fn a_local_day_column_is_each_instants_day_in_the_stated_zone() {
+        let scratch = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let mut asked = query(&["party_id", "created_at"], "party_id", "party_id");
+        asked.local_day_columns = vec!["created_at".to_owned()];
+        asked.tz = "Pacific/Kiritimati".to_owned();
+        let answer = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked.clone()),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect("a page");
+        let zone =
+            centraid_vault::time::zone::FireZone::named("Pacific/Kiritimati").expect("bundled");
+        assert!(!answer.rows.is_empty());
+        for row in &answer.rows {
+            assert_eq!(row.values.len(), 3, "one day column, appended last");
+            let Some(wire::value::Kind::Text(created)) = &row.values[1].kind else {
+                panic!("created_at is text");
+            };
+            assert_eq!(
+                row.values[2].kind,
+                centraid_apps_agenda::local::today(&zone, created).map(wire::value::Kind::Text),
+                "the day {created} falls on at UTC+14"
+            );
+        }
+        assert_eq!(
+            local_day_of(&zone, "2026-10-12").as_deref(),
+            Some("2026-10-12"),
+            "a date is its own day"
+        );
+        assert_eq!(
+            local_day_of(&zone, "2026-10-12T20:00:00.000Z").as_deref(),
+            Some("2026-10-13"),
+            "an instant is read in the zone"
+        );
+
+        let mut unnamed = asked.clone();
+        unnamed.local_day_columns = vec!["updated_at".to_owned()];
+        let refused = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(unnamed),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect_err("a day of a column not selected");
+        assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
+
+        asked.tz = String::new();
+        let zoneless = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect_err("founding names no zone, so no day can be read");
+        assert_eq!(zoneless.code(), wire::ErrorCode::InvalidRequest);
+        let _ = std::fs::remove_dir_all(&scratch);
     }
 
     /// The refusal arrives with the code a shell branches on.
@@ -665,23 +787,5 @@ mod tests {
                 ..
             })
         ));
-    }
-
-    /// THE KEY DOOR IS DELETED AT THE TYPE LEVEL (#1020, D-1020-L2).
-    ///
-    /// The router that used to ask "gateway or seat" is gone with the roles
-    /// (#1029 §1), and the half of the rule that was never about roles is
-    /// still enforced by `crates/vault`: `SealedSubject` has no Locker
-    /// representation, so no sealed-column path can be written to open a
-    /// Locker cell even by mistake.
-    #[test]
-    fn the_sealed_subject_has_no_locker_representation() {
-        let refusal =
-            centraid_vault::SealedSubject::new("locker", "item").expect_err("no such subject");
-        assert!(
-            refusal.to_string().contains("unwrapped only on the seat"),
-            "{refusal}"
-        );
-        assert!(centraid_vault::SealedSubject::new("sync", "connection_credential").is_ok());
     }
 }

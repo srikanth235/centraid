@@ -67,10 +67,19 @@ kotlin {
     val xcframework =
         org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFrameworkConfig(project, "CentraidShared")
 
+    // A SIMULATOR-ONLY XCFRAMEWORK (#1047). The assemble task links every
+    // slice it holds, and each slice force-loads its own Rust archive, so on a
+    // machine that has built only `aarch64-apple-ios-sim` the task fails on the
+    // missing device archive. `-Pcentraid.iosSimulatorOnly=true` puts the one
+    // simulator slice in the XCFramework — what a simulator build and walk
+    // need, at the same path `project.yml` names. A device or release build
+    // leaves the property unset and gets all three.
+    val simulatorOnly = (findProperty("centraid.iosSimulatorOnly") as String?) == "true"
+
     listOf(iosArm64(), iosSimulatorArm64(), iosX64()).forEach { target ->
         target.binaries.framework {
             baseName = "CentraidShared"
-            xcframework.add(this)
+            if (!simulatorOnly || target.targetName == "iosSimulatorArm64") xcframework.add(this)
             val slice = (findProperty("centraid.coreFfiLibDir") as String?)
                 ?: rustTargetDir.dir("${rustTripleOf.getValue(target.targetName)}/$coreFfiProfile").asFile.path
             // `-force_load`, NOT `-L` + `-l`, and the difference is the whole

@@ -24,6 +24,8 @@ import centraid.screen.v1.TallyEditorEvent
 import centraid.screen.v1.TallyEditorState
 import centraid.screen.v1.TallyExpenseEvent
 import centraid.screen.v1.TallyExpenseState
+import centraid.screen.v1.TallyExportEvent
+import centraid.screen.v1.TallyExportState
 import centraid.screen.v1.TallyFriendEvent
 import centraid.screen.v1.TallyFriendState
 import centraid.screen.v1.TallyGroupEvent
@@ -50,8 +52,10 @@ import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.IconKey
+import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OptionSheet
+import dev.centraid.android.kit.ProgressStatusLine
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
@@ -236,15 +240,14 @@ private fun LazyListScope.activity(state: TallyHomeState, onEvent: (TallyHomeEve
 @Composable
 internal fun TallyGroupScreen(
     state: TallyGroupState,
-    parentTitle: String,
     onEvent: (TallyGroupEvent) -> Unit,
     onBack: () -> Unit,
 ) {
     val chrome = state.chrome
     val data = state.data_
     PushedPage(
-        title = data?.name?.ifEmpty { null } ?: state.title,
-        parentTitle = state.chrome?.back?.ifEmpty { null } ?: parentTitle,
+        title = state.title,
+        parentTitle = state.chrome?.back.orEmpty(),
         onBack = onBack,
         trailing = chrome?.add_expense?.takeIf { it.isNotEmpty() && data?.gone == null }?.let { label ->
             RoomAction("Plus", label, "tally-group-add") { onEvent(TallyGroupEvent(add_expense = TallyGroupEvent.AddExpense())) }
@@ -335,15 +338,14 @@ internal fun TallyGroupScreen(
 @Composable
 internal fun TallyFriendScreen(
     state: TallyFriendState,
-    parentTitle: String,
     onEvent: (TallyFriendEvent) -> Unit,
     onBack: () -> Unit,
 ) {
     val chrome = state.chrome
     val data = state.data_
     PushedPage(
-        title = data?.person?.name?.ifEmpty { null } ?: state.title,
-        parentTitle = state.chrome?.back?.ifEmpty { null } ?: parentTitle,
+        title = state.title,
+        parentTitle = state.chrome?.back.orEmpty(),
         onBack = onBack,
         trailing = chrome?.add_expense?.takeIf { it.isNotEmpty() && data?.gone == null }?.let { label ->
             RoomAction("Plus", label, "tally-friend-add") { onEvent(TallyFriendEvent(add_expense = TallyFriendEvent.AddExpense())) }
@@ -403,7 +405,6 @@ internal fun TallyFriendScreen(
 @Composable
 internal fun TallyExpenseScreen(
     state: TallyExpenseState,
-    parentTitle: String,
     onEvent: (TallyExpenseEvent) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -411,7 +412,7 @@ internal fun TallyExpenseScreen(
     val chrome = state.chrome
     PushedPage(
         title = data?.title.orEmpty(),
-        parentTitle = state.chrome?.back?.ifEmpty { null } ?: parentTitle,
+        parentTitle = state.chrome?.back.orEmpty(),
         onBack = onBack,
         trailing = data?.edit_label?.takeIf { it.isNotEmpty() && !data.trashed && data.gone == null }?.let { label ->
             RoomAction("Pencil", label, "tally-expense-edit") { onEvent(TallyExpenseEvent(edit = TallyExpenseEvent.EditTapped())) }
@@ -567,7 +568,7 @@ internal fun TallyExpenseScreen(
 // ---------------------------------------------------------------------------
 
 @Composable
-internal fun TallyEditorScreen(state: TallyEditorState, parentTitle: String, onEvent: (TallyEditorEvent) -> Unit) {
+internal fun TallyEditorScreen(state: TallyEditorState, onEvent: (TallyEditorEvent) -> Unit) {
     val chrome = state.chrome
     val data = state.data_
     val form = state.form
@@ -581,7 +582,10 @@ internal fun TallyEditorScreen(state: TallyEditorState, parentTitle: String, onE
     val reload = if (!state.dirty) state.baseline ?: form else null
     PushedPage(
         title = chrome?.title.orEmpty(),
-        parentTitle = parentTitle,
+        // Back IS cancel here (explicit Save): the machine's word for it.
+        parentTitle = chrome?.cancel.orEmpty(),
+        // …and it is spoken as the word it is, not "Back to Cancel".
+        backSpoken = chrome?.cancel?.ifEmpty { null },
         onBack = close,
         trailing = if (data?.can_save == true && chrome?.save.orEmpty().isNotEmpty()) {
             RoomAction("Check", chrome!!.save, "tally-editor-save") { onEvent(TallyEditorEvent(save = TallyEditorEvent.SaveTapped())) }
@@ -783,11 +787,10 @@ private fun ChoiceLine(key: String, choices: List<TallyChoice>, onTap: () -> Uni
 @Composable
 internal fun TallySettleUpScreen(
     state: TallySettleUpState,
-    parentTitle: String,
     onEvent: (TallySettleUpEvent) -> Unit,
     onBack: () -> Unit,
 ) {
-    PushedPage(title = state.title, parentTitle = state.chrome?.back?.ifEmpty { null } ?: parentTitle, onBack = onBack, status = refusal(state.write)) {
+    PushedPage(title = state.title, parentTitle = state.chrome?.back.orEmpty(), onBack = onBack, status = refusal(state.write)) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
             onRetry = { onEvent(TallySettleUpEvent(refreshed = TallySettleUpEvent.Refreshed())) },
@@ -843,11 +846,10 @@ internal fun TallySettleUpScreen(
 @Composable
 internal fun TallyRecurringScreen(
     state: TallyRecurringState,
-    parentTitle: String,
     onEvent: (TallyRecurringEvent) -> Unit,
     onBack: () -> Unit,
 ) {
-    PushedPage(title = state.title, parentTitle = state.chrome?.back?.ifEmpty { null } ?: parentTitle, onBack = onBack) {
+    PushedPage(title = state.title, parentTitle = state.chrome?.back.orEmpty(), onBack = onBack) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
             onRetry = { onEvent(TallyRecurringEvent(refreshed = TallyRecurringEvent.Refreshed())) },
@@ -881,12 +883,11 @@ internal fun TallyRecurringScreen(
 @Composable
 internal fun TallySpendingScreen(
     state: TallySpendingState,
-    parentTitle: String,
     onEvent: (TallySpendingEvent) -> Unit,
     onBack: () -> Unit,
 ) {
     val chrome = state.chrome
-    PushedPage(title = chrome?.title.orEmpty(), parentTitle = parentTitle, onBack = onBack) {
+    PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back.orEmpty(), onBack = onBack) {
         Column {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp),
@@ -952,12 +953,11 @@ internal fun TallySpendingScreen(
 @Composable
 internal fun TallySearchScreen(
     state: TallySearchState,
-    parentTitle: String,
     onEvent: (TallySearchEvent) -> Unit,
     onBack: () -> Unit,
 ) {
     val chrome = state.chrome
-    PushedPage(title = chrome?.title.orEmpty(), parentTitle = parentTitle, onBack = onBack) {
+    PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back.orEmpty(), onBack = onBack) {
         Column {
             CentraidSearchField(
                 field = state.field_ ?: centraid.screen.v1.SearchField(open_ = true),
@@ -993,3 +993,108 @@ internal fun TallySearchScreen(
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// tally.export — a group's ledger as a file
+// ---------------------------------------------------------------------------
+
+/**
+ * `tally.export`: the group and the range (each a choice sheet, the editor's
+ * grammar), the format, what the file holds, and Export — the view's one ink
+ * button. The CSV never reaches this view: [onSave] is the route's, which
+ * calls the bridge's `save()` and the platform writes the file.
+ *
+ * Which choice sheet is up is the machine's `sheet`; a range choice carries
+ * its `export_range`, sent back as it came.
+ */
+@Composable
+internal fun TallyExportScreen(
+    state: TallyExportState,
+    onEvent: (TallyExportEvent) -> Unit,
+    onSave: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val chrome = state.chrome
+    val choose = { sheet: TallyExportState.Sheet -> onEvent(TallyExportEvent(sheet_opened = TallyExportEvent.SheetOpened(sheet = sheet))) }
+    val saying = state.status_label
+    PushedPage(
+        title = chrome?.title.orEmpty(),
+        parentTitle = chrome?.back.orEmpty(),
+        onBack = onBack,
+        statusLine = if (saying.isNotEmpty()) {
+            { ProgressStatusLine(sentence = saying, refused = state.save == TallyExportState.Save.SAVE_REFUSED, testTag = "tally-export-status") }
+        } else {
+            null
+        },
+    ) {
+        ReadStateView(
+            content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+            onRetry = { onEvent(TallyExportEvent(refreshed = TallyExportEvent.Refreshed())) },
+            retryLabel = chrome?.retry.orEmpty().ifEmpty { dev.centraid.android.kit.KitWords.RETRY },
+            skeleton = { RowSkeleton(label = chrome?.loading.orEmpty().ifEmpty { dev.centraid.android.kit.KitWords.OPENING }) },
+        ) { export ->
+            val empty = export.empty
+            LazyColumn {
+                item(key = "lede") { TallyNote(chrome?.lede.orEmpty()) }
+                item(key = "choices") {
+                    ExportChoice(chrome?.group_label.orEmpty(), export.groups, "tally-export-group") { choose(TallyExportState.Sheet.SHEET_GROUP) }
+                    ExportChoice(chrome?.range_label.orEmpty(), export.ranges, "tally-export-range") { choose(TallyExportState.Sheet.SHEET_RANGE) }
+                    if (chrome?.format_label.orEmpty().isNotEmpty()) FieldRow(key = chrome!!.format_label, value = chrome.format_value)
+                }
+                if (empty != null) {
+                    item(key = "empty") { EmptyStateView(empty, onAction = null) }
+                } else {
+                    item(key = "count") { StatusLine(export.count_label) }
+                    item(key = "save") {
+                        if (export.can_save && chrome?.save.orEmpty().isNotEmpty()) {
+                            InkButton(
+                                label = chrome!!.save,
+                                testTag = "tally-export-save",
+                                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                            ) {
+                                if (state.save != TallyExportState.Save.SAVE_OPEN) onSave()
+                            }
+                        }
+                        TallyNote(chrome?.foot.orEmpty())
+                    }
+                    if (export.rows.isNotEmpty()) {
+                        item(key = "rows-head") { TallySection(chrome?.rows_heading.orEmpty()) }
+                        // What the file carries, as the ledger draws it — to read, not to open.
+                        items(export.rows, key = { "r-" + it.row_key }) { row -> TallyLedgerLine(row, onTap = null) }
+                    }
+                }
+            }
+        }
+    }
+    val export = state.data_
+    val up = state.sheet
+    if (export != null && (up == TallyExportState.Sheet.SHEET_GROUP || up == TallyExportState.Sheet.SHEET_RANGE)) {
+        val grouping = up == TallyExportState.Sheet.SHEET_GROUP
+        val (title, options) = if (grouping) {
+            chrome?.group_label.orEmpty() to export.groups
+        } else {
+            chrome?.range_label.orEmpty() to export.ranges
+        }
+        OptionSheet(
+            title = title,
+            options = options.filter { it.enabled }.map { SheetOption(key = it.key, label = it.label, selected = it.selected) },
+            onPick = { key ->
+                val picked = options.firstOrNull { it.key == key }
+                when {
+                    picked == null -> onEvent(TallyExportEvent(sheet_closed = TallyExportEvent.SheetClosed()))
+                    grouping -> onEvent(TallyExportEvent(group = TallyExportEvent.GroupPicked(group_id = picked.key)))
+                    else -> onEvent(TallyExportEvent(range = TallyExportEvent.RangePicked(range = picked.export_range)))
+                }
+            },
+            onDismiss = { onEvent(TallyExportEvent(sheet_closed = TallyExportEvent.SheetClosed())) },
+        )
+    }
+}
+
+/** A choice row whose value is the picked choice's label (empty until one is picked). */
+@Composable
+private fun ExportChoice(key: String, choices: List<TallyChoice>, testTag: String, onTap: () -> Unit) {
+    if (key.isEmpty() || choices.isEmpty()) return
+    ChoiceFieldRow(key = key, value = selectedLabel(choices), onTap = onTap, testTag = testTag)
+}
+

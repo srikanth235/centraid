@@ -123,6 +123,20 @@ pub trait Transport {
     ) -> impl Future<Output = Result<HttpResponse, TransportError>>;
 }
 
+/// **ONE CARRIER, MANY CLIENTS.** A client signs for one vault, and a phone
+/// that asks a laptop about several — a restore probing every derived index —
+/// would otherwise bind an endpoint and dial once per vault. Sharing the
+/// transport behind an `Arc` shares its endpoint and its kept connection, so
+/// each vault's client is one signer over the same stream (#1047 R3).
+impl<T: Transport> Transport for std::sync::Arc<T> {
+    fn send(
+        &self,
+        request: HttpRequest,
+    ) -> impl Future<Output = Result<HttpResponse, TransportError>> {
+        (**self).send(request)
+    }
+}
+
 /// The one transport this crate ships: `reqwest`, for the desktop seat, the
 /// drill, and anything else that is not a phone.
 ///

@@ -15,9 +15,8 @@ import dev.centraid.shared.sync.ScreenWrites
 /**
  * WHAT `agenda.event` ASKS THE CORE, AND HOW ITS WRITES SETTLE (#1046).
  *
- * Two queries: `agenda.event` for the picked occurrence by its key, and
- * `agenda.upcoming` over today ([AgendaWrites.today]) for the calendars it
- * names — the detail answer carries only a `calendar_id`. A write's answer
+ * One query: `agenda.event` for the picked occurrence by its key; its answer
+ * carries the event's calendar row (#1047), so nothing else is read. A write's answer
  * goes to the machine AND to the session's [marks] — on the session's scope,
  * so a cancellation refused after the screen was left is still recorded, and
  * comes back as the parked card.
@@ -43,12 +42,10 @@ public class AgendaEventReads(
                     tz = now.zone,
                 ),
             ),
-            AppQueryRequest(agenda_upcoming = AgendaWrites.today(now)),
         )
     }
 
     override fun arrived(answers: List<AppQueryResponse>): AgendaEventInput = AgendaEventInput.Answered(
-        upcoming = answers.firstNotNullOfOrNull { it.agenda_upcoming },
         detail = answers.firstNotNullOfOrNull { it.agenda_event },
     )
 

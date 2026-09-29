@@ -110,6 +110,9 @@ message TallyExportRequest {
   string since = 2;
   // 0 is the default window (500); anything else is clamped to 1..=2,000.
   uint32 limit = 3;
+  // The zone of `file_name`'s day: the stated IANA name, else the vault's. An
+  // unknown name is refused; no zone at all names the file without a day.
+  string tz = 4;
 }
 
 // ---------------------------------------------------------------------------
@@ -524,8 +527,23 @@ message TallyExport {
   // The window, stated so a partial file is never read as a whole one.
   uint32 limit = 7;
   optional string since = 8;
+  // How many matched the group and `since` before `limit` cut them: the
+  // file holds `expenses.len()` of `expenses_in_window` ("N of M").
   uint32 expenses_in_window = 9;
   uint32 settlements_in_window = 10;
+  // THE FILE, RENDERED BY THE CORE (#1047), so a view formats no money: RFC
+  // 4180 CSV, CRLF line ends, a header row, then the expenses and the
+  // settlements in the answer's own order. Columns: `kind` (`expense` or
+  // `settlement`), `date` (`YYYY-MM-DD`), `description`, `category`,
+  // `amount` (a plain decimal placed by the currency's own exponent —
+  // `42.50`, `4250` for JPY — never grouped and never localised),
+  // `currency`, `paid_by`, `paid_to` (a settlement's payee), `split`
+  // (the split method), `your_share` (the owner's resolved share of an
+  // expense, as `amount`). EMPTY for a group that does not exist.
+  string csv = 11;
+  // A file name for the platform's save sheet: the group's name, slugged,
+  // plus the vault clock's day, `.csv` — `tahoe-trip-2026-09-25.csv`.
+  string file_name = 12;
 }
 
 message TallyExportRevision {

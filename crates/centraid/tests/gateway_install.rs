@@ -118,7 +118,15 @@ fn an_install_writes_the_unit_and_nothing_else() {
 
 /// A malformed `--instance` is refused before anything is written, because it
 /// becomes a `%i` and a directory name under `/var/lib/centraid`.
+///
+/// LINUX ONLY (ruling D-3 of 2026-09-25): `--system` is a systemd template
+/// unit, and on macOS the command refuses the platform before it reads the
+/// instance name. CI is Linux; the ignore says why on a Mac instead of failing.
 #[test]
+#[cfg_attr(
+    not(target_os = "linux"),
+    ignore = "`--system` is systemd's; another platform is refused before the instance name"
+)]
 fn a_system_install_with_a_bad_instance_name_refuses() {
     let output = Command::new(binary())
         .args([

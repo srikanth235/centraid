@@ -121,6 +121,24 @@ message PageQuery {
   // invalid request rather than answered with a column of guesses, for the
   // same reason the three flags above are refused on the wrong table.
   bool with_minor_units = 10;
+  // STATE EACH NAMED INSTANT'S CIVIL DAY IN THE DEVICE'S ZONE (#1047).
+  //
+  // A shape, not a statement: for every column named here, in this order, the
+  // core appends one TEXT column after every other computed column — the
+  // `YYYY-MM-DD` that row's instant falls on in `tz` — so a trash row's
+  // "Deleted Wed 11 March" is the member's day and never the first ten
+  // characters of a UTC instant. NULL where the value is NULL or does not
+  // read as an instant or a date. A date-only value (`2026-10-12`) is its own
+  // day.
+  //
+  // Each column must be named in `select` (by its output name); one that is
+  // not is REFUSED as an invalid request, as the flags above are.
+  repeated string local_day_columns = 11;
+  // The zone `local_day_columns` are read in: `agenda.proto`'s rule — an
+  // IANA name, EMPTY is the vault's zone, and neither is
+  // `ERROR_CODE_INVALID_REQUEST`, as is a name the bundled database does not
+  // know. Read only when `local_day_columns` is non-empty.
+  string tz = 12;
 }
 
 // The keyset cursor. `sort_key` is TEXT even for a numeric sort column, and a

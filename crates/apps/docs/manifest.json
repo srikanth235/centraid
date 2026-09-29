@@ -19,10 +19,12 @@
       { "schema": "core", "table": "concept", "verbs": "read" },
       { "schema": "core", "table": "concept_scheme", "verbs": "read" },
       { "schema": "core", "table": "add_document", "verbs": "act" },
+      { "schema": "core", "table": "create_text_document", "verbs": "act" },
       { "schema": "core", "table": "rename_document", "verbs": "act" },
       { "schema": "core", "table": "move_document", "verbs": "act" },
       { "schema": "core", "table": "trash_document", "verbs": "act" },
       { "schema": "core", "table": "restore_document", "verbs": "act" },
+      { "schema": "core", "table": "purge_document", "verbs": "act" },
       {
         "schema": "core",
         "table": "empty_document_trash",
@@ -87,6 +89,35 @@
         "core.document",
         "core.tag"
       ]
+    },
+    {
+      "name": "create-text",
+      "description": "Write a new text document through core.create_text_document — the Add sheet's Text. The words become the bytes in the core, so no caller spells a data: URI; no body_text is an empty document the editor then fills. text/plain unless media_type says text/markdown. Filed into folder_id, or the drive's top level.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "document_id": { "type": "string", "minLength": 36, "maxLength": 36 },
+          "title": { "type": "string", "minLength": 1 },
+          "folder_id": { "type": "string", "minLength": 1 },
+          "media_type": {
+            "type": "string",
+            "enum": ["text/plain", "text/markdown"]
+          },
+          "body_text": { "type": "string" }
+        },
+        "required": ["title"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": ["core.document"]
     },
     {
       "name": "rename",
@@ -184,8 +215,30 @@
       "writes": ["core.document"]
     },
     {
+      "name": "purge",
+      "description": "Delete one ALREADY-TRASHED document forever through core.purge_document — the path Photos' purge takes. Irreversible: the row, its folder tag, star, labels and versions go now, and its bytes are released when nothing else names them. A document that is not in the trash is refused.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "document_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["document_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": ["core.document"]
+    },
+    {
       "name": "empty-trash",
-      "description": "Empty the document trash through core.empty_document_trash. Irreversible and takes no id: every document already in the trash has its ~30-day grace window collapsed onto the moment it was trashed, so restore refuses it from then on. Destroying the rows is not yet built: nothing in this build purges a document after its window, so an emptied document stays in the vault, unrestorable, until that purge lands. A document that was restored is no longer in the trash and is untouched. An empty trash is a no-op, not a refusal.",
+      "description": "Empty the document trash through core.empty_document_trash. Irreversible and takes no id: every document in the trash is destroyed now, as purge destroys one — the row, its folder tag, star, labels and versions go, and its bytes are released when nothing else names them. A document that was restored is no longer in the trash and is untouched. An empty trash is a no-op, not a refusal.",
       "confirmation": "required",
       "input": {
         "type": "object",

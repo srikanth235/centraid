@@ -137,9 +137,7 @@ internal actual fun openCentraidAbi(config: String, uiThreadName: String): AbiOp
     if (status != CoreStatus.OK) {
         return@memScoped AbiOpen.Refused(
             when (status) {
-                CoreStatus.BAD_ARGUMENT -> CoreFailure.BadArgument(
-                    "centraid_open refused the configuration JSON",
-                )
+                CoreStatus.BAD_ARGUMENT -> CoreFailure.BadArgument(CoreFailure.BadArgument.OPEN_REFUSED)
                 CoreStatus.MALFORMED -> CoreFailure.Malformed(
                     "centraid_open could not read the configuration JSON",
                 )

@@ -63,6 +63,7 @@ public object TallyExpenseMachine :
                 held.copy(
                     screen = held.screen.copy(
                         expense_id = event.opened.expense_id,
+                        parent = event.opened.parent,
                         confirm = null,
                         write = WriteState(phase = WriteState.Phase.PHASE_IDLE),
                     ),
@@ -202,8 +203,8 @@ public object TallyExpenseMachine :
         val trashed = answer.deleted_at != null
         val title = expense.description.ifEmpty { TallyCopy.UNTITLED_EXPENSE }
         val fields = buildList {
-            add(TallyField(key = TallyCopy.FIELD_PAID_BY, value_ = expense.payers.joinToString(", ") { it.person?.name ?: "" }
-                .ifEmpty { expense.paid_by?.name ?: "" }))
+            add(TallyField(key = TallyCopy.FIELD_PAID_BY, value_ = TallyFold.names(expense.payers.map { it.person })
+                .ifEmpty { expense.paid_by?.let(TallyFold::who) ?: "" }))
             add(TallyField(key = TallyCopy.FIELD_DATE, value_ = CivilWords.dayMonth(expense.spent_on)))
             add(TallyField(key = TallyCopy.FIELD_GROUP, value_ = expense.group_name.ifEmpty { TallyCopy.NO_GROUP_LABEL }))
             add(TallyField(key = TallyCopy.FIELD_CATEGORY, value_ = TallyFold.categoryLabel(expense.category)))
@@ -291,7 +292,7 @@ public object TallyExpenseMachine :
     private const val DAY: Int = 10
 
     override fun decorate(held: TallyHeld<TallyExpenseState>): TallyExpenseState =
-        held.screen.copy(chrome = TallyGroupMachine.CHROME)
+        held.screen.copy(chrome = TallyGroupMachine.chrome(held.screen.parent))
 
     private object Writes : WriteLens<TallyHeld<TallyExpenseState>> {
         override fun write(state: TallyHeld<TallyExpenseState>): WriteState = state.screen.write ?: WriteState()

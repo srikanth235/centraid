@@ -68,7 +68,7 @@ pub fn sole_vault_file(data_dir: &Path) -> Result<PathBuf, String> {
         0 => Err(format!("no vault under {}", root.display())),
         1 => Ok(found.remove(0)),
         _ => Err(format!(
-            "{} holds {} vaults — name one with --vault",
+            "{} holds {} vaults — point --data-dir at a directory holding one",
             root.display(),
             found.len()
         )),

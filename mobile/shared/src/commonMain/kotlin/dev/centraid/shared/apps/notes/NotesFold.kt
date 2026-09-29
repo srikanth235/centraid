@@ -13,10 +13,11 @@ import dev.centraid.shared.kit.time.CivilWords
  * THE CORE'S NOTES ANSWERS, AS FINISHED ROWS (#1029 port). Pure; every word
  * from `NotesCopy` or the kit's `CivilWords`.
  *
- * DATES ARE THE INSTANT'S OWN DAY. `NotesRow.updated_at` is a UTC instant and
- * the library answer carries no local day, and `commonMain` does no zone
- * arithmetic — so "Edited 3 March" is the UTC day, as the kit's trash rows say
- * theirs. The core's need is in the port report: a `*_local` day per row.
+ * DATES ARE THE MEMBER'S DAYS. A library row's "Edited 3 March" is
+ * `updated_local_day` (else `created_local_day`), which the core read in the
+ * request's zone; `commonMain` does no zone arithmetic. A search hit's is
+ * the same pair, read in the zone the search states. An answer with no zone
+ * resolved says no day at all — never a UTC instant's (R-1047-Q3).
  */
 internal object NotesFold {
     private const val DAY: Int = 10
@@ -26,7 +27,7 @@ internal object NotesFold {
         title = row.title,
         preview = row.preview,
         pinned = row.pinned,
-        updatedAt = row.updated_at ?: row.created_at,
+        localDay = row.updated_local_day.ifEmpty { row.created_local_day },
         notebookNames = row.notebook_names,
         notebookIds = row.notebook_ids,
         checkTotal = row.check_total,
@@ -41,7 +42,7 @@ internal object NotesFold {
             title = hit.title,
             preview = hit.preview,
             pinned = hit.pinned,
-            updatedAt = hit.updated_at ?: hit.created_at,
+            localDay = hit.updated_local_day.ifEmpty { hit.created_local_day },
             notebookNames = hit.notebook_names,
             notebookIds = hit.notebook_ids,
             checkTotal = hit.check_total,
@@ -55,7 +56,7 @@ internal object NotesFold {
         title: String?,
         preview: String,
         pinned: Boolean,
-        updatedAt: String?,
+        localDay: String,
         notebookNames: List<String>,
         notebookIds: List<String>,
         checkTotal: Int,
@@ -63,7 +64,7 @@ internal object NotesFold {
         runs: List<NotesTextRun>,
     ): NotesNoteRow {
         val shownTitle = titleOf(title, preview)
-        val edited = updatedAt?.takeIf { it.length >= DAY }?.let { "${NotesCopy.EDITED} ${CivilWords.dayMonth(it.take(DAY))}" } ?: ""
+        val edited = if (localDay.length >= DAY) "${NotesCopy.EDITED} ${CivilWords.dayMonth(localDay.take(DAY))}" else ""
         val meta = (listOf(edited) + notebookNames.filter { it.isNotBlank() }).filter { it.isNotEmpty() }.joinToString(" · ")
         val check = if (checkTotal > 0) "$checkDone of $checkTotal done" else ""
         val spoken = listOf(shownTitle, if (pinned) NotesCopy.SECTION_PINNED else "", meta, check)
@@ -114,7 +115,11 @@ internal object NotesFold {
         notebook.name?.trim()?.takeIf { it.isNotEmpty() } ?: NotesCopy.UNTITLED_NOTEBOOK
 
     /** "12 notes" / "1 note". */
-    fun notes(count: Int): String = if (count == 1) "1 note" else "$count notes"
+    fun notes(count: Int, more: Boolean = false): String = when {
+        more -> "$count+ notes"
+        count == 1 -> "1 note"
+        else -> "$count notes"
+    }
 
     /**
      * Every row the core answers is a notebook: its read filters

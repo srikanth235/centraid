@@ -1,79 +1,51 @@
-//! The Locker key `K` — layer three, and the one wave 4 moves (#1020,
-//! D-1020-R2, D-1020-R4).
+//! The Locker key `K`'s cell format, and the vault's two doors onto it
+//! (#1020, D-1020-R2; #1047, D-6).
 //!
-//! One random 256-bit key per vault, minted **at founding** into the gateway's
-//! `keys/` directory: the same custody the seal key and the identity seed use,
-//! deliberately outside the directory that export, backup and copy gestures
-//! move around. A copied vault carries ciphertext only, and the recovery kit is
-//! the one artefact that carries keys.
+//! ## Where `K` is, and where it is not
 //!
-//! Only secret **values** are encrypted. Title, url and username stay plaintext
-//! so a locked seat can list and search offline — which is the whole reason
-//! Locker is usable on a phone in airplane mode.
+//! `K` is the 24 words' own leaf, `seed / vault'(i) / locker'`
+//! (`centraid_identity::derive`, D-6 in `docs/decisions.md`). The core derives it at open into its
+//! in-memory keyring and hands it to a Locker session after the phone's unlock;
+//! it is **never a file** and this crate never holds it. Every function here
+//! takes the key **by value**, so there is no ambient `K` for a read path to
+//! reach for. The vault stores only the live generation's **id**, in
+//! `locker_key`, and a restore from the 24 words re-derives the same `K` for
+//! the same id.
+//!
+//! The multi-seat file custody that stood beside this module under #1020 — key
+//! files in a `keys/` directory, `mk1:` transfer envelopes, the recovery kit's
+//! adopt, and rotation across seats — is deleted (#1047 slice D1): there is one
+//! seat, it derives `K`, and nothing held a key file any more.
+//!
+//! Only secret **values** are encrypted. Title, url and username stay
+//! plaintext, so a locked Locker can list and search — which is the whole
+//! reason Locker is usable on a phone in airplane mode.
 //!
 //! Wire form `lk1:<base64(nonce ‖ ct ‖ tag)>`, AES-256-GCM, a fresh random
 //! 96-bit nonce per value, **AAD = `<rowId>‖<keyId>`**. The `keyId` half is as
-//! load-bearing as the row half: it makes a ciphertext unopenable under a key
-//! generation it was not sealed with, so a rotation the seat has not caught up
-//! with is a *distinguishable* refusal rather than a corrupt secret.
+//! load-bearing as the row half: a ciphertext is unopenable under a generation
+//! it was not sealed with, so a mismatch is a *distinguishable* refusal rather
+//! than a corrupt secret.
 //!
-//! ## `locker_key` carries ids, never material
+//! ## `locker_key` carries one id, never material
 //!
-//! `locker_key(key_id PK, created_at, retired_at)` and a unique index on the
-//! **predicate**:
+//! `locker_key(key_id PK, created_at)` holds **at most one row**, the vault's
+//! generation, and a unique index on a constant makes a second one
+//! unrepresentable (rung seven, `contracts/migrations/007_locker_key_one_generation.sql`):
 //!
 //! ```sql
-//! CREATE UNIQUE INDEX locker_key_live_idx ON locker_key(retired_at IS NULL)
-//!   WHERE retired_at IS NULL
+//! CREATE UNIQUE INDEX locker_key_one_generation ON locker_key((1))
 //! ```
 //!
-//! Indexing `retired_at` itself would permit any number of live rows, because
-//! SQLite treats NULLs as distinct. Indexing the predicate makes "two live
-//! keys" unrepresentable.
-//!
-//! ## Rotation is an order, not a transaction
-//!
-//! `keys/` and `vault.db` share no transaction, so the **order** is the
-//! guarantee:
-//!
-//! 1. write `K′` to `keys/` as a NEW file (the old one is untouched);
-//! 2. ONE DB transaction: retire the old row, insert the new row, re-encrypt
-//!    every secret, bump every `key_id`;
-//! 3. delete the old key file.
-//!
-//! A crash between 1 and 2 leaves the DB still naming the old key: nothing was
-//! re-encrypted and the orphan `K′` file is swept at the next open. A crash
-//! between 2 and 3 leaves the DB naming `K′` and the retired file is swept the
-//! same way. At no point is any ciphertext under a key the DB does not name,
-//! and at no point are two rows live. Both windows are tested —
-//! `a_crash_between_the_new_key_file_and_the_transaction_sweeps_clean` and
-//! `a_crash_between_the_transaction_and_the_old_file_delete_sweeps_clean`.
-//!
-//! The retire **precedes** the insert inside step 2 because `locker_key_live_idx`
-//! is checked per statement, not per transaction.
-//!
-//! ## What wave 4 changes, and what this proves today
-//!
-//! The gateway **holds** `K` today; that is v0's posture and R-1020 moves it to
-//! a member key the gateway never holds. What is landed now is the shape that
-//! makes the move a change of custody rather than a rewrite: every function
-//! here takes the key **by value**, so there is no ambient `K` for a read path
-//! to reach for. The acceptance test
-//! `gateway_file_and_keystore_do_not_reveal_a_cell_without_k` opens the vault
-//! file *and* the whole `keys/` directory with `K` withheld and asserts every
-//! `lk1:` cell fails to open — which proves the cells depend on `K` and on
-//! nothing else that is on disk. It does not, and does not claim to, prove the
-//! gateway cannot get `K`; that is wave 4's box.
-
-use std::collections::BTreeMap;
+//! `K` is the seed's single leaf, so there is no `K′` to rotate to and nothing
+//! ever retires a generation; the `retired_at` column and the predicate index
+//! that let one live row stand beside retired ones went with rotation
+//! (R-1047-D1, R-1047-D2). The live generation is the row.
 
 use aes_gcm::aead::{Aead, Payload};
 use aes_gcm::{Aes256Gcm, KeyInit};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-
-use super::keystore::KeyStoreError;
-use super::member_key::MemberKeyCustody;
 
 /// `K` is 32 bytes. Anything else is not a Locker key.
 pub const LOCKER_KEY_BYTES: usize = 32;
@@ -86,9 +58,9 @@ const TAG_BYTES: usize = 16;
 
 /// Which columns of which physical table hold ciphertext under `K`.
 ///
-/// Stated ONCE, here, and read by encryption, rotation, the sweep and the
-/// tests. The list is tight on purpose: only where the value **is** the
-/// secret. Everything else on these tables is the browsable half a locked seat
+/// Stated ONCE, here, and read by the command plane's guards, the core's
+/// sealing and the tests. The list is tight on purpose: only where the value **is** the
+/// secret. Everything else on these tables is the browsable half a locked Locker
 /// still needs.
 pub const LOCKER_ENCRYPTED_COLUMNS: &[(&str, &str, &[&str])] = &[
     (
@@ -102,9 +74,7 @@ pub const LOCKER_ENCRYPTED_COLUMNS: &[(&str, &str, &[&str])] = &[
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LockerKeyErrorCode {
-    /// A key file the DB names is not on disk — unambiguous custody loss.
-    Missing,
-    /// A write arrived under a key generation the vault has rotated past.
+    /// A write names a key generation that is not the vault's live one.
     StaleKeyId,
     /// This vault has no key plane; it was never founded.
     NotFounded,
@@ -114,7 +84,6 @@ impl LockerKeyErrorCode {
     #[must_use]
     pub const fn as_wire(self) -> &'static str {
         match self {
-            Self::Missing => "missing",
             Self::StaleKeyId => "stale_key_id",
             Self::NotFounded => "not_founded",
         }
@@ -140,8 +109,6 @@ pub enum LockerKeyError {
     #[error("locker key is {0} bytes, expected {LOCKER_KEY_BYTES}")]
     KeyLength(usize),
     #[error(transparent)]
-    Custody(#[from] KeyStoreError),
-    #[error(transparent)]
     Sqlite(#[from] rusqlite::Error),
 }
 
@@ -164,92 +131,14 @@ impl LockerKeyError {
 
 type Result<T> = std::result::Result<T, LockerKeyError>;
 
-/// `<vaultId>.locker.<keyId>.key` — the deterministic file name inside `keys/`.
-#[must_use]
-pub fn locker_key_file_name(vault_id: &str, key_id: &str) -> String {
-    format!("{vault_id}.locker.{key_id}.key")
-}
-
-// THE GATEWAY-SIDE KEY DIRECTORY IS GONE (#1020, D-1020-L2).
-//
-// `locker_key_dir_for(vault_dir)` used to map a vault directory to the host's
-// own `keys/`, so that `K` shared custody with the seal key. That sharing was
-// the right answer while the gateway held `K` and is the door itself now: a
-// function that hands out the path is a function a future read path can call.
-//
-// The only custody type is [`super::member_key::MemberKeyCustody`], and it is
-// constructed from a **seat's** data directory. The seal key and the identity
-// seed still live in the host's `keys/` and still reach it through
-// `crate::custody::keystore`, because those are the host's own and always were
-// (census §D4: the sealed-column class is host-readable by design).
-//
-// `crates/vault/tests/member_key_gate.rs` asserts the absence by name.
-
-/// One `locker_key` row. Ids only — never key material.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LockerKeyRow {
-    pub key_id: String,
-    pub created_at: String,
-    pub retired_at: Option<String>,
-}
-
-/// Every `locker_key` row, newest first.
-pub fn locker_key_rows(connection: &rusqlite::Connection) -> Result<Vec<LockerKeyRow>> {
-    let mut statement = connection.prepare(
-        "SELECT key_id, created_at, retired_at FROM locker_key \
-         ORDER BY created_at DESC, key_id DESC",
-    )?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok(LockerKeyRow {
-                key_id: row.get(0)?,
-                created_at: row.get(1)?,
-                retired_at: row.get(2)?,
-            })
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    Ok(rows)
-}
-
 /// The live key id, or `None` on a vault whose key plane was never founded.
 pub fn live_locker_key_id(connection: &rusqlite::Connection) -> Result<Option<String>> {
-    let mut statement =
-        connection.prepare("SELECT key_id FROM locker_key WHERE retired_at IS NULL LIMIT 1")?;
+    let mut statement = connection.prepare("SELECT key_id FROM locker_key LIMIT 1")?;
     let mut rows = statement.query([])?;
     Ok(match rows.next()? {
         Some(row) => Some(row.get(0)?),
         None => None,
     })
-}
-
-/// Mint `K` at vault founding: one key file, one live row. Idempotent.
-///
-/// **Founding, not first-need.** The seal key was minted lazily and #298 spent
-/// a whole ruling on what that cost: a vault that had never sealed could mint
-/// freely, so "is this the right key" had no answer until the first secret
-/// existed. The key plane has no such window — the row and the file are written
-/// together at founding, the live id is non-null for the life of the vault, and
-/// a missing file is unambiguously custody loss.
-///
-/// The FILE comes first, then the row, for the same reason rotation does it in
-/// that order: a row naming a key file that does not exist is unrecoverable, a
-/// key file no row names is a sweepable orphan.
-pub fn found_locker_key(
-    connection: &rusqlite::Connection,
-    custody: &MemberKeyCustody,
-    key_id: &str,
-    now: &str,
-) -> Result<(String, Vec<u8>)> {
-    if let Some(live) = live_locker_key_id(connection)? {
-        let key = custody.load(&live)?;
-        return Ok((live, key));
-    }
-    let key = custody.store().create(&custody.file_name(key_id))?;
-    connection.execute(
-        "INSERT INTO locker_key (key_id, created_at, retired_at) VALUES (?1, ?2, NULL)",
-        (key_id, now),
-    )?;
-    Ok((key_id.to_owned(), key))
 }
 
 /// AAD binding a ciphertext to its row AND its key generation.
@@ -258,8 +147,10 @@ pub fn locker_aad(row_id: &str, key_id: &str) -> String {
     format!("{row_id}‖{key_id}")
 }
 
-/// The structural predicate, for the same reason [`super::seal::is_sealed_value`]
-/// is structural: a plaintext that merely begins `lk1:` is not ciphertext.
+/// The structural predicate, not a prefix test: a plaintext that merely begins
+/// `lk1:` is not ciphertext. A bare `starts_with` would hand a caller a way to
+/// store a plaintext secret as "already sealed" by choosing its first four
+/// characters (#298).
 #[must_use]
 pub fn is_locker_ciphertext(value: &str) -> bool {
     let Some(body) = value.strip_prefix(LOCKER_CIPHERTEXT_PREFIX) else {
@@ -351,12 +242,12 @@ pub fn decrypt_under_locker_key(
     String::from_utf8(plain).map_err(|_| LockerKeyError::NotUtf8)
 }
 
-/// Refuse a write whose author was looking at a key the vault has rotated past.
+/// Refuse a write that names a key generation other than the vault's live one.
 ///
-/// The seat encrypted with the key it held; if the vault moved on, storing that
-/// ciphertext would put a row under a key nothing can open. "Re-enter this
-/// secret" is the only repair — the gateway cannot decrypt the intent in order
-/// to re-encrypt it, which is the point of the layer.
+/// Storing that ciphertext would put a row under a generation id the vault does
+/// not name, so its AAD would never match on reveal. "Re-enter this secret" is
+/// the only repair: the command plane cannot decrypt the intent in order to
+/// re-encrypt it, which is the point of the layer.
 pub fn assert_live_locker_key_id(connection: &rusqlite::Connection, key_id: &str) -> Result<()> {
     match live_locker_key_id(connection)? {
         None => Err(LockerKeyError::plane(
@@ -367,215 +258,147 @@ pub fn assert_live_locker_key_id(connection: &rusqlite::Connection, key_id: &str
         Some(live) => Err(LockerKeyError::plane(
             LockerKeyErrorCode::StaleKeyId,
             format!(
-                "this secret was encrypted under Locker key {key_id}, which is no longer live \
-                 ({live}) — re-enter this secret"
+                "this secret was encrypted under Locker key {key_id}, which is not this vault's \
+                 generation ({live}) — re-enter this secret"
             ),
         )),
     }
 }
 
-/// Where a rotation is interrupted, for the two crash tests.
-///
-/// These are the only two windows rotation has. They are a test seam and not a
-/// production knob: the recovery for both is [`sweep_retired_locker_keys`] on
-/// open, which is also the production path.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RotationCrash {
-    /// After `K′` is on disk, before the DB transaction opens.
-    BeforeTransaction,
-    /// After the DB transaction commits, before the old key file is deleted.
-    BeforeOldFileDelete,
-}
+// ---------------------------------------------------------------------------
+// THE PHONE'S TWO DOORS ONTO THE KEY PLANE (#1047, wave L1; D-5, D-6).
+//
+// The phone is the vault (#1029), so the core that derives `K` and the file
+// are on one device. These are the two things the core's Locker session needs
+// from the file and cannot say itself (`crates/core` holds no SQL): the live
+// generation's id, and one sealed cell's ciphertext for a reveal. Neither
+// returns plaintext and neither touches key material; the unwrap is the core's.
+// ---------------------------------------------------------------------------
 
-/// What a completed rotation did.
+/// One sealed item cell, as it is at rest: the ciphertext and the key
+/// generation it names. Both `None` when the cell is empty.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LockerRotation {
-    pub previous_key_id: String,
-    pub key_id: String,
-    pub key: Vec<u8>,
-    /// Rows re-encrypted, by physical table.
-    pub rewritten: BTreeMap<String, usize>,
+pub struct SealedItemCell {
+    pub ciphertext: Option<String>,
+    pub key_id: Option<String>,
 }
 
-/// Rotate `K` → `K′` in the order the module docs state.
-///
-/// **Revoke is rotate.** A device that held `K` keeps a key that opens nothing
-/// written after this call; rotation protects what comes after, not what a
-/// revoked device already read. R13 is honest about the trade and so is this.
-pub fn rotate_locker_key(
-    connection: &rusqlite::Connection,
-    custody: &MemberKeyCustody,
-    new_key_id: &str,
-    now: &str,
-    crash: Option<RotationCrash>,
-) -> Result<LockerRotation> {
-    let Some(previous_key_id) = live_locker_key_id(connection)? else {
-        return Err(LockerKeyError::plane(
-            LockerKeyErrorCode::NotFounded,
-            "this vault has no Locker key plane to rotate",
-        ));
-    };
-    let previous_key = custody.load(&previous_key_id)?;
-
-    // STEP 1 — the new key file, before anything in the DB names it.
-    let key = custody.store().create(&custody.file_name(new_key_id))?;
-    if crash == Some(RotationCrash::BeforeTransaction) {
-        return Err(LockerKeyError::plane(
-            LockerKeyErrorCode::Missing,
-            "injected crash after the new key file and before the transaction",
-        ));
-    }
-
-    // STEP 2 — one transaction. Either every ciphertext is under `K′` and every
-    // `key_id` says so, or none of it happened.
-    let mut rewritten = BTreeMap::new();
-    let outcome = (|| -> Result<()> {
-        connection.execute_batch("BEGIN IMMEDIATE")?;
-        // Retire BEFORE inserting: `locker_key_live_idx` is checked per
-        // statement, not per transaction, so "two live rows" is
-        // unrepresentable even for the instant between these two writes.
-        connection.execute(
-            "UPDATE locker_key SET retired_at = ?1 WHERE key_id = ?2",
-            (now, &previous_key_id),
-        )?;
-        connection.execute(
-            "INSERT INTO locker_key (key_id, created_at, retired_at) VALUES (?1, ?2, NULL)",
-            (new_key_id, now),
-        )?;
-        for (table, pk, columns) in LOCKER_ENCRYPTED_COLUMNS {
-            let select = format!(
-                "SELECT {pk} AS pk, {} FROM {table} WHERE key_id = ?1",
-                columns.join(", ")
-            );
-            let update = format!(
-                "UPDATE {table} SET {}, key_id = ?{} WHERE {pk} = ?{}",
-                columns
-                    .iter()
-                    .enumerate()
-                    .map(|(index, column)| format!("{column} = ?{}", index + 1))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                columns.len() + 1,
-                columns.len() + 2
-            );
-            let mut statement = connection.prepare(&select)?;
-            let pending = statement
-                .query_map([&previous_key_id], |row| {
-                    let row_id: String = row.get(0)?;
-                    let values = (0..columns.len())
-                        .map(|index| row.get::<_, Option<String>>(index + 1))
-                        .collect::<std::result::Result<Vec<_>, _>>()?;
-                    Ok((row_id, values))
-                })?
-                .collect::<std::result::Result<Vec<_>, _>>()?;
-            let mut count = 0_usize;
-            for (row_id, values) in pending {
-                let mut next: Vec<Option<String>> = Vec::with_capacity(values.len());
-                for value in values {
-                    next.push(match value {
-                        Some(value) if is_locker_ciphertext(&value) => {
-                            let plain = decrypt_under_locker_key(
-                                &previous_key,
-                                &previous_key_id,
-                                &row_id,
-                                &value,
-                            )?;
-                            Some(encrypt_under_locker_key(&key, new_key_id, &row_id, &plain)?)
-                        }
-                        other => other,
-                    });
+impl crate::file::Vault {
+    /// THE LIVE LOCKER GENERATION'S ID, naming one if the vault has none —
+    /// ids only, never material (#1047, Q-1047-11).
+    ///
+    /// The phone's `K` is derived from the 24 words, not held here, so this
+    /// door writes no key file and reads none: it answers the `key_id` every
+    /// sealed cell names in its AAD, and on a vault whose key plane was never
+    /// founded it commits the one `locker_key` row. A restored vault carries
+    /// that row in the backup, so the restored phone seals and opens under the
+    /// same generation with the `K` it re-derived.
+    ///
+    /// Not inside a read or a commit: it may write the one `locker_key` row,
+    /// and a write under `query_only` or inside another command's transaction
+    /// is the escape the two guards exist to prevent.
+    ///
+    /// # Errors
+    /// [`LockerKeyError`] — `NotFounded` inside a commit, or a failed read or
+    /// write of `locker_key`.
+    pub fn locker_generation(&self) -> std::result::Result<String, LockerKeyError> {
+        if self.depth.get() > 0 {
+            return Err(LockerKeyError::Plane {
+                code: LockerKeyErrorCode::NotFounded,
+                message: "the Locker generation is named outside a commit, never inside one"
+                    .to_owned(),
+            });
+        }
+        if let Some(live) = live_locker_key_id(self.connection())? {
+            return Ok(live);
+        }
+        // THROUGH THE COMMIT GUARD AND NOWHERE ELSE (#1047 R3). This insert
+        // used to go straight to the connection, so the `update_hook` never
+        // saw it: the running census said `locker_key: 0`, the generation
+        // manifest carried 0, and every restore of a phone that had ever
+        // opened Locker was refused by `census_matches` with the row right
+        // there in the file. The guard is what counts rows; a write that
+        // skips it is a row the backup's own check will call missing.
+        let key_id = self.ids().next();
+        let created_at = self.clock().now_text();
+        self.commit(|tx| {
+            tx.set_producer("locker.generation");
+            // Re-read under the write lock: one row, whoever got here first.
+            if let Some(live) = live_locker_key_id(tx.connection()).map_err(|error| {
+                crate::error::VaultError::Invariant {
+                    context: format!("reading the Locker generation: {error}"),
                 }
-                let mut params: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(next.len() + 2);
-                for value in &next {
-                    params.push(value);
-                }
-                params.push(&new_key_id);
-                params.push(&row_id);
-                connection.execute(&update, params.as_slice())?;
-                count += 1;
+            })? {
+                return Ok(live);
             }
-            // Rows written before the plane existed carry a NULL key id; they
-            // hold no ciphertext, so they simply join the live key.
-            connection.execute(
-                &format!("UPDATE {table} SET key_id = ?1 WHERE key_id IS NULL"),
-                [new_key_id],
+            tx.connection().execute(
+                "INSERT INTO locker_key (key_id, created_at) VALUES (?1, ?2)",
+                (&key_id, &created_at),
             )?;
-            rewritten.insert((*table).to_owned(), count);
-        }
-        connection.execute_batch("COMMIT")?;
-        Ok(())
-    })();
-    if let Err(error) = outcome {
-        let _ = connection.execute_batch("ROLLBACK");
-        // The new file is now an orphan no row names. Sweep it here rather than
-        // leaving it for the next open: a failed rotation should cost nothing.
-        let _ = custody.store().destroy(&custody.file_name(new_key_id));
-        return Err(error);
+            Ok(key_id.clone())
+        })
+        .map(|committed| committed.value)
+        .map_err(|error| match error {
+            crate::error::VaultError::Sqlite(inner) => LockerKeyError::Sqlite(inner),
+            other => LockerKeyError::plane(LockerKeyErrorCode::NotFounded, other.to_string()),
+        })
     }
 
-    if crash == Some(RotationCrash::BeforeOldFileDelete) {
-        return Err(LockerKeyError::plane(
-            LockerKeyErrorCode::Missing,
-            "injected crash after the transaction and before the old key file delete",
-        ));
-    }
-
-    // STEP 3 — the old file, last. Everything above already reads `K′`.
-    custody
-        .store()
-        .destroy(&custody.file_name(&previous_key_id))?;
-    Ok(LockerRotation {
-        previous_key_id,
-        key_id: new_key_id.to_owned(),
-        key,
-        rewritten,
-    })
-}
-
-/// Reconcile `keys/` with the DB after a crash. Returns the files it removed.
-///
-/// The whole recovery story of the two-store order: whatever the DB names is
-/// live, and every other Locker key file for this vault is a leftover of an
-/// interrupted rotation. Called on open, so a crash in either window costs one
-/// directory listing rather than an operator gesture.
-pub fn sweep_retired_locker_keys(
-    connection: &rusqlite::Connection,
-    custody: &MemberKeyCustody,
-) -> Result<Vec<String>> {
-    let Some(live) = live_locker_key_id(connection)? else {
-        return Ok(Vec::new());
-    };
-    let keep = custody.file_name(&live);
-    let mut removed = Vec::new();
-    for (key_id, _) in custody.files_in_custody()? {
-        let name = custody.file_name(&key_id);
-        if name == keep {
-            continue;
+    /// One sealed `locker_item` cell of a LIVE item, for a reveal. `None`
+    /// when no live item has `item_id` or `column` is
+    /// not one of the five sealed item cells.
+    ///
+    /// # Errors
+    /// A failed read.
+    pub fn locker_sealed_item_cell(
+        &self,
+        item_id: &str,
+        column: &str,
+    ) -> crate::error::Result<Option<SealedItemCell>> {
+        if !crate::commands::locker::SEALED_ITEM_CELLS.contains(&column) {
+            return Ok(None);
         }
-        if custody.store().destroy(&name)? {
-            removed.push(name);
-        }
+        self.read(|connection| {
+            // The column is one of five compile-time names, checked above, so
+            // it is spliced; the id is bound.
+            let sql = format!(
+                "SELECT {column}, key_id FROM locker_item WHERE item_id = ?1 AND deleted_at IS NULL"
+            );
+            let mut statement = connection.prepare(&sql)?;
+            let mut rows = statement.query([item_id])?;
+            Ok(match rows.next()? {
+                Some(row) => {
+                    let ciphertext: Option<String> = row.get(0)?;
+                    let ciphertext = ciphertext.filter(|value| !value.is_empty());
+                    Some(SealedItemCell {
+                        key_id: if ciphertext.is_some() {
+                            row.get(1)?
+                        } else {
+                            None
+                        },
+                        ciphertext,
+                    })
+                }
+                None => None,
+            })
+        })
     }
-    Ok(removed)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::custody::KeyStore;
     use crate::file::Vault;
 
     struct Fixture {
         _dir: tempfile::TempDir,
         connection: rusqlite::Connection,
-        custody: MemberKeyCustody,
         vault_file: std::path::PathBuf,
-        keys_dir: std::path::PathBuf,
     }
 
-    /// A real v1 vault file (D1's baseline, which carries the whole Locker
-    /// plane and `locker_key_live_idx`), reopened on a plain writable
-    /// connection: rotation is gateway maintenance, not a replicated command.
+    /// A real vault file (the ladder head, which carries the whole Locker plane
+    /// and `locker_key_one_generation`), reopened on a plain writable
+    /// connection with its generation named.
     fn founded() -> Fixture {
         let dir = tempfile::tempdir().expect("scratch dir");
         let vault_file = dir.path().join("vault").join("v1").join("vault.db");
@@ -585,18 +408,17 @@ mod tests {
         connection
             .execute_batch("PRAGMA foreign_keys = ON")
             .unwrap();
-        // THE KEY FILES LIVE ON A SEAT, and this fixture's "seat" is a
-        // directory beside the vault. Before wave 4 the path came from
-        // `locker_key_dir_for(vault_dir)` — the host's own `keys/` — and that
-        // function is the door this wave deleted (#1020, D-1020-L2).
-        let keys_dir = crate::custody::member_key_dir_on_seat(&dir.path().join("seat"));
-        let custody = MemberKeyCustody::with_store(KeyStore::new(&keys_dir), "v1");
+        connection
+            .execute(
+                "INSERT INTO locker_key (key_id, created_at) \
+                 VALUES ('k-1', '2026-01-01T00:00:00Z')",
+                [],
+            )
+            .unwrap();
         Fixture {
             _dir: dir,
             connection,
-            custody,
             vault_file,
-            keys_dir,
         }
     }
 
@@ -610,73 +432,78 @@ mod tests {
             .unwrap();
     }
 
-    fn password_of(connection: &rusqlite::Connection, item_id: &str) -> (String, String) {
-        connection
-            .query_row(
-                "SELECT password, key_id FROM locker_item WHERE item_id = ?1",
-                [item_id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .unwrap()
-    }
-
     #[test]
-    fn founding_writes_one_key_file_and_one_live_row_and_is_idempotent() {
+    fn a_second_generation_is_unrepresentable() {
         let fixture = founded();
-        let (key_id, key) = found_locker_key(
-            &fixture.connection,
-            &fixture.custody,
-            "k-1",
-            "2026-01-01T00:00:00Z",
-        )
-        .unwrap();
-        assert_eq!(key_id, "k-1");
-        assert_eq!(key.len(), LOCKER_KEY_BYTES);
-        assert_eq!(
-            live_locker_key_id(&fixture.connection).unwrap().as_deref(),
-            Some("k-1")
-        );
-        assert_eq!(
-            fixture.custody.files_in_custody().unwrap().len(),
-            1,
-            "one key file, named for the vault and the key id"
-        );
-        let (again, same) = found_locker_key(
-            &fixture.connection,
-            &fixture.custody,
-            "k-2",
-            "2026-01-02T00:00:00Z",
-        )
-        .unwrap();
-        assert_eq!(again, "k-1");
-        assert_eq!(
-            same, key,
-            "a vault already founded gets its existing key back"
-        );
-    }
-
-    #[test]
-    fn two_live_rows_are_unrepresentable_because_the_index_is_on_the_predicate() {
-        let fixture = founded();
-        found_locker_key(
-            &fixture.connection,
-            &fixture.custody,
-            "k-1",
-            "2026-01-01T00:00:00Z",
-        )
-        .unwrap();
         let error = fixture
             .connection
             .execute(
-                "INSERT INTO locker_key (key_id, created_at, retired_at) \
-                 VALUES ('k-2', '2026-01-02T00:00:00Z', NULL)",
+                "INSERT INTO locker_key (key_id, created_at) \
+                 VALUES ('k-2', '2026-01-02T00:00:00Z')",
                 [],
             )
             .unwrap_err();
         assert!(
-            error.to_string().to_lowercase().contains("unique"),
-            "locker_key_live_idx must refuse a second live row: {error}"
+            error.to_string().contains("locker_key_one_generation"),
+            "locker_key_one_generation must refuse a second row: {error}"
         );
+    }
+
+    /// RUNG SEVEN OVER A FILE WRITTEN BEFORE IT (R-1047-D2): the live
+    /// generation survives, a retired one does not, and the guard reads the
+    /// survivor.
+    #[test]
+    fn rung_seven_keeps_the_live_generation_and_drops_the_retired_ones() {
+        let dir = tempfile::tempdir().expect("scratch dir");
+        let vault_file = dir.path().join("vault").join("v1").join("vault.db");
+        std::fs::create_dir_all(vault_file.parent().unwrap()).unwrap();
+        Vault::create(&vault_file).unwrap().close().unwrap();
+        {
+            let raw = rusqlite::Connection::open(&vault_file).unwrap();
+            raw.execute_batch(
+                "BEGIN;
+                 DROP TABLE locker_key;
+                 CREATE TABLE locker_key (
+                   key_id     TEXT PRIMARY KEY,
+                   created_at TEXT NOT NULL,
+                   retired_at TEXT
+                 ) STRICT;
+                 CREATE UNIQUE INDEX locker_key_live_idx
+                   ON locker_key(retired_at IS NULL) WHERE retired_at IS NULL;
+                 CREATE TABLE notifications_notice (notice_id TEXT PRIMARY KEY) STRICT;
+                 ALTER TABLE locker_item ADD COLUMN url_match_policy TEXT NOT NULL
+                   DEFAULT 'registrable-domain';
+                 ALTER TABLE locker_item_address ADD COLUMN match_policy TEXT NOT NULL
+                   DEFAULT 'registrable-domain';
+                 INSERT INTO locker_key VALUES
+                   ('k-old', '2026-01-01T00:00:00Z', '2026-02-01T00:00:00Z'),
+                   ('k-live', '2026-02-01T00:00:00Z', NULL);
+                 PRAGMA user_version = 6;
+                 COMMIT;",
+            )
+            .unwrap();
+        }
+        let migrated = Vault::open(&vault_file).expect("the file climbs rung seven");
+        assert_eq!(migrated.schema_version(), crate::head_version());
+        let (rows, live, objects) = migrated
+            .read(|connection| {
+                let rows: Vec<String> = connection
+                    .prepare("SELECT key_id FROM locker_key ORDER BY key_id")?
+                    .query_map([], |row| row.get(0))?
+                    .collect::<rusqlite::Result<_>>()?;
+                let objects: Vec<String> = connection
+                    .prepare(
+                        "SELECT name FROM sqlite_master
+                          WHERE tbl_name = 'locker_key' AND sql IS NOT NULL ORDER BY name",
+                    )?
+                    .query_map([], |row| row.get(0))?
+                    .collect::<rusqlite::Result<_>>()?;
+                Ok((rows, live_locker_key_id(connection).ok().flatten(), objects))
+            })
+            .unwrap();
+        assert_eq!(rows, ["k-live"]);
+        assert_eq!(live.as_deref(), Some("k-live"));
+        assert_eq!(objects, ["locker_key", "locker_key_one_generation"]);
     }
 
     #[test]
@@ -705,277 +532,34 @@ mod tests {
     }
 
     #[test]
-    fn rotation_re_encrypts_every_secret_and_retires_the_old_key() {
+    fn a_write_under_a_generation_that_is_not_live_is_refused_as_stale_not_stored() {
         let fixture = founded();
-        let (key_id, key) = found_locker_key(
-            &fixture.connection,
-            &fixture.custody,
-            "k-1",
-            "2026-01-01T00:00:00Z",
-        )
-        .unwrap();
-        let sealed = encrypt_under_locker_key(&key, &key_id, "item-1", "s3cret").unwrap();
-        insert_item(&fixture.connection, "item-1", &sealed, &key_id);
-
-        let rotation = rotate_locker_key(
-            &fixture.connection,
-            &fixture.custody,
-            "k-2",
-            "2026-01-02T00:00:00Z",
-            None,
-        )
-        .unwrap();
-        assert_eq!(rotation.previous_key_id, "k-1");
-        assert_eq!(rotation.rewritten["locker_item"], 1);
-
-        let (stored, stamped) = password_of(&fixture.connection, "item-1");
-        assert_eq!(stamped, "k-2");
-        assert_ne!(
-            stored, sealed,
-            "the ciphertext was re-encrypted, not just re-stamped"
-        );
-        assert_eq!(
-            decrypt_under_locker_key(&rotation.key, "k-2", "item-1", &stored).unwrap(),
-            "s3cret"
-        );
-        // The old key opens nothing any more, and its file is gone.
-        assert!(decrypt_under_locker_key(&key, "k-1", "item-1", &stored).is_err());
-        assert_eq!(fixture.custody.files_in_custody().unwrap().len(), 1);
-        let rows = locker_key_rows(&fixture.connection).unwrap();
-        assert_eq!(rows.len(), 2);
-        assert!(
-            rows.iter()
-                .any(|r| r.key_id == "k-1" && r.retired_at.is_some())
-        );
-    }
-
-    /// Crash window one of two: `K′` is on disk, the DB still names `K`.
-    /// Nothing was re-encrypted, so the orphan is the only thing to clean up.
-    #[test]
-    fn a_crash_between_the_new_key_file_and_the_transaction_sweeps_clean() {
-        let fixture = founded();
-        let (key_id, key) = found_locker_key(
-            &fixture.connection,
-            &fixture.custody,
-            "k-1",
-            "2026-01-01T00:00:00Z",
-        )
-        .unwrap();
-        let sealed = encrypt_under_locker_key(&key, &key_id, "item-1", "s3cret").unwrap();
-        insert_item(&fixture.connection, "item-1", &sealed, &key_id);
-
-        let error = rotate_locker_key(
-            &fixture.connection,
-            &fixture.custody,
-            "k-2",
-            "2026-01-02T00:00:00Z",
-            Some(RotationCrash::BeforeTransaction),
-        )
-        .unwrap_err();
-        assert_eq!(error.code(), Some(LockerKeyErrorCode::Missing));
-
-        // The DB is untouched: still `k-1` live, still the original ciphertext.
-        assert_eq!(
-            live_locker_key_id(&fixture.connection).unwrap().as_deref(),
-            Some("k-1")
-        );
-        assert_eq!(
-            password_of(&fixture.connection, "item-1"),
-            (sealed.clone(), "k-1".into())
-        );
-        assert_eq!(
-            fixture.custody.files_in_custody().unwrap().len(),
-            2,
-            "both key files are on disk after the crash"
-        );
-
-        let removed = sweep_retired_locker_keys(&fixture.connection, &fixture.custody).unwrap();
-        assert_eq!(removed, vec![locker_key_file_name("v1", "k-2")]);
-        assert_eq!(fixture.custody.files_in_custody().unwrap().len(), 1);
-        // And the secret still opens under the key the DB names.
-        assert_eq!(
-            decrypt_under_locker_key(
-                &fixture.custody.load("k-1").unwrap(),
-                "k-1",
-                "item-1",
-                &sealed
-            )
-            .unwrap(),
-            "s3cret"
-        );
-    }
-
-    /// Crash window two of two: the transaction committed, so every ciphertext
-    /// is under `K′` and the DB says so; the retired file is the leftover.
-    #[test]
-    fn a_crash_between_the_transaction_and_the_old_file_delete_sweeps_clean() {
-        let fixture = founded();
-        let (key_id, key) = found_locker_key(
-            &fixture.connection,
-            &fixture.custody,
-            "k-1",
-            "2026-01-01T00:00:00Z",
-        )
-        .unwrap();
-        let sealed = encrypt_under_locker_key(&key, &key_id, "item-1", "s3cret").unwrap();
-        insert_item(&fixture.connection, "item-1", &sealed, &key_id);
-
-        assert!(
-            rotate_locker_key(
-                &fixture.connection,
-                &fixture.custody,
-                "k-2",
-                "2026-01-02T00:00:00Z",
-                Some(RotationCrash::BeforeOldFileDelete),
-            )
-            .is_err()
-        );
-
-        assert_eq!(
-            live_locker_key_id(&fixture.connection).unwrap().as_deref(),
-            Some("k-2"),
-            "the transaction committed: the DB names K′"
-        );
-        let (stored, stamped) = password_of(&fixture.connection, "item-1");
-        assert_eq!(stamped, "k-2");
-        assert_eq!(fixture.custody.files_in_custody().unwrap().len(), 2);
-
-        let removed = sweep_retired_locker_keys(&fixture.connection, &fixture.custody).unwrap();
-        assert_eq!(removed, vec![locker_key_file_name("v1", "k-1")]);
-        // The invariant both windows exist to protect: at no point is any
-        // ciphertext under a key the DB does not name.
-        let live = fixture.custody.load("k-2").unwrap();
-        assert_eq!(
-            decrypt_under_locker_key(&live, "k-2", "item-1", &stored).unwrap(),
-            "s3cret"
-        );
-    }
-
-    #[test]
-    fn a_failed_transaction_rolls_back_and_sweeps_its_own_orphan() {
-        let fixture = founded();
-        found_locker_key(
-            &fixture.connection,
-            &fixture.custody,
-            "k-1",
-            "2026-01-01T00:00:00Z",
-        )
-        .unwrap();
-        // A row whose ciphertext does not open under the key the DB names: the
-        // re-encryption inside the transaction fails, and the whole rotation
-        // must leave nothing behind.
-        insert_item(
-            &fixture.connection,
-            "item-1",
-            &encrypt_under_locker_key(&[99_u8; 32], "k-1", "item-1", "s3cret").unwrap(),
-            "k-1",
-        );
-        assert!(
-            rotate_locker_key(
-                &fixture.connection,
-                &fixture.custody,
-                "k-2",
-                "2026-01-02T00:00:00Z",
-                None
-            )
-            .is_err()
-        );
-        assert_eq!(
-            live_locker_key_id(&fixture.connection).unwrap().as_deref(),
-            Some("k-1")
-        );
-        assert_eq!(
-            fixture.custody.files_in_custody().unwrap().len(),
-            1,
-            "a failed rotation costs nothing, not even an orphan file"
-        );
-    }
-
-    #[test]
-    fn a_write_under_a_rotated_past_key_is_refused_as_stale_not_stored() {
-        let fixture = founded();
-        found_locker_key(
-            &fixture.connection,
-            &fixture.custody,
-            "k-1",
-            "2026-01-01T00:00:00Z",
-        )
-        .unwrap();
         assert!(assert_live_locker_key_id(&fixture.connection, "k-1").is_ok());
-        rotate_locker_key(
-            &fixture.connection,
-            &fixture.custody,
-            "k-2",
-            "2026-01-02T00:00:00Z",
-            None,
-        )
-        .unwrap();
-        let error = assert_live_locker_key_id(&fixture.connection, "k-1").unwrap_err();
+        let error = assert_live_locker_key_id(&fixture.connection, "k-0").unwrap_err();
         assert_eq!(error.code(), Some(LockerKeyErrorCode::StaleKeyId));
         assert!(error.to_string().contains("re-enter this secret"));
     }
 
-    #[test]
-    fn a_missing_key_file_is_custody_loss_and_says_what_carries_the_key() {
-        let fixture = founded();
-        found_locker_key(
-            &fixture.connection,
-            &fixture.custody,
-            "k-1",
-            "2026-01-01T00:00:00Z",
-        )
-        .unwrap();
-        fixture
-            .custody
-            .store()
-            .destroy(&locker_key_file_name("v1", "k-1"))
-            .unwrap();
-        let error = fixture.custody.load("k-1").unwrap_err();
-        assert_eq!(error.code(), Some(LockerKeyErrorCode::Missing));
-        assert!(error.to_string().contains("recovery kit"));
-        // …and `live_files` refuses to hand a kit a set that misses the live key.
-        assert_eq!(
-            fixture
-                .custody
-                .live_files(&fixture.connection)
-                .unwrap_err()
-                .code(),
-            Some(LockerKeyErrorCode::Missing)
-        );
-    }
-
-    /// **The acceptance test, in its wave 2 form** (#1020, D-1020-R4).
+    /// A SEALED CELL DEPENDS ON `K` AND ON NOTHING ELSE IN THE FILE
+    /// (#1020, D-1020-R4; #1047, D-6).
     ///
-    /// Read the gateway's vault file and the whole `keys/` directory with `K`
-    /// **withheld**, and every `lk1:` cell must fail to open. The gateway still
-    /// *holds* `K` until wave 4 moves it to a member key; what this proves is
-    /// that a sealed cell depends on `K` and on nothing else that is on disk —
-    /// so moving `K` out of the gateway's custody is a change of custody, not a
-    /// change of format.
+    /// Read the vault file with `K` withheld, and every `lk1:` cell must fail
+    /// to open under everything the file itself says about its key plane — the
+    /// generation id, a zero key. `K` lives only in the core's memory, so this
+    /// is the whole of what a copy of the file (a backup restored anywhere, a
+    /// stolen disk) offers towards a secret.
     #[test]
-    fn gateway_file_and_keystore_do_not_reveal_a_cell_without_k() {
+    fn the_vault_file_does_not_reveal_a_cell_without_k() {
         let fixture = founded();
-        let (key_id, key) = found_locker_key(
-            &fixture.connection,
-            &fixture.custody,
-            "k-1",
-            "2026-01-01T00:00:00Z",
-        )
-        .unwrap();
+        let key = [0x5a_u8; LOCKER_KEY_BYTES];
         let secrets = ["s3cret", "otp-seed-bytes", "4111111111111111"];
         for (index, plaintext) in secrets.iter().enumerate() {
             let item = format!("item-{index}");
-            let sealed = encrypt_under_locker_key(&key, &key_id, &item, plaintext).unwrap();
-            insert_item(&fixture.connection, &item, &sealed, &key_id);
+            let sealed = encrypt_under_locker_key(&key, "k-1", &item, plaintext).unwrap();
+            insert_item(&fixture.connection, &item, &sealed, "k-1");
         }
         drop(fixture.connection);
 
-        // WITHHOLD `K`: delete every key file, keeping the vault file and the
-        // keys directory exactly as the gateway left them otherwise.
-        let withheld = fixture.custody.destroy_all().unwrap();
-        assert_eq!(withheld.len(), 1, "one live key file was withheld");
-
-        // Now read the vault file the way an attacker with the host would.
         let stolen = rusqlite::Connection::open(&fixture.vault_file).unwrap();
         let mut statement = stolen
             .prepare("SELECT item_id, password, key_id FROM locker_item ORDER BY item_id")
@@ -993,18 +577,7 @@ mod tests {
             .unwrap();
         assert_eq!(cells.len(), secrets.len());
 
-        // Every candidate key the host still offers: every byte string left in
-        // `keys/`, plus the vault's own id and the key id, which is all the
-        // file itself says about its custody.
-        let mut candidates: Vec<Vec<u8>> = vec![
-            [0_u8; 32].to_vec(),
-            key_id.as_bytes().to_vec(),
-            b"v1".to_vec(),
-        ];
-        for name in KeyStore::new(&fixture.keys_dir).names().unwrap() {
-            candidates.push(std::fs::read(fixture.keys_dir.join(&name)).unwrap());
-        }
-
+        let candidates: Vec<Vec<u8>> = vec![[0_u8; 32].to_vec(), b"k-1".to_vec()];
         for (item_id, cell, stamped) in &cells {
             assert!(
                 is_locker_ciphertext(cell),
@@ -1019,12 +592,12 @@ mod tests {
             for candidate in &candidates {
                 assert!(
                     decrypt_under_locker_key(candidate, stamped, item_id, cell).is_err(),
-                    "{item_id} opened under a key that is not K — the cell depends on \
-                     something other than K"
+                    "{item_id} opened under a key that is not K"
                 );
             }
+            // …and it DOES open under `K`, so the refusals above are not vacuous.
+            assert!(decrypt_under_locker_key(&key, stamped, item_id, cell).is_ok());
         }
-        // And the vault file's raw bytes never carried the plaintext either.
         let raw = std::fs::read(&fixture.vault_file).unwrap();
         for plaintext in secrets {
             assert!(

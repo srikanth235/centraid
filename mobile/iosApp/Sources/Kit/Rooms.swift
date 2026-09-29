@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if canImport(CentraidShared)
+import CentraidShared
+#endif
+
 // THE ROOMS (K5; DESIGN.md "The seven rooms (mobile)").
 //
 // A mobile screen is one of seven rooms and nothing else. The room owns the
@@ -17,7 +21,7 @@ import SwiftUI
 struct SearchSlot {
     let field: Centraid_Screen_V1_SearchField
     let placeholder: String
-    var closeLabel: String = "Close search"
+    var closeLabel: String = KitWords.shared.CLOSE_SEARCH
     let onTerm: (String) -> Void
     let onClose: () -> Void
 }
@@ -149,7 +153,7 @@ struct PushedPage<Trailing: View, Content: View>: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Back to \(parentTitle)")
+                    .accessibilityLabel(KitWords.shared.backTo(parent: parentTitle))
                     .accessibilityIdentifier("kit-pushed-back")
                 }
                 ToolbarItem(placement: .topBarTrailing) { trailing() }
@@ -168,7 +172,7 @@ struct PushedPage<Trailing: View, Content: View>: View {
 struct EditorRoom<Trailing: View, Content: View>: View {
     let title: String
     let status: Centraid_Screen_V1_Autosave
-    var closeLabel: String = "Done"
+    var closeLabel: String = KitWords.shared.DONE
     let onClose: () -> Void
     let onDeparted: () -> Void
     let trailing: () -> Trailing
@@ -179,7 +183,7 @@ struct EditorRoom<Trailing: View, Content: View>: View {
     init(
         title: String,
         status: Centraid_Screen_V1_Autosave,
-        closeLabel: String = "Done",
+        closeLabel: String = KitWords.shared.DONE,
         onClose: @escaping () -> Void,
         onDeparted: @escaping () -> Void,
         @ViewBuilder trailing: @escaping () -> Trailing,
@@ -241,6 +245,10 @@ struct SheetRoom<Content: View>: View {
     let title: String
     var status: String = ""
     var primary: SheetPrimary? = nil
+    /// The sheet's own id, carried by its TITLE — a leaf — so it names the
+    /// sheet without replacing its children's ids, which an identifier on the
+    /// container does (#1047).
+    var titleIdentifier: String = ""
     let content: () -> Content
 
     @Environment(\.colorScheme) private var scheme
@@ -249,11 +257,13 @@ struct SheetRoom<Content: View>: View {
         title: String,
         status: String = "",
         primary: SheetPrimary? = nil,
+        titleIdentifier: String = "",
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
         self.status = status
         self.primary = primary
+        self.titleIdentifier = titleIdentifier
         self.content = content
     }
 
@@ -263,6 +273,7 @@ struct SheetRoom<Content: View>: View {
                 .centraidType("title")
                 .foregroundStyle(Theme.color("text", scheme))
                 .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier(titleIdentifier.isEmpty ? "kit-sheet-title" : titleIdentifier)
                 .padding(.top, 20)
             content()
             if !status.isEmpty {
@@ -281,9 +292,24 @@ struct SheetRoom<Content: View>: View {
         // floated mid-sheet as a band of `bgElev` between two slabs of the
         // system's own sheet ground.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .presentationBackground(Theme.color("bgElev", scheme))
-        .presentationDragIndicator(.visible)
-        .presentationDetents([.medium, .large])
+        .modifier(SheetPresentation())
+    }
+}
+
+/// A SHEET'S PRESENTATION — its ground, its grabber, its detents — as one
+/// modifier, so a caller that hosts a `SheetRoom` somewhere the presentation
+/// preferences cannot climb out of (a capture shield's secure canvas is a
+/// hosting controller of its own) can state them again on the sheet's root.
+struct SheetPresentation: ViewModifier {
+    var detents: Set<PresentationDetent> = [.medium, .large]
+
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        content
+            .presentationBackground(Theme.color("bgElev", scheme))
+            .presentationDragIndicator(.visible)
+            .presentationDetents(detents)
     }
 }
 

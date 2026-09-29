@@ -26,10 +26,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,6 +77,8 @@ public data class RoomSearch(
  * `AppPlace`: an app's root. `AppHeader` (mark + name + ≤1 trailing action),
  * the search field under it while [search] is open, [content], the status line
  * and the app's band at the foot — a render prop, so the band stays the app's.
+ * [statusLine] is the status host's second form, for a line that carries a
+ * verb or a bar ([ProgressStatusLine]); it docks where [status] does.
  */
 @Composable
 public fun AppPlace(
@@ -85,6 +89,7 @@ public fun AppPlace(
     trailing: RoomAction? = null,
     search: RoomSearch? = null,
     status: String = "",
+    statusLine: (@Composable () -> Unit)? = null,
     band: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
@@ -114,6 +119,7 @@ public fun AppPlace(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         StatusLine(status)
+        statusLine?.invoke()
         band?.invoke()
     }
 }
@@ -122,6 +128,10 @@ public fun AppPlace(
  * `PushedPage`: content a member pushed into. `PlaceHeader` with back to the
  * NAMED parent ([parentTitle] is what the back key says), the title, ≤1
  * trailing action; the status line at the foot. No band.
+ *
+ * [backSpoken] replaces "Back to [parentTitle]" for a key that is not a way
+ * back to a parent — an editor's "Cancel", which TalkBack read as "Back to
+ * Cancel" (#1047 walk).
  */
 @Composable
 public fun PushedPage(
@@ -131,6 +141,8 @@ public fun PushedPage(
     modifier: Modifier = Modifier,
     trailing: RoomAction? = null,
     status: String = "",
+    statusLine: (@Composable () -> Unit)? = null,
+    backSpoken: String? = null,
     content: @Composable () -> Unit,
 ) {
     Column(modifier.fillMaxSize().testTag("pushed-page")) {
@@ -146,7 +158,7 @@ public fun PushedPage(
                     .padding(horizontal = 8.dp)
                     .testTag("room-back")
                     .clearAndSetSemantics {
-                        contentDescription = "${KitWords.BACK} to $parentTitle"
+                        contentDescription = backSpoken ?: KitWords.backTo(parentTitle)
                         role = Role.Button
                     },
                 verticalAlignment = Alignment.CenterVertically,
@@ -166,6 +178,7 @@ public fun PushedPage(
         RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp))
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         StatusLine(status)
+        statusLine?.invoke()
     }
 }
 
@@ -348,6 +361,56 @@ public fun StatusLine(line: StatusLineMessage?, modifier: Modifier = Modifier, o
         )
         if (line.action_label.isNotEmpty()) {
             QuietButton(line.action_label, testTag = "room-status-act", onPress = onAct)
+        }
+    }
+}
+
+/**
+ * THE STATUS LINE WITH A BAR: one clause, a DETERMINATE bar under it while
+ * work with a known size runs ([permille], null for none — never a spinner),
+ * at most one text verb ([actionLabel]) and a close key ([closeLabel]) that
+ * puts the line away. A refusal is `net` ink. Every word is the caller's
+ * state's; drawn only when there is a sentence.
+ */
+@Composable
+public fun ProgressStatusLine(
+    sentence: String,
+    modifier: Modifier = Modifier,
+    permille: Int? = null,
+    refused: Boolean = false,
+    actionLabel: String = "",
+    onAct: () -> Unit = {},
+    closeLabel: String = "",
+    onClose: () -> Unit = {},
+    testTag: String = "room-progress-line",
+) {
+    if (sentence.isEmpty()) return
+    Column(modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp).testTag(testTag)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                sentence,
+                style = centraidType("annotLabel"),
+                color = centraidColor(if (refused) "net" else "textSoft"),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (actionLabel.isNotEmpty()) QuietButton(actionLabel, testTag = "$testTag-act", onPress = onAct)
+            if (closeLabel.isNotEmpty()) IconKey("X", closeLabel, "$testTag-close", bordered = false, onPress = onClose)
+        }
+        if (permille != null) {
+            val fraction = permille.coerceIn(0, 1000) / 1000f
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .heightIn(min = 2.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(centraidColor("bgSunken"))
+                    .semantics { progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f) },
+            ) {
+                Box(Modifier.fillMaxWidth(fraction).heightIn(min = 2.dp).background(centraidColor("textSoft")))
+            }
         }
     }
 }

@@ -70,7 +70,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotoDetail
@@ -80,6 +79,7 @@ import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.PhotoLightboxMachine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -294,7 +294,8 @@ internal fun LightboxStage(
                             },
                         contentAlignment = Alignment.Center,
                     ) {
-                        frames[id]?.thumbnail_path?.let { StageImage(path = it) }
+                        // OFF THE STAGE until the swipe lands: the page it lands on speaks.
+                        frames[id]?.thumbnail_path?.let { StageImage(path = it, description = null) }
                     }
                 }
             }
@@ -345,13 +346,17 @@ private fun StageContent(
 ) {
     val thumbnail = detail?.thumbnail_path?.takeIf { it.isNotEmpty() }
         ?: frame?.thumbnail_path?.takeIf { it.isNotEmpty() }
-    if (thumbnail != null) StageImage(path = thumbnail)
+    // THE PHOTOGRAPH IS THE CONTENT: it is spoken by its title, else the noun.
+    val spoken = detail?.title?.takeIf { it.isNotBlank() } ?: PhotosCopy.PHOTOGRAPH
+    // The thumbnail under a drawn original is the same photograph: said once.
+    val original = detail?.original_path?.takeIf { it.isNotEmpty() && detail.original_embeddable }
+    val drawsOriginal = detail != null && detail.kind != PhotoCell.Kind.KIND_VIDEO && original != null
+    if (thumbnail != null) StageImage(path = thumbnail, description = if (drawsOriginal) null else spoken)
     if (detail == null) return
-    val original = detail.original_path?.takeIf { it.isNotEmpty() && detail.original_embeddable }
     when {
         detail.kind == PhotoCell.Kind.KIND_VIDEO && original != null && player != null ->
             PlayerSurface(player)
-        detail.kind != PhotoCell.Kind.KIND_VIDEO && original != null -> StageImage(path = original, full = true)
+        drawsOriginal && original != null -> StageImage(path = original, description = spoken, full = true)
     }
     if (live != null && live.showing) PlayerSurface(live)
 }
@@ -363,7 +368,7 @@ private fun StageContent(
  * gigabyte a phone does not have to spend.
  */
 @Composable
-private fun StageImage(path: String, full: Boolean = false) {
+private fun StageImage(path: String, description: String?, full: Boolean = false) {
     val bitmap by produceState<ImageBitmap?>(initialValue = null, path) {
         value = withContext(Dispatchers.IO) {
             decodeUpright(path, maxDimension = if (full) FULL_DECODE else 0)?.asImageBitmap()
@@ -372,7 +377,7 @@ private fun StageImage(path: String, full: Boolean = false) {
     bitmap?.let {
         Image(
             bitmap = it,
-            contentDescription = null,
+            contentDescription = description, // decorative when null: a neighbour off the stage, or a thumbnail under its original
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize(),
         )
@@ -449,14 +454,15 @@ internal fun rememberLightboxPlayer(path: String?, once: Boolean): LightboxPlaye
 }
 
 @Composable
-private fun PlayerSurface(player: LightboxPlayer) {
+internal fun PlayerSurface(player: LightboxPlayer) {
     AndroidView(
         factory = { context ->
             PlayerView(context).apply {
                 // THE APP'S OWN TRANSPORT, never the library's: one control
                 // vocabulary, drawn by this screen.
+                // Fit, letterboxed, is `PlayerView`'s default resize mode; it
+                // is not set here because the setter is Media3's unstable API.
                 useController = false
-                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                 isClickable = false
                 isFocusable = false
                 layoutParams = ViewGroup.LayoutParams(
@@ -497,7 +503,9 @@ internal fun LightboxTransport(player: LightboxPlayer) {
                 },
             )
         }
-        BoxWithConstraints(
+        // The strip's width is the pointer scope's `size`; nothing reads the
+        // layout's constraints.
+        Box(
             Modifier
                 .weight(1f)
                 .height(28.dp)
@@ -594,7 +602,7 @@ internal fun LightboxFilmstrip(state: PhotoLightboxState, onEvent: (PhotoLightbo
                     bitmap?.let {
                         Image(
                             bitmap = it,
-                            contentDescription = null,
+                            contentDescription = null, // decorative: the cell's own semantics name the photograph
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
                         )

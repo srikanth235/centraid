@@ -6,7 +6,6 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -23,7 +22,7 @@ import kotlinx.coroutines.test.runTest
 class VaultSecretsSpec : StringSpec({
 
     fun secrets(services: FakePlatformServices = FakePlatformServices()) =
-        services to VaultSecrets(services.secureStore, services.syncedSecrets, services.secureRandom)
+        services to VaultSecrets(services.secureStore, services.syncedSecrets)
 
     "the seed goes to the SYNCHRONISED store and nowhere else" {
         runTest {
@@ -38,14 +37,17 @@ class VaultSecretsSpec : StringSpec({
         }
     }
 
-    "the device secret goes to the DEVICE store, is minted once, and is stable" {
+    "the device secret is the CORE's, kept in the DEVICE store and never minted here" {
         runTest {
             val (services, vault) = secrets()
-            val first = vault.deviceSecret("vault-a")
-            first.length shouldBe VaultSecrets.DEVICE_SECRET_HEX_LENGTH
-            // MINTED ONCE. A fresh identity on every launch would silently
-            // un-enrol this device from its own laptop.
-            vault.deviceSecret("vault-a") shouldBe first
+            // NOTHING BEFORE A PAIR OR A RESTORE HANDS ONE BACK (#1047 E1,
+            // R-1047-E4): a secret this class minted would be a key no
+            // certificate names, and every drain would be refused.
+            vault.deviceSecret("vault-a").shouldBeNull()
+            val minted = "cd".repeat(32)
+            vault.rememberDeviceSecret("vault-a", minted)
+            vault.deviceSecret("vault-a") shouldBe minted
+            services.secureStore.keys.any { it.endsWith(VaultSecrets.DEVICE_SECRET_PREFIX + "vault-a") } shouldBe true
             services.syncedSecrets.seed().shouldBeNull()
         }
     }
@@ -53,12 +55,11 @@ class VaultSecretsSpec : StringSpec({
     "a device secret is PER VAULT, so unpairing one does not un-enrol the other" {
         runTest {
             val (_, vault) = secrets()
-            val a = vault.deviceSecret("vault-a")
-            val b = vault.deviceSecret("vault-b")
-            a shouldNotBe b
+            vault.rememberDeviceSecret("vault-a", "aa".repeat(32))
+            vault.rememberDeviceSecret("vault-b", "bb".repeat(32))
             vault.forgetDeviceSecret("vault-a")
-            vault.deviceSecret("vault-b") shouldBe b
-            vault.deviceSecret("vault-a") shouldNotBe a
+            vault.deviceSecret("vault-b") shouldBe "bb".repeat(32)
+            vault.deviceSecret("vault-a").shouldBeNull()
         }
     }
 
@@ -66,9 +67,26 @@ class VaultSecretsSpec : StringSpec({
         runTest {
             val (services, vault) = secrets()
             services.secureStore.write(VaultSecrets.DEVICE_SECRET_PREFIX + "vault-a", "not hex")
-            // MINTED AFRESH rather than handed to the core, which would be a
-            // BAD_ARGUMENT arriving as a crash on a path a member cannot fix.
-            vault.deviceSecret("vault-a").length shouldBe VaultSecrets.DEVICE_SECRET_HEX_LENGTH
+            // ABSENT rather than handed to the core, which would be a
+            // BAD_ARGUMENT arriving as a refused open on a path a member
+            // cannot fix.
+            vault.deviceSecret("vault-a").shouldBeNull()
+        }
+    }
+
+    "a seed is SETTLED only when this phone minted, restored or re-keyed it, or spent an index" {
+        runTest {
+            val (_, vault) = secrets()
+            vault.rememberSeed("ab".repeat(64))
+            // A SEED THAT ARRIVED BY SYNC is not settled: its indices are on
+            // another phone, and index 0 is a vault that already exists.
+            vault.seedSettled() shouldBe false
+            vault.settleSeed()
+            vault.seedSettled() shouldBe true
+
+            val (_, other) = secrets()
+            other.rememberVaultIndex("v", 0)
+            other.seedSettled() shouldBe true
         }
     }
 
@@ -79,6 +97,29 @@ class VaultSecretsSpec : StringSpec({
             shouldThrow<IllegalArgumentException> {
                 vault.rememberDeviceSecret("vault-a", "AB".repeat(32))
             }
+        }
+    }
+
+    "a platform that will not synchronise still leaves the seed on THIS phone, and only here" {
+        runTest {
+            val services = FakePlatformServices(
+                syncedSecrets = dev.centraid.shared.platform.FakeSyncedSecrets(
+                    availability = dev.centraid.shared.platform.SyncedSecrets.Availability(
+                        synchronizing = false,
+                        sentence = dev.centraid.shared.platform.SyncedSecrets.ANDROID_SENTENCE,
+                        restoresAfterSetup = false,
+                    ),
+                ),
+            )
+            val vault = VaultSecrets(services.secureStore, services.syncedSecrets)
+            val seed = "ef".repeat(64)
+            // SAID PLAINLY: not synchronised. And yet a phone that stored it
+            // nowhere could never open a vault keyed (#1047 E1, R-1047-E6).
+            vault.rememberSeed(seed) shouldBe false
+            vault.seed() shouldBe seed
+            services.syncedSecrets.seed().shouldBeNull()
+            vault.forgetSeed()
+            vault.seed().shouldBeNull()
         }
     }
 

@@ -191,7 +191,8 @@ internal object TallySplit {
             if (amount == null) issues[entry.partyId] = TallyCopy.NOT_AN_AMOUNT else if (amount > 0) shares[entry.partyId] = amount
         }
         if (issues.isNotEmpty()) return Outcome(emptyMap(), TallyCopy.FIX_ENTRIES, issues)
-        if (shares.isEmpty()) return Outcome(emptyMap(), TallyCopy.NOBODY_SHARES)
+        // NOTHING TYPED YET: say what to type, not who to choose (#1047).
+        if (shares.isEmpty()) return Outcome(emptyMap(), TallyCopy.TYPE_AMOUNTS)
         val sum = shares.values.sum()
         if (sum != total) {
             return Outcome(
@@ -217,7 +218,10 @@ internal object TallySplit {
             }
         }
         if (issues.isNotEmpty()) return Outcome(emptyMap(), TallyCopy.FIX_ENTRIES, issues)
-        if (weights.isEmpty()) return Outcome(emptyMap(), TallyCopy.NOBODY_SHARES)
+        // NOTHING TYPED YET: this method is typed, so it asks for the figures.
+        if (weights.isEmpty()) {
+            return Outcome(emptyMap(), if (percent) TallyCopy.TYPE_PERCENTAGES else TallyCopy.TYPE_WEIGHTS)
+        }
         val sum = weights.values.sum()
         if (percent && sum != HUNDRED_PERCENT) {
             return Outcome(emptyMap(), "${TallyCopy.PERCENT_TOTAL_PREFIX} ${hundredths(sum)}${TallyCopy.PERCENT_TOTAL_SUFFIX}")

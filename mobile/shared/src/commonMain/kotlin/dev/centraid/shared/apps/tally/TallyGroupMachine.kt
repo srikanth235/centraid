@@ -50,6 +50,7 @@ public object TallyGroupMachine :
                     screen = held.screen.copy(
                         group_id = event.opened.group_id,
                         title = event.opened.title,
+                        parent = event.opened.parent,
                         write = WriteState(phase = WriteState.Phase.PHASE_IDLE),
                     ),
                 ),
@@ -146,9 +147,9 @@ public object TallyGroupMachine :
                 toggle_label = if (optedIn) TallyCopy.SIMPLIFY_STOP else TallyCopy.SIMPLIFY_COMMIT,
                 toggle_enabled = !writing,
                 summary = if (optedIn && simplification != null && !level) {
-                    "${TallyFold.count(simplification.debts_before.toInt(), TallyCopy.DEBT_ONE, TallyCopy.DEBT_MANY)} " +
+                    "${TallyFold.count(simplification.debts_before, TallyCopy.DEBT_ONE, TallyCopy.DEBT_MANY)} " +
                         "${TallyCopy.BECOME_WORD} " +
-                        TallyFold.count(simplification.payments_after.toInt(), TallyCopy.PAYMENT_ONE, TallyCopy.PAYMENT_MANY)
+                        TallyFold.count(simplification.payments_after, TallyCopy.PAYMENT_ONE, TallyCopy.PAYMENT_MANY)
                 } else {
                     ""
                 },
@@ -158,7 +159,18 @@ public object TallyGroupMachine :
         )
     }
 
-    override fun decorate(held: TallyHeld<TallyGroupState>): TallyGroupState = held.screen.copy(chrome = CHROME)
+    // THE TITLE IS THE GROUP'S NAME once the read lands (the route's name
+    // until then), so a page pushed from here names it as its parent.
+    override fun decorate(held: TallyHeld<TallyGroupState>): TallyGroupState = held.screen.copy(
+        title = held.screen.data_?.name?.ifEmpty { null } ?: held.screen.title,
+        chrome = chrome(held.screen.parent),
+    )
+
+    /**
+     * A DETAIL PAGE'S WORDS, its back named for the page it was pushed from
+     * (#1047) — "Lisbon" over an expense opened from that group — else "Tally".
+     */
+    internal fun chrome(parent: String): TallyDetailChrome = CHROME.copy(back = parent.ifEmpty { TallyCopy.APP_TITLE })
 
     internal val CHROME: TallyDetailChrome = TallyDetailChrome(
         retry = TallyCopy.RETRY,

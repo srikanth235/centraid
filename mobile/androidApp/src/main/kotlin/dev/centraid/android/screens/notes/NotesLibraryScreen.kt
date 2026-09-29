@@ -253,10 +253,32 @@ private fun LazyListScope.sections(
 /** One note: title over snippet and meta, the checklist word as a chip, and the menu key. */
 @Composable
 private fun NoteRow(row: NotesNoteRow, menuLabel: String, onEvent: (NotesLibraryEvent) -> Unit) {
+    val matchInk = centraidColor("text")
     CentraidRow(
         title = row.title,
         meta = listOf(row.snippet, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
         chips = listOfNotNull(if (row.check_label.isNotEmpty()) StatusChip(label = row.check_label) else null),
+        // A SEARCH HIT'S SNIPPET, its matches emphasised as the index marked
+        // them (`snippet_runs`); the meta follows as on any row.
+        metaRuns = row.snippet_runs.takeIf { it.isNotEmpty() }?.let { runs ->
+            androidx.compose.ui.text.buildAnnotatedString {
+                runs.forEach { run ->
+                    if (run.highlighted) {
+                        pushStyle(
+                            androidx.compose.ui.text.SpanStyle(
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.W600,
+                                color = matchInk,
+                            ),
+                        )
+                        append(run.text)
+                        pop()
+                    } else {
+                        append(run.text)
+                    }
+                }
+                if (row.meta.isNotEmpty()) append(" · ${row.meta}")
+            }
+        },
         testTag = "notes-row-${row.note_id}",
         onTap = { onEvent(NotesLibraryEvent(note_picked = NotesLibraryEvent.NotePicked(row.note_id, row.title))) },
     ) {

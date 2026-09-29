@@ -58,6 +58,9 @@ fn generated() -> Value {
                 "boxPublicHex": hex::encode(keys.box_key.public().to_bytes()),
                 // Never leaves the phone, so only the vectors can see it move.
                 "rootKeyHex": hex::encode(keys.root.as_bytes()),
+                // Locker's `K` (#1047, Q-1047-11). If it moves, every sealed
+                // Locker secret stops opening after a restore from the words.
+                "lockerKeyHex": hex::encode(keys.locker.as_bytes()),
             })
         })
         .collect();

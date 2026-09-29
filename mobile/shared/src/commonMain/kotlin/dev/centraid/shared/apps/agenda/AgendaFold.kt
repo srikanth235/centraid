@@ -39,7 +39,9 @@ import centraid.screen.v1.AgendaDueTask as DueTitle
  * - **Waiting**: the days of Schedule's window that hold an occurrence waiting
  *   on your reply, and only those occurrences.
  * - **A search term**: the days the hits fall on, wherever they are — a search
- *   finds, and a hit last month is still the answer. Waiting still filters.
+ *   finds, and a hit last month is still the answer. Search is an overlay on
+ *   whichever tab was open, and it covers every event: Waiting's filter does
+ *   not narrow it (#1047).
  *
  * A run over several days is a row on each; the upcoming answer is padded a
  * day either side (`AgendaReads`), and `local_days` is what keeps a row to the
@@ -64,7 +66,8 @@ internal object AgendaFold {
         val anchor = screen.anchor_day.ifEmpty { today }
         val term = AgendaHomeMachine.activeTerm(screen)
         val search = answers.search.takeIf { term != null }
-        val waitingOnly = screen.destination == AgendaHomeState.Destination.DESTINATION_WAITING
+        // THE HITS ARE EVERY EVENT: while they read, the tab's own rows stay.
+        val waitingOnly = search == null && screen.destination == AgendaHomeState.Destination.DESTINATION_WAITING
         val span = AgendaHomeMachine.spanOf(screen.destination)
         val window = generateSequence(anchor) { day -> plusDays(day, 1) }.take(span).toList()
         val inWindow = window.toSet()
@@ -73,7 +76,10 @@ internal object AgendaFold {
         val shown = { event: AgendaEvent -> event.calendar_id == null || event.calendar_id !in hidden }
         val hues = calendarHues(answers)
 
-        val source = search?.events ?: upcoming.events
+        // A REPEATING HIT IS ITS NEXT OCCURRENCE (#1047, R-1047-Q6): drawn on
+        // that day and opened by that occurrence's key, never the series'
+        // anchor years back.
+        val source = search?.events?.map(::atNextOccurrence) ?: upcoming.events
         val visible = source.filter(shown).filter { !waitingOnly || waitsOnYou(it) }
 
         // EVERY DAY A ROW IS ON, in the window unless it is a search hit.
@@ -200,6 +206,29 @@ internal object AgendaFold {
                 if (drawn.size == 1) AgendaCopy.EVENT_ONE else AgendaCopy.EVENT_MANY
             }",
             landing = landing,
+        )
+    }
+
+    /**
+     * A search hit moved onto the occurrence the core names
+     * (`next_instance_key`, `next_original_start_local`, `next_local_start`):
+     * its keys are that occurrence's, and its days shift by whole days from
+     * the series' anchor to it, so the row sits on the day it opens. A hit
+     * with no next occurrence (a one-off, or none in reach) is itself.
+     */
+    internal fun atNextOccurrence(event: AgendaEvent): AgendaEvent {
+        if (event.next_instance_key.isEmpty() || event.next_local_start.length < DAY) return event
+        val from = dev.centraid.shared.kit.time.epochDayOf(event.local_start.take(DAY))
+        val to = dev.centraid.shared.kit.time.epochDayOf(event.next_local_start.take(DAY))
+        val shift = if (from != null && to != null) (to - from).toInt() else 0
+        fun moved(stamp: String): String =
+            if (stamp.length < DAY) stamp else (plusDays(stamp.take(DAY), shift) ?: stamp.take(DAY)) + stamp.drop(DAY)
+        return event.copy(
+            instance_key = event.next_instance_key,
+            original_start_local = event.next_original_start_local.ifEmpty { event.original_start_local },
+            local_start = event.next_local_start,
+            local_end = moved(event.local_end),
+            local_days = event.local_days.map(::moved),
         )
     }
 
@@ -346,14 +375,18 @@ internal object AgendaFold {
     private fun startDay(event: AgendaEvent): String = event.local_start.take(DAY)
 
     /**
-     * THE 2PX RULE'S HUE. A calendar that stores `var(--c-<hue>)` gets that
-     * hue; one that stores nothing, or a colour the wheel cannot name (the demo
-     * vault's `steelblue`), gets its id's own — a rule has to be some colour,
-     * and the id's is stable across renames. An event on no calendar is
-     * [NO_CALENDAR_HUE].
+     * THE 2PX RULE'S HUE, as the theme's colour role (`cTeal`) — People's
+     * convention, so no view converts a wheel word (#1047). A calendar that
+     * stores `var(--c-<hue>)` gets that hue; one that stores nothing, or a
+     * colour the wheel cannot name (the demo vault's `steelblue`), gets its
+     * id's own — a rule has to be some colour, and the id's is stable across
+     * renames. An event on no calendar is [NO_CALENDAR_HUE].
      */
     private fun calendarHues(answers: AgendaAnswers): (String?) -> String =
         calendarHues(answers.upcoming.calendars)
+
+    /** A person's own hue on a guest row, as a colour role. */
+    fun personHue(partyId: String): String = PartyHueWheel.role(PartyHueWheel.identityHueKey(partyId))
 
     /** [calendarHues] over a calendar list — the detail's and the editor's too. */
     fun calendarHues(calendars: List<AgendaCalendar>): (String?) -> String {
@@ -362,7 +395,7 @@ internal object AgendaFold {
             if (id == null) {
                 NO_CALENDAR_HUE
             } else {
-                PartyHueWheel.partyHueKey(id, stored[id]) ?: PartyHueWheel.identityHueKey(id)
+                PartyHueWheel.role(PartyHueWheel.partyHueKey(id, stored[id]) ?: PartyHueWheel.identityHueKey(id))
             }
         }
     }
@@ -430,7 +463,7 @@ internal object AgendaFold {
     )
 
     /** A party hue for an event on no calendar: neutral, and never a brand. */
-    private const val NO_CALENDAR_HUE: String = "slate"
+    private const val NO_CALENDAR_HUE: String = "cSlate"
 
     private const val CANCELLED: String = "cancelled"
     private const val NEEDS_ACTION: String = "needs-action"

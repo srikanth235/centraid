@@ -246,10 +246,8 @@ public class NotesRoutes : AppRoutes {
                 journal.forward(event)
                 event.band?.let { place(nav, it.key) }
                 event.entry_picked?.let { nav.go(nav.stack.push(Destination.NotesEditor(it.note_id, it.title))) }
-                // TODO(intent): Notes has no command that writes a journal
-                // entry for a day, so "New entry" opens a new note; the day
-                // it carries is not written anywhere yet.
-                if (event.new_entry != null) newNote(nav)
+                // "New entry" is the machine's own sheet (`compose`), written
+                // through People's journal command — nothing to route here.
                 if (event.trash_opened != null) nav.go(nav.stack.push(Destination.NotesTrash))
             },
             onHome = { nav.home() },
@@ -267,7 +265,8 @@ public class NotesRoutes : AppRoutes {
         NotesHistoryScreen(
             state = state,
             onEvent = { event -> history.forward(event) },
-            parentTitle = destination.title.ifEmpty { NotesCopy.UNTITLED },
+            // `chrome.back` is the machine's back word (#1047).
+            parentTitle = state.chrome?.back.orEmpty(),
             onBack = { nav.pop() },
         )
     }

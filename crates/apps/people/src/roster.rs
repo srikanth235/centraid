@@ -113,6 +113,8 @@ pub struct TrashRow {
     pub party_id: String,
     pub name: String,
     pub role: String,
+    /// When the person was trashed.
+    pub deleted_at: Option<String>,
     pub purge_at: Option<String>,
 }
 
@@ -466,6 +468,7 @@ pub fn load_trash(door: &dyn PageDoor) -> KitResult<(TrashData, Option<Denial>)>
                     .cloned()
                     .unwrap_or_else(|| UNKNOWN_NAME.to_owned()),
                 role: text_of(row, "role").unwrap_or_default(),
+                deleted_at: text_of(row, "deleted_at"),
                 purge_at: text_of(row, "purge_at"),
                 party_id,
             })

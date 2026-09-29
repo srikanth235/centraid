@@ -38,6 +38,7 @@ package centraid.core.v1;
 
 import "centraid/core/v1/agenda.proto";
 import "centraid/core/v1/docs.proto";
+import "centraid/core/v1/locker.proto";
 import "centraid/core/v1/notes.proto";
 import "centraid/core/v1/people.proto";
 import "centraid/core/v1/tally.proto";
@@ -83,6 +84,11 @@ message AppQueryRequest {
     TallySearchRequest tally_search = 57;
     TallyTrashRequest tally_trash = 58;
     TallyExportRequest tally_export = 59;
+    // Locker (#1047): 60-69. Metadata only; a secret is the session's.
+    LockerItemsRequest locker_items = 60;
+    LockerItemRequest locker_item = 61;
+    LockerSearchRequest locker_search = 62;
+    LockerReviewRequest locker_review = 63;
   }
 }
 
@@ -127,6 +133,10 @@ message AppQueryResponse {
     TallySearch tally_search = 57;
     TallyTrash tally_trash = 58;
     TallyExport tally_export = 59;
+    LockerItems locker_items = 60;
+    LockerItemDetail locker_item = 61;
+    LockerSearch locker_search = 62;
+    LockerReview locker_review = 63;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

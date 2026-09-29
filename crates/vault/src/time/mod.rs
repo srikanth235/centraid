@@ -10,7 +10,7 @@
 //!
 //! | Module | The seam |
 //! |---|---|
-//! | [`zone`] | THE vault's zone, resolved in two tiers with v0's host-local third DELETED; the DST policy shared with cron; all civil arithmetic |
+//! | [`zone`] | THE vault's zone, resolved in two tiers with v0's host-local third DELETED; the DST policy; all civil arithmetic |
 //! | [`rrule`] | ONE parser, three call shapes, a refused-never-dropped subset, and the ONE member-facing summariser |
 //! | [`recurrence`] | the expander, the exception matcher, the next occurrence and the missed-period collapse |
 //! | [`occurrence`] | `original_start_local` — the ONE place the stored spelling appears (#996 R21, drift ONT-25) |
@@ -18,8 +18,8 @@
 //!
 //! ## The three sentences of the DST policy
 //!
-//! Shared with `crates/automations::cron`, which is the other half of the same
-//! contract (`docs/cron-timezone.md`):
+//! Every reader of civil time — the task lifecycle's rollover here, Agenda's
+//! expansion and its local days (`crates/apps/agenda`) — goes through them:
 //!
 //! 1. A **nonexistent** wall time is SKIPPED — it exists at no instant, so
 //!    nothing can deliver it.
@@ -29,10 +29,10 @@
 //!
 //! ## One zone source
 //!
-//! [`zone::FireZone`] and [`zone::ZoneUnset`] were `crates/automations::cron`'s
-//! and are re-exported from there unchanged. A second reader would be the
-//! drift this module exists to prevent, and the crate graph
-//! (`automations → assist → vault`) means the shared type can only live here.
+//! [`zone::FireZone`] and [`zone::ZoneUnset`] are the one resolution of a
+//! zone name, and every crate above the vault that needs civil time reads it
+//! from here. A second reader would be the drift this module exists to
+//! prevent.
 
 pub mod occurrence;
 pub mod recurrence;

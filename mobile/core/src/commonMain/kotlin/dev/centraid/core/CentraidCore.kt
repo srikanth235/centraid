@@ -103,18 +103,29 @@ public data class CoreConfiguration(
      * keyed on. `dev.centraid.shared.custody.VaultSecrets` is the one place the
      * two are stored, with that rule on each accessor.
      *
-     * **Absent is not an error**: the core mints one and hands it back to be
-     * stored, which is every first launch.
-     *
-     * **The JSON spelling below is W15's and is still landing.** `CONTRACT.md`
-     * §4b carries the seed half today; the `device` object is the extension
-     * W15 is adding, and its key is `"device": {"secret": "<hex>"}` as the
-     * contract's author stated it. If the landed contract spells it otherwise,
-     * this one line moves and nothing else does — which is why the spelling is
-     * built here and nowhere else.
+     * **The CORE mints it**, at pair or at restore, certifies it under the
+     * vault's identity key and hands it back once on that flow's answer
+     * (`crates/core/src/phone/link.rs`); the shell stores it and passes it at
+     * every keyed open as `"device": {"secret": "<hex>"}`
+     * (`crates/core-ffi/src/marshal.rs`'s `device_secret`). **Absent is not an
+     * error**: a core opened without it seals and does not sign, so it drains
+     * nothing — every vault before its first pair (#1047 E1, R-1047-E4).
      */
     public val deviceSecretHex: String? = null,
 ) {
+    /**
+     * REDACTED: the generated `toString` of a data class prints every field,
+     * and two of these are the seed and the device secret (#1047 W2). A
+     * configuration that reached a log line or a crash report would carry
+     * every vault the member has.
+     */
+    override fun toString(): String =
+        "CoreConfiguration(databasePath=$databasePath, create=$create, " +
+            "expectedDigest=$expectedDigest, " +
+            "vaultSeedHex=${if (vaultSeedHex == null) "absent" else "<redacted>"}, " +
+            "vaultIndex=$vaultIndex, " +
+            "deviceSecretHex=${if (deviceSecretHex == null) "absent" else "<redacted>"})"
+
     internal fun toJson(uiThreadName: String): String = buildString {
         append('{')
         append("\"path\":").append(quote(databasePath))
@@ -403,13 +414,35 @@ public class CentraidCore private constructor(
             CoreStatus.MALFORMED -> CoreOutcome.Failed(
                 CoreFailure.Malformed("the core could not decode the request this shell encoded"),
             )
+            // A REFUSED REQUEST CARRIES ITS REASON (`CONTRACT.md` clause 4, #1047
+            // E1). The core writes an `Error` body with `BAD_ARGUMENT` for an
+            // `InvalidRequest` — a `tz` a vault cannot answer in, a phrase that
+            // is not one, a `Cancel` naming a bounded read — and this arm threw
+            // those bytes away and said "impossible argument", which is what
+            // hid a missing `tz` behind a generic line (#1047 F2). Decoded, it
+            // is a refusal like any other, with the code a caller branches on.
+            // Only a call with NO body — a null pointer from this binding — is
+            // the binding's own fault.
             CoreStatus.BAD_ARGUMENT -> CoreOutcome.Failed(
-                CoreFailure.BadArgument("the binding handed the ABI an impossible argument"),
+                refusalIn(answer.bytes)
+                    ?: CoreFailure.BadArgument("the binding handed the ABI an impossible argument"),
             )
             CoreStatus.TIMEOUT -> CoreOutcome.Failed(
                 CoreFailure.BadArgument("centraid_call cannot time out; only next_event can"),
             )
         }
+    }
+
+    /** The `Error` body a refusing call wrote, as a [CoreFailure.Refused]; null for none. */
+    private fun refusalIn(bytes: ByteArray?): CoreFailure.Refused? {
+        if (bytes == null || bytes.isEmpty()) return null
+        val error = runCatching { Envelope.ADAPTER.decode(bytes) }.getOrNull()?.error ?: return null
+        return CoreFailure.Refused(
+            code = error.code.value,
+            detail = error.detail,
+            diagnosticId = error.diagnostic_id,
+            sentence = error.sentence.ifBlank { "Centraid refused that." },
+        )
     }
 
     private fun diagnosticIdOf(bytes: ByteArray?): String {

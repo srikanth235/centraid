@@ -21,27 +21,28 @@ import SwiftUI
 ///
 /// ## Nothing here decides anything
 ///
-/// Still true, and it is the reason this sheet is three controls and no state.
-/// Whether a vault can be founded, and what it ends up called, are
-/// `HomeSession.found` and, under it, the core. A shell that pre-judged either
+/// Still true, and it is the reason this sheet is two doors and no state.
+/// Making a vault opens `words.make` (#1047 E2): whether this phone mints its
+/// 24 words, makes the next vault from a seed it already holds, or must
+/// restore first is `VaultWordsMachine`'s, and the vault's name is the
+/// core's. Restoring opens `words.enter`. A shell that pre-judged either
 /// would be a second opinion about a value only the vault can state.
 struct MakeVaultSheet: View {
     @ObservedObject var shell: ShellModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
 
-    @State private var working = false
-
     var body: some View {
         NavigationStack {
             Form {
                 Section("Make a vault") {
-                    Button(working ? "Making…" : "Make a vault on this phone") {
-                        working = true
-                        shell.found { working = false }
-                    }
-                    .disabled(working)
-                    .accessibilityIdentifier("vault-found-button")
+                    Button("Make a vault on this phone") { shell.makeVault() }
+                        .accessibilityIdentifier("vault-found-button")
+
+                    // BRING THIS MEMBER'S VAULTS BACK from their 24 words — a
+                    // fresh install, or a phone told to restore first.
+                    Button(ShellWords.wordsRestore) { shell.openRestore() }
+                        .accessibilityIdentifier("vault-restore-button")
 
                     // THE LAST OUTCOME, IN A MEMBER'S WORDS. Never a hash,
                     // never a path, never a peer's error text — `gatewayStatus`

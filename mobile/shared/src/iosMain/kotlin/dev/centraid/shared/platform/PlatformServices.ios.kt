@@ -135,7 +135,14 @@ import platform.UIKit.UIDeviceBatteryState
  * * **`BGTaskScheduler` refuses by throwing**, and the refusal is the answer a
  *   member reads: "Background App Refresh is off" (`docs/mobile-offline.md:214`).
  */
-public actual fun platformServices(): PlatformServices = IosPlatformServices()
+public actual fun platformServices(): PlatformServices = processServices
+
+/**
+ * ONE PER PROCESS, as on Android (#1047 walk): a caller asks on every
+ * keystroke (Locker's `secureRandom`), and each instance starts its own
+ * network path monitor that nothing ever cancels.
+ */
+private val processServices: IosPlatformServices by lazy { IosPlatformServices() }
 
 public class IosPlatformServices : PlatformServices {
     override val secureStore: SecureStore = IosSecureStore()

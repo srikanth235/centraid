@@ -32,10 +32,6 @@
 //! and `delete-note`; no `knowledge.*` or `core.*` command this build carries
 //! sets the command-level gate. Collapsing them would put a dialog in front of
 //! nothing and drop the non-owner park in exchange.
-//!
-//! **Nothing here is `online_only`, and that is a checked claim.** Locker
-//! declares `ONLINE_ONLY_ACTIONS`; Notes declares none. So every Notes action
-//! may be queued offline — which is the point of writing a note on a train.
 
 use std::collections::BTreeMap;
 
@@ -130,9 +126,6 @@ pub struct ActionRow {
     pub action: &'static str,
     pub command: &'static str,
     pub confirm: Confirm,
-    /// A seat refuses to QUEUE this offline. Notes declares none; see the
-    /// module note for the grep behind the claim.
-    pub online_only: bool,
     /// The schema whose commands are not in this build yet, when there is one.
     /// `send-to-tasks` is the only row that carries it (slot 4d).
     pub pending_schema: Option<&'static str>,
@@ -143,7 +136,6 @@ const fn act(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::None,
-        online_only: false,
         pending_schema: None,
     }
 }
@@ -153,7 +145,6 @@ const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::Required,
-        online_only: false,
         pending_schema: None,
     }
 }
@@ -293,11 +284,6 @@ mod tests {
             .map(|row| row.action)
             .collect();
         assert_eq!(required, ["delete-notebook", "delete-note"]);
-    }
-
-    #[test]
-    fn no_action_is_withheld_offline() {
-        assert!(ACTIONS.iter().all(|row| !row.online_only));
     }
 
     /// NOTHING IS OWED ANY MORE. `send-to-tasks`' `schedule.add_task` was the

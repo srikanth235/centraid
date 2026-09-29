@@ -1,0 +1,338 @@
+// LOCKER ON THE PHONE, AS THE CORE ANSWERS IT (#1047, wave L1; D-5).
+//
+// Two planes, one file, because they are one app's and a shell author reads
+// them together:
+//
+// 1. **The app queries (60–63)** — the list, one item, search and review.
+//    `crates/apps/locker::phone` reads and folds; `crates/core`'s `app_query`
+//    converts. THE LIST IS METADATA; THE SECRET IS NOT. No answer here carries
+//    a sealed cell's value OR its ciphertext: a secret is answered as its
+//    PRESENCE (`LockerSecret.present`), through the grammar's one sealed
+//    operand (`<cell> IS NOT NULL AS …`), and nothing else.
+//
+// 2. **The session (`Request.locker = 21`)** — unlock, relock, the state, one
+//    reveal, and one one-time code. D-5: the phone's biometric with the device passcode as
+//    fallback; relock when Centraid leaves the foreground; no Locker
+//    passphrase. The OS prompt is the SHELL's (LAContext
+//    `.deviceOwnerAuthentication`, BiometricPrompt with `DEVICE_CREDENTIAL`);
+//    the core cannot see it happen, so `LockerUnlock` is the shell's REPORT
+//    that it did, receipted as `locker.auth`. What the core enforces is the
+//    other half: `K` is loaded only by an unlock, a reveal and a
+//    secret-bearing write are refused while locked, idle ends a session, and
+//    a relock zeroes the key.
+//
+// A LOCKED LOCKER IS NOT READ. The shell withholds every query here while its
+// lock is not open (`LockerGate`); the core does not refuse them, because the
+// metadata is plaintext at rest by design (listing is not unlocking, #873) and
+// a refusal in the same process as the file would protect nothing the OS lock
+// screen does not. What the core refuses is what needs `K`.
+//
+// CIVIL TIME is `agenda.proto`'s zone rule: `tz` names an IANA zone; empty is
+// the vault's own; neither is refused. Every stored instant a member reads is
+// answered as its local day (`*_local_day`, `YYYY-MM-DD`), never an instant.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// ---------------------------------------------------------------------------
+// The app queries.
+// ---------------------------------------------------------------------------
+
+// `locker.items` (60): one shelf, newest-updated first, with the vault's own
+// counts beside it so the foot can say "300 of 312".
+message LockerItemsRequest {
+  // The archived shelf ("keep forever, hide from lists") instead of the live
+  // one. Trash is the kit's page read, not this query.
+  bool archived = 1;
+  // The window: 0 is 300; clamped to 20–2,000 (the manifest's bounds).
+  uint32 limit = 2;
+  string tz = 3;
+}
+
+message LockerItems {
+  repeated LockerItemRow items = 1;
+  // The shelf is longer than `window`.
+  bool truncated = 2;
+  uint32 window = 3;
+  // How many items the shelf holds, counted in the vault — absent when the
+  // count itself reached its ceiling, so the foot says nothing rather than a
+  // wrong number.
+  optional uint32 total = 4;
+  // Live items per rendered type, in `ITEM_TYPES` order, zero counts omitted.
+  repeated LockerTypeCount by_type = 5;
+  optional uint32 archived_count = 6;
+  optional uint32 trashed_count = 7;
+  // Every tag in use on a live item, sorted — the filter row's chips.
+  repeated string tags = 8;
+  // `YYYY-MM-DD` in `tz`.
+  string today = 9;
+}
+
+message LockerTypeCount {
+  string type = 1;
+  uint32 count = 2;
+}
+
+// One row of a shelf or a search. Secret-free by construction.
+message LockerItemRow {
+  string item_id = 1;
+  // The type the phone draws: an unknown stored type reads as `note` (L-type).
+  string type = 2;
+  string title = 3;
+  // The crate's secret-free subtitle: a login's username, an identity's
+  // email, a Wi-Fi network — never a card number.
+  string subtitle = 4;
+  bool starred = 5;
+  repeated string tags = 6;
+  // The one stored security fact (L-type). Weak and reused are derived and
+  // are not on this row.
+  bool compromised = 7;
+  // A login's primary address, as stored. Empty for every other type.
+  string url = 8;
+  bool archived = 9;
+  // The row's last change, as a day in `tz`.
+  string updated_local_day = 10;
+  // A card's expiry as stored (`MM/YY`). Empty otherwise.
+  string expiry = 11;
+}
+
+// `locker.item` (61): one item and its sidecars. Answers a TRASHED item too,
+// so a stale link says what happened rather than nothing.
+message LockerItemRequest {
+  string item_id = 1;
+  string tz = 2;
+}
+
+message LockerItemDetail {
+  // Absent: no item has this id.
+  optional LockerItem item = 1;
+  string today = 2;
+}
+
+message LockerItem {
+  string item_id = 1;
+  // Rendered and stored type; `degraded_from` is set when they differ.
+  string type = 2;
+  string degraded_from = 3;
+  string title = 4;
+  bool starred = 5;
+  repeated string tags = 6;
+  bool compromised = 7;
+  bool archived = 8;
+  bool trashed = 9;
+  // The plain columns, as stored; empty when unset. Which of them a type
+  // carries is `locker.proto`'s reader's question, answered by the type.
+  string username = 10;
+  string url = 11;
+  // RESERVED. Held `url_match_policy` until rung eight dropped the column with
+  // the matcher nothing ran (Q-1047-15).
+  reserved 12;
+  reserved "url_match_policy";
+  string notes = 13;
+  string cardholder = 14;
+  string expiry = 15;
+  string brand = 16;
+  string fullname = 17;
+  string email = 18;
+  string phone = 19;
+  string address = 20;
+  string network = 21;
+  // The connector alias, when one is bound.
+  string alias = 22;
+  // The member's memo (`knowledge.annotation`, plaintext and searchable).
+  string memo = 23;
+  // The sealed cells this item's TYPE carries, in the type's order, each with
+  // whether it holds a value. Never a value, never ciphertext.
+  repeated LockerSecret secrets = 24;
+  // Owner-defined fields (L-field). A sealed field's `value` is empty and
+  // `sealed` is true.
+  repeated LockerField fields = 25;
+  // A login's additional addresses (L-address).
+  repeated LockerAddress addresses = 26;
+  // The passkey slot's metadata (L-passkey), when one is stored.
+  optional LockerPasskey passkey = 27;
+  // Days in `tz`; empty when unknown.
+  string password_set_local_day = 28;
+  string created_local_day = 29;
+  string updated_local_day = 30;
+  string purge_local_day = 31;
+}
+
+message LockerSecret {
+  // `password`, `otp_seed`, `card_number`, `cvv` or `content` — the address a
+  // `LockerReveal` names.
+  string column = 1;
+  bool present = 2;
+}
+
+message LockerField {
+  string field_id = 1;
+  string section = 2;
+  string label = 3;
+  // `text`, `sealed`, `url`, `date` or `otp`.
+  string kind = 4;
+  string value = 5;
+  bool sealed = 6;
+  bool present = 7;
+}
+
+message LockerAddress {
+  string address_id = 1;
+  string url = 2;
+  // RESERVED: `match_policy`, dropped with `url_match_policy` (Q-1047-15).
+  reserved 3;
+  reserved "match_policy";
+}
+
+message LockerPasskey {
+  string rp_id = 1;
+  string user_handle = 2;
+  string display_name = 3;
+  bool has_private_key = 4;
+}
+
+// `locker.search` (62): title, username and address only (the handoff's
+// search note: secret values and notes are never searched). Live and archived
+// items; trashed ones are not found.
+message LockerSearchRequest {
+  string term = 1;
+  // At most this many rows; 0 is 50.
+  uint32 limit = 2;
+  string tz = 3;
+}
+
+message LockerSearch {
+  string term = 1;
+  repeated LockerItemRow items = 2;
+  // More matched than `limit`.
+  bool truncated = 3;
+}
+
+// `locker.review` (63): the checks this phone can run over METADATA, and the
+// ones it cannot. Weak and reused need every password unsealed at once, which
+// this phone does not do; breach checking would need network egress, which
+// Locker is excluded from. Both are named, never scored as clear.
+message LockerReviewRequest {
+  string tz = 1;
+}
+
+message LockerReview {
+  // Items the member flagged compromised by hand, in the editor. There is no
+  // import and no automatic producer (R-1047-F7); a changed password clears
+  // the flag.
+  repeated LockerItemRow compromised = 1;
+  // Logins whose address is `http://`.
+  repeated LockerItemRow insecure_address = 2;
+  // Cards whose expiry month has passed, in `tz`.
+  repeated LockerItemRow expired = 3;
+  // Cards that expire this month or within the next two, in `tz`.
+  repeated LockerItemRow expiring = 4;
+  // How many live and archived items were reviewed.
+  uint32 reviewed = 5;
+  // The review walked its ceiling (2,000) and stopped.
+  bool truncated = 6;
+  string today = 7;
+}
+
+// ---------------------------------------------------------------------------
+// The session (`Request.locker = 21`).
+// ---------------------------------------------------------------------------
+
+message LockerSessionRequest {
+  oneof step {
+    // Where the session stands. Answers `state` and nothing else.
+    LockerStateAsk state = 1;
+    // The OS prompt succeeded. Loads `K` (minting it on this device's first
+    // unlock, D-L3), opens a session and writes a `locker.auth` receipt.
+    LockerUnlock unlock = 2;
+    // Zero the key. Idempotent: relocking a locked Locker is a no-op.
+    LockerRelock relock = 3;
+    // One sealed cell's plaintext, receipted first.
+    LockerReveal reveal = 4;
+    // The one-time code an item's `otp_seed` makes now (RFC 6238: HMAC-SHA-1,
+    // six digits, thirty seconds), receipted first through
+    // `locker.totp_code`. The seed itself is never answered.
+    LockerTotpAsk totp = 5;
+  }
+}
+
+message LockerStateAsk {}
+
+message LockerUnlock {}
+
+message LockerRelock {}
+
+message LockerReveal {
+  string item_id = 1;
+  // One of `LockerSecret.column`.
+  string column = 2;
+}
+
+message LockerTotpAsk {
+  string item_id = 1;
+}
+
+message LockerSessionResponse {
+  LockerSessionState state = 1;
+  // How long an unlocked session has left before idle ends it.
+  uint64 remaining_ms = 2;
+  // The unlock's receipt, on an unlock.
+  string receipt_id = 3;
+  // A reveal's answer, when it happened.
+  optional LockerRevealed revealed = 4;
+  // Why a reveal or a code did not happen. `UNSPECIFIED` on every other step.
+  LockerRevealRefusal refusal = 5;
+  // A code's answer, when one was made.
+  optional LockerTotp totp = 6;
+}
+
+enum LockerSessionState {
+  LOCKER_SESSION_STATE_UNSPECIFIED = 0;
+  LOCKER_SESSION_STATE_LOCKED = 1;
+  LOCKER_SESSION_STATE_UNLOCKED = 2;
+}
+
+// ONE CELL'S PLAINTEXT, WITH A LIFE. The receipt is written before the value
+// exists; a shell conceals it at `expires_in_ms` and keeps no copy.
+message LockerRevealed {
+  string item_id = 1;
+  string column = 2;
+  string value = 3;
+  string receipt_id = 4;
+  uint64 expires_in_ms = 5;
+}
+
+// ONE CODE, WITH ITS LIFE. The code is what a site asks for and is only good
+// until the step rolls, so its life is the step's: a shell shows it for
+// `remaining_seconds` and keeps no copy. Never logged.
+message LockerTotp {
+  string item_id = 1;
+  // Six digits, ungrouped — what a site's field takes.
+  string code = 2;
+  // Thirty.
+  uint32 period_seconds = 3;
+  // Seconds until this code rolls: 1–30, never 0.
+  uint32 remaining_seconds = 4;
+  string receipt_id = 5;
+}
+
+enum LockerRevealRefusal {
+  LOCKER_REVEAL_REFUSAL_UNSPECIFIED = 0;
+  // No open session: the shell shows its lock, and never prompts from here.
+  LOCKER_REVEAL_REFUSAL_LOCKED = 1;
+  // The cell holds nothing.
+  LOCKER_REVEAL_REFUSAL_EMPTY = 2;
+  // Not a sealed cell, or no live item has this id.
+  LOCKER_REVEAL_REFUSAL_NOT_SEALED = 3;
+  // The ciphertext did not open, or names a key generation this device does
+  // not hold. One answer on purpose: telling them apart is an oracle.
+  LOCKER_REVEAL_REFUSAL_DID_NOT_OPEN = 4;
+  // A code was asked for and the seed opened, but it is not base32 — a seed
+  // stored before the editor read entries through `totp::seed_of`.
+  LOCKER_REVEAL_REFUSAL_NOT_A_SEED = 5;
+  // A reveal named `otp_seed`. The seed is the second factor: the phone asks
+  // `totp` for a code and never for the seed, so the core refuses it before
+  // the session is consulted and before any receipt (R-1047-D6).
+  LOCKER_REVEAL_REFUSAL_SEED_NOT_SHOWN = 6;
+}

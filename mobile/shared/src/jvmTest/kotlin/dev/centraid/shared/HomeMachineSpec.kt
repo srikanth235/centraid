@@ -14,6 +14,7 @@ import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.shell.FirstMoves
 import dev.centraid.shared.shell.HomeMachine
+import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.shell.SpringboardPolicy
 import dev.centraid.shared.shell.StrandedWrite
 import dev.centraid.shared.shell.strandedStatus
@@ -72,6 +73,51 @@ class HomeMachineSpec : StringSpec({
         SpringboardPolicy.SPRINGBOARD_ORDER.fold(state) { acc, appId ->
             arrive(acc, appId, TileStatus.TILE_STATUS_EMPTY)
         }
+
+    // --- the words a view draws, not spells (#1047) ------------------------
+
+    "every tile's accessibility words are the machine's: \"Open People, 5 people\", the withheld glyph never spoken" {
+        val seeded = opened().data_!!.tiles.single { it.app_id == "people" }
+        seeded.open_label shouldBe "Open People"
+        seeded.accessibility_label shouldBe "Open People"
+        val counted = HomeMachine.reduce(
+            opened(),
+            HomeEvent(
+                tile = HomeEvent.TileArrived(
+                    app_id = "people",
+                    status = TileStatus.TILE_STATUS_CONTENT,
+                    count = TileCount(value_ = 5),
+                    count_label = "people",
+                ),
+            ),
+        ).state.data_!!.tiles.single { it.app_id == "people" }
+        counted.accessibility_label shouldBe "Open People, 5 people"
+        counted.open_label shouldBe "Open People"
+        val capped = HomeMachine.reduce(
+            opened(),
+            HomeEvent(
+                tile = HomeEvent.TileArrived(
+                    app_id = "docs",
+                    status = TileStatus.TILE_STATUS_CONTENT,
+                    count = TileCount(value_ = 200, capped = true),
+                    count_label = "documents",
+                ),
+            ),
+        ).state.data_!!.tiles.single { it.app_id == "docs" }
+        capped.accessibility_label shouldBe "Open Docs, 200+ documents"
+    }
+
+    "the people tile's foot is in state: \"+N more in your directory\", else everyone" {
+        fun row(id: String) = centraid.core.v1.Row(
+            values = listOf(centraid.core.v1.Value(text = id), centraid.core.v1.Value(text = "Name $id")),
+        )
+        val five = HomeReads.arrived("people", (1..5).map { row("p$it") }, capped = false).tile!!.body!!.people!!
+        five.more shouldBe 2
+        five.more_label shouldBe "+2 more in your directory"
+        val two = HomeReads.arrived("people", (1..2).map { row("p$it") }, capped = false).tile!!.body!!.people!!
+        two.more shouldBe 0
+        two.more_label shouldBe "That's everyone in your directory"
+    }
 
     // --- the seed ---------------------------------------------------------
 

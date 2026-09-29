@@ -73,8 +73,7 @@ pub use manifest::{
 pub use objects::{ObjectKeys, ObjectsError};
 pub use policy::{BackupPolicy, BackupPolicyError, CasAck, MIN_RPO_SECONDS};
 pub use restore::{
-    DataDirLock, RecoverPhase, RestoreDrillReport, RestoredPairReport, SealKeyVerdict,
-    restore_check, restore_drill,
+    DataDirLock, RecoverPhase, RestoreDrillReport, RestoredPairReport, restore_check, restore_drill,
 };
 pub use segment::{GenerationId, PageSegment, SegmentError};
 pub use spool::{Spool, SpoolCursor, SpoolEntry, SpoolError};

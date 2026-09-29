@@ -947,7 +947,6 @@ fn add_person() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1035,7 +1034,6 @@ fn edit_person() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1094,7 +1092,6 @@ fn set_cadence() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1142,7 +1139,6 @@ fn trash_person() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1178,7 +1174,6 @@ fn restore_person() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1390,7 +1385,6 @@ fn purge_person() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1471,7 +1465,6 @@ fn undo_person() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id, "revision_id": revision_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1582,7 +1575,6 @@ fn log_interaction() -> CommandDefinition {
             Ok(serde_json::json!({ "interaction_id": interaction_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1612,7 +1604,6 @@ fn star_person() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1638,7 +1629,6 @@ fn unstar_person() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1704,7 +1694,6 @@ fn move_person() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1729,7 +1718,6 @@ fn add_note() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1814,7 +1802,6 @@ fn add_task() -> CommandDefinition {
             Ok(serde_json::json!({ "task_id": task_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1890,7 +1877,6 @@ fn complete_task() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1942,7 +1928,6 @@ fn reopen_task() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2063,7 +2048,6 @@ fn add_important_date() -> CommandDefinition {
             Ok(serde_json::json!({ "date_id": date_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2157,7 +2141,6 @@ fn toggle_reminder() -> CommandDefinition {
             Ok(serde_json::json!({ "date_id": date_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2275,7 +2258,6 @@ fn add_relationship() -> CommandDefinition {
             Ok(serde_json::json!({ "relationship_id": relationship_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2313,7 +2295,6 @@ fn add_gift() -> CommandDefinition {
             Ok(serde_json::json!({ "gift_id": gift_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2369,7 +2350,6 @@ fn toggle_gift() -> CommandDefinition {
             Ok(serde_json::json!({ "gift_id": gift_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2480,7 +2460,6 @@ fn add_debt() -> CommandDefinition {
             Ok(serde_json::json!({ "debt_id": debt_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2535,7 +2514,6 @@ fn settle_debt() -> CommandDefinition {
             Ok(serde_json::json!({ "debt_id": debt_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2632,7 +2610,6 @@ fn create_list() -> CommandDefinition {
             Ok(serde_json::json!({ "list_id": list_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2679,7 +2656,6 @@ fn rename_list() -> CommandDefinition {
             Ok(serde_json::json!({ "list_id": list_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2738,7 +2714,6 @@ fn delete_list() -> CommandDefinition {
             Ok(serde_json::json!({ "list_id": list_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2847,7 +2822,6 @@ fn add_journal_entry() -> CommandDefinition {
             Ok(serde_json::json!({ "entry_id": entry_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3178,7 +3152,6 @@ fn save_contact_channel() -> CommandDefinition {
             Ok(output)
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3235,7 +3208,6 @@ fn delete_contact_channel() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3274,22 +3246,54 @@ fn undo_contact_channel() -> CommandDefinition {
             let named = ctx.optional_str("revision_id").map(str::to_owned);
             let (revision_id, snapshot) =
                 load_revision(ctx, CHANNEL_ENTITY_TYPE, &channel_id, named.as_deref())?;
+            let party_id = snapshot_str(&snapshot, "party_id").unwrap_or_default();
+            let kind = snapshot_str(&snapshot, "kind").unwrap_or_default();
+            let is_preferred = snapshot
+                .get("is_preferred")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or_default();
+            // THE PREFERRED CHANNEL MOVES BACK, it does not evict. The
+            // `OR REPLACE` this was resolved a clash on the one-preferred index
+            // by DELETING the channel that is preferred now — a member's other
+            // phone number, gone, with its entity row orphaned because a
+            // REPLACE fires no delete trigger (#1047 R3).
+            if is_preferred == 1 {
+                ctx.connection().execute(
+                    "UPDATE social_contact_channel SET is_preferred = 0
+                      WHERE party_id = ?1 AND kind = ?2 AND is_preferred = 1
+                        AND channel_id <> ?3",
+                    rusqlite::params![party_id, kind, channel_id],
+                )?;
+            }
+            // AN UPSERT AND NEVER `OR REPLACE` (#1047 R3): SQLite does not
+            // report a row a fast-path REPLACE displaced, so the running census
+            // drifted by one on every undo of an edit, and a restore refused
+            // the generation that carried it. A value another channel of this
+            // party now holds is refused by the unique index rather than
+            // deleting that channel.
             ctx.connection().execute(
-                "INSERT OR REPLACE INTO social_contact_channel
+                "INSERT INTO social_contact_channel
                    (channel_id, party_id, kind, label, value, normalized_value,
                     is_preferred, provenance_json, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                 ON CONFLICT (channel_id) DO UPDATE SET
+                   party_id = excluded.party_id,
+                   kind = excluded.kind,
+                   label = excluded.label,
+                   value = excluded.value,
+                   normalized_value = excluded.normalized_value,
+                   is_preferred = excluded.is_preferred,
+                   provenance_json = excluded.provenance_json,
+                   created_at = excluded.created_at,
+                   updated_at = excluded.updated_at",
                 rusqlite::params![
                     snapshot_str(&snapshot, "channel_id").unwrap_or(&channel_id),
-                    snapshot_str(&snapshot, "party_id").unwrap_or_default(),
-                    snapshot_str(&snapshot, "kind").unwrap_or_default(),
+                    party_id,
+                    kind,
                     snapshot_str(&snapshot, "label"),
                     snapshot_str(&snapshot, "value").unwrap_or_default(),
                     snapshot_str(&snapshot, "normalized_value").unwrap_or_default(),
-                    snapshot
-                        .get("is_preferred")
-                        .and_then(serde_json::Value::as_i64)
-                        .unwrap_or_default(),
+                    is_preferred,
                     snapshot_str(&snapshot, "provenance_json"),
                     snapshot_str(&snapshot, "created_at").unwrap_or(&ctx.now),
                     ctx.now
@@ -3299,7 +3303,6 @@ fn undo_contact_channel() -> CommandDefinition {
             Ok(serde_json::json!({ "channel_id": channel_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3351,11 +3354,6 @@ mod tests {
             assert!(
                 !definition.confirm,
                 "{} carries confirm: true; no people command does in v0",
-                definition.name
-            );
-            assert!(
-                !definition.online_only,
-                "{} is not online-only",
                 definition.name
             );
             assert!(

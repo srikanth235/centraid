@@ -150,7 +150,6 @@ fn definition(
         postconditions,
         handler,
         sealed_input: &[],
-        online_only: false,
     }
 }
 

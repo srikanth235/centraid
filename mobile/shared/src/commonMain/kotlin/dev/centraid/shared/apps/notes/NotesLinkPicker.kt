@@ -20,6 +20,7 @@ import dev.centraid.design.copy.NotesCopy
 import dev.centraid.shared.kit.ContentLens
 import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.kit.ScreenBridge
+import dev.centraid.shared.kit.time.CivilWords
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -74,13 +75,14 @@ public object NotesLinkPickerMachine : ScreenMachine<NotesLinkPickerState, Notes
             NotesLinkDomain(
                 head = SectionHead(title = label, count = rows.size),
                 rows = rows.map { t ->
+                    val subtitle = subtitleOf(t)
                     NotesLinkTargetRow(
                         entity = t.entity,
                         id = t.id,
                         title = t.title.ifBlank { NotesCopy.UNTITLED },
-                        subtitle = t.subtitle,
+                        subtitle = subtitle,
                         app_id = t.app_id,
-                        accessibility_label = listOf(t.title, t.subtitle, label).filter { it.isNotBlank() }.joinToString(", "),
+                        accessibility_label = listOf(t.title, subtitle, label).filter { it.isNotBlank() }.joinToString(", "),
                     )
                 },
             )
@@ -88,14 +90,83 @@ public object NotesLinkPickerMachine : ScreenMachine<NotesLinkPickerState, Notes
         return NotesLinkPickerData(domains = domains)
     }
 
+    /**
+     * THE SUBTITLE AS WORDS (#1047). The search index answers a raw column:
+     * an event's `dtstart`, a task's `due_at`, an expense's `spent_on`, a
+     * note's decoded body, else the app's name. A day or an instant is a
+     * civil day in words ("Wed 11 March"); anything else is a clean excerpt —
+     * its first line with the markdown marks taken out, capped.
+     *
+     * The day is the core's `subtitle_local_day`, read in the device's zone
+     * (#1047) — never the instant's own date part. A when the core could not
+     * place (an instant, no zone) says what kind of thing the row is instead.
+     */
+    internal fun subtitleOf(target: NotesLinkTarget): String {
+        // THE INDEX'S FALLBACK IS THE APP KEY ("photos", "docs") when a row
+        // has no subtitle column of its own — an identifier, not copy. The
+        // row says what KIND of thing it is instead (#1047).
+        if (target.subtitle.trim() == target.app_id) return kindOf(target.entity)
+        if (target.subtitle_local_day.isNotBlank()) {
+            val words = CivilWords.dayMonth(target.subtitle_local_day)
+            if (words != target.subtitle_local_day) return words
+        }
+        if (WHEN_SHAPE.matches(target.subtitle.trim())) return kindOf(target.entity)
+        return excerpt(target.subtitle)
+    }
+
+    /** The first non-blank line of [markdown], unmarked and capped at [EXCERPT] characters. */
+    internal fun excerpt(markdown: String): String {
+        val line = markdown.lineSequence()
+            .map(::unmark)
+            .firstOrNull { it.isNotEmpty() }
+            ?: return ""
+        return if (line.length <= EXCERPT) line else line.take(EXCERPT).trimEnd() + "…"
+    }
+
+    private fun unmark(line: String): String {
+        var text = line.trim()
+        text = BLOCK_MARK.replace(text, "")
+        text = IMAGE.replace(text) { it.groupValues[1] }
+        text = LINK.replace(text) { it.groupValues[1] }
+        text = WIKI_LINK.replace(text) { it.groupValues[1] }
+        text = INLINE_MARK.replace(text, "")
+        return WHITESPACE.replace(text, " ").trim()
+    }
+
+    private const val EXCERPT: Int = 80
+    /** A day, or an instant: `2026-03-11`, `2026-03-11T09:00:00Z`, `2026-03-11 09:00`. */
+    private val WHEN_SHAPE = Regex("""\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?""")
+
+    /** Heading, quote, list and task marks at a line's start — repeated, as `> - [ ] ` nests them. */
+    private val BLOCK_MARK = Regex("""^(?:(?:#{1,6}|>|[-*+]|\d+[.)]|\[[ xX]\])\s+)+""")
+    private val IMAGE = Regex("""!\[([^\]]*)]\([^)]*\)""")
+    private val LINK = Regex("""\[([^\]]*)]\([^)]*\)""")
+    private val WIKI_LINK = Regex("""\[\[([^\]]*)]]""")
+    private val INLINE_MARK = Regex("""\*\*|__|~~|`|(?<![\w])[*_]|[*_](?![\w])""")
+    private val WHITESPACE = Regex("""\s+""")
+
+    /** The index's domains (`crates/search/src/domains.rs`), by entity. A photograph is a content item there. */
     private fun domainOf(entity: String): String = when (entity) {
         "knowledge.note" -> NotesCopy.DOMAIN_NOTES
         "core.party" -> NotesCopy.DOMAIN_PEOPLE
         "core.event" -> NotesCopy.DOMAIN_EVENTS
         "schedule.task" -> NotesCopy.DOMAIN_TASKS
         "core.document" -> NotesCopy.DOMAIN_DOCS
-        "media.asset" -> NotesCopy.DOMAIN_PHOTOS
+        "core.content_item", "media.asset" -> NotesCopy.DOMAIN_PHOTOS
+        "tally.expense" -> NotesCopy.DOMAIN_TALLY
         else -> NotesCopy.DOMAIN_OTHER
+    }
+
+    /** What one target IS, in a word — the subtitle when its row has none. Unknown: no subtitle. */
+    private fun kindOf(entity: String): String = when (entity) {
+        "knowledge.note" -> NotesCopy.LINK_KIND_NOTE
+        "core.party" -> NotesCopy.LINK_KIND_PERSON
+        "core.event" -> NotesCopy.LINK_KIND_EVENT
+        "schedule.task" -> NotesCopy.LINK_KIND_TASK
+        "core.document" -> NotesCopy.LINK_KIND_DOCUMENT
+        "core.content_item", "media.asset" -> NotesCopy.LINK_KIND_PHOTOGRAPH
+        "tally.expense" -> NotesCopy.LINK_KIND_EXPENSE
+        else -> ""
     }
 
     private val CHROME = NotesLinkPickerChrome(
@@ -146,7 +217,7 @@ public object NotesLinkPickerReads : ScreenQueries<NotesLinkPickerState, NotesLi
     override val tables: Set<String> = NotesLinkPickerMachine.TABLES
 
     override fun requests(state: NotesLinkPickerState, now: DeviceClock.Reading): List<AppQueryRequest> =
-        listOf(AppQueryRequest(notes_link_targets = NotesLinkTargetsRequest(term = state.term.trim())))
+        listOf(AppQueryRequest(notes_link_targets = NotesLinkTargetsRequest(term = state.term.trim(), tz = now.zone)))
 
     override fun arrived(answers: List<AppQueryResponse>): NotesLinkPickerEvent = NotesLinkPickerEvent(
         data_ = NotesLinkPickerEvent.DataArrived(

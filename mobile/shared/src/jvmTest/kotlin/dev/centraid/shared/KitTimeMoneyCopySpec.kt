@@ -91,7 +91,7 @@ class KitTimeMoneyCopySpec : StringSpec({
     "copy: every app's Kotlin table and its copy/<app>.json say the same strings" {
         val tables = root.resolve("mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy")
         val files = tables.listFiles { file -> file.name.endsWith("Copy.kt") }!!.sorted()
-        files.size shouldBe 9
+        files.size shouldBe 10
         files.forEach { file ->
             val app = file.name.removeSuffix("Copy.kt").lowercase()
             val kotlin = Regex("""const val (\w+): String = "((?:[^"\\]|\\.)*)"""")

@@ -29,7 +29,9 @@ public object BandPolicy {
      * shipped dead, and so are Needs you and Activity: their data planes
      * (staged writes and access requests; runs, harnesses and spend) were
      * deleted with the gateway-as-server (#1029), and a place with nothing
-     * behind it is Starred's defect again.
+     * behind it is Starred's defect again. Vault stays in the table (its
+     * row names a place the frame will have) and is pinned by nobody until
+     * a shell can draw it (R-1047-F7b).
      */
     public val PLACES: List<Place> = listOf(
         Place(
@@ -50,7 +52,10 @@ public object BandPolicy {
             iconKey = "Database",
             what = "Contents, copies and sharing",
             law = false,
-            pinnedByDefault = true,
+            // NOT PINNED UNTIL ITS SCREEN EXISTS (R-1047-F7b): neither shell
+            // has a destination for it, so a pinned Vault was a tab that
+            // navigated nowhere — Starred's defect, on the default band.
+            pinnedByDefault = false,
         ),
         Place(
             id = "gateway",

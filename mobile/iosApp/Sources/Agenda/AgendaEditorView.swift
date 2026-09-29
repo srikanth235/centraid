@@ -372,7 +372,7 @@ struct AgendaEditorView: View {
                         HStack(spacing: 8) {
                             if !choice.hueKey.isEmpty {
                                 Circle()
-                                    .fill(Theme.color(AgendaHue.role(choice.hueKey), scheme))
+                                    .fill(Theme.color(KitHue.role(choice.hueKey) ?? "cSlate", scheme))
                                     .frame(width: 8, height: 8)
                             }
                             SheetRow(label: choice.label, selected: choice.selected, identifier: "agenda-choice-\(choice.key)") {

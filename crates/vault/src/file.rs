@@ -422,7 +422,13 @@ impl Vault {
                 context: "a replica apply was attempted inside a read or a commit".to_owned(),
             });
         }
-        body(&self.connection)
+        // THE RUNNING CENSUS DID NOT SEE THESE ROWS (#1047 R3). An apply
+        // writes around the commit guard, so its hook never counted them;
+        // forgetting sends the next census read back to the file, which is
+        // exact where arithmetic over a missed write would not be.
+        let outcome = body(&self.connection);
+        self.running_census.forget();
+        outcome
     }
 
     /// The connection, for this crate's own internals only.

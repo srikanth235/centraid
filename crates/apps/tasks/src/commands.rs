@@ -14,9 +14,6 @@
 //! **`invoke_key` is mandatory** (D-1020-D3-5).
 //!
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10).
-//!
-//! **`online_only` is empty for Tasks, and that is a checked claim.** No
-//! Tasks action is online-only. Filing a task in a tunnel is the point.
 
 use std::collections::BTreeMap;
 
@@ -109,7 +106,6 @@ pub struct ActionRow {
     pub action: &'static str,
     pub command: &'static str,
     pub confirm: Confirm,
-    pub online_only: bool,
 }
 
 const fn act(action: &'static str, command: &'static str) -> ActionRow {
@@ -117,7 +113,6 @@ const fn act(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::None,
-        online_only: false,
     }
 }
 
@@ -299,10 +294,5 @@ mod tests {
                 "`edit` does not declare `{key}`"
             );
         }
-    }
-
-    #[test]
-    fn no_action_is_online_only_because_filing_in_a_tunnel_is_the_point() {
-        assert!(ACTIONS.iter().all(|row| !row.online_only));
     }
 }

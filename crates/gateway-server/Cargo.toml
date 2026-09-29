@@ -32,6 +32,8 @@ centraid-api-proto = { path = "../api-proto" }
 # A device certificate's byte layout belongs to the crate that mints it. This
 # crate decodes and verifies one, then hands `auth::CertifiedDevice` to the
 # rules — which is the seam `gateway-core` documents for exactly this reason.
+# And the pairing safety number: the phone's core and this crate call the one
+# renderer, so the two screens cannot disagree about how the digits are made.
 centraid-identity = { path = "../identity" }
 
 anyhow.workspace = true
@@ -42,6 +44,9 @@ clap.workspace = true
 # The ACME state machine is a `Stream`; this is the crate whose trait it is.
 futures.workspace = true
 hex.workspace = true
+# `invites` says when an invite was redeemed in the laptop's own time zone
+# (`tz-system`: the operator's terminal, never the phone's core).
+jiff = { workspace = true, features = ["tz-system"] }
 # THE DEFAULT CARRIER (#1029, scope amendment 2026-09-21). The gateway API is
 # carried as HTTP/1.1 over one iroh bi-stream under `centraid-gateway/1`, so a
 # laptop behind NAT needs no port forwarding and no certificate. Confined to

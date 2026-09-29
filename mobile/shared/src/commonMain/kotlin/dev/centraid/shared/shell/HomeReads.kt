@@ -8,6 +8,13 @@ import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.TileBody
 import centraid.screen.v1.TileCount
 import centraid.screen.v1.TileStatus
+import dev.centraid.design.copy.DocsCopy
+import dev.centraid.design.copy.LockerCopy
+import dev.centraid.design.copy.NotesCopy
+import dev.centraid.design.copy.PeopleCopy
+import dev.centraid.design.copy.PhotosCopy
+import dev.centraid.design.copy.TallyCopy
+import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.design.PartyHueWheel
 
 /**
@@ -34,12 +41,12 @@ import dev.centraid.shared.design.PartyHueWheel
  * screens and this file never collapses them, which is the whole reason Home
  * has a fourth state.
  *
- * ## Locker is not here
+ * ## Locker counts, and shows nothing (#1047)
  *
- * Its tile body is a STATE — locked or unlocked — and not a query result, so it
- * has no read. `Reads` in `ScreenHost`'s effect runner supplies it from the
- * lock's own state. A `SELECT` over `locker_item` to decorate a launcher would
- * also be a count of a member's secrets computed for no one who asked.
+ * Its read selects an id and an order column — no title, no username, no
+ * sealed cell — so the tile says how many live items there are and whether
+ * the Locker is open ([lockerOpen]), which is all a launcher may say about a
+ * place that holds secrets.
  */
 public object HomeReads {
     /**
@@ -86,17 +93,40 @@ public object HomeReads {
     private val OPEN_TASK_STATUSES: List<String> = listOf("needs-action", "in-process")
 
     /**
-     * One app's read: the statement, and the label its count is spoken with.
+     * One app's read: the statement, and the nouns its count is spoken with.
      *
-     * `countLabel` is the noun a screen reader says after the number ("812
+     * The label is the noun a screen reader says after the number ("812
      * photographs"), never the glyph — the em dash a withheld count draws is
-     * not a word.
+     * not a word. It AGREES WITH THE NUMBER (#1047): "1 group", not "1
+     * groups", so each read carries both forms from its app's copy and
+     * [countLabel] picks one.
      */
     public data class TileRead(
         val appId: String,
         val query: PageQuery,
-        val countLabel: String,
-    )
+        val countOne: String,
+        val countMany: String,
+        /**
+         * Tables the query's filter READS besides [PageQuery.from] — a
+         * subquery's — so a change on them redraws the tile too (#1047).
+         */
+        val alsoReads: Set<String> = emptySet(),
+    ) {
+        /** The noun for [count] rows: singular at exactly one uncapped row. */
+        public fun countLabel(count: Int, capped: Boolean): String = countNoun(count, capped, countOne, countMany)
+    }
+
+    /**
+     * Singular only at exactly one, and never when capped — "1+" is a floor,
+     * not a count of one. Zero takes the plural ("0 groups"). Agenda's tile
+     * speaks through here too, so every tile agrees on the rule.
+     */
+    public fun countNoun(count: Int, capped: Boolean, one: String, many: String): String =
+        if (count == 1 && !capped) one else many
+
+    /** The People tile's foot: how many more than the faces, or that every face is shown. */
+    public fun peopleMore(more: Int): String =
+        if (more > 0) PeopleCopy.TILE_MORE.replace("{n}", more.toString()) else PeopleCopy.TILE_EVERYONE
 
     private fun order(sort: String, pk: String, descending: Boolean = true) =
         PageOrder(sort_column = sort, pk_column = pk, descending = descending)
@@ -130,7 +160,8 @@ public object HomeReads {
                 order = order("captured_at", "asset_id"),
                 with_held_thumbnail = true,
             ),
-            countLabel = "photographs",
+            countOne = PhotosCopy.TILE_COUNT_ONE,
+            countMany = PhotosCopy.TILE_COUNT_MANY,
         ),
         TileRead(
             appId = "docs",
@@ -151,7 +182,8 @@ public object HomeReads {
                 // and the page is REFUSED at prepare, never answered with nulls.
                 with_document_size = true,
             ),
-            countLabel = "documents",
+            countOne = DocsCopy.DOCUMENT_ONE,
+            countMany = DocsCopy.DOCUMENT_MANY,
         ),
         TileRead(
             appId = "notes",
@@ -163,7 +195,8 @@ public object HomeReads {
                 where_ = NOT_TRASHED,
                 order = order("updated_at", "note_id"),
             ),
-            countLabel = "notes",
+            countOne = NotesCopy.TILE_COUNT_ONE,
+            countMany = NotesCopy.TILE_COUNT_MANY,
         ),
         // AGENDA IS NOT A PAGE READ (#1046). Its tile is the next occurrence
         // of whatever repeats, which only the core's recurrence engine can
@@ -183,7 +216,8 @@ public object HomeReads {
                 bind = OPEN_TASK_STATUSES.map { Value(text = it) },
                 order = order("task_id", "task_id"),
             ),
-            countLabel = "tasks",
+            countOne = TasksCopy.TASK_ONE,
+            countMany = TasksCopy.TASK_MANY,
         ),
         TileRead(
             appId = "people",
@@ -191,9 +225,17 @@ public object HomeReads {
                 name = "home.people",
                 select = listOf("party_id", "display_name", "updated_at"),
                 from = "core_party",
+                // THE PEOPLE THE ROSTER LISTS, NOT EVERY PARTY (#1047): a
+                // party is anyone the vault names — the owner, a merchant, a
+                // face — and the People app's roster is the parties with a
+                // live profile. Counted off `core_party`, the tile said 8 over
+                // a roster of 4.
+                where_ = "party_id IN (SELECT party_id FROM people_profile WHERE deleted_at IS NULL)",
                 order = order("updated_at", "party_id"),
             ),
-            countLabel = "people",
+            countOne = PeopleCopy.TILE_COUNT_ONE,
+            countMany = PeopleCopy.TILE_COUNT_MANY,
+            alsoReads = setOf("people_profile"),
         ),
         TileRead(
             appId = "tally",
@@ -203,9 +245,34 @@ public object HomeReads {
                 from = "tally_group",
                 order = order("group_id", "group_id"),
             ),
-            countLabel = "groups",
+            countOne = TallyCopy.TILE_COUNT_ONE,
+            countMany = TallyCopy.TILE_COUNT_MANY,
+        ),
+        // LOCKER COUNTS ITS ITEMS AND SHOWS NONE OF THEM (#1047, D-5): the
+        // read selects the id and the order column and nothing a member
+        // wrote, so a locked Locker's tile carries no title, no username and
+        // no secret — only how many live items there are, and whether the
+        // Locker is open ([lockerOpen]).
+        TileRead(
+            appId = "locker",
+            query = PageQuery(
+                name = "home.locker",
+                select = listOf("item_id", "updated_at"),
+                from = "locker_item",
+                where_ = "$NOT_TRASHED AND archived_at IS NULL",
+                order = order("updated_at", "item_id"),
+            ),
+            countOne = LockerCopy.TILE_COUNT_ONE,
+            countMany = LockerCopy.TILE_COUNT_MANY,
         ),
     )
+
+    /**
+     * WHETHER LOCKER IS OPEN, as the Locker gate says (#1047). A slot the
+     * shell owns and `apps.locker` fills, so Home never names an app's types
+     * (`PerAppLayoutSpec`); closed until something says otherwise.
+     */
+    public var lockerOpen: () -> Boolean = { false }
 
     /**
      * THE TABLES HOME COUNTS, DERIVED FROM THE READS THEMSELVES (#1025 S5).
@@ -218,11 +285,11 @@ public object HomeReads {
      * which names no table the runtime can see, it is [HomeAgendaTile.TABLES].
      */
     public val TABLES: Set<String> =
-        READS.map { it.query.from }.toSet() + HomeAgendaTile.TABLES
+        READS.flatMap { listOf(it.query.from) + it.alsoReads }.toSet() + HomeAgendaTile.TABLES
 
     /**
      * Every app whose tile is READ — the page reads and the app queries —
-     * which is every tile but Locker's.
+     * which is every tile, Locker's included since #1047 (a count, never a row).
      */
     public val READ_APP_IDS: Set<String> =
         READS.map { it.appId }.toSet() + HomeAgendaTile.APP_ID
@@ -258,7 +325,7 @@ public object HomeReads {
         capped: Boolean,
     ): HomeEvent {
         val read = READS.firstOrNull { it.appId == appId }
-        val label = read?.countLabel ?: ""
+        val label = read?.countLabel(rows.size, capped) ?: ""
         if (rows.isEmpty()) {
             // EMPTY, not UNKNOWN: this read landed and the app holds nothing.
             // The count is still stated — zero is a true answer to "how many"
@@ -371,7 +438,8 @@ public object HomeReads {
                 ),
             )
 
-            "people" -> TileBody(
+            "people" -> (rows.size - preview.size).coerceAtLeast(0).let { more ->
+                TileBody(
                 people = TileBody.People(
                     faces = preview.map { row ->
                         TileBody.People.Face(
@@ -401,15 +469,28 @@ public object HomeReads {
                     },
                     // From the HEADER TOTAL, never a fabricated 0: an exhausted
                     // directory says so plainly rather than claiming more.
-                    more = (rows.size - preview.size).coerceAtLeast(0),
+                    more = more,
+                    more_label = peopleMore(more),
                 ),
             )
+            }
 
             // Tally's figure is a BALANCE, and a balance is derived by the
             // app's own projection rather than counted off a table. The tile
             // says how many groups there are until that projection is wired,
             // and says nothing it cannot stand behind.
             "tally" -> null
+
+            // A STATE AND ITS WORDS, never a row (the read carries none).
+            "locker" -> lockerOpen().let { open ->
+                TileBody(
+                    locker = TileBody.Locker(
+                        locked = !open,
+                        state_label = if (open) LockerCopy.TILE_OPEN else LockerCopy.TILE_LOCKED,
+                        line = if (open) LockerCopy.TILE_OPEN_LINE else LockerCopy.TILE_LOCKED_LINE,
+                    ),
+                )
+            }
 
             else -> null
         }

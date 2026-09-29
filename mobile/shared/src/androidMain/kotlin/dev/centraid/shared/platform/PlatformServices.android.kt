@@ -40,8 +40,7 @@ import kotlinx.coroutines.withContext
  * [AndroidMediaLibrary], `expo-background-task` becomes WorkManager, and
  * `expo-secure-store` becomes the Keystore-backed [AndroidSecureStore].
  */
-public actual fun platformServices(): PlatformServices =
-    AndroidPlatformServices(AndroidPlatform.require())
+public actual fun platformServices(): PlatformServices = AndroidPlatform.services()
 
 /**
  * The one piece of global state Android forces, and the loudest possible
@@ -53,9 +52,22 @@ public actual fun platformServices(): PlatformServices =
 public object AndroidPlatform {
     private var applicationContext: Context? = null
 
+    /**
+     * ONE SET OF SERVICES PER PROCESS. [AndroidNetworkStatus] registers a
+     * default-network callback when it is built, and Android refuses a
+     * process its 101st (`TooManyRequestsException`, fatal): Locker's editor
+     * asks for `secureRandom` on every keystroke, and a fresh set per call
+     * crashed it mid-typing (#1047 final walk).
+     */
+    @Volatile private var services: AndroidPlatformServices? = null
+
     public fun install(context: Context) {
         applicationContext = context.applicationContext
+        services = null
     }
+
+    internal fun services(): PlatformServices =
+        services ?: synchronized(this) { services ?: AndroidPlatformServices(require()).also { services = it } }
 
     internal fun require(): Context = applicationContext ?: error(
         "AndroidPlatform.install(context) was never called. Call it from " +

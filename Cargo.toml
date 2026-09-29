@@ -94,13 +94,21 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 # reason — an object store's API is not ours: `crates/gateway-core`
 # (`src/checksum.rs`, the SHA-256 an object store attests). It is ONE module
 # with an entry in `crates/vault/tests/one_hash.rs`'s allowlist carrying its
-# reason, and no other crate under `crates/` may depend on `sha2` or `hmac`.
+# reason, and no other crate under `crates/` may depend on `sha2`, nor on
+# `hmac` save `crates/core` for RFC 6238 (the `sha1` note below).
 # `crates/gateway-server/src/bytes/sigv4.rs` was the second of the two; the
 # scope amendment of 2026-09-21 struck the S3 byte store and it went with it. W0.5-R1 is a
 # ruling put to the owner with a recommendation, not yet a `docs/decisions.md`
 # supersession of D-1025-S4-5 (that entry is W9's).
 hmac = "0.13"
 sha2 = "0.11"
+# SHA-1 SURVIVES IN ONE PLACE, AND FOR THE SAME REASON (#1047, Q-1047-16):
+# `crates/core::locker::phone` computes a Locker one-time code, and RFC 6238's
+# HMAC-SHA-1 is the algorithm every authenticator app and every site that
+# printed the QR code agree on — somebody else's protocol, not a hash this repo
+# chose. It is `hmac` + RustCrypto `sha1` in that one module and nowhere else;
+# nothing the vault names, stores or deduplicates is SHA-1.
+sha1 = "0.11"
 thiserror = "2"
 tracing = "0.1"
 
@@ -170,7 +178,6 @@ aes-gcm = "0.11"
 # `contracts/crypto/object-vectors.json`, never routine housekeeping.
 chacha20poly1305 = "0.11"
 ryu-js = "1.0.3"
-scrypt = "0.12"
 subtle = "2"
 tempfile = "3"
 zstd = "0.13"
@@ -200,21 +207,8 @@ jiff = { version = "0.2", default-features = false, features = [
   "tzdb-bundle-always",
 ] }
 
-# Wave 4 lane Locker — origin matching, and the one dependency it adds
-# (#1020, D-1020-L10). `psl` is the Public Suffix List embedded and pinned: its
-# version number IS the list's date, which is the same shape `tldts` has on the
-# TypeScript side that `contracts/origin-matching-v1.json` is the spec for. A
-# bump is a list refresh and re-runs that spec in both trees. `url` is the
-# WHATWG parser the policy needs anyway (IDNA, default-port normalisation) and
-# is already in the graph.
-psl = "2.1"
+# The WHATWG URL parser (IDNA, default-port normalisation).
 url = "2.5"
-# THE ONE JOB A FAST HASH MUST NOT DO (#1025 S4, D-1025-S4-4). Stretching a
-# member's passphrase is memory-hardness work, and BLAKE3 is deliberately fast,
-# so the seat's at-rest wrap is Argon2id — not `blake3::derive_key`, which would
-# be the one place "one hash" bought an attacker throughput. v0's
-# PBKDF2-SHA-256 at 600,000 rounds is superseded; `pbkdf2` leaves the graph.
-argon2 = "0.6"
 
 # Wave 0.5 lane A — `crates/identity`: the 24-word phrase, SLIP-0010 hardened
 # derivation, device certificates and HPKE base mode (#1029 §0, §4).

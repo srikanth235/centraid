@@ -68,7 +68,7 @@ public object PeopleHomeReads :
     override fun requests(state: PeopleHomeState, now: DeviceClock.Reading): List<AppQueryRequest> {
         val term = PeopleHomeMachine.activeTerm(state)
         if (term != null) {
-            return listOf(AppQueryRequest(people_search = PeopleSearchRequest(term = term, limit = SEARCH_LIMIT)))
+            return listOf(AppQueryRequest(people_search = PeopleSearchRequest(term = term, limit = SEARCH_LIMIT, tz = now.zone)))
         }
         return when (state.destination) {
             PeopleHomeState.Destination.DESTINATION_TOUCH ->
@@ -143,12 +143,12 @@ public object PeopleFold {
                 chip(PeopleChipKey.PEOPLE_CHIP_KEY_STARRED, PeopleCopy.CHIP_STARRED, answer.count_starred),
                 chip(PeopleChipKey.PEOPLE_CHIP_KEY_DUE, PeopleCopy.CHIP_DUE, answer.count_due),
             ),
-            rows = answer.people.map(::row),
+            rows = answer.people.map { row(it, answer.today) },
             // DAY ONE is the fold's to say; a chip's own empty is the machine's.
             empty = if (answer.count_all == 0) dayOne() else null,
             status_line = fill(
                 if (answer.truncated) PeopleCopy.STATUS_ROSTER_SHOWN else PeopleCopy.STATUS_ROSTER,
-                "people" to answer.count_all,
+                "people" to PeopleWords.people(answer.count_all),
                 "due" to answer.count_due,
                 "starred" to answer.count_starred,
             ),
@@ -170,7 +170,7 @@ public object PeopleFold {
     )
 
     /** One roster or search row; the star words are the machine's overlay. */
-    public fun row(person: PeopleRosterRow): PeopleRow {
+    public fun row(person: PeopleRosterRow, today: String = ""): PeopleRow {
         val chips = buildList {
             if (person.due) add(StatusChip(label = PeopleCopy.CHIP_OVERDUE, tone = StatusChip.Tone.TONE_NET))
             person.reminders
@@ -194,7 +194,7 @@ public object PeopleFold {
             name = person.name,
             avatar = PeopleWords.avatar(person.party_id, person.name, person.avatar_color),
             role = person.role,
-            meta = PeopleWords.lastTouch(person.last_contacted_at != null, person.days_since_contact),
+            meta = PeopleWords.lastTouch(person, today),
             chips = chips,
             due = person.due,
             starred = person.starred,
@@ -279,7 +279,7 @@ public object PeopleFold {
                 )
             },
             recent_empty = if (answer.recent.isEmpty()) PeopleCopy.EMPTY_RECENT else "",
-            status_line = fill(PeopleCopy.STATUS_TOUCH, "people" to answer.count_all, "due" to answer.count_reconnect),
+            status_line = fill(PeopleCopy.STATUS_TOUCH, "people" to PeopleWords.people(answer.count_all), "due" to answer.count_reconnect),
             empty = if (answer.count_all == 0) dayOne() else null,
         ),
     )

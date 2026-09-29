@@ -22,7 +22,7 @@ use centraid_vault::Vault;
 
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, non_empty, settle, zone_of};
+use super::{RecordingSearch, VaultDoor, non_empty, settle, zone_if_any, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -40,6 +40,25 @@ fn window_of(window: u32) -> Option<i64> {
 fn local_day(zone: &FireZone, instant: Option<&str>) -> String {
     instant
         .and_then(|instant| notes::local::civil_day(zone, instant))
+        .unwrap_or_default()
+}
+
+/// [`local_day`] for a decoration's zone, which may be none: EMPTY then.
+fn day_if(zone: Option<&FireZone>, instant: Option<&str>) -> String {
+    zone.map(|zone| local_day(zone, instant))
+        .unwrap_or_default()
+}
+
+/// A non-empty instant, or none: `NotesNote` spells an absent one as `""`.
+fn known(instant: &str) -> Option<&str> {
+    (!instant.is_empty()).then_some(instant)
+}
+
+/// An instant's wall clock, `YYYY-MM-DDTHH:MM`, in `zone`; EMPTY when either
+/// is absent.
+fn minute_if(zone: Option<&FireZone>, instant: Option<&str>) -> String {
+    zone.zip(instant)
+        .and_then(|(zone, instant)| centraid_apps_agenda::local::now_local(zone, instant))
         .unwrap_or_default()
 }
 
@@ -104,6 +123,8 @@ pub(super) fn library(
 pub(super) fn notebooks(door: &VaultDoor<'_>) -> Result<Answer> {
     settle(door, notes::load_notebooks(door), |data| {
         Answer::NotesNotebooks(wire::NotesNotebooks {
+            unfiled_count: count(data.unfiled_count),
+            unfiled_truncated: data.unfiled_truncated,
             notebooks: data
                 .notebooks
                 .into_iter()
@@ -168,12 +189,17 @@ pub(super) fn search(
     door: &VaultDoor<'_>,
     asked: &wire::NotesSearchRequest,
 ) -> Result<Answer> {
+    let zone = zone_if_any(vault, &asked.tz)?;
     let loaded = with_search(vault, door, |search| {
         queries::load_search(door, search, &Principal::Owner, &asked.term)
     })?;
     settle(door, loaded, |data| {
         Answer::NotesSearch(wire::NotesSearch {
-            hits: data.notes.into_iter().map(hit_to_wire).collect(),
+            hits: data
+                .notes
+                .into_iter()
+                .map(|hit| hit_to_wire(hit, zone.as_ref()))
+                .collect(),
         })
     })
 }
@@ -195,12 +221,14 @@ pub(super) fn link_targets(
         Ok(index
             .map(|index| queries::load_link_targets(door, &index, &Principal::Owner, &asked.term)))
     })??;
+    let zone = zone_if_any(vault, &asked.tz)?;
     settle(door, loaded, |data| {
         Answer::NotesLinkTargets(wire::NotesLinkTargets {
             targets: data
                 .targets
                 .into_iter()
                 .map(|target| wire::NotesLinkTarget {
+                    subtitle_local_day: subtitle_day(zone.as_ref(), &target.subtitle),
                     entity: target.entity,
                     id: target.id,
                     title: target.title,
@@ -211,6 +239,51 @@ pub(super) fn link_targets(
                 .collect(),
         })
     })
+}
+
+/// A powerbox subtitle's civil day (`NotesLinkTarget.subtitle_local_day`).
+/// The index answers a raw column: a date (`spent_on`, an all-day
+/// `dtstart`) or a floating wall clock is already civil, so its date part IS
+/// the day; an instant — a `Z` or an offset after the date — is read in the
+/// zone, and with no zone it has no day. Anything else is not a when: EMPTY.
+fn subtitle_day(zone: Option<&FireZone>, subtitle: &str) -> String {
+    let text = subtitle.trim();
+    let bytes = text.as_bytes();
+    let dated = bytes.len() >= 10
+        && bytes[..10].iter().enumerate().all(|(at, byte)| {
+            if at == 4 || at == 7 {
+                *byte == b'-'
+            } else {
+                byte.is_ascii_digit()
+            }
+        });
+    if !dated {
+        return String::new();
+    }
+    if bytes.len() == 10 {
+        return text.to_owned();
+    }
+    if bytes[10] != b'T' && bytes[10] != b' ' {
+        return String::new();
+    }
+    // The clock, and the designator after it when there is one.
+    let time = &text[11..];
+    let (clock, zoned) = match time.find(['Z', '+', '-']) {
+        Some(at) => (&time[..at], true),
+        None => (time, false),
+    };
+    let clocked = clock.len() >= 5
+        && clock.as_bytes()[2] == b':'
+        && clock
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || byte == b':' || byte == b'.');
+    if !clocked {
+        return String::new();
+    }
+    if !zoned {
+        return text[..10].to_owned();
+    }
+    day_if(zone, Some(&format!("{}T{time}", &text[..10])))
 }
 
 pub(super) fn trash(
@@ -245,10 +318,8 @@ pub(super) fn history(
                     .versions
                     .into_iter()
                     .map(|version| wire::NotesVersion {
-                        asserted_local_day: local_day(
-                            &zone,
-                            Some(version.asserted_at.as_str()),
-                        ),
+                        asserted_local_day: local_day(&zone, Some(version.asserted_at.as_str())),
+                        asserted_local: minute_if(Some(&zone), Some(version.asserted_at.as_str())),
                         content_id: version.content_id,
                         body: version.body,
                         media_type: version.media_type,
@@ -261,12 +332,21 @@ pub(super) fn history(
     )
 }
 
-pub(super) fn note(door: &VaultDoor<'_>, asked: &wire::NotesNoteRequest) -> Result<Answer> {
+pub(super) fn note(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    asked: &wire::NotesNoteRequest,
+) -> Result<Answer> {
+    let zone = zone_if_any(vault, &asked.tz)?;
     settle(
         door,
         notes::load_editor_note(door, &asked.note_id),
         |note| {
+            let zone = zone.as_ref();
             Answer::NotesNote(wire::NotesNote {
+                created_local_day: day_if(zone, known(&note.created_at)),
+                updated_local_day: day_if(zone, known(&note.updated_at)),
+                updated_local: minute_if(zone, known(&note.updated_at)),
                 found: note.found,
                 note_id: note.note_id,
                 title: note.title,
@@ -390,8 +470,10 @@ fn row_to_wire(row: LibraryRow, zone: &FireZone) -> wire::NotesRow {
     }
 }
 
-fn hit_to_wire(hit: SearchRow) -> wire::NotesSearchHit {
+fn hit_to_wire(hit: SearchRow, zone: Option<&FireZone>) -> wire::NotesSearchHit {
     wire::NotesSearchHit {
+        created_local_day: day_if(zone, hit.created_at.as_deref()),
+        updated_local_day: day_if(zone, hit.updated_at.as_deref()),
         note_id: hit.note_id,
         title: hit.title,
         format: hit.format,
@@ -523,6 +605,7 @@ mod tests {
             match self
                 .ask(Q::NotesNote(wire::NotesNoteRequest {
                     note_id: note_id.to_owned(),
+                    tz: TZ.to_owned(),
                 }))
                 .expect("note answers")
             {
@@ -559,10 +642,25 @@ mod tests {
         assert!(journal.days.is_empty());
         assert_eq!(journal.today, "2099-06-01", "the device's day, not UTC's");
         assert!(matches!(
-            scratch.ask(Q::NotesSearch(wire::NotesSearchRequest { term: "anything".to_owned() })),
+            scratch.ask(Q::NotesSearch(wire::NotesSearchRequest {
+                term: "anything".to_owned(),
+                tz: String::new(),
+            })),
             Ok(Answer::NotesSearch(found)) if found.hits.is_empty()
         ));
         assert!(!scratch.note("no-such-note").found);
+        // A LOOSE NOTE IS COUNTED ON THE "UNFILED" ROW (#1047), with no
+        // notebook anywhere in the vault.
+        scratch.run(
+            "knowledge.create_note",
+            serde_json::json!({ "title": "Loose", "body_text": "scratch" }),
+        );
+        let Ok(Answer::NotesNotebooks(spine)) =
+            scratch.ask(Q::NotesNotebooks(wire::NotesNotebooksRequest {}))
+        else {
+            panic!("notebooks answers");
+        };
+        assert_eq!(spine.unfiled_count, 1);
         // THE ZONE RULE IS AGENDA'S: founding names no zone, so an empty one
         // is refused rather than read as UTC.
         let refused = scratch
@@ -634,6 +732,7 @@ mod tests {
         let Ok(Answer::NotesSearch(found)) =
             scratch.ask(Q::NotesSearch(wire::NotesSearchRequest {
                 term: "cedar".to_owned(),
+                tz: TZ.to_owned(),
             }))
         else {
             panic!("search answers");
@@ -645,6 +744,19 @@ mod tests {
             "{}",
             found.hits[0].snippet
         );
+        // A HIT'S DAYS ARE THE DEVICE'S (#1047): the stopped clock's instant
+        // read in New York.
+        assert_eq!(found.hits[0].updated_local_day, "2099-06-01");
+        assert_eq!(found.hits[0].created_local_day, "2099-06-01");
+        // AND THE EDITOR'S NOTE CARRIES ITS "EDITED" READINGS.
+        let note = scratch.note(&kept);
+        assert_eq!(note.updated_local_day, "2099-06-01");
+        assert!(
+            note.updated_local.starts_with("2099-06-01T"),
+            "{}",
+            note.updated_local
+        );
+        assert_eq!(note.created_local_day, "2099-06-01");
 
         let Ok(Answer::NotesNotebooks(spine)) =
             scratch.ask(Q::NotesNotebooks(wire::NotesNotebooksRequest {}))
@@ -657,6 +769,8 @@ mod tests {
             .find(|row| row.notebook_id == notebook)
             .expect("the notebook is on the spine");
         assert_eq!(garden.note_count, 1, "the trashed note does not count");
+        assert_eq!(spine.unfiled_count, 0, "the one live note is filed");
+        assert!(!spine.unfiled_truncated);
 
         let filtered = match scratch
             .ask(Q::NotesLibrary(wire::NotesLibraryRequest {
@@ -674,6 +788,7 @@ mod tests {
         let Ok(Answer::NotesLinkTargets(targets)) =
             scratch.ask(Q::NotesLinkTargets(wire::NotesLinkTargetsRequest {
                 term: "tomato".to_owned(),
+                tz: TZ.to_owned(),
             }))
         else {
             panic!("link targets answers");
@@ -742,6 +857,33 @@ mod tests {
         assert_eq!(bodies, ["three", "two", "one"]);
         assert!(history.versions[0].current);
         assert!(history.versions[1..].iter().all(|version| !version.current));
+    }
+
+    /// A POWERBOX SUBTITLE'S DAY IS CIVIL, NEVER A UTC SLICE: 02:00Z on 2 June
+    /// is 1 June in New York; a date and a floating wall clock are their own
+    /// date part in any zone; an instant with no zone, and prose that merely
+    /// starts with a date, have no day.
+    #[test]
+    fn link_target_subtitles_answer_their_local_day() {
+        let zone = FireZone::resolve(Some(TZ), None).expect("the zone resolves");
+        let zone = Some(&zone);
+        assert_eq!(subtitle_day(zone, "2099-06-02T02:00:00Z"), "2099-06-01");
+        assert_eq!(
+            subtitle_day(zone, "2099-06-02T02:00:00+00:00"),
+            "2099-06-01"
+        );
+        assert_eq!(
+            subtitle_day(zone, "2099-06-02T09:00:00-04:00"),
+            "2099-06-02"
+        );
+        assert_eq!(subtitle_day(zone, "2099-06-02"), "2099-06-02");
+        assert_eq!(subtitle_day(zone, "2099-06-02T02:00"), "2099-06-02");
+        assert_eq!(subtitle_day(zone, "2099-06-02 02:00"), "2099-06-02");
+        assert_eq!(subtitle_day(None, "2099-06-02T02:00:00Z"), "");
+        assert_eq!(subtitle_day(None, "2099-06-02"), "2099-06-02");
+        assert_eq!(subtitle_day(zone, "2099-06-02 was the day we met"), "");
+        assert_eq!(subtitle_day(zone, "Groceries"), "");
+        assert_eq!(subtitle_day(zone, ""), "");
     }
 
     /// CIVIL DAYS RIDE BESIDE THE INSTANTS: 02:00Z on 2 June is 1 June in New

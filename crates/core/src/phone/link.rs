@@ -118,7 +118,7 @@ impl Device {
         hex::encode(self.certificate.to_bytes())
     }
 
-    fn signer(&self) -> DeviceSigner {
+    pub(crate) fn signer(&self) -> DeviceSigner {
         DeviceSigner::new(
             self.key.clone(),
             &self.certificate,
@@ -141,6 +141,23 @@ pub async fn dial(
     device: &Device,
     vault: centraid_gateway_core::ids::VaultId,
 ) -> Result<GatewayClient<IrohTransport>> {
+    Ok(GatewayClient::new(
+        carrier(laptop).await?,
+        device.signer(),
+        vault,
+    ))
+}
+
+/// Bind this phone's dial-only endpoint and point it at the laptop the record
+/// names — the carrier [`dial`] wraps in one vault's client.
+///
+/// Separate so a caller that speaks for several vaults can share it: a restore
+/// probes every derived index against one laptop, and a carrier per index was
+/// a fresh endpoint and a fresh hole-punch per index (#1047 R3).
+///
+/// # Errors
+/// As [`dial`].
+pub async fn carrier(laptop: &super::Laptop) -> Result<IrohTransport> {
     let raw = hex::decode(&laptop.gateway_endpoint).map_err(|error| CoreError::Unavailable {
         reason: format!("the paired laptop's id is not hex: {error}"),
     })?;
@@ -171,11 +188,7 @@ pub async fn dial(
             .map(iroh::TransportAddr::Ip),
     );
 
-    Ok(GatewayClient::new(
-        IrohTransport::new(endpoint, address),
-        device.signer(),
-        vault,
-    ))
+    Ok(IrohTransport::new(endpoint, address))
 }
 
 /// This phone's wall clock, in milliseconds, for signing.

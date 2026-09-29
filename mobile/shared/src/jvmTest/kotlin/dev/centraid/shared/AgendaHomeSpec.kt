@@ -379,8 +379,10 @@ class AgendaHomeSpec : StringSpec({
         )
         // THE HUE: a stored `var(--c-teal)` is teal; `steelblue` is no hue the
         // wheel names, so the calendar's own id picks one.
-        data.calendars.map { it.hue_key } shouldBe listOf("teal", PartyHueWheel.identityHueKey("cal-2"))
-        rows(data.days.single()).single().calendar_hue_key shouldBe "teal"
+        // THE THEME'S COLOUR ROLE, People's convention: no view converts a wheel word.
+        data.calendars.map { it.hue_key } shouldBe
+            listOf("cTeal", PartyHueWheel.role(PartyHueWheel.identityHueKey("cal-2")))
+        rows(data.days.single()).single().calendar_hue_key shouldBe "cTeal"
         // Toggled back, and the session remembers across a re-open.
         drive(hidden.state, view(opened())).state.screen.hidden_calendar_ids shouldBe listOf("cal-2")
     }
@@ -426,6 +428,27 @@ class AgendaHomeSpec : StringSpec({
         closed.state.screen.search_open shouldBe false
         closed.state.screen.search_term shouldBe ""
         closed.state.screen.data_.shouldNotBeNull().days.map { it.day } shouldBe listOf("2026-06-16")
+    }
+
+    "search from Waiting covers every event, not only the ones waiting on you (#1047)" {
+        val invite = timed("w", "Offsite", "2026-06-16T09:00").copy(attendees = listOf(you("needs-action")))
+        val home = landed(waiting, upcoming(invite, timed("a", "Stand-up", "2026-06-16T10:00")))
+        home.screen.data_.shouldNotBeNull().days.flatMap { rows(it) }.map { it.title } shouldBe listOf("Offsite")
+        val typed = drive(home, band("search"), term("dentist")).state
+        typed.screen.destination shouldBe waiting
+        // WHILE THE HITS READ, the tab's own rows stay.
+        typed.screen.data_.shouldNotBeNull().days.flatMap { rows(it) }.map { it.title } shouldBe listOf("Offsite")
+        val hits = drive(
+            typed,
+            AgendaInput.Answered(
+                upcoming = null,
+                context = context(),
+                search = AgendaSearch(events = listOf(timed("d", "Dentist", "2026-06-20T14:00"))),
+            ),
+        ).state
+        val found = hits.screen.data_.shouldNotBeNull()
+        found.days.flatMap { rows(it) }.map { it.title } shouldBe listOf("Dentist")
+        found.empty shouldBe AgendaEmpty.AGENDA_EMPTY_NONE
     }
 
     "the empties are four different screens" {

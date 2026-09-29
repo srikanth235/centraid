@@ -19,11 +19,6 @@
 //!
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10).
 //!
-//! **`online_only` is empty for Agenda, and that is a checked claim.**
-//! `ONLINE_ONLY_ACTIONS` names actions that must stay online, and Agenda has
-//! none. So every Agenda action may be queued offline, including `propose`
-//! — which is the point of accepting an invitation on a train.
-//!
 //! **`confirmation` is the manifest's and `confirm` is the command's** (census
 //! §A0, two gates). **Agenda declares NONE of the first**, including on
 //! `cancel-event`, and the port reproduces that faithfully; the four
@@ -131,9 +126,6 @@ pub struct ActionRow {
     pub action: &'static str,
     pub command: &'static str,
     pub confirm: Confirm,
-    /// A seat refuses to QUEUE this offline. Agenda declares none; see the
-    /// module note for the grep behind the claim.
-    pub online_only: bool,
 }
 
 const fn act(action: &'static str, command: &'static str) -> ActionRow {
@@ -141,7 +133,6 @@ const fn act(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::None,
-        online_only: false,
     }
 }
 

@@ -132,9 +132,9 @@ internal fun TallySection(title: String) {
     if (title.isNotEmpty()) SectionHeader(SectionHead(title = title))
 }
 
-/** THE LEDGER ROW: the one row, the member's share as its figure. */
+/** THE LEDGER ROW: the one row, the member's share as its figure. Null [onTap]: a row to read, not to open. */
 @Composable
-internal fun TallyLedgerLine(row: TallyLedgerRow, onTap: () -> Unit) {
+internal fun TallyLedgerLine(row: TallyLedgerRow, onTap: (() -> Unit)?) {
     val figure = row.yours
     val amount = figure?.amount ?: row.amount
     CentraidRow(
@@ -145,7 +145,7 @@ internal fun TallyLedgerLine(row: TallyLedgerRow, onTap: () -> Unit) {
         hueKey = row.payer?.hue.orEmpty(),
         a11y = spoken(row.accessibility_label, amount),
         testTag = "tally-row-${row.row_key}",
-        onTap = if (row.expense_id.isNotEmpty()) onTap else null,
+        onTap = onTap?.takeIf { row.expense_id.isNotEmpty() },
     )
 }
 

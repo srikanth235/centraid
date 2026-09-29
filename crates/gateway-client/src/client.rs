@@ -195,6 +195,26 @@ impl<T: Transport> GatewayClient<T> {
         }
     }
 
+    /// Redeem an invite for this client's vault (#1047, pairing).
+    ///
+    /// The pairing ticket carries the invite code the laptop's owner minted,
+    /// and redeeming it is how the laptop comes to know this vault at all —
+    /// every signed call before it answers `UnknownVault`. Unsigned, for the
+    /// reason [`crate::directory::redeem_invite`] gives, and not latched by
+    /// the server-too-old rule: it writes a tenancy row, not vault content.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::Refused`] for any invite the laptop did not accept —
+    /// unknown, expired and already redeemed are one answer on the wire.
+    pub async fn admit(
+        &mut self,
+        account: &centraid_gateway_core::ids::AccountId,
+        invite: &str,
+    ) -> Result<crate::directory::Admission, ClientError> {
+        crate::directory::redeem_invite(&self.transport, &self.vault, account, invite).await
+    }
+
     /// Claim the lease for this vault at this device's certified epoch.
     ///
     /// # Errors
@@ -203,6 +223,47 @@ impl<T: Transport> GatewayClient<T> {
     pub async fn claim_lease(&mut self, phone_now_ms: i64) -> Result<LeaseAck, ClientError> {
         let path = format!("/v1/vaults/{}/lease", self.vault.hex());
         let response = self.write("POST", &path, Vec::new(), phone_now_ms).await?;
+        decode(&response)
+    }
+
+    /// Claim the lease **only while the manifest head is `head`** — the
+    /// restore's claim, over the generation it fetched and checked (#1047 L1).
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::Refused`] with `GatewayHeadConflict` when the head has
+    /// moved since the phone read it — the lease has not moved, and the phone
+    /// re-reads and re-checks — and [`ClientError::LeaseStale`] when another
+    /// claim took the epoch.
+    pub async fn claim_lease_at_head(
+        &mut self,
+        head: &str,
+        phone_now_ms: i64,
+    ) -> Result<LeaseAck, ClientError> {
+        let path = format!("/v1/vaults/{}/lease", self.vault.hex());
+        let body = serde_json::to_vec(&serde_json::json!({ "head": head })).map_err(|error| {
+            ClientError::Malformed {
+                reason: error.to_string(),
+            }
+        })?;
+        let response = self.write("POST", &path, body, phone_now_ms).await?;
+        decode(&response)
+    }
+
+    /// Read the lease's epoch and the manifest head **without claiming**.
+    ///
+    /// The restore path: a phone fetches and checks the generation this names
+    /// first, and claims the lease only for one that passed (#1047 R3). A GET,
+    /// so like [`Self::get_object`] it is not latched by the server-too-old
+    /// rule — restore must work from a server this phone will not write to.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::Refused`] with `UnknownVault` for a vault this gateway
+    /// does not hold.
+    pub async fn head(&mut self, phone_now_ms: i64) -> Result<LeaseAck, ClientError> {
+        let path = format!("/v1/vaults/{}/head", self.vault.hex());
+        let response = self.attempt("GET", &path, Vec::new(), phone_now_ms).await?;
         decode(&response)
     }
 

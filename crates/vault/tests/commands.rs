@@ -40,8 +40,11 @@ fn the_registry_carries_every_command_this_build_has() {
         // (slot 4c, D-1020-N6) and People's ontology primitive
         // `core.merge_party` (slot 4c, D-1020-PE2), which is twenty-five of
         // v0's twenty-seven. The two still absent are `core.merge_entity` and
-        // `core.find_duplicate_parties`.
-        ("core.", 25_usize),
+        // `core.find_duplicate_parties`. Plus this build's own two for Docs on
+        // the phone (#1047): `core.purge_document`, the destroy ruling D-1 of
+        // 2026-09-25 gave Docs' trash, and `core.create_text_document`, the Add
+        // sheet's "Text".
+        ("core.", 27_usize),
         // The whole 9-command `knowledge.*` schema (wave 4 slot 4c).
         ("knowledge.", 9),
         // The 23 `tally.*`, real since the Tally-finish lane.
@@ -61,9 +64,11 @@ fn the_registry_carries_every_command_this_build_has() {
         // over `crates/assist`, and both are deleted — so every one of them
         // had exactly one caller and it is gone.
         ("enrich.", 0),
-        // v0's twenty `locker.*` plus `reveal_receipt` and `rotate_key`, the
-        // two the member-key custody change needs (wave 4 lane Locker).
-        ("locker.", 22),
+        // v0's twenty `locker.*` plus `reveal_receipt`, which the core's
+        // reveal writes. `rotate_key` went with the multi-seat custody plane
+        // (#1047 slice D1), and `watchtower` with the weak/reused scoring
+        // (Q-1047-16).
+        ("locker.", 20),
         // The whole 28-command `people.*` schema and the whole 4-command
         // `social.*` one (wave 4 lane People), plus `people.purge_person` —
         // the destroy People's trash needed to meet #1015 D1.

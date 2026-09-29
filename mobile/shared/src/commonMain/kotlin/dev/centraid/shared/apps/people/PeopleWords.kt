@@ -49,8 +49,7 @@ public object PeopleWords {
         role(PartyHueWheel.partyHueKey(partyId, avatarColor) ?: PartyHueWheel.identityHueKey(partyId))
 
     /** A wheel key as the theme's colour role: `rose` → `cRose`. */
-    public fun role(wheelKey: String): String =
-        if (wheelKey.isEmpty()) "" else "c" + wheelKey.replaceFirstChar { it.uppercaseChar() }
+    public fun role(wheelKey: String): String = PartyHueWheel.role(wheelKey)
 
     /** The wheel key inside a colour role: `cRose` → `rose`; empty for anything else. */
     public fun wheelKey(role: String): String {
@@ -69,6 +68,27 @@ public object PeopleWords {
         return if (key in PartyHueWheel.HUE_KEYS) role(key) else ""
     }
 
+    /**
+     * A roster row's last touch, counted in the member's days (#1047): the
+     * civil day the core read `last_contacted_at` on in the request's zone,
+     * against the answer's `today` — never a UTC slice of the instant. An
+     * answer with no local day (no zone resolved) keeps the core's own
+     * `days_since_contact`.
+     */
+    public fun lastTouch(person: centraid.core.v1.PeopleRosterRow, today: String): String {
+        val local = person.last_contacted_local_day
+        val ever = person.last_contacted_at != null || local.isNotEmpty()
+        val days = daysBetween(local, today) ?: person.days_since_contact
+        return lastTouch(ever, days)
+    }
+
+    /** Whole civil days from [from] to [to], or null when either is not a day. */
+    private fun daysBetween(from: String, to: String): Long? {
+        val start = dev.centraid.shared.kit.time.epochDayOf(from.take(DAY)) ?: return null
+        val end = dev.centraid.shared.kit.time.epochDayOf(to.take(DAY)) ?: return null
+        return end - start
+    }
+
     /** "Last touch 12 days ago" / "No touch logged yet". */
     public fun lastTouch(everContacted: Boolean, daysSince: Long): String = when {
         !everContacted -> PeopleCopy.META_NEVER
@@ -77,9 +97,17 @@ public object PeopleWords {
         else -> fill(PeopleCopy.META_DAYS, "n" to daysSince)
     }
 
+    /** "1 person" / "12 people": the count a status line leads with. */
+    public fun people(n: Int): String =
+        if (n == 1) PeopleCopy.PEOPLE_COUNT_ONE else fill(PeopleCopy.PEOPLE_COUNT_MANY, "n" to n)
+
     /** "Every 14 days" / "No cadence". 0 is no cadence. */
     public fun cadence(days: Long): String =
-        if (days <= 0) PeopleCopy.CADENCE_NONE else fill(PeopleCopy.CADENCE_EVERY, "n" to days)
+        when {
+            days <= 0 -> PeopleCopy.CADENCE_NONE
+            days == 1L -> PeopleCopy.CADENCE_EVERY_ONE
+            else -> fill(PeopleCopy.CADENCE_EVERY, "n" to days)
+        }
 
     /** "1 day over" / "3 days over". */
     public fun daysOver(days: Long): String =

@@ -1,0 +1,32 @@
+-- A VAULT KEEPS NO NOTICES — RUNG NINE (#1047).
+--
+-- **ON THE LADDER.** `LADDER` in `crates/vault/src/migrations.rs` ends here.
+-- The file is both the migration and its fixture (D-1020-D1-13).
+--
+-- **NEVER EDITED FROM HERE ON.** A file in the field has already run this text;
+-- an edit changes what a fresh file gets and nothing else, which is two schemas
+-- with one number. A correction is rung ten.
+--
+-- ## What this is for
+--
+-- `notifications_notice` held the durable, non-decision updates the v0 planes
+-- raised — a notice per `(kind, source_ref)`, with a count, read and archive
+-- state — for an inbox the member cleared. Every plane that wrote a notice was
+-- deleted under #1029, and the inbox's reader went with the v0 tree, but rung
+-- five did not name the table, so a new vault kept founding it. A mechanical
+-- sweep of `crates/`, `mobile/`, `packages/`, `contracts/` (the app bundles,
+-- the screens, the ledgers) and the scripts finds no statement that reads or
+-- writes it: its only mentions are the baseline that founds it, the two frozen
+-- v0 corpora and `contracts/schema/v0-registries.json`, which are the v0 record
+-- and keep it as such.
+--
+-- ## Why a plain `DROP`
+--
+-- No trigger, view or foreign key names the table, so it goes alone, and its
+-- two indexes (`notifications_notice_active_idx`,
+-- `notifications_notice_retention_idx`) and its UNIQUE's implicit index go
+-- with it. Not `IF EXISTS`: every file at rung eight holds the table, and one
+-- that did not would be a file this ladder did not write. The rows a file holds
+-- were raised by planes no build has and are discarded with it.
+
+DROP TABLE notifications_notice;

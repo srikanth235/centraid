@@ -130,6 +130,8 @@ fn the_c_harness_crosses_the_abi_ten_thousand_times() {
                     with_note_body: false,
                     with_document_size: false,
                     with_minor_units: false,
+                    local_day_columns: Vec::new(),
+                    tz: String::new(),
                 }),
                 limit: 100,
                 after: None,

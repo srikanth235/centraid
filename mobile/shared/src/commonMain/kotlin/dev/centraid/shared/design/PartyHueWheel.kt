@@ -181,4 +181,13 @@ public object PartyHueWheel {
         val key = stored.substring(HUE_VAR_OPEN.length, stored.length - 1)
         return if (key in HUE_KEYS) key else null
     }
+
+    /**
+     * A wheel key as the THEME'S COLOUR ROLE — `rose` → `cRose` — the name a
+     * view looks a colour up by. Every hue a screen emits is a role, so no view
+     * keeps a table from the wheel's word to the role (#1047); empty stays
+     * empty.
+     */
+    public fun role(wheelKey: String): String =
+        if (wheelKey.isEmpty()) "" else "c" + wheelKey.replaceFirstChar { it.uppercaseChar() }
 }

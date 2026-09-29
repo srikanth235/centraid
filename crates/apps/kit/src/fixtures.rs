@@ -5191,6 +5191,19 @@ pub fn set_enrich_policy(connection: &Connection, domain: &str, tier: &str) -> K
     Ok(())
 }
 
+/// One named `core_place` with no coordinate — the row an event's
+/// `location_place_id` points at when a test needs a place name to read back.
+pub fn seed_place(connection: &Connection, place_id: &str, name: &str, now: &str) -> KitResult<()> {
+    connection
+        .execute(
+            "INSERT INTO core_place (place_id, name, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?3)",
+            rusqlite::params![place_id, name, now],
+        )
+        .map_err(door)?;
+    Ok(())
+}
+
 /// Give a place a name and a kind — the act that turns it into an anchor.
 pub fn name_place(
     connection: &Connection,

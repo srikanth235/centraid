@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if canImport(CentraidShared)
+import CentraidShared
+#endif
+
 // ONE ROW SHAPE, ONE SECTION HEAD, ONE FIELD ROW (K5; handoff README l.22-27:
 // "one row shape per app reused by every list in it; the section head with a
 // count and a text verb; the field row of key, value and note; the chip").
@@ -20,7 +24,7 @@ struct CentraidRow: View {
     var hueKey: String = ""
     var dimmed: Bool = false
     var pending: Bool = false
-    var pendingLabel: String = "Saving"
+    var pendingLabel: String = KitWords.shared.PENDING
     var accessibility: String = ""
     var identifier: String = ""
     var onTap: (() -> Void)? = nil
@@ -54,7 +58,7 @@ struct CentraidRow: View {
         hueKey: String = "",
         dimmed: Bool = false,
         pending: Bool = false,
-        pendingLabel: String = "Saving",
+        pendingLabel: String = KitWords.shared.PENDING,
         accessibility: String = "",
         identifier: String = "",
         onTap: (() -> Void)? = nil
@@ -248,7 +252,7 @@ struct SectionHeader: View {
 struct ShowMoreFooter: View {
     let visible: Bool
     var loading: Bool = false
-    var label: String = "Show more"
+    var label: String = KitWords.shared.SHOW_MORE
     let onMore: () -> Void
 
     var body: some View {

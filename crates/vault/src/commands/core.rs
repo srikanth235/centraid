@@ -101,7 +101,9 @@ const TAGGABLE: &[(&str, &str, bool)] = &[
 ];
 
 /// Every `core.*` command this build carries: the nineteen of v0's twenty-seven
-/// that the parties plane and Docs' whole write surface need.
+/// that the parties plane and Docs' whole write surface need, plus Docs' two
+/// phone commands (#1047) — `core.create_text_document` and
+/// `core.purge_document`.
 ///
 /// The order is v0's own file order — parties, tags, then documents and folders
 /// — so the registry's `agent_command` record reads like the source it was
@@ -114,10 +116,12 @@ pub fn definitions() -> Vec<CommandDefinition> {
         tag_item(),
         untag_item(),
         add_document(),
+        create_text_document(),
         rename_document(),
         move_document(),
         trash_document(),
         restore_document(),
+        purge_document(),
         empty_document_trash(),
         star_document(),
         unstar_document(),
@@ -283,7 +287,6 @@ fn add_party() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id, "identifiers_bound": bound }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -380,7 +383,6 @@ fn update_party() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -490,7 +492,6 @@ fn tag_item() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1967,21 +1968,7 @@ fn add_document() -> CommandDefinition {
         preconditions: ADD_DOCUMENT_PRE,
         postconditions: &[CommandCondition {
             predicate: "document_filed",
-            check: |ctx| {
-                let document_id = created_id(ctx, "document_id");
-                let count: i64 = ctx.connection().query_row(
-                    "SELECT COUNT(*) FROM core_document d
-                      WHERE d.document_id = ?1 AND d.deleted_at IS NULL
-                        AND EXISTS(SELECT 1 FROM core_tag t
-                                     JOIN core_concept c ON c.concept_id = t.concept_id
-                                     JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-                                    WHERE t.target_type = ?2 AND t.target_id = d.document_id
-                                      AND s.uri = ?3)",
-                    rusqlite::params![document_id, DOCUMENT_TARGET_TYPE, FOLDER_SCHEME_URI],
-                    |row| row.get(0),
-                )?;
-                Ok((count != 1).then(|| "the document was not filed".to_owned()))
-            },
+            check: pre_document_filed,
         }],
         handler: |ctx| {
             // THE WRAPPER'S ID FIRST — see `created_id`.
@@ -1990,60 +1977,182 @@ fn add_document() -> CommandDefinition {
             let folder_id = ctx.optional_str("folder_id").map(str::to_owned);
             let extracted_text = ctx.optional_str("extracted_text").map(str::to_owned);
             let minted = minted_bytes(ctx)?;
-            // The FIRST occurrence (#996 R20(a)): a document's original body is
-            // a version like any other, so the chain starts here rather than
-            // being inferred later from the absence of a parent edge.
-            //
-            // RECORDED BEFORE THE ROW, so the row is inserted with its head in
-            // ONE statement — `knowledge.create_note`'s fix for R-1020-35. The
-            // second statement this replaces was an `UPDATE` whose `updated_at`
-            // did not move, which is exactly when
-            // `core_document_touch_updated_at` stamps SQLite's host `'now'`
-            // over the vault clock (QUALITY.md, #1046). The revision has no
-            // foreign key onto the wrapper, and `record_body_revision` finds no
-            // row yet — the right answer: the first occurrence has no parent.
-            let revision_id = record_body_revision(
+            file_new_document(
                 ctx,
-                DOCUMENT_TARGET_TYPE,
                 &document_id,
-                &minted.content_id,
-                None,
-            )?;
-            ctx.connection().execute(
-                "INSERT INTO core_document
-                   (document_id, title, current_content_id, current_revision_id,
-                    created_at, updated_at, deleted_at, purge_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?5, NULL, NULL)",
-                rusqlite::params![document_id, title, minted.content_id, revision_id, ctx.now],
-            )?;
-            // THIS DOCUMENT'S READING OF THE BYTES (#996 R20(b)). The same sha
-            // filed twice as two documents carries two readings, so a second
-            // filing cannot inherit the first import's media type.
-            set_representation(
-                ctx,
-                &minted.content_id,
-                DOCUMENT_TARGET_TYPE,
-                &document_id,
-                &minted.media_type,
-                Some("body"),
-            )?;
-            if let Some(text) = extracted_text.filter(|text| !text.is_empty()) {
-                upsert_text_derivative(ctx, &minted.content_id, "text", "text/plain", &text)?;
-            }
-            let folder = match folder_id {
-                Some(folder_id) => folder_id,
-                None => root_folder_id(ctx)?,
-            };
-            file_into(ctx, &document_id, &folder)?;
-            Ok(serde_json::json!({
-                "document_id": document_id,
-                "content_id": minted.content_id,
-                "deduped": minted.deduped,
-                "byte_size": minted.byte_size,
-            }))
+                &title,
+                folder_id,
+                &minted,
+                extracted_text,
+            )
         },
         sealed_input: &[],
-        online_only: false,
+    }
+}
+
+/// A NEW DOCUMENT OVER BYTES ALREADY MINTED: the wrapper, its first version
+/// occurrence, its reading of the bytes, and its folder. The one body behind
+/// `core.add_document` and `core.create_text_document`, so a document written
+/// from the Add sheet's "Text" and one uploaded from a file are the same rows.
+fn file_new_document(
+    ctx: &CommandCtx<'_, '_>,
+    document_id: &str,
+    title: &str,
+    folder_id: Option<String>,
+    minted: &Minted,
+    extracted_text: Option<String>,
+) -> Result<serde_json::Value> {
+    // The FIRST occurrence (#996 R20(a)): a document's original body is
+    // a version like any other, so the chain starts here rather than
+    // being inferred later from the absence of a parent edge.
+    //
+    // RECORDED BEFORE THE ROW, so the row is inserted with its head in
+    // ONE statement — `knowledge.create_note`'s fix for R-1020-35. The
+    // second statement this replaces was an `UPDATE` whose `updated_at`
+    // did not move, which is exactly when
+    // `core_document_touch_updated_at` stamps SQLite's host `'now'`
+    // over the vault clock (QUALITY.md, #1046). The revision has no
+    // foreign key onto the wrapper, and `record_body_revision` finds no
+    // row yet — the right answer: the first occurrence has no parent.
+    let revision_id = record_body_revision(
+        ctx,
+        DOCUMENT_TARGET_TYPE,
+        document_id,
+        &minted.content_id,
+        None,
+    )?;
+    ctx.connection().execute(
+        "INSERT INTO core_document
+           (document_id, title, current_content_id, current_revision_id,
+            created_at, updated_at, deleted_at, purge_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5, NULL, NULL)",
+        rusqlite::params![document_id, title, minted.content_id, revision_id, ctx.now],
+    )?;
+    // THIS DOCUMENT'S READING OF THE BYTES (#996 R20(b)). The same sha
+    // filed twice as two documents carries two readings, so a second
+    // filing cannot inherit the first import's media type.
+    set_representation(
+        ctx,
+        &minted.content_id,
+        DOCUMENT_TARGET_TYPE,
+        document_id,
+        &minted.media_type,
+        Some("body"),
+    )?;
+    if let Some(text) = extracted_text.filter(|text| !text.is_empty()) {
+        upsert_text_derivative(ctx, &minted.content_id, "text", "text/plain", &text)?;
+    }
+    let folder = match folder_id {
+        Some(folder_id) => folder_id,
+        None => root_folder_id(ctx)?,
+    };
+    file_into(ctx, document_id, &folder)?;
+    Ok(serde_json::json!({
+        "document_id": document_id,
+        "content_id": minted.content_id,
+        "deduped": minted.deduped,
+        "byte_size": minted.byte_size,
+    }))
+}
+
+/// THE FILED-DOCUMENT POSTCONDITION both creating commands share: the minted
+/// document is live and carries a folders-scheme tag.
+fn pre_document_filed(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let document_id = created_id(ctx, "document_id");
+    let count: i64 = ctx.connection().query_row(
+        "SELECT COUNT(*) FROM core_document d
+          WHERE d.document_id = ?1 AND d.deleted_at IS NULL
+            AND EXISTS(SELECT 1 FROM core_tag t
+                         JOIN core_concept c ON c.concept_id = t.concept_id
+                         JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+                        WHERE t.target_type = ?2 AND t.target_id = d.document_id
+                          AND s.uri = ?3)",
+        rusqlite::params![document_id, DOCUMENT_TARGET_TYPE, FOLDER_SCHEME_URI],
+        |row| row.get(0),
+    )?;
+    Ok((count != 1).then(|| "the document was not filed".to_owned()))
+}
+
+/// `core.create_text_document` — a new text document written on the phone
+/// (#1047: the Docs Add sheet's "Text"). The member's words become the bytes
+/// here, as `core.edit_document` makes them, so a shell never spells a `data:`
+/// URI; an absent `body_text` is an empty document the editor then fills.
+/// `media_type` is `text/plain` unless the caller says `text/markdown`.
+fn create_text_document() -> CommandDefinition {
+    CommandDefinition {
+        name: "core.create_text_document",
+        owner_schema: "core",
+        input_schema: r#"{
+          "type": "object",
+          "required": ["title"],
+          "additionalProperties": false,
+          "properties": {
+            "document_id": {
+              "type": "string", "minLength": 36, "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "title": { "type": "string", "minLength": 1 },
+            "folder_id": { "type": "string", "minLength": 1 },
+            "media_type": { "type": "string", "enum": ["text/plain", "text/markdown"] },
+            "body_text": { "type": "string" }
+          }
+        }"#,
+        idempotency: Idempotency::Once,
+        risk: Risk::Low,
+        confirm: false,
+        preconditions: &[
+            CommandCondition {
+                predicate: "document_id_is_free",
+                check: |ctx| {
+                    minted_id_is_free(
+                        ctx,
+                        "document_id",
+                        "core_document",
+                        "document_id",
+                        "document",
+                    )
+                },
+            },
+            CommandCondition {
+                predicate: "text_body_within_budget",
+                check: |ctx| {
+                    let body = ctx.optional_str("body_text").unwrap_or_default();
+                    Ok((body.len() > INLINE_BODY_BUDGET_BYTES).then(|| {
+                        format!(
+                            "that body is {} bytes, over the {INLINE_BODY_BUDGET_BYTES}-byte \
+                             inline budget — text bodies cannot redirect to blob storage \
+                             (the search index reads them in-transaction)",
+                            body.len()
+                        )
+                    }))
+                },
+            },
+            CommandCondition {
+                predicate: "folder_exists_if_given",
+                check: folder_exists_if_given,
+            },
+        ],
+        postconditions: &[CommandCondition {
+            predicate: "document_filed",
+            check: pre_document_filed,
+        }],
+        handler: |ctx| {
+            let document_id = minted_id(ctx, "document_id");
+            let title = ctx.required_str("title")?.to_owned();
+            let folder_id = ctx.optional_str("folder_id").map(str::to_owned);
+            let media_type = ctx
+                .optional_str("media_type")
+                .unwrap_or("text/plain")
+                .to_owned();
+            let body = ctx.optional_str("body_text").unwrap_or_default().to_owned();
+            let data_uri = format!(
+                "data:{media_type};charset=utf-8,{}",
+                encode_uri_component(&body)
+            );
+            let minted = mint_content_from_data_uri(ctx, &data_uri)?;
+            file_new_document(ctx, &document_id, &title, folder_id, &minted, None)
+        },
+        sealed_input: &[],
     }
 }
 
@@ -2162,7 +2271,6 @@ fn rename_document() -> CommandDefinition {
             Ok(serde_json::json!({ "document_id": document_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2218,7 +2326,6 @@ fn move_document() -> CommandDefinition {
             Ok(serde_json::json!({ "document_id": document_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2260,7 +2367,6 @@ fn trash_document() -> CommandDefinition {
             Ok(serde_json::json!({ "document_id": document_id, "purge_at": until }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2316,19 +2422,147 @@ fn restore_document() -> CommandDefinition {
             Ok(serde_json::json!({ "document_id": document_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
-/// `core.empty_document_trash` — collapse the grace window on EVERY document
-/// already in the trash so the next lifecycle sweep destroys them (#1015, D1).
+/// DESTROY ONE TRASHED DOCUMENT — the path Photos' `media.purge_asset` takes
+/// (#1047, ruling D-1 of 2026-09-25, which supersedes 2026-09-10's "the
+/// gateway's lifecycle sweep is the only thing that destroys a document": that
+/// sweep went with the gateway in #1029, and one vault gets one answer).
 ///
-/// **Nothing is deleted here.** The gateway's sweep is the only thing that
-/// destroys a document, and it keeps its rent checks, its authority revocations
-/// and its provenance receipts — emptying the trash is a DATE, not a second
-/// destruction path. `purge_at` collapses onto the row's own `deleted_at`
-/// rather than onto `now`: a moment provably in the past, so the postcondition
-/// is exact without reading a clock.
+/// The document goes through the entity supertype, so its folder tag, star,
+/// labels, representation, links, annotations and collection entries go with
+/// it by the engine's cascades; its version occurrences go by hand (they name
+/// the document by value, not by key). Then every content item the document
+/// ever named — the head and each version's — is released through
+/// [`super::media::release_content_now`] when nothing else rents it: its
+/// `purge_at` is now, and the bytes are the store's to reclaim. A content item
+/// another document or a photograph still names is left exactly as it is.
+///
+/// Returns how many content items were released.
+pub(crate) fn destroy_document(ctx: &CommandCtx<'_, '_>, document_id: &str) -> Result<i64> {
+    let contents: Vec<String> = {
+        let connection = ctx.connection();
+        let mut statement = connection.prepare(
+            "SELECT current_content_id FROM core_document WHERE document_id = ?1
+             UNION
+             SELECT content_id FROM core_entity_revision
+              WHERE entity_type = ?2 AND entity_id = ?1 AND content_id IS NOT NULL",
+        )?;
+        statement
+            .query_map(
+                rusqlite::params![document_id, DOCUMENT_TARGET_TYPE],
+                |row| row.get::<_, String>(0),
+            )?
+            .collect::<rusqlite::Result<Vec<String>>>()?
+    };
+    // The wrapper first: its `current_revision_id` would otherwise be SET NULL
+    // on a row that is about to go anyway.
+    ctx.connection().execute(
+        "DELETE FROM core_entity WHERE entity_id = ?1",
+        [document_id],
+    )?;
+    // THE CHAIN FROM ITS NEWEST END. An occurrence is immutable (#916 R3), and
+    // deleting a parent under a child would SET NULL the child's
+    // `parent_revision_id` — a rewrite the vault refuses. So each pass deletes
+    // only the occurrences no remaining one names as its parent, until none
+    // is left; `core_entity_revision_entity_delete` takes the supertype rows.
+    loop {
+        let removed = ctx.connection().execute(
+            "DELETE FROM core_entity_revision
+              WHERE entity_type = ?1 AND entity_id = ?2
+                AND revision_id NOT IN (SELECT parent_revision_id FROM core_entity_revision
+                                         WHERE parent_revision_id IS NOT NULL)",
+            rusqlite::params![DOCUMENT_TARGET_TYPE, document_id],
+        )?;
+        if removed == 0 {
+            break;
+        }
+    }
+    let mut released = 0;
+    for content_id in &contents {
+        if super::media::release_content_now(ctx, content_id)? {
+            released += 1;
+        }
+    }
+    Ok(released)
+}
+
+/// NOTHING MAY STILL NAME A DESTROYED DOCUMENT: the row, its supertype, and
+/// every polymorphic pointer at it, in one predicate — `media.purge_asset`'s
+/// shape, so a clause dropped in a later edit fails here rather than in a
+/// member's drive.
+const DOCUMENT_GONE_SQL: &str = "SELECT (
+       (SELECT COUNT(*) FROM core_document WHERE document_id = ?1)
+     + (SELECT COUNT(*) FROM core_entity WHERE entity_id = ?1)
+     + (SELECT COUNT(*) FROM core_entity_revision
+         WHERE entity_type = 'core.document' AND entity_id = ?1)
+     + (SELECT COUNT(*) FROM core_tag
+         WHERE target_type = 'core.document' AND target_id = ?1)
+     + (SELECT COUNT(*) FROM core_collection_entry
+         WHERE target_type = 'core.document' AND target_id = ?1)
+     + (SELECT COUNT(*) FROM core_content_representation
+         WHERE owner_type = 'core.document' AND owner_id = ?1)
+     + (SELECT COUNT(*) FROM core_link
+         WHERE (from_type = 'core.document' AND from_id = ?1)
+            OR (to_type = 'core.document' AND to_id = ?1))
+     )";
+
+/// `core.purge_document` — "Delete forever" on one trashed document
+/// ([`destroy_document`]). Only a document already in the trash, whatever is
+/// left of its grace window: a live one is refused by name. Not `confirm:
+/// true`, for `media.purge_asset`'s reason — the owner's confirmation is the
+/// manifest's, in front of the command.
+fn purge_document() -> CommandDefinition {
+    CommandDefinition {
+        name: "core.purge_document",
+        owner_schema: "core",
+        input_schema: DOCUMENT_ID_ONLY,
+        idempotency: Idempotency::Once,
+        risk: Risk::High,
+        confirm: false,
+        preconditions: &[CommandCondition {
+            predicate: "document_is_trashed",
+            check: |ctx| {
+                let document_id = ctx.required_str("document_id")?;
+                let count: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM core_document
+                      WHERE document_id = ?1 AND deleted_at IS NOT NULL",
+                    [document_id],
+                    |row| row.get(0),
+                )?;
+                Ok((count != 1).then(|| {
+                    "Only a document that is already in the trash can be deleted forever."
+                        .to_owned()
+                }))
+            },
+        }],
+        postconditions: &[CommandCondition {
+            predicate: "document_destroyed",
+            check: |ctx| {
+                let document_id = ctx.required_str("document_id")?;
+                let left: i64 =
+                    ctx.connection()
+                        .query_row(DOCUMENT_GONE_SQL, [document_id], |row| row.get(0))?;
+                Ok((left != 0).then(|| "something still names the destroyed document".to_owned()))
+            },
+        }],
+        handler: |ctx| {
+            let document_id = ctx.required_str("document_id")?.to_owned();
+            let released = destroy_document(ctx, &document_id)?;
+            Ok(serde_json::json!({
+                "document_id": document_id,
+                "content_released": released,
+            }))
+        },
+        sealed_input: &[],
+    }
+}
+
+/// `core.empty_document_trash` — "Empty trash": [`destroy_document`] on every
+/// document in the trash (#1047, D-1 of 2026-09-25). It used to collapse each
+/// grace window and leave destruction to the gateway's lifecycle sweep; that
+/// sweep went with the gateway, so the date destroyed nothing.
 ///
 /// An empty trash is a NO-OP that still executes: a member who taps "Empty
 /// trash" on an empty trash is not shown a refusal. And **not** `confirm: true`
@@ -2338,14 +2572,9 @@ fn empty_document_trash() -> CommandDefinition {
     CommandDefinition {
         name: "core.empty_document_trash",
         owner_schema: "core",
-        // "NOT YET", WHERE EVERY CALLER READS IT (QUALITY.md, #1046): the
-        // command collapses the window and nothing in this build destroys the
-        // rows afterwards, so an emptied document can neither be restored nor
-        // is it gone. The purge is a follow-up (docs.proto's "WHAT TRASH
-        // MEANS"); until it lands a surface must not say "deleted forever".
         input_schema: r#"{
           "type": "object",
-          "description": "Empty the Docs trash: every trashed document's grace window ends now, so restore refuses it from here on. Destroying the rows and releasing their bytes is not yet built — nothing in this build purges a document after its window — so an emptied document stays in the vault, unrestorable, until that purge lands.",
+          "description": "Empty the Docs trash: every document in the trash is destroyed now, as core.purge_document destroys one — the row, its tags and its versions go, and its bytes are released when nothing else names them. A document that was restored is no longer in the trash and is untouched.",
           "additionalProperties": false,
           "properties": {}
         }"#,
@@ -2354,32 +2583,37 @@ fn empty_document_trash() -> CommandDefinition {
         confirm: false,
         preconditions: &[],
         postconditions: &[CommandCondition {
-            // NO DOCUMENT MAY SIT IN THE TRASH STILL WAITING OUT A WINDOW.
-            predicate: "trash_window_collapsed",
+            predicate: "trash_emptied",
             check: |ctx| {
-                let waiting: i64 = ctx.connection().query_row(
-                    "SELECT COUNT(*) FROM core_document
-                      WHERE deleted_at IS NOT NULL AND purge_at <> deleted_at",
+                let left: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM core_document WHERE deleted_at IS NOT NULL",
                     [],
                     |row| row.get(0),
                 )?;
-                Ok((waiting != 0).then(|| {
-                    format!("{waiting} trashed documents are still waiting out a grace window")
-                }))
+                Ok((left != 0).then(|| format!("{left} documents are still in the trash")))
             },
         }],
         handler: |ctx| {
-            let released = ctx.connection().execute(
-                "UPDATE core_document SET purge_at = deleted_at, updated_at = ?1
-                  WHERE deleted_at IS NOT NULL",
-                [&ctx.now],
-            )?;
+            let trashed: Vec<String> = {
+                let connection = ctx.connection();
+                let mut statement = connection.prepare(
+                    "SELECT document_id FROM core_document WHERE deleted_at IS NOT NULL
+                      ORDER BY document_id",
+                )?;
+                statement
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<String>>>()?
+            };
+            let mut released = 0;
+            for document_id in &trashed {
+                released += destroy_document(ctx, document_id)?;
+            }
             Ok(serde_json::json!({
-                "documents_released": i64::try_from(released).unwrap_or(i64::MAX)
+                "documents_released": i64::try_from(trashed.len()).unwrap_or(i64::MAX),
+                "content_released": released,
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2417,7 +2651,6 @@ fn star_document() -> CommandDefinition {
             Ok(serde_json::json!({ "document_id": document_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2447,7 +2680,6 @@ fn unstar_document() -> CommandDefinition {
             Ok(serde_json::json!({ "document_id": document_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2605,7 +2837,6 @@ fn edit_document() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2716,7 +2947,6 @@ fn replace_document_content() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2874,7 +3104,6 @@ fn restore_document_version() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2965,7 +3194,6 @@ fn create_folder() -> CommandDefinition {
             Ok(serde_json::json!({ "folder_id": folder_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3009,7 +3237,6 @@ fn rename_folder() -> CommandDefinition {
             Ok(serde_json::json!({ "folder_id": folder_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3095,7 +3322,6 @@ fn delete_folder() -> CommandDefinition {
             Ok(serde_json::json!({ "folder_id": folder_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3150,7 +3376,6 @@ fn untag_item() -> CommandDefinition {
             Ok(serde_json::json!({ "tag_id": tag_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3210,7 +3435,6 @@ fn set_extracted_text() -> CommandDefinition {
             Ok(serde_json::json!({ "content_id": content_id, "replaced": replaced }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -4019,7 +4243,6 @@ fn merge_party() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -4063,9 +4286,11 @@ mod tests {
     /// registered together by [`super::Registry::with_system_commands`], which
     /// is why this test counts the REGISTRY rather than `definitions()`. The
     /// two that remain are `core.merge_entity` and
-    /// `core.find_duplicate_parties` (census §A5).
+    /// `core.find_duplicate_parties` (census §A5). Docs' two phone commands
+    /// (#1047) — `core.create_text_document` and `core.purge_document` — are
+    /// this build's own and not v0's, so the schema is twenty-seven.
     #[test]
-    fn the_schema_carries_twenty_five_of_v0s_twenty_seven() {
+    fn the_schema_carries_twenty_five_of_v0s_twenty_seven_and_docs_two() {
         let registry =
             crate::commands::Registry::with_system_commands().expect("the registry builds");
         let names = registry.names();
@@ -4074,12 +4299,15 @@ mod tests {
             .copied()
             .filter(|name: &&str| name.starts_with("core."))
             .collect();
-        assert_eq!(core.len(), 25, "{core:?}");
+        assert_eq!(core.len(), 27, "{core:?}");
         assert_eq!(
             definitions().len(),
-            20,
+            22,
             "this file is still the larger half"
         );
+        for phone in ["core.create_text_document", "core.purge_document"] {
+            assert!(core.contains(&phone), "{phone} is Docs' (#1047)");
+        }
         for landed in [
             "core.link_entities",
             "core.unlink_entities",
@@ -4107,7 +4335,9 @@ mod tests {
         }
     }
 
-    /// The split off v0's own definitions, for the twenty IN THIS FILE.
+    /// The split off v0's own definitions, for the twenty IN THIS FILE — plus
+    /// Docs' two phone commands (#1047), both `once`: a text document is
+    /// created once, and a destroy cannot run twice.
     ///
     /// v0's whole `core` schema is 17 idempotent / 8 once / 2 retry-safe. Slot
     /// 4c's link half takes two `once` (`link_entities`, `attach`) and three
@@ -4129,11 +4359,12 @@ mod tests {
                 Idempotency::RetrySafe => retry_safe += 1,
             }
         }
-        assert_eq!((idempotent, once, retry_safe), (14, 5, 1));
+        assert_eq!((idempotent, once, retry_safe), (14, 7, 1));
     }
 
-    /// TWO GATES, NEVER ONE (census §A0). Docs' one manifest-confirmed action
-    /// is `empty-trash`, and the command behind it deliberately does not carry
+    /// TWO GATES, NEVER ONE (census §A0). Docs' manifest-confirmed actions are
+    /// `purge` and `empty-trash`, and the commands behind them deliberately do
+    /// not carry
     /// the command-level park: `confirm: true` parks a NON-OWNER invocation,
     /// and the owner's confirmation is in front of the command.
     ///
@@ -4161,13 +4392,8 @@ mod tests {
     }
 
     #[test]
-    fn nothing_here_is_online_only_or_seals_an_input() {
+    fn nothing_here_seals_an_input() {
         for definition in definitions() {
-            assert!(
-                definition.online_only.eq(&false),
-                "{} is marked online-only and Docs declares no ONLINE_ONLY_ACTIONS",
-                definition.name
-            );
             assert!(definition.sealed_input.is_empty(), "{}", definition.name);
         }
     }

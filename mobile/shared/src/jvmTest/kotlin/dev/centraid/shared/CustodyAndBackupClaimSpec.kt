@@ -103,32 +103,14 @@ class CustodyAndBackupClaimSpec : StringSpec({
         asked shouldBe listOf(1, 2, 3)
     }
 
-    "the check is answered by the phrase and not by the screen above it" {
+    "the check is answered by the phrase, forgiving case and spacing and nothing else" {
         val phrase = List(PhraseMachine.WORDS) { "word${it + 1}" }
-        val machine = PhraseMachine(listOf(2, 9, 20)) { position, typed ->
-            phrase[position - 1] == typed
-        }
-        machine.confirmed.shouldBeFalse()
-
-        machine.answer(2, "word2").shouldBeTrue()
-        machine.answer(9, "  WORD9 ").shouldBeTrue() // case and spaces forgiven
-        machine.confirmed.shouldBeFalse()
-        machine.answer(20, "word19").shouldBeFalse()
-        machine.confirmed.shouldBeFalse()
-        machine.verdict(20) shouldBe false
-
-        machine.answer(20, "word20").shouldBeTrue()
-        machine.confirmed.shouldBeTrue()
-        machine.correct shouldBe 3
-
-        machine.reset()
-        machine.confirmed.shouldBeFalse()
-        machine.verdict(2).shouldBeNull()
-    }
-
-    "an empty answer is never correct, however forgiving the check is" {
-        val machine = PhraseMachine(listOf(1)) { _, _ -> true }
-        machine.answer(1, "   ").shouldBeFalse()
+        PhraseMachine.matches(phrase, 2, "word2").shouldBeTrue()
+        PhraseMachine.matches(phrase, 9, "  WORD9 ").shouldBeTrue()
+        PhraseMachine.matches(phrase, 20, "word19").shouldBeFalse()
+        PhraseMachine.matches(phrase, 25, "word25").shouldBeFalse()
+        // AN EMPTY ANSWER IS NEVER CORRECT, however forgiving the check is.
+        PhraseMachine.matches(List(PhraseMachine.WORDS) { "" }, 1, "   ").shouldBeFalse()
     }
 
     "iOS and Android are told different things about their key, and Android is told the truth" {

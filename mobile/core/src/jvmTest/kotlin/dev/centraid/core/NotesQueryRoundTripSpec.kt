@@ -40,6 +40,11 @@ import okio.ByteString.Companion.encodeUtf8
  * Over JNA, against the real `libcentraid_core_ffi` and the vault
  * `spike-fixture` founded — nothing faked. The fixture vault is shared by every
  * spec in the run, so each case asks about the notes it wrote and no others.
+ *
+ * EVERY READ STATES ITS ZONE, as the shell's pre-check makes every screen do
+ * (`ScreenQueries.zone()`): the fixture vault names none, and a library, trash
+ * or history read with an empty `tz` there is `ERROR_CODE_INVALID_REQUEST`
+ * (`CONTRACT.md`, "A denial is an answer") — never an answer in UTC.
  */
 class NotesQueryRoundTripSpec : StringSpec({
 
@@ -76,7 +81,7 @@ class NotesQueryRoundTripSpec : StringSpec({
             )
             core.note(noteId).current_revision_id shouldNotBe opened.current_revision_id
             var bodies = emptyList<String>()
-            core.appQuery(AppQueryRequest(notes_history = NotesHistoryRequest(note_id = noteId)))
+            core.appQuery(AppQueryRequest(notes_history = NotesHistoryRequest(note_id = noteId, tz = TZ)))
                 .shouldBeAnsweredWith { envelope ->
                     bodies = envelope.appQuery().notes_history?.versions?.map { it.body }
                         ?: error("a history answer, got ${envelope.appQuery()}")
@@ -117,7 +122,7 @@ class NotesQueryRoundTripSpec : StringSpec({
             shelf shouldNotContain gone
 
             var trashed = emptyList<String>()
-            core.appQuery(AppQueryRequest(notes_trash = NotesTrashRequest()))
+            core.appQuery(AppQueryRequest(notes_trash = NotesTrashRequest(tz = TZ)))
                 .shouldBeAnsweredWith { envelope ->
                     trashed = envelope.appQuery().notes_trash?.notes?.map { it.note_id }
                         ?: error("a trash answer, got ${envelope.appQuery()}")
@@ -126,7 +131,7 @@ class NotesQueryRoundTripSpec : StringSpec({
             trashed shouldNotContain kept
 
             var hits = emptyList<String>()
-            core.appQuery(AppQueryRequest(notes_search = NotesSearchRequest(term = "quince")))
+            core.appQuery(AppQueryRequest(notes_search = NotesSearchRequest(term = "quince", tz = TZ)))
                 .shouldBeAnsweredWith { envelope ->
                     hits = envelope.appQuery().notes_search?.hits?.map { it.note_id }
                         ?: error("a search answer, got ${envelope.appQuery()}")
@@ -137,7 +142,7 @@ class NotesQueryRoundTripSpec : StringSpec({
             // THE SORT IS THE CORE'S: by title, pins first.
             var titled: NotesLibrary? = null
             core.appQuery(
-                AppQueryRequest(notes_library = NotesLibraryRequest(sort = NotesSort.NOTES_SORT_TITLE)),
+                AppQueryRequest(notes_library = NotesLibraryRequest(sort = NotesSort.NOTES_SORT_TITLE, tz = TZ)),
             ).shouldBeAnsweredWith { envelope ->
                 titled = envelope.appQuery().notes_library
             }
@@ -181,7 +186,7 @@ class NotesQueryRoundTripSpec : StringSpec({
 
         suspend fun CentraidCore.library(): NotesLibrary {
             var answer: NotesLibrary? = null
-            appQuery(AppQueryRequest(notes_library = NotesLibraryRequest()))
+            appQuery(AppQueryRequest(notes_library = NotesLibraryRequest(tz = TZ)))
                 .shouldBeAnsweredWith { envelope ->
                     answer = envelope.appQuery().notes_library
                         ?: error("a library answer, got ${envelope.appQuery()}")
@@ -191,7 +196,7 @@ class NotesQueryRoundTripSpec : StringSpec({
 
         suspend fun CentraidCore.note(noteId: String): NotesNote {
             var answer: NotesNote? = null
-            appQuery(AppQueryRequest(notes_note = NotesNoteRequest(note_id = noteId)))
+            appQuery(AppQueryRequest(notes_note = NotesNoteRequest(note_id = noteId, tz = TZ)))
                 .shouldBeAnsweredWith { envelope ->
                     answer = envelope.appQuery().notes_note
                         ?: error("a note answer, got ${envelope.appQuery()}")

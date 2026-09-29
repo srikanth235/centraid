@@ -500,9 +500,8 @@ CREATE INDEX locker_item_type_updated_page_idx
 CREATE INDEX locker_item_updated_page_idx
   ON locker_item(updated_at, item_id);
 
--- index locker_key_live_idx on locker_key
-CREATE UNIQUE INDEX locker_key_live_idx
-  ON locker_key(retired_at IS NULL) WHERE retired_at IS NULL;
+-- index locker_key_one_generation on locker_key
+CREATE UNIQUE INDEX locker_key_one_generation ON locker_key((1));
 
 -- index media_asset_captured_page_idx on media_asset
 CREATE INDEX media_asset_captured_page_idx
@@ -523,14 +522,6 @@ CREATE INDEX media_asset_purge_idx
 -- index media_face_region_asset_page_idx on media_face_region
 CREATE INDEX media_face_region_asset_page_idx
   ON media_face_region(asset_id, region_id);
-
--- index notifications_notice_active_idx on notifications_notice
-CREATE INDEX notifications_notice_active_idx
-  ON notifications_notice(archived_at, last_at DESC);
-
--- index notifications_notice_retention_idx on notifications_notice
-CREATE INDEX notifications_notice_retention_idx
-  ON notifications_notice(last_at);
 
 -- index people_important_date_purge_idx on people_important_date
 CREATE INDEX people_important_date_purge_idx
@@ -2166,8 +2157,6 @@ CREATE TABLE locker_item (
   username     TEXT,
   password     TEXT,
   url          TEXT,
-  url_match_policy TEXT NOT NULL DEFAULT 'registrable-domain'
-    CHECK (url_match_policy IN ('registrable-domain','exact-host')),
   otp_seed     TEXT,
   notes        TEXT,
   -- card
@@ -2221,8 +2210,6 @@ CREATE TABLE locker_item_address (
   address_id   TEXT PRIMARY KEY,
   item_id      TEXT NOT NULL REFERENCES locker_item(item_id) ON DELETE CASCADE,
   url          TEXT NOT NULL,
-  match_policy TEXT NOT NULL DEFAULT 'registrable-domain'
-    CHECK (match_policy IN ('registrable-domain','exact-host')),
   position     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL,
   FOREIGN KEY (address_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
@@ -2272,8 +2259,7 @@ CREATE TABLE locker_item_passkey (
 -- table locker_key on locker_key
 CREATE TABLE locker_key (
   key_id     TEXT PRIMARY KEY,
-  created_at TEXT NOT NULL,
-  retired_at TEXT
+  created_at TEXT NOT NULL
 ) STRICT;
 
 -- table media_asset on media_asset
@@ -2427,22 +2413,6 @@ CREATE TABLE media_memory_member (
   ordinal   INTEGER NOT NULL CHECK (ordinal >= 0),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   PRIMARY KEY (memory_id, asset_id)
-) STRICT;
-
--- table notifications_notice on notifications_notice
-CREATE TABLE notifications_notice (
-  notice_id TEXT PRIMARY KEY,
-  kind TEXT NOT NULL,
-  source_ref TEXT NOT NULL,
-  headline TEXT NOT NULL,
-  detail_json TEXT NOT NULL CHECK (json_valid(detail_json)),
-  severity TEXT NOT NULL CHECK (severity IN ('info','warning','high')),
-  count INTEGER NOT NULL DEFAULT 1 CHECK (count > 0),
-  first_at TEXT NOT NULL,
-  last_at TEXT NOT NULL,
-  read_at TEXT,
-  archived_at TEXT,
-  UNIQUE(kind, source_ref)
 ) STRICT;
 
 -- table people_important_date on people_important_date

@@ -3741,3 +3741,45 @@ The root posts this; this lane does not.
 | `cargo xtask gate --profile local --lane rules` | **PASS** — `sql-confinement` 220 files clean, `abi-five-symbols` clean, `no-listening-socket` 340 files clean with one allowlisted listener, `commonmain-no-platform-import` clean |
 | `node .governance/law/run.mjs --brief-digest 4cf9a5a8690a` | **10 rules, no findings**, and **no drift** — `node .governance/law/brief.mjs` still reads `4cf9a5a8690a` |
 | `node --test scripts/release/surfaces.test.mjs` (again, after format) | 5 passed / 0 failed |
+
+## What changed
+
+Added 2026-09-29 by slice F6 of [#1047](https://github.com/srikanth235/centraid/issues/1047). This receipt rides in the same branch range, and `receipt-per-issue` asks every receipt the range adds for this section. It is an index of what the waves above already record, plus what git holds. It is not new evidence.
+
+- **Where each wave's changes are recorded.** Each wave section above has its own landed-commit table or file list. **W9 — the close** summarises the umbrella in "What v0 is", "What was struck", "What the umbrella built" and "What is honestly not done". It also re-judges the frozen `## Checklist` line by line: W0.5–W4 and W9 done, W10 not started.
+- **What git holds.** 156 commits on this branch carry `(#1029)` in their subject. The first is `d93cdd05e` (2026-09-17, "retire the v0 directives with the tree they policed"). The last is `d049f19bd` (2026-09-23, the native Photos app). The receipt itself was opened in `f74e73f14`.
+- **What came after the close.** `d1d08eb3a` and `038d8bb89` are two doc fixes the exit greps found. `d049f19bd` is Photos on SwiftUI and Compose, with no backup claim for photos. [#1047](https://github.com/srikanth235/centraid/issues/1047) then changed the restore this umbrella built. It claims last (R-1047-R2), checks every vault before any claim, and claims only the head it checked (R-1047-R5).
+
+## Verification
+
+Each wave's `### Verification` table above records its own commands and outcomes, on its own tree. There are 13 of them, from W1 lane A to W9's close. F6 re-ran the checks that hold this umbrella's central claims on 2026-09-29, against the #1047 close tree:
+
+```
+$ cargo test -p centraid --test restore_drill
+test result: ok. 5 passed; 0 failed
+$ cargo test -p centraid-core-ffi --test symbols
+test result: ok. 3 passed; 0 failed
+$ cargo test -p centraid-vault --test ladder_ddl
+test result: ok. 3 passed; 0 failed
+$ cargo test -p centraid-gateway-core --test conformance
+test result: ok. 2 passed; 0 failed
+$ cargo test -p centraid --test drain_wire
+test result: ok. 11 passed; 0 failed
+```
+
+Outcome: **all passed**. This tree is the #1047 close plus F6, not the tree at #1029's close. So these runs show the claims hold now, not that they held then.
+
+## Audit
+
+**Verdict: PASS**, with one finding about the record.
+
+Retroactive and sampled, by slice F6 of #1047 on 2026-09-29. F6 did not write any of #1029's work. Every sampled claim was checked against the current tree.
+
+1. **The ABI is five symbols.** `crates/core-ffi/src` has five `no_mangle` exports, and `symbols.rs` passes (above). **Holds.**
+2. **Rung five drops 43 tables.** `contracts/migrations/005_the_cut.sql` has 44 `DROP TABLE` statements. One of them is `fts_conversation`, a virtual table, which leaves 43 base tables. **Holds.**
+3. **The zstd dictionary rides inside the generation manifest.** `GenerationManifest::open_with_dictionary` (`crates/vault/src/backup/manifest.rs:423`) returns it, and the phone's restore opens every generation through it. **Holds.**
+4. **The restore drill destroys a live vault and brings back a byte-identical file.** `restore_drill` passes (above). **Holds.**
+5. **Purge and scrub run on a schedule.** `crates/gateway-server/src/config.rs:165` and `lib.rs:70` state the sweep schedule (W15-4). **Holds.**
+6. **Vault-derived paths on iPhone are excluded from iCloud backup.** `mobile/iosApp/Sources/VaultFileProtection.swift:87` sets `isExcludedFromBackup = true`. The receipt itself lists "every path" as measured only on a device, and F6 had no device. **Holds as code. Not verified on a device.**
+
+**Finding (record integrity).** The receipt cites 80 distinct hex tokens in backticks. 46 of them resolve to commits in this clone. **34 do not.** One of those is a brief digest (`4cf9a5a8690a`), not a commit. The rest are per-slice commits from worktree branches that landed as other commits. Examples are W9's own `96aa99c8`, `39a4d48c`, `d39c34e9` and `2b07b511`, and W16-5's `13bf54b3`. A reader cannot follow those citations. This refutes no claim, because the wave commits that landed carry the same changes, but the landed-commit tables are not a usable index into history.

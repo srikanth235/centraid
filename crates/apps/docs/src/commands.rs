@@ -1,14 +1,14 @@
-//! THE SIXTEEN ACTIONS, as command invocations.
+//! THE EIGHTEEN ACTIONS, as command invocations.
 //!
 //! Every Docs action is a thin invocation of ONE typed vault command: the
 //! projection lives in the command, not the app. So this module is a
 //! table, not logic.
 //!
-//! **ALL SIXTEEN ARE `core.*`** — Docs is the app whose whole command surface
+//! **ALL EIGHTEEN ARE `core.*`** — Docs is the app whose whole command surface
 //! belongs to the core schema (census §A3), which is why "porting Docs'
 //! commands" meant editing `crates/vault/src/commands/core.rs` and not this
 //! crate. The scope list stays **explicit, one `act` scope per action**: the
-//! manifest declares sixteen `{schema: "core", table: "<command>", verbs:
+//! manifest declares eighteen `{schema: "core", table: "<command>", verbs:
 //! "act"}` entries rather than one `read+act` over the whole schema, and
 //! widening it would hand Docs every `core.*` command including the two merges.
 //! Only agenda and people use the whole-schema form, and Docs is not one of
@@ -20,13 +20,9 @@
 //!
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10).
 //!
-//! **`online_only` is empty for Docs, and that is a checked claim.** Locker
-//! declares `ONLINE_ONLY_ACTIONS`; Docs declares none. So every Docs action
-//! may be queued offline, including `upload` — which is the point of filing
-//! a scan of a receipt in a car park.
-//!
 //! **`confirmation` is the manifest's and `confirm` is the command's** (census
-//! §A0, two gates). Docs' one manifest-confirmed action is `empty-trash`; no
+//! §A0, two gates). Docs' two manifest-confirmed actions are `purge` and
+//! `empty-trash`, the two destroys (ruling D-1 of 2026-09-25); no
 //! `core.*` command this build carries sets `confirm: true`. Collapsing them
 //! would put a dialog in front of nothing and drop nothing in exchange.
 
@@ -123,9 +119,6 @@ pub struct ActionRow {
     pub action: &'static str,
     pub command: &'static str,
     pub confirm: Confirm,
-    /// A seat refuses to QUEUE this offline. Docs declares none; see the module
-    /// note for the grep behind the claim.
-    pub online_only: bool,
 }
 
 const fn act(action: &'static str, command: &'static str) -> ActionRow {
@@ -133,7 +126,6 @@ const fn act(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::None,
-        online_only: false,
     }
 }
 
@@ -142,18 +134,21 @@ const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::Required,
-        online_only: false,
     }
 }
 
-/// THE TABLE. Sixteen actions, sixteen commands, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 16] = [
+/// THE TABLE. Eighteen actions, eighteen commands, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 18] = [
     act("upload", "core.add_document"),
+    // The Add sheet's "Text" (#1047): words in, a text document out.
+    act("create-text", "core.create_text_document"),
     act("rename", "core.rename_document"),
     act("move", "core.move_document"),
     act("trash", "core.trash_document"),
     act("restore", "core.restore_document"),
-    // THE ONE CONFIRM-GATED ACTION, and the app's only bulk purge.
+    // THE TWO CONFIRM-GATED ACTIONS, and the app's two destroys (D-1,
+    // 2026-09-25): one trashed document, and the whole trash.
+    confirmed("purge", "core.purge_document"),
     confirmed("empty-trash", "core.empty_document_trash"),
     act("star", "core.star_document"),
     act("unstar", "core.unstar_document"),
@@ -214,7 +209,7 @@ mod tests {
 
     #[test]
     fn every_action_invokes_exactly_one_core_command() {
-        assert_eq!(ACTIONS.len(), 16);
+        assert_eq!(ACTIONS.len(), 18);
         let mut commands: Vec<&str> = ACTIONS.iter().map(|row| row.command).collect();
         for command in &commands {
             assert!(
@@ -228,27 +223,22 @@ mod tests {
         assert_eq!(before, commands.len(), "no command is invoked twice");
     }
 
-    /// The one manifest-confirmed action, and nothing else.
+    /// The two destroys are the manifest-confirmed actions, and nothing else.
     #[test]
-    fn empty_trash_is_the_only_confirmed_action() {
+    fn the_two_destroys_are_the_only_confirmed_actions() {
         let required: Vec<&str> = ACTIONS
             .iter()
             .filter(|row| row.confirm == Confirm::Required)
             .map(|row| row.action)
             .collect();
-        assert_eq!(required, ["empty-trash"]);
-    }
-
-    #[test]
-    fn no_action_is_withheld_offline() {
-        assert!(ACTIONS.iter().all(|row| !row.online_only));
+        assert_eq!(required, ["purge", "empty-trash"]);
     }
 
     /// SIXTEEN ACT SCOPES, ONE PER ACTION — never one `read+act` over the whole
     /// schema. Widening it would hand Docs `core.merge_party`.
     #[test]
     fn the_act_scopes_are_one_per_action() {
-        assert_eq!(act_scope_tables().len(), 16);
+        assert_eq!(act_scope_tables().len(), 18);
         assert!(act_scope_tables().contains(&"add_document"));
         assert!(!act_scope_tables().contains(&"merge_party"));
     }

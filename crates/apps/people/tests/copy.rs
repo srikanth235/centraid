@@ -62,7 +62,7 @@ fn the_leaf_carries_its_sentences_and_names_what_did_not_cross() {
     assert_eq!(people.text("CADENCE_NEVER"), Some("Never"));
     assert_eq!(
         people.text("STATUS_ROSTER"),
-        Some("{people} people · {due} to reconnect · {starred} starred")
+        Some("{people} · {due} to reconnect · {starred} starred")
     );
     assert_eq!(
         people.text("OUTCOME_TRASHED"),
@@ -188,9 +188,34 @@ fn the_root_shelf_carries_this_apps_own_route_id() {
         Some("list"),
         "Docs' drive was emitted with Tally's route id before this fix"
     );
-    assert_eq!(
-        root_of("locker").as_deref(),
-        Some("items"),
-        "Locker's shelf landed a wave after Docs' and carried the same wrong id"
-    );
+    // LOCKER CARRIES NO SHELF TABLE: its leaf was rewritten for the phone port
+    // (#1047, D-5) as sentences only — the phone routes Locker through its
+    // band and the shared machines, and v0's URL shelves (`fill`, `import`,
+    // `export`, `access`) name screens the phone does not have. Restoring the
+    // table would be a record of routes nothing draws. With no table there is
+    // no root id to mis-name; one that comes back is held by the sweep below.
+    assert_eq!(root_of("locker"), None);
+    // THE SWEEP, over every leaf in `copy/`: no app but Tally roots at
+    // `balances`, which is the exact shape PE-F7 was.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../copy");
+    let mut swept = 0;
+    for entry in fs::read_dir(&root).expect("copy/ is readable") {
+        let path = entry.expect("an entry").path();
+        let Some(app) = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .filter(|_| path.extension().is_some_and(|ext| ext == "json"))
+        else {
+            continue;
+        };
+        swept += 1;
+        if app != "tally" {
+            assert_ne!(
+                root_of(app).as_deref(),
+                Some("balances"),
+                "{app}'s root shelf carries Tally's route id"
+            );
+        }
+    }
+    assert!(swept >= 9, "the sweep read {swept} leaves");
 }

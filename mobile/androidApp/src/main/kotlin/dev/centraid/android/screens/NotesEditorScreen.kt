@@ -157,7 +157,7 @@ public fun NotesEditorScreen(
                 menuOpen = false
                 when (key) {
                     MENU_PIN -> onEvent(NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
-                    MENU_LINK -> onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested(caret = draft.body.length)))
+                    MENU_LINK -> onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
                     MENU_HISTORY -> onEvent(NotesEditorEvent(history = NotesEditorEvent.HistoryRequested()))
                     // The note's title, else its body — iOS sends the same.
                     MENU_SEND -> onEvent(

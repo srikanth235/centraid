@@ -20,14 +20,18 @@
 //!
 //! - what a rung ADDS — rung two's four revision guards (#1020, D-1020-N2),
 //!   rung three's four backup-index objects and rung four's four blob-custody
-//!   objects (#1029 §2, §4), and rung six's kind guard on `core_collection` —
-//!   named in `LADDER_OBJECTS`;
-//! - what rung five DROPS — the planes v1 does not have (#1029) — named in
-//!   `DROPPED_OBJECTS`;
+//!   objects (#1029 §2, §4), rung six's kind guard on `core_collection` and
+//!   rung seven's one-generation index on `locker_key` — named in
+//!   `LADDER_OBJECTS`;
+//! - what rung five DROPS — the planes v1 does not have (#1029) — rung
+//!   seven's `locker_key_live_idx` and rung nine's `notifications_notice`,
+//!   named in `DROPPED_OBJECTS`;
 //! - the tables a rung ALTERS — `locker_item`, which loses the
 //!   `connection_id` column that pointed into `sync_connection` (rung five),
-//!   and `core_collection`, which gains its required `kind` (rung six) — named
-//!   in `ALTERED_OBJECTS`.
+//!   `core_collection`, which gains its required `kind` (rung six),
+//!   `locker_key`, which loses `retired_at` (rung seven), and
+//!   `locker_item_address`, which loses `match_policy` as `locker_item` loses
+//!   `url_match_policy` (rung eight) — named in `ALTERED_OBJECTS`.
 //!
 //! All three are named rather than matched by prefix, so a table that comes
 //! back, a drop that stops running and an object arriving from nowhere are each
@@ -43,14 +47,15 @@ use centraid_vault::{APPLICATION_ID, Vault, head_version};
 /// What the ladder adds above the baseline: rung two's four revision guards
 /// (#1020, D-1020-N2), rung three's in-vault backup index, rung four's blob
 /// custody — a file key per blob, and where its bytes are (#1029 §2, §4) — and
-/// rung six's guard that a collection's kind never changes.
+/// rung six's guard that a collection's kind never changes, and rung seven's
+/// index that makes a second Locker generation unrepresentable (R-1047-D2).
 ///
 /// The corpus is a v0 file and knows nothing of the v1 ladder above rung one,
 /// so a founded v1 file legitimately carries exactly these and nothing else.
 /// Named here rather than filtered by prefix: a guard that stopped being
 /// created, or an object arriving from somewhere, both have to show up as a
 /// failure.
-const LADDER_OBJECTS: [&str; 13] = [
+const LADDER_OBJECTS: [&str; 14] = [
     "backup_base_range",
     "backup_base_range_by_hash",
     "backup_blob_custody",
@@ -64,6 +69,7 @@ const LADDER_OBJECTS: [&str; 13] = [
     "core_entity_revision_parent_is_immutable",
     "core_entity_revision_parent_is_same_object",
     "core_link_no_revises_edge",
+    "locker_key_one_generation",
 ];
 
 /// WHAT RUNG FIVE DROPS (#1029): the storage of every plane this umbrella
@@ -72,12 +78,15 @@ const LADDER_OBJECTS: [&str; 13] = [
 /// with each dropped table's own indexes and triggers, the `fts_conversation`
 /// virtual table's five shadow tables, the `run_summary` view over the ledger
 /// and the `core_entity_revoke_on_purge` trigger whose whole body was an UPDATE
-/// on `share_authority`.
+/// on `share_authority` — and, from rung seven, `locker_key_live_idx`, the
+/// predicate index whose `retired_at` had no writer once rotation went
+/// (R-1047-D2) — and, from rung nine, `notifications_notice` with its two
+/// indexes, a table no plane has written or read since #1029.
 ///
 /// `access_device` and `access_device_secret` are deliberately NOT here:
 /// `Vault::enrol_device` has live callers and the base copy carries
 /// `access_device_secret` as a sealed custody property (#1029 B1).
-const DROPPED_OBJECTS: [&str; 119] = [
+const DROPPED_OBJECTS: [&str; 123] = [
     "access_agent",
     "access_agent_secret",
     "attachments",
@@ -155,6 +164,10 @@ const DROPPED_OBJECTS: [&str; 119] = [
     "idx_turns_started",
     "items",
     "locker_item_connection_idx",
+    "locker_key_live_idx",
+    "notifications_notice",
+    "notifications_notice_active_idx",
+    "notifications_notice_retention_idx",
     "outbox_item",
     "replica_intent_outcome",
     "replica_intent_outcome_touch_updated_at",
@@ -206,11 +219,22 @@ const DROPPED_OBJECTS: [&str; 119] = [
 ///   rows. The rung rebuilds the table and re-creates its indexes and triggers
 ///   in the baseline's own text, so the table is the only one of them whose DDL
 ///   differs from the corpus's.
+/// - `locker_key` (rung seven): the table loses `retired_at`, whose only
+///   writer was the rotation R-1047-D1 deleted; the Locker names one
+///   generation (R-1047-D2).
 /// - `locker_item` (rung five): `locker_item.connection_id` was a foreign key
 ///   into `sync_connection`, "the connector this password belongs to". There is
-///   no connector runtime, so the column and its index go — which makes this
-///   table's DDL differ from the corpus's by exactly one line.
-const ALTERED_OBJECTS: [&str; 2] = ["core_collection", "locker_item"];
+///   no connector runtime, so the column and its index go. Rung eight drops
+///   `url_match_policy` too (Q-1047-15), so the table's DDL differs from the
+///   corpus's by those two columns.
+/// - `locker_item_address` (rung eight): `match_policy` goes with the matcher
+///   nothing ran (Q-1047-15).
+const ALTERED_OBJECTS: [&str; 4] = [
+    "core_collection",
+    "locker_item",
+    "locker_item_address",
+    "locker_key",
+];
 
 /// Every schema object of a file, keyed by `(type, name)`.
 fn schema_of(connection: &rusqlite::Connection) -> BTreeMap<(String, String), String> {
@@ -280,7 +304,7 @@ fn a_founded_v1_file_carries_exactly_the_corpuss_schema() {
     }
     beyond.sort_unstable();
     assert_eq!(findings.join("\n"), "");
-    // AND THE DROPS ARE RUNG FIVE'S, NAMED. A table that came back, or a drop
+    // AND THE DROPS ARE THE LADDER'S, NAMED. A table that came back, or a drop
     // that stopped running, is this assertion rather than a silent pass.
     assert_eq!(dropped, DROPPED_OBJECTS);
     // AND THE DELTA IS THE LADDER, NAMED (#1020, close pass). A founded file is
@@ -434,10 +458,12 @@ fn the_two_pragmas_and_the_replica_seed_are_written() {
     assert_eq!(user_version, head_version());
     // Rung two is the revision guards (#1020, D-1020-N2); rung three is the
     // in-vault backup index and rung four is blob custody (#1029 §2, §4); rung
-    // five is the cut (#1029); rung six is the collection kind. Spelled out
-    // rather than left as `head_version()` alone: a rung silently vanishing
-    // would still satisfy the line above.
-    assert_eq!(user_version, 6);
+    // five is the cut (#1029); rung six is the collection kind; rung seven is
+    // the Locker's one generation (R-1047-D2); rung eight drops the Locker's
+    // match policy (Q-1047-15); rung nine drops the notices no plane writes.
+    // Spelled out rather than left as `head_version()` alone: a rung silently
+    // vanishing would still satisfy the line above.
+    assert_eq!(user_version, 9);
     assert_eq!(journal, "wal");
 }
 

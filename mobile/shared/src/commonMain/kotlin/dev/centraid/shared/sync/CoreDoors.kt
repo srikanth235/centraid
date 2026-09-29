@@ -13,8 +13,14 @@ import dev.centraid.core.CoreFailure
 import dev.centraid.core.CoreOutcome
 import dev.centraid.shared.custody.PairAnswer
 import dev.centraid.shared.custody.PairDoor
+import dev.centraid.shared.custody.PairRefusal
+import dev.centraid.shared.custody.PairResult
 import dev.centraid.shared.custody.RestoreAnswer
 import dev.centraid.shared.custody.RestoreDoor
+import dev.centraid.shared.custody.RestoreRefusal
+import dev.centraid.shared.custody.RestoreResult
+import dev.centraid.shared.custody.RestoredVaultAt
+import dev.centraid.shared.custody.UnclaimedVaultAt
 import okio.ByteString.Companion.toByteString
 
 /**
@@ -26,10 +32,13 @@ import okio.ByteString.Companion.toByteString
  * This file is the whole of what crosses: one `Envelope` per call over the ABI
  * `CentraidCore` already holds, and a `when` over the answer.
  *
- * **Every door is nullable-on-unreachable and never throws.** "Your laptop did
- * not answer" is a sentence a member reads, not an exception a pass has to
- * guess the meaning of, and `DrainPass` and the two custody machines are
- * written against exactly that.
+ * **Every door never throws, and drain is nullable-on-unreachable.** "Your
+ * laptop did not answer" is a sentence a member reads, not an exception a pass
+ * has to guess the meaning of, and `DrainPass` is written against exactly that.
+ * Pair and restore answer a typed refusal instead (`PairResult`, #1047 E5;
+ * `RestoreResult`, #1047 R3), because their screens have a different sentence
+ * for a laptop that answered and refused, and restore one more for a backup
+ * this phone would not accept.
  *
  * **The core is asked of a SUPPLIER and not held.** The shelf moves the
  * foreground holding on a vault switch, and a door bound to one handle would go
@@ -74,52 +83,112 @@ public class CoreDrainDoor(private val core: () -> CentraidCore?) : DrainDoor {
     }
 }
 
-/** `pair_phone = 16`. */
-public class CorePairDoor(private val core: () -> CentraidCore?) : PairDoor {
+/**
+ * `pair_phone = 16`.
+ *
+ * **The device secret on the answer is kept, here, before anything else**
+ * (#1047 E1, R-1047-E4): the core mints it at pair and hands it over exactly
+ * once, and the certificate it wrote beside the vault names that key and no
+ * other. [keep] stores it in the device-only store for this vault; the next
+ * keyed open carries it.
+ */
+public class CorePairDoor(
+    private val core: () -> CentraidCore?,
+    private val keep: suspend (deviceSecretHex: String) -> Unit = {},
+) : PairDoor {
 
-    override suspend fun pair(payload: String): PairAnswer? {
-        val open = core() ?: return null
+    override suspend fun pair(payload: String): PairResult {
+        val open = core() ?: return PairResult.Refused(PairRefusal.UNREACHABLE)
         val answer = open.call(
             Envelope(request_id = 0, request = Request(pair_phone = PairRequest(payload = payload))),
         )
-        val paired = (answer as? CoreOutcome.Answered)?.value?.response?.pair_phone ?: return null
-        return PairAnswer(
-            // WHAT THE MEMBER COMPARES IS THE ENDPOINT THE PHONE WILL DIAL.
-            // See `CustodyCopy.pairedLine`: the laptop's terminal prints this
-            // same id, so the two are comparable by eye.
-            gatewayEndpoint = paired.gateway_endpoint.hex(),
-            recordPublished = paired.record_published,
-        )
-    }
-}
-
-/** `restore = 17`. */
-public class CoreRestoreDoor(private val core: () -> CentraidCore?) : RestoreDoor {
-
-    override suspend fun restore(words: List<String>, endpoint: String?): RestoreAnswer? {
-        val open = core() ?: return null
-        val answer = open.call(
-            Envelope(
-                request_id = 0,
-                request = Request(
-                    restore = RestoreRequest(
-                        // THE WORDS AS ONE STRING, because
-                        // `RecoveryPhrase::parse` owns what a phrase is and a
-                        // second parser here would disagree with it.
-                        phrase = words.joinToString(" "),
-                        endpoint = endpoint?.let { hexToBytes(it) },
-                    ),
-                ),
+        val paired = when (answer) {
+            is CoreOutcome.Answered -> answer.value.response?.pair_phone
+            // THE CODE SAYS WHICH REFUSAL (#1047 E5); the detail stays in the
+            // logs. Anything this build does not name is read as silence, the
+            // one refusal whose remedy — try again — is never harmful.
+            is CoreOutcome.Failed -> return PairResult.Refused(
+                when {
+                    answer.failure.isRefusedWith(ErrorCode.ERROR_CODE_INVALID_REQUEST) -> PairRefusal.NOT_A_CODE
+                    answer.failure.isRefusedWith(ErrorCode.ERROR_CODE_UNAUTHORIZED) -> PairRefusal.NOT_TAKEN
+                    else -> PairRefusal.UNREACHABLE
+                },
+            )
+        } ?: return PairResult.Refused(PairRefusal.UNREACHABLE)
+        if (paired.device_secret.size == DEVICE_SECRET_BYTES) keep(paired.device_secret.hex())
+        return PairResult.Paired(
+            PairAnswer(
+                gatewayEndpoint = paired.gateway_endpoint.hex(),
+                // WHAT THE MEMBER COMPARES (W15-D5): the core's digits, which
+                // `centraid-gateway serve` prints once the invite is redeemed.
+                safetyNumber = paired.safety_number,
+                recordPublished = paired.record_published,
             ),
         )
-        val restored = (answer as? CoreOutcome.Answered)?.value?.response?.restore ?: return null
-        return RestoreAnswer(
-            vaults = restored.vaults.size,
-            rows = restored.vaults.sumOf { it.rows },
-            gapScanned = restored.gap_scanned,
-        )
     }
 }
+
+/**
+ * `restore = 17`, over a core that holds NO VAULT (#1047 E1).
+ *
+ * The core lays each vault down under the directory it was opened in, so the
+ * supplier is the shelf's custody core, opened over the vault directory.
+ */
+public class CoreRestoreDoor(private val core: suspend () -> CentraidCore?) : RestoreDoor {
+
+    override suspend fun restore(words: List<String>, endpoint: String?): RestoreResult = ask(
+        RestoreRequest(
+            // THE WORDS AS ONE STRING, because `RecoveryPhrase::parse` owns
+            // what a phrase is and a second parser here would disagree with it.
+            phrase = words.joinToString(" "),
+            endpoint = endpoint?.let { hexToBytes(it) },
+        ),
+    )
+
+    /**
+     * THE SEED IN PLACE OF THE WORDS (Q-1047-18). `phrase` is left empty:
+     * the core refuses a request carrying both.
+     */
+    override suspend fun restoreSeed(seedHex: String, endpoint: String?): RestoreResult {
+        val seed = hexToBytes(seedHex) ?: return RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
+        return ask(RestoreRequest(seed = seed, endpoint = endpoint?.let { hexToBytes(it) }))
+    }
+
+    private suspend fun ask(request: RestoreRequest): RestoreResult {
+        val open = core() ?: return RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
+        val answer = open.call(Envelope(request_id = 0, request = Request(restore = request)))
+        val restored = when (answer) {
+            is CoreOutcome.Answered -> answer.value.response?.restore
+            // THE CODE SAYS WHICH REFUSAL (#1047 R3); the detail stays in the
+            // logs. Anything this build does not name is read as silence, the
+            // one refusal whose remedy — try again — is never harmful.
+            is CoreOutcome.Failed -> return RestoreResult.Refused(
+                when {
+                    answer.failure.isRefusedWith(ErrorCode.ERROR_CODE_INTERNAL) -> RestoreRefusal.DID_NOT_CHECK
+                    answer.failure.isRefusedWith(ErrorCode.ERROR_CODE_UNAUTHORIZED) -> RestoreRefusal.NOT_TAKEN
+                    else -> RestoreRefusal.UNREACHABLE
+                },
+            )
+        } ?: return RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
+        return RestoreResult.Restored(RestoreAnswer(
+            vaults = restored.vaults.map {
+                RestoredVaultAt(
+                    path = it.path,
+                    index = it.index,
+                    rows = it.rows,
+                    safetyNumber = it.safety_number,
+                )
+            },
+            gapScanned = restored.gap_scanned,
+            deviceSecretHex = restored.device_secret.takeIf { it.size == DEVICE_SECRET_BYTES }?.hex().orEmpty(),
+            // A VAULT THAT STAYED WITH THE OLD PHONE (R-1047-R5), by index and
+            // id. Its `reason` is the core's support log and stays there.
+            unclaimed = restored.unclaimed.map { UnclaimedVaultAt(index = it.index, vaultId = it.vault_id) },
+        ))
+    }
+}
+
+private const val DEVICE_SECRET_BYTES: Int = 32
 
 /**
  * `backup_status = 18` — what the backup row draws.

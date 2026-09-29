@@ -61,7 +61,7 @@ cargo run -p centraid-gateway-server --bin centraid-gateway -- serve --data-dir 
 cargo run -p centraid-gateway-server --bin centraid-gateway -- invite --data-dir ./gw-data --quota-gib 64
 ```
 
-Scan the QR from a phone build and compare the safety number on both screens. An invite is one-shot, so a second device needs a second invite. Recovery from a bad pairing: [docs/recovery/pairing.md](docs/recovery/pairing.md).
+Scan the QR from a phone build, then compare the safety number the phone shows with the `safety` line `serve` prints once it pairs. An invite is one-shot, so a second device needs a second invite. Recovery from a bad pairing: [docs/recovery/pairing.md](docs/recovery/pairing.md).
 
 ## Layout
 

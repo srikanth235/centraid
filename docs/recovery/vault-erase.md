@@ -1,6 +1,6 @@
 # Recovery: vault erase
 
-This build has **no vault-erase gesture**. No command, `centraid` verb, or surface erases a vault or destroys its seal key; the v0 erase ceremony and its boot roll-forward were removed with the v0 tree in [#1020](https://github.com/srikanth235/centraid/issues/1020). The one erase primitive that exists is custody's: `MemberKeyCustody::destroy_all` destroys every member key file for a vault on the device that holds them, and nothing outside its tests calls it.
+This build has **no vault-erase gesture**. No command, `centraid` verb, or surface erases a vault or destroys its seal key; the v0 erase ceremony and its boot roll-forward were removed with the v0 tree in [#1020](https://github.com/srikanth235/centraid/issues/1020). There is no key file to destroy either: the Locker key `K` is derived from the 24 words and held only in memory ([D-6](../decisions.md#the-owners-rulings-of-2026-09-28-1047)), and #1020's key-file custody, with its `destroy_all`, is deleted (#1047).
 
 ## What still holds
 

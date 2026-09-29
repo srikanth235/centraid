@@ -31,7 +31,9 @@ import Foundation
 /// And the items are not made here. The vault file's name is minted in
 /// `Shelf` (Kotlin, `commonMain`); `-wal` and `-shm` are SQLite's; `.bytes` is
 /// derived in `crates/core-ffi`; `objects/`, `spool/`, `scratch/` and
-/// `head.json` are `BackupHome::open`'s. None of those layers can call
+/// `head.json` are `BackupHome::open`'s. Locker's `K` is not among them: it is
+/// derived from the seed in the core's memory and never written (#1047,
+/// Q-1047-11), so no key directory sits beside the vault. None of those layers can call
 /// `URL.setResourceValues`, and the one layer that both owns this directory and
 /// can is the shell — `ShellModel.vaultDirectory` is where the path is made.
 /// So the shell sweeps: once before the core opens, once after, and again

@@ -2,6 +2,7 @@ package dev.centraid.shared
 
 import centraid.core.v1.AgendaAttendee
 import centraid.core.v1.AgendaEvent
+import centraid.core.v1.AgendaEventDetail
 import centraid.core.v1.AgendaParties
 import centraid.core.v1.AgendaParty
 import centraid.core.v1.AgendaReminder
@@ -75,7 +76,12 @@ class AgendaEditorSpec : StringSpec({
         data.guests.map { it.label } shouldBe listOf("Priya Raman", "Tom")
         data.foot_note shouldBe "A new event starts tentative."
         data.can_save shouldBe false
-        data.blocked_reason shouldBe "Add a title to save."
+        // NOTHING TOUCHED, NOTHING SAID: why Save is not armed waits for a
+        // change or a Save pressed (#1047).
+        data.blocked_reason shouldBe ""
+        drive(state, save()).state.screen.data_.shouldNotBeNull().blocked_reason shouldBe "Add a title to save."
+        drive(state, edit(AgendaEditorEvent(notes = AgendaEditorEvent.NotesChanged(text = "Bring the form"))))
+            .state.screen.data_.shouldNotBeNull().blocked_reason shouldBe "Add a title to save."
         // Another day starts at 09:00.
         answered(drive(AgendaEditorMachine.initial(), openNew("2026-06-17")).state)
             .screen.data_.shouldNotBeNull().draft.shouldNotBeNull().start_time shouldBe "09:00"
@@ -301,11 +307,45 @@ class AgendaEditorSpec : StringSpec({
         drive(opened, AgendaEditorInput.Denied(AppQueryDenial())).state.screen.denied.shouldNotBeNull()
         val gone = answered(drive(AgendaEditorMachine.initial(), openEdit(timed("x", "X", "2026-06-15T08:00"))).state)
         gone.screen.gone.shouldNotBeNull().title shouldBe "This event is no longer on your calendar."
-        // AN EDIT WITH NO DAY does not read.
+        // AN EDIT WITH NO EVENT does not read.
         AgendaEditorReads().requests(
-            drive(AgendaEditorMachine.initial(), edit(AgendaEditorEvent(opened = AgendaEditorEvent.Opened(mode = AgendaEditorState.Mode.MODE_EDIT, event_id = "e1")))).state,
+            drive(AgendaEditorMachine.initial(), edit(AgendaEditorEvent(opened = AgendaEditorEvent.Opened(mode = AgendaEditorState.Mode.MODE_EDIT)))).state,
             clock,
         ).shouldBeNull()
+        // THE BY-ID ANSWER WINS: absent there is gone, whatever the window lists.
+        val event = timed("x", "X", "2026-06-15T08:00")
+        drive(
+            drive(AgendaEditorMachine.initial(), openEdit(event)).state,
+            AgendaEditorInput.Answered(upcoming(event), PARTIES, "Europe/London", AgendaEventDetail()),
+        ).state.screen.gone.shouldNotBeNull()
+    }
+
+    "a repeating event opened from a search hit edits the series, read by its id (#1047)" {
+        // A SEARCH HIT IS THE SERIES: its instance key is its event id, which
+        // no padded window lists — the window has `<id>:<clock>` occurrences.
+        val occurrence = series("s1", "Stand-up", "2026-06-15T09:00", "2026-06-15T09:15")
+        val hit = occurrence.copy(instance_key = "s1", original_start_local = null)
+        val opened = drive(AgendaEditorMachine.initial(), openEdit(hit, day = "")).state
+        val reads = AgendaEditorReads().requests(opened, clock).shouldNotBeNull()
+        reads.first().agenda_event.shouldNotBeNull().let {
+            it.event_id shouldBe "s1"
+            it.instance_key shouldBe "s1"
+            it.original_start_local shouldBe ""
+            it.tz shouldBe "Europe/London"
+        }
+        reads.map { it.agenda_upcoming != null } shouldBe listOf(false, true, false)
+
+        val loaded = drive(
+            opened,
+            AgendaEditorInput.Answered(upcoming(occurrence), PARTIES, "Europe/London", AgendaEventDetail(event = hit)),
+        ).state
+        loaded.screen.gone.shouldBeNull()
+        val data = loaded.screen.data_.shouldNotBeNull()
+        data.draft.shouldNotBeNull().title shouldBe "Stand-up"
+        // THE SERIES ROW: no occurrence to skip, and a save edits the series.
+        data.show_skip shouldBe false
+        val saved = drive(loaded, edit(AgendaEditorEvent(title = AgendaEditorEvent.TitleChanged(text = "Daily"))), save())
+        (saved.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "schedule.edit_event"
     }
 }) {
     companion object {

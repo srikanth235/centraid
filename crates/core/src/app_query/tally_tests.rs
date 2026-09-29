@@ -859,3 +859,67 @@ fn a_memo_set_on_an_expense_is_answered_and_an_empty_one_clears_it() {
     );
     assert_eq!(memo(&scratch), None, "an empty note clears it");
 }
+
+/// THE EXPORT IS A FILE THE CORE RENDERS (#1047): the group and `since`
+/// narrow it, `limit` cuts it with the "N of M" counts stated, and the CSV
+/// carries each amount as a plain decimal with its own currency column — a
+/// view formats no money. A group that does not exist is no file.
+#[test]
+fn the_export_answers_a_csv_with_its_window_stated() {
+    let SixWays { scratch, house, .. } = six_ways();
+    let export = |since: &str, limit: u32, group_id: &str| match scratch
+        .ask(Q::TallyExport(wire::TallyExportRequest {
+            group_id: group_id.to_owned(),
+            since: since.to_owned(),
+            limit,
+            tz: TZ.to_owned(),
+        }))
+        .expect("the export answers")
+    {
+        Answer::TallyExport(export) => export,
+        other => panic!("the export answered as {other:?}"),
+    };
+
+    let whole = export("", 0, &house);
+    assert_eq!(whole.expenses.len(), 6);
+    assert_eq!(whole.expenses_in_window, 6);
+    assert!(!whole.truncated);
+    let lines: Vec<&str> = whole
+        .csv
+        .split("\r\n")
+        .filter(|line| !line.is_empty())
+        .collect();
+    assert_eq!(
+        lines[0],
+        "kind,date,description,category,amount,currency,paid_by,paid_to,split,your_share"
+    );
+    assert_eq!(lines.len(), 1 + 6, "a header and one line per expense");
+    let groceries = lines
+        .iter()
+        .find(|line| line.contains(",Groceries,"))
+        .expect("the groceries line");
+    assert!(
+        groceries.starts_with("expense,2099-06-20,Groceries,groceries,100.00,USD,"),
+        "{groceries}"
+    );
+    assert!(groceries.ends_with(",equally,33.34"), "{groceries}");
+    // The vault clock's day in New York: 02:00Z on 1 July is 30 June there.
+    assert_eq!(whole.file_name, "house-2099-06-30.csv");
+
+    // A LIMIT CUTS THE FILE AND SAYS SO: 2 of 6.
+    let cut = export("", 2, &house);
+    assert_eq!(cut.expenses.len(), 2);
+    assert_eq!(cut.expenses_in_window, 6);
+    assert!(cut.truncated);
+    assert_eq!(cut.csv.matches("\r\n").count(), 1 + 2);
+
+    // A FLOOR AFTER EVERY EXPENSE LEAVES A HEADER AND NOTHING ELSE.
+    let later = export("2099-06-21", 0, &house);
+    assert_eq!(later.expenses_in_window, 0);
+    assert_eq!(later.csv.matches("\r\n").count(), 1);
+
+    // NO SUCH GROUP IS NO FILE.
+    let none = export("", 0, "no-such-group");
+    assert!(none.group.is_none());
+    assert!(none.csv.is_empty() && none.file_name.is_empty());
+}

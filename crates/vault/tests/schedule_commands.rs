@@ -1102,15 +1102,6 @@ fn the_schema_declares_seventeen_commands_and_four_confirm_gates() {
             "schedule.reschedule_event",
         ]
     );
-    // NONE is online-only: `ONLINE_ONLY_ACTIONS` is Locker's alone, and a
-    // task filed in a tunnel is the point of filing it there.
-    assert!(names.iter().all(|name| {
-        !registry
-            .get(name)
-            .expect("registered")
-            .definition
-            .online_only
-    }));
 }
 
 // ---------------------------------------------------------------------------

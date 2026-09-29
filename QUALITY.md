@@ -3,9 +3,17 @@
 ## Open
 
 - **Vault-writer bugs the #1046 app_query arms surfaced.** One line each:
-  - `tally.set_expense_memo` inserts `kind`/`body` into `knowledge_annotation`, which has neither column (`body_text`, no `kind`) — `crates/vault/src/commands/tally.rs:2709`; any non-empty memo fails the write.
-  - `core.empty_document_trash` still destroys nothing: it collapses the window, so an emptied document is unrestorable and never purged. Its schema `description` and Docs' manifest now say "not yet"; the purge (rows through the entity supertype, content released as `media.purge_asset` releases it, the content sweep for the bytes) is the follow-up — `crates/vault/src/commands/core.rs`, `empty_document_trash`.
   - `knowledge.edit_note` still refuses an empty title (`minLength: 1`); the body may be cleared.
+
+- **A vault that stayed with the old phone has no way back on its own**
+  (#1047 F8, [R-1047-R5](docs/decisions.md#a-restore-that-holds-1047-r3)).
+  `RestoreRequest` names no index, so the core restores every index or none;
+  a second restore on a phone that already adopted the claimed vaults would
+  discard and lay those files down again under an open session, and mint a
+  new device secret. words.enter therefore names each vault that stayed and
+  offers no retry. Owed: a per-index restore (`RestoreRequest.indices`, or a
+  restore that skips a vault this phone already holds) before the shells can
+  offer one.
 
 - **`.mjs` scripts should be TypeScript.** Hundreds of `.mjs` files under
   `scripts/` and `.governance/law/` exist because their call sites say
@@ -45,6 +53,26 @@
   deliberately don't assert those bytes.
 
 ## Resolved
+
+- #1047 — **The shells did not draw `RestoreResponse.unclaimed`.** The core
+  named each vault it checked and could not claim, and `CoreRestoreDoor`
+  mapped only `vaults`, so words.enter reported the claimed vaults and said
+  nothing of the rest. `RestoreAnswer.unclaimed` now carries each one by index
+  and id (never the core's support-log `reason`), and words.enter's DONE draws
+  one `WordsEntryState.stayed` sentence per vault, numbered with the restored
+  lines in one sequence by index, under "Some of your vaults are back"
+  (`WordsCopy.RESTORED_SOME_TITLE`, `RESTORED_STAYED`, `RESTORED_STAYED_BODY`).
+  Locks: `WordsEntrySpec` "a vault that stayed with the other phone is named…",
+  `WordsShelfSpec` "the restore door carries every vault's path and index…",
+  `EnrollmentSpec` "a restore that left a vault with the old phone holds only
+  what it claimed…".
+
+- #1047 — **`tally.set_expense_memo` wrote columns `knowledge_annotation` does
+  not have.** It inserted `kind`/`body`, so any non-empty memo failed the
+  write; it now writes `body_text` (`crates/vault/src/commands/tally.rs`), and
+  the memo the expense reads back is the one set. Lock:
+  `crates/core/src/app_query/tally_tests.rs`
+  `a_memo_set_on_an_expense_is_answered_and_an_empty_one_clears_it`.
 
 - #1029 — **`core_collection` says whether it is a notebook or an album.** Rung
   six (`contracts/migrations/006_collection_kind.sql`) adds a required,

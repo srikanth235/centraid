@@ -1,5 +1,6 @@
 package dev.centraid.shared.apps.agenda
 
+import centraid.core.v1.AgendaEventRequest
 import centraid.core.v1.AgendaPartiesRequest
 import centraid.core.v1.AppQueryDenial
 import centraid.core.v1.AppQueryRequest
@@ -14,11 +15,13 @@ import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
 
 /**
- * WHAT `agenda.editor` ASKS THE CORE (#1046): `agenda.upcoming` — the
- * occurrence being edited, every calendar, and the core's today and now — and
- * `agenda.parties`, the people an event can invite. CREATE with no day reads
- * from the core's own today. A write's answer also reaches the session's
- * [marks] (see [AgendaEventReads]).
+ * WHAT `agenda.editor` ASKS THE CORE (#1046): `agenda.upcoming` — every
+ * calendar, and the core's today and now — and `agenda.parties`, the people
+ * an event can invite. An EDIT also reads its event BY ID (`agenda.event`,
+ * the detail's own query): a search hit on a repeating event is the series
+ * row, keyed by its event id, which no padded window lists (#1047). CREATE
+ * with no day reads from the core's own today. A write's answer also reaches
+ * the session's [marks] (see [AgendaEventReads]).
  *
  * THE ZONE A READ WAS ASKED IN rides back with its answer: the device's zone
  * is known only here (`requests` is handed the clock), and a timed save
@@ -40,13 +43,24 @@ public class AgendaEditorReads(
         askedIn = now.zone
         val screen = state.screen
         val day = screen.day
-        val upcoming = when {
-            day.isNotEmpty() -> AgendaWrites.around(day, now) ?: return null
-            // AN EDIT WITH NO DAY cannot say where its occurrence is.
-            screen.mode == AgendaEditorState.Mode.MODE_EDIT -> return null
-            else -> AgendaWrites.today(now)
+        val edit = screen.mode == AgendaEditorState.Mode.MODE_EDIT
+        // AN EDIT WITH NO EVENT names nothing to read.
+        if (edit && screen.event_id.isEmpty()) return null
+        val upcoming = if (day.isNotEmpty()) AgendaWrites.around(day, now) ?: return null else AgendaWrites.today(now)
+        val event = if (edit) {
+            AppQueryRequest(
+                agenda_event = AgendaEventRequest(
+                    event_id = screen.event_id,
+                    instance_key = screen.instance_key,
+                    original_start_local = screen.original_start_local ?: "",
+                    tz = now.zone,
+                ),
+            )
+        } else {
+            null
         }
-        return listOf(
+        return listOfNotNull(
+            event,
             AppQueryRequest(agenda_upcoming = upcoming),
             AppQueryRequest(agenda_parties = AgendaPartiesRequest()),
         )
@@ -56,6 +70,7 @@ public class AgendaEditorReads(
         upcoming = answers.firstNotNullOfOrNull { it.agenda_upcoming },
         parties = answers.firstNotNullOfOrNull { it.agenda_parties },
         zone = askedIn,
+        detail = answers.firstNotNullOfOrNull { it.agenda_event },
     )
 
     override fun refused(failure: ReadFailure): AgendaEditorInput = AgendaEditorInput.View(

@@ -7,6 +7,7 @@ package dev.centraid.design.copy
 
 /** Photos's strings. STRINGS ONLY: a function composes a sentence and is the app's to write. */
 public object PhotosCopy {
+    public const val PHOTOGRAPH: String = "Photograph"
     public const val PHOTOS_ARCHIVE: String = "Archive"
     public const val PHOTOS_ARCHIVE_EMPTY: String = "Archive is empty."
     public const val PHOTOS_EMPTY_DUPLICATES: String = "No near-identical clusters in your library."
@@ -24,4 +25,6 @@ public object PhotosCopy {
     public const val PHOTOS_VIDEO_STATUS: String = "Video · playing from the display copy on this device"
     public const val PLACE_NO_LOCATION: String = "No location yet"
     public const val PLACE_UNNAMED: String = "A place with no name yet"
+    public const val TILE_COUNT_MANY: String = "photographs"
+    public const val TILE_COUNT_ONE: String = "photograph"
 }

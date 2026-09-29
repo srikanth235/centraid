@@ -1,4 +1,4 @@
-//! # Docs — a manifest, five queries, the phone's shelves, sixteen actions
+//! # Docs — a manifest, five queries, the phone's shelves, eighteen actions
 //!
 //! 13,183 lines of v0 TypeScript, 4 queries, 16 actions, 34 scopes over five
 //! schemas (#1020, wave 4 census §A3). Its doctrine, from the manifest's own
@@ -22,8 +22,10 @@
 //! - **NOTHING IS SHARED AND NOTHING ARRIVES.** The share fold and the origin
 //!   plane left with the sharing plane (#1029's scope amendment): no row
 //!   carries `shared_with` or `shared_from`, and there is no Shared shelf.
-//! - **TRASH IS A DATE, NOT A DESTRUCTION.** Nothing in this build destroys a
-//!   trashed document — see the README's "Trash has no destroy path".
+//! - **"DELETE FOREVER" IS PHOTOS' PATH.** `purge` and `empty-trash` destroy
+//!   through `core.purge_document`'s internals, the way `media.purge_asset`
+//!   destroys a photograph (ruling D-1 of 2026-09-25) — see the README's
+//!   "Trash".
 //! - **THE PHONE ASKS FOR A SHELF, NOT A WINDOW** ([`phone`], [`kind`], #1046):
 //!   the core cuts the shelf, applies the filters and the order, classifies
 //!   each row and reads its dates in the device's zone.

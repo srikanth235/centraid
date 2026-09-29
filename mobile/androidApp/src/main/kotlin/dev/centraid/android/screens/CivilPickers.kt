@@ -18,14 +18,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.theme.centraidColor
-import java.util.Calendar
-import java.util.TimeZone
+import dev.centraid.shared.kit.time.civilDayOf
+import dev.centraid.shared.kit.time.epochDayOf
+import dev.centraid.shared.kit.time.floorDiv
 
 /**
  * THE OS PICKERS, BOUND TO CIVIL STRINGS. A machine speaks days as
  * `YYYY-MM-DD` and clocks as `HH:MM`; these dialogs read one in and hand one
- * back, and decide nothing else. The date picker works in UTC midnight
- * millis (Material's contract), so no zone ever shifts a day.
+ * back, and decide nothing else. The date picker speaks UTC-midnight millis
+ * (Material's contract); the day is turned into and out of them by the shared
+ * kit's civil arithmetic — a day number times a day's millis — so no
+ * `Calendar`, no zone and no Gregorian cutover ever touches it (#1047).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,23 +79,10 @@ internal fun CivilTimeDialog(
 private fun clock(hour: Int, minute: Int): String =
     hour.toString().padStart(2, '0') + ":" + minute.toString().padStart(2, '0')
 
-private val UTC: TimeZone = TimeZone.getTimeZone("UTC")
+private const val DAY_MILLIS: Long = 86_400_000L
 
-internal fun millisOfDay(day: String): Long? {
-    val parts = day.split("-")
-    if (parts.size != 3) return null
-    val y = parts[0].toIntOrNull() ?: return null
-    val m = parts[1].toIntOrNull() ?: return null
-    val d = parts[2].toIntOrNull() ?: return null
-    return Calendar.getInstance(UTC).apply {
-        clear()
-        set(y, m - 1, d)
-    }.timeInMillis
-}
+/** `YYYY-MM-DD` as the picker's midnight millis, or null for a day that is not one. */
+internal fun millisOfDay(day: String): Long? = epochDayOf(day)?.let { it * DAY_MILLIS }
 
-internal fun dayOfMillis(millis: Long): String {
-    val c = Calendar.getInstance(UTC).apply { timeInMillis = millis }
-    return c.get(Calendar.YEAR).toString().padStart(4, '0') + "-" +
-        (c.get(Calendar.MONTH) + 1).toString().padStart(2, '0') + "-" +
-        c.get(Calendar.DAY_OF_MONTH).toString().padStart(2, '0')
-}
+/** The picker's millis as `YYYY-MM-DD`: the day they fall in, counted in whole days. */
+internal fun dayOfMillis(millis: Long): String = civilDayOf(floorDiv(millis, DAY_MILLIS))

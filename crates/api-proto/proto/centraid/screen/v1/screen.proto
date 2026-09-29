@@ -848,10 +848,15 @@ message NotesEditorState {
   // editor and forwards its pick as `LinkPicked`.
   bool link_sheet_open = 13;
   // Where a pick lands in `draft.body` (a UTF-16 offset), and whether it
-  // replaces the `[[` typed there.
+  // replaces the `[[` typed there: the typed `[[` for the brackets, else the
+  // end of the body (the link button; no field reports a caret).
   uint32 link_anchor = 14;
   bool link_replaces = 15;
   NotesEditorChrome chrome = 16;
+  // `autosave.edit_seq` when this note opened. An edit past it makes close
+  // "Done" for the rest of the visit: a save that returns the phase to clean
+  // does not make it "Cancel" again (#1015 D3, close = done).
+  uint64 opened_seq = 17;
 
   enum SaveState {
     SAVE_STATE_UNSPECIFIED = 0;
@@ -868,7 +873,8 @@ message NotesEditorState {
 
 // The editor's fixed words, and the two that follow its state.
 message NotesEditorChrome {
-  // "Cancel" before the first keystroke, "Done" after (#1015 D3).
+  // "Cancel" before the first keystroke, "Done" after it — and after it for
+  // good, however many saves follow (#1015 D3).
   string close = 1;
   string title_placeholder = 2;
   string body_placeholder = 3;
@@ -955,6 +961,9 @@ message NotesEditorEvent {
     bool is_new = 2;
   }
 
+  // THE BUTTON'S LINK LANDS AT THE END OF THE NOTE (#1047): neither shell's
+  // text field reports a caret, so the machine does not ask for one and
+  // `link_anchor` says where the pick goes. `caret` is not read.
   message LinkRequested {
     uint32 caret = 1;
   }
@@ -1116,6 +1125,9 @@ message TileBody {
     repeated Face faces = 1;
     // How many more than the faces shown.
     uint32 more = 2;
+    // `more` in words: "+3 more in your directory", or "That's everyone in
+    // your directory" when every face is shown. A view draws it as it is.
+    string more_label = 3;
 
     message Face {
       // `party_id`, NEVER the display name: the avatar hue is derived from this
@@ -1157,6 +1169,10 @@ message TileBody {
   // something true to say and is never an invitation to fill it.
   message Locker {
     bool locked = 1;
+    // "Locked" / "Open" — the state, as a label and not a control (#1047).
+    string state_label = 2;
+    // What opening does, or that it relocks; never a title from inside.
+    string line = 3;
   }
 
   message Notes {
@@ -1185,6 +1201,11 @@ message HomeTile {
   // re-promoting a beat later is a relayout the member watches. Locker always
   // earns it. `EMPTY` and `UNKNOWN` do not, and fall to first moves.
   bool earns_grid = 9;
+  // WHAT A SCREEN READER SAYS FOR THE TILE: "Open People, 5 people" — the
+  // app's name and the count's words, the withheld glyph never spoken.
+  // `open_label` alone ("Open People") is the All apps row's.
+  string accessibility_label = 10;
+  string open_label = 11;
 }
 
 // Which of the three Homes this is.
@@ -3984,7 +4005,8 @@ message AgendaEventRow {
   // "repeats · 2 guests · call". Hidden on touch; spoken in
   // `accessibility_label`.
   string meta = 7;
-  // A party-hue key for the 2px rule, from the calendar's colour.
+  // The 2px rule's colour, from the calendar's: the THEME'S COLOUR ROLE
+  // (`cTeal`), as People's hues are — every Agenda `*hue_key` is one (#1047).
   string calendar_hue_key = 8;
   AgendaRowStatus status = 9;
   // "needs a reply" / "pending" / "cancellation asked"; empty for none.
@@ -4722,6 +4744,11 @@ message Autosave {
   uint64 saving_seq = 7;
   // The key the save in flight was submitted under, one per `edit_seq`.
   string invoke_key = 8;
+  // THE STATUS LINE'S WORDS (#1047): "Saved", "Edited", "Saving…", the
+  // refusal's own sentence or "Not saved", "Changed on another device" — set
+  // by the kit's law with every phase, so no shell spells them. Empty before
+  // the law has written a phase.
+  string label = 9;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -5381,6 +5408,33 @@ message NotesJournalState {
   // The band's More sheet: its one row sends `TrashOpened`.
   bool more_open = 9;
   string trash_label = 10;
+  // THE NEW-ENTRY SHEET (#1047): "New entry for today" opens it over the
+  // journal; Save writes `people.add_journal_entry{mood, text, entry_date}`
+  // — the one command that makes a journal entry (D-1020-N3) — and a
+  // committed write puts it away. Absent while closed.
+  optional NotesJournalCompose compose = 11;
+  WriteState write = 12;
+}
+
+// The new-entry sheet: a SheetRoom titled with its noun, two fields and one
+// ink button.
+message NotesJournalCompose {
+  // `YYYY-MM-DD`: the core's `today` when it was opened, the entry's date.
+  string day = 1;
+  string mood = 2;
+  string text = 3;
+  // "New entry for today".
+  string title = 4;
+  string mood_placeholder = 5;
+  string text_placeholder = 6;
+  string save = 7;
+  string close = 8;
+  // Both fields hold something and no write is in flight.
+  bool can_save = 9;
+  // The write is in flight: the fields and Save wait.
+  bool saving = 10;
+  // A refusal, in the core's words; EMPTY otherwise. The sheet's status line.
+  string status_label = 11;
 }
 
 message NotesJournalEvent {
@@ -5399,7 +5453,21 @@ message NotesJournalEvent {
     NewEntryRequested new_entry = 11;
     MoreClosed more_closed = 12;
     TrashOpened trash_opened = 13;
+    // The new-entry sheet: typed, saved, put away; the write's answer.
+    ComposeEdited compose_edited = 14;
+    ComposeSaved compose_saved = 15;
+    ComposeClosed compose_closed = 16;
+    WriteSettled write_settled = 17;
   }
+
+  message ComposeEdited {
+    string mood = 1;
+    string text = 2;
+  }
+
+  message ComposeSaved {}
+
+  message ComposeClosed {}
 
   message MoreClosed {}
 
@@ -5436,7 +5504,8 @@ message NotesJournalEvent {
     string title = 2;
   }
 
-  // A new entry dated today (`NotesJournalData.today`).
+  // A new entry dated today (`NotesJournalData.today`): opens `compose`.
+  // `day` EMPTY is the answer's own `today`.
   message NewEntryRequested {
     string day = 1;
   }
@@ -5460,6 +5529,9 @@ message NotesHistoryChrome {
   string retry = 2;
   string loading = 3;
   string close = 4;
+  // The back control's words: the note it was pushed from, by its title
+  // (`note_title`, else "Untitled note") — never a bare "Back" (#1047).
+  string back = 5;
 }
 
 message NotesHistoryData {
@@ -7420,9 +7492,10 @@ message TasksCatchUpEvent {
 // changed is a shelf chosen from the More sheet; Trash is its own screen,
 // `TrashListState` with `app_id = "docs"`.
 //
-// NO DESTROY PATH. Trashing stamps a thirty-day grace window; "Empty trash"
-// ends every window at once. Nothing in this build removes a trashed document,
-// so no string here says "delete forever" — `docs.proto`'s header.
+// DOCS DESTROYS, ON PHOTOS' PATH (D-1 of 2026-09-25). Trashing stamps a
+// thirty-day grace window; the trash's "Delete forever" is
+// `core.purge_document` and "Empty trash" is `core.empty_document_trash`,
+// both behind the kit's destructive confirm — `docs.proto`'s header.
 
 message DocsDriveState {
   SeatState seat = 1;
@@ -7475,6 +7548,9 @@ message DocsDriveState {
   DocsCapture capture = 25;
   // The app bar's subtitle: "24 documents", "Starred · 3".
   string head_meta = 26;
+  // A FOLDER PAGE's parent, by its title (#1047): `chrome.back` is it, else
+  // "Docs" — never a bare "Back". Rides along with `Opened`.
+  string parent = 27;
 
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;
@@ -7556,6 +7632,8 @@ message DocsDriveChrome {
   // The inline rename's words.
   string rename_placeholder = 14;
   string rename_done = 15;
+  // A folder page's back control: `parent`, else "Docs" (#1047).
+  string back = 16;
 }
 
 message DocsBandTab {
@@ -7855,6 +7933,9 @@ message DocsDriveEvent {
     DocsDriveState.Destination destination = 1;
     string folder_id = 2;
     string folder_name = 3;
+    // A folder page's: the page it was pushed from, by its title — what
+    // `chrome.back` says (#1047). Empty: "Docs".
+    string parent = 4;
   }
 
   message Refreshed {}
@@ -8012,9 +8093,25 @@ message DocsDocumentState {
   optional DocsRename rename = 13;
   DocsSheet sheet = 14;
   DocsDocumentChrome chrome = 15;
+  // The page it was pushed from, by its title ("Docs", "Recent", a folder's
+  // name) — what `chrome.back` says (#1047). Rides along with `Opened`.
+  string parent = 16;
+  // WHICH VERB `confirm` ASKS ABOUT: trash on a live document, delete
+  // forever on a trashed one. NONE while no confirm is up.
+  Asking asking = 17;
+  // THE SCREEN IS DONE — the document was deleted forever here. The shell pops.
+  bool dismissed = 18;
+
+  enum Asking {
+    ASKING_UNSPECIFIED = 0;
+    ASKING_NONE = 1;
+    ASKING_TRASH = 2;
+    ASKING_PURGE = 3;
+  }
 }
 
 message DocsDocumentChrome {
+  // The parent's name — `parent`, else "Docs" — never a bare "Back".
   string back = 1;
   string retry = 2;
   string loading = 3;
@@ -8083,11 +8180,18 @@ message DocsStage {
   string content_id = 1;
   Media media = 2;
   string media_type = 3;
-  // Whether the bytes are on this device; when not, `absent_reason` says why
-  // in the member's words and the stage draws that instead.
+  // Whether there is a file on this device to draw (`bytes_path`); when not,
+  // `absent_reason` says why in the member's words and the stage draws that
+  // instead.
   bool held = 4;
   string absent_reason = 5;
   string accessibility_label = 6;
+  // THE FILE (#1047, R-1047-Q4): an absolute path the view hands its
+  // platform's renderer, picked by `media` — an image view, a PDF view, a
+  // video or audio player. The core sets it only when the bytes are here and
+  // the type may be drawn inline (Photos' held-thumbnail rule). EMPTY when
+  // `held` is false.
+  string bytes_path = 7;
 
   enum Media {
     MEDIA_UNSPECIFIED = 0;
@@ -8163,6 +8267,8 @@ message DocsDocumentEvent {
   message Opened {
     string document_id = 1;
     string title = 2;
+    // The pushing page's title, its state's own word (`DocsDriveChrome.title`).
+    string parent = 3;
   }
 
   message Refreshed {}
@@ -8345,6 +8451,141 @@ message DocsEditorEvent {
 }
 
 // ---------------------------------------------------------------------------
+// Docs: adding a document — Upload, Scan and Text (#1047)
+// ---------------------------------------------------------------------------
+//
+// THE SHELL PICKS, THE CORE NAMES THE BYTES, THE PHONE FILES THEM (R-1047-Q4).
+// The drive's `AddRequested` goes to `DocsIngestBridge.request`. Upload and
+// Scan ask the platform's file picker or document scanner through the bridge's
+// `onPick`; the shell answers with a file on this device (`picked`), a
+// cancellation, or a sentence. The bridge streams the file through the stage
+// frames (`Staging.stage`, the camera roll's door) and files it with
+// `core.add_document{document_id, staged_sha, title, folder_id}`. Text is
+// `core.create_text_document`, and a filed text document opens its editor.
+// One ingest at a time; the drive's status host draws `status_label`.
+
+message DocsIngestState {
+  Phase phase = 1;
+  DocsDriveEvent.AddRequested.Kind kind = 2;
+  // Where it lands; EMPTY is the drive's top level.
+  string folder_id = 3;
+  // The title it is filed under: the file's name, else "Scanned document";
+  // "Untitled document" for Text.
+  string title = 4;
+  // The row id this phone minted for the write, so a retry is the same write.
+  string document_id = 5;
+  // Bytes streamed into the core so far, the file's size, and the two as
+  // thousandths for a bar. `total_bytes` 0 is unknown.
+  uint64 staged_bytes = 6;
+  uint64 total_bytes = 7;
+  uint32 progress_permille = 8;
+  // One clause for the status host: "Adding Lease.pdf", "Lease.pdf added",
+  // or the failure's sentence. EMPTY while idle or picking.
+  string status_label = 9;
+  // FAILED: why, in the core's or the platform's words.
+  optional ReadFailure failure = 10;
+  // The picked file is still in the bridge's hands, so Try again restages it
+  // rather than asking the picker again.
+  bool file_held = 11;
+  // FILED: push the document once per `request_seq` — its editor when
+  // `open_editor` (Text), else its page — then send `Routed`.
+  bool open_editor = 12;
+  uint32 request_seq = 13;
+  bool routed = 14;
+  // THE STATUS LINE'S CONTROLS (DESIGN.md: at most one inline text action).
+  // `retry_label` is that one text action — FAILED only, EMPTY otherwise.
+  // `dismiss_label` is the line's CLOSE KEY (an icon control; this is its
+  // accessibility label), never a second text action: set at FILED and at
+  // FAILED so either line can be put away (`Dismissed`), EMPTY otherwise.
+  // The line never clears itself — a persistent status line, no auto-dismiss.
+  string retry_label = 15;
+  string dismiss_label = 16;
+  // THE PUSH IS THE SHELL'S, WHEREVER THE MEMBER IS (#1047): the shell
+  // observes this state at its root, not on the drive page, so a document
+  // filed while the member is elsewhere still opens. `parent` is the pushed
+  // page's back word — `Requested.parent`, else "Docs".
+  string parent = 17;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_IDLE = 1;
+    // The platform's picker or scanner is up.
+    PHASE_PICKING = 2;
+    // The bytes are streaming into the core.
+    PHASE_STAGING = 3;
+    // The write that files them is in flight.
+    PHASE_FILING = 4;
+    PHASE_FILED = 5;
+    PHASE_FAILED = 6;
+  }
+}
+
+message DocsIngestEvent {
+  oneof kind {
+    // The drive's Add sheet asked; the bridge mints `document_id`.
+    Requested requested = 1;
+    // The platform answered the picker or the scanner.
+    Picked picked = 2;
+    PickCancelled pick_cancelled = 3;
+    PickRefused pick_refused = 4;
+    // The bridge: bytes streamed, the stage's end, the filing's answer.
+    Progressed progressed = 5;
+    Staged staged = 6;
+    Settled settled = 7;
+    // The member: again after a failure, or put the status away.
+    Retried retried = 8;
+    Dismissed dismissed = 9;
+    // The shell pushed the filed document.
+    Routed routed = 10;
+  }
+
+  message Requested {
+    DocsDriveEvent.AddRequested.Kind kind = 1;
+    string folder_id = 2;
+    string document_id = 3;
+    // The title of the drive page the Add sheet was on ("Docs", a folder's
+    // name): the filed document's back word, wherever the member is then.
+    string parent = 4;
+  }
+
+  // The file's name as the platform named it, its media type (EMPTY: read
+  // off the name) and its size.
+  message Picked {
+    string name = 1;
+    string media_type = 2;
+    uint64 byte_size = 3;
+  }
+
+  message PickCancelled {}
+
+  message PickRefused {
+    string sentence = 1;
+  }
+
+  message Progressed {
+    uint64 staged_bytes = 1;
+  }
+
+  message Staged {
+    string staged_sha = 1;
+  }
+
+  // The filing's answer. `sentence` is the core's (or the stage's) on a refusal.
+  message Settled {
+    bool committed = 1;
+    string sentence = 2;
+  }
+
+  message Retried {}
+
+  message Dismissed {}
+
+  message Routed {
+    uint32 request_seq = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // --- Tally ---
 // ---------------------------------------------------------------------------
 //
@@ -8467,6 +8708,9 @@ message TallyChoice {
   // A split-method choice's method, what `MethodPicked` sends back; UNSPECIFIED
   // on every other choice.
   TallySplitMethod method = 6;
+  // An export range choice's range, what `TallyExportEvent.RangePicked` sends
+  // back; UNSPECIFIED on every other choice.
+  TallyExportState.Range export_range = 7;
 }
 
 // A proposed or recordable payment.
@@ -8683,6 +8927,9 @@ message TallyGroupState {
   // The simplification toggle's write.
   WriteState write = 8;
   TallyDetailChrome chrome = 9;
+  // The page it was pushed from, by its title (#1047): `chrome.back` is it,
+  // else the app's name — never a bare "Back". Rides along with `Opened`.
+  string parent = 10;
 }
 
 // The words every Tally detail screen carries.
@@ -8758,6 +9005,9 @@ message TallyGroupEvent {
   message Opened {
     string group_id = 1;
     string title = 2;
+    // The page it was pushed from, by its title — what `chrome.back` says
+    // (#1047). Empty: the app's name.
+    string parent = 3;
   }
 
   message Refreshed {}
@@ -8790,6 +9040,9 @@ message TallyFriendState {
     TallyFriendData data = 7;
   }
   TallyDetailChrome chrome = 8;
+  // The page it was pushed from, by its title (#1047): `chrome.back` is it,
+  // else the app's name — never a bare "Back". Rides along with `Opened`.
+  string parent = 9;
 }
 
 message TallyFriendData {
@@ -8828,6 +9081,9 @@ message TallyFriendEvent {
   message Opened {
     string party_id = 1;
     string title = 2;
+    // The page it was pushed from, by its title — what `chrome.back` says
+    // (#1047). Empty: the app's name.
+    string parent = 3;
   }
 
   message Refreshed {}
@@ -8864,6 +9120,9 @@ message TallyExpenseState {
   // THE MEMO SHEET IS UP, holding what is typed; absent when it is not.
   // Closing it is done (#1015 D3): changed words are written then.
   optional string memo_draft = 10;
+  // The page it was pushed from, by its title (#1047): `chrome.back` is it,
+  // else the app's name — never a bare "Back". Rides along with `Opened`.
+  string parent = 11;
 }
 
 message TallyExpenseData {
@@ -8954,6 +9213,9 @@ message TallyExpenseEvent {
 
   message Opened {
     string expense_id = 1;
+    // The page it was pushed from, by its title — what `chrome.back` says
+    // (#1047). Empty: the app's name.
+    string parent = 2;
   }
 
   message Refreshed {}
@@ -9271,6 +9533,9 @@ message TallySettleUpState {
   string draft_token = 10;
   string title = 11;
   string lede = 12;
+  // The page it was pushed from, by its title (#1047): `chrome.back` is it,
+  // else the app's name — never a bare "Back". Rides along with `Opened`.
+  string parent = 13;
 }
 
 message TallySettleUpData {
@@ -9305,6 +9570,9 @@ message TallySettleUpEvent {
   message Opened {
     string group_id = 1;
     string draft_token = 2;
+    // The page it was pushed from, by its title — what `chrome.back` says
+    // (#1047). Empty: the app's name.
+    string parent = 3;
   }
 
   message Refreshed {}
@@ -9391,6 +9659,8 @@ message TallySpendingChrome {
   string next = 3;
   string retry = 4;
   string loading = 5;
+  // The back control names the page it returns to: "Tally" (#1047).
+  string back = 6;
 }
 
 message TallySpendingData {
@@ -9462,6 +9732,8 @@ message TallySearchChrome {
   string close = 3;
   string retry = 4;
   string loading = 5;
+  // The back control names the page it returns to: "Tally" (#1047).
+  string back = 6;
 }
 
 message TallySearchData {
@@ -9493,4 +9765,1361 @@ message TallySearchEvent {
   message ExpensePicked {
     string expense_id = 1;
   }
+}
+
+// --- tally.export: a group's ledger as a file (#1047) -----------------------
+//
+// THE CORE RENDERS THE FILE (R-1047-Q5): `tally.export` answers `csv` and
+// `file_name`, so no view formats money. The group and the range are the
+// request (law 2) — a range is a `since` day off the answer's `today`. The
+// file itself stays Kotlin-side: Save hands the platform `csv` and
+// `file_name` through `TallyExportBridge.onSave`, and the platform answers
+// `saved`, `saveCancelled` or `saveRefused`.
+
+message TallyExportState {
+  SeatState seat = 1;
+  // The group exported; EMPTY until one is picked. A vault with one group
+  // has it picked for the member.
+  string group_id = 2;
+  Range range = 3;
+  oneof content {
+    Loading loading = 4;
+    ReadFailure failure = 5;
+    Denied denied = 6;
+    TallyExportData data = 7;
+  }
+  TallyExportChrome chrome = 8;
+  // The page it was pushed from, by its title: `chrome.back` says it, else
+  // "Tally" (#1047).
+  string parent = 9;
+  Save save = 10;
+  // "Ledger exported", or the platform's refusal. EMPTY otherwise.
+  string status_label = 11;
+  // THE CHOICE SHEET UP, if any (#1015 D4: choices sheet), as the editor's
+  // `sheet`: the group's or the range's. A pick closes it.
+  Sheet sheet = 12;
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_GROUP = 2;
+    SHEET_RANGE = 3;
+  }
+
+  enum Range {
+    RANGE_UNSPECIFIED = 0;
+    RANGE_EVERYTHING = 1;
+    RANGE_THIS_YEAR = 2;
+    RANGE_THIS_MONTH = 3;
+  }
+
+  enum Save {
+    SAVE_UNSPECIFIED = 0;
+    SAVE_IDLE = 1;
+    // The platform's save or share sheet is up.
+    SAVE_OPEN = 2;
+    SAVE_SAVED = 3;
+    SAVE_REFUSED = 4;
+  }
+}
+
+message TallyExportChrome {
+  string title = 1;
+  string lede = 2;
+  string group_label = 3;
+  string range_label = 4;
+  string format_label = 5;
+  // "CSV · one row per expense and settlement".
+  string format_value = 6;
+  // The save action ("Export"), and the line under it.
+  string save = 7;
+  string foot = 8;
+  string retry = 9;
+  string loading = 10;
+  string back = 11;
+  // Over `rows`: "In the file".
+  string rows_heading = 12;
+}
+
+message TallyExportData {
+  // Live groups, then archived ones; `key` is what `GroupPicked` sends.
+  repeated TallyChoice groups = 1;
+  // Everything · This year · This month; each carries its `export_range`,
+  // which `RangePicked` sends back (`key` is an identifier, never parsed).
+  repeated TallyChoice ranges = 2;
+  // "12 expenses · 3 settlements"; "500 of 812 expenses · 3 settlements"
+  // when the window cut the file. EMPTY with no group.
+  string count_label = 3;
+  // The first rows the file carries, as the ledger draws them.
+  repeated TallyLedgerRow rows = 4;
+  // No groups at all, no group picked, or nothing in the range.
+  optional EmptyState empty = 5;
+  // Save is offered: a group is picked and the core rendered a file.
+  bool can_save = 6;
+  // The name the platform's sheet proposes: `tahoe-trip-2026-09-25.csv`.
+  string file_name = 7;
+}
+
+message TallyExportEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    GroupPicked group = 3;
+    RangePicked range = 4;
+    // Save: the bridge hands the platform the file.
+    SaveRequested save = 5;
+    // The platform's sheet answered.
+    SaveSettled save_settled = 6;
+    // A choice row tapped, or its sheet put away without a pick.
+    SheetOpened sheet_opened = 7;
+    SheetClosed sheet_closed = 8;
+  }
+
+  message SheetOpened {
+    TallyExportState.Sheet sheet = 1;
+  }
+
+  message SheetClosed {}
+
+  // `group_id` presets the group (a group page's Export); EMPTY picks none.
+  message Opened {
+    string group_id = 1;
+    string parent = 2;
+  }
+
+  message Refreshed {}
+
+  message GroupPicked {
+    string group_id = 1;
+  }
+
+  message RangePicked {
+    TallyExportState.Range range = 1;
+  }
+
+  message SaveRequested {}
+
+  // `saved`, else `cancelled` (nothing to say), else refused with `sentence`.
+  message SaveSettled {
+    bool saved = 1;
+    bool cancelled = 2;
+    string sentence = 3;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// --- Locker ---
+// ---------------------------------------------------------------------------
+//
+// Locker's screens over the core's `locker.*` app queries and its session
+// (`locker.proto`, #1047 wave L1). THE LIST IS METADATA; THE SECRET IS NOT:
+// a sealed value reaches a state only as a reveal the core receipted, lives
+// there for thirty seconds, and is gone on conceal, on relock and on leave.
+//
+// D-5: the phone's biometric, the device passcode as fallback, a relock when
+// Centraid leaves the foreground, no Locker passphrase. THE SHARED MACHINE OWNS
+// THE LOCK (`LockerLockState`) AND EVERY WORD; a shell does exactly two things
+// the machine cannot: it raises the OS prompt when `LockerLockState.prompt`
+// carries a new token and answers `PromptAnswered`, and it reports the app
+// leaving the foreground (`Backgrounded`). While `LockerLockState.cover` is
+// set, every Locker screen is covered by the lock wall, no Locker screen
+// reads, and what one held is dropped.
+//
+// VIEWS DECIDE NOTHING: labels, notes, masks, verbs, chips, empty states,
+// accessibility labels and the band are the machines'. The raw core answers
+// never cross (Tally's rule): they are held on a Kotlin-side state, and an
+// answer, a refusal, a reveal, a tick and the lock reach a machine as
+// Kotlin-side input (`LockerInput`); a view forwards only what a member did.
+
+// --- locker.lock: the gate -------------------------------------------------
+
+message LockerLockState {
+  Phase phase = 1;
+  // Cover every Locker screen with this wall. Set in every phase but
+  // UNLOCKED; a shell draws nothing of Locker's under it.
+  bool cover = 2;
+  // "Locker is locked".
+  string title = 3;
+  // What unlocking does, in the words for this phone's biometry.
+  string body = 4;
+  // "Unlock with Face ID", "Unlock with fingerprint", "Unlock with passcode",
+  // "Try again". Empty while UNLOCKING or UNAVAILABLE: no control to draw.
+  string unlock_label = 5;
+  // What a session is (the handoff's facts table), in order.
+  repeated LockerFact facts = 6;
+  // The sentence a FAILED or UNAVAILABLE phase says; empty otherwise.
+  string notice = 7;
+  // PRESENT EXACTLY WHEN THE OS PROMPT MUST BE RAISED NOW. A shell raises it
+  // once per `token` and answers with `PromptAnswered` carrying the same token;
+  // an answer to an older token is ignored.
+  optional LockerPrompt prompt = 8;
+  // 9 was `lock_label`, an app-bar lock verb no view drew: locking is the
+  // More sheet's Lock row (D-8, #1047).
+  reserved 9;
+  reserved "lock_label";
+  string accessibility_label = 10;
+  // UNAVAILABLE on a core with no keys: "Enter your 24 words" — the intent
+  // `WordsTapped`, which the shell routes to words.enter for PURPOSE_REKEY
+  // (#1047 E1). Empty otherwise.
+  string words_label = 11;
+  // SHIELD LOCKER FROM CAPTURE: set exactly while UNLOCKED, when a Locker
+  // screen may show an item. While it holds, a shell keeps every Locker page
+  // and every Locker dialog out of screenshots, recordings and the app
+  // switcher — Android `FLAG_SECURE` on the activity window (and on any
+  // dialog window Locker opens), iOS the words screens' shield (content in a
+  // secure canvas, covered while captured or not active) — and drops it on
+  // relock and on leaving Locker. The views decide nothing of when.
+  bool secure = 12;
+  // CLEAR LOCKER'S OWN COPY FROM THE CLIPBOARD, once per new value: the
+  // member locked Locker (its Lock row, or a vault switch). A shell clears the
+  // clipboard only if what is on it is still the last copy Locker made —
+  // iOS by `UIPasteboard.changeCount`, Android by the copy's own mark — so a
+  // member's later copy from anywhere else is never wiped. Leaving the
+  // foreground does NOT clear it: a copy exists to be pasted into another
+  // app, and its own expiry (`LockerClipboard.expires_in_ms`) ends it.
+  uint64 clipboard_clear = 13;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    // Nothing is open. Every Locker screen is covered.
+    PHASE_LOCKED = 1;
+    // The OS prompt is up, or the core is opening the session.
+    PHASE_UNLOCKING = 2;
+    PHASE_UNLOCKED = 3;
+    // This phone has no passcode (and so no biometric) — a Locker on a phone
+    // with no lock of its own would be a Locker nothing guards.
+    PHASE_UNAVAILABLE = 4;
+    // The prompt failed or the core would not open; `notice` says which, and
+    // `unlock_label` offers another try.
+    PHASE_FAILED = 5;
+  }
+}
+
+// THE PLATFORM SEAM. iOS: `LAContext().evaluatePolicy(.deviceOwnerAuthentication,
+// localizedReason: reason)`. Android: `BiometricPrompt` with
+// `setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)`,
+// `setTitle(title)` and `setSubtitle(subtitle)` — and no negative button,
+// which `DEVICE_CREDENTIAL` forbids.
+message LockerPrompt {
+  uint64 token = 1;
+  string reason = 2;
+  string title = 3;
+  string subtitle = 4;
+}
+
+// What this phone can do, as its shell reads it: iOS
+// `canEvaluatePolicy(.deviceOwnerAuthentication)` and `biometryType`; Android
+// `BiometricManager.canAuthenticate(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)`
+// and which biometric the device has.
+enum LockerBiometry {
+  LOCKER_BIOMETRY_UNSPECIFIED = 0;
+  // A passcode and no biometric enrolled.
+  LOCKER_BIOMETRY_PASSCODE = 1;
+  LOCKER_BIOMETRY_FACE = 2;
+  LOCKER_BIOMETRY_FINGERPRINT = 3;
+  // Touch ID's name for the same thing.
+  LOCKER_BIOMETRY_TOUCH = 4;
+  LOCKER_BIOMETRY_OPTIC = 5;
+}
+
+message LockerFact {
+  string label = 1;
+  string detail = 2;
+}
+
+message LockerLockEvent {
+  oneof kind {
+    Attached attached = 1;
+    UnlockTapped unlock = 2;
+    PromptAnswered answered = 3;
+    Backgrounded backgrounded = 4;
+    Foregrounded foregrounded = 5;
+    LockTapped lock = 6;
+    // INTENT: the shell opens words.enter for PURPOSE_REKEY (#1047 E1).
+    WordsTapped words = 7;
+  }
+
+  // The shell's capability read, sent when Locker is entered and again on a
+  // return to the foreground (the member may have set a passcode meanwhile).
+  message Attached {
+    // A passcode is set, so `.deviceOwnerAuthentication` / `DEVICE_CREDENTIAL`
+    // can succeed.
+    bool available = 1;
+    LockerBiometry biometry = 2;
+  }
+
+  message UnlockTapped {}
+
+  message PromptAnswered {
+    uint64 token = 1;
+    Outcome outcome = 2;
+
+    enum Outcome {
+      OUTCOME_UNSPECIFIED = 0;
+      OUTCOME_SUCCEEDED = 1;
+      // The member dismissed it (`LAError.userCancel`/`.systemCancel`/
+      // `.appCancel`; `ERROR_USER_CANCELED`/`ERROR_CANCELED`). Not a failure.
+      OUTCOME_CANCELLED = 2;
+      // Not recognised, or the prompt errored.
+      OUTCOME_FAILED = 3;
+      // No passcode is set (`LAError.passcodeNotSet`; `ERROR_NO_DEVICE_CREDENTIAL`).
+      OUTCOME_UNAVAILABLE = 4;
+      // Too many attempts (`LAError.biometryLockout`; `ERROR_LOCKOUT*`).
+      OUTCOME_LOCKED_OUT = 5;
+    }
+  }
+
+  // Centraid left the foreground: iOS `scenePhase == .background` (NOT
+  // `.inactive`, which the prompt itself causes); Android `ON_STOP` (NOT
+  // `ON_PAUSE`). Relocks at once.
+  message Backgrounded {}
+
+  // Centraid is in the foreground again: the gate re-reads the core's session
+  // (idle may have ended it).
+  message Foregrounded {}
+
+  // The member locked by hand.
+  message LockTapped {}
+
+  message WordsTapped {}
+}
+
+// --- The shared parts -------------------------------------------------------
+
+message LockerBandTab {
+  // `items`, `review`, `generate`, `search`, `more` — what `BandPicked` sends.
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  bool current = 4;
+}
+
+// One item as a list draws it: the handoff's item row.
+message LockerRow {
+  string item_id = 1;
+  string title = 2;
+  // "Login · maya@example.com · finance" — type, the secret-free subtitle,
+  // the tags. Never a secret.
+  string meta = 3;
+  // The type chip: two letters ("LO") on the rose wash, and its key for the
+  // icon catalogue.
+  string type_chip = 4;
+  string type_key = 5;
+  bool starred = 6;
+  // `COMPROMISED` (net), `ARCHIVED` (seam).
+  repeated StatusChip chips = 7;
+  string accessibility_label = 8;
+}
+
+message LockerChoice {
+  string key = 1;
+  string label = 2;
+  bool selected = 3;
+  // A count or a note beside the label ("12"); empty for none.
+  string detail = 4;
+}
+
+// A COPY THE SHELL PERFORMS NOW, once per `token`: the value goes on the
+// clipboard LOCAL-ONLY and EXPIRING (`UIPasteboard.setItems(_:options:)` with
+// `.localOnly` and `.expirationDate`; Android `ClipDescription.EXTRA_IS_SENSITIVE`
+// and a clear after `expires_in_ms`), then the shell answers `ClipboardDone`.
+// A value never sits on a state longer than the copy takes.
+message LockerClipboard {
+  uint64 token = 1;
+  string value = 2;
+  uint64 expires_in_ms = 3;
+  bool sensitive = 4;
+}
+
+// --- locker.home: Items · Review · Generate · Search, More as a sheet -------
+
+message LockerHomeState {
+  SeatState seat = 1;
+  // WHICH SURFACE, as a parameter (law 2). GENERATE draws the generator
+  // screen (`LockerGeneratorState`) in the band's slot.
+  Destination destination = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    Denied denied = 5;
+    LockerHomeData data = 6;
+  }
+  Sheet sheet = 7;
+  // Five tabs in order; EMPTY while locked or denied.
+  repeated LockerBandTab band = 8;
+  LockerHomeChrome chrome = 9;
+  SearchField search = 10;
+  // The Items filter in force: `all`, `starred`, `archived` or a type key.
+  string filter = 11;
+
+  enum Destination {
+    DESTINATION_UNSPECIFIED = 0;
+    DESTINATION_ITEMS = 1;
+    DESTINATION_REVIEW = 2;
+    DESTINATION_GENERATE = 3;
+    DESTINATION_SEARCH = 4;
+  }
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_MORE = 2;
+    // "What Locker keeps" — `LockerHomeChrome.facts`.
+    SHEET_FACTS = 3;
+  }
+}
+
+message LockerHomeChrome {
+  string title = 1;
+  // The app bar's primary verb: "New item".
+  string add_label = 2;
+  string retry = 3;
+  string more_title = 4;
+  // The More sheet's rows, in order; `key` is what `MorePicked` sends:
+  // `trash`, `facts`, `lock`.
+  repeated LockerMoreRow more_rows = 5;
+  string facts_title = 6;
+  repeated LockerFact facts = 7;
+  string search_placeholder = 8;
+  // The handoff's search note: what is never searched, and why.
+  string search_note = 9;
+  string close_label = 10;
+}
+
+message LockerMoreRow {
+  string key = 1;
+  string label = 2;
+  string meta = 3;
+  string icon_key = 4;
+}
+
+message LockerHomeData {
+  // "Titles, usernames and addresses are browsable · a secret is revealed per
+  // item, per gesture, and receipted".
+  string status_line = 1;
+
+  // ITEMS: the filter chips, the rows, the window's honest end.
+  repeated LockerChoice filters = 2;
+  repeated LockerRow rows = 3;
+  // "300 of 312 · the window is 300 by default and 2,000 at most."; empty
+  // when every row is drawn.
+  string window = 4;
+  // Day one ("Nothing is kept here yet") or a filter with nothing in it.
+  optional EmptyState items_empty = 5;
+
+  // REVIEW: the verdicts, the checks that cannot run here, and all clear.
+  repeated LockerReviewSection review = 6;
+  repeated LockerFact review_unchecked = 7;
+  string review_unchecked_title = 8;
+  // Nothing needs attention: stated, not celebrated. Absent otherwise.
+  optional EmptyState review_clear = 9;
+  // "Checked 42 items · today".
+  string review_note = 10;
+
+  // SEARCH: hits for `search.answered_term`.
+  repeated LockerRow hits = 11;
+  optional EmptyState search_empty = 12;
+}
+
+message LockerReviewSection {
+  // `compromised`, `insecure_address`, `expired`, `expiring`.
+  string key = 1;
+  SectionHead head = 2;
+  // Why this verdict matters, in one sentence.
+  string reason = 3;
+  repeated LockerRow rows = 4;
+}
+
+message LockerHomeEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    BandPicked band = 3;
+    FilterPicked filter = 4;
+    SheetOpened sheet_opened = 5;
+    SheetClosed sheet_closed = 6;
+    SearchOpened search_opened = 7;
+    SearchTyped search_typed = 8;
+    SearchClosed search_closed = 9;
+    // INTENTS: the machine changes nothing; the shell routes them.
+    AddItem add = 10;
+    ItemPicked item = 11;
+    MorePicked more = 12;
+  }
+
+  // Lands on `destination` (Items when unspecified).
+  message Opened {
+    LockerHomeState.Destination destination = 1;
+  }
+
+  message Refreshed {}
+
+  message BandPicked {
+    string key = 1;
+  }
+
+  message FilterPicked {
+    string key = 1;
+  }
+
+  message SheetOpened {
+    LockerHomeState.Sheet sheet = 1;
+  }
+
+  message SheetClosed {}
+
+  message SearchOpened {}
+
+  message SearchTyped {
+    string term = 1;
+  }
+
+  message SearchClosed {}
+
+  message AddItem {}
+
+  message ItemPicked {
+    string item_id = 1;
+  }
+
+  // `trash` pushes Locker's trash; `lock` locks (the shell forwards
+  // `LockTapped` to the gate); `facts` opens the facts sheet.
+  message MorePicked {
+    string key = 1;
+  }
+}
+
+// --- locker.item ------------------------------------------------------------
+
+message LockerItemState {
+  SeatState seat = 1;
+  string item_id = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    Denied denied = 5;
+    LockerItemData data = 6;
+  }
+  WriteState write = 7;
+  optional Confirm confirm = 8;
+  // What the last act did: "Password copied · the clipboard clears itself in
+  // 30 seconds", "Moved to the trash" with Undo, a refused reveal's sentence.
+  optional StatusLine status = 9;
+  LockerItemChrome chrome = 10;
+  optional LockerClipboard clipboard = 11;
+  // The memo sheet, while it is open.
+  optional LockerMemoSheet memo = 12;
+  // The pushing page's title, which the back control says.
+  string parent = 13;
+}
+
+message LockerItemChrome {
+  string title = 1;
+  string back_label = 2;
+  // "Edit" — the app bar's primary verb; empty on a trashed item.
+  string edit_label = 3;
+  string retry = 4;
+}
+
+message LockerItemData {
+  string title = 1;
+  // "Login", and the chip's two letters and icon key.
+  string type_label = 2;
+  string type_chip = 3;
+  string type_key = 4;
+  bool starred = 5;
+  repeated StatusChip chips = 6;
+  // "Sealed at rest. Revealing one writes a receipt and it conceals itself
+  // after 30 seconds." — the boundary, stated on the item.
+  string status_line = 7;
+  // The fields, section by section: the type's own (secrets among them),
+  // addresses, custom fields, passkey, dates.
+  repeated LockerSection sections = 8;
+  repeated string tags = 9;
+  string tags_label = 10;
+  string memo = 11;
+  string memo_label = 12;
+  // "Add a memo" / "Edit the memo"; empty on a trashed item.
+  string memo_action = 13;
+  // The item's verbs, in order (`star`, `archive`, `trash`, `restore`), each
+  // with its finished label.
+  repeated LockerAction actions = 14;
+  // No item has this id any more.
+  optional EmptyState gone = 15;
+  // "This item is in the trash · it is erased on Mon 12 October".
+  string trashed_note = 16;
+}
+
+message LockerSection {
+  string title = 1;
+  repeated LockerFieldRow rows = 2;
+}
+
+// A FIELD ROW WITH VERBS (the handoff's recipe). Plain metadata shows its
+// value. A sealed cell shows `mask` and `note` and offers Reveal and Copy;
+// revealed, it shows `value`, a countdown `note` and Copy and Conceal.
+message LockerFieldRow {
+  // The address of what the row shows: a column (`password`, `username`),
+  // `field:<id>`, `address:<id>`, or a date key. What `VerbTapped` sends.
+  string key = 1;
+  string label = 2;
+  // The plain value, or — revealed — the plaintext. Empty while sealed.
+  string value = 3;
+  bool sealed = 4;
+  bool revealed = 5;
+  // A letter-spaced dot run, drawn in `ink2`, while sealed and concealed.
+  string mask = 6;
+  string note = 7;
+  repeated LockerVerb verbs = 8;
+  string accessibility_label = 9;
+  // Draw `value` in the monospace role (a secret, a card number).
+  bool monospace = 10;
+  // A shown one-time code's life (Q-1047-16): the seconds until it rolls, out
+  // of the step. A shell draws it as a small ring or bar beside `value`;
+  // absent on every other row.
+  optional LockerCountdown countdown = 11;
+}
+
+message LockerCountdown {
+  uint32 seconds_left = 1;
+  uint32 period = 2;
+}
+
+message LockerVerb {
+  // `reveal`, `copy`, `conceal`, `open` — and on a one-time code, `code`
+  // (show it) and `copy_code`.
+  string key = 1;
+  string label = 2;
+}
+
+message LockerAction {
+  string key = 1;
+  string label = 2;
+  bool destructive = 3;
+}
+
+message LockerMemoSheet {
+  string title = 1;
+  string text = 2;
+  string hint = 3;
+  string save_label = 4;
+  string cancel_label = 5;
+}
+
+message LockerItemEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    VerbTapped verb = 3;
+    ActionTapped action = 4;
+    Confirmed confirmed = 5;
+    Dismissed dismissed = 6;
+    // The status line's verb (Undo).
+    StatusActed status_acted = 7;
+    ClipboardDone clipboard_done = 8;
+    MemoOpened memo_opened = 9;
+    MemoTyped memo_typed = 10;
+    MemoSaved memo_saved = 11;
+    MemoClosed memo_closed = 12;
+    // INTENT: the shell pushes the editor on this item.
+    EditTapped edit = 13;
+    // The screen closed: every revealed value is dropped.
+    Left left = 14;
+  }
+
+  message Opened {
+    string item_id = 1;
+    string parent = 2;
+  }
+
+  message Refreshed {}
+
+  message VerbTapped {
+    string key = 1;
+    string verb = 2;
+  }
+
+  message ActionTapped {
+    string key = 1;
+  }
+
+  message Confirmed {}
+
+  message Dismissed {}
+
+  message StatusActed {}
+
+  message ClipboardDone {
+    uint64 token = 1;
+  }
+
+  message MemoOpened {}
+
+  message MemoTyped {
+    string text = 1;
+  }
+
+  message MemoSaved {}
+
+  message MemoClosed {}
+
+  message EditTapped {}
+
+  message Left {}
+}
+
+// --- locker.editor: add or edit an item -------------------------------------
+
+// AN EXPLICIT SAVE, NOT AUTOSAVE (R-1047-L5): a secret saved on a pause
+// mid-typing would be a wrong secret the member did not choose, and a half
+// title would be a row in a list. Leaving with changes asks first.
+message LockerEditorState {
+  SeatState seat = 1;
+  Mode mode = 2;
+  // The item being edited, or the id minted for the new one.
+  string item_id = 3;
+  oneof content {
+    Loading loading = 4;
+    ReadFailure failure = 5;
+    Denied denied = 6;
+    LockerEditorData data = 7;
+  }
+  WriteState write = 8;
+  // The discard confirm, when leaving with changes.
+  optional Confirm confirm = 9;
+  LockerEditorChrome chrome = 10;
+  // The save committed: the shell closes the editor.
+  bool done = 11;
+
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    MODE_ADD = 1;
+    MODE_EDIT = 2;
+  }
+}
+
+message LockerEditorChrome {
+  // "New item" / "Edit item".
+  string title = 1;
+  string save_label = 2;
+  string cancel_label = 3;
+  // What saving does with a secret, said before it happens (the handoff's
+  // lede rule).
+  string lede = 4;
+}
+
+message LockerEditorData {
+  // The six types a phone creates, on ADD; empty on EDIT (a type is fixed).
+  repeated LockerChoice types = 1;
+  string types_label = 2;
+  repeated LockerInputRow inputs = 3;
+  // RESERVED: a login's address match policy and its label and note, dropped
+  // with the column (Q-1047-15).
+  reserved 4, 5, 6;
+  reserved "match_policy", "match_policy_label", "match_policy_note";
+  string tags_label = 7;
+  string tags_text = 8;
+  string tags_hint = 9;
+  // Save is enabled.
+  bool can_save = 10;
+  // Why Save is not enabled ("A title is needed"); empty when it is.
+  string blocked = 11;
+  // THE COMPROMISED FLAG (R-1047-F7): a toggle row the member sets on a
+  // leaked secret so Review lists the item for changing. Nothing else
+  // produces it. `compromised_note` says what the flag does and, on a type
+  // with a password, that a changed password clears it.
+  string compromised_label = 12;
+  bool compromised = 13;
+  string compromised_note = 14;
+}
+
+message LockerInputRow {
+  // The command's input key: `title`, `username`, `password`, `url`, …
+  string key = 1;
+  string label = 2;
+  string value = 3;
+  string placeholder = 4;
+  // A secret field: a secure text entry, never autocorrected, never
+  // suggested, and excluded from the keyboard's learning.
+  bool secret = 5;
+  Kind kind = 6;
+  // Under the field: on EDIT, a stored secret's "Kept sealed · type to
+  // replace it"; a generated password's strength.
+  string note = 7;
+  // "Generate" on a password field; empty elsewhere.
+  string generate_label = 8;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_TEXT = 1;
+    KIND_EMAIL = 2;
+    KIND_URL = 3;
+    KIND_PHONE = 4;
+    KIND_NUMBER = 5;
+    KIND_MULTILINE = 6;
+  }
+}
+
+message LockerEditorEvent {
+  oneof kind {
+    Opened opened = 1;
+    TypePicked type = 2;
+    Typed typed = 3;
+    // RESERVED: `policy`, the match-policy pick (Q-1047-15).
+    TagsTyped tags = 5;
+    GenerateTapped generate = 6;
+    SaveTapped save = 7;
+    CancelTapped cancel = 8;
+    Confirmed confirmed = 9;
+    Dismissed dismissed = 10;
+    CompromisedToggled compromised = 11;
+  }
+  reserved 4;
+  reserved "policy";
+
+  // ADD mints `item_id` in the bridge; EDIT names the item. `password`
+  // presets a new login's password (the generator's "Put it on an item").
+  message Opened {
+    LockerEditorState.Mode mode = 1;
+    string item_id = 2;
+    string type = 3;
+    string password = 4;
+  }
+
+  message TypePicked {
+    string key = 1;
+  }
+
+  message Typed {
+    string key = 1;
+    string value = 2;
+  }
+
+  message TagsTyped {
+    string text = 1;
+  }
+
+  message GenerateTapped {
+    string key = 1;
+  }
+
+  message SaveTapped {}
+
+  message CancelTapped {}
+
+  message Confirmed {}
+
+  message Dismissed {}
+
+  // The compromised toggle row, set to `on`.
+  message CompromisedToggled {
+    bool on = 1;
+  }
+}
+
+// --- locker.generator -------------------------------------------------------
+
+// A STRING WITHOUT AN ITEM (the handoff's Generator): nothing is written until
+// it lands on one. Look-alikes (0 O o 1 l I) are always excluded.
+message LockerGeneratorState {
+  string title = 1;
+  // The generated string, drawn at the display rung in a bordered box.
+  string output = 2;
+  // "Strong · about 95 bits".
+  string strength = 3;
+  repeated LockerChoice kinds = 4;
+  string kinds_label = 5;
+  uint32 length = 6;
+  uint32 length_min = 7;
+  uint32 length_max = 8;
+  // "Length · 20".
+  string length_label = 9;
+  repeated LockerChoice include = 10;
+  string include_label = 11;
+  string lookalike_note = 12;
+  string regenerate_label = 13;
+  string copy_label = 14;
+  // "Put it on an item" — an intent; the shell opens the editor with
+  // `LockerEditorBridge.openAddFrom(generator)`, which carries `output` over
+  // as `Opened.password` — never through a route.
+  string use_label = 15;
+  optional LockerClipboard clipboard = 16;
+  optional StatusLine status = 17;
+  string accessibility_label = 18;
+}
+
+message LockerGeneratorEvent {
+  oneof kind {
+    Opened opened = 1;
+    KindPicked kind_picked = 2;
+    LengthChanged length = 3;
+    IncludeToggled include = 4;
+    Regenerate regenerate = 5;
+    CopyTapped copy = 6;
+    ClipboardDone clipboard_done = 7;
+    // INTENT: the shell opens the editor with the output.
+    UseTapped use = 8;
+  }
+
+  message Opened {}
+
+  message KindPicked {
+    string key = 1;
+  }
+
+  message LengthChanged {
+    uint32 length = 1;
+  }
+
+  message IncludeToggled {
+    string key = 1;
+  }
+
+  message Regenerate {}
+
+  message CopyTapped {}
+
+  message ClipboardDone {
+    uint64 token = 1;
+  }
+
+  message UseTapped {}
+}
+
+// ---------------------------------------------------------------------------
+// --- The 24 words ---
+// ---------------------------------------------------------------------------
+//
+// Two screens over one set of words (#1047 E1): MAKING A VAULT, which mints
+// them, shows them once and checks three, and ENTERING THEM, which restores
+// this member's vaults onto a fresh phone or gives this phone's vaults their
+// key back (Locker's "needs your 24 words" wall). The words are minted,
+// judged and turned into a seed by the core (`phone.proto`'s
+// `PhraseRequest`); the shared machines own every phase and every word a
+// member reads, and a view draws and forwards.
+//
+// THREE PLATFORM DUTIES ARE THE VIEW'S, because only a view can do them:
+//
+// 1. While `secure` is set the screen is shielded from capture — Android
+//    `WindowManager.LayoutParams.FLAG_SECURE` on the window (screenshots,
+//    screen recording and the recents thumbnail), iOS the secure-field
+//    screenshot shield plus a cover drawn when the scene resigns active (the
+//    app-switcher snapshot).
+// 2. A word is never put on the clipboard: no copy control, no long-press
+//    copy on a shown word, and no paste target that reads the clipboard.
+// 3. Every word-entry field turns off autocorrect, autocapitalisation,
+//    suggestions and keyboard learning — iOS `.autocorrectionDisabled()`,
+//    `.textInputAutocapitalization(.never)`, `.keyboardType(.asciiCapable)`
+//    and no `textContentType`; Android `KeyboardOptions(autoCorrectEnabled =
+//    false, capitalization = None, keyboardType = Password or Ascii)` with
+//    `imeOptions` `IME_FLAG_NO_PERSONALIZED_LEARNING` — so the words do not
+//    end up in a keyboard's dictionary.
+
+// --- words.make: make a vault, and its words ---------------------------------
+
+message VaultWordsState {
+  Phase phase = 1;
+  // SHIELD THE SCREEN (duty 1). Set while the words are on it or being typed.
+  bool secure = 2;
+  string title = 3;
+  string body = 4;
+  // SHOW: the 24 words, in order. Empty in every other phase — the words
+  // reach a state only while they are being shown.
+  repeated WordCell words = 5;
+  // CONFIRM: the positions asked, and what was typed into each.
+  repeated WordAsk asks = 6;
+  // The one control the phase offers; empty when there is none to draw.
+  string primary_label = 7;
+  bool primary_enabled = 8;
+  // The quieter control (Cancel, "Show the words again"); empty for none.
+  string secondary_label = 9;
+  // A wrong word, or why nothing was made.
+  string notice = 10;
+  // Where this phone keeps the key (synchronised or this phone only), in the
+  // platform's own sentence. SHOW only.
+  string custody = 11;
+  // RESTORE_FIRST: the intent's label ("Restore my vaults"); the shell opens
+  // words.enter with `restore_purpose` when `RestoreTapped` is sent.
+  string restore_label = 12;
+  string accessibility_label = 13;
+  // RESTORE_FIRST: which words.enter to open. PURPOSE_RESTORE_HELD — this
+  // phone holds a seed (that is what RESTORE_FIRST means), and it restores
+  // with no words typed (#1047, Q-1047-18).
+  WordsEntryState.Purpose restore_purpose = 14;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    // Reading what this phone already holds.
+    PHASE_CHECKING = 1;
+    // The words are shown, once.
+    PHASE_SHOW = 2;
+    // Three of them are asked back.
+    PHASE_CONFIRM = 3;
+    // The key is being kept and the vault founded.
+    PHASE_MAKING = 4;
+    PHASE_MADE = 5;
+    // `notice` says why; `primary_label` offers another try.
+    PHASE_FAILED = 6;
+    // This phone holds a key from another phone and no record of which
+    // vaults it made: restore them first (R-1047-E2).
+    PHASE_RESTORE_FIRST = 7;
+    // The flow is over; the shell closes the sheet.
+    PHASE_CLOSED = 8;
+  }
+}
+
+message WordCell {
+  // 1-based.
+  uint32 position = 1;
+  string word = 2;
+  // "Word 3, abandon".
+  string accessibility_label = 3;
+}
+
+message WordAsk {
+  uint32 position = 1;
+  // "Word 7".
+  string prompt = 2;
+  string typed = 3;
+  Mark mark = 4;
+
+  enum Mark {
+    MARK_UNSPECIFIED = 0;
+    MARK_UNANSWERED = 1;
+    MARK_RIGHT = 2;
+    MARK_WRONG = 3;
+  }
+}
+
+message VaultWordsEvent {
+  oneof kind {
+    Opened opened = 1;
+    // The phase's primary control, whatever it is labelled.
+    Primary primary = 2;
+    Secondary secondary = 3;
+    WordTyped typed = 4;
+    // The sheet was swiped away. Drops the words; keeps nothing.
+    Dismissed dismissed = 5;
+    // INTENT: the shell opens words.enter for PURPOSE_RESTORE.
+    RestoreTapped restore = 6;
+  }
+
+  message Opened {}
+
+  message Primary {}
+
+  message Secondary {}
+
+  message WordTyped {
+    uint32 position = 1;
+    string text = 2;
+  }
+
+  message Dismissed {}
+
+  message RestoreTapped {}
+}
+
+// --- words.enter: type the words back ---------------------------------------
+
+message WordsEntryState {
+  Phase phase = 1;
+  Purpose purpose = 2;
+  // SHIELD THE SCREEN (duty 1). Set while any word is on it.
+  bool secure = 3;
+  string title = 4;
+  string body = 5;
+  // Always 24 cells, in order.
+  repeated WordEntry cells = 6;
+  // PURPOSE_RESTORE only: the optional laptop address, and what it is for.
+  string endpoint_label = 7;
+  string endpoint = 8;
+  // The phrase's verdict or the refusal, as a sentence; empty for none.
+  string notice = 9;
+  string primary_label = 10;
+  bool primary_enabled = 11;
+  string secondary_label = 12;
+  // WORKING: what is happening.
+  string progress = 13;
+  // DONE after a restore: one line per vault, each with its safety number.
+  repeated RestoredVaultLine restored = 14;
+  string accessibility_label = 15;
+  // PURPOSE_REKEY: which door opened the grid, so `body` explains the words
+  // in that door's terms (#1047 F5). Kept through DONE.
+  Origin origin = 16;
+  // DONE after a restore: one sentence per vault the restore checked and
+  // could not claim (`RestoreResponse.unclaimed`, #1047 R-1047-R5) — it
+  // stayed with the other phone, lease and all. Numbered with `restored` in
+  // one sequence by derivation index, so "Vault 2" names one vault on both
+  // lists. Empty is the ordinary answer. There is no retry control: the core
+  // restores every index or none, and a second restore here would lay the
+  // claimed vaults down again under an open session.
+  repeated string stayed = 17;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_ENTERING = 1;
+    PHASE_WORKING = 2;
+    PHASE_DONE = 3;
+    // The flow is over; the shell closes the screen.
+    PHASE_CLOSED = 4;
+  }
+
+  enum Purpose {
+    PURPOSE_UNSPECIFIED = 0;
+    // A fresh install: bring every vault back from the laptop.
+    PURPOSE_RESTORE = 1;
+    // This phone's own vaults: hand the words back so they open keyed again
+    // (Locker's wall). Needs no laptop.
+    PURPOSE_REKEY = 2;
+    // Bring every vault back with the seed this phone ALREADY holds — the one
+    // the synchronised keychain carried here, with no words (#1047,
+    // Q-1047-18). `cells` is empty and `secure` is false: nothing secret is
+    // on the screen, only the optional laptop address.
+    PURPOSE_RESTORE_HELD = 3;
+  }
+
+  // Where a re-key came from. A restore has one door and ignores it.
+  enum Origin {
+    // Read as ORIGIN_LOCKER: Locker's wall was the first re-key door.
+    ORIGIN_UNSPECIFIED = 0;
+    // Locker's "needs your 24 words" wall.
+    ORIGIN_LOCKER = 1;
+    // pair.laptop's NEEDS_WORDS, whose `WordsTapped` opens the re-key.
+    ORIGIN_PAIRING = 2;
+  }
+}
+
+message WordEntry {
+  uint32 position = 1;
+  // "Word 5".
+  string prompt = 2;
+  string typed = 3;
+  Mark mark = 4;
+  // List words beginning with what is typed, when it is not yet one. A tap
+  // sends `SuggestionPicked`.
+  repeated string suggestions = 5;
+  string accessibility_label = 6;
+
+  enum Mark {
+    MARK_UNSPECIFIED = 0;
+    MARK_EMPTY = 1;
+    // A list word.
+    MARK_KNOWN = 2;
+    // Not a list word (yet).
+    MARK_UNKNOWN = 3;
+  }
+}
+
+message RestoredVaultLine {
+  // "Restored 1 vault, 1,204 rows." for this vault, by index.
+  string line = 1;
+  // The safety number to compare with the laptop's, grouped; empty when the
+  // phone could not compute one — never shown as "it matched".
+  string safety_number = 2;
+  string safety_label = 3;
+}
+
+message WordsEntryEvent {
+  oneof kind {
+    Opened opened = 1;
+    WordTyped typed = 2;
+    SuggestionPicked picked = 3;
+    EndpointTyped endpoint = 4;
+    Primary primary = 5;
+    Secondary secondary = 6;
+  }
+
+  message Opened {
+    WordsEntryState.Purpose purpose = 1;
+    WordsEntryState.Origin origin = 2;
+  }
+
+  message WordTyped {
+    uint32 position = 1;
+    string text = 2;
+  }
+
+  message SuggestionPicked {
+    uint32 position = 1;
+    string word = 2;
+  }
+
+  message EndpointTyped {
+    string text = 1;
+  }
+
+  message Primary {}
+
+  message Secondary {}
+}
+
+// --- words.show: settings shows the words again (#1047, Q-1047-19) ---------
+//
+// The words are kept in this phone's device-only store beside the seed, so a
+// member can read them again from settings. The screen asks the phone's own
+// owner check first — Face ID, Touch ID, a fingerprint, or the passcode — and
+// that check is the VIEW's (iOS `LAContext` `.deviceOwnerAuthentication`,
+// Android `BiometricPrompt` with `DEVICE_CREDENTIAL`), the same posture as
+// Locker's unlock (Q-1047-12). The words reach a state only in PHASE_SHOW, and
+// the three platform duties above apply while `secure` is set.
+
+message WordsShowState {
+  Phase phase = 1;
+  bool secure = 2;
+  string title = 3;
+  string body = 4;
+  // SHOW: the 24 words, in order. Empty in every other phase.
+  repeated WordCell words = 5;
+  string primary_label = 6;
+  string secondary_label = 7;
+  string notice = 8;
+  string accessibility_label = 9;
+  // ASK: the reason the owner check shows ("Show your 24 words").
+  string verify_reason = 10;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    // "Your phone will check it's you." Primary runs the owner check (the
+    // view's), which answers `Verified` or `VerifyFailed`.
+    PHASE_ASK = 1;
+    // The words are being read from the store.
+    PHASE_LOADING = 2;
+    PHASE_SHOW = 3;
+    // This phone holds no words to show: its key came through the
+    // synchronised keychain, or it has none. `body` says which.
+    PHASE_NONE_HERE = 4;
+    // The flow is over; the shell closes the screen.
+    PHASE_CLOSED = 5;
+  }
+}
+
+message WordsShowEvent {
+  oneof kind {
+    Opened opened = 1;
+    // PHASE_ASK's primary is an INTENT: the view runs the owner check and
+    // sends one of the two answers below. Every other phase's primary closes.
+    Primary primary = 2;
+    Secondary secondary = 3;
+    Verified verified = 4;
+    VerifyFailed verify_failed = 5;
+    // Swiped away, or the app left the foreground: the words are dropped.
+    Dismissed dismissed = 6;
+  }
+
+  message Opened {}
+
+  message Primary {}
+
+  message Secondary {}
+
+  message Verified {}
+
+  message VerifyFailed {}
+
+  message Dismissed {}
+}
+
+// ---------------------------------------------------------------------------
+// --- Pair with the laptop (#1047) ---
+// ---------------------------------------------------------------------------
+//
+// `pair.laptop`. The laptop's owner runs `centraid-gateway invite` and it
+// prints a square and the same text beneath it: a pairing ticket (the laptop's
+// endpoint id, a one-time invite code and the addresses to dial). The phone
+// scans or pastes it; the core redeems the invite, claims the lease and hands
+// back the pairing's safety number (`PairResponse.safety_number`: 60 digits in
+// 12 groups of 5 over the vault's identity key and the laptop's endpoint key),
+// which the member compares with the number `centraid-gateway serve` prints
+// once the invite is redeemed (W15-D5). That comparison is the whole security
+// property of the flow and it is the member's to make.
+//
+// The ticket is not a secret the way the words are — it is spent on first use
+// and expires — so pasting is allowed and the screen is not shielded.
+
+message PairLaptopState {
+  Phase phase = 1;
+  string title = 2;
+  string body = 3;
+  // WAITING: what is in the paste field.
+  string payload = 4;
+  string payload_label = 5;
+  // WAITING: the scan control's label; empty when this phone has no camera.
+  string scan_label = 6;
+  // 7 was `fingerprint`, the laptop's hex endpoint id in groups of eight:
+  // a hex id is not what a member compares (W15-D5; R-1047-E12's grouped
+  // endpoint superseded 2026-09-29). `safety_number` is.
+  reserved 7;
+  reserved "fingerprint";
+  string notice = 8;
+  string primary_label = 9;
+  bool primary_enabled = 10;
+  string secondary_label = 11;
+  // PAIRING: what is happening.
+  string progress = 12;
+  string accessibility_label = 13;
+  // PAIRED: the safety number to compare with the laptop's terminal, in its
+  // 12 groups of 5, drawn in a monospaced face and never shortened. A pairing
+  // with no number is refused, never shown as this empty.
+  string safety_number = 14;
+  // NEEDS_WORDS on a vault that opened without its words: "Enter your 24
+  // words" — the intent `WordsTapped`, which the shell routes to words.enter
+  // for PURPOSE_REKEY (Locker's wall's door). Empty otherwise.
+  string words_label = 15;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_WAITING = 1;
+    PHASE_PAIRING = 2;
+    PHASE_PAIRED = 3;
+    // `notice` says why; primary tries again with the same text.
+    PHASE_FAILED = 4;
+    // This vault opens without its words, so it has no identity to pair
+    // with: `body` sends the member to the words first.
+    PHASE_NEEDS_WORDS = 5;
+    PHASE_CLOSED = 6;
+  }
+}
+
+message PairLaptopEvent {
+  oneof kind {
+    Opened opened = 1;
+    PayloadTyped typed = 2;
+    // INTENT: the shell opens its camera; what it reads comes back as
+    // `Scanned`.
+    ScanTapped scan = 3;
+    Scanned scanned = 4;
+    Primary primary = 5;
+    Secondary secondary = 6;
+    Dismissed dismissed = 7;
+    // INTENT: the shell opens words.enter for PURPOSE_REKEY. The machine
+    // closes the pairing screen; pairing is opened again after the words.
+    WordsTapped words = 8;
+  }
+
+  // `camera`: whether this phone has a camera the shell can scan with — a
+  // platform fact only the shell can read. Without one, `scan_label` is empty
+  // and the screen is paste-only.
+  message Opened {
+    bool camera = 1;
+  }
+
+  message PayloadTyped {
+    string text = 1;
+  }
+
+  message ScanTapped {}
+
+  // A code the camera read. Pairs at once: a scan is a deliberate act.
+  message Scanned {
+    string payload = 1;
+  }
+
+  message Primary {}
+
+  message Secondary {}
+
+  message Dismissed {}
+
+  message WordsTapped {}
 }

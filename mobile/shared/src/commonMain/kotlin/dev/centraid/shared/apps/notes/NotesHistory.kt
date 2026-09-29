@@ -50,6 +50,7 @@ public object NotesHistoryMachine : ScreenMachine<NotesHistoryState, NotesHistor
     internal const val RESTORE_COMMAND: String = "knowledge.restore_note_version"
 
     private const val PREVIEW: Int = 200
+    private const val DAY: Int = 10
 
     override fun initial(): NotesHistoryState = decorate(
         NotesHistoryState(loading = Loading(first_load = true), write = WriteState(phase = WriteState.Phase.PHASE_IDLE)),
@@ -104,14 +105,20 @@ public object NotesHistoryMachine : ScreenMachine<NotesHistoryState, NotesHistor
             retry = NotesCopy.RETRY,
             loading = NotesCopy.LOADING_HISTORY,
             close = NotesCopy.CLOSE,
+            // THE PARENT BY NAME (#1047): the note this history is of.
+            back = state.note_title.ifBlank { NotesCopy.UNTITLED },
         ),
     )
 
-    /** The core's versions, as rows. The day is the instant's own (see [NotesFold]). */
+    /**
+     * The core's versions, as rows. The day and the time are the member's
+     * (`asserted_local_day`, `asserted_local`), read in the request's zone;
+     * an answer with no zone resolved says neither (R-1047-Q3).
+     */
     internal fun fold(history: NotesHistory): NotesHistoryData {
         val rows = history.versions.map { version ->
-            val day = version.asserted_at.take(10)
-            val clock = CivilWords.clock(version.asserted_at)
+            val day = version.asserted_local_day.ifEmpty { version.asserted_local.take(DAY) }
+            val clock = CivilWords.clock(version.asserted_local)
             val dated = listOf(CivilWords.dayMonth(day), clock).filter { it.isNotEmpty() }.joinToString(" · ")
             val label = if (version.current) NotesCopy.CURRENT_VERSION else dated
             val preview = NotesEditorMachine.firstLine(version.body).ifEmpty { version.body.take(PREVIEW) }

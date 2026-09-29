@@ -1,7 +1,7 @@
 package dev.centraid.shared.custody
 
 /**
- * PAIRING AND RESTORE, AS TWO MACHINES AND ONE PIECE OF COPY (#1029 W18-4).
+ * PAIRING AND RESTORE: THEIR DOORS, THEIR ANSWERS AND THEIR COPY (#1029 W18-4).
  *
  * The two flows a phone has that are not about a vault it already holds:
  *
@@ -9,10 +9,11 @@ package dev.centraid.shared.custody
  *   `Pair` request, and show the laptop's endpoint id so the member can compare
  *   it with the one the laptop's terminal is printing. That comparison is the
  *   whole security property of the flow and it is the member's to make: nothing
- *   here decides that a pairing is genuine.
- * * **Restore** — 24 words typed, or the seed the platform synchronised, with
- *   an endpoint typed by hand when DNS cannot find the laptop; then `Restore`,
- *   then progress read from `BackupStatus`.
+ *   here decides that a pairing is genuine. Its screen is `PairLaptopFlow`
+ *   (`pair.laptop`, #1047 E4).
+ * * **Restore** — the 24 words typed, with an endpoint typed by hand when DNS
+ *   cannot find the laptop. Its screen is `WordsEntryFlow` (#1047 E1); what is
+ *   left here is its door and its answer.
  *
  * **Machines and not views.** `commonMain` holds what both shells do
  * identically — which state the flow is in, what may be tapped, and what
@@ -32,158 +33,103 @@ package dev.centraid.shared.custody
  * of what that phone never uploaded, and a second spelling of it would be a
  * second answer to what a frozen vault says.
  */
-public class PairMachine(private val door: PairDoor) {
+/**
+ * W15's `Pair` request. It answers [PairResult.Paired], or [PairResult.Refused]
+ * with WHICH refusal — never a bare null (#1047 E5): a laptop that answered
+ * and said no is not one that did not answer, and a member told to wake a
+ * laptop that is awake has been sent the wrong way.
+ */
+public interface PairDoor {
+    public suspend fun pair(payload: String): PairResult
+}
 
-    private var state: State = State.Waiting
+/** What a pairing came back as. */
+public sealed interface PairResult {
+    public data class Paired(public val answer: PairAnswer) : PairResult
 
-    /** Where the flow is. */
-    public fun state(): State = state
-
-    /**
-     * A payload, scanned or pasted.
-     *
-     * **Trimmed once and otherwise untouched.** W17 owns the payload's shape —
-     * `base64url(PairTicket)` — and a shell that validated it would be a second
-     * parser for a format it does not own, disagreeing with the first one the
-     * day either changed. An empty box is the one thing this can answer for
-     * itself, because there is nothing to send.
-     */
-    public suspend fun offer(payload: String): State {
-        val ticket = payload.trim()
-        if (ticket.isEmpty()) {
-            state = State.Refused(CustodyCopy.PAIR_EMPTY)
-            return state
-        }
-        state = State.Pairing
-        state = when (val answer = door.pair(ticket)) {
-            null -> State.Refused(CustodyCopy.PAIR_UNREACHABLE)
-            else -> if (answer.gatewayEndpoint.isBlank()) {
-                // A PAIRING WITH NOTHING TO COMPARE IS NOT A PAIRING A MEMBER
-                // CAN CHECK. Refused rather than shown, because the alternative
-                // is a screen that asks somebody to compare a blank.
-                State.Refused(CustodyCopy.PAIR_NOTHING_TO_COMPARE)
-            } else {
-                State.Paired(answer)
-            }
-        }
-        return state
-    }
-
-    public sealed interface State {
-        /** Nothing scanned yet. */
-        public data object Waiting : State
-
-        /** The payload is with the core. */
-        public data object Pairing : State
-
-        /** Paired. [answer] carries what the member must compare. */
-        public data class Paired(public val answer: PairAnswer) : State
-
-        /** [sentence] is what the member reads. */
-        public data class Refused(public val sentence: String) : State
-    }
+    public data class Refused(public val because: PairRefusal) : PairResult
 }
 
 /**
- * RESTORE FROM 24 WORDS (#1029 §5, W18-4).
- *
- * The phrase is the only credential. This machine holds the words the member
- * typed for exactly as long as it takes to hand them to the core, and holds no
- * derived key at any point: deriving is Rust's, behind the ABI, which is what
- * keeps a seed out of a crash report of a screen's state.
+ * WHY A PAIRING DID NOT HAPPEN, by the core's code (`ErrorCode`) and never by
+ * its logs-only detail (D-1025-S7-82).
  */
-public class RestoreMachine(
-    private val door: RestoreDoor,
-    /**
-     * The seed the platform synchronised to this phone, or null.
-     *
-     * iCloud Keychain hands one back on a new device; Android's Block Store
-     * only does so inside the setup wizard, which is why the written phrase is
-     * the common path on that platform and not the fallback
-     * (`SyncedSecrets.ANDROID_SENTENCE`).
-     */
-    private val syncedSeed: suspend () -> String? = { null },
-) {
-    private var state: State = State.Asking
+public enum class PairRefusal {
+    /** `PEER_UNREACHABLE` and everything unrecognised: the laptop did not answer. */
+    UNREACHABLE,
 
-    public fun state(): State = state
+    /** `INVALID_REQUEST`: not a pairing code, a version this build cannot read, or expired. */
+    NOT_A_CODE,
 
-    /** Whether a synchronised seed was found, which changes what is asked. */
-    public suspend fun offerSynced(): Boolean = syncedSeed() != null
-
-    /**
-     * Restore, from [words] and optionally from an [endpoint] typed by hand.
-     *
-     * **The endpoint is optional and its absence is normal.** The phone finds
-     * the laptop by resolving the identity record the phrase derives; a member
-     * types one only when DNS cannot answer — on a network that blocks it, or
-     * for a laptop that has never published.
-     */
-    public suspend fun restore(words: List<String>, endpoint: String? = null): State {
-        val phrase = words.map { it.trim().lowercase() }.filter { it.isNotEmpty() }
-        if (phrase.size != WORDS) {
-            state = State.Refused(CustodyCopy.restoreWordCount(phrase.size))
-            return state
-        }
-        state = State.Restoring(CustodyCopy.RESTORE_STARTED)
-        state = when (val answer = door.restore(phrase, endpoint?.trim()?.ifEmpty { null })) {
-            null -> State.Refused(CustodyCopy.RESTORE_UNREACHABLE)
-            else -> if (answer.vaults <= 0) {
-                // NOT A FAILURE OF THE PHRASE. A laptop that holds nothing for
-                // this identity is the ordinary answer for a member who typed a
-                // phrase belonging to a vault that was never backed up, and
-                // telling them the words were wrong would be a lie.
-                State.Refused(CustodyCopy.RESTORE_NOTHING_HELD)
-            } else {
-                State.Restored(answer)
-            }
-        }
-        return state
-    }
-
-    public sealed interface State {
-        /** Waiting for the words. */
-        public data object Asking : State
-
-        /** In flight. [sentence] is what a member reads meanwhile. */
-        public data class Restoring(public val sentence: String) : State
-
-        public data class Restored(public val answer: RestoreAnswer) : State
-
-        public data class Refused(public val sentence: String) : State
-    }
-
-    public companion object {
-        /** BIP-39's 256-bit phrase, which is what `identity::phrase` mints. */
-        public const val WORDS: Int = 24
-    }
+    /** `UNAUTHORIZED`: the laptop answered and did not take the code (spent, or never minted). */
+    NOT_TAKEN,
 }
 
-/** W15's `Pair` request. Null when the laptop could not be reached. */
-public interface PairDoor {
-    public suspend fun pair(payload: String): PairAnswer?
-}
-
-/** W15's `Restore` request. Null when the laptop could not be reached. */
+/**
+ * W15's `Restore` request. It answers [RestoreResult.Restored], or
+ * [RestoreResult.Refused] with WHICH refusal — never a bare null (#1047 R3),
+ * for [PairDoor]'s reason: a generation this phone refused to lay down is not
+ * a laptop that did not answer, and "could not reach your laptop" sends a
+ * member to wake a laptop that is awake.
+ *
+ * Driven by `WordsEntryFlow` (#1047 E1), which judges the words first and
+ * stores what the answer carries; see [Enrollment.restore].
+ */
 public interface RestoreDoor {
-    public suspend fun restore(words: List<String>, endpoint: String?): RestoreAnswer?
+    public suspend fun restore(words: List<String>, endpoint: String?): RestoreResult
+
+    /**
+     * The same restore from the 64-byte seed (128 hex) in place of the words
+     * (`RestoreRequest.seed`, Q-1047-18): what a phone the synchronised
+     * keychain handed the seed and no words restores with.
+     */
+    public suspend fun restoreSeed(seedHex: String, endpoint: String?): RestoreResult
+}
+
+/** What a restore came back as. */
+public sealed interface RestoreResult {
+    /** An answer: every vault the laptop held and this phone accepted — possibly none. */
+    public class Restored(public val answer: RestoreAnswer) : RestoreResult {
+        override fun toString(): String = "Restored($answer)"
+    }
+
+    public data class Refused(public val because: RestoreRefusal) : RestoreResult
+}
+
+/**
+ * WHY A RESTORE BROUGHT NOTHING BACK, by the core's code (`ErrorCode`) and
+ * never by its logs-only detail (D-1025-S7-82). "No vault for these words" is
+ * not here: it is an answer, [RestoreAnswer.vaults] empty.
+ */
+public enum class RestoreRefusal {
+    /** `PEER_UNREACHABLE`, no core, and everything unrecognised: the laptop did not answer. */
+    UNREACHABLE,
+
+    /** `UNAUTHORIZED`: the laptop answered and would not grant this phone the vault's lease. */
+    NOT_TAKEN,
+
+    /**
+     * `INTERNAL`: what the laptop sent did not open, or failed `integrity_check`
+     * or the census. Nothing was laid down and the lease did not move, so the
+     * old phone still backs up (#1047 R3).
+     */
+    DID_NOT_CHECK,
 }
 
 /**
  * What a `Pair` answered (`phone.proto`'s `PairResponse`).
  *
- * **There is no safety number on the wire and this does not invent one.** W15's
- * response carries the laptop's `EndpointId` and whether the identity record
- * was published; `centraid_identity::safety_number` exists in Rust and is not
- * part of this answer. The endpoint id is what the laptop's own terminal
- * prints, so it is comparable by eye and it is what the paired screen shows —
- * and the gap is recorded as a hand-off rather than papered over with a number
- * this shell computed itself, which would be a second answer to "who did I
- * pair with".
+ * **The safety number is the core's** (W15-D5): `centraid_identity::
+ * pairing_safety_number` over the vault's identity key and the laptop's
+ * endpoint key, the same function `centraid-gateway serve` prints its digits
+ * with. This shell computes no number of its own — a second renderer would be
+ * a second answer to "who did I pair with".
  */
 public data class PairAnswer(
-    /** The laptop's iroh `EndpointId`, hex — what this phone will dial. */
+    /** The laptop's iroh `EndpointId`, hex — what this phone will dial. Never what a member compares. */
     public val gatewayEndpoint: String,
+    /** The 60 digits in 12 groups of 5 to compare; empty when the core could not compute one. */
+    public val safetyNumber: String = "",
     /**
      * Whether the identity record reached the resolver.
      *
@@ -197,20 +143,61 @@ public data class PairAnswer(
     public val laptopName: String = "",
 )
 
-/** What a `Restore` answered (`phone.proto`'s `RestoreResponse`). */
-public data class RestoreAnswer(
-    /** How many vaults the laptop held for this identity. */
-    public val vaults: Int,
-    /**
-     * Rows the restored generations' censuses promised, summed.
-     *
-     * The number that makes "your vault is back" a claim rather than a hope: a
-     * perfect page tree over no rows passes `integrity_check` and is a total
-     * loss (#1029 §2).
-     */
-    public val rows: Long = 0,
+/**
+ * What a `Restore` answered (`phone.proto`'s `RestoreResponse`).
+ *
+ * **It carries the device secret the restore minted**, which the core hands
+ * over exactly once (`crates/core/src/phone/link.rs`), so its `toString` says
+ * nothing of it.
+ */
+public class RestoreAnswer(
+    /** Every vault the laptop held for these words, laid down on this phone. */
+    public val vaults: List<RestoredVaultAt>,
     /** How many derivation indices were tried past the last that answered. */
     public val gapScanned: Int = 0,
+    /** This phone's new device secret, 64 lowercase hex; the device store's. */
+    public val deviceSecretHex: String = "",
+    /**
+     * Every vault the restore checked and could not claim
+     * (`RestoreResponse.unclaimed`, R-1047-R5): a claim failed after another
+     * landed, so this vault's file was removed and its lease is still the old
+     * phone's. Empty is the ordinary answer; [vaults] is never empty beside
+     * it, because a restore where no claim landed is refused instead.
+     */
+    public val unclaimed: List<UnclaimedVaultAt> = emptyList(),
+) {
+    /**
+     * Rows the restored generations' censuses promised, summed — what makes
+     * "your vault is back" a claim rather than a hope (#1029 §2).
+     */
+    public val rows: Long get() = vaults.sumOf { it.rows }
+
+    override fun toString(): String =
+        "RestoreAnswer(vaults=${vaults.size}, unclaimed=${unclaimed.size}, gapScanned=$gapScanned, <redacted>)"
+}
+
+/**
+ * One vault a restore checked and could not claim (`UnclaimedVault`).
+ *
+ * **The core's `reason` is not carried**: it is a support-log string, and a
+ * member's sentence is never built from logs-only detail (D-1025-S7-82).
+ */
+public data class UnclaimedVaultAt(
+    /** The derivation index it was found at; recorded, never chosen. */
+    public val index: Int,
+    /** The vault's identity public key, hex. */
+    public val vaultId: String = "",
+)
+
+/** One vault a restore laid down (`RestoredVault`). */
+public data class RestoredVaultAt(
+    /** Where the file landed, under the vault directory. */
+    public val path: String,
+    /** The derivation index it was found at; recorded, never chosen. */
+    public val index: Int,
+    public val rows: Long = 0,
+    /** Grouped digits to compare with the laptop's; empty when not computed. */
+    public val safetyNumber: String = "",
 )
 
 /**
@@ -226,10 +213,37 @@ public object CustodyCopy {
     public const val PAIR_TITLE: String = "Pair with your laptop"
 
     public const val PAIR_ASK: String =
-        "Run `centraid pair` on your laptop and scan the square it prints. " +
-            "You can paste the text underneath it instead."
+        "Run “centraid-gateway invite” on your laptop and scan the square it prints. " +
+            "You can paste the “pair” line underneath it instead."
 
     public const val PAIR_EMPTY: String = "Scan the square your laptop printed, or paste its text."
+
+    public const val PAIR_PASTE_LABEL: String = "Pairing code"
+
+    public const val PAIR_SCAN: String = "Scan the square"
+
+    public const val PAIR_PRIMARY: String = "Pair"
+
+    public const val PAIRING: String = "Pairing with your laptop…"
+
+    public const val PAIRED_TITLE: String = "Check it's your laptop"
+
+    public const val PAIR_FAILED_TITLE: String = "Not paired"
+
+    public const val PAIR_NEEDS_WORDS_TITLE: String = "Your words come first"
+
+    /** A vault opened without its words has no identity to pair with. */
+    public const val PAIR_NEEDS_WORDS: String =
+        "This vault is open without your 24 words, so it cannot prove to your laptop whose it is. " +
+            "Enter your words first, then pair."
+
+    public const val PAIR_NO_VAULT: String = "Make a vault on this phone first, then pair it with your laptop."
+
+    public const val DONE: String = "Done"
+
+    public const val CANCEL: String = "Cancel"
+
+    public const val TRY_AGAIN: String = "Try again"
 
     public const val PAIR_UNREACHABLE: String =
         "Your laptop did not answer. Check it is awake and on the same network, then try again."
@@ -245,15 +259,6 @@ public object CustodyCopy {
      * it says the second half plainly: matching numbers mean nobody is in the
      * middle.
      */
-    // TODO(#1029, W15): swap `answer.gatewayEndpoint` below for
-    //  `PairResponse.safety_number` the moment W15 lands it — the root has
-    //  ruled that `identity::safety_number` joins that message. It is ONE line:
-    //  `CorePairDoor` fills `PairAnswer.gatewayEndpoint` from
-    //  `paired.gateway_endpoint`, and it becomes `paired.safety_number`. A
-    //  safety number is designed to be read aloud and compared; a 64-character
-    //  hex endpoint id is not, and a member will check four characters and
-    //  stop. Until then this shows the endpoint id, which is what the laptop's
-    //  own terminal prints, and the shell computes no number of its own.
     public fun pairedLine(answer: PairAnswer): String {
         val who = answer.laptopName.ifBlank { "your laptop" }
         val warning = if (answer.recordPublished) {
@@ -265,69 +270,13 @@ public object CustodyCopy {
             " Centraid could not publish your address, so restoring on a new phone may need " +
                 "you to type it."
         }
-        return "Paired with $who. Check this matches what $who is showing: " +
-            "${fingerprint(answer.gatewayEndpoint)}. If it does not match, do not carry on — " +
+        return "Paired with $who. Check every group of the number below matches the safety number " +
+            "“centraid-gateway serve” printed on $who. If it does not match, do not carry on — " +
             "pair again on a network you trust.$warning"
     }
 
-    /**
-     * A 32-byte id, in groups a member can read across two screens.
-     *
-     * Not a shortening: every character is there, because a fingerprint that
-     * dropped some of them would be a comparison that passes on a collision
-     * somebody arranged.
-     */
-    public fun fingerprint(endpointHex: String): String =
-        endpointHex.chunked(8).joinToString(" ")
-
-    /** The restore screen's heading and its ask. */
-    public const val RESTORE_TITLE: String = "Restore from your 24 words"
-
-    public const val RESTORE_ASK: String =
-        "Type the 24 words you wrote down. Centraid finds your laptop from them."
-
-    /** The optional box, and why it is empty almost always. */
-    public const val RESTORE_ENDPOINT_ASK: String =
-        "If Centraid cannot find your laptop, type the address it printed."
-
-    public const val RESTORE_STARTED: String = "Looking for your laptop…"
-
-    public const val RESTORE_UNREACHABLE: String =
-        "Centraid could not reach your laptop. Open Centraid on it, or type the address it " +
-            "printed."
-
-    public const val RESTORE_NOTHING_HELD: String =
-        "That phrase is valid and your laptop is holding no backup for it. " +
-            "Check you are restoring onto the right laptop."
-
-    /**
-     * The word-count sentence.
-     *
-     * It names the number typed as well as the number wanted, because "24
-     * words" over a box holding 23 is a member counting them again by hand.
-     */
-    public fun restoreWordCount(typed: Int): String = when (typed) {
-        1 -> "Centraid needs 24 words. There is 1 here."
-        else -> "Centraid needs 24 words. There are $typed here."
-    }
-
-    /**
-     * What came back, in the terms the answer is in.
-     *
-     * **It names the rows.** `RestoredVault.rows` is the census the generation
-     * promised, and a restore that reports only "2 vaults" would read the same
-     * over two empty files — a perfect page tree over no rows passes
-     * `integrity_check` and is a total loss (#1029 §2). What makes it a claim
-     * rather than a hope is the count.
-     */
-    public fun restoringLine(answer: RestoreAnswer): String {
-        val vaults = if (answer.vaults == 1) "1 vault" else "${answer.vaults} vaults"
-        return if (answer.rows > 0) "Restored $vaults, ${grouped(answer.rows)} rows." else
-            "Restored $vaults."
-    }
-
     /** Thousands separated, so a six-figure row count is readable at a glance. */
-    private fun grouped(value: Long): String = value.toString()
+    public fun grouped(value: Long): String = value.toString()
         .reversed()
         .chunked(3)
         .joinToString(",")

@@ -52,6 +52,7 @@ public object TallySettleUpMachine :
                         seat = screen.seat,
                         group_id = event.opened.group_id,
                         draft_token = event.opened.draft_token,
+                        parent = event.opened.parent,
                     ),
                 ),
             )
@@ -147,7 +148,7 @@ public object TallySettleUpMachine :
     }
 
     override fun decorate(held: TallyHeld<TallySettleUpState>): TallySettleUpState =
-        held.screen.copy(chrome = TallyGroupMachine.CHROME)
+        held.screen.copy(chrome = TallyGroupMachine.chrome(held.screen.parent))
 
     private object Writes : WriteLens<TallyHeld<TallySettleUpState>> {
         override fun write(state: TallyHeld<TallySettleUpState>): WriteState = state.screen.write ?: WriteState()

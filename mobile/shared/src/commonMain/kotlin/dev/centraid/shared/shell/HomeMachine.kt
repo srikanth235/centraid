@@ -276,7 +276,12 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
      */
     private fun regraded(data: HomeData): HomeData {
         val graded = data.tiles.map { tile ->
-            tile.copy(earns_grid = SpringboardPolicy.earnsGrid(tile.status, tile.body))
+            val spoken = HomeTileWords.spoken(tile)
+            tile.copy(
+                earns_grid = SpringboardPolicy.earnsGrid(tile.status, tile.body),
+                open_label = spoken.first,
+                accessibility_label = spoken.second,
+            )
         }
         val membership = SpringboardPolicy.gridMembership(graded)
         val unreadable = SpringboardPolicy.everyTileUnreadable(graded)

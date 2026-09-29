@@ -715,7 +715,7 @@ pub(crate) fn event_of(row: &Row) -> Option<EventRow> {
     })
 }
 
-fn calendar_of(row: &Row) -> Option<CalendarRow> {
+pub(crate) fn calendar_of(row: &Row) -> Option<CalendarRow> {
     Some(CalendarRow {
         calendar_id: cell_text(row, "calendar_id")?,
         owner_party_id: cell_text(row, "owner_party_id"),

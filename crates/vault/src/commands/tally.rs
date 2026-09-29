@@ -1147,7 +1147,6 @@ fn definition(
         postconditions,
         handler,
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3047,7 +3046,7 @@ fn save_recurring_expense() -> CommandDefinition {
 }
 
 fn materialize_recurring_expense() -> CommandDefinition {
-    let mut definition = definition(
+    definition(
         "tally.materialize_recurring_expense",
         r#"{
           "type": "object",
@@ -3080,13 +3079,7 @@ fn materialize_recurring_expense() -> CommandDefinition {
                 Some(_) => Err(invalid("template_id", "recurring expense is not active")),
             }
         },
-    );
-    // v0's Tally `online_only` list is exactly this command (census E4 of wave
-    // 3): materialising an occurrence is withheld offline, because a seat that
-    // queued one could write a second copy of the same occurrence when the
-    // gateway had already written it.
-    definition.online_only = true;
-    definition
+    )
 }
 
 fn edit_recurring_expense_occurrence() -> CommandDefinition {
@@ -3248,16 +3241,6 @@ mod tests {
             vec!["tally.remove_group_member", "tally.nudge"],
             "tally has exactly two command-level confirms (census A0)"
         );
-    }
-
-    #[test]
-    fn only_materialize_is_withheld_offline() {
-        let online: Vec<&str> = definitions()
-            .iter()
-            .filter(|definition| definition.online_only)
-            .map(|definition| definition.name)
-            .collect();
-        assert_eq!(online, vec!["tally.materialize_recurring_expense"]);
     }
 
     #[test]

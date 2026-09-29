@@ -19,6 +19,7 @@ import centraid.screen.v1.ReadFailureKind
 import centraid.screen.v1.StatusChip
 import centraid.screen.v1.WriteState
 import dev.centraid.shared.apps.agenda.AgendaEventInput
+import dev.centraid.shared.apps.agenda.AgendaFold
 import dev.centraid.shared.apps.agenda.AgendaEventMachine
 import dev.centraid.shared.apps.agenda.AgendaEventReads
 import dev.centraid.shared.apps.agenda.AgendaEventScreen
@@ -46,7 +47,7 @@ class AgendaEventSpec : StringSpec({
 
     val clock = DeviceClock.Reading(zone = "Europe/London", epochMillis = 1_781_516_520_000L)
 
-    "opening reads the occurrence by its key, and today's calendars, in the device's zone" {
+    "opening reads the occurrence by its key, in the device's zone, and nothing beside it" {
         val opened = drive(AgendaEventMachine.initial(), open("e1", "e1:2026-06-15T08:00:00", "2026-06-15T08:00:00"))
         opened.effects shouldBe listOf(ScreenEffect.ReadPage(AgendaEventMachine.SCREEN_ID, null))
         opened.state.screen.loading.shouldNotBeNull()
@@ -57,10 +58,8 @@ class AgendaEventSpec : StringSpec({
             it.original_start_local shouldBe "2026-06-15T08:00:00"
             it.tz shouldBe "Europe/London"
         }
-        reads[1].agenda_upcoming.shouldNotBeNull().let {
-            it.from shouldBe ""
-            it.tz shouldBe "Europe/London"
-        }
+        // THE ANSWER NAMES ITS CALENDAR (#1047): no `upcoming` read rides along.
+        reads.size shouldBe 1
         // NO EVENT, NO READ.
         AgendaEventReads().requests(AgendaEventMachine.initial(), clock).shouldBeNull()
         AgendaEventReads().tables shouldBe AgendaEventMachine.TABLES
@@ -78,7 +77,7 @@ class AgendaEventSpec : StringSpec({
         data.date_label shouldBe "Monday 15 June"
         data.when_label shouldBe "08:15 – 09:30"
         data.calendar_name shouldBe "Personal"
-        data.calendar_hue_key shouldBe "teal"
+        data.calendar_hue_key shouldBe "cTeal"
         data.facts.map { it.label to it.detail } shouldBe listOf(
             "Joining link" to "https://call.example/abc",
             "Reminder" to "30 minutes before",
@@ -328,6 +327,24 @@ class AgendaEventSpec : StringSpec({
         rows.single { it.event_id == "s1" }.status shouldBe AgendaRowStatus.AGENDA_ROW_STATUS_CANCEL_ASKED
         marked.state.screen.destination shouldBe AgendaHomeState.Destination.DESTINATION_DAY
     }
+
+    "a repeating search hit opens, and sits on, the occurrence the core names (#1047, R-1047-Q6)" {
+        // The series' anchor is a year back; the core names Monday's occurrence.
+        val hit = series("s1", "Stand-up", "2025-06-16T10:00", "2025-06-16T10:15").copy(
+            next_instance_key = "s1:2026-06-15T10:00:00",
+            next_original_start_local = "2026-06-15T10:00:00",
+            next_local_start = "2026-06-15T10:00",
+        )
+        val moved = AgendaFold.atNextOccurrence(hit)
+        moved.instance_key shouldBe "s1:2026-06-15T10:00:00"
+        moved.original_start_local shouldBe "2026-06-15T10:00:00"
+        moved.local_start shouldBe "2026-06-15T10:00"
+        moved.local_end shouldBe "2026-06-15T10:15"
+        moved.local_days shouldBe listOf("2026-06-15")
+        // A one-off (or a series with nothing in reach) is itself.
+        val once = timed("e1", "Dentist", "2026-06-20T09:00")
+        AgendaFold.atNextOccurrence(once) shouldBe once
+    }
 }) {
     companion object {
         const val TODAY: String = "2026-06-15"
@@ -358,16 +375,17 @@ class AgendaEventSpec : StringSpec({
             inputs.fold(Step(state)) { step, input -> AgendaEventMachine.reduce(step.state, input) }
 
         /**
-         * The two answers the detail reads: `agenda.event` for the state's
-         * occurrence (found in [upcoming]'s rows, or absent), and `upcoming`
-         * for the calendars.
+         * The one answer the detail reads: `agenda.event` for the state's
+         * occurrence (found in [upcoming]'s rows, or absent), carrying that
+         * event's calendar row the way the core does (#1047).
          */
         fun answer(state: AgendaEventScreen, upcoming: AgendaUpcoming): AgendaEventScreen {
             val found = upcoming.events.firstOrNull {
                 it.event_id == state.screen.event_id && it.instance_key == state.screen.instance_key
             }
-            val detail = AgendaEventDetail(today = upcoming.today, now_local = upcoming.now_local, event = found)
-            return drive(state, AgendaEventInput.Answered(upcoming.copy(events = emptyList()), detail)).state
+            val calendar = upcoming.calendars.firstOrNull { it.calendar_id == found?.calendar_id }
+            val detail = AgendaEventDetail(today = upcoming.today, now_local = upcoming.now_local, event = found, calendar = calendar)
+            return drive(state, AgendaEventInput.Answered(detail)).state
         }
 
         /** Opened on [event]'s occurrence and answered with it. */

@@ -44,6 +44,7 @@ Every one is an answer to a way this crate could be wrong, and every one has a t
 `crates/core/src/app_query/notes.rs` answers eight typed queries — `library`, `notebooks`, `journal`, `search`, `trash`, `history`, `link_targets` and `note` — at numbers 40–47 of `app_query.proto`, over the same page door a shell's page read reaches. Three facts a shell author needs:
 
 - **A filter narrows the window, not the vault.** `shape_library` filters the rows the recent window returned; a notebook or tag filter over a `truncated` window can miss older notes, and `truncated` says so. The pinned filter is complete.
+- **The spine counts "Unfiled" too** (#1047): live, non-journal notes filed in no notebook, over the library's default window plus every pinned note, with `unfiled_truncated` when the window filled.
 - **A notebook is a collection of kind `notebook`.** `core_collection` holds Photos' albums too and says which a row is (`kind`, rung six), so `notebooks` and the library's own `notebooks` list read `kind = 'notebook'` only; the spine carries each notebook's live `note_count`, the library list no counts.
 - **`edit_note` takes no base.** The conflict check is the editor's, against `note`'s `current_revision_id` and `row_version`. Its schema requires `title` to be non-empty when present (`minLength: 1`); `body_text` takes `minLength: 0` on create and edit (owner ruling, 2026-09-24): a note may be cleared.
 

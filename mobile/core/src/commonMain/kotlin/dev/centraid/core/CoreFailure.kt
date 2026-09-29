@@ -35,6 +35,25 @@ public sealed interface CoreFailure {
     /** The binding handed the ABI something impossible. Always a shell bug. */
     public data class BadArgument(val detail: String) : CoreFailure {
         override val sentence: String = "Centraid could not read its own request."
+
+        public companion object {
+            /**
+             * WHAT A REFUSED `centraid_open` IS, AND IS NOT (#1047 E1).
+             *
+             * `open` has no out-buffer (`crates/core-ffi`'s `code_for_open`), so
+             * `BAD_ARGUMENT` there carries no `Error` body to decode: every
+             * refusal that is not a panic or a decode arrives as the same `-1`.
+             * It was labelled "refused the configuration JSON", which named one
+             * cause of many and sent two debugging sessions after the JSON when
+             * the file was the problem. The core writes the reason to its own
+             * `centraid_open refused with -1: …` log line; this names the
+             * candidates and points there.
+             */
+            public const val OPEN_REFUSED: String =
+                "centraid_open refused this open (BAD_ARGUMENT): the path, the file (not a vault, " +
+                    "or migrated by a newer core), a malformed seed or device secret, or an identity " +
+                    "mismatch — the core's `centraid_open refused` log line names which"
+        }
     }
 
     /** The bytes were not a decodable envelope, in either direction. */

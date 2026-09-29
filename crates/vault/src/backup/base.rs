@@ -363,7 +363,6 @@ mod tests {
     use super::*;
     use crate::backup::store::FsBlobStore;
     use crate::custody::locker_key;
-    use crate::custody::member_key::MemberKeyCustody;
 
     fn keys() -> ObjectKeys {
         ObjectKeys::new([0x21; 32], [0x22; 32])
@@ -375,18 +374,15 @@ mod tests {
         vault
             .enrol_device("d-1", &founded.owner_party_id, "a laptop", "linux", "pk-1")
             .expect("enrols");
-        let custody = MemberKeyCustody::on_seat(&dir.join("seat"), founded.vault_id.clone());
+        // The generation row only: `K` is the seed's leaf and never a file
+        // (#1047, D-6), and the base exists to carry this private band.
         vault
             .commit(|tx| {
-                locker_key::found_locker_key(
-                    tx.connection(),
-                    &custody,
-                    "k-1",
-                    "2026-01-01T00:00:00.000Z",
-                )
-                .map_err(|error| VaultError::Invariant {
-                    context: error.to_string(),
-                })?;
+                tx.connection().execute(
+                    "INSERT INTO locker_key (key_id, created_at) \
+                     VALUES ('k-1', '2026-01-01T00:00:00.000Z')",
+                    [],
+                )?;
                 Ok(())
             })
             .expect("founds a locker key");

@@ -50,7 +50,7 @@ pub mod manifest;
 pub mod queries;
 
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
-pub use detail::{EventDetailData, load_event};
+pub use detail::{EventDetailData, NEXT_OCCURRENCE_REACH_DAYS, load_event, next_occurrence};
 pub use expansion::{
     DEFAULT_EXPAND_MS, MAX_TOTAL_INSTANCES, SPAN_BUFFER_MS, expand_recurring_events,
 };

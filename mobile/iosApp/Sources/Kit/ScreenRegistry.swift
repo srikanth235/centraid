@@ -29,6 +29,15 @@ protocol AppScreens {
     /// Where this app's Home tile leads, or nowhere (`nil` is honest: a tap
     /// that stays put beats a blank cover).
     static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route?
+    /// WHAT AN APP WATCHES FROM THE APP'S ROOT, wherever the member is
+    /// (Android's `AppRoutes.Global`): a push a background ingest earns, the
+    /// OS prompt a lock asks for, the platform sheets a bridge's seam
+    /// presents. `nil` for an app with nothing there.
+    @MainActor static func global(_ shell: ShellModel) -> AnyView?
+}
+
+extension AppScreens {
+    @MainActor static func global(_ shell: ShellModel) -> AnyView? { nil }
 }
 
 /// THE ONE LIST. A port adds exactly one line here.
@@ -40,6 +49,7 @@ enum AppRegistry {
         TasksScreens.self,
         PeopleScreens.self,
         DocsScreens.self,
+        LockerScreens.self,
     ]
 
     static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
@@ -127,4 +137,20 @@ struct RegisteredScreen: View {
     let parameter: Data
 
     var body: some View { shell.routeView(identifier, parameter) }
+}
+
+/// EVERY APP'S ROOT WATCHER, drawn once behind the root stack (`CentraidApp`).
+/// Its own `@ObservedObject`, so a state that arrives for a watched bridge
+/// re-evaluates the watchers wherever the member is.
+struct AppGlobals: View {
+    @ObservedObject var shell: ShellModel
+
+    var body: some View {
+        let globals = AppRegistry.apps.compactMap { $0.global(shell) }
+        ZStack {
+            ForEach(Array(globals.enumerated()), id: \.offset) { _, global in global }
+        }
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
+    }
 }

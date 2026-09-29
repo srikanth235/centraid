@@ -172,6 +172,23 @@ targets:
         # not — it reads the vault. Two planes, and the string says which one is
         # asking.
         NSPhotoLibraryUsageDescription: Centraid backs up your camera roll into your own vault.
+        # WHY LOCKER ASKS FOR FACE ID (#1047, D-5). `LAContext` with
+        # `.deviceOwnerAuthentication` on a Face ID phone TERMINATES an app
+        # that has not declared this key; the passcode fallback needs nothing.
+        # The biometric is a presence gate in front of Locker's session, and
+        # the sentence says only that.
+        NSFaceIDUsageDescription: Centraid uses Face ID to unlock Locker.
+        # WHY CENTRAID ASKS FOR THE CAMERA (#1047): Docs' Scan is VisionKit's
+        # document camera, and pairing reads the square `centraid-gateway
+        # invite` prints (#1047 E5). One key, so the sentence names both;
+        # Upload runs out of process and needs none.
+        NSCameraUsageDescription: Centraid uses the camera to scan paper documents into Docs, and to read the square your laptop shows when you pair it.
+        # WHY CENTRAID ASKS FOR THE LOCAL NETWORK (#1047 E5). The laptop's
+        # gateway is dialled at the addresses its pairing ticket names, which
+        # are usually on the member's own Wi-Fi; iOS asks before an app reaches
+        # a device on the local network. No Bonjour: the ticket carries the
+        # addresses, so nothing is browsed and no `NSBonjourServices` is needed.
+        NSLocalNetworkUsageDescription: Centraid reaches your laptop on this network to back up your vault and to bring it back.
         # iCloud is EXCLUDED from the replica directory in code; this is the
         # declaration that goes with it (`docs/mobile-offline.md:240-247`).
         ITSAppUsesNonExemptEncryption: false

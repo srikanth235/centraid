@@ -1,5 +1,7 @@
 package dev.centraid.android.kit
 
+import dev.centraid.shared.shell.HomeWords
+
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -124,8 +126,8 @@ public fun HomeBand(
         BandTab(
             iconKey = "more",
             bordered = true,
-            label = "More",
-            spoken = "All apps and places",
+            label = HomeWords.BAND_MORE,
+            spoken = HomeWords.BAND_MORE_SPOKEN,
             selected = false,
             testTag = "home-band-more",
             onPress = { onSelect("more") },
@@ -312,7 +314,7 @@ public fun AppBand(
                 .border(CentraidGeometry.HAIRLINE.dp, centraidColor("lineStrong"), CircleShape)
                 .testTag("$app-band-home")
                 .semantics {
-                    contentDescription = "Home"
+                    contentDescription = HomeWords.BAND_HOME
                     role = Role.Button
                 },
             contentAlignment = Alignment.Center,
@@ -352,7 +354,7 @@ public fun AppBand(
                 if (onMore != null) {
                     AppBandTabView(
                         iconKey = "MoreVert",
-                        label = "More",
+                        label = HomeWords.BAND_MORE,
                         selected = false,
                         testTag = "$app-band-more",
                         onPress = onMore,

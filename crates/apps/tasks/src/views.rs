@@ -45,6 +45,9 @@ pub struct Placed {
     /// Civil days since `created_at`, in the zone; `None` when it will not
     /// read.
     pub age_days: Option<i64>,
+    /// The local day `created_at` falls on; empty when it will not read — the
+    /// day "sitting since" names (#1047).
+    pub created_day: String,
     pub children: Vec<Placed>,
 }
 
@@ -88,6 +91,12 @@ pub fn place(task: &TaskRow, zone: &FireZone, today: &Civil) -> Placed {
             .as_deref()
             .and_then(|stamp| local::read(stamp, zone))
             .map(|born| local::days_between(born.day, today.day)),
+        created_day: task
+            .created_at
+            .as_deref()
+            .and_then(|stamp| local::read(stamp, zone))
+            .map(|civil| civil.day_text())
+            .unwrap_or_default(),
         task: bare,
         children,
     }

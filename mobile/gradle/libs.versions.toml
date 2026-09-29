@@ -28,6 +28,16 @@ androidx-core = "1.17.0"
 androidx-lifecycle = "2.9.4"
 androidx-security-crypto = "1.1.0"
 androidx-work = "2.10.5"
+# LOCKER'S UNLOCK (#1047, D-5): `BiometricPrompt` with
+# `BIOMETRIC_STRONG or DEVICE_CREDENTIAL` — the phone's biometric, the device
+# credential as its fallback. The newest release with no alpha suffix.
+androidx-biometric = "1.1.0"
+# THE FRAGMENT RUNTIME UNDER `MainActivity : FragmentActivity`, pinned because
+# biometric 1.1.0 drags in fragment 1.2.5, whose FragmentActivity refuses the
+# 32-bit request codes Compose's `rememberLauncherForActivityResult` mints: the
+# first runtime-permission ask (Docs Scan, pairing's Scan) crashed with "Can
+# only use lower 16 bits for requestCode" (#1047 final walk).
+androidx-fragment = "1.8.9"
 # THE LIGHTBOX'S VIDEO PLAYER (#1029 photos port): ExoPlayer for decode and
 # the `PlayerView` surface only — the transport is the app's own controls, so
 # `media3-ui`'s controller is never shown.
@@ -41,6 +51,12 @@ androidx-media3 = "1.11.1"
 # Android members are on anyway (Block Store restores only in the device-setup
 # flow). Confined to `:shared`'s androidMain, behind `androidEnabled`.
 gms-blockstore = "16.4.0"
+# PAIRING'S SCAN (#1047 E6): the laptop's square, read in the app. CameraX for
+# the preview and the frames; ZXing's pure-Java, Apache-2.0 reader for the
+# code — no Play Services, no model download, and it reads the light-on-dark
+# square a dark terminal draws. The newest releases with no alpha suffix.
+androidx-camera = "1.6.2"
+zxing = "3.5.4"
 roborazzi = "1.53.0"
 robolectric = "4.16"
 
@@ -75,7 +91,13 @@ androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-ru
 # 1.1.0 is the first STABLE release of the line; 1.0.0 is the one that pins
 # Tink 1.5 and the alphas in between were never a thing to ship a credential on.
 androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "androidx-security-crypto" }
+androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "androidx-biometric" }
+androidx-fragment = { module = "androidx.fragment:fragment-ktx", version.ref = "androidx-fragment" }
 androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "androidx-work" }
+androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "androidx-camera" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "androidx-camera" }
+androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "androidx-camera" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "androidx-media3" }
 androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "androidx-media3" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }

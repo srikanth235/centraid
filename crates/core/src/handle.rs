@@ -143,6 +143,11 @@ pub struct Handle {
     /// is an honest state (see [`crate::phone`]'s header for why this library
     /// writes no key down).
     keys: Option<crate::phone::Keyring>,
+    /// THE LOCKER SESSION (#1047, D-5): a copy of `K` (derived into `keys`
+    /// from the seed, Q-1047-11) while the member has unlocked Locker on this
+    /// phone, zeroed on relock, and nothing otherwise. See
+    /// [`crate::locker::phone`].
+    locker: crate::locker::phone::Cell,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -254,6 +259,7 @@ impl Core {
             bytes: Mutex::new(None),
             runtime: Mutex::new(None),
             owned_bytes: Mutex::new(None),
+            locker: Mutex::new(None),
         })
     }
 
@@ -841,7 +847,36 @@ impl Handle {
                 let changes = crate::events::ChangeFeed::new(self.events());
                 Ok(response(wire::response::Kind::Command(self.with_vault(
                     |vault| {
+                        // A LOCKER SECRET IS SEALED HERE, before the vault
+                        // sees it (#1047, D-5): the command plane refuses
+                        // plaintext, and the core is the one holder of `K`.
+                        let sealed =
+                            crate::locker::phone::seal_command(vault, &self.locker, command)?;
+                        let command = match sealed {
+                            Some(input) => &wire::Command {
+                                input,
+                                ..command.clone()
+                            },
+                            None => command,
+                        };
                         crate::api::invoke(vault, &self.registry, &self.owner(), command, &changes)
+                    },
+                )?)))
+            }
+            // THE LOCKER SESSION (#1047, D-5). See `crate::locker::phone`.
+            K::Locker(request) => {
+                let changes = crate::events::ChangeFeed::new(self.events());
+                Ok(response(wire::response::Kind::Locker(self.with_vault(
+                    |vault| {
+                        crate::locker::phone::answer(
+                            vault,
+                            &self.registry,
+                            &self.owner(),
+                            self.keys.as_ref(),
+                            &self.locker,
+                            request,
+                            &changes,
+                        )
                     },
                 )?)))
             }
@@ -882,6 +917,13 @@ impl Handle {
             }
             K::BackupStatus(_) => Ok(response(wire::response::Kind::BackupStatus(
                 crate::phone::backup_status(&self.path)?,
+            ))),
+            // THE 24 WORDS NEED NO VAULT EITHER (#1047 E1): a first launch
+            // mints them before there is a vault to found, and a restore
+            // judges them before there is one to lay down. Pure functions of
+            // the words and the OS's entropy — see `phone::phrase`.
+            K::Phrase(request) => Ok(response(wire::response::Kind::Phrase(
+                crate::phone::phrase::answer(request)?,
             ))),
             // THE KEEP LIST AND THE CENSUS (#1029, the photos port). Through
             // `with_vault` for every arm, because the vault lock is what
@@ -1082,7 +1124,11 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // AN APP QUERY IS BOUNDED BY ITS OWN STATED CEILINGS: every join
             // walks a declared fan-out and every expansion a declared instance
             // cap, and reaching one is `ReadBoundReached`, not a longer read.
-            | K::AppQuery(_),
+            | K::AppQuery(_)
+            // A LOCKER STEP IS BOUNDED: one key load, one receipt, one cell.
+            | K::Locker(_)
+            // A PHRASE STEP IS 24 WORDS AND ONE PBKDF2 (#1047 E1).
+            | K::Phrase(_),
         )
         | None => RequestKind::Bounded,
         // A DRAIN IS AS LONG AS THE SPOOL IS and a RESTORE as long as the
@@ -1488,6 +1534,8 @@ mod tests {
                     with_note_body: false,
                     with_document_size: false,
                     with_minor_units: false,
+                    local_day_columns: Vec::new(),
+                    tz: String::new(),
                 }),
                 limit: 10,
                 after: None,

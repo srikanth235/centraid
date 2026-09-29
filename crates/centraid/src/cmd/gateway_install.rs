@@ -290,7 +290,13 @@ fn default_user_data_dir(home: &str) -> PathBuf {
 mod tests {
     use super::*;
 
+    /// LINUX ONLY (ruling D-3 of 2026-09-25): `plan` refuses the platform
+    /// before the instance name on macOS, where `--system` has no systemd.
     #[test]
+    #[cfg_attr(
+        not(target_os = "linux"),
+        ignore = "`--system` is systemd's; another platform is refused before the instance name"
+    )]
     fn a_system_install_refuses_an_instance_name_that_is_not_one() {
         for bad in ["", "home vault", "../etc", "home/work"] {
             let error = plan(&InstallArgs {

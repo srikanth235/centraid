@@ -1,78 +1,80 @@
-//! The `locker.*` commands — v0's twenty, plus the two the custody change
-//! needs (#1020, D-1020-L1…L7).
+//! The `locker.*` commands — v0's twenty, plus the reveal receipt (#1020,
+//! D-1020-L1…L7; #1047).
 //!
 //! ## The one sentence this whole file follows from
 //!
-//! *Locker secret cells are end-to-end sealed under a member key `K` the
-//! gateway never holds, unwrapped only on the seat that reveals* (#1020 `:33`,
-//! open question 8). So every command below is written for a gateway that
-//! **cannot read a secret and cannot write one either**, and the shape that
-//! falls out is not a detail:
+//! *Locker secret cells are sealed under a key `K` this crate never holds.*
+//! `K` is the 24 words' own leaf, derived by the core and kept in its memory
+//! (#1047, D-6); the command plane sees only ciphertext and the generation id
+//! it was sealed under. So every command below **cannot read a secret and
+//! cannot write one in the clear either**, and the shape that falls out is not
+//! a detail:
 //!
 //! ### 1. A secret arrives as CIPHERTEXT, and plaintext is a typed refusal
 //!
-//! In v0 `locker.add_item` takes a plaintext `password` and the gateway's seal
-//! sweep encrypts it. There is no sweep here, because there is no `K` here. So
-//! the **seat** encrypts and what crosses the wire is `lk1:<base64>` plus the
-//! `key_id` it was sealed under; [`assert_sealed_cell`] refuses anything else
-//! **by construction rather than by policy** — a plaintext password reaching
-//! this file would be a secret in the gateway's journal, its WAL and its
-//! replica log, which is the entire thing wave 4 exists to prevent. The
-//! refusal is [`crate::error::VaultError::InvalidInput`] naming the cell, and
-//! the value never reaches a message.
+//! In v0 `locker.add_item` took a plaintext `password` and a seal sweep
+//! encrypted it. There is no sweep here, because there is no `K` here. The
+//! core's Locker session (`crates/core/src/locker/phone.rs`, `seal_command`)
+//! encrypts the member's input under `K` before the command runs, so what
+//! reaches this file is `lk1:<base64>` plus the `key_id` it was sealed under;
+//! [`assert_sealed_cell`] refuses anything else **by construction rather than
+//! by policy** — a plaintext password reaching this file would be a secret in
+//! the vault's invocation journal, its WAL, and the backup base and segments
+//! the laptop's gateway stores, which is the property
+//! `tests/locker_plaintext_gate.rs` searches for. The refusal is
+//! [`crate::error::VaultError::InvalidInput`] naming the cell, and the value
+//! never reaches a message.
 //!
-//! `assert_live_locker_key_id` is the second half, and it was already written
-//! for this in wave 2: a write sealed under a key generation the vault has
-//! rotated past is refused with *"re-enter this secret"*, because the gateway
-//! **cannot** decrypt the intent in order to re-encrypt it.
+//! `assert_live_locker_key_id` is the second half: a write sealed under a
+//! generation that is not the vault's one is refused with *"re-enter this
+//! secret"*, because the command plane **cannot** decrypt the intent in order
+//! to re-encrypt it.
 //!
-//! ### 2. The seat mints the id of any row that carries a secret (D-1020-L9)
+//! ### 2. The caller mints the id of any row that carries a secret (D-1020-L9)
 //!
 //! `AAD = rowId ‖ keyId`. That is what stops a ciphertext being moved between
-//! rows — and it means the party that encrypts must already know the row's id.
-//! The gateway used to mint ids for new rows; for a secret-bearing row it now
-//! cannot, because the seat has to seal against the id before the row exists.
+//! rows — and it means whoever encrypts must already know the row's id. The
+//! command plane mints ids for other new rows; for a secret-bearing row it
+//! cannot, because the core seals against the id before the row exists.
 //!
 //! Three options were weighed (D-1020-L9):
 //!
-//! - **(a) two commands**: the gateway mints the row, the seat fills the secret
-//!   with a second call. Rejected: an interrupted duplicate leaves a copy of a
-//!   login with no password, which is a locker item that looks complete and is
-//!   not.
-//! - **(b) the gateway mints the id and returns it, the seat seals, the
-//!   gateway rewrites.** Same window, one more round trip.
-//! - **(c) the seat mints the id** and sends it with the ciphertext. Adopted.
-//!   Ids are UUIDv7 off the clock on every seat already (lane X3's `ClockIds`),
-//!   the outbox has always carried seat-minted intent ids, and
-//!   [`assert_fresh_id`] refuses one that is taken or malformed — so the
-//!   gateway keeps the property that matters (no id collision, no id reuse
-//!   across kinds, which `locker_item_entity_insert` also enforces) without
-//!   keeping the one it cannot have.
+//! - **(a) two commands**: the vault mints the row, the caller fills the
+//!   secret with a second call. Rejected: an interrupted duplicate leaves a
+//!   copy of a login with no password, which is a locker item that looks
+//!   complete and is not.
+//! - **(b) the vault mints the id and returns it, the caller seals, the vault
+//!   rewrites.** Same window, one more round trip.
+//! - **(c) the caller mints the id** and sends it with the ciphertext.
+//!   Adopted. `seal_command` refuses a secret with no `item_id` to seal
+//!   against, and [`assert_fresh_id`] refuses one that is taken or malformed —
+//!   so the vault keeps the property that matters (no id collision, no id reuse
+//!   across kinds, which `locker_item_entity_insert` also enforces).
 //!
-//! ### 3. A derivation over secrets moves to the seat; its RECEIPT does not
+//! ### 3. A derivation over secrets leaves the command plane; its RECEIPT does not
 //!
-//! `locker.watchtower` and `locker.totp_code` unsealed inside the gateway.
-//! They now answer with the **addresses** to derive over and write the receipt
-//! that says a mass reveal happened; the derivation runs in
-//! `crates/apps/locker::{watchtower, totp}` on the seat (D-1020-L6). Their
-//! output shapes therefore change, which is stated rather than hidden: a
-//! caller that got `{items: [{item_id, weak, reused}]}` now gets
-//! `{rows: [{item_id, type, has_password}], receipt_id}` and derives.
+//! `locker.totp_code` unsealed the seed inside v0's server. Here it writes the
+//! receipt that says a code was derived, and answers the item and the period;
+//! the digits are `crates/core::locker::phone`'s, over a seed only a core
+//! holding `K` can open, computed after this receipt lands (D-1020-L6,
+//! Q-1047-16). v0's `locker.watchtower`, which unsealed every password to
+//! score weak and reused, is deleted rather than moved (Q-1047-16): nothing
+//! on the phone scores them.
 //!
 //! `locker.export` moves the same way and for the same reason — and keeps
 //! `confirm: true` and `risk: high`, because what it authorises is still the
 //! mass unseal of everything the locker holds.
 //!
-//! ### 4. Two commands are new, and both exist because custody moved
+//! ### 4. One command is new, because the reveal is the core's
 //!
-//! - [`reveal_receipt`]: a reveal on the seat still owes an `access.receipt`
-//!   row, and the shell's own door cannot write one. This is the door that
+//! - [`reveal_receipt`]: a reveal in the core still owes an `access.receipt`
+//!   row, and the core's own door cannot write one. This is the door that
 //!   does, under `object_type = 'locker.item'` so the app's access history sees
 //!   it (D-1020-L3).
-//! - [`rotate_key`]: rotation's step 2. v0 re-encrypted every secret inside one
-//!   gateway transaction; the re-encryption is now the seat's and this command
-//!   **applies the whole batch atomically** under `locker_key_live_idx`
-//!   (D-1020-L4).
+//!
+//! #1020's second add, `locker.rotate_key` (rotation's step 2 across seats,
+//! D-1020-L4), is deleted (#1047 slice D1): `K` is the seed's single leaf, so
+//! there is no `K′` for a rotation to move to.
 //!
 //! ## What did NOT change, and is worth saying
 //!
@@ -284,13 +286,13 @@ fn invalid(name: &str, detail: impl Into<String>) -> VaultError {
     }
 }
 
-/// A CELL THE GATEWAY MAY STORE — ciphertext, or the placeholder, or nothing.
+/// A CELL THE VAULT MAY STORE — ciphertext, or the placeholder, or nothing.
 ///
 /// The member-facing sentence names the cell and **never quotes the value**,
 /// because the one value this refusal is most likely to be handed is a
 /// password. `MemberKeyPlaintext` in the census's vocabulary; the vault's own
-/// error taxonomy calls it invalid input, which is what it is: a gateway that
-/// accepted it would be a gateway holding a secret.
+/// error taxonomy calls it invalid input, which is what it is: a command plane
+/// that accepted it would write a secret into the journal and the backup.
 fn assert_sealed_cell(column: &str, value: Option<&str>) -> Result<()> {
     let Some(value) = value else {
         return Ok(());
@@ -301,9 +303,9 @@ fn assert_sealed_cell(column: &str, value: Option<&str>) -> Result<()> {
     Err(invalid(
         column,
         format!(
-            "`{column}` is a Locker secret and must arrive sealed under the member key — this \
-             gateway holds no key and cannot seal one. Seal it on the seat that unlocked \
-             (#1020, open question 8)."
+            "`{column}` is a Locker secret and must arrive sealed under the member key — the \
+             vault's commands hold no key and cannot seal one. It is sealed by the Locker \
+             session that unlocked (#1047, D-6)."
         ),
     ))
 }
@@ -317,7 +319,7 @@ fn assert_sealed_cells(ctx: &CommandCtx<'_, '_>, columns: &[&str]) -> Result<()>
     Ok(())
 }
 
-/// The key generation a sealed write names must be the live one.
+/// The key generation a sealed write names must be the vault's one.
 ///
 /// Absent when the input carries no sealed cell at all — a retag is not a
 /// secret write and must not need the key plane to exist.
@@ -329,14 +331,13 @@ fn assert_key_generation(ctx: &CommandCtx<'_, '_>, carries_secret: bool) -> Resu
         invalid(
             "key_id",
             "a sealed cell must name the member key generation it was sealed under, so a \
-             write from a seat that has not caught up with a rotation is refused rather than \
-             stored unopenable",
+             write under any other generation is refused rather than stored unopenable",
         )
     })?;
     assert_live_locker_key_id(ctx.connection(), key_id).map_err(|error| {
-        // A vault with no key plane is `MemberKeyAbsent` in the census's words
-        // (D-1020-L1): a vault with zero seats holds no `K` and therefore holds
-        // no secrets, and a write is refused rather than silently stored in the
+        // A vault with no key plane is `MemberKeyAbsent` in the census's words:
+        // no Locker session has named a generation yet, so the vault holds no
+        // secrets, and a write is refused rather than silently stored in the
         // clear.
         invalid("key_id", error.to_string())
     })
@@ -350,7 +351,7 @@ fn carries_secret(ctx: &CommandCtx<'_, '_>, columns: &[&str]) -> bool {
     })
 }
 
-/// A SEAT-MINTED ID THE GATEWAY WILL ACCEPT (D-1020-L9).
+/// A CALLER-MINTED ID THE VAULT WILL ACCEPT (D-1020-L9).
 ///
 /// Two refusals, and they are different: a malformed id is a caller bug, and a
 /// taken id is a collision. Neither is allowed to become a silent overwrite of
@@ -583,9 +584,16 @@ fn set_alias(ctx: &CommandCtx<'_, '_>, item_id: &str, alias: &str) -> Result<()>
             format!("the alias \"{trimmed}\" is already used by another live item"),
         ));
     }
+    // AN UPSERT AND NEVER `OR REPLACE` (#1047 R3). The row this displaces
+    // belongs to a deleted item, and a REPLACE deletes it on SQLite's fast
+    // path, which the `update_hook` never reports — so the running census
+    // counted one alias more than the file held, the generation carried that
+    // number, and a restore refused the vault. An update moves no count.
     ctx.connection().execute(
-        "INSERT OR REPLACE INTO locker_item_alias (alias, item_id, created_at)
-         VALUES (?1, ?2, ?3)",
+        "INSERT INTO locker_item_alias (alias, item_id, created_at)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT (alias) DO UPDATE
+            SET item_id = excluded.item_id, created_at = excluded.created_at",
         rusqlite::params![trimmed, item_id, ctx.now],
     )?;
     Ok(())
@@ -597,8 +605,8 @@ fn set_alias(ctx: &CommandCtx<'_, '_>, item_id: &str, alias: &str) -> Result<()>
 /// placeholder mean *unchanged*: the ciphertext's AAD is bound to that id.
 struct FieldWrite<'a> {
     /// The id to write under. A rewrite keeps it; a **new** field carries the
-    /// seat's, because a sealed value's AAD is bound to it (D-1020-L9). `None`
-    /// asks the gateway to mint one, which is allowed only for a field that
+    /// caller's, because a sealed value's AAD is bound to it (D-1020-L9). `None`
+    /// asks the vault to mint one, which is allowed only for a field that
     /// holds no secret.
     field_id: Option<&'a str>,
     section: &'a str,
@@ -707,18 +715,14 @@ fn mint_template_fields(ctx: &CommandCtx<'_, '_>, item_id: &str, item_type: &str
 }
 
 /// Replace the item's ADDITIONAL addresses; the primary stays on the item.
-fn set_addresses(
-    ctx: &CommandCtx<'_, '_>,
-    item_id: &str,
-    addresses: &[(String, String)],
-) -> Result<i64> {
+fn set_addresses(ctx: &CommandCtx<'_, '_>, item_id: &str, addresses: &[String]) -> Result<i64> {
     ctx.connection().execute(
         "DELETE FROM locker_item_address WHERE item_id = ?1",
         [item_id],
     )?;
     let mut position = 0_i64;
     let mut seen: BTreeSet<String> = BTreeSet::new();
-    for (url, policy) in addresses {
+    for url in addresses {
         let url = url.trim();
         if url.is_empty() || !seen.insert(url.to_owned()) {
             continue;
@@ -726,20 +730,9 @@ fn set_addresses(
         let address_id = ctx.next_id();
         ctx.connection().execute(
             "INSERT INTO locker_item_address
-               (address_id, item_id, url, match_policy, position, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![
-                address_id,
-                item_id,
-                url,
-                if policy == "exact-host" {
-                    "exact-host"
-                } else {
-                    "registrable-domain"
-                },
-                position,
-                ctx.now
-            ],
+               (address_id, item_id, url, position, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![address_id, item_id, url, position, ctx.now],
         )?;
         position += 1;
     }
@@ -863,7 +856,7 @@ const PASSWORD_ROTATION_IS_DECLARED: CommandCondition = CommandCondition {
     check: |ctx| Ok(password_rotated(ctx).err().map(sentence_of)),
 };
 
-/// The seat-minted `item_id` is fresh and well formed.
+/// The caller-minted `item_id` is fresh and well formed.
 const ITEM_ID_IS_FRESH: CommandCondition = CommandCondition {
     predicate: "item_id_is_fresh",
     check: |ctx| {
@@ -874,7 +867,7 @@ const ITEM_ID_IS_FRESH: CommandCondition = CommandCondition {
     },
 };
 
-/// The seat-minted `new_item_id` of a duplicate is fresh and well formed.
+/// The caller-minted `new_item_id` of a duplicate is fresh and well formed.
 const NEW_ITEM_ID_IS_FRESH: CommandCondition = CommandCondition {
     predicate: "new_item_id_is_fresh",
     check: |ctx| {
@@ -966,186 +959,8 @@ const PASSKEY_IS_SEALED: CommandCondition = CommandCondition {
     },
 };
 
-/// Any sealed cell whose row still names a key other than `key_id`.
-///
-/// `(table, count)` of the first table that has one, or `None`. Used twice: as
-/// the **precondition** that refuses an incomplete batch before anything moves,
-/// and as the **postcondition** that says the batch did what it claimed.
-fn cells_under_another_key(
-    ctx: &CommandCtx<'_, '_>,
-    key_id: &str,
-) -> Result<Option<(&'static str, i64)>> {
-    for (table, _, columns) in crate::custody::locker_key::LOCKER_ENCRYPTED_COLUMNS {
-        let predicate = columns
-            .iter()
-            .map(|column| format!("{column} IS NOT NULL"))
-            .collect::<Vec<_>>()
-            .join(" OR ");
-        let stragglers: i64 = ctx.connection().query_row(
-            &format!(
-                "SELECT COUNT(*) FROM {table}
-                  WHERE key_id IS NOT NULL AND key_id <> ?1 AND ({predicate})"
-            ),
-            [key_id],
-            |row| row.get(0),
-        )?;
-        if stragglers > 0 {
-            return Ok(Some((table, stragglers)));
-        }
-    }
-    Ok(None)
-}
-
-/// THE BATCH IS THE WHOLE VAULT OR IT IS NOTHING (D-1020-L4).
-///
-/// Checked BEFORE the writes, over the rows as they stand: every row that
-/// carries a sealed cell under the outgoing key must appear in the batch for
-/// each such cell. A batch that misses one would leave a secret under a key
-/// generation the database no longer names — which is the one outcome the
-/// order-not-transaction argument exists to prevent, and which no sweep can
-/// repair because the gateway cannot read the cell to re-encrypt it.
-const ROTATION_COVERS_EVERY_CELL: CommandCondition = CommandCondition {
-    predicate: "rotation_covers_every_cell",
-    check: |ctx| {
-        let previous = ctx.required_str("previous_key_id")?;
-        let batch: BTreeSet<(String, String, String)> = ctx
-            .input
-            .get("cells")
-            .and_then(serde_json::Value::as_array)
-            .map(|cells| {
-                cells
-                    .iter()
-                    .filter_map(|cell| {
-                        Some((
-                            cell.get("table")?.as_str()?.to_owned(),
-                            cell.get("row_id")?.as_str()?.to_owned(),
-                            cell.get("column")?.as_str()?.to_owned(),
-                        ))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        for (table, pk, columns) in crate::custody::locker_key::LOCKER_ENCRYPTED_COLUMNS {
-            for column in *columns {
-                let mut statement = ctx.connection().prepare(&format!(
-                    "SELECT {pk} FROM {table}
-                      WHERE {column} IS NOT NULL AND COALESCE(key_id, ?1) = ?1"
-                ))?;
-                let rows: Vec<String> = statement
-                    .query_map([previous], |row| row.get(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
-                for row_id in rows {
-                    if !batch.contains(&((*table).to_owned(), row_id.clone(), (*column).to_owned()))
-                    {
-                        return Ok(Some(format!(
-                            "the batch does not re-encrypt `{table}.{column}` for the row \
-                             {row_id}; a rotation is the whole vault or it is nothing \
-                             (#1020, D-1020-L4)"
-                        )));
-                    }
-                }
-            }
-        }
-        Ok(None)
-    },
-};
-
-/// The rotation's `previous_key_id` is the key the vault actually names live.
-const ROTATION_TARGETS_THE_LIVE_KEY: CommandCondition = CommandCondition {
-    predicate: "rotation_targets_the_live_key",
-    check: |ctx| {
-        let key_id = ctx.required_str("key_id")?;
-        let previous = ctx.required_str("previous_key_id")?;
-        if key_id == previous {
-            return Ok(Some(
-                "a rotation moves to a NEW key generation; the ids are the same".to_owned(),
-            ));
-        }
-        let live: Option<String> = ctx
-            .connection()
-            .query_row(
-                "SELECT key_id FROM locker_key WHERE retired_at IS NULL LIMIT 1",
-                [],
-                |row| row.get(0),
-            )
-            .ok();
-        Ok(match live.as_deref() {
-            None => Some("this vault has no live Locker key to rotate; found one first".to_owned()),
-            // A ROTATION FROM A KEY THAT IS NOT LIVE IS TWO SEATS ROTATING AT
-            // ONCE, and the loser must be told rather than allowed to
-            // overwrite the winner's cells under a key nothing names.
-            Some(live) if live != previous => Some(format!(
-                "this vault's live Locker key is {live}, not {previous} — another seat \
-                 rotated first; re-read the live key and rotate again"
-            )),
-            Some(_) => None,
-        })
-    },
-};
-
-/// Every cell of a rotation batch is ciphertext, in the registry, and on a row
-/// that exists.
-const ROTATION_CELLS_ARE_SEALED: CommandCondition = CommandCondition {
-    predicate: "rotation_cells_are_sealed",
-    check: |ctx| {
-        let Some(cells) = ctx.input.get("cells").and_then(serde_json::Value::as_array) else {
-            return Ok(None);
-        };
-        for cell in cells {
-            let table = cell
-                .get("table")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default();
-            let column = cell
-                .get("column")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default();
-            let value = cell
-                .get("value")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default();
-            let row_id = cell
-                .get("row_id")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default();
-            // THE REGISTRY IS THE ALLOW-LIST, and it is the same registry
-            // encryption and the sweep read. A rotation that could name any
-            // column would be a rotation that could write ciphertext into
-            // `title`.
-            let Some((_, pk, columns)) = crate::custody::locker_key::LOCKER_ENCRYPTED_COLUMNS
-                .iter()
-                .find(|(known, _, _)| *known == table)
-            else {
-                return Ok(Some(format!("`{table}` holds no cell sealed under K")));
-            };
-            if !columns.contains(&column) {
-                return Ok(Some(format!(
-                    "`{table}.{column}` is not a cell sealed under K"
-                )));
-            }
-            if !is_locker_ciphertext(value) {
-                return Ok(Some(format!(
-                    "the rotated value for `{table}.{column}` is not sealed; a rotation \
-                     re-encrypts on the seat and the gateway stores what it is given"
-                )));
-            }
-            let found = count(
-                ctx,
-                &format!("SELECT COUNT(*) FROM {table} WHERE {pk} = ?1"),
-                &[row_id],
-            )?;
-            if found != 1 {
-                return Ok(Some(format!(
-                    "there is no `{table}` row with the id the batch names"
-                )));
-            }
-        }
-        Ok(None)
-    },
-};
-
-/// A reveal receipt names a sealed column, matches its subject to its object
-/// type, and a fill names the page it happened on.
+/// A reveal receipt names a sealed column and matches its subject to its
+/// object type.
 const RECEIPT_IS_WELL_FORMED: CommandCondition = CommandCondition {
     predicate: "receipt_is_well_formed",
     check: |ctx| {
@@ -1183,11 +998,6 @@ const RECEIPT_IS_WELL_FORMED: CommandCondition = CommandCondition {
                     )));
                 }
             }
-        }
-        if ctx.optional_str("kind") == Some("fill") && ctx.optional_str("origin").is_none() {
-            return Ok(Some(
-                "a fill happened on a page, and the receipt names which one".to_owned(),
-            ));
         }
         Ok(None)
     },
@@ -1228,20 +1038,14 @@ static SET_FIELD_PRE: &[CommandCondition] = &[ITEM_LIVE_CHECK, FIELD_VALUE_IS_SE
 
 static SET_PASSKEY_PRE: &[CommandCondition] = &[ITEM_LIVE_CHECK, PASSKEY_IS_SEALED];
 
-static ROTATE_KEY_PRE: &[CommandCondition] = &[
-    ROTATION_TARGETS_THE_LIVE_KEY,
-    ROTATION_CELLS_ARE_SEALED,
-    ROTATION_COVERS_EVERY_CELL,
-];
-
 static REVEAL_RECEIPT_PRE: &[CommandCondition] = &[RECEIPT_IS_WELL_FORMED];
 
 // ---------------------------------------------------------------------------
 // The catalogue.
 // ---------------------------------------------------------------------------
 
-/// Every `locker.*` command this build carries: v0's twenty, plus the two the
-/// custody change needs.
+/// Every `locker.*` command this build carries: v0's twenty, plus the reveal
+/// receipt the core's reveal writes.
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
     vec![
@@ -1253,7 +1057,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
         star_item(),
         unstar_item(),
         totp_code(),
-        watchtower(),
         set_memo(),
         archive_item(),
         unarchive_item(),
@@ -1265,9 +1068,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
         clear_passkey(),
         counts(),
         export(),
-        // The two wave 4 adds.
+        // The one the core's reveal needs.
         reveal_receipt(),
-        rotate_key(),
     ]
 }
 
@@ -1290,7 +1092,6 @@ fn definition(
         postconditions,
         handler,
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1368,10 +1169,10 @@ fn item_id_output(item_id: &str) -> serde_json::Value {
 
 /// Whether the caller declared the password a real rotation (D-1020-L10b).
 ///
-/// The gateway cannot compare two ciphertexts for equality — AES-GCM with a
-/// fresh nonce per value means the same plaintext encrypts differently every
+/// The command plane cannot compare two ciphertexts for equality — AES-GCM with
+/// a fresh nonce per value means the same plaintext encrypts differently every
 /// time — so *"only a real change re-stamps the age"* (v0's `rotated`) is a
-/// fact only the seat holding `K` can establish. It is therefore an explicit,
+/// fact only the core holding `K` can establish. It is therefore an explicit,
 /// **required** claim whenever a password cell arrives, and it lands on the
 /// invocation's receipt like any other input.
 ///
@@ -1392,7 +1193,7 @@ fn password_rotated(ctx: &CommandCtx<'_, '_>) -> Result<bool> {
             invalid(
                 "password_rotated",
                 "a write that carries a password must say whether the value CHANGED: the \
-                 gateway cannot compare two ciphertexts, and only a real change re-stamps \
+                 vault cannot compare two ciphertexts, and only a real change re-stamps \
                  the password's age (#1020, D-1020-L10b)",
             )
         })
@@ -1423,8 +1224,6 @@ fn add_item() -> CommandDefinition {
             "tags": { "type": "array", "items": { "type": "string" } },
             "compromised": { "type": "boolean" },
             "alias": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
-            "url_match_policy": { "type": "string",
-              "enum": ["registrable-domain", "exact-host"] },
             "#,
             field_schema!(),
             r#"
@@ -1449,21 +1248,15 @@ fn add_item() -> CommandDefinition {
                 .iter()
                 .find(|(column, _)| *column == "password")
                 .and_then(|(_, value)| value.clone());
-            let policy = if ctx.optional_str("url_match_policy") == Some("exact-host") {
-                "exact-host"
-            } else {
-                "registrable-domain"
-            };
 
             // Only the type's own columns are written; everything else stays
             // NULL, so a member who filled a login and switched to Wi-Fi never
             // stores the login's fields.
-            let mut columns: Vec<&str> = vec!["item_id", "type", "title", "url_match_policy"];
+            let mut columns: Vec<&str> = vec!["item_id", "type", "title"];
             let mut binds: Vec<Box<dyn rusqlite::ToSql>> = vec![
                 Box::new(item_id.clone()),
                 Box::new(item_type.clone()),
                 Box::new(title),
-                Box::new(policy),
             ];
             for (column, value) in &values {
                 columns.push(column);
@@ -1515,7 +1308,6 @@ fn add_item() -> CommandDefinition {
         },
     );
     definition.sealed_input = &SEALED_ITEM_CELLS;
-    definition.online_only = true;
     definition
 }
 
@@ -1546,8 +1338,6 @@ fn edit_item() -> CommandDefinition {
             "tags": { "type": "array", "items": { "type": "string" } },
             "compromised": { "type": "boolean" },
             "alias": { "type": "string", "pattern": "^[A-Za-z0-9._-]{0,64}$" },
-            "url_match_policy": { "type": "string",
-              "enum": ["registrable-domain", "exact-host"] },
             "#,
             field_schema!(),
             r#"
@@ -1578,32 +1368,21 @@ fn edit_item() -> CommandDefinition {
             if let Some(title) = ctx.optional_str("title") {
                 push(&mut sets, &mut binds, "title", Box::new(title.to_owned()));
             }
-            if let Some(compromised) = ctx
+            // THE COMPROMISED FLAG (#1047, R-1047-F7): the member's, set and
+            // cleared by hand — nothing produces it automatically. A ROTATION
+            // CLEARS IT, because the fix Review asks for ("change the
+            // password") has been made; a write that states the flag itself
+            // wins over that rule, since the member said so in the same breath.
+            let stated = ctx
                 .input
                 .get("compromised")
-                .and_then(serde_json::Value::as_bool)
-            {
+                .and_then(serde_json::Value::as_bool);
+            if let Some(compromised) = stated.or_else(|| rotated.then_some(false)) {
                 push(
                     &mut sets,
                     &mut binds,
                     "compromised",
                     Box::new(i64::from(compromised)),
-                );
-            }
-            if let Some(policy) = ctx.optional_str("url_match_policy") {
-                // Login-only: the match policy is about an address, and only a
-                // login has one the Companion fills against.
-                if item_type != "login" {
-                    return Err(invalid(
-                        "url_match_policy",
-                        "only a login has an address match policy",
-                    ));
-                }
-                push(
-                    &mut sets,
-                    &mut binds,
-                    "url_match_policy",
-                    Box::new(policy.to_owned()),
                 );
             }
 
@@ -1636,7 +1415,7 @@ fn edit_item() -> CommandDefinition {
                 push(&mut sets, &mut binds, column, Box::new(value.clone()));
                 changed.push(column);
             }
-            // A ROTATION, distinguished from any other edit. The seat says so
+            // A ROTATION, distinguished from any other edit. The core says so
             // (see `password_rotated`); only a real change re-stamps the age.
             if rotated {
                 let stamp = ctx
@@ -1677,7 +1456,6 @@ fn edit_item() -> CommandDefinition {
         },
     );
     definition.sealed_input = &SEALED_ITEM_CELLS;
-    definition.online_only = true;
     definition
 }
 
@@ -1890,11 +1668,10 @@ fn unarchive_item() -> CommandDefinition {
 }
 
 /// Every column a duplicate copies verbatim, minus the sealed ones.
-const PLAIN_COPY_COLUMNS: [&str; 14] = [
+const PLAIN_COPY_COLUMNS: [&str; 13] = [
     "type",
     "username",
     "url",
-    "url_match_policy",
     "notes",
     "cardholder",
     "expiry",
@@ -1954,12 +1731,12 @@ fn duplicate_item() -> CommandDefinition {
             // each secret here and wrote it back as plaintext for the seal
             // sweep to re-seal under the NEW row's id, "so no secret
             // round-trips through the client". The ciphertext's AAD binds it to
-            // the old row, and this gateway cannot re-seal — so the seat
+            // the old row, and the command plane cannot re-seal — so the core
             // re-encrypts under the new id and sends the cells, which is why
-            // the new id is the seat's (D-1020-L9). The promise that changes
+            // the new id is the caller's (D-1020-L9). The promise that changes
             // is "no secret round-trips through the client"; the promise that
             // survives, and is the stronger one, is that no secret is ever
-            // readable by the host.
+            // readable by the command plane or anything it writes.
             let mut columns: Vec<String> = vec!["item_id".to_owned(), "title".to_owned()];
             let source_title: String = ctx.connection().query_row(
                 "SELECT title FROM locker_item WHERE item_id = ?1",
@@ -2019,7 +1796,7 @@ fn duplicate_item() -> CommandDefinition {
                 params.as_slice(),
             )?;
 
-            // The custom fields, re-sealed by the seat against their own new
+            // The custom fields, re-sealed by the core against their own new
             // ids for the same AAD reason.
             let mut copied = 0_usize;
             if let Some(fields) = ctx
@@ -2069,12 +1846,10 @@ fn duplicate_item() -> CommandDefinition {
             // The addresses copy as they are — no secret is involved.
             let addresses = {
                 let mut statement = ctx.connection().prepare(
-                    "SELECT url, match_policy FROM locker_item_address
+                    "SELECT url FROM locker_item_address
                       WHERE item_id = ?1 ORDER BY position, address_id",
                 )?;
-                let rows = statement.query_map([&source_id], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-                })?;
+                let rows = statement.query_map([&source_id], |row| row.get::<_, String>(0))?;
                 rows.collect::<rusqlite::Result<Vec<_>>>()?
             };
             set_addresses(ctx, &item_id, &addresses)?;
@@ -2128,7 +1903,7 @@ fn set_field() -> CommandDefinition {
                 assert_sealed_cell("value", value.as_deref())?;
             }
             assert_key_generation(ctx, sealed_value)?;
-            // A NEW sealed field needs the seat's id, for the AAD reason.
+            // A NEW sealed field needs the caller's id, for the AAD reason.
             if sealed_value && field_id.is_none() {
                 return Err(invalid(
                     "field_id",
@@ -2153,8 +1928,8 @@ fn set_field() -> CommandDefinition {
                         .unwrap_or(0),
                 },
             )?;
-            // A sealed field's `key_id` is stamped on the field row, so a
-            // rotation can find it.
+            // A sealed field's `key_id` is stamped on the field row, like
+            // every sealed cell's, so the generation guard can check it.
             if sealed_value {
                 ctx.connection().execute(
                     "UPDATE locker_item_field SET key_id = ?1 WHERE field_id = ?2",
@@ -2169,7 +1944,6 @@ fn set_field() -> CommandDefinition {
         },
     );
     definition.sealed_input = &["value"];
-    definition.online_only = true;
     definition
 }
 
@@ -2218,9 +1992,7 @@ fn set_addresses_command() -> CommandDefinition {
               "required": ["url"],
               "additionalProperties": false,
               "properties": {
-                "url": { "type": "string", "minLength": 1 },
-                "match_policy": { "type": "string",
-                  "enum": ["registrable-domain", "exact-host"] }
+                "url": { "type": "string", "minLength": 1 }
               }
             } }
           }
@@ -2230,28 +2002,18 @@ fn set_addresses_command() -> CommandDefinition {
         NONE,
         |ctx| {
             let item_id = ctx.required_str("item_id")?.to_owned();
-            let addresses: Vec<(String, String)> = ctx
+            let addresses: Vec<String> = ctx
                 .input
                 .get("addresses")
                 .and_then(serde_json::Value::as_array)
                 .map(|list| {
                     list.iter()
-                        .filter_map(|address| {
-                            Some((
-                                address.get("url")?.as_str()?.to_owned(),
-                                address
-                                    .get("match_policy")
-                                    .and_then(serde_json::Value::as_str)
-                                    .unwrap_or("registrable-domain")
-                                    .to_owned(),
-                            ))
-                        })
+                        .filter_map(|address| Some(address.get("url")?.as_str()?.to_owned()))
                         .collect()
                 })
                 .unwrap_or_default();
-            // `locker_item.url` stays the PRIMARY, so Companion candidates,
-            // the connector binding and Review's unsecured-address check keep
-            // working. No secret is involved, which is why this one takes the
+            // `locker_item.url` stays the PRIMARY, so the connector binding
+            // and Review's unsecured-address check keep working. No secret is involved, which is why this one takes the
             // whole list.
             let written = set_addresses(ctx, &item_id, &addresses)?;
             ctx.connection().execute(
@@ -2295,7 +2057,7 @@ fn set_passkey() -> CommandDefinition {
 
             // STORAGE ONLY: this mints no challenge, signs nothing and speaks
             // no WebAuthn. The slot's `item_id` is its own primary key, so the
-            // seat already knows the id it seals against — no new id is needed.
+            // core already knows the id it seals against — no new id is needed.
             let existing: Option<(Option<String>, String)> = ctx
                 .connection()
                 .query_row(
@@ -2347,7 +2109,6 @@ fn set_passkey() -> CommandDefinition {
         },
     );
     definition.sealed_input = &["private_key"];
-    definition.online_only = true;
     definition
 }
 
@@ -2452,7 +2213,7 @@ fn counts() -> CommandDefinition {
 }
 
 // ---------------------------------------------------------------------------
-// The three derivations that moved to the seat, and their receipts.
+// The two derivations that left the command plane, and their receipts.
 // ---------------------------------------------------------------------------
 
 fn totp_code() -> CommandDefinition {
@@ -2460,10 +2221,10 @@ fn totp_code() -> CommandDefinition {
         predicate: "item_has_seed",
         check: |ctx| {
             let item_id = ctx.required_str("item_id")?;
-            // THE PRESENCE OF A SEALED CELL IS STILL A FACT THE GATEWAY KNOWS.
+            // THE PRESENCE OF A SEALED CELL IS A FACT THE COMMAND PLANE KNOWS.
             // `otp_seed IS NOT NULL` reads a column without reading a value,
-            // which is exactly the line the trust premise draws: the gateway
-            // serves ciphertext and knows it is there.
+            // which is exactly the line the trust premise draws: the command
+            // plane serves ciphertext and knows it is there.
             let found = count(
                 ctx,
                 "SELECT COUNT(*) FROM locker_item
@@ -2473,7 +2234,7 @@ fn totp_code() -> CommandDefinition {
             Ok((found != 1).then(|| "that item carries no one-time-code seed".to_owned()))
         },
     }];
-    let mut definition = definition(
+    definition(
         "locker.totp_code",
         item_id_only!(),
         Idempotency::RetrySafe,
@@ -2483,16 +2244,16 @@ fn totp_code() -> CommandDefinition {
             let item_id = ctx.required_str("item_id")?.to_owned();
             // WHAT THIS COMMAND IS, AFTER THE CUSTODY CHANGE (D-1020-L6).
             //
-            // v0 unsealed the seed here and returned six digits. This gateway
-            // cannot unseal, so what it does is the half that is still its
-            // own and that the seat cannot do for itself: it RECEIPTS the
-            // reveal. A member's access history must record that a one-time
-            // code was derived from a seed, and a seat writing its own
-            // receipts would be a seat auditing itself.
+            // v0 unsealed the seed here and returned six digits. The command
+            // plane cannot unseal, so what it does is the half that is still
+            // its own: it RECEIPTS the reveal, in the command gate's append-only
+            // band. A member's access history must record that a one-time code
+            // was derived from a seed, and a deriver writing its own receipts
+            // would be a deriver auditing itself.
             //
-            // The digits are computed by `crates/apps/locker::totp` over the
-            // replica's own `otp_seed` cell, unwrapped by
-            // `crates/core::locker` inside the reveal window.
+            // The digits are computed by `crates/core::locker::phone` after
+            // this receipt lands, over the `otp_seed` cell it opens under `K`,
+            // with `crates/apps/locker::totp`'s RFC 6238 fold.
             let receipt_id = ctx.write_subject_receipt(
                 "reveal locker.totp_code",
                 ITEM_TYPE,
@@ -2506,80 +2267,18 @@ fn totp_code() -> CommandDefinition {
             Ok(serde_json::json!({
                 "item_id": item_id,
                 "period": 30,
-                "receipt_id": receipt_id,
-                "derived_on": "seat"
+                "receipt_id": receipt_id
             }))
         },
-    );
-    definition.online_only = true;
-    definition
-}
-
-fn watchtower() -> CommandDefinition {
-    let mut definition = definition(
-        "locker.watchtower",
-        r#"{ "type": "object", "additionalProperties": false, "properties": {} }"#,
-        Idempotency::RetrySafe,
-        NONE,
-        NONE,
-        |ctx| {
-            // THE ROW SET IS V0'S ROW SET, exactly: logins and cards always,
-            // and a wifi or standalone password only when it HAS a password.
-            // Archived items are in it, because an archived login's password
-            // is still a password somebody reused.
-            let mut statement = ctx.connection().prepare(
-                "SELECT item_id, type, password IS NOT NULL
-                   FROM locker_item
-                  WHERE deleted_at IS NULL
-                    AND (type IN ('login', 'card')
-                      OR (type IN ('wifi', 'password') AND password IS NOT NULL))
-                  ORDER BY item_id",
-            )?;
-            let rows: Vec<serde_json::Value> = statement
-                .query_map([], |row| {
-                    Ok(serde_json::json!({
-                        "item_id": row.get::<_, String>(0)?,
-                        "type": row.get::<_, String>(1)?,
-                        "has_password": row.get::<_, i64>(2)? == 1
-                    }))
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            // THE OUTPUT SHAPE CHANGES, AND SAYING SO IS THE POINT
-            // (D-1020-L6). v0 answered `{items: [{item_id, weak, reused,
-            // last4}]}` because it could unseal; this answers the ADDRESSES
-            // and `crates/apps/locker::watchtower` folds the scores from
-            // plaintext the seat unwrapped. A port that kept the old shape
-            // would have to invent the scores, and a security screen that
-            // invents an all-clear is the worst failure this app has.
-            let receipt_id = ctx.write_subject_receipt(
-                "reveal locker.watchtower",
-                ITEM_TYPE,
-                None,
-                "allow",
-                serde_json::json!({
-                    "columns": ["password", "card_number"],
-                    "context": { "kind": "reveal", "derivation": "watchtower" },
-                    "rows": rows.len()
-                }),
-            )?;
-            Ok(serde_json::json!({
-                "rows": rows,
-                "receipt_id": receipt_id,
-                "derived_on": "seat"
-            }))
-        },
-    );
-    definition.online_only = true;
-    definition
+    )
 }
 
 /// The plain columns an export carries verbatim.
-const PLAIN_EXPORT_COLUMNS: [&str; 20] = [
+const PLAIN_EXPORT_COLUMNS: [&str; 19] = [
     "type",
     "title",
     "username",
     "url",
-    "url_match_policy",
     "notes",
     "cardholder",
     "expiry",
@@ -2634,9 +2333,9 @@ fn export() -> CommandDefinition {
             // and a replica read returns sealed columns as placeholders.
             //
             // WHAT CHANGED (D-1020-L7): v0 unsealed every cell here and
-            // returned the plaintext. This gateway cannot, so the command
+            // returned the plaintext. The command plane cannot, so the command
             // answers the PLAIN half plus the ciphertext's addresses, writes
-            // the one receipt, and the seat produces the file. The confirm and
+            // the one receipt, and a core holding `K` produces the file. The confirm and
             // the `high` risk stay exactly where they were, because what is
             // being authorised is unchanged: every secret the locker holds,
             // in the clear, in a file.
@@ -2694,19 +2393,17 @@ fn export() -> CommandDefinition {
                 "exported_at": ctx.now,
                 "item_count": items.len(),
                 "items": items,
-                "receipt_id": receipt_id,
                 // A REVISION'S SNAPSHOT IS THE ONE THING ONLY AN EXPORT
-                // UNSEALS, and it stays that way: the seat reads
-                // `core_entity_revision` off its own replica under the receipt
-                // this command wrote. The flag rides the answer so the seat
-                // knows whether the member asked for it.
-                "unseals_on": "seat"
+                // UNSEALS, and it stays that way: the unsealing is outside
+                // the command plane, in the phone core holding `K`, under the
+                // receipt this command wrote. There is no field saying where:
+                // one device, one side that can unseal (Q-1047-13).
+                "receipt_id": receipt_id
             }))
         },
     );
     definition.risk = Risk::High;
     definition.confirm = true;
-    definition.online_only = true;
     definition
 }
 
@@ -2723,8 +2420,7 @@ fn reveal_receipt() -> CommandDefinition {
             "item_id": { "type": "string", "minLength": 1 },
             "columns": { "type": "array", "minItems": 1,
               "items": { "type": "string", "minLength": 1 } },
-            "kind": { "type": "string", "enum": ["reveal", "fill", "auth"] },
-            "origin": { "type": "string", "minLength": 1 },
+            "kind": { "type": "string", "enum": ["reveal", "auth"] },
             "allowed": { "type": "boolean" },
             "failing": { "type": "string" }
           }
@@ -2733,19 +2429,18 @@ fn reveal_receipt() -> CommandDefinition {
         REVEAL_RECEIPT_PRE,
         NONE,
         |ctx| {
-            // THE RECEIPT A SEAT-SIDE REVEAL OWES (D-1020-L3).
+            // THE RECEIPT A REVEAL IN THE CORE OWES (D-1020-L3).
             //
-            // The gateway no longer produces the plaintext, and that is exactly
-            // why this door has to exist: the record of *who looked* is the one
-            // thing that must stay readable now that the gateway cannot
-            // decrypt, and a seat that wrote its own receipts would be a seat
-            // auditing itself. `access_receipt` is append-only by trigger and
+            // The command plane no longer produces the plaintext, and that is
+            // exactly why this door has to exist: the record of *who looked* is
+            // the one thing that must stay readable now that the command plane
+            // cannot decrypt, and a revealer that wrote its own receipts outside
+            // the gate would be a revealer auditing itself. `access_receipt` is append-only by trigger and
             // hash-chained by `seq`, so this is a receipt a member can read
             // and nobody can quietly remove.
             //
             // It carries COLUMN NAMES, never values — `columns: ["password"]`
-            // is what the access history shows. An `origin` rides only a
-            // `fill`, because that is the only kind that happened on a page.
+            // is what the access history shows.
             let object_type = ctx.required_str("object_type")?.to_owned();
             let item_id = ctx.optional_str("item_id").map(str::to_owned);
             if object_type == ITEM_TYPE && item_id.is_none() {
@@ -2808,18 +2503,6 @@ fn reveal_receipt() -> CommandDefinition {
                 "kind".to_owned(),
                 serde_json::Value::String(kind.to_owned()),
             );
-            if kind == "fill" {
-                let origin = ctx.optional_str("origin").ok_or_else(|| {
-                    invalid(
-                        "origin",
-                        "a fill happened on a page, and the receipt names which one",
-                    )
-                })?;
-                context.insert(
-                    "origin".to_owned(),
-                    serde_json::Value::String(origin.to_owned()),
-                );
-            }
             let mut detail = serde_json::Map::new();
             detail.insert("columns".to_owned(), serde_json::json!(columns));
             detail.insert("context".to_owned(), serde_json::Value::Object(context));
@@ -2843,231 +2526,6 @@ fn reveal_receipt() -> CommandDefinition {
             }))
         },
     )
-}
-
-fn rotate_key() -> CommandDefinition {
-    static POST: &[CommandCondition] = &[
-        CommandCondition {
-            predicate: "one_live_key_and_it_is_the_new_one",
-            check: |ctx| {
-                let key_id = ctx.required_str("key_id")?;
-                let live = count(
-                    ctx,
-                    "SELECT COUNT(*) FROM locker_key WHERE retired_at IS NULL",
-                    &[],
-                )?;
-                if live != 1 {
-                    return Ok(Some(format!(
-                        "the vault names {live} live Locker keys after a rotation; it must \
-                         name one"
-                    )));
-                }
-                let named = count(
-                    ctx,
-                    "SELECT COUNT(*) FROM locker_key WHERE retired_at IS NULL AND key_id = ?1",
-                    &[key_id],
-                )?;
-                Ok((named != 1).then(|| "the rotation did not make the new key live".to_owned()))
-            },
-        },
-        // THE NEW KEY IS THE ONLY KEY ANY CELL NAMES. The precondition
-        // `rotation_covers_every_cell` refuses an incomplete batch before
-        // anything moves; this is the same claim asserted after the fact,
-        // because a postcondition is what makes the command's own statement
-        // about what it did true or rolls the whole commit back.
-        CommandCondition {
-            predicate: "no_cell_names_a_retired_key",
-            check: |ctx| {
-                let key_id = ctx.required_str("key_id")?;
-                Ok(
-                    cells_under_another_key(ctx, key_id)?.map(|(table, stragglers)| {
-                        format!(
-                            "{stragglers} `{table}` row(s) still name the old Locker key; a \
-                         rotation is the whole vault or it is nothing (#1020, D-1020-L4)"
-                        )
-                    }),
-                )
-            },
-        },
-    ];
-    let mut definition = definition(
-        "locker.rotate_key",
-        r#"{
-          "type": "object",
-          "required": ["key_id", "previous_key_id", "cells"],
-          "additionalProperties": false,
-          "properties": {
-            "key_id": { "type": "string", "minLength": 1, "maxLength": 64 },
-            "previous_key_id": { "type": "string", "minLength": 1 },
-            "cells": { "type": "array", "items": {
-              "type": "object",
-              "required": ["table", "row_id", "column", "value"],
-              "additionalProperties": false,
-              "properties": {
-                "table": { "type": "string",
-                  "enum": ["locker_item", "locker_item_field", "locker_item_passkey"] },
-                "row_id": { "type": "string", "minLength": 1 },
-                "column": { "type": "string", "minLength": 1 },
-                "value": { "type": "string", "minLength": 1 }
-              }
-            } }
-          }
-        }"#,
-        Idempotency::Once,
-        ROTATE_KEY_PRE,
-        POST,
-        |ctx| {
-            // ROTATION STEP 2, AS ONE BATCH (D-1020-L4).
-            //
-            // v0's step 2 was one gateway transaction that re-encrypted every
-            // secret. The re-encryption is now the SEAT's — the gateway holds
-            // no key and cannot read a cell in order to rewrite it — so what
-            // arrives is the finished ciphertext and what this command
-            // guarantees is the part that was always the transaction's job:
-            // **either every cell is under `K′` and every `key_id` says so, or
-            // none of it happened.** The whole command runs inside the commit
-            // guard, so there is no partial state for a crash to leave.
-            //
-            // The retire PRECEDES the insert because `locker_key_live_idx` is
-            // on the PREDICATE (`retired_at IS NULL`) and is checked per
-            // statement, not per transaction — so "two live rows" is
-            // unrepresentable even for the instant between the two writes.
-            let key_id = ctx.required_str("key_id")?.to_owned();
-            let previous_key_id = ctx.required_str("previous_key_id")?.to_owned();
-            if key_id == previous_key_id {
-                return Err(invalid(
-                    "key_id",
-                    "a rotation moves to a NEW key generation; the ids are the same",
-                ));
-            }
-            let live: Option<String> = ctx
-                .connection()
-                .query_row(
-                    "SELECT key_id FROM locker_key WHERE retired_at IS NULL LIMIT 1",
-                    [],
-                    |row| row.get(0),
-                )
-                .ok();
-            // A ROTATION FROM A KEY THAT IS NOT LIVE IS TWO SEATS ROTATING AT
-            // ONCE, and the loser must be told rather than allowed to
-            // overwrite the winner's cells under a key nothing names.
-            match live.as_deref() {
-                None => {
-                    return Err(invalid(
-                        "previous_key_id",
-                        "this vault has no live Locker key to rotate; found it first",
-                    ));
-                }
-                Some(live) if live != previous_key_id => {
-                    return Err(invalid(
-                        "previous_key_id",
-                        format!(
-                            "this vault's live Locker key is {live}, not {previous_key_id} — \
-                             another seat rotated first; re-read the live key and rotate again"
-                        ),
-                    ));
-                }
-                Some(_) => {}
-            }
-
-            ctx.connection().execute(
-                "UPDATE locker_key SET retired_at = ?1 WHERE key_id = ?2",
-                rusqlite::params![ctx.now, previous_key_id],
-            )?;
-            ctx.connection().execute(
-                "INSERT INTO locker_key (key_id, created_at, retired_at) VALUES (?1, ?2, NULL)",
-                rusqlite::params![key_id, ctx.now],
-            )?;
-
-            let mut rewritten = 0_usize;
-            let cells = ctx
-                .input
-                .get("cells")
-                .and_then(serde_json::Value::as_array)
-                .cloned()
-                .unwrap_or_default();
-            for cell in &cells {
-                let table = cell
-                    .get("table")
-                    .and_then(serde_json::Value::as_str)
-                    .ok_or_else(|| invalid("cells", "every cell names its `table`"))?;
-                let row_id = cell
-                    .get("row_id")
-                    .and_then(serde_json::Value::as_str)
-                    .ok_or_else(|| invalid("cells", "every cell names its `row_id`"))?;
-                let column = cell
-                    .get("column")
-                    .and_then(serde_json::Value::as_str)
-                    .ok_or_else(|| invalid("cells", "every cell names its `column`"))?;
-                let value = cell
-                    .get("value")
-                    .and_then(serde_json::Value::as_str)
-                    .ok_or_else(|| invalid("cells", "every cell carries its `value`"))?;
-                // THE REGISTRY IS THE ALLOW-LIST, and it is the same registry
-                // encryption and the sweep read (`LOCKER_ENCRYPTED_COLUMNS`).
-                // A rotation that could name any column would be a rotation
-                // that could write ciphertext into `title`.
-                let (pk, columns) = crate::custody::locker_key::LOCKER_ENCRYPTED_COLUMNS
-                    .iter()
-                    .find(|(known, _, _)| *known == table)
-                    .map(|(_, pk, columns)| (*pk, *columns))
-                    .ok_or_else(|| {
-                        invalid("cells", format!("`{table}` holds no cell sealed under K"))
-                    })?;
-                if !columns.contains(&column) {
-                    return Err(invalid(
-                        "cells",
-                        format!("`{table}.{column}` is not a cell sealed under K"),
-                    ));
-                }
-                // And the value must be ciphertext, for the same reason every
-                // other write's is.
-                if !is_locker_ciphertext(value) {
-                    return Err(invalid(
-                        "cells",
-                        format!(
-                            "the rotated value for `{table}.{column}` is not sealed; a rotation \
-                             re-encrypts on the seat and the gateway stores what it is given"
-                        ),
-                    ));
-                }
-                let changed = ctx.connection().execute(
-                    &format!("UPDATE {table} SET {column} = ?1, key_id = ?2 WHERE {pk} = ?3"),
-                    rusqlite::params![value, key_id, row_id],
-                )?;
-                if changed != 1 {
-                    return Err(invalid(
-                        "cells",
-                        format!("there is no `{table}` row with the id the batch names"),
-                    ));
-                }
-                rewritten += 1;
-            }
-
-            let receipt_id = ctx.write_subject_receipt(
-                "rotate locker.key",
-                ITEM_TYPE,
-                Some("rotate"),
-                "allow",
-                serde_json::json!({
-                    "context": { "kind": "rotate" },
-                    "previous_key_id": previous_key_id,
-                    "key_id": key_id,
-                    "cells": rewritten
-                }),
-            )?;
-            Ok(serde_json::json!({
-                "key_id": key_id,
-                "previous_key_id": previous_key_id,
-                "cells": rewritten,
-                "receipt_id": receipt_id
-            }))
-        },
-    );
-    definition.risk = Risk::High;
-    definition.confirm = true;
-    definition.online_only = true;
-    definition
 }
 
 #[cfg(test)]

@@ -159,6 +159,42 @@ pub fn apply_field_mask(rows: Vec<RowImage>, decision: &Decision) -> Vec<RowImag
         .collect()
 }
 
+/// ONE PROJECTED COLUMN: a name, quoted — or a sealed cell's PRESENCE.
+///
+/// The kit's grammar admits exactly one expression in a projection, `<cell> IS
+/// NOT NULL AS <name>` (D-1020-CL5): whether a sealed cell holds anything, so a
+/// read can say "this login has a password" without carrying ciphertext. The
+/// page door quoted every entry as an identifier, which turned that expression
+/// into a string literal named after itself (#1047, found by Locker's item
+/// read). Both names are checked as plain identifiers before they are quoted,
+/// so nothing but a presence test is spelled here.
+fn projected(column: &str) -> String {
+    let words: Vec<&str> = column.split_whitespace().collect();
+    let identifier = |word: &str| {
+        !word.is_empty()
+            && word
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    };
+    match words.as_slice() {
+        [cell, is, not, null, r#as, name]
+            if is.eq_ignore_ascii_case("IS")
+                && not.eq_ignore_ascii_case("NOT")
+                && null.eq_ignore_ascii_case("NULL")
+                && r#as.eq_ignore_ascii_case("AS")
+                && identifier(cell)
+                && identifier(name) =>
+        {
+            format!(
+                "({} IS NOT NULL) AS {}",
+                crate::log::quoted(cell),
+                crate::log::quoted(name)
+            )
+        }
+        _ => crate::log::quoted(column),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -595,7 +631,7 @@ impl Vault {
         let projection = page
             .select
             .iter()
-            .map(|column| crate::log::quoted(column))
+            .map(|column| projected(column))
             .collect::<Vec<_>>()
             .join(", ");
         let thumbnail = if page.held_thumbnail {
@@ -1484,5 +1520,20 @@ mod keyset_tests {
             "the refusal did not name the column it wanted: {error}"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_presence_test_is_projected_as_one_and_anything_else_as_a_name() {
+        assert_eq!(
+            projected("otp_seed IS NOT NULL AS has_totp"),
+            "(\"otp_seed\" IS NOT NULL) AS \"has_totp\""
+        );
+        assert_eq!(projected("title"), crate::log::quoted("title"));
+        // Not an identifier on either side: quoted whole, so it reads as a
+        // name that does not exist rather than as SQL.
+        assert_eq!(
+            projected("x; IS NOT NULL AS y"),
+            crate::log::quoted("x; IS NOT NULL AS y")
+        );
     }
 }

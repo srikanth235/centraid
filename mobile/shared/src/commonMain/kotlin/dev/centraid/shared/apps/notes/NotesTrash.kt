@@ -68,7 +68,8 @@ public object NotesTrashReads :
         return TrashRow(
             id = row.note_id,
             title = NotesFold.titleOf(row.title, row.preview),
-            meta = NotesTrashSpec.copy.deletedMeta(row.deleted_at ?: ""),
+            // THE MEMBER'S DAY: `deleted_local_day`, read in the request's zone.
+            meta = NotesTrashSpec.copy.deletedMeta(row.deleted_local_day),
             icon_key = "FileText",
         )
     }

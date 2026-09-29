@@ -123,6 +123,20 @@ pub fn mint(store: &SqliteState, quota_bytes: u64, now: ServerTime) -> Result<In
     })
 }
 
+/// THE DIGITS THIS LAPTOP PRINTS BESIDE A VAULT IT ADMITTED (W15-D5, #1047).
+///
+/// Over the laptop's iroh endpoint id and the account the admit named, which
+/// is the vault's own identity key — the phone's core admits with exactly
+/// that. The one function both sides call is
+/// [`centraid_identity::pairing_safety_number`], so the phone's paired screen
+/// and this terminal render the same 60 digits when, and only when, each holds
+/// the other's real key. `None` for a key that is not an Ed25519 point.
+#[must_use]
+pub fn safety_number(endpoint: &[u8; 32], account: &AccountId) -> Option<String> {
+    centraid_identity::pairing_safety_number(account.as_bytes(), endpoint)
+        .map(|number| number.grouped())
+}
+
 /// `aaaa-bbbb-…`, so somebody can read it over a kitchen table without losing
 /// their place.
 fn group(hex: &str) -> String {

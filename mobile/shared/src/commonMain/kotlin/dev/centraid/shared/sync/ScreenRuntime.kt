@@ -59,6 +59,14 @@ public interface ScreenReads<S, E> {
      */
     public fun query(state: S, afterCursor: String?): PageQuery?
 
+    /**
+     * [query], told the device's [zone] (an IANA name, or empty when none is
+     * known) — what a read that asks the core for civil days
+     * (`PageQuery.local_day_columns`) states as its `tz`. What the runtime
+     * calls; a read with no day in it keeps the default.
+     */
+    public fun query(state: S, afterCursor: String?, zone: String): PageQuery? = query(state, afterCursor)
+
     /** The rows, as this screen's `DataArrived`. [nextCursor] is null at the end. */
     public fun arrived(rows: List<Row>, nextCursor: String?): E
 
@@ -210,6 +218,8 @@ public class ScreenRuntime<S, E>(
     private val left: () -> Boolean = { false },
     /** Where a write that failed after its screen was left is told. */
     private val stranded: StrandedWrites? = null,
+    /** The device's zone at the moment of the read, for [ScreenReads.query]. Empty when unknown. */
+    private val zone: () -> String = { "" },
 ) {
     /**
      * Collect this host's effects and serve the ones that are this screen's.
@@ -267,7 +277,7 @@ public class ScreenRuntime<S, E>(
         }
     }
     private suspend fun serve(afterCursor: String?) {
-        val query = reads.query(host.state.value, afterCursor)
+        val query = reads.query(host.state.value, afterCursor, zone())
         if (query == null) {
             // NOT SILENCE. A screen that asked for a read and got no event sits
             // on its loading state for ever, which is the exact defect this

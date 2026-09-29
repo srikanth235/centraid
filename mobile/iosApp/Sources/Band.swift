@@ -61,8 +61,8 @@ struct HomeBand: View {
             BandTab(
                 iconKey: "more",
                 bordered: true,
-                label: "More",
-                spoken: "All apps and places",
+                label: ShellWords.bandMore,
+                spoken: ShellWords.bandMoreSpoken,
                 selected: false,
                 identifier: "home-band-more",
                 onPress: { onSelect("more") }
@@ -222,10 +222,13 @@ struct AppBand: View {
                 Capsule()
                     .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
             )
-            .accessibilityLabel("Home")
+            .accessibilityLabel(ShellWords.bandHome)
             .accessibilityIdentifier("\(app)-band-home")
 
-            // ONE plate; the gutter between the tabs is the seam.
+            // ONE plate; the gutter between the tabs is the seam. NO PLATE
+            // AT ALL with no tabs (a locked Locker, #1047): an empty capsule
+            // is a control that does nothing.
+            if !tabs.isEmpty || onMore != nil {
             HStack(spacing: BandMetrics.groupGutter) {
                 ForEach(tabs, id: \.self) { tab in
                     AppBandTab(
@@ -240,7 +243,7 @@ struct AppBand: View {
                 if let onMore {
                     AppBandTab(
                         iconKey: "MoreVert",
-                        label: "More",
+                        label: ShellWords.bandMore,
                         selected: false,
                         rule: rule,
                         identifier: "\(app)-band-more",
@@ -262,6 +265,9 @@ struct AppBand: View {
                     : .timingCurve(0.3, 0, 0.4, 1, duration: CentraidGeometry.durationOne / 1000),
                 value: lit
             )
+            } else {
+                Spacer(minLength: 0)
+            }
         }
         // The capsule takes the plate's height, whatever the plate's is.
         .fixedSize(horizontal: false, vertical: true)
@@ -473,4 +479,47 @@ enum BandDestinations {
         return []
         #endif
     }
+}
+
+/// THE FRAME'S OWN WORDS — the band, Home and the vault switcher — from
+/// `copy/shared.json` through `HomeWords` (#1047: views decide nothing, and
+/// spell nothing either). Empty without the shared framework, as
+/// `LockerWords` is.
+enum ShellWords {
+    #if canImport(CentraidShared)
+    static var bandHome: String { HomeWords.shared.BAND_HOME }
+    static var bandMore: String { HomeWords.shared.BAND_MORE }
+    static var bandMoreSpoken: String { HomeWords.shared.BAND_MORE_SPOKEN }
+    static var allApps: String { HomeWords.shared.ALL_APPS }
+    static var loading: String { HomeWords.shared.LOADING }
+    static var photosAbsent: String { HomeWords.shared.PHOTOS_ABSENT }
+    static var dayOneTitle: String { HomeWords.shared.DAY_ONE_TITLE }
+    static var dayOneBody: String { HomeWords.shared.DAY_ONE_BODY }
+    static var firstMoves: String { HomeWords.shared.FIRST_MOVES }
+    static var vaultsTitle: String { HomeWords.shared.VAULTS_TITLE }
+    static var vaultsNone: String { HomeWords.shared.VAULTS_NONE }
+    static var vaultsOne: String { HomeWords.shared.VAULTS_ONE }
+    static var vaultsMake: String { HomeWords.shared.VAULTS_MAKE }
+    static var vaultsMakeSpoken: String { HomeWords.shared.VAULTS_MAKE_SPOKEN }
+    /// "Restore my vaults" — words.enter's door on the vault sheets (#1047 E2).
+    static var wordsRestore: String { WordsCopy.shared.RESTORE_FIRST_ACTION }
+    /// The More sheet's custody rows (#1047 E5): "Show my 24 words", and
+    /// "Pair with your laptop".
+    static var showWords: String { WordsCopy.shared.SHOW_AGAIN_ROW }
+    static var pairLaptop: String { CustodyCopy.shared.PAIR_TITLE }
+    static var vaultsCurrent: String { HomeWords.shared.VAULTS_CURRENT }
+    static var vaultsForget: String { HomeWords.shared.VAULTS_FORGET }
+    static var vaultsForgetBody: String { HomeWords.shared.VAULTS_FORGET_BODY }
+    static var cancel: String { KitWords.shared.CANCEL }
+    static func vaultName(_ name: String) -> String { HomeWords.shared.vaultName(name: name) }
+    static func forgetTitle(_ name: String) -> String { HomeWords.shared.forgetTitle(name: name) }
+    #else
+    static let bandHome = "", bandMore = "", bandMoreSpoken = "", allApps = "", loading = ""
+    static let photosAbsent = "", dayOneTitle = "", dayOneBody = "", firstMoves = ""
+    static let vaultsTitle = "", vaultsNone = "", vaultsOne = "", vaultsMake = "", vaultsMakeSpoken = ""
+    static let wordsRestore = "", showWords = "", pairLaptop = ""
+    static let vaultsCurrent = "", vaultsForget = "", vaultsForgetBody = "", cancel = ""
+    static func vaultName(_ name: String) -> String { name }
+    static func forgetTitle(_ name: String) -> String { "" }
+    #endif
 }

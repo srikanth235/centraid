@@ -22,11 +22,15 @@ debug-fault = []
 
 [dependencies]
 centraid-api-proto = { path = "../api-proto" }
-# THE UNLOCK BOUNDARY'S ORIGIN MATCHER (#1029 §1). `locker::fill` asks
-# `centraid_apps_locker` whether a page's origin matches a stored one before it
-# will hand an autofill grant out — the one question a fill must not answer
-# itself.
+# LOCKER'S PHONE LOADERS (#1047 L1): `app_query::locker` asks
+# `centraid_apps_locker::phone` for the list, the item and the counts.
 centraid-apps-locker = { path = "../apps/locker" }
+# A LOCKER ONE-TIME CODE (#1047, Q-1047-16): RFC 6238 is HMAC-SHA-1, fixed by
+# the specification every authenticator shares. Used by `locker::phone` alone,
+# over a seed opened under `K` after the code's receipt lands; see the
+# workspace manifest's note beside `sha1`.
+hmac.workspace = true
+sha1.workspace = true
 # THE APP QUERIES THE PHONE ASKS FOR BY NAME (#1046). Agenda's `upcoming` joins
 # six-plus tables and expands every series through the one recurrence engine,
 # so it runs HERE, over the page door, and a shell draws its typed answer —
@@ -76,9 +80,6 @@ centraid-media = { path = "../media" }
 # address: this crate offers no ALPN and calls no `accept`, which is what
 # `no-listening-socket` checks on every gate run.
 iroh.workspace = true
-# ONE TYPE: `VerifyingKey`. An iroh `EndpointId` IS an Ed25519 public key, and
-# a safety number is computed over two of them (W15-D5).
-ed25519-dalek.workspace = true
 # The laptop's endpoint id is stored as hex beside the vault; `hex` is what
 # writes and reads it.
 hex.workspace = true
@@ -94,13 +95,6 @@ centraid-ontology = { path = "../ontology" }
 centraid-protocol = { path = "../protocol" }
 centraid-vault = { path = "../vault" }
 prost.workspace = true
-# THE LOCKER'S OWN PRIMITIVES (#1029 §1), moved in with `crates/core/src/locker`:
-# Argon2id over the passphrase, AES-GCM around `K`, base64 for the wrapped blob
-# at rest, and `rand` for its salt and nonce.
-aes-gcm.workspace = true
-argon2.workspace = true
-base64.workspace = true
-rand.workspace = true
 serde.workspace = true
 # The network seam hands a connection DOWN (`link::SeatNetwork::sync`): SQLite
 # allows one writer and this crate holds it, so the type has to be nameable here.

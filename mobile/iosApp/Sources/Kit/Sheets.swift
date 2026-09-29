@@ -1,12 +1,19 @@
 import SwiftUI
 
+#if canImport(CentraidShared)
+import CentraidShared
+#endif
+
 /// THE CONFIRM: the machine's `Confirm` (title, the one full sentence the copy
 /// table allows, the verb) in a `SheetRoom`. **Destructive is the outlined
 /// `net` button** — the handoff's "destructive outline" — and Cancel is always
 /// there, because a confirm with one way out is not a question.
 struct ConfirmSheet: View {
+    /// Its detents, named so a host that shields it can state them again.
+    static let detents: Set<PresentationDetent> = [.height(280), .medium]
+
     let confirm: Centraid_Screen_V1_Confirm
-    var cancelLabel: String = "Cancel"
+    var cancelLabel: String = KitWords.shared.CANCEL
     let onConfirm: () -> Void
     let onDismiss: () -> Void
 
@@ -14,7 +21,7 @@ struct ConfirmSheet: View {
 
     init(
         _ confirm: Centraid_Screen_V1_Confirm,
-        cancelLabel: String = "Cancel",
+        cancelLabel: String = KitWords.shared.CANCEL,
         onConfirm: @escaping () -> Void,
         onDismiss: @escaping () -> Void
     ) {
@@ -27,7 +34,8 @@ struct ConfirmSheet: View {
     var body: some View {
         SheetRoom(
             title: confirm.title,
-            primary: SheetPrimary(label: confirm.confirmLabel, destructive: confirm.destructive, action: onConfirm)
+            primary: SheetPrimary(label: confirm.confirmLabel, destructive: confirm.destructive, action: onConfirm),
+            titleIdentifier: "kit-confirm"
         ) {
             if !confirm.body.isEmpty {
                 Text(confirm.body)
@@ -44,12 +52,11 @@ struct ConfirmSheet: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("kit-confirm-cancel")
         }
-        .presentationDetents([.height(280), .medium])
-        // A CONTAINER, SO ITS ID IS ITS OWN: an identifier on a plain
-        // container is handed down to every child and replaces theirs
-        // (`kit-destructive`, `kit-confirm-cancel`).
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("kit-confirm")
+        .presentationDetents(Self.detents)
+        // NO IDENTIFIER ON THE CONTAINER (#1047): one there is handed down to
+        // every child and replaced theirs (`kit-destructive`,
+        // `kit-confirm-cancel`) even under `.contain`. The sheet is found by
+        // its title, which carries `kit-confirm`.
     }
 }
 

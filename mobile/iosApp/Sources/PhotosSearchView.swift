@@ -1,6 +1,10 @@
 import Foundation
 import SwiftProtobuf
 import SwiftUI
+
+#if canImport(CentraidShared)
+import CentraidShared
+#endif
 import UIKit
 
 /// SEARCH, IN SWIFTUI (#1029, the photos port).
@@ -188,7 +192,7 @@ struct PhotosSearchBar: View {
             if !focused {
                 SearchCircle(
                     iconKey: returnIconKey,
-                    spoken: "Back to \(returnLabel)",
+                    spoken: KitWords.shared.backTo(parent: returnLabel),
                     identifier: "photos.search.return",
                     action: onReturn
                 )

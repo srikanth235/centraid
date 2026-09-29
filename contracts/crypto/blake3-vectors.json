@@ -11,11 +11,6 @@
       "outHex": "c3dce70fb4fb4f744b893299e5de02918f0873433930cadfe5aa38b207af9242"
     },
     {
-      "context": "centraid-member-key-envelope-v1‖00000000-0000-7000-8000-000000000456",
-      "length": 32,
-      "outHex": "d182df8a09c0c500821b0bbea251517a5b67c461dfb53afd8725e539ebed71e3"
-    },
-    {
       "context": "centraid-backup:wal-nonce:vault:0123456789abcdef0123456789abcdef:7:32:67:1721280000456",
       "length": 12,
       "outHex": "7f4ccdf0de34a9db508e1369"

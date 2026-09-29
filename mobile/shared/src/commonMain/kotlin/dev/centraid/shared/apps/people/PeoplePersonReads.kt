@@ -91,7 +91,7 @@ public object PeoplePersonReads :
 public object PeopleSheetFold {
     public fun person(sheet: PeopleSheet, today: String): PeoplePersonData {
         val person = sheet.person ?: centraid.core.v1.PeopleRosterRow()
-        val lastTouch = PeopleWords.lastTouch(person.last_contacted_at != null, person.days_since_contact)
+        val lastTouch = PeopleWords.lastTouch(person, today)
         return PeoplePersonData(
             party_id = person.party_id,
             name = person.name,

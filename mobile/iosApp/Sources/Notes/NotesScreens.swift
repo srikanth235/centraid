@@ -267,11 +267,8 @@ enum NotesScreens: AppScreens {
             swapPlace(band.key, shell)
         case let .entryPicked(picked):
             shell.path.append(editorRoute(picked.noteID))
-        case .newEntry:
-            // TODO(intent): `NewEntryRequested{day}` — Notes has no command
-            // that writes a journal marker for a day, so this opens a new
-            // note and the day is not carried (notes-report "Needs from core").
-            shell.path.append(newNoteRoute())
+        // `newEntry` is the machine's own sheet (`compose`), written through
+        // People's journal command — nothing to route.
         case .trashOpened:
             shell.path.append(.screen(trash, Data()))
         default:

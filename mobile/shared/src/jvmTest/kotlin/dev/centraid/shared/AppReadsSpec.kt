@@ -22,6 +22,16 @@ import dev.centraid.shared.apps.agenda.AgendaEventMachine
 import dev.centraid.shared.apps.agenda.AgendaEventReads
 import dev.centraid.shared.apps.agenda.AgendaHomeMachine
 import dev.centraid.shared.apps.agenda.AgendaReads
+import dev.centraid.shared.apps.locker.LOCKER_TRASH
+import dev.centraid.shared.apps.locker.LockerEditorMachine
+import dev.centraid.shared.apps.locker.LockerEditorReads
+import dev.centraid.shared.apps.locker.LockerGeneratorMachine
+import dev.centraid.shared.apps.locker.LockerGeneratorReads
+import dev.centraid.shared.apps.locker.LockerHomeMachine
+import dev.centraid.shared.apps.locker.LockerHomeReads
+import dev.centraid.shared.apps.locker.LockerItemMachine
+import dev.centraid.shared.apps.locker.LockerItemReads
+import dev.centraid.shared.apps.locker.LockerTrashMachine
 import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.notes.NotesReads
 import dev.centraid.shared.apps.notes.NotesHistoryMachine
@@ -69,6 +79,8 @@ import dev.centraid.shared.apps.tally.TallyEditorMachine
 import dev.centraid.shared.apps.tally.TallyEditorReads
 import dev.centraid.shared.apps.tally.TallyExpenseMachine
 import dev.centraid.shared.apps.tally.TallyExpenseReads
+import dev.centraid.shared.apps.tally.TallyExportMachine
+import dev.centraid.shared.apps.tally.TallyExportReads
 import dev.centraid.shared.apps.tally.TallyFriendMachine
 import dev.centraid.shared.apps.tally.TallyFriendReads
 import dev.centraid.shared.apps.tally.TallyGroupMachine
@@ -86,6 +98,7 @@ import dev.centraid.shared.apps.tally.TallySpendingReads
 import dev.centraid.shared.apps.tally.TallyTrashMachine
 import dev.centraid.shared.apps.tally.TallyTrashReads
 import dev.centraid.shared.screen.ScreenMachine
+import dev.centraid.shared.kit.TrashReads
 import dev.centraid.shared.shell.HomeMachine
 import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.apps.tasks.TasksCatchUpMachine
@@ -155,6 +168,10 @@ class AppReadsSpec : StringSpec({
         Triple("tasks.trash", TasksTrashMachine.reads, TasksTrashMachine.machine),
         // TALLY (#1046 port): the kit's trash over `tally_expense`, restore only.
         Triple("tally.trash", TallyTrashReads, TallyTrashMachine),
+        // LOCKER (#1047): the kit's trash over `locker_item`. The statement is
+        // the kit's own; `LockerTrashReads` adds only the gate in front of it
+        // (`LockerSpec`).
+        Triple("locker.trash", TrashReads(LOCKER_TRASH), LockerTrashMachine),
     )
 
     /** The statement each screen makes when it is holding a state that can read. */
@@ -209,6 +226,7 @@ class AppReadsSpec : StringSpec({
         "docs.trash" -> DocsTrashReads.query(DocsTrashMachine.initial(), null)
         "tasks.trash" -> TasksTrashMachine.reads.query(TasksTrashMachine.machine.initial(), null)
         "tally.trash" -> TallyTrashReads.query(TallyTrashMachine.initial(), null)
+        "locker.trash" -> TrashReads(LOCKER_TRASH).query(LockerTrashMachine.initial(), null)
         else -> DuplicateReviewReads.query(
             DuplicateReviewMachine.reduce(
                 DuplicateReviewMachine.initial(),
@@ -321,6 +339,14 @@ class AppReadsSpec : StringSpec({
         Triple("tally.recurring", TallyRecurringReads, TallyRecurringMachine),
         Triple("tally.spending", TallySpendingReads, TallySpendingMachine),
         Triple("tally.search", TallySearchReads, TallySearchMachine),
+        // The export folds the same load, plus the dashboard for its picker.
+        Triple("tally.export", TallyExportReads, TallyExportMachine),
+        // LOCKER (#1047). Every read screen shares one table set — the item,
+        // its sidecars, the tag plane and the memo; the generator reads none.
+        Triple("locker.home", LockerHomeReads, LockerHomeMachine),
+        Triple("locker.item", LockerItemReads, LockerItemMachine),
+        Triple("locker.editor", LockerEditorReads, LockerEditorMachine),
+        Triple("locker.generator", LockerGeneratorReads, LockerGeneratorMachine),
     )
 
     "an app-query screen's tables are exactly the tables its machine re-reads on" {

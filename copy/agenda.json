@@ -1,5 +1,5 @@
 {
-  "$generatedBy": "contracts/tools/export-copy.ts",
+  "$comment": "Hand-maintained source: no emitter writes this file (export-copy.ts left with v0's copy leaves in #1020 wave 6). Its twin is mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/AgendaCopy.kt; edit both, and KitTimeMoneyCopySpec fails when their strings disagree.",
   "app": "agenda",
   "strings": {
     "A11Y_CANCEL": "Cancel this event",
@@ -181,7 +181,8 @@
     "STATUS_NEEDS_REPLY": "needs a reply",
     "STATUS_PENDING": "pending",
     "TILE_ALL_DAY": "all day",
-    "TILE_COUNT_LABEL": "events in the next 7 days",
+    "TILE_COUNT_MANY": "events in the next 7 days",
+    "TILE_COUNT_ONE": "event in the next 7 days",
     "TILE_NOTHING_AFTER": "nothing after it",
     "TILE_NOTHING_UNTIL": "then nothing until the",
     "TILE_THEN": "then",

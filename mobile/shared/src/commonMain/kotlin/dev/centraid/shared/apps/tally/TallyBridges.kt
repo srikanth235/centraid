@@ -56,14 +56,22 @@ public class TallyGroupBridge : TallyScreenBridge<TallyGroupState, TallyGroupEve
     TallyGroupEvent.ADAPTER,
     TallyGroupReads,
 ) {
-    /** [title] is the group's name where the shell has it, for the app bar before the read. */
-    public fun open(groupId: String, title: String = "") {
-        forward(TallyGroupEvent(opened = TallyGroupEvent.Opened(group_id = groupId, title = title)))
+    /**
+     * [title] is the group's name where the shell has it, for the app bar
+     * before the read; [parent] is the pushing page's own title, which the
+     * back control says (#1047).
+     */
+    public fun open(groupId: String, title: String, parent: String) {
+        forward(TallyGroupEvent(opened = TallyGroupEvent.Opened(group_id = groupId, title = title, parent = parent)))
     }
 
-    /** Swift cannot omit `title`'s default: this is the call without it. */
+    /** Swift cannot omit a default: these are the calls without them. */
+    public fun open(groupId: String, title: String) {
+        open(groupId, title, "")
+    }
+
     public fun open(groupId: String) {
-        open(groupId, "")
+        open(groupId, "", "")
     }
 }
 
@@ -72,13 +80,18 @@ public class TallyFriendBridge : TallyScreenBridge<TallyFriendState, TallyFriend
     TallyFriendEvent.ADAPTER,
     TallyFriendReads,
 ) {
-    public fun open(partyId: String, title: String = "") {
-        forward(TallyFriendEvent(opened = TallyFriendEvent.Opened(party_id = partyId, title = title)))
+    /** [parent] is the pushing page's own title, which the back control says (#1047). */
+    public fun open(partyId: String, title: String, parent: String) {
+        forward(TallyFriendEvent(opened = TallyFriendEvent.Opened(party_id = partyId, title = title, parent = parent)))
     }
 
-    /** Swift cannot omit `title`'s default: this is the call without it. */
+    /** Swift cannot omit a default: these are the calls without them. */
+    public fun open(partyId: String, title: String) {
+        open(partyId, title, "")
+    }
+
     public fun open(partyId: String) {
-        open(partyId, "")
+        open(partyId, "", "")
     }
 }
 
@@ -87,8 +100,13 @@ public class TallyExpenseBridge : TallyScreenBridge<TallyExpenseState, TallyExpe
     TallyExpenseEvent.ADAPTER,
     TallyExpenseReads,
 ) {
+    /** [parent] is the pushing page's own title, which the back control says (#1047). */
+    public fun open(expenseId: String, parent: String) {
+        forward(TallyExpenseEvent(opened = TallyExpenseEvent.Opened(expense_id = expenseId, parent = parent)))
+    }
+
     public fun open(expenseId: String) {
-        forward(TallyExpenseEvent(opened = TallyExpenseEvent.Opened(expense_id = expenseId)))
+        open(expenseId, "")
     }
 }
 
@@ -139,14 +157,23 @@ public class TallySettleUpBridge : TallyScreenBridge<TallySettleUpState, TallySe
     TallySettleUpEvent.ADAPTER,
     TallySettleUpReads,
 ) {
-    /** Empty [groupId] is every group plus the group-less positions. */
-    public fun open(groupId: String = "") {
-        forward(TallySettleUpEvent(opened = TallySettleUpEvent.Opened(group_id = groupId, draft_token = token())))
+    /**
+     * Empty [groupId] is every group plus the group-less positions. [parent]
+     * is the pushing page's own title, which the back control says (#1047).
+     */
+    public fun open(groupId: String, parent: String) {
+        forward(
+            TallySettleUpEvent(opened = TallySettleUpEvent.Opened(group_id = groupId, draft_token = token(), parent = parent)),
+        )
+    }
+
+    public fun open(groupId: String) {
+        open(groupId, "")
     }
 
     /** Every group: the call Swift can make (default arguments do not cross). */
     public fun open() {
-        open("")
+        open("", "")
     }
 }
 

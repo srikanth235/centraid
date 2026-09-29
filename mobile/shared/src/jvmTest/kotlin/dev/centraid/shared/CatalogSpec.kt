@@ -7,8 +7,10 @@ import dev.centraid.shared.shell.FirstMoves
 import dev.centraid.shared.shell.SpringboardPolicy
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 
@@ -107,6 +109,14 @@ class CatalogSpec : StringSpec({
         tabs.first().law.shouldBeTrue()
         (tabs.size <= BandPolicy.BAND_PLACE_SLOTS + 1).shouldBeTrue()
         tabs.none { it.id == "more" }.shouldBeTrue()
+    }
+
+    "the default band pins no place with nothing behind it (R-1047-F7b)" {
+        // Vault has no destination on either shell yet: pinned, it was a tab
+        // that navigated nowhere, which is Starred's defect.
+        BandPolicy.DEFAULT_PINS.contains("data").shouldBeFalse()
+        BandPolicy.bandTabs().map { it.id } shouldBe listOf("home")
+        BandPolicy.place("data").shouldNotBeNull().pinnedByDefault.shouldBeFalse()
     }
 
     "System is reachable by link and never spends a band slot" {

@@ -50,6 +50,7 @@ import dev.centraid.shared.apps.tasks.TasksProjectInput
 import dev.centraid.shared.apps.tasks.TasksProjectMachine
 import dev.centraid.shared.apps.tasks.TasksProjectPage
 import dev.centraid.shared.apps.tasks.TasksProjectReads
+import dev.centraid.shared.apps.tasks.TasksRows
 import dev.centraid.shared.apps.tasks.TasksTrashMachine
 import dev.centraid.shared.kit.AutosaveLaw
 import dev.centraid.shared.kit.WriteLaw
@@ -184,6 +185,16 @@ class TasksSpec : StringSpec({
         }
         data.count_label shouldBe "3 projects"
         step.state.screen.quick_add!!.shown shouldBe false
+    }
+
+    "a project's hue is a colour role like People's and Agenda's — cTeal, never the wheel's word (#1047)" {
+        val rows = dev.centraid.shared.apps.tasks.TasksRows
+        rows.hueOf("p1", TasksProject(project_id = "p1", color = "var(--c-teal)")) shouldBe "cTeal"
+        // No stored hue: the id's own, still a role.
+        val own = rows.hueOf("p1", TasksProject(project_id = "p1"))
+        own shouldBe dev.centraid.shared.design.PartyHueWheel.role(dev.centraid.shared.design.PartyHueWheel.identityHueKey("p1"))
+        own.startsWith("c") shouldBe true
+        rows.hueOf("p1", null).startsWith("c") shouldBe true
     }
 
     "every destination says its own empty sentence, and day one says one" {
@@ -487,7 +498,8 @@ class TasksSpec : StringSpec({
             done_children = 1,
             priority = 3,
         )
-        val old = task("b", "Paint shed").copy(age_days = 200, created_at = "2025-11-02T10:00:00.000Z")
+        // 23:30 UTC on 31 October is 1 November in the member's zone: the core's day names the month.
+        val old = task("b", "Paint shed").copy(age_days = 200, created_at = "2025-10-31T23:30:00.000Z", created_local_day = "2025-11-01")
         val b = board(TasksView.TASKS_VIEW_ALL, TasksGroup(kind = TasksGroupKind.TASKS_GROUP_KIND_DATED, key = "d", tasks = listOf(behind)), TasksGroup(kind = TasksGroupKind.TASKS_GROUP_KIND_UNDATED, key = "u", tasks = listOf(old)))
             .copy(projects = listOf(TasksProject(project_id = "p1", name = "Home admin")))
         val rows = listOn(TasksListState.View.VIEW_ALL, b).screen.data_!!.groups.flatMap { it.rows }
@@ -495,6 +507,8 @@ class TasksSpec : StringSpec({
         rows[0].priority_label shouldBe "Now"
         rows[0].children.map { it.subtask } shouldBe listOf(true, true)
         rows[1].meta shouldBe "sitting since November"
+        // NO LOCAL DAY ANSWERED: the month is not guessed from a UTC instant.
+        TasksRows.meta(old.copy(created_local_day = ""), TasksRows.Context(today = "2026-06-15")) shouldBe ""
     }
 
     // -----------------------------------------------------------------
@@ -586,6 +600,10 @@ class TasksSpec : StringSpec({
         fields.getValue("repeats").choices.single { it.selected }.key shouldBe "monthly"
         fields.getValue("anchor").choices.single { it.selected }.key shouldBe "completion"
         fields.getValue("priority").value_ shouldBe "None"
+        // SIGNAGE, NOT AN ESSAY (DESIGN.md, Copy; #1047): "None" is on the row,
+        // so no note explains that priority is optional; the placeholder is a noun.
+        fields.getValue("priority").note shouldBe ""
+        data.title_placeholder shouldBe "Task name"
         fields.getValue("project").value_ shouldBe "Inbox"
         fields.getValue("tags").value_ shouldBe "—"
 

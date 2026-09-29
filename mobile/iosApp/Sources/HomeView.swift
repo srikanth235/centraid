@@ -203,7 +203,7 @@ private struct StatusRibbon: View {
             Button {
                 shell.send(screen: "home", event: HomeEvents.allApps(open: true))
             } label: {
-                Text("All apps")
+                Text(ShellWords.allApps)
                     .centraidType("control")
                     .foregroundStyle(Theme.color("link", scheme))
             }
@@ -321,16 +321,12 @@ private struct TileCard: View {
 
     /// A count a read ACTUALLY RETURNED, or the withheld glyph.
     ///
-    /// The em dash is the honest half: Locker withholds its count by design, and
-    /// a `0` there would be a lie about how many secrets a member holds. A
-    /// capped count says `N+` rather than printing its ceiling as a fact.
+    /// The em dash is the honest half: a count the read did not return is not
+    /// a `0`, which would be a lie about what a member holds. A capped count
+    /// says `N+` rather than printing its ceiling as a fact.
     private var count: String {
         guard tile.hasCount else { return "—" }
         return tile.count.capped ? "\(tile.count.value)+" : "\(tile.count.value)"
-    }
-
-    private var spoken: String {
-        tile.hasCount ? "\(count) \(tile.countLabel)" : tile.countLabel
     }
 
     /// PHOTOS TAKES THE CARD'S SLACK ITSELF, so it is the one body that gets no
@@ -404,7 +400,7 @@ private struct TileCard: View {
         // Keyed on the app id. The label carries the live count, so it changes
         // with the vault; the id does not.
         .accessibilityIdentifier("home-tile-\(tile.appID)")
-        .accessibilityLabel("Open \(name), \(spoken)".trimmingCharacters(in: .whitespaces))
+        .accessibilityLabel(tile.accessibilityLabel)
     }
 
     /// Where this tile leads, or nowhere.
@@ -575,30 +571,39 @@ private struct ContentBody: View {
                         // tile is not the place to take the shell down over a
                         // hue.
                         let hue = face.hasColor ? partyHueRoles[face.color] : nil
-                        Text(face.initials)
-                            .centraidType("smallStrong")
-                            // `textInv` is the SOLVED foreground for a filled
-                            // identity disc (`DESIGN.md`'s rule 7 — `onAccent`
-                            // in the hand-off's role map). Ink on a saturated
-                            // fill is the contrast failure this tile had.
-                            .foregroundStyle(Theme.color(hue != nil ? "textInv" : "text", scheme))
-                            .frame(width: 30, height: 30)
-                            .background(Theme.color(hue ?? "bgSunken", scheme))
-                            .clipShape(Circle())
+                        Circle()
+                            .fill(Theme.color(hue ?? "bgSunken", scheme))
+                            .overlay(
+                                // THE INITIALS STAY INSIDE THEIR OWN DISC. A
+                                // bare `Text` framed at the disc's width drew
+                                // at its natural width, so two letters ran
+                                // under the next disc and read as one word
+                                // ("GRMACO"). Inset by the 7pt the next disc
+                                // covers ON BOTH SIDES, so centred letters end
+                                // before the overlap; one line, shrunk to fit.
+                                Text(face.initials)
+                                    .centraidType("smallStrong")
+                                    // `textInv` is the SOLVED foreground for a
+                                    // filled identity disc (`DESIGN.md`'s rule
+                                    // 7 — `onAccent` in the hand-off's role
+                                    // map). Ink on a saturated fill is the
+                                    // contrast failure this tile had.
+                                    .foregroundStyle(Theme.color(hue != nil ? "textInv" : "text", scheme))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.5)
+                                    .padding(.horizontal, 7)
+                            )
                             .overlay(
                                 Circle()
                                     .strokeBorder(Theme.color("bgElev", scheme), lineWidth: 1.5)
                             )
+                            .frame(width: 30, height: 30)
+                            .clipShape(Circle())
                     }
                 }
                 Spacer(minLength: 0)
-                // `more` comes off the header total — never a fabricated 0; an
-                // exhausted directory says so plainly.
-                Text(
-                    people.more > 0
-                        ? "+\(people.more) more in your directory"
-                        : "That's everyone in your directory"
-                )
+                // The machine's words for `more` (off the header total).
+                Text(people.moreLabel)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("text", scheme))
                 .lineLimit(1)
@@ -630,7 +635,9 @@ private struct ContentBody: View {
             VStack(alignment: .leading, spacing: 4) {
                 // No lock glyph beside "Locked" — that says it twice. A STATE
                 // label, not a control, so the chip is an outline and not a fill.
-                Text(locker.locked ? "Locked" : "Unlocked")
+                // THE MACHINE'S WORD FOR THE STATE (R-1047-L7): "Locked" or
+                // "Open", from `HomeReads.lockerOpen` — never spelt here.
+                Text(locker.stateLabel)
                     .centraidType("eyebrow")
                     .foregroundStyle(
                         scheme.centraidMarks["locker"]?.hue ?? Theme.color("text", scheme)
@@ -642,11 +649,11 @@ private struct ContentBody: View {
                             .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: hairline)
                     )
                 Spacer(minLength: 0)
-                // Instructional — never claim a shelf count this tile cannot read.
-                Text(locker.locked ? "Opens with your passphrase" : "Open on this device")
+                // The machine's line — never a shelf count it cannot read.
+                Text(locker.line)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("text", scheme))
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
@@ -734,7 +741,7 @@ private struct PhotoMosaic: View {
                 // own photographs, and "these fill in when it is back" was a
                 // sentence about a connection that is not the reason. What is
                 // true in every case is that the bytes are not here yet.
-                Text("These photographs are not on this device yet.")
+                Text(ShellWords.photosAbsent)
                     .centraidType("mono")
                     .foregroundStyle(Theme.color("textFaint", scheme))
             }
@@ -780,7 +787,7 @@ private struct Skeleton: View {
         // `GeometryReader` has no intrinsic height and would otherwise eat the
         // whole card.
         .frame(height: 56)
-        .accessibilityLabel("Loading")
+        .accessibilityLabel(ShellWords.loading)
     }
 }
 
@@ -807,13 +814,10 @@ private struct DayOne: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Nothing in here yet")
+                Text(ShellWords.dayOneTitle)
                     .centraidType("title")
                     .foregroundStyle(Theme.color("text", scheme))
-                Text(
-                    "Bring your photographs and documents in and this becomes the front of "
-                        + "your own archive."
-                )
+                Text(ShellWords.dayOneBody)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
                 ForEach(data.firstMoves, id: \.id) { move in
@@ -838,7 +842,7 @@ private struct FirstMovesBand: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Fill this out")
+            Text(ShellWords.firstMoves)
                 .centraidType("eyebrow")
                 .foregroundStyle(Theme.color("textFaint", scheme))
             ForEach(moves, id: \.id) { MoveRow(move: $0, shell: shell) }
@@ -867,6 +871,15 @@ private struct MoveRow: View {
             // "Add someone" is a new person's editor.
             if move.id == "notes" { shell.path.append(NotesScreens.newNoteRoute()) }
             if move.id == "people" { shell.path.append(PeopleScreens.newPersonRoute) }
+            // "File a document" lands on the drive, "Log a shared expense" on
+            // the composer over Tally, "Save a secret" on Locker — whose wall
+            // asks first (#1047).
+            if move.id == "docs" { shell.path.append(DocsScreens.driveRoute) }
+            if move.id == "tally" {
+                shell.path.append(TallyScreens.homeRoute)
+                shell.path.append(TallyScreens.addRoute())
+            }
+            if move.id == "locker" { shell.path.append(LockerScreens.homeRoute) }
         } label: {
             HStack(spacing: 8) {
                 // A move carries its OWN icon key: `connectors` is a move and
@@ -910,7 +923,7 @@ private struct ThingsFoot: View {
 
     var body: some View {
         if things.settled {
-            Text(things.capped ? "at least \(things.total) things" : "\(things.total) things")
+            Text("\(things.capped ? "at least " : "")\(things.total) \(things.total == 1 ? "thing" : "things")")
                 .centraidType("mono")
                 .foregroundStyle(Theme.color("textFaint", scheme))
                 .padding(.top, 16)
@@ -925,33 +938,62 @@ private struct AllAppsSheet: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        List(tiles, id: \.appID) { tile in
-            // A ROW DOES WHAT ITS TILE DOES — the same pick, the same route —
-            // so the listing and the springboard cannot disagree about where an
-            // app goes. The sheet closes only when there is somewhere to go: an
-            // app with no screen yet leaves the member where they are, as its
-            // tile does, rather than dropping them back on Home with nothing
-            // opened.
-            Button {
-                shell.send(screen: "home", event: HomeEvents.movePicked(tile.appID))
-                guard let route = TileCard.route(for: tile) else { return }
-                shell.send(screen: "home", event: HomeEvents.allApps(open: false))
-                shell.path.append(route)
-            } label: {
-                HStack(spacing: 8) {
-                    AppMark(appID: tile.appID, size: 22)
-                    Text(CentraidCatalog.byID[tile.appID]?.name ?? tile.appID.capitalized)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
-                    Spacer(minLength: 0)
-                }
-                .contentShape(Rectangle())
+        List {
+            ForEach(tiles, id: \.appID) { tile in
+                row(tile)
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("home-all-apps-row-\(tile.appID)")
+            // THE CUSTODY ROWS (#1047 E5): the words again, and the laptop.
+            // Each opens its own screen over its own machine; the rows are
+            // intents and decide nothing.
+            Section {
+                custodyRow(ShellWords.showWords, identifier: "home-more-show-words") { shell.openShowWords() }
+                custodyRow(ShellWords.pairLaptop, identifier: "home-more-pair-laptop") { shell.openPairLaptop() }
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home-all-apps-sheet")
+    }
+
+    private func custodyRow(_ label: String, identifier: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(label)
+                    .centraidType("smallStrong")
+                    .foregroundStyle(Theme.color("text", scheme))
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private func row(_ tile: Centraid_Screen_V1_HomeTile) -> some View {
+        // A ROW DOES WHAT ITS TILE DOES — the same pick, the same route —
+        // so the listing and the springboard cannot disagree about where an
+        // app goes. The sheet closes only when there is somewhere to go: an
+        // app with no screen yet leaves the member where they are, as its
+        // tile does, rather than dropping them back on Home with nothing
+        // opened.
+        Button {
+            shell.send(screen: "home", event: HomeEvents.movePicked(tile.appID))
+            guard let route = TileCard.route(for: tile) else { return }
+            shell.send(screen: "home", event: HomeEvents.allApps(open: false))
+            shell.path.append(route)
+        } label: {
+            HStack(spacing: 8) {
+                AppMark(appID: tile.appID, size: 22)
+                Text(CentraidCatalog.byID[tile.appID]?.name ?? tile.appID.capitalized)
+                    .centraidType("smallStrong")
+                    .foregroundStyle(Theme.color("text", scheme))
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("home-all-apps-row-\(tile.appID)")
+        .accessibilityLabel(tile.openLabel)
     }
 }
 
@@ -978,7 +1020,7 @@ private struct VaultSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Vaults")
+            Text(ShellWords.vaultsTitle)
                 .centraidType("title")
                 .foregroundStyle(Theme.color("text", scheme))
                 .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -991,7 +1033,7 @@ private struct VaultSheet: View {
             // still is). The way out was PAIR and is now MAKE — the phone is
             // the vault (#1029 §1), so there is nothing to pair with.
             if vaults.isEmpty {
-                Text("This device holds no vault.")
+                Text(ShellWords.vaultsNone)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -1005,7 +1047,7 @@ private struct VaultSheet: View {
                         shell.vaultSheetOpen = true
                     }
                 } label: {
-                    Text("Make a vault")
+                    Text(ShellWords.vaultsMake)
                         .centraidType("smallStrong")
                         .foregroundStyle(Theme.color("link", scheme))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1014,10 +1056,26 @@ private struct VaultSheet: View {
                         .frame(minHeight: 44)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Make a vault on this phone")
+                .accessibilityLabel(ShellWords.vaultsMakeSpoken)
                 .accessibilityIdentifier("vault-sheet-make")
+                // AND THE WAY BACK: a fresh install's vaults come home from
+                // the 24 words (#1047 E2), the switcher shut first.
+                Button {
+                    shell.send(screen: "home", event: HomeEvents.vaultPicked(""))
+                    DispatchQueue.main.async { shell.openRestore() }
+                } label: {
+                    Text(ShellWords.wordsRestore)
+                        .centraidType("smallStrong")
+                        .foregroundStyle(Theme.color("link", scheme))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.vertical, 12)
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("vault-sheet-restore")
             } else if vaults.count == 1 {
-                Text("This device holds one vault.")
+                Text(ShellWords.vaultsOne)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -1043,7 +1101,7 @@ private struct VaultSheet: View {
                                 in: RoundedRectangle(cornerRadius: 7)
                             )
                         VStack(alignment: .leading, spacing: 0) {
-                            Text(vault.vaultName.isEmpty ? "Unnamed vault" : vault.vaultName)
+                            Text(ShellWords.vaultName(vault.vaultName))
                                 .centraidType("smallStrong")
                                 .foregroundStyle(Theme.color("text", scheme))
                             // THE SAME SECOND LINE THE HEADER DRAWS, from the
@@ -1066,7 +1124,7 @@ private struct VaultSheet: View {
                                 tint: Theme.color("link", scheme),
                                 size: 18
                             )
-                            .accessibilityLabel("Currently open")
+                            .accessibilityLabel(ShellWords.vaultsCurrent)
                         }
                     }
                     .frame(minHeight: 44)
@@ -1084,7 +1142,7 @@ private struct VaultSheet: View {
                     Button(role: .destructive) {
                         forgetting = vault
                     } label: {
-                        Label("Forget", systemImage: "trash")
+                        Label(ShellWords.vaultsForget, systemImage: "trash")
                     }
                     .accessibilityIdentifier("vault-forget-\(vault.vaultID)")
                 }
@@ -1103,20 +1161,20 @@ private struct VaultSheet: View {
         // alert that still offered a way back would be the one place this
         // shell lies about what a destructive button does.
         .alert(
-            "Forget \(forgetting?.vaultName.isEmpty == false ? forgetting!.vaultName : "this vault")?",
+            ShellWords.forgetTitle(forgetting?.vaultName ?? ""),
             isPresented: Binding(
                 get: { forgetting != nil },
                 set: { if !$0 { forgetting = nil } }
             ),
             presenting: forgetting
         ) { vault in
-            Button("Forget", role: .destructive) {
+            Button(ShellWords.vaultsForget, role: .destructive) {
                 shell.forget(vaultID: vault.vaultID)
                 forgetting = nil
             }
-            Button("Cancel", role: .cancel) { forgetting = nil }
+            Button(ShellWords.cancel, role: .cancel) { forgetting = nil }
         } message: { _ in
-            Text("This deletes the vault and everything in it. There is no copy anywhere else.")
+            Text(ShellWords.vaultsForgetBody)
         }
     }
 }

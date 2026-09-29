@@ -173,7 +173,7 @@ struct TasksHomeView: View {
                             trailing: row.trailing,
                             trailingTone: StatusChipView.ink(row.trailingTone, neutral: "text"),
                             chips: row.chips,
-                            hueKey: row.hueKey.isEmpty ? "" : AgendaHue.role(row.hueKey),
+                            hueKey: row.hueKey.isEmpty ? "" : (KitHue.role(row.hueKey) ?? "cSlate"),
                             dimmed: row.dimmed,
                             pending: row.pending,
                             accessibility: row.accessibilityLabel,

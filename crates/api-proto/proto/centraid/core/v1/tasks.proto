@@ -180,6 +180,9 @@ message TasksTask {
   // from it: `recurrence_summary`, `next_due` and `missed` are those answers
   // (#834's rule, which this field does not relax).
   optional string rrule = 38;
+  // `created_at`'s civil day (`YYYY-MM-DD`) in the request zone — what
+  // "sitting since" names. EMPTY when there is no `created_at`.
+  string created_local_day = 39;
 }
 
 message TasksTag {

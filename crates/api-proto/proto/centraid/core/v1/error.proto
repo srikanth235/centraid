@@ -103,8 +103,12 @@ enum ErrorCode {
   ERROR_CODE_INTENT_OUTCOME_EXPIRED = 42;
   // The declared read-set did not version every row the operation reads.
   ERROR_CODE_READ_SET_INCOMPLETE = 43;
-  // The action is `online_only` and this seat has no gateway.
-  ERROR_CODE_ONLINE_ONLY = 44;
+  // RESERVED. Held `ERROR_CODE_ONLINE_ONLY` ("this action refuses to queue for
+  // a gateway") until #1047 (Q-1047-14) deleted the flag it answered: the
+  // phone is the vault, nothing queues, and nothing gated on it. The number and
+  // the name are not re-used, for the same reason as 91 below.
+  reserved 44;
+  reserved "ERROR_CODE_ONLINE_ONLY";
   // The access plane returned a deny. A deny is an OUTCOME, not an exception,
   // so the member-facing sentence is on the outcome and this code is what the
   // shell branches on.

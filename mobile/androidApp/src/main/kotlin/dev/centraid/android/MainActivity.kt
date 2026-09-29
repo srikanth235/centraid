@@ -1,7 +1,8 @@
 package dev.centraid.android
 
+import android.content.pm.PackageManager
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -17,11 +18,13 @@ import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.agenda.AgendaRoutes
 import dev.centraid.android.screens.docs.DocsRoutes
+import dev.centraid.android.screens.locker.LockerRoutes
 import dev.centraid.android.screens.notes.NotesRoutes
 import dev.centraid.android.screens.people.PeopleRoutes
 import dev.centraid.android.screens.photos.PhotosRoutes
 import dev.centraid.android.screens.tally.TallyRoutes
 import dev.centraid.android.screens.tasks.TasksRoutes
+import dev.centraid.android.screens.words.WordsSheets
 import androidx.compose.runtime.key
 import dev.centraid.android.theme.centraidColor
 import androidx.compose.material3.ModalBottomSheet
@@ -48,7 +51,6 @@ import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.HomeMachine
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.platform.platformServices
-import dev.centraid.shared.shell.FoundResult
 import dev.centraid.shared.shell.TransferRuleChoice
 import dev.centraid.shared.shell.Shelf
 import dev.centraid.shared.sync.TransferRule
@@ -65,7 +67,10 @@ import kotlinx.coroutines.withContext
  * ONE ROOT STACK, NO BOTTOM TABS — apps are covers over Home.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-public class MainActivity : ComponentActivity() {
+// A `FragmentActivity` AND NOT A PLAIN `ComponentActivity` for one reason:
+// Locker's unlock raises `BiometricPrompt`, which hosts itself in a fragment
+// of the activity it is given (#1047, D-5).
+public class MainActivity : FragmentActivity() {
     /**
      * HOME OVER A REAL VAULT.
      *
@@ -105,8 +110,19 @@ public class MainActivity : ComponentActivity() {
             DocsRoutes(),
             PeopleRoutes(),
             TasksRoutes(),
+            locker,
         )
     }
+
+    /**
+     * LOCKER'S ROUTES, NAMED because two things outside them reach in: its
+     * wall's "Enter your 24 words" opens [words]' words.enter, and that
+     * sheet's close has the gate re-read `keyed` (#1047 E3).
+     */
+    private val locker: LockerRoutes by lazy { LockerRoutes(openWords = { words.openRekey() }) }
+
+    /** THE 24 WORDS' SHEETS (#1047 E3), over every screen. See `WordsSheets`. */
+    private val words: WordsSheets by lazy { WordsSheets(onEnterClosed = { locker.reattach(this) }) }
 
     /**
      * THE OS ASKING FOR MEMORY BACK (#1025 S7-13, ruling F).
@@ -186,21 +202,19 @@ public class MainActivity : ComponentActivity() {
         // opened with `create = true` in its place would found an empty vault
         // and the screen would be honestly, uselessly empty.
         //
-        // EVERY `.sqlite3` IN `filesDir` IS A VAULT, and the directory is the
-        // roster: no manifest sits beside it, because a manifest would be a
-        // second place a vault's name and existence live. What each file is
-        // CALLED is read out of the file itself; see `VaultRoster`.
-        //
-        // THE SUFFIX IS `Shelf.SUFFIX` AND NOTHING ELSE. This filter said
-        // `.db`, which is what `mobile/scripts/demo-vault.sh` used to write,
-        // and the shelf has taken only `*.sqlite3` since #1025 S7 — so a placed
-        // fixture was copied into `filesDir` and then ignored by the roster that
-        // was supposed to adopt it. Nothing failed: the switcher simply said the
-        // device held one vault.
-        for (name in assets.list("")?.filter { it.endsWith(Shelf.SUFFIX) }.orEmpty()) {
-            val file = java.io.File(filesDir, name)
+        // EVERY `<dir>/vault.db` IN `filesDir` IS A VAULT, one directory per
+        // vault (#1047, Q-1047-17), and the directory is the roster: no
+        // manifest sits beside it, because a manifest would be a second place a
+        // vault's name and existence live. What each file is CALLED is read out
+        // of the file itself; see `VaultRoster`. A placed fixture
+        // `demo-vault.sqlite3` lands as `files/demo-vault/vault.db`
+        // (`Shelf.VAULT_FILE`), beside the backup home the core keeps for it.
+        for (name in assets.list("")?.filter { it.endsWith(".sqlite3") }.orEmpty()) {
+            val home = java.io.File(filesDir, name.substringBeforeLast('.'))
+            val file = java.io.File(home, Shelf.VAULT_FILE)
             if (file.exists()) continue
             runCatching {
+                home.mkdirs()
                 assets.open(name).use { source ->
                     file.outputStream().use { sink -> source.copyTo(sink) }
                 }
@@ -219,6 +233,17 @@ public class MainActivity : ComponentActivity() {
         // opens every file it finds. An empty directory is the ordinary first
         // run.
         val vaultDir = filesDir.absolutePath
+        // THE DEMO VAULT'S SEED, HANDED TO A DEBUG BUILD AT LAUNCH (#1047 W2).
+        // `mobile/scripts/demo-vault.sh android` starts the activity with the
+        // seed `seed-demo-vault` printed as `CENTRAID_DEMO_SEED` — the public
+        // all-`abandon` words' seed — as an extra, and the shelf stores it where
+        // a real seed lives, so the demo Locker opens keyed. A build that is not
+        // debuggable never reads the extra. See `DevSeed`.
+        val devSeed = if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+            dev.centraid.shared.custody.DevSeed.parse(intent?.getStringExtra(DEV_SEED_EXTRA))
+        } else {
+            null
+        }
         setContent {
             CentraidTheme {
                 // The stack is shell state, not a library's: `NavStack` is
@@ -237,6 +262,7 @@ public class MainActivity : ComponentActivity() {
                         services = platformServices(),
                         dispatcher = Dispatchers.IO,
                         uiThreadName = Thread.currentThread().name,
+                        devSeed = devSeed,
                     ).also { opened ->
                         session = opened
                         // THE BACKGROUND WINDOW NOW HAS SOMETHING TO RUN
@@ -271,6 +297,7 @@ public class MainActivity : ComponentActivity() {
                         // change stream, so a row that arrives moves the screen
                         // without a tap — and a host routed twice re-reads twice.
                         routes.forEach { it.attach(opened, scope) }
+                        words.attach(opened, scope)
                     }
                 }
                 // BACK IS THE STACK'S, AND A BAND IS NOT A STEP IN IT.
@@ -322,6 +349,8 @@ public class MainActivity : ComponentActivity() {
                 val nav = remember(scope) {
                     RouteNav(read = { stack }, write = { next -> stack = next }, scope = scope)
                 }
+                // EVERY APP'S ROOT WATCH (`AppRoutes.Global`), on every screen.
+                routes.forEach { app -> key(app) { app.Global(nav) } }
                 if (route != null) {
                     // KEYED ON THE APP, so one app's effects never carry
                     // into another's at this one call site.
@@ -345,10 +374,13 @@ public class MainActivity : ComponentActivity() {
                     // It was the GATEWAY sheet and it pairs with nothing
                     // now: the one act it offers is founding a vault here.
                     var vaultSheetOpen by remember { mutableStateOf(false) }
-                    var vaultWorking by remember { mutableStateOf(false) }
                     // R-SHELL-2: member-visible sentences name the
                     // foreground holding. Cleared on forget / switch.
                     var vaultStatus by remember { mutableStateOf("") }
+                    // THE MADE VAULT'S SENTENCE (words.make's MADE) stays on
+                    // the vault sheet, as `found`'s did — taken once.
+                    val made = words.made
+                    LaunchedEffect(made.first) { words.takeMade()?.let { vaultStatus = it } }
                     HomeScreen(
                         state = state,
                         onEvent = { event ->
@@ -410,39 +442,31 @@ public class MainActivity : ComponentActivity() {
                             }
                         },
                         onMakeVault = { vaultSheetOpen = true },
+                        onRestore = { words.openRestore() },
+                        // THE MORE SHEET'S CUSTODY ROWS (#1047 E6). Whether
+                        // this phone has a camera is the one fact pair.laptop
+                        // is told; without one it is paste-only.
+                        onShowWords = { words.openShow() },
+                        onPairLaptop = {
+                            words.openPair(
+                                camera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY),
+                            )
+                        },
                     )
                     if (vaultSheetOpen) {
                         ModalBottomSheet(onDismissRequest = { vaultSheetOpen = false }) {
                             MakeVaultSheet(
                                 status = vaultStatus,
-                                working = vaultWorking,
-                                onFound = { done ->
-                                    val open = live
-                                    if (open == null) {
-                                        vaultStatus = "This build has no core."
-                                        done()
-                                        return@MakeVaultSheet
-                                    }
-                                    vaultWorking = true
-                                    // ON IO, for the reason `open` is:
-                                    // `centraid_open` asserts it is not on
-                                    // the main thread, and founding a vault
-                                    // opens one.
-                                    scope.launch(Dispatchers.IO) {
-                                        val outcome = open.found()
-                                        withContext(Dispatchers.Main) {
-                                            vaultStatus = when (outcome) {
-                                                is FoundResult.Made ->
-                                                    "Made ${outcome.vaultName}."
-                                                is FoundResult.Refused ->
-                                                    outcome.sentence
-                                                FoundResult.NoSession ->
-                                                    "Centraid is still opening."
-                                            }
-                                            vaultWorking = false
-                                            done()
-                                        }
-                                    }
+                                // THE BARE TAP IS GONE (#1047 E3): making a
+                                // vault goes through its words. One sheet at
+                                // a time — the vault sheet goes first.
+                                onMake = {
+                                    vaultSheetOpen = false
+                                    words.makeVault()
+                                },
+                                onRestore = {
+                                    vaultSheetOpen = false
+                                    words.openRestore()
                                 },
                                 onOpenTransferRules = {
                                     scope.launch {
@@ -484,9 +508,15 @@ public class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+                // THE 24 WORDS' SHEET, over whatever is drawn (#1047 E3).
+                words.Sheets()
                 }
             }
         }
     }
-}
 
+    private companion object {
+        /** The launch extra a debug build reads its demo seed from. See `DevSeed`. */
+        const val DEV_SEED_EXTRA: String = "dev.centraid.DEV_SEED"
+    }
+}

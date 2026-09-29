@@ -73,6 +73,16 @@ pub enum CoreError {
     #[error("the gateway is unreachable: {reason}")]
     Unavailable { reason: String },
 
+    /// THE LAPTOP ANSWERED AND SAID NO (#1047 E5).
+    ///
+    /// Distinct from [`Self::Unavailable`] because the remedy is different: a
+    /// laptop that did not answer wants waking, and one that answered and
+    /// refused a pairing code — spent, unknown, or a lease it will not grant —
+    /// wants a new code. Folding the two into `PEER_UNREACHABLE` sent a member
+    /// to check a laptop that was awake and had told the phone why.
+    #[error("the gateway refused: {reason}")]
+    GatewayRefused { reason: String },
+
     /// **THIS VAULT MOVED TO ANOTHER PHONE** (#1029 F1, §1, W15-2).
     ///
     /// A gateway's refusal, heard by this core because a drain holds the lease
@@ -118,10 +128,6 @@ pub enum CoreError {
         what: &'static str,
         lands_in: &'static str,
     },
-
-    /// The action refuses to run without a gateway.
-    #[error("`{app_id}.{action}` needs the gateway and this seat has none")]
-    OnlineOnly { app_id: String, action: String },
 
     /// The request was cancelled by a `Cancel`.
     #[error("request {request_id} was cancelled")]
@@ -172,6 +178,7 @@ impl CoreError {
             // which cannot fix it (#1020 wave 3).
             Self::StaleCore { .. } => ErrorCode::VersionWindow,
             Self::Unavailable { .. } => ErrorCode::PeerUnreachable,
+            Self::GatewayRefused { .. } => ErrorCode::Unauthorized,
             Self::VaultMoved { .. } => ErrorCode::VaultMoved,
             Self::Unpaired => ErrorCode::RebootstrapRequired,
             Self::VaultAlreadyHeld { .. } => ErrorCode::VaultAlreadyHeld,
@@ -182,7 +189,6 @@ impl CoreError {
             Self::Unsupported { .. } => ErrorCode::UnsupportedMessage,
             Self::ReadBoundReached { .. } => ErrorCode::ReadBoundReached,
             Self::NotYetAvailable { .. } => ErrorCode::NotYetAvailable,
-            Self::OnlineOnly { .. } => ErrorCode::OnlineOnly,
             Self::Cancelled { .. } => ErrorCode::Cancelled,
             Self::Vault(vault) => vault_code(vault),
             Self::Protocol(_) => ErrorCode::MalformedFrame,
@@ -321,7 +327,6 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
             "That change did not declare everything it reads, so it was refused rather than run \
              on a guess."
         }
-        C::OnlineOnly => "That one needs the gateway, and this device cannot reach it.",
         C::Denied => "That is not allowed for this app.",
         // RETRYABLE, and the sentence says the device is still working rather
         // than that anything went wrong: the write is in the queue, its bytes
@@ -554,7 +559,7 @@ mod tests {
 
     /// Every code the enum carries, so the sweep above cannot miss one: a new
     /// code with no sentence is a code whose refusal renders as nothing.
-    const EVERY_CODE: [ErrorCode; 22] = [
+    const EVERY_CODE: [ErrorCode; 21] = [
         ErrorCode::Unspecified,
         ErrorCode::Unauthorized,
         ErrorCode::VersionWindow,
@@ -571,7 +576,6 @@ mod tests {
         ErrorCode::IntentIdReused,
         ErrorCode::IntentOutcomeExpired,
         ErrorCode::ReadSetIncomplete,
-        ErrorCode::OnlineOnly,
         ErrorCode::Denied,
         ErrorCode::DowngradeRefused,
         ErrorCode::UpgradeRequired,

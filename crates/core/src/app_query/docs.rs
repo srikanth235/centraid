@@ -9,9 +9,10 @@
 //! - **the size phrase**, through `centraid_vault::page::format_byte_size` —
 //!   the formatter Home's Docs tile already reads, so a launcher row and a
 //!   drive row cannot disagree about one file;
-//! - **whether the head's bytes are on this device**, through
+//! - **whether the head's bytes are on this device, and the file**, through
 //!   [`Vault::content_location`], which asks the byte store — a question no
-//!   page read can answer.
+//!   page read can answer. The path is handed out only for a type that may be
+//!   drawn inline, the rule Photos' held thumbnails use (#1047).
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_apps_agenda::local;
@@ -238,6 +239,14 @@ pub(super) fn document(
             bytes_held: held
                 .as_ref()
                 .is_some_and(|location| location.path.is_some()),
+            // THE FILE A STAGE DRAWS: here, and drawable inline under the
+            // rule Photos' held thumbnails use (`may_serve_inline`).
+            bytes_path: held
+                .as_ref()
+                .filter(|location| location.embeddable)
+                .and_then(|location| location.path.as_ref())
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_default(),
             bytes_absent_reason: held
                 .map(|location| location.absent_reason)
                 .unwrap_or_default(),

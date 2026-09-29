@@ -66,7 +66,6 @@ struct TallyRecurringView: View {
 
 struct TallySpendingView: View {
     let data: Data
-    let parentTitle: String
     let send: (Data) -> Void
     let onBack: () -> Void
 
@@ -94,7 +93,7 @@ struct TallySpendingView: View {
 
     var body: some View {
         let state = state
-        PushedPage(title: state.chrome.title, parentTitle: parentTitle, onBack: onBack) {
+        PushedPage(title: state.chrome.title, parentTitle: state.chrome.back, onBack: onBack) {
             EmptyView()
         } content: {
             VStack(spacing: 0) {
@@ -213,7 +212,6 @@ struct TallySpendingView: View {
 
 struct TallySearchView: View {
     let data: Data
-    let parentTitle: String
     let send: (Data) -> Void
     let push: (ShellModel.Route) -> Void
     let onBack: () -> Void
@@ -249,7 +247,7 @@ struct TallySearchView: View {
 
     var body: some View {
         let state = state
-        PushedPage(title: state.chrome.title, parentTitle: parentTitle, onBack: onBack) {
+        PushedPage(title: state.chrome.title, parentTitle: state.chrome.back, onBack: onBack) {
             EmptyView()
         } content: {
             VStack(spacing: 0) {
@@ -282,7 +280,7 @@ struct TallySearchView: View {
                                         TallyLedgerRowView(row: row) {
                                             guard !row.expenseID.isEmpty else { return }
                                             send(Self.event { $0.expense = .with { $0.expenseID = row.expenseID } })
-                                            push(TallyScreens.expenseRoute(row.expenseID))
+                                            push(TallyScreens.expenseRoute(row.expenseID, parent: state.chrome.title))
                                         }
                                     }
                                 }

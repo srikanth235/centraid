@@ -43,6 +43,14 @@ public interface AppRoutes {
     /** Draw [destination], which [handles] said is this app's. */
     @Composable
     public fun Routes(destination: Destination, nav: RouteNav)
+
+    /**
+     * WHAT THIS APP WATCHES WHEREVER THE MEMBER IS: composed at the root for
+     * every app on every screen, drawing nothing — a bridge-level intent (Docs'
+     * filed document) is pushed from here, not from the page that started it.
+     */
+    @Composable
+    public fun Global(nav: RouteNav) {}
 }
 
 /**

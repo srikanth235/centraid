@@ -42,7 +42,7 @@ public object NotesLibraryReads :
 
     override fun requests(state: NotesLibraryState, now: DeviceClock.Reading): List<AppQueryRequest> =
         if (NotesLibraryMachine.searchActive(state)) {
-            listOf(AppQueryRequest(notes_search = NotesSearchRequest(term = state.search?.term?.trim() ?: "")))
+            listOf(AppQueryRequest(notes_search = NotesSearchRequest(term = state.search?.term?.trim() ?: "", tz = now.zone)))
         } else {
             listOf(
                 AppQueryRequest(notes_library = libraryRequest(state).copy(tz = now.zone)),

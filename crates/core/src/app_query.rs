@@ -68,6 +68,8 @@ use crate::error::{CoreError, Result};
 // People's arm (#1046): its conversions and tests, beside this one.
 // Docs' arm (#1046): its conversions and tests, beside this one.
 mod docs;
+// Locker's arm (#1047): metadata only; a secret is the session's.
+mod locker;
 mod notes;
 mod people;
 // Tally's arm (#1046): its conversions and tests, beside this one.
@@ -132,11 +134,12 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
                     non_empty(&asked.original_start_local),
                 ),
                 |data| {
-                    A::AgendaEvent(wire::AgendaEventDetail {
+                    A::AgendaEvent(Box::new(wire::AgendaEventDetail {
                         today: local::today(&zone, &now).unwrap_or_default(),
                         now_local: local::now_local(&zone, &now).unwrap_or_default(),
                         event: data.event.map(|event| event_to_wire(event, &zone)),
-                    })
+                        calendar: data.calendar.map(calendar_to_wire),
+                    }))
                 },
             )?
         }
@@ -151,9 +154,23 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
                 });
             }
             let zone = zone_of(vault, &asked.tz)?;
-            let loaded = search_events(vault, &door, &asked.term, asked.limit)?;
-            settle(&door, loaded, |data| {
-                A::AgendaSearch(search_to_wire(data, &zone))
+            // WHERE A REPEATING HIT OPENS (#1047): the occurrence it means,
+            // asked of the same door after the hits are folded.
+            let loaded = search_events(vault, &door, &asked.term, asked.limit)?.and_then(
+                |(data, denial)| {
+                    let next = if denial.is_none() {
+                        data.events
+                            .iter()
+                            .map(|event| centraid_apps_agenda::next_occurrence(&door, event, &now))
+                            .collect::<KitResult<Vec<_>>>()?
+                    } else {
+                        Vec::new()
+                    };
+                    Ok(((data, next), denial))
+                },
+            );
+            settle(&door, loaded, |(data, next)| {
+                A::AgendaSearch(search_to_wire(data, next, &zone))
             })?
         }
         Q::DocsDrive(asked) => docs::drive(vault, &door, &now, asked)?,
@@ -164,7 +181,7 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::PeopleTouch(asked) => people::touch(vault, &door, &now, asked)?,
         Q::PeoplePerson(asked) => people::person(vault, &door, &now, asked)?,
         Q::PeopleSearch(asked) => people::search(vault, &door, &now, asked)?,
-        Q::PeopleTrash(_) => people::trash(&door)?,
+        Q::PeopleTrash(asked) => people::trash(vault, &door, asked)?,
         Q::TallyDashboard(asked) => tally::dashboard(vault, &door, &now, asked)?,
         Q::TallyGroup(asked) => tally::group(&door, asked)?,
         Q::TallyFriend(asked) => tally::friend(&door, asked)?,
@@ -174,7 +191,7 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::TallySpending(asked) => tally::spending(vault, &door, &now, asked)?,
         Q::TallySearch(asked) => tally::search(&door, asked)?,
         Q::TallyTrash(asked) => tally::trash(vault, &door, asked)?,
-        Q::TallyExport(asked) => tally::export(&door, asked)?,
+        Q::TallyExport(asked) => tally::export(vault, &door, &now, asked)?,
         Q::NotesLibrary(asked) => notes::library(vault, &door, asked)?,
         Q::NotesNotebooks(_) => notes::notebooks(&door)?,
         Q::NotesJournal(asked) => notes::journal(vault, &door, &now, asked)?,
@@ -182,12 +199,16 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::NotesTrash(asked) => notes::trash(vault, &door, asked)?,
         Q::NotesHistory(asked) => notes::history(vault, &door, asked)?,
         Q::NotesLinkTargets(asked) => notes::link_targets(vault, &door, asked)?,
-        Q::NotesNote(asked) => notes::note(&door, asked)?,
+        Q::NotesNote(asked) => notes::note(vault, &door, asked)?,
         Q::TasksBoard(asked) => tasks::board(vault, &door, &now, asked)?,
         Q::TasksTask(asked) => tasks::task(vault, &door, &now, asked)?,
         Q::TasksProjects(asked) => tasks::projects(vault, &door, &now, asked)?,
         Q::TasksSearch(asked) => tasks::search(vault, &door, &now, asked)?,
         Q::TasksCatchUp(asked) => tasks::catch_up(vault, &door, &now, asked)?,
+        Q::LockerItems(asked) => locker::items(vault, &door, &now, asked)?,
+        Q::LockerItem(asked) => locker::item(vault, &door, &now, asked)?,
+        Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,
+        Q::LockerReview(asked) => locker::review(vault, &door, &now, asked)?,
     };
     Ok(wire::AppQueryResponse {
         answer: Some(answer),
@@ -206,7 +227,7 @@ fn non_empty(value: &str) -> Option<&str> {
 /// same way rather than demoted to the vault's: a device that named
 /// `America/New_Yrok` meant something, and answering in another zone would be
 /// answering a question nobody asked.
-fn zone_of(vault: &Vault, stated: &str) -> Result<FireZone> {
+pub(crate) fn zone_of(vault: &Vault, stated: &str) -> Result<FireZone> {
     let stated = non_empty(stated.trim());
     let vault_zone = match stated {
         Some(_) => None,
@@ -214,13 +235,30 @@ fn zone_of(vault: &Vault, stated: &str) -> Result<FireZone> {
     };
     FireZone::resolve(stated, vault_zone.as_deref()).map_err(|unset| CoreError::InvalidRequest {
         detail: match unset {
-            ZoneUnset::Missing => "an agenda query states no `tz` and this vault's settings                                    name no zone; the device's own zone is the answer, and 00:00Z                                    is somebody else's midnight"
+            ZoneUnset::Missing => "an agenda query states no `tz` and this vault's settings \
+                                   name no zone; the device's own zone is the answer, and \
+                                   00:00Z is somebody else's midnight"
                 .to_owned(),
             ZoneUnset::Unknown { name } => {
                 format!("`{name}` is not a time zone this build's bundled database knows")
             }
         },
     })
+}
+
+/// THE ZONE OF A DECORATION: [`zone_of`]'s rule, except that a request which
+/// states none on a vault that names none gets `None` rather than a refusal.
+/// For an answer whose civil readings are a decoration (an editor's "Edited",
+/// a search hit's day, a file name) — failing the whole read over one would
+/// take the thing away to report its label. The readings are then EMPTY,
+/// never UTC; an unknown name is still refused, because a device that named
+/// a zone meant one.
+fn zone_if_any(vault: &Vault, stated: &str) -> Result<Option<FireZone>> {
+    let stated = non_empty(stated.trim());
+    if stated.is_none() && vault.time_zone()?.is_none() {
+        return Ok(None);
+    }
+    zone_of(vault, stated.unwrap_or_default()).map(Some)
 }
 
 /// A loader's answer as the wire's: the data, the denial, or the error — with
@@ -438,12 +476,28 @@ fn upcoming_to_wire(
     }
 }
 
-fn search_to_wire(data: agenda::SearchData, zone: &FireZone) -> wire::AgendaSearch {
+fn search_to_wire(
+    data: agenda::SearchData,
+    next: Vec<Option<agenda::EventRow>>,
+    zone: &FireZone,
+) -> wire::AgendaSearch {
+    let mut next = next.into_iter();
     wire::AgendaSearch {
         events: data
             .events
             .into_iter()
-            .map(|event| event_to_wire(event, zone))
+            .map(|event| {
+                let mut hit = event_to_wire(event, zone);
+                if let Some(occurrence) = next.next().flatten() {
+                    hit.next_local_start = local::place(&occurrence, zone)
+                        .map(|placed| placed.local_start)
+                        .unwrap_or_default();
+                    hit.next_original_start_local =
+                        occurrence.original_start_local.unwrap_or_default();
+                    hit.next_instance_key = occurrence.instance_key;
+                }
+                hit
+            })
             .collect(),
     }
 }
@@ -510,6 +564,10 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
         original_start_local: event.original_start_local,
         recurrence_overlap: event.recurrence_overlap,
         snippet: event.snippet,
+        // `search` only, and filled there (`search_to_wire`).
+        next_instance_key: String::new(),
+        next_original_start_local: String::new(),
+        next_local_start: String::new(),
     }
 }
 
