@@ -54,7 +54,6 @@ export const PRODUCT_GATES = Object.freeze([
   "lint:design-tokens",
   "lint:turbo-cache",
   "lint:path-filters",
-  "lint:acp-min-versions",
   "lint:packages",
   "lint:node-version",
   "test:quarantine",

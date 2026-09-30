@@ -186,14 +186,7 @@ Consequences of that seam, each enforced on the fire path:
 
 ## Testing and live-model evidence
 
-PR tests inject model functions into the bundled handler sources and exercise pure tokenizer, CTC, geometry, postprocessing, cursor, consent, and typed-command behavior without installing native dependencies or weights. The weekly/release live lane uses pinned real weights and committed fixtures:
-
-```sh
-bun run --cwd packages/model-runtime setup
-bun run test:enrich:live
-```
-
-The live suite checks OCR image and PDF behavior, embedding cosine tolerances, face count/geometry, model/version pins, and licence integrity. Model-quality judgements such as OCR recall, cluster purity, and search relevance remain dogfood evidence rather than deterministic CI gates.
+PR tests inject model functions into the bundled handler sources and exercise pure tokenizer, CTC, geometry, postprocessing, cursor, consent, and typed-command behavior without installing native dependencies or weights. There is no live-model lane: the weekly real-weights suite lived in the retired v0 `packages/model-runtime` tree and went with it ([#1052](https://github.com/srikanth235/centraid/issues/1052)); a v1 live lane, if one is wanted, is a proposal issue, not a resurrection. Model-quality judgements such as OCR recall, cluster purity, and search relevance remain dogfood evidence rather than deterministic CI gates.
 
 ## Related
 

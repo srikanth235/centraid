@@ -47,7 +47,6 @@ export const WORKFLOW_RUNG = Object.freeze({
   "e2e.yml": 4,
   "soak-weekly.yml": 5,
   "interop-weekly.yml": 5,
-  "enrichment-live-weekly.yml": 5,
   "hygiene.yml": 5,
 });
 
