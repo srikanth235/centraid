@@ -92,12 +92,12 @@ const entry = (over = {}) => ({
 
 test("a hole in the nine-journey grid fails", () => {
   const root = fixture(
-    { ...BASE, entries: { "desktop/cold-open/year3/any": entry() } },
+    { ...BASE, entries: { "mobile/cold-open/year3/any": entry() } },
     { "tests/probe.ts": "" }
   );
   assert.match(
     lintJourneyLedger(root).join("\n"),
-    /no entry for desktop\/share/u
+    /no entry for mobile\/share/u
   );
 });
 

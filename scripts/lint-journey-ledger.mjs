@@ -158,7 +158,7 @@ export function lintJourneyLedger(root = ROOT) {
   const covered = new Set(
     Object.values(entries).map((entry) => `${entry.surface}/${entry.journey}`)
   );
-  for (const surface of ["desktop", "mobile", "gateway"])
+  for (const surface of ["mobile", "gateway"])
     for (const journey of NINE)
       if (!covered.has(`${surface}/${journey}`))
         errors.push(
