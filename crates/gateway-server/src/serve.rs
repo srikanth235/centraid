@@ -1,11 +1,10 @@
 //! THE LISTENER, AND IT IS THE ONLY ONE IN THIS WORKSPACE (#1029 §3).
 //!
-//! Everything else Centraid ships is a client: the phone opens no inbound
-//! socket, the desktop talks to a sidecar over stdio, the browser Companion
-//! talks to a native host. `cargo xtask rules`' `no-listening-socket` exists to
-//! keep that true, and it predates #1029 §3 — which introduces, deliberately,
-//! **a server anyone can self-host**. A gateway that did not listen would not
-//! be a gateway.
+//! Everything else Centraid ships is a client: the phone is the vault, opens
+//! no inbound socket, and dials the member's own laptop, where
+//! `centraid-gateway` runs this listener as a blind store for the phone's
+//! sealed backup. `cargo xtask rules`' `no-listening-socket` keeps every other
+//! file free of a bind; a gateway that did not listen would not be a gateway.
 //!
 //! So the bind is confined to this one file, and the rule was repointed rather
 //! than relaxed: it still scans every other crate, and inside this crate it
@@ -250,6 +249,96 @@ fn restrict(_path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Where `serve` keeps the dialling hints its bound endpoint reports.
+pub const DIAL_HINTS_FILE: &str = "dial-hints.json";
+
+/// **THE SERVING ENDPOINT'S DIALLING HINTS**, as `invite` puts them on a ticket
+/// (#1047 T1).
+///
+/// `invite` runs as a second process while `serve` holds the endpoint, and it
+/// cannot bind one of its own to ask: two processes do not share one UDP
+/// socket, and a second endpoint's addresses would be the wrong process's. So
+/// it printed a ticket with no relay and no direct address, which under the
+/// `local_only` setting — no relay, no address lookup — is a ticket nothing
+/// can dial. `serve` now writes what its endpoint reports here on bind and on
+/// every change, and `invite` reads it. **Hints, never authority**: iroh's TLS
+/// proves the endpoint id, so a stale or edited file reaches this laptop or
+/// nothing; and the file holds no key.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DialHints {
+    /// The home relay the endpoint reports, or `""` for none.
+    #[serde(default)]
+    pub relay_url: String,
+    /// `<ip>:<port>`, as `PairTicket.direct_addrs` carries them.
+    #[serde(default)]
+    pub direct_addrs: Vec<String>,
+}
+
+impl DialHints {
+    /// What an endpoint address says about how to dial it.
+    #[must_use]
+    pub fn of(addr: &iroh::EndpointAddr) -> Self {
+        Self {
+            relay_url: addr
+                .relay_urls()
+                .next()
+                .map(ToString::to_string)
+                .unwrap_or_default(),
+            direct_addrs: addr.ip_addrs().map(ToString::to_string).collect(),
+        }
+    }
+
+    /// The file for a data directory.
+    #[must_use]
+    pub fn path(data_dir: &Path) -> PathBuf {
+        data_dir.join(DIAL_HINTS_FILE)
+    }
+
+    /// What `serve` last wrote, or `None` when it never has — or wrote
+    /// something this build cannot read, which is the same answer: no hints.
+    #[must_use]
+    pub fn read(data_dir: &Path) -> Option<Self> {
+        let bytes = std::fs::read(Self::path(data_dir)).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    }
+
+    /// Replace the file whole: written beside it and renamed over it, so a
+    /// reader never sees half of one.
+    ///
+    /// # Errors
+    ///
+    /// If the directory cannot be written.
+    pub fn write(&self, data_dir: &Path) -> anyhow::Result<()> {
+        let path = Self::path(data_dir);
+        let staged = data_dir.join(format!("{DIAL_HINTS_FILE}.tmp"));
+        let bytes = serde_json::to_vec_pretty(self).context("encoding the dialling hints")?;
+        std::fs::write(&staged, bytes).with_context(|| format!("writing {}", staged.display()))?;
+        std::fs::rename(&staged, &path).with_context(|| format!("replacing {}", path.display()))
+    }
+}
+
+/// Write the endpoint's dialling hints now, and again whenever they change,
+/// for as long as the endpoint lives ([`DialHints`]).
+///
+/// # Errors
+///
+/// If the first write fails. A later one that fails is logged: the hints go
+/// stale, which costs a LAN-only phone its pairing code and nothing else.
+pub fn publish_dial_hints(endpoint: &Endpoint, data_dir: &Path) -> anyhow::Result<()> {
+    use iroh::Watcher as _;
+    let dir = data_dir.to_path_buf();
+    DialHints::of(&endpoint.addr()).write(&dir)?;
+    let mut watcher = endpoint.watch_addr();
+    tokio::spawn(async move {
+        while let Ok(addr) = watcher.updated().await {
+            if let Err(error) = DialHints::of(&addr).write(&dir) {
+                tracing::warn!(%error, "the dialling hints did not update");
+            }
+        }
+    });
+    Ok(())
+}
+
 /// Bind the iroh endpoint this gateway is dialled on.
 ///
 /// **The defaults are n0's**, deliberately: `presets::N0` is the relay mesh and
@@ -449,6 +538,38 @@ mod tests {
             .permissions()
             .mode();
         assert_eq!(mode & 0o777, 0o600, "{mode:o}");
+    }
+
+    /// **`invite` BESIDE A RUNNING `serve` CARRIES THE SERVING ENDPOINT'S
+    /// ADDRESSES** (#1047 T1). A local-only endpoint has no relay and no
+    /// address lookup, so its id alone dials nothing: the ticket `invite`
+    /// prints needs the direct addresses of the endpoint that is serving —
+    /// which `serve` publishes on bind and `invite` reads back.
+    #[tokio::test]
+    async fn a_bound_endpoint_publishes_its_direct_addresses_for_invite() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        assert_eq!(DialHints::read(dir.path()), None, "nothing served here yet");
+        let endpoint = bind_iroh(
+            dir.path(),
+            &IrohConfig {
+                local_only: true,
+                bind_addr: Some("127.0.0.1:0".to_owned()),
+                ..IrohConfig::default()
+            },
+        )
+        .await
+        .expect("binds");
+        publish_dial_hints(&endpoint, dir.path()).expect("published");
+        let hints = DialHints::read(dir.path()).expect("written on bind");
+        let bound: Vec<String> = endpoint
+            .addr()
+            .ip_addrs()
+            .map(ToString::to_string)
+            .collect();
+        assert!(!bound.is_empty(), "a bound endpoint reports an address");
+        assert_eq!(hints.direct_addrs, bound);
+        assert_eq!(hints.relay_url, "", "local-only has no relay");
+        endpoint.close().await;
     }
 
     /// A TRUNCATED KEY IS AN ERROR, NOT A FRESH IDENTITY. Minting over it

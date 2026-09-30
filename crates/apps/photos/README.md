@@ -35,7 +35,7 @@ Every one of them is an answer to a way this crate could be wrong, and every one
 | Not allowed | What stops it |
 | --- | --- |
 | SQL, in any form | `cargo xtask rules`' `sql-confinement` scans this crate and finds none; a statement here is a `PageQuery` — a projection, a `from`, a predicate and an order, as data |
-| A model, a codec or a hash | recognition is not this crate's and the byte plane is `crates/media`'s; the dependencies are the kit and `serde` |
+| A model, a codec or a hash | recognition is not this crate's and the byte plane is `crates/media`'s; the dependencies are the kit and `serde_json` |
 | A write from a query | `queries` holds statements and a `PageDoor`, whose one method reads |
 | An invocation with no `invoke_key` | the field is required (D-1020-D3-5) |
 | A denial turned into an error | `Outcome::Denied` and `Reading::Denied` are states a surface renders |

@@ -5,6 +5,7 @@ import centraid.core.v1.ErrorCode
 import centraid.core.v1.Page
 import centraid.core.v1.PhraseMinted
 import centraid.core.v1.PhraseResponse
+import centraid.core.v1.RestoreRequest
 import centraid.core.v1.RestoreResponse
 import centraid.core.v1.RestoredVault
 import centraid.core.v1.Response
@@ -235,6 +236,32 @@ class WordsShelfSpec : StringSpec({
             answer.vaults.single().path shouldBe "/v/x/vault.db"
             answer.deviceSecretHex shouldBe secret
             answer.toString() shouldNotContain secret
+        }
+    }
+
+    "the seed doors ask the core with all 64 bytes, and the retry with the named indices" {
+        runTest {
+            var asked: RestoreRequest? = null
+            val door = CoreRestoreDoor {
+                CentraidCore.answering(Dispatchers.Unconfined) { envelope ->
+                    asked = envelope.request?.restore
+                    Envelope(response = Response(restore = RestoreResponse(vaults = listOf(RestoredVault(index = 1, path = "/v/y/vault.db")))))
+                }
+            }
+            val answer = door.restoreStayed("cd".repeat(64), "ab".repeat(32), listOf(1, 3))
+                .shouldBeInstanceOf<RestoreResult.Restored>().answer
+            answer.vaults.single().index shouldBe 1
+            asked?.indices shouldBe listOf(1, 3)
+            asked?.phrase shouldBe ""
+            asked?.seed?.size shouldBe 64
+            asked?.endpoint?.size shouldBe 32
+            // THE HELD-SEED RESTORE rides the same 64 bytes, and reached the core
+            // too: a seed read as a 32-byte endpoint id never did.
+            door.restoreSeed("cd".repeat(64), null).shouldBeInstanceOf<RestoreResult.Restored>()
+            asked?.seed?.size shouldBe 64
+            asked?.indices shouldBe emptyList()
+            CoreRestoreDoor { null }.restoreStayed("not hex", null, listOf(1)) shouldBe
+                RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
         }
     }
 

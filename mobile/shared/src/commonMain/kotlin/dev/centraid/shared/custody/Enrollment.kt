@@ -32,6 +32,9 @@ import dev.centraid.shared.shell.Shelf
  *   words and no record of its indices, restores exactly what its words would.
  *   Nothing new is stored; the seed is settled once the laptop brought
  *   something back.
+ * * **Asking again for what stayed** ([restoreStayed], R-1047-R6): the vaults
+ *   a restore named as staying with the old phone, by index, from the seed
+ *   that restore stored. The vaults already here are never laid down again.
  *
  * **The words are kept beside the seed** (Q-1047-19): whenever this phone
  * stores a seed from words — made, restored or re-keyed — it keeps the words
@@ -147,6 +150,28 @@ public class Enrollment(
         }
         if (answer.vaults.isEmpty()) return Restored.NothingHeld
         secrets.settleSeed()
+        val added = keeper.adoptRestored(
+            answer.vaults.map { Shelf.Restored(path = it.path, index = it.index) },
+            answer.deviceSecretHex,
+        )
+        return Restored.Done(answer, added)
+    }
+
+    /**
+     * BRING BACK THE VAULTS THAT STAYED, ON THEIR OWN (R-1047-R6): a restore
+     * answered some vaults and named [indices] as `unclaimed`, and the member
+     * asks again. The seed is already stored — the first restore stored it —
+     * so no words are asked for and nothing is stored; the core leaves the
+     * vaults this phone holds as they are, and only what came back is held,
+     * under the device secret this answer minted for it.
+     */
+    public suspend fun restoreStayed(indices: List<Int>, endpoint: String?): Restored {
+        val seed = secrets.seed() ?: return Restored.Refused(Refusal.NOT_A_PHRASE)
+        val answer = when (val result = restoreDoor.restoreStayed(seed, endpoint, indices)) {
+            is RestoreResult.Restored -> result.answer
+            is RestoreResult.Refused -> return stopped(result.because)
+        }
+        if (answer.vaults.isEmpty()) return Restored.NothingHeld
         val added = keeper.adoptRestored(
             answer.vaults.map { Shelf.Restored(path = it.path, index = it.index) },
             answer.deviceSecretHex,

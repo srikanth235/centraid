@@ -37,6 +37,11 @@ import path from "node:path";
  * states of this type" — and a generated file is a bad place for a decision.
  */
 const TYPES: Record<string, string> = {
+  // Agenda's three screens (#1046): the home over Day, Schedule and Waiting,
+  // one event's page, and the editor in both its modes.
+  agenda: "centraid.screen.v1.AgendaHomeState",
+  "agenda-editor": "centraid.screen.v1.AgendaEditorState",
+  "agenda-event": "centraid.screen.v1.AgendaEventState",
   home: "centraid.screen.v1.HomeState",
   notes: "centraid.screen.v1.NotesEditorState",
   photos: "centraid.screen.v1.PhotosGridState",

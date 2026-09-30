@@ -686,8 +686,9 @@ fn demo_seed() -> centraid_core::Seed {
 ///
 /// One of each thing a member walks: a login with a password and an address,
 /// a card, a secure note, a Wi-Fi password, a login Review flags (marked
-/// compromised, on `http://`), and one item in the trash. Every secret is a
-/// test value.
+/// compromised, on `http://`), one item in the trash, a sealed and a plain
+/// custom field on the bank login, and a login holding a passkey (#1047 T2).
+/// Every secret is a test value.
 fn locker_items() -> Vec<(&'static str, Value)> {
     vec![
         (
@@ -745,7 +746,84 @@ fn locker_items() -> Vec<(&'static str, Value)> {
             json!({ "item_id": "demo-locker-gone" }),
         ),
         ("locker.star_item", json!({ "item_id": "demo-locker-bank" })),
+        // CUSTOM FIELDS (#1047 T2): a sealed one the core seals against its
+        // own id, and a plain one, so the item page shows both kinds.
+        (
+            "locker.set_field",
+            json!({
+                "item_id": "demo-locker-bank", "field_id": "demo-locker-bank-recovery",
+                "section": "Recovery", "label": "Recovery code", "kind": "sealed",
+                "value": "SCU-7731-4402-9918", "position": 0
+            }),
+        ),
+        (
+            "locker.set_field",
+            json!({
+                "item_id": "demo-locker-bank", "field_id": "demo-locker-bank-member",
+                "section": "Recovery", "label": "Member number", "kind": "text",
+                "value": "0048213", "position": 1
+            }),
+        ),
+        // A LOGIN THAT HOLDS A PASSKEY (#1047 T2). Its key material is sealed
+        // by `seed_passkey` below, because no phone door takes one.
+        (
+            "locker.add_item",
+            json!({
+                "item_id": "demo-locker-rentals", "type": "login", "title": "Alpine Rentals",
+                "username": "owner@example.com", "url": "https://alpinerentals.example.com"
+            }),
+        ),
     ]
+}
+
+/// THE DEMO PASSKEY'S KEY, SEALED HERE (#1047 T2, L-passkey). A passkey is
+/// storage only and no phone door takes key material — the phone neither makes
+/// nor imports one — so the seeder seals the demo's under the demo words' `K`
+/// itself, against the item's id, exactly as the vault stores one. The value
+/// is a test string, not a key anybody signs with.
+fn seed_passkey(handle: &centraid_core::Handle) -> Result<(), String> {
+    let keys = centraid_core::phone::Keyring::derive(&demo_seed(), 0, None)
+        .map_err(|error| error.to_string())?;
+    let key_id = handle
+        .with_vault(|vault| {
+            vault
+                .locker_generation()
+                .map_err(|error| centraid_core::CoreError::Invariant {
+                    context: error.to_string(),
+                })
+        })
+        .map_err(|error| error.to_string())?;
+    let sealed = centraid_vault::custody::encrypt_under_locker_key(
+        keys.vault.locker.as_bytes(),
+        &key_id,
+        "demo-locker-rentals",
+        "demo-passkey-es256-private-key",
+    )
+    .map_err(|error| error.to_string())?;
+    let input = json!({
+        "item_id": "demo-locker-rentals", "rp_id": "alpinerentals.example.com",
+        "user_handle": "owner", "display_name": "Cabin booking", "credential_id": "demo-credential-1",
+        "algorithm": "ES256", "private_key": sealed, "key_id": key_id
+    });
+    let answer = handle
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::Command(wire::Command {
+                name: "locker.set_passkey".to_owned(),
+                input: serde_json::to_vec(&input).map_err(|error| error.to_string())?,
+                invoke_key: "seed-demo-locker-passkey".to_owned(),
+                ..wire::Command::default()
+            })),
+        })
+        .map_err(|error| error.to_string())?;
+    match answer.kind {
+        Some(wire::response::Kind::Command(outcome))
+            if outcome.status == wire::CommandStatus::Executed as i32 =>
+        {
+            Ok(())
+        }
+        Some(wire::response::Kind::Command(outcome)) => Err(outcome.reason),
+        other => Err(format!("answered as {other:?}")),
+    }
 }
 
 /// Seed Locker through `Handle::call`: unlock, write, relock. Answers the
@@ -786,6 +864,10 @@ fn seed_locker(handle: &centraid_core::Handle) -> Vec<String> {
         };
         eprintln!("seed-demo-vault: {name} refused: {why}");
         refused.push(format!("{name}: {why}"));
+    }
+    if let Err(why) = seed_passkey(handle) {
+        eprintln!("seed-demo-vault: locker.set_passkey refused: {why}");
+        refused.push(format!("locker.set_passkey: {why}"));
     }
     // LOCKED AGAIN, so nothing about the artifact depends on a session.
     if let Err(error) = session(Step::Relock(wire::LockerRelock {})) {

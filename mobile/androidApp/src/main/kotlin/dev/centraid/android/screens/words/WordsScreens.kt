@@ -340,6 +340,9 @@ internal fun WordsEntryScreen(state: WordsEntryState, onEvent: (WordsEntryEvent)
         }
         for ((index, line) in state.restored.withIndex()) RestoredLine(line, index)
         for ((index, line) in state.stayed.withIndex()) StayedLine(line, index)
+        if (state.retry_label.isNotEmpty()) {
+            StayedRetry(state.retry_label) { onEvent(WordsEntryEvent(retry = WordsEntryEvent.Retry())) }
+        }
         WordsControls(
             primary = state.primary_label,
             primaryEnabled = state.primary_enabled,
@@ -501,8 +504,8 @@ private fun RestoredLine(line: RestoredVaultLine, index: Int) {
 /**
  * One vault that stayed with the other phone (`WordsEntryState.stayed`,
  * R-1047-R5): the machine's sentence behind a `seam` rule — "not yet, and not
- * wrong" (DESIGN.md), since the vault is safe where it is. No control: the
- * core has no retry for one vault.
+ * wrong" (DESIGN.md), since the vault is safe where it is. The retry under the
+ * list is [StayedRetry].
  */
 @Composable
 private fun StayedLine(line: String, index: Int) {
@@ -515,6 +518,26 @@ private fun StayedLine(line: String, index: Int) {
     ) {
         Box(Modifier.width(2.dp).fillMaxHeight().background(centraidColor("seam")))
         Text(line, style = centraidType("body"), color = centraidColor("text"))
+    }
+}
+
+/**
+ * `retry_label`'s control (R-1047-R6): ask the laptop again for the vaults
+ * that stayed. A link-weight text button, like [WordsControls]' secondary; the
+ * label and when it shows are the machine's.
+ */
+@Composable
+private fun StayedRetry(label: String, onRetry: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+            .clickable(onClick = onRetry)
+            .testTag("words-retry")
+            .semantics { role = Role.Button },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(label, style = centraidType("smallStrong"), color = centraidColor("link"))
     }
 }
 

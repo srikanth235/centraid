@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "locker",
   "name": "Locker",
-  "description": "Everything, locked up — a personal password manager as a projection of the vault. Logins, cards, secure notes, identities, Wi-Fi and standalone passwords, each an owner-only locker.item. Secrets are sealed vault columns (ciphertext at rest, issue #293): opening an item exercises the app's reveal scope and is receipted per item; secrets never ride a list payload and are never journaled. One-time codes are real RFC-6238 TOTP computed client-side after the seed is read; the password generator runs entirely in the browser. Watchtower flags weak, reused and compromised passwords — weak and reused are derived inside the vault's sealed boundary by locker.watchtower, compromised is a stored breach flag. Favorites are the canonical flags-scheme star, anchored on the locker.item itself — every app stars its OWN rows, so nothing starred elsewhere appears here; tags are free-form. Adding, editing, trashing, restoring, purging and starring all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
+  "description": "Everything, locked up — a personal password manager over the vault on this phone. Logins, cards, secure notes, identities, Wi-Fi and standalone passwords (and nine template types), each an owner-only locker.item. Secrets are sealed under a key K derived from the member's 24 words and held only in the phone core's memory behind the phone's own lock (biometric, passcode fallback); the list is metadata and every secret is revealed per field, per gesture, receipted before its value exists, and concealed after 30 seconds. One-time codes are RFC 6238 codes the core makes from a seed that is never shown. Custom fields may be sealed; a passkey is stored, never revealed, and cannot be made on the phone. Review is metadata only — the compromised flag, http:// addresses and card expiry — and names weak/reused passwords and breach checking as not checked here. Import reads a password-manager CSV or a Locker export and seals it in; export writes every secret to a plaintext file through the system's save sheet after a fresh owner check. Favorites are the canonical flags-scheme star; tags are free-form. Every write runs through a typed vault command, receipted.",
   "version": "0.3.0",
   "iconKey": "Lock",
   "colorKey": "rose",
@@ -705,7 +705,7 @@
     },
     {
       "name": "set-field",
-      "description": "Create or rewrite ONE owner-defined field on an item through locker.set_field. A field is (section, label, kind, value); a sealed kind stores its value in a sealed vault column, so it is ciphertext at rest and a keyed hash in the journal. Sending «sealed» back leaves the stored secret alone. One field per call so a secret is always a top-level input the journal redaction can reach.",
+      "description": "Create or rewrite ONE owner-defined field on an item through locker.set_field. A field is (section, label, kind, value); a sealed field's value is sealed by the phone core against the field's own id before the vault sees it, so it is ciphertext at rest. Sending «sealed» back leaves the stored secret alone. One field per call so a secret is always a top-level input the journal redaction can reach.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -838,7 +838,7 @@
     },
     {
       "name": "set-passkey",
-      "description": "Store or restate an item's passkey slot through locker.set_passkey: relying-party id, user handle, credential id, algorithm, and sealed private key material. Storage only — this performs no WebAuthn ceremony.",
+      "description": "Restate an item's passkey slot through locker.set_passkey: relying-party id, user handle, display name, credential id and algorithm, with the sealed key kept by sending «sealed» back. Storage only — this performs no WebAuthn ceremony, and the phone neither makes a passkey nor reveals its key.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -953,7 +953,7 @@
     },
     {
       "name": "export",
-      "description": "Read every item out in the clear through locker.export, so this device can write a plaintext file. This is a mass reveal: it is confirmed, and it is receipted as an unseal of every sealed column it touches. Anything that reads the file reads your secrets. With include_history it also unseals the passwords each item was rotated away from, out of the vault's own revision snapshots — the one path on which a previous password is readable at all, since no reveal reaches a revision.",
+      "description": "Receipt the mass reveal an export is, through locker.export, before the phone core opens every live and archived secret and renders the file (1Password CSV or Locker JSON). It is confirmed, the phone asks its owner check afresh, and the file goes only to the system's save sheet. Anything that reads the file reads your secrets. A passkey's key and previous passwords are never in it.",
       "confirmation": "required",
       "input": {
         "type": "object",
@@ -991,7 +991,7 @@
   "queries": [
     {
       "name": "items",
-      "description": "A bounded window of non-trashed, non-archived items (caller-sized via limit, default 300, 2,000 at most), newest-updated first, each decorated with its favorite star, free-form tags, a safe subtitle, its connector alias and derived Watchtower status (weak / reused / compromised). `total` is the live count from the vault itself, so the foot line can say \"300 of 312\" without reading the ceiling back to count it. Pass archived:true for the archive shelf. Secrets are NEVER in this payload — passwords, card numbers, CVVs, OTP seeds and note bodies stay out; open a single item to read them.",
+      "description": "A bounded window of non-trashed, non-archived items (caller-sized via limit, default 300, 2,000 at most), newest-updated first, each with its favorite star, free-form tags, a safe subtitle and the compromised flag. `total` is the live count from the vault itself, so the foot line can say \"300 of 312\" without reading the ceiling back to count it. Pass archived:true for the archive shelf. Secrets are NEVER in this payload — passwords, card numbers, CVVs, OTP seeds and note bodies stay out.",
       "input": {
         "type": "object",
         "properties": {
@@ -1047,7 +1047,7 @@
     },
     {
       "name": "item",
-      "description": "One item's full decrypted fields for the detail pane — the only query that returns secrets, and only for the single item the owner opened. Carries the item's connector alias, its owner-defined sections and fields, its additional addresses, its passkey slot's metadata, its attachment metadata and its revision history. A sealed custom value and a passkey's key material are reported as PRESENT and never returned. A revision names what changed and when, never what it changed from: the password an item was rotated away from stays sealed in the vault's own snapshot and leaves only through a confirmed export. A type this build does not know reads as a note that still carries its fields.",
+      "description": "One item's browsable fields for the detail pane, trashed or not: its connector alias, memo, owner-defined sections and fields, additional addresses and passkey metadata. Every sealed value — the type's own cells, a sealed custom field, a passkey's key — is reported only as PRESENT; its plaintext is the phone core's reveal, behind the unlock and a receipt. A type this build does not know reads as a note that still carries its fields.",
       "input": {
         "type": "object",
         "properties": {
@@ -1079,7 +1079,7 @@
     },
     {
       "name": "search",
-      "description": "Match items by title, username or url within the bounded window, returning the same secret-free row shape as items. Matching happens server-side over fields the payload never returns.",
+      "description": "Match items by title, username or url, case-insensitively, over every item not in the trash, returning the same secret-free row shape as items. A note and a secret are never searched.",
       "input": {
         "type": "object",
         "properties": {
@@ -1104,7 +1104,7 @@
     },
     {
       "name": "trash",
-      "description": "Trashed items with their purge dates (secret-free row shape).",
+      "description": "Trashed items with their purge dates (secret-free row shape); on the phone the kit's one trash screen reads them.",
       "input": {
         "type": "object",
         "properties": {},
@@ -1124,7 +1124,7 @@
     },
     {
       "name": "access",
-      "description": "Locker's access history: every unlock and every reveal, newest first, windowed, and a refusal is listed like an allowance. Read from the vault's append-only consent receipts under a grant pinned to Locker's own objects. No receipt has ever carried a secret value, and this adds none.",
+      "description": "Locker's access history: the receipts the vault already wrote — unlocks, reveals, copies and one-time codes, refusals included — newest first and windowed, and on the phone one item's at a time. Read from the vault's append-only receipts under a grant pinned to Locker's own objects. No receipt has ever carried a secret value, and this adds none.",
       "input": {
         "type": "object",
         "properties": {

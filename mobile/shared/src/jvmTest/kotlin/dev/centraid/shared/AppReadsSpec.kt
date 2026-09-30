@@ -25,10 +25,14 @@ import dev.centraid.shared.apps.agenda.AgendaReads
 import dev.centraid.shared.apps.locker.LOCKER_TRASH
 import dev.centraid.shared.apps.locker.LockerEditorMachine
 import dev.centraid.shared.apps.locker.LockerEditorReads
+import dev.centraid.shared.apps.locker.LockerExportMachine
+import dev.centraid.shared.apps.locker.LockerExportReads
 import dev.centraid.shared.apps.locker.LockerGeneratorMachine
 import dev.centraid.shared.apps.locker.LockerGeneratorReads
 import dev.centraid.shared.apps.locker.LockerHomeMachine
 import dev.centraid.shared.apps.locker.LockerHomeReads
+import dev.centraid.shared.apps.locker.LockerImportMachine
+import dev.centraid.shared.apps.locker.LockerImportReads
 import dev.centraid.shared.apps.locker.LockerItemMachine
 import dev.centraid.shared.apps.locker.LockerItemReads
 import dev.centraid.shared.apps.locker.LockerTrashMachine
@@ -347,6 +351,10 @@ class AppReadsSpec : StringSpec({
         Triple("locker.item", LockerItemReads, LockerItemMachine),
         Triple("locker.editor", LockerEditorReads, LockerEditorMachine),
         Triple("locker.generator", LockerGeneratorReads, LockerGeneratorMachine),
+        // #1047 T2: the item page reads its access history (`access_receipt`);
+        // export and import read the shelf's counts.
+        Triple("locker.export", LockerExportReads, LockerExportMachine),
+        Triple("locker.import", LockerImportReads, LockerImportMachine),
     )
 
     "an app-query screen's tables are exactly the tables its machine re-reads on" {

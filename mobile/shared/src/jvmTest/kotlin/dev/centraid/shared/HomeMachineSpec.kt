@@ -225,7 +225,7 @@ class HomeMachineSpec : StringSpec({
         // Empty, and still on the grid — it has something true to say and is
         // never an invitation to fill it.
         locker.earns_grid.shouldBeTrue()
-        SpringboardPolicy.gridMembership(state.data_!!.tiles)
+        SpringboardPolicy.gridMembership(state.data_.tiles)
             .idleAppIds.contains("locker").shouldBeFalse()
     }
 
@@ -311,7 +311,7 @@ class HomeMachineSpec : StringSpec({
         frozen.data_!!.tiles.first { it.app_id == "docs" }.status shouldBe
             TileStatus.TILE_STATUS_CONTENT
         frozen.vault!!.state shouldBe VaultLockup.State.STATE_FROZEN
-        frozen.vault!!.frozen_line shouldBe "3 changes since 2026-03-14"
+        frozen.vault.frozen_line shouldBe "3 changes since 2026-03-14"
     }
 
     // --- the packed grid --------------------------------------------------
@@ -348,7 +348,7 @@ class HomeMachineSpec : StringSpec({
         // Locker. A tile with nothing to say is an invitation like any other.
         val drawn = filled.data_!!.grid_rows.flatMap { it.app_ids }
         drawn shouldContainExactly listOf("notes")
-        filled.data_!!.tiles.size shouldBe SpringboardPolicy.SPRINGBOARD_ORDER.size
+        filled.data_.tiles.size shouldBe SpringboardPolicy.SPRINGBOARD_ORDER.size
     }
 
     "every tile unreadable draws them all rather than an empty launcher" {
@@ -485,7 +485,7 @@ class HomeMachineSpec : StringSpec({
             ),
         ).state
         loud.data_!!.status!!.tone shouldBe HomeStatus.Tone.TONE_URGENT
-        loud.data_!!.tiles shouldBe filled.data_!!.tiles
+        loud.data_.tiles shouldBe filled.data_!!.tiles
     }
 
     // --- the vault switcher -------------------------------------------------

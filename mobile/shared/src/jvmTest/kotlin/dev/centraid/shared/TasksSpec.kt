@@ -272,7 +272,7 @@ class TasksSpec : StringSpec({
             it.action_label shouldBe "Undo"
         }
         // THE EARNED QUIET: Today empty after a check-off says so.
-        checked.state.screen.data_!!.empty!!.headline shouldBe "Everything due today is done."
+        checked.state.screen.data_.empty!!.headline shouldBe "Everything due today is done."
 
         val undone = TasksHomeMachine.reduce(checked.state, view(TasksHomeEvent(status_acted = TasksHomeEvent.StatusActed())))
         val back = undone.effects.single() as ScreenEffect.SubmitWrite
@@ -357,7 +357,7 @@ class TasksSpec : StringSpec({
         typed.state.screen.data_!!.searching shouldBe false
         val hits = TasksHomeMachine.reduce(typed.state, TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Call Ana"))))).state
         hits.screen.data_!!.searching shouldBe true
-        hits.screen.data_!!.count_label shouldBe "1 hit"
+        hits.screen.data_.count_label shouldBe "1 hit"
         hits.screen.search!!.answered_term shouldBe "ana"
         hits.screen.band.none { it.current } shouldBe true
 
@@ -368,7 +368,7 @@ class TasksSpec : StringSpec({
         closed.effects.shouldBeEmpty()
         closed.state.screen.search!!.term shouldBe ""
         closed.state.screen.data_!!.searching shouldBe false
-        closed.state.screen.data_!!.groups.single().title shouldBe "Today"
+        closed.state.screen.data_.groups.single().title shouldBe "Today"
     }
 
     "the band: the tab you are on is nothing; another reads; More is a sheet; its Search opens the field" {
@@ -656,7 +656,7 @@ class TasksSpec : StringSpec({
         }
         val moved = TasksDetailMachine.reduce(typed, TasksDetailInput.Answered(TasksTaskDetail(today = TODAY, task = task("a", "Rent", due = "2026-06-19", days = 4).copy(priority = 2)), TasksProjects())).state
         moved.screen.data_!!.draft!!.title shouldBe "Rent!"
-        moved.screen.data_!!.fields.single { it.key == "priority" }.value_ shouldBe "Next"
+        moved.screen.data_.fields.single { it.key == "priority" }.value_ shouldBe "Next"
     }
 
     "every other field is one write when it is chosen — the day keeps its time; a choice made again is a new command" {
@@ -801,7 +801,7 @@ class TasksSpec : StringSpec({
 
         val clear = TasksCatchUpMachine.reduce(opened.state, TasksCatchUpInput.Answered(TasksCatchUp(today = TODAY), TasksProjects())).state
         clear.screen.data_!!.empty!!.headline shouldBe "Nothing is overdue."
-        clear.screen.data_!!.head shouldBe ""
+        clear.screen.data_.head shouldBe ""
     }
 
     // -----------------------------------------------------------------
@@ -815,7 +815,7 @@ class TasksSpec : StringSpec({
         val opened = machine.reduce(machine.initial(), TrashListEvent(opened = TrashListEvent.Opened())).state
         val listed = machine.reduce(opened, TrashListEvent(data_ = TrashListEvent.DataArrived(data_ = TrashListData(rows = listOf(TrashRow(id = "a", title = "Rent"))), answered_cursor = ""))).state
         listed.data_!!.rows.single().purge_label shouldBe SharedCopy.TRASH_PURGE
-        listed.data_!!.empty_label shouldBe ""
+        listed.data_.empty_label shouldBe ""
         listed.back_label shouldBe TasksCopy.APP_TITLE
         val asked = machine.reduce(listed, TrashListEvent(purge = TrashListEvent.PurgeTapped(id = "a"))).state
         asked.confirm.shouldNotBeNull().body shouldBe TasksCopy.TRASH_PURGE_BODY

@@ -1,0 +1,77 @@
+# A NEW EVENT WITH NO TITLE YET. Create mode names no event, and Save is not
+# armed — the reason is on the state, in words, so a view never guesses why.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+mode: MODE_CREATE
+event_id: ""
+day: "2026-03-11"
+data {
+  draft {
+    title: ""
+    all_day: false
+    start_day: "2026-03-11"
+    start_time: "14:00"
+    end_day: "2026-03-11"
+    end_time: "15:00"
+    calendar_id: "calendar-home"
+    repeat_key: "never"
+    reminder_key: "none"
+  }
+  heading: "New event"
+  start_label: "Wednesday 11 March · 14:00"
+  end_label: "Wednesday 11 March · 15:00"
+  calendar_label: "Home"
+  calendar_hue_key: "cTeal"
+  calendars { key: "calendar-home" label: "Home" selected: true hue_key: "cTeal" accessibility_label: "Home" }
+  guests_label: "Nobody else"
+  repeat_label: "Does not repeat"
+  repeats { key: "never" label: "Does not repeat" selected: true }
+  repeats { key: "weekly" label: "Every week on Wednesday" selected: false }
+  repeat_enabled: true
+  repeat_note: ""
+  reminder_label: "No reminder"
+  reminders { key: "none" label: "No reminder" selected: true }
+  dirty: true
+  can_save: false
+  blocked_reason: "Add a title to save."
+  show_skip: false
+  skip_label: ""
+  foot_note: "A new event starts tentative."
+  scope_armed: false
+  start_day_label: "Wednesday 11 March"
+  start_time_label: "14:00"
+  end_day_label: "Wednesday 11 March"
+  end_time_label: "15:00"
+}
+write { phase: PHASE_IDLE }
+sheet: SHEET_NONE
+asking: ASKING_NONE
+chrome {
+  title_placeholder: "Add a title"
+  notes_placeholder: "Add notes"
+  link_placeholder: "Paste a joining link"
+  field_title: "Title"
+  field_all_day: "All day"
+  field_starts: "Starts"
+  field_ends: "Ends"
+  field_calendar: "Calendar"
+  field_guests: "Guests"
+  field_repeat: "Repeats"
+  field_reminder: "Reminder"
+  field_link: "Joining link"
+  field_notes: "Notes"
+  save: "Save"
+  close: "Close"
+  done: "Done"
+  keep_editing: "Keep editing"
+  loading: "Opening your calendar"
+  retry: "Retry"
+  scope_title: "This event repeats"
+  scope_question: "Which occurrences does this change?"
+  pick_date: "Pick a date"
+  pick_time: "Pick a time"
+}
+dismissed: false

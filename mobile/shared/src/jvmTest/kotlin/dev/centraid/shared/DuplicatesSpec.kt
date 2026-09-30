@@ -236,7 +236,7 @@ class DuplicatesSpec : StringSpec({
         // AND THE COVER IS THE FIRST MEMBER IN THE FOLD'S ORDER, not the first
         // row the leg happened to return: a card that changed picture between
         // two reads of an unchanged library is a card a member cannot trust.
-        amended.data_!!.clusters.single().cover_thumbnail_path shouldBe "/store/1.data"
+        amended.data_.clusters.single().cover_thumbnail_path shouldBe "/store/1.data"
     }
 
     "a leg with nothing to say sends no event, because an empty one is a fold" {

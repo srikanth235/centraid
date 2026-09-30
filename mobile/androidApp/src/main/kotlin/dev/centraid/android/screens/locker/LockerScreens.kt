@@ -63,6 +63,7 @@ import centraid.screen.v1.LockerCountdown
 import centraid.screen.v1.LockerEditorEvent
 import centraid.screen.v1.LockerEditorState
 import centraid.screen.v1.LockerFieldRow
+import centraid.screen.v1.LockerFieldSheet
 import centraid.screen.v1.LockerGeneratorEvent
 import centraid.screen.v1.LockerGeneratorState
 import centraid.screen.v1.LockerHomeEvent
@@ -380,7 +381,7 @@ private fun TypeChip(letters: String, modifier: Modifier = Modifier) {
 
 /** A quiet sentence under a list or a field: the machine's, drawn only when present. */
 @Composable
-private fun LockerNote(text: String, modifier: Modifier = Modifier, ink: String = "textSoft") {
+internal fun LockerNote(text: String, modifier: Modifier = Modifier, ink: String = "textSoft") {
     if (text.isEmpty()) return
     Text(
         text,
@@ -392,7 +393,7 @@ private fun LockerNote(text: String, modifier: Modifier = Modifier, ink: String 
 
 /** A row of the machine's choices as outlined chips; the selected one is filled. */
 @Composable
-private fun LockerChoices(choices: List<LockerChoice>, testTag: String, onPick: (String) -> Unit) {
+internal fun LockerChoices(choices: List<LockerChoice>, testTag: String, onPick: (String) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -639,6 +640,7 @@ internal fun LockerItemScreen(
                             }
                         }
                     }
+                    if (section.note.isNotEmpty()) item(key = "sec-note-$index") { LockerNote(section.note) }
                 }
                 if (item.tags.isNotEmpty()) {
                     item(key = "tags") {
@@ -725,6 +727,102 @@ internal fun LockerItemScreen(
             if (memo.cancel_label.isNotEmpty()) {
                 QuietButton(memo.cancel_label, testTag = "locker-memo-cancel", modifier = Modifier.padding(horizontal = KitGeometry.GUTTER), onPress = close)
             }
+        }
+    }
+    // THE PASSKEY'S NAME (#1047 T2): the memo sheet's shape.
+    state.passkey_name?.let { sheet ->
+        val close = { onEvent(LockerItemEvent(passkey_name_closed = LockerItemEvent.PasskeyNameClosed())) }
+        val text = remember { mutableStateOf(TextFieldValue(sheet.text, TextRange(sheet.text.length))) }
+        SheetRoom(
+            title = sheet.title,
+            onDismiss = close,
+            primary = SheetPrimary(label = sheet.save_label, testTag = "locker-passkey-name-save") {
+                onEvent(LockerItemEvent(passkey_name_saved = LockerItemEvent.PasskeyNameSaved()))
+            },
+        ) {
+            LockerTextField(
+                text = text,
+                label = sheet.title,
+                placeholder = sheet.hint,
+                testTag = "locker-passkey-name-text",
+                onEdit = { onEvent(LockerItemEvent(passkey_name_typed = LockerItemEvent.PasskeyNameTyped(text = it))) },
+            )
+            if (sheet.cancel_label.isNotEmpty()) {
+                QuietButton(sheet.cancel_label, testTag = "locker-passkey-name-cancel", modifier = Modifier.padding(horizontal = KitGeometry.GUTTER), onPress = close)
+            }
+        }
+    }
+    // THE CUSTOM FIELD SHEET (#1047 T2): one field, added or edited; a sealed
+    // value in a password entry the IME neither suggests from nor learns.
+    state.field_sheet?.let { sheet -> LockerFieldSheetView(sheet, onEvent) }
+}
+
+@Composable
+private fun LockerFieldSheetView(sheet: LockerFieldSheet, onEvent: (LockerItemEvent) -> Unit) {
+    val close = { onEvent(LockerItemEvent(field_closed = LockerItemEvent.FieldClosed())) }
+    val typed = { key: String, value: String -> onEvent(LockerItemEvent(field_typed = LockerItemEvent.FieldTyped(key = key, value_ = value))) }
+    val section = rememberSentText(sheet.section)
+    val label = rememberSentText(sheet.label)
+    SheetRoom(
+        title = sheet.title,
+        onDismiss = close,
+        status = sheet.blocked,
+        primary = if (sheet.can_save) {
+            SheetPrimary(label = sheet.save_label, testTag = "locker-field-save") { onEvent(LockerItemEvent(field_saved = LockerItemEvent.FieldSaved())) }
+        } else {
+            null
+        },
+    ) {
+        LockerTextField(
+            text = section.first,
+            label = sheet.section_label,
+            placeholder = sheet.section_hint,
+            testTag = "locker-field-section",
+            onEdit = {
+                section.second(it)
+                typed("section", it)
+            },
+        )
+        LockerTextField(
+            text = label.first,
+            label = sheet.label_label,
+            placeholder = sheet.label_hint,
+            testTag = "locker-field-label",
+            onEdit = {
+                label.second(it)
+                typed("label", it)
+            },
+        )
+        if (sheet.kinds.isNotEmpty()) {
+            LockerLabel(sheet.kind_label)
+            LockerChoices(sheet.kinds, "locker-field-kind") { key -> onEvent(LockerItemEvent(field_kind = LockerItemEvent.FieldKindPicked(key = key))) }
+        }
+        // A NEW ENTRY WHEN THE KIND CHANGES, so a plain value never lingers
+        // in a field that has become a secret one.
+        androidx.compose.runtime.key(sheet.secret) {
+            val value = rememberSentText(sheet.value_)
+            LockerTextField(
+                text = value.first,
+                label = sheet.value_label,
+                placeholder = sheet.value_hint,
+                secret = sheet.secret,
+                singleLine = sheet.secret,
+                keyboard = if (sheet.secret) KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false) else KeyboardOptions.Default,
+                testTag = "locker-field-value",
+                onEdit = {
+                    value.second(it)
+                    typed("value", it)
+                },
+            )
+        }
+        LockerNote(sheet.value_note, ink = "textFaint")
+        if (sheet.remove_label.isNotEmpty()) {
+            QuietButton(sheet.remove_label, testTag = "locker-field-remove", ink = "net", modifier = Modifier.padding(horizontal = KitGeometry.GUTTER)) {
+                onEvent(LockerItemEvent(field_removed = LockerItemEvent.FieldRemoved()))
+            }
+        }
+        if (sheet.cancel_label.isNotEmpty()) {
+            QuietButton(sheet.cancel_label, testTag = "locker-field-cancel", modifier = Modifier.padding(horizontal = KitGeometry.GUTTER), onPress = close)
         }
     }
 }

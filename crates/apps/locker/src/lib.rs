@@ -17,15 +17,14 @@
 //! - **A sealed cell never rides a payload.** No statement in this crate names
 //!   `password`, `otp_seed`, `card_number`, `cvv`, `content`, `value_sealed` or
 //!   `private_key` for a **list**; [`queries::ITEM_COLUMNS`] is the browsable
-//!   half, stated once, and the detail pane's own projection carries the sealed
-//!   cells as the ciphertext they are at rest — a placeholder, never a value
-//!   ([`sidecars`]). A secret's existence travels as a presence bit
-//!   (`<cell> IS NOT NULL`), never as the cell.
+//!   half, stated once, and a secret's existence travels as a presence bit
+//!   (`<cell> IS NOT NULL`), never as the cell — the item's cells, a sealed
+//!   custom field and a passkey's key alike ([`phone`]).
 //! - **The plaintext is not in this crate at all.** Revealing one cell is
 //!   `crates/core::locker::phone`'s, behind the unlock and a receipt written
 //!   first; this crate has no reveal type and no key.
 //! - **`access` has two walls.** The declared `rowFilter` on `object_type` is
-//!   the outer wall and [`queries::access`]'s own predicate is the inner one,
+//!   the outer wall and [`queries::access_statement`]'s own predicate is the inner one,
 //!   so the page is filtered **before** the window rather than after — without
 //!   it a busy vault's newest 200 receipts could be entirely someone else's
 //!   and the clamp would hand the screen an empty history (census §A8).
@@ -44,8 +43,7 @@
 //! | SQL, in any form | `cargo xtask rules`' `sql-confinement`; a statement here is a [`centraid_apps_kit::PageQuery`] — a projection, a `from`, a predicate and an order, as data |
 //! | The member key `K`, in any form | nothing in this crate's dependency set can open a `lk1:` cell: `centraid-vault` is not a dependency, and a reveal is the core's |
 //! | A write from a query | [`queries`] holds statements and a [`centraid_apps_kit::PageDoor`], whose one method reads |
-//! | An invocation with no `invoke_key` | the field is required on [`commands::Invocation`] (D-1020-D3-5) |
-//! | A denial turned into an error | [`commands::Outcome::Denied`] and [`Denial`] are states a surface renders |
+//! | A plaintext file on disk | [`transfer`] renders and reads bytes; the core hands them to the OS save sheet and takes them from the OS picker |
 //!
 //! ## The manifest
 //!
@@ -59,63 +57,11 @@ pub mod commands;
 pub mod manifest;
 pub mod phone;
 pub mod queries;
-pub mod sidecars;
 pub mod totp;
+pub mod transfer;
 pub mod types;
 
-pub use commands::{ACTIONS, Commands, Invocation, Outcome};
+pub use commands::ACTIONS;
 pub use manifest::{APP_ID, manifest};
-pub use queries::{Decorated, ITEM_COLUMNS, ItemRow};
+pub use queries::{ITEM_COLUMNS, ItemRow};
 pub use types::{ITEM_TYPES, degrade_type, is_known_type};
-
-/// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
-/// every app so the core settles all of them through one door.
-pub use centraid_apps_kit::Denial;
-
-/// THE THREE STATES OF A READ, once, for every surface in this app.
-///
-/// `Option<T>` collapses two of the three (census §A seam 5): "not asked yet"
-/// and "asked and refused" both become `None`, and the failure mode on a
-/// security screen is an **all-clear that was never checked**. The third state
-/// is modelled here instead.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Reading<T> {
-    /// The read has not happened yet. A surface renders a skeleton.
-    Loading,
-    /// The vault refused, or the door was not there. A surface renders the ask.
-    Denied(Denial),
-    /// The answer.
-    Data(T),
-}
-
-impl<T> Reading<T> {
-    /// The data, when there is data. **Not** a default.
-    pub const fn data(&self) -> Option<&T> {
-        match self {
-            Self::Data(value) => Some(value),
-            Self::Loading | Self::Denied(_) => None,
-        }
-    }
-
-    /// Whether this reading is a refusal a surface should offer to fix.
-    pub const fn denied(&self) -> bool {
-        matches!(self, Self::Denied(_))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The third state is the point of [`Reading`].
-    #[test]
-    fn loading_and_denied_are_not_the_same_absence() {
-        let loading: Reading<u8> = Reading::Loading;
-        let denied: Reading<u8> = Reading::Denied(Denial::default());
-        assert_eq!(loading.data(), None);
-        assert_eq!(denied.data(), None);
-        assert!(!loading.denied());
-        assert!(denied.denied());
-        assert_ne!(loading, denied);
-    }
-}

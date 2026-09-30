@@ -3,8 +3,8 @@
 //! The whole input is the phrase — or the seed it becomes, for a phone the
 //! platform's synchronised keychain handed the seed and no words (#1047,
 //! Q-1047-18) — and F2 is held structurally: there is no vault id here, no
-//! index, no key and no path on the lost phone. What this module does with it
-//! is derive, dial, ask, and fetch.
+//! key and no path on the lost phone, and no index the shell chose. What this
+//! module does with it is derive, dial, ask, and fetch.
 //!
 //! # HOW A PHONE LEARNS WHICH VAULTS EXIST, WITH NO ACCOUNT AND NO LISTING
 //!
@@ -55,6 +55,16 @@
 //! the new head down, checks it, and claims again. A new head that fails its
 //! checks therefore moves nothing either — the claim used to land first and
 //! the new head was checked after, with the lease already gone.
+//!
+//! # A VAULT THAT STAYED, ASKED FOR AGAIN (R-1047-R6)
+//!
+//! `RestoreRequest.indices` names the indices an earlier restore answered as
+//! `unclaimed`, and the scan then visits exactly those. Whatever the scan,
+//! **a vault this phone already holds is never touched**: its directory
+//! already has a `vault.db`, so it is not dialled, not laid down again under
+//! the core that has it open, and not answered. The retry mints a device
+//! secret for the vaults it answers, as every restore does; the shell keeps
+//! one per vault, so no held vault is re-keyed by it.
 //!
 //! # ONE CARRIER FOR EVERY INDEX
 //!
@@ -187,31 +197,51 @@ pub fn run_observed(
     // moves (#1047 M1). One that will not check refuses the whole restore,
     // and every vault already laid down goes with it.
     let mut staged: Vec<Staged> = Vec::new();
-    let mut misses = 0_u32;
-    let mut index = 0_u32;
-    let mut gap_scanned = 0_u32;
-    while misses < GAP {
-        let checked = centraid_identity::derive::restore_vault_keys(&seed, index)
+    // `Ok(true)` is a hit — staged, or a vault this phone already holds —
+    // and `Ok(false)` a miss.
+    let mut visit = |index: u32| -> Result<bool> {
+        let found = centraid_identity::derive::restore_vault_keys(&seed, index)
             .map_err(|error| CoreError::InvalidRequest {
                 detail: format!("index {index} will not derive: {error}"),
             })
-            .and_then(|keys| runtime.block_on(scan.check(keys, &root, index)));
-        match checked {
-            Ok(Some(one)) => {
-                staged.push(one);
+            .and_then(|keys| {
+                // A VAULT THIS PHONE ALREADY HOLDS IS NEVER TOUCHED (R-1047-R6):
+                // it may be open, draining under its own device secret, and
+                // laying it down again would replace the file under that
+                // session. It is not dialled and not answered, and for the
+                // gap it is a hit.
+                if vault_dir(&root, &keys).join("vault.db").exists() {
+                    return Ok(true);
+                }
+                runtime
+                    .block_on(scan.check(keys, &root, index))
+                    .map(|checked| checked.map(|one| staged.push(one)).is_some())
+            });
+        found.inspect_err(|_| staged.iter().for_each(Staged::forget))
+    };
+    let mut gap_scanned = 0_u32;
+    if request.indices.is_empty() {
+        // EVERY INDEX, upward to the gap limit (the module header).
+        let mut misses = 0_u32;
+        let mut index = 0_u32;
+        while misses < GAP {
+            if visit(index)? {
                 misses = 0;
                 gap_scanned = 0;
-            }
-            Ok(None) => {
+            } else {
                 misses += 1;
                 gap_scanned += 1;
             }
-            Err(error) => {
-                staged.iter().for_each(Staged::forget);
-                return Err(error);
-            }
+            index += 1;
         }
-        index += 1;
+    } else {
+        // ONLY THE NAMED INDICES (R-1047-R6): what an earlier restore answered
+        // as `unclaimed`, asked for again. No gap is scanned, so none is
+        // reported.
+        let named: std::collections::BTreeSet<u32> = request.indices.iter().copied().collect();
+        for index in named {
+            visit(index)?;
+        }
     }
 
     // ONLY THEN, THE CLAIMS. A claim that fails after an earlier one landed
@@ -307,6 +337,12 @@ fn resolve(seed: &centraid_identity::Seed, runtime: &tokio::runtime::Handle) -> 
         })
 }
 
+/// Where a vault's directory is on this phone: the first 16 hex characters of
+/// its identity key, under the directory the core was opened on.
+fn vault_dir(root: &Path, keys: &VaultKeys) -> PathBuf {
+    root.join(&hex::encode(keys.identity.public().to_bytes())[..16])
+}
+
 /// A client for one vault over the shared carrier.
 type Client = GatewayClient<Arc<IrohTransport>>;
 
@@ -364,7 +400,7 @@ impl Scan<'_> {
         let Some((epoch, head, mut client)) = self.probe(&keys).await? else {
             return Ok(None);
         };
-        let dir = root.join(&hex::encode(keys.identity.public().to_bytes())[..16]);
+        let dir = vault_dir(root, &keys);
         let made = (!dir.exists()).then(|| dir.clone());
         link::ensure_dir(&dir)?;
         let file = dir.join("vault.db");

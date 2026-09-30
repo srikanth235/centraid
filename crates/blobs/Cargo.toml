@@ -13,8 +13,6 @@ name = "centraid_blobs"
 path = "src/lib.rs"
 
 [dependencies]
-centraid-api-proto = { path = "../api-proto" }
-centraid-protocol = { path = "../protocol" }
 # THE VAULT'S BYTE DOOR, implemented here (`door.rs`). The direction is
 # blobs -> vault and never the reverse: `crates/vault` is host-agnostic and
 # must not gain a network dependency (#1025 S3).
@@ -25,7 +23,6 @@ hex.workspace = true
 iroh-blobs.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true }
-tracing.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

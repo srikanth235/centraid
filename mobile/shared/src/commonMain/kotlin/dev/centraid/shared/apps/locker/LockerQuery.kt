@@ -4,6 +4,8 @@ import centraid.core.v1.AppQueryDenial
 import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandStatus
+import centraid.core.v1.LockerAccess
+import centraid.core.v1.LockerExportFormat
 import centraid.core.v1.LockerItemDetail
 import centraid.core.v1.LockerItems
 import centraid.core.v1.LockerReview
@@ -57,7 +59,55 @@ public data class LockerHeld<S>(
     public val shown: LockerShown? = null,
     /** The last token minted for an ask, a tick or a clipboard. */
     public val tokens: Long = 0L,
+    /** An export or an import the bridge must run through the core (#1047 T2). */
+    public val job: LockerJob? = null,
+    /**
+     * A file in flight (#1047 T2): the one an import picked, or the one an
+     * export wrote for the save sheet. Never on the drawn state, and dropped
+     * by a relock like everything else here.
+     */
+    public val file: LockerFile? = null,
+    /** Which confirm is up, when a screen has more than one (#1047 T2). */
+    public val confirming: String? = null,
+    /**
+     * What a screen's sheet is editing (#1047 T2): the item page's custom
+     * field — its id, or "" for a new one.
+     */
+    public val editing: String? = null,
+    /** An import's plan, as the core answered it (#1047 T2). No row carries a secret. */
+    public val plan: centraid.core.v1.LockerImportPlan? = null,
 )
+
+/**
+ * WHAT A LOCKER SCREEN ASKS THE CORE THAT IS NOT A READ OR A REVEAL (#1047
+ * T2): every secret into a file, or a picked file planned or written. The
+ * bridge runs each once per [token] and answers [LockerInput.Worked].
+ */
+public sealed interface LockerJob {
+    public val token: Long
+
+    public data class Export(override val token: Long, public val format: LockerExportFormat) : LockerJob
+
+    /** The held [LockerHeld.file]: planned, or written when [publish]. */
+    public data class Import(override val token: Long, public val publish: Boolean) : LockerJob
+}
+
+/**
+ * A FILE'S BYTES, WITH ITS NAME. Not a `data class`: its bytes are secrets in
+ * the clear — a picked export from another manager, or Locker's own — and a
+ * generated `toString` would print them.
+ */
+public class LockerFile(
+    public val name: String,
+    public val bytes: ByteArray,
+    public val mediaType: String = "",
+    /** The token of the save this file is for (the bridge hands it over once). */
+    public val token: Long = 0L,
+    /** Sealed values that did not open and are not in the file. */
+    public val unopened: Int = 0,
+) {
+    override fun toString(): String = "LockerFile($name, ${bytes.size} bytes, «concealed»)"
+}
 
 /** The last answer of each arm a Locker screen asked for. */
 public data class LockerAnswers(
@@ -65,12 +115,15 @@ public data class LockerAnswers(
     public val item: LockerItemDetail? = null,
     public val search: LockerSearch? = null,
     public val review: LockerReview? = null,
+    /** One item's access history (#1047 T2). */
+    public val access: LockerAccess? = null,
 ) {
     public fun with(responses: List<AppQueryResponse>): LockerAnswers = LockerAnswers(
         items = responses.firstNotNullOfOrNull { it.locker_items } ?: items,
         item = responses.firstNotNullOfOrNull { it.locker_item } ?: item,
         search = responses.firstNotNullOfOrNull { it.locker_search } ?: search,
         review = responses.firstNotNullOfOrNull { it.locker_review } ?: review,
+        access = responses.firstNotNullOfOrNull { it.locker_access } ?: access,
     )
 }
 
@@ -85,6 +138,11 @@ public data class LockerAsk(
     public val code: Boolean = false,
     /** A shown code that rolls asks once more for the next one (see [LockerShown.follow]). */
     public val follow: Boolean = false,
+    /**
+     * A custom sealed field's id (#1047 T2): [column] is then the row's key
+     * (`field:<id>`) and the core is asked for `value_sealed` of this field.
+     */
+    public val fieldId: String = "",
 )
 
 /**
@@ -147,6 +205,17 @@ public sealed interface LockerInput<out E> {
 
     /** A `ScreenEffect.Schedule` came due. */
     public data class Tick(public val token: String) : LockerInput<Nothing>
+
+    /** The core answered the [LockerJob] minted under [token] (#1047 T2). */
+    public data class Worked(public val token: Long, public val answer: LockerDoorAnswer) : LockerInput<Nothing>
+
+    /**
+     * The OS picker handed over a file (#1047 T2). Not a `data class`: the
+     * bytes are secrets in the clear.
+     */
+    public class Picked(public val name: String, public val bytes: ByteArray) : LockerInput<Nothing> {
+        override fun toString(): String = "Picked($name, ${bytes.size} bytes, «concealed»)"
+    }
 }
 
 /**
@@ -178,6 +247,12 @@ public abstract class LockerQueryMachine<S, E, D>(
 
     protected open fun tick(held: LockerHeld<S>, token: String): Step<LockerHeld<S>> = Step(held)
 
+    /** The core answered this screen's [LockerJob]. */
+    protected open fun worked(held: LockerHeld<S>, input: LockerInput.Worked): Step<LockerHeld<S>> = Step(held)
+
+    /** The OS picker handed over a file. */
+    protected open fun picked(held: LockerHeld<S>, input: LockerInput.Picked): Step<LockerHeld<S>> = Step(held)
+
     /** A row moved under the screen: read again over what is on it. */
     protected open fun changed(held: LockerHeld<S>): Step<LockerHeld<S>> = read(overRows(held))
 
@@ -203,6 +278,8 @@ public abstract class LockerQueryMachine<S, E, D>(
             is LockerInput.Settled -> settled(state, event.settled)
             is LockerInput.Revealed -> if (state.open && state.asking?.token == event.token) revealed(state, event) else Step(state)
             is LockerInput.Tick -> if (state.open) tick(state, event.token) else Step(state)
+            is LockerInput.Worked -> if (state.open && state.job?.token == event.token) worked(state, event) else Step(state)
+            is LockerInput.Picked -> if (state.open) picked(state, event) else Step(state)
         }
         return Step(finish(step.state), step.effects)
     }
@@ -338,6 +415,7 @@ public open class LockerScreenBridge<S : Message<S, *>, E : Message<E, *>>(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var onState: ((ByteArray) -> Unit)? = null
     private var asked: Long = 0L
+    private var worked: Long = 0L
 
     @kotlin.concurrent.Volatile
     private var hasLeft: Boolean = false
@@ -356,13 +434,40 @@ public open class LockerScreenBridge<S : Message<S, *>, E : Message<E, *>>(
             host.state.map { it.asking }.distinctUntilChanged().collect { ask ->
                 if (ask != null && ask.token > asked) {
                     asked = ask.token
-                    val answer = if (ask.code) gate.doorway.totp(ask.itemId) else gate.doorway.reveal(ask.itemId, ask.column)
+                    val door = gate.doorway
+                    val answer = when {
+                        ask.code -> door.totp(ask.itemId, ask.copy)
+                        ask.fieldId.isNotEmpty() -> door.reveal(ask.itemId, "value_sealed", ask.fieldId, ask.copy)
+                        else -> door.reveal(ask.itemId, ask.column, "", ask.copy)
+                    }
                     if (answer is LockerDoorAnswer.Session &&
                         answer.refusal == centraid.core.v1.LockerRevealRefusal.LOCKER_REVEAL_REFUSAL_LOCKED
                     ) {
                         gate.expired()
                     }
                     host.send(LockerInput.Revealed(ask.token, answer))
+                }
+            }
+        }
+        // THE JOBS (#1047 T2): an export or an import, run once per token.
+        scope.launch {
+            host.state.map { it.job }.distinctUntilChanged().collect { job ->
+                if (job != null && job.token > worked) {
+                    worked = job.token
+                    val door = gate.doorway
+                    val answer = when (job) {
+                        is LockerJob.Export -> door.export(job.format, platformServices().clock.read().zone)
+                        is LockerJob.Import -> {
+                            val file = host.state.value.file
+                            if (file == null) LockerDoorAnswer.Unreachable(LockerCopy.NO_ANSWER) else door.import(file.bytes, job.publish)
+                        }
+                    }
+                    if (answer is LockerDoorAnswer.Session &&
+                        answer.refusal == centraid.core.v1.LockerRevealRefusal.LOCKER_REVEAL_REFUSAL_LOCKED
+                    ) {
+                        gate.expired()
+                    }
+                    host.send(LockerInput.Worked(job.token, answer))
                 }
             }
         }
@@ -377,6 +482,12 @@ public open class LockerScreenBridge<S : Message<S, *>, E : Message<E, *>>(
 
     public fun send(event: ByteArray) {
         forward(events.decode(event))
+    }
+
+    /** A Kotlin-side input from the shell's platform seam (a picked file). */
+    protected fun deliver(input: LockerInput<E>) {
+        hasLeft = false
+        scope.launch { host.send(input) }
     }
 
     public fun forward(event: E) {

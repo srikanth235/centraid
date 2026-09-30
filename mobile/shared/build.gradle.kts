@@ -151,7 +151,6 @@ kotlin {
         // block, which is what makes "the app happens to bring it" stop working.
         if (androidEnabled) {
             androidMain.dependencies {
-                implementation(libs.androidx.security.crypto)
                 implementation(libs.androidx.work.runtime)
                 // BLOCK STORE AND ITS `Task`-to-coroutine adapter (#1029 W5B-3).
                 // The seed is the one secret that may follow a member to their
@@ -180,6 +179,10 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.turbine)
             implementation(libs.konsist)
+            // `sealedSubclasses` and `KClass.members` are full reflection: without
+            // kotlin-reflect on the compile classpath the compiler warns that
+            // the call may throw `KotlinReflectionNotSupportedError` at run time.
+            implementation(kotlin("reflect"))
         }
     }
 }

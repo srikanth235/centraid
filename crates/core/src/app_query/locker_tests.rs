@@ -143,12 +143,14 @@ impl Scratch {
         self.session(Step::Reveal(wire::LockerReveal {
             item_id: item_id.to_owned(),
             column: column.to_owned(),
+            ..wire::LockerReveal::default()
         }))
     }
 
     fn totp(&self, item_id: &str) -> wire::LockerSessionResponse {
         self.session(Step::Totp(wire::LockerTotpAsk {
             item_id: item_id.to_owned(),
+            ..wire::LockerTotpAsk::default()
         }))
     }
 
@@ -825,5 +827,499 @@ fn a_one_time_code_is_receipted_first_and_is_rfc_6238s_code_for_now() {
     assert_eq!(
         scratch.reveal("item-nobody", "otp_seed").refusal,
         wire::LockerRevealRefusal::SeedNotShown as i32
+    );
+}
+
+// ---------------------------------------------------------------------------
+// #1047 T2: custom sealed fields, passkeys, access history, import, export.
+// ---------------------------------------------------------------------------
+
+impl Scratch {
+    fn step_reveal(&self, reveal: wire::LockerReveal) -> wire::LockerSessionResponse {
+        self.session(Step::Reveal(reveal))
+    }
+
+    fn access(&self, item_id: &str) -> wire::LockerAccess {
+        match self.ask(Q::LockerAccess(wire::LockerAccessRequest {
+            item_id: item_id.to_owned(),
+            limit: 0,
+            tz: TZ.to_owned(),
+        })) {
+            Answer::LockerAccess(access) => access,
+            other => panic!("access answered as {other:?}"),
+        }
+    }
+
+    fn export(&self, format: wire::LockerExportFormat) -> wire::LockerSessionResponse {
+        self.session(Step::Export(wire::LockerExportAsk {
+            format: format as i32,
+            tz: TZ.to_owned(),
+        }))
+    }
+
+    fn import(&self, content: &str, publish: bool) -> wire::LockerSessionResponse {
+        self.session(Step::ImportFile(wire::LockerImportAsk {
+            content: content.as_bytes().to_vec(),
+            publish,
+        }))
+    }
+
+    /// The receipts this item's access history holds — the query's own
+    /// answer, so a test counts what a member would see.
+    fn receipts(&self, item_id: &str) -> usize {
+        self.access(item_id).entries.len()
+    }
+
+    /// A passkey whose key material is real ciphertext under this vault's
+    /// `K` — sealed here, because no phone door seals one (L-passkey).
+    fn passkey(&self, item_id: &str) {
+        let keys = crate::phone::Keyring::derive(&seed_of(WORDS), 0, None).expect("keys");
+        let key_id = self
+            .handle
+            .with_vault(|vault| {
+                vault
+                    .locker_generation()
+                    .map_err(|error| CoreError::Invariant {
+                        context: error.to_string(),
+                    })
+            })
+            .expect("a generation");
+        let sealed = centraid_vault::custody::encrypt_under_locker_key(
+            keys.vault.locker.as_bytes(),
+            &key_id,
+            item_id,
+            "passkey-private-key-material",
+        )
+        .expect("it seals");
+        self.run(
+            "locker.set_passkey",
+            json!({
+                "item_id": item_id, "rp_id": "bank.example.com", "user_handle": "maya",
+                "display_name": "Maya", "credential_id": "cred-1", "algorithm": "ES256",
+                "private_key": sealed, "key_id": key_id
+            }),
+        );
+    }
+}
+
+/// A CUSTOM SEALED FIELD IS SEALED BY THE CORE AGAINST ITS OWN ID, REVEALED
+/// THROUGH THE ITEM'S DOOR, AND RECEIPTED AS THE FIELD — never as its label or
+/// value (#1047 T2).
+#[test]
+fn a_custom_sealed_field_is_sealed_here_and_reveals_through_the_items_door() {
+    let scratch = stocked();
+    // Locked, a sealed field's value is refused before anything is written.
+    let refused = scratch.try_run(
+        "locker.set_field",
+        json!({ "item_id": "item-bank", "field_id": "field-rc", "label": "Recovery code",
+                "kind": "sealed", "value": "rc-4411" }),
+    );
+    assert!(refused.is_err(), "a locked Locker sealed a field");
+    scratch.unlock();
+    // A NEW SEALED FIELD NAMES ITS ID, because the ciphertext is bound to it.
+    assert!(
+        scratch
+            .try_run(
+                "locker.set_field",
+                json!({ "item_id": "item-bank", "label": "Recovery code",
+                        "kind": "sealed", "value": "rc-4411" }),
+            )
+            .is_err()
+    );
+    scratch.run(
+        "locker.set_field",
+        json!({ "item_id": "item-bank", "field_id": "field-rc", "section": "Recovery",
+                "label": "Recovery code", "kind": "sealed", "value": "rc-4411" }),
+    );
+    let text = scratch.run(
+        "locker.set_field",
+        json!({ "item_id": "item-bank", "label": "Branch", "kind": "text", "value": "Leeds" }),
+    );
+    let stored = scratch
+        .handle
+        .with_vault(|vault| Ok(vault.locker_sealed_field_cell("item-bank", "field-rc")?))
+        .expect("the cell reads")
+        .and_then(|cell| cell.ciphertext)
+        .expect("a ciphertext");
+    assert!(stored.starts_with("lk1:") && !stored.contains("rc-4411"));
+
+    let item = scratch.item("item-bank").expect("bank");
+    let field = item
+        .fields
+        .iter()
+        .find(|field| field.field_id == "field-rc")
+        .expect("the field is listed");
+    assert!(field.sealed && field.present && field.value.is_empty());
+    assert!(!contains(
+        &scratch.ask_bytes(Q::LockerItem(wire::LockerItemRequest {
+            item_id: "item-bank".to_owned(),
+            tz: TZ.to_owned(),
+        })),
+        "rc-4411"
+    ));
+
+    let revealed = scratch
+        .step_reveal(wire::LockerReveal {
+            item_id: "item-bank".to_owned(),
+            column: "value_sealed".to_owned(),
+            field_id: "field-rc".to_owned(),
+            copy: true,
+        })
+        .revealed
+        .expect("the field reveals");
+    assert_eq!(revealed.value, "rc-4411");
+    assert_eq!(revealed.field_id, "field-rc");
+    // A plain field and another item's field reveal nothing.
+    let text_id = text["field_id"].as_str().expect("an id").to_owned();
+    for (item_id, field_id) in [("item-bank", text_id.as_str()), ("item-card", "field-rc")] {
+        assert_eq!(
+            scratch
+                .step_reveal(wire::LockerReveal {
+                    item_id: item_id.to_owned(),
+                    column: "value_sealed".to_owned(),
+                    field_id: field_id.to_owned(),
+                    copy: false,
+                })
+                .refusal,
+            wire::LockerRevealRefusal::NotSealed as i32
+        );
+    }
+    // The placeholder keeps the value; removing the field removes it.
+    scratch.run(
+        "locker.set_field",
+        json!({ "item_id": "item-bank", "field_id": "field-rc", "section": "Recovery",
+                "label": "Recovery codes", "kind": "sealed", "value": "«sealed»" }),
+    );
+    let again = scratch
+        .step_reveal(wire::LockerReveal {
+            item_id: "item-bank".to_owned(),
+            column: "value_sealed".to_owned(),
+            field_id: "field-rc".to_owned(),
+            copy: false,
+        })
+        .revealed
+        .expect("kept");
+    assert_eq!(again.value, "rc-4411");
+    scratch.run(
+        "locker.remove_field",
+        json!({ "item_id": "item-bank", "field_id": "field-rc" }),
+    );
+    assert!(
+        scratch
+            .item("item-bank")
+            .expect("bank")
+            .fields
+            .iter()
+            .all(|field| field.field_id != "field-rc")
+    );
+}
+
+/// A PASSKEY'S METADATA IS ON THE ITEM AND ITS KEY IS NEVER REVEALED — not
+/// while locked, not while open, and with no receipt (#1047 T2, L-passkey).
+#[test]
+fn a_passkeys_metadata_reads_and_its_key_is_never_revealed() {
+    let scratch = stocked();
+    scratch.unlock();
+    scratch.passkey("item-bank");
+    let passkey = scratch
+        .item("item-bank")
+        .expect("bank")
+        .passkey
+        .expect("a passkey");
+    assert_eq!(passkey.rp_id, "bank.example.com");
+    assert_eq!(passkey.display_name, "Maya");
+    assert_eq!(passkey.credential_id, "cred-1");
+    assert_eq!(passkey.algorithm, "ES256");
+    assert_eq!(passkey.created_local_day, "2099-06-30");
+    assert!(passkey.has_private_key);
+
+    let before = scratch.receipts("item-bank");
+    let refused = scratch.reveal("item-bank", "private_key");
+    assert_eq!(
+        refused.refusal,
+        wire::LockerRevealRefusal::KeyNotShown as i32
+    );
+    assert!(refused.revealed.is_none());
+    scratch.relock();
+    assert_eq!(
+        scratch.reveal("item-bank", "private_key").refusal,
+        wire::LockerRevealRefusal::KeyNotShown as i32,
+        "refused before the session is consulted"
+    );
+    assert_eq!(
+        scratch.receipts("item-bank"),
+        before,
+        "a refused key reveal wrote a receipt"
+    );
+
+    // RENAMED AND REMOVED: the placeholder keeps the key.
+    scratch.run(
+        "locker.set_passkey",
+        json!({ "item_id": "item-bank", "rp_id": "bank.example.com", "user_handle": "maya",
+                "display_name": "Maya at the bank", "credential_id": "cred-1",
+                "algorithm": "ES256", "private_key": "«sealed»" }),
+    );
+    let renamed = scratch
+        .item("item-bank")
+        .expect("bank")
+        .passkey
+        .expect("kept");
+    assert_eq!(renamed.display_name, "Maya at the bank");
+    assert!(renamed.has_private_key);
+    scratch.run("locker.clear_passkey", json!({ "item_id": "item-bank" }));
+    assert!(scratch.item("item-bank").expect("bank").passkey.is_none());
+}
+
+/// ONE ITEM'S ACCESS HISTORY IS THE RECEIPTS ALREADY WRITTEN (#1047 T2):
+/// reveals, copies and codes, newest first, metadata only, this item only.
+#[test]
+fn an_items_access_history_is_its_receipts_as_metadata() {
+    let scratch = stocked();
+    scratch.unlock();
+    scratch.run(
+        "locker.edit_item",
+        json!({ "item_id": "item-bank", "username": "maya@example.com", "password": "«sealed»",
+                "url": "https://bank.example.com", "otp_seed": "JBSWY3DPEHPK3PXP" }),
+    );
+    scratch.reveal("item-bank", "password");
+    scratch.step_reveal(wire::LockerReveal {
+        item_id: "item-bank".to_owned(),
+        column: "password".to_owned(),
+        copy: true,
+        ..wire::LockerReveal::default()
+    });
+    scratch.session(Step::Totp(wire::LockerTotpAsk {
+        item_id: "item-bank".to_owned(),
+        copy: false,
+    }));
+    scratch.reveal("item-card", "card_number");
+
+    let access = scratch.access("item-bank");
+    assert_eq!(
+        access.entries.len(),
+        3,
+        "the bank's three, not the card's or the unlock"
+    );
+    let kinds: Vec<(i32, bool)> = access
+        .entries
+        .iter()
+        .map(|entry| (entry.kind, entry.copied))
+        .collect();
+    assert!(kinds.contains(&(wire::LockerAccessKind::Code as i32, false)));
+    assert!(kinds.contains(&(wire::LockerAccessKind::Reveal as i32, true)));
+    assert!(kinds.contains(&(wire::LockerAccessKind::Reveal as i32, false)));
+    for entry in &access.entries {
+        assert!(entry.allowed);
+        assert_eq!(entry.local_day, "2099-06-30");
+        assert_eq!(entry.local_time, "22:00");
+    }
+    assert!(!access.truncated);
+    let bytes = scratch.ask_bytes(Q::LockerAccess(wire::LockerAccessRequest {
+        item_id: "item-bank".to_owned(),
+        limit: 0,
+        tz: TZ.to_owned(),
+    }));
+    assert!(!contains(&bytes, PASSWORD), "a receipt carried the value");
+}
+
+/// EXPORT: the receipt first, then every live and archived secret in the
+/// clear, in 1Password's CSV or Centraid's JSON — never a passkey's key and
+/// never the trash; refused while locked (#1047 T2).
+#[test]
+fn an_export_is_receipted_first_and_carries_every_secret_but_a_passkeys_key() {
+    let scratch = stocked();
+    assert_eq!(
+        scratch.export(wire::LockerExportFormat::Csv).refusal,
+        wire::LockerRevealRefusal::Locked as i32
+    );
+    scratch.unlock();
+    scratch.passkey("item-bank");
+    scratch.run(
+        "locker.set_field",
+        json!({ "item_id": "item-bank", "field_id": "field-rc", "section": "Recovery",
+                "label": "Recovery code", "kind": "sealed", "value": "rc-4411" }),
+    );
+    let csv = scratch
+        .export(wire::LockerExportFormat::Csv)
+        .exported
+        .expect("a file");
+    // THE ONE MASS-REVEAL RECEIPT, written before any cell opened.
+    assert!(!csv.receipt_id.is_empty(), "the export was not receipted");
+    assert_eq!(csv.file_name, "locker-2099-06-30.csv");
+    assert_eq!(csv.media_type, "text/csv");
+    assert_eq!(csv.item_count, 6, "live and archived, not the trash");
+    assert_eq!(csv.unopened, 0);
+    let text = String::from_utf8(csv.content).expect("utf-8");
+    assert!(text.starts_with("Title,Url,Username,Password,OTPAuth"));
+    assert!(text.contains(PASSWORD));
+    assert!(text.contains("Card number: 4111111111111111"));
+    assert!(text.contains("Recovery · Recovery code: rc-4411"));
+    assert!(!text.contains("passkey-private-key-material"));
+    assert!(!text.contains("Gone"), "the trash was exported");
+
+    let json = scratch
+        .export(wire::LockerExportFormat::Json)
+        .exported
+        .expect("a file");
+    assert_eq!(json.file_name, "locker-2099-06-30.json");
+    let text = String::from_utf8(json.content).expect("utf-8");
+    assert!(text.contains("centraid-locker/1"));
+    assert!(text.contains("rc-4411"));
+    assert!(!text.contains("passkey-private-key-material"));
+    assert!(!text.contains("lk1:"), "ciphertext rode the file");
+}
+
+/// IMPORT: a plan writes nothing; a publish seals every secret on the way in,
+/// fills only empty fields, and the vault wins every collision (#1047 T2).
+#[test]
+fn an_import_plans_then_seals_in_and_the_vault_wins() {
+    let scratch = stocked();
+    let file = "name,url,username,password,note\n\
+                Bank,https://bank.example.com/login,maya@example.com,not-the-vaults,x\n\
+                Forum,http://forum.example.org,maya,forum-pw,\n\
+                Shop,https://shop.example,maya,shop-pw,a note\n\
+                Shop,https://shop.example/cart,maya,shop-pw-2,\n";
+    assert_eq!(
+        scratch.import(file, false).refusal,
+        wire::LockerRevealRefusal::Locked as i32
+    );
+    scratch.unlock();
+    assert_eq!(
+        scratch
+            .import("date,amount\n2026-01-01,1.00\n", false)
+            .refusal,
+        wire::LockerRevealRefusal::NotReadable as i32
+    );
+    let before = scratch.items(false).total;
+    let plan = scratch.import(file, false).import_plan.expect("a plan");
+    assert_eq!(plan.format, "csv");
+    assert_eq!(
+        (
+            plan.new_count,
+            plan.fill_count,
+            plan.held_count,
+            plan.skipped_count
+        ),
+        (1, 1, 1, 1)
+    );
+    assert!(!plan.published);
+    assert_eq!(plan.rows[0].verdict, wire::LockerImportVerdict::Held as i32);
+    assert_eq!(plan.rows[0].matched_item_id, "item-bank");
+    assert_eq!(plan.rows[2].subtitle, "maya · shop.example");
+    assert!(plan.rows[2].carries_secret);
+    assert!(
+        !contains(&plan.encode_to_vec(), "shop-pw"),
+        "a plan carried a secret"
+    );
+    assert_eq!(scratch.items(false).total, before, "a plan wrote");
+
+    let published = scratch.import(file, true).import_plan.expect("published");
+    assert!(published.published);
+    assert_eq!(
+        (published.created, published.filled, published.failed),
+        (1, 1, 0)
+    );
+    // THE VAULT WON: the bank's password is still the vault's.
+    assert_eq!(
+        scratch
+            .reveal("item-bank", "password")
+            .revealed
+            .expect("bank")
+            .value,
+        PASSWORD
+    );
+    // THE FILL filled the forum's empty password and nothing else.
+    assert_eq!(
+        scratch
+            .reveal("item-forum", "password")
+            .revealed
+            .expect("forum")
+            .value,
+        "forum-pw"
+    );
+    let forum = scratch.item("item-forum").expect("forum");
+    assert_eq!(forum.url, "http://forum.example.org");
+    assert_eq!(forum.username, "maya");
+    // THE NEW ITEM's secret was sealed on the way in.
+    let shop = scratch
+        .search("shop")
+        .items
+        .into_iter()
+        .next()
+        .expect("the new item");
+    assert_eq!(
+        scratch
+            .stored_password(&shop.item_id)
+            .map(|stored| stored.starts_with("lk1:")),
+        Some(true)
+    );
+    assert_eq!(
+        scratch
+            .reveal(&shop.item_id, "password")
+            .revealed
+            .expect("shop")
+            .value,
+        "shop-pw"
+    );
+}
+
+/// CENTRAID'S OWN JSON COMES BACK WHOLE: fields, tags, star and memo.
+#[test]
+fn a_json_export_imports_back_whole() {
+    let scratch = stocked();
+    scratch.unlock();
+    scratch.run(
+        "locker.set_field",
+        json!({ "item_id": "item-bank", "field_id": "field-rc", "section": "Recovery",
+                "label": "Recovery code", "kind": "sealed", "value": "rc-4411" }),
+    );
+    scratch.run(
+        "locker.set_memo",
+        json!({ "item_id": "item-bank", "note": "the memo" }),
+    );
+    let exported = scratch
+        .export(wire::LockerExportFormat::Json)
+        .exported
+        .expect("a file");
+    let restored = Scratch::founded();
+    restored.unlock();
+    let published = restored
+        .import(std::str::from_utf8(&exported.content).expect("utf-8"), true)
+        .import_plan
+        .expect("published");
+    assert_eq!(published.format, "json");
+    assert_eq!(published.created, 6);
+    assert_eq!(published.failed, 0);
+    let bank_id = restored
+        .search("bank")
+        .items
+        .into_iter()
+        .next()
+        .expect("the bank")
+        .item_id;
+    let bank = restored.item(&bank_id).expect("the bank");
+    assert!(bank.starred);
+    assert_eq!(bank.tags, vec!["finance".to_owned()]);
+    assert_eq!(bank.memo, "the memo");
+    let field = bank
+        .fields
+        .iter()
+        .find(|field| field.label == "Recovery code")
+        .expect("the field came back");
+    let value = restored
+        .step_reveal(wire::LockerReveal {
+            item_id: bank_id.clone(),
+            column: "value_sealed".to_owned(),
+            field_id: field.field_id.clone(),
+            copy: false,
+        })
+        .revealed
+        .expect("it reveals")
+        .value;
+    assert_eq!(value, "rc-4411");
+    assert_eq!(
+        restored.items(true).items.len(),
+        1,
+        "the archived item stays archived"
     );
 }

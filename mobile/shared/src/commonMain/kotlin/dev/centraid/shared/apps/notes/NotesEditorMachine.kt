@@ -423,11 +423,13 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
      *   to nothing is the member's words (`minLength: 0`). A body this seat has
      *   not copied (`body_unavailable`) is never sent, which is what lets a
      *   title or pin save without blanking the note (R-NOTES-2/3).
-     * * **An empty title is DERIVED from the body's first line**, because
-     *   `title` is `minLength: 1` too and a note with no title is still a note
-     *   a member means to keep. The draft keeps its empty title; the vault gets
-     *   the derived one, and a re-read does not put it back ([keepDerived]).
-     *   No first line, no title sent.
+     * * **An empty title is DERIVED from the body's first line**, because a
+     *   note with no title is still a note a member means to keep and the
+     *   first line is what names it. The draft keeps its empty title; the
+     *   vault gets the derived one, and a re-read does not put it back
+     *   ([keepDerived]). No first line: a changed title is sent EMPTY —
+     *   `edit_note`'s `title` takes `""` (#1047 T1) — so a name the member
+     *   removed does not stay in the vault and come back on the next read.
      * * **`base_revision_id` is not an input.** There is no vault-side
      *   revision check: the last save on this phone wins.
      * * `pinned` is 0 or 1 — SQLite has no boolean.
@@ -440,7 +442,7 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
         val bodyChanged = draft.body != (baseline?.body ?: "") && !draft.body_unavailable
         val title = draft.title.ifBlank { firstLine(draft.body) }
         val titleChanged = draft.title != baseline?.title || (draft.title.isBlank() && bodyChanged)
-        if (titleChanged && title.isNotEmpty()) fields += "\"title\":${jsonString(title)}"
+        if (titleChanged) fields += "\"title\":${jsonString(title)}"
         if (bodyChanged) fields += "\"body_text\":${jsonString(draft.body)}"
         if (draft.pinned != baseline?.pinned) fields += "\"pinned\":${if (draft.pinned) 1 else 0}"
         if (fields.isEmpty()) return null

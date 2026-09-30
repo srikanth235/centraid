@@ -156,6 +156,23 @@ mod tests {
         }
     }
 
+    /// A TITLE MAY BE CLEARED BY AN EDIT (#1047 T1): Notes draws an empty
+    /// title as the body's first line, so `edit-note` takes `""` in step with
+    /// `knowledge.edit_note`. A new note still needs a name or a first line.
+    #[test]
+    fn a_note_title_may_be_cleared_by_an_edit_and_not_left_empty_on_create() {
+        let title = |action: &str| {
+            manifest().action(action).expect("declared").input["properties"]["title"]["minLength"]
+                .clone()
+        };
+        assert_eq!(
+            title("edit-note"),
+            0,
+            "edit-note still refuses an empty title"
+        );
+        assert_eq!(title("create-note"), 1);
+    }
+
     #[test]
     fn every_action_declares_the_tables_it_writes() {
         for action in &manifest().actions {

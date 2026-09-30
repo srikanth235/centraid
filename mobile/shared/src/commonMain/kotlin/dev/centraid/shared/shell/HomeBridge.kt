@@ -328,8 +328,6 @@ public class HomeBridge {
         val open = session ?: return
         scope.launch { open.rest() }
     }
-
-    private fun HomeState.encode(): ByteArray = HomeState.ADAPTER.encode(this)
 }
 
 /**

@@ -227,11 +227,14 @@ struct LockerHomeView: View {
         push(LockerScreens.itemRoute(row.itemID, parent: state.chrome.title))
     }
 
-    /// A More row: `facts` is the machine's sheet; `trash` and `lock` are
-    /// the shell's (a push, and the gate's `LockTapped`).
+    /// A More row: `facts` is the machine's sheet; `import`, `trash`,
+    /// `export` and `lock` are the shell's (a push, and the gate's
+    /// `LockTapped`).
     private func more(_ row: Centraid_Screen_V1_LockerMoreRow) {
         send(Self.event { $0.more = .with { $0.key = row.key } })
         switch row.key {
+        case "import": push(LockerScreens.importRoute)
+        case "export": push(LockerScreens.exportRoute)
         case "trash": push(LockerScreens.trashRoute)
         case "lock": sendLock(LockerLockSeam.event { $0.lock = .init() })
         default: break

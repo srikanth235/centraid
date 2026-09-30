@@ -40,6 +40,11 @@ import kotlinx.coroutines.sync.withLock
  * then an unknown word, then the checksum. The primary control opens only on a
  * VALID verdict for exactly what is on screen. The words are dropped the moment
  * a restore or a re-key succeeds, and on leaving.
+ *
+ * A restore's DONE that names vaults which stayed with the old phone offers
+ * `retry_label`: it asks the laptop again for those indices alone, from the
+ * seed the restore stored ([Enrollment.restoreStayed], R-1047-R6), over the
+ * lists already drawn — never the grid again.
  */
 public object WordsEntryMachine {
     public const val CELLS: Int = 24
@@ -84,6 +89,7 @@ public object WordsEntryMachine {
             event.endpoint != null && entering -> EntryStep(render(model.copy(endpoint = event.endpoint.text)))
             event.primary != null -> primary(model)
             event.secondary != null -> EntryStep(closed())
+            event.retry != null -> retry(model)
             else -> EntryStep(model)
         }
     }
@@ -160,17 +166,18 @@ public object WordsEntryMachine {
 
     private fun restored(model: Entry, outcome: Enrollment.Restored): EntryStep {
         if (model.phase != WordsEntryState.Phase.PHASE_WORKING) return EntryStep(model)
+        if (model.retrying) return retried(model, outcome)
         return when (outcome) {
+            // THE WORDS GO; the laptop address stays, for a retry of what stayed.
             is Enrollment.Restored.Done -> EntryStep(
-                render(
+                settled(
                     Entry(
                         phase = WordsEntryState.Phase.PHASE_DONE,
                         purpose = WordsEntryState.Purpose.PURPOSE_RESTORE,
-                        restored = outcome.answer.vaults.map { vault -> line(ordinal(outcome.answer, vault.index), vault) },
-                        stayed = outcome.answer.unclaimed.map { vault ->
-                            WordsCopy.RESTORED_STAYED.replace("{index}", "${ordinal(outcome.answer, vault.index)}")
-                        },
+                        endpoint = model.endpoint,
                     ),
+                    outcome.answer.vaults,
+                    outcome.answer.unclaimed.map { it.index },
                 ),
             )
             Enrollment.Restored.Unreachable -> back(model, WordsCopy.RESTORE_UNREACHABLE)
@@ -179,6 +186,63 @@ public object WordsEntryMachine {
             Enrollment.Restored.DidNotCheck -> back(model, WordsCopy.RESTORE_DID_NOT_CHECK)
             is Enrollment.Restored.Refused -> back(model, refusal(outcome.because))
         }
+    }
+
+    /**
+     * ASK AGAIN FOR WHAT STAYED (R-1047-R6): DONE with any vault that stayed,
+     * and no retry already running. The indices are the ones the core named;
+     * the vaults already here are not asked for.
+     */
+    private fun retry(model: Entry): EntryStep {
+        if (model.phase != WordsEntryState.Phase.PHASE_DONE || model.stayedAt.isEmpty()) return EntryStep(model)
+        return EntryStep(
+            render(model.copy(phase = WordsEntryState.Phase.PHASE_WORKING, retrying = true, notice = "")),
+            listOf(EntryEffect.RestoreStayed(model.stayedAt, model.endpoint)),
+        )
+    }
+
+    /**
+     * A RETRY'S ANSWER. What came back joins the vaults already here; what did
+     * not still stayed. A refusal changes neither list and says why, and the
+     * retry is offered again.
+     */
+    private fun retried(model: Entry, outcome: Enrollment.Restored): EntryStep {
+        val done = model.copy(phase = WordsEntryState.Phase.PHASE_DONE, retrying = false)
+        return EntryStep(
+            when (outcome) {
+                is Enrollment.Restored.Done -> {
+                    val back = outcome.answer.vaults.map { it.index }.toSet()
+                    settled(
+                        done.copy(notice = ""),
+                        (model.restoredAt.filter { it.index !in back } + outcome.answer.vaults).sortedBy { it.index },
+                        model.stayedAt.filter { it !in back },
+                    )
+                }
+                Enrollment.Restored.Unreachable -> render(done.copy(notice = WordsCopy.RESTORE_UNREACHABLE))
+                else -> render(done.copy(notice = WordsCopy.RESTORE_STAYED_STILL))
+            },
+        )
+    }
+
+    /**
+     * DONE after a restore: the vaults here and the ones that stayed.
+     *
+     * "VAULT N" IS ONE SEQUENCE over both, ordered by derivation index
+     * (R-1047-R5), so a vault that stayed is never given the number of one
+     * that came back. Never the index itself: a member made "Vault 1", not
+     * "index 0".
+     */
+    private fun settled(model: Entry, restoredAt: List<RestoredVaultAt>, stayedAt: List<Int>): Entry {
+        val sequence = (restoredAt.map { it.index } + stayedAt).sorted()
+        fun ordinal(index: Int): Int = sequence.indexOf(index) + 1
+        return render(
+            model.copy(
+                restoredAt = restoredAt,
+                stayedAt = stayedAt,
+                restored = restoredAt.map { vault -> line(ordinal(vault.index), vault) },
+                stayed = stayedAt.map { index -> WordsCopy.RESTORED_STAYED.replace("{index}", "${ordinal(index)}") },
+            ),
+        )
     }
 
     private fun rekeyed(model: Entry, outcome: Enrollment.Rekeyed): EntryStep {
@@ -205,15 +269,6 @@ public object WordsEntryMachine {
 
     private fun back(model: Entry, notice: String): EntryStep =
         EntryStep(render(model.copy(phase = WordsEntryState.Phase.PHASE_ENTERING, notice = notice)))
-
-    /**
-     * "VAULT N" IS ONE SEQUENCE over what came back and what stayed, ordered by
-     * derivation index (R-1047-R5), so a vault that stayed is never given the
-     * number of one that came back. Never the index itself: a member made
-     * "Vault 1", not "index 0".
-     */
-    private fun ordinal(answer: RestoreAnswer, index: Int): Int =
-        (answer.vaults.map { it.index } + answer.unclaimed.map { it.index }).sorted().indexOf(index) + 1
 
     private fun line(number: Int, vault: RestoredVaultAt): RestoredVaultLine = RestoredVaultLine(
         line = when {
@@ -252,8 +307,12 @@ public object WordsEntryMachine {
         val fromPairing = rekey && model.origin == WordsEntryState.Origin.ORIGIN_PAIRING
         val held = model.purpose == WordsEntryState.Purpose.PURPOSE_RESTORE_HELD
         val done = phase == WordsEntryState.Phase.PHASE_DONE
+        // A RETRY OF WHAT STAYED draws DONE's lists under its progress: the
+        // words are gone, so no grid and no address box come back.
+        val answered = done || model.retrying
         val verdict = model.currentVerdict
-        val grid = !held && (phase == WordsEntryState.Phase.PHASE_ENTERING || phase == WordsEntryState.Phase.PHASE_WORKING)
+        val grid = !held && !model.retrying &&
+            (phase == WordsEntryState.Phase.PHASE_ENTERING || phase == WordsEntryState.Phase.PHASE_WORKING)
         val cells = if (grid) {
             model.cells.mapIndexed { at, typed ->
                 val judged = verdict?.cells?.getOrNull(at)
@@ -278,7 +337,7 @@ public object WordsEntryMachine {
             phase == WordsEntryState.Phase.PHASE_CLOSED -> ""
             done && rekey -> WordsCopy.REKEYED_TITLE
             // NOT "YOUR VAULTS ARE BACK" when one of them is not (R-1047-R5).
-            done && model.stayed.isNotEmpty() -> WordsCopy.RESTORED_SOME_TITLE
+            answered && model.stayed.isNotEmpty() -> WordsCopy.RESTORED_SOME_TITLE
             done -> WordsCopy.RESTORED_TITLE
             rekey -> WordsCopy.REKEY_TITLE
             held -> WordsCopy.RESTORE_HELD_TITLE
@@ -288,9 +347,8 @@ public object WordsEntryMachine {
             phase == WordsEntryState.Phase.PHASE_CLOSED -> ""
             done && fromPairing -> WordsCopy.REKEYED_PAIR_BODY
             done && rekey -> WordsCopy.REKEYED_BODY
-            // WHAT BECOMES OF WHAT STAYED, and why there is no retry here: the
-            // core restores every index or none.
-            done && model.stayed.isNotEmpty() -> WordsCopy.RESTORED_STAYED_BODY
+            // WHAT BECOMES OF WHAT STAYED, and that it can be asked for again.
+            answered && model.stayed.isNotEmpty() -> WordsCopy.RESTORED_STAYED_BODY
             done -> ""
             fromPairing -> WordsCopy.REKEY_PAIR_BODY
             rekey -> WordsCopy.REKEY_BODY
@@ -317,8 +375,8 @@ public object WordsEntryMachine {
                 title = title,
                 body = body,
                 cells = cells,
-                endpoint_label = if (!rekey && !done && phase != WordsEntryState.Phase.PHASE_CLOSED) WordsCopy.ENDPOINT_LABEL else "",
-                endpoint = if (!rekey && !done) model.endpoint else "",
+                endpoint_label = if (!rekey && !answered && phase != WordsEntryState.Phase.PHASE_CLOSED) WordsCopy.ENDPOINT_LABEL else "",
+                endpoint = if (!rekey && !answered) model.endpoint else "",
                 notice = notice,
                 primary_label = primary,
                 primary_enabled = when (phase) {
@@ -334,6 +392,7 @@ public object WordsEntryMachine {
                 },
                 restored = model.restored,
                 stayed = model.stayed,
+                retry_label = if (done && !rekey && model.stayedAt.isNotEmpty()) WordsCopy.RESTORED_STAYED_RETRY else "",
                 accessibility_label = listOf(title, notice).filter { it.isNotEmpty() }.joinToString(". "),
             ),
         )
@@ -359,6 +418,12 @@ public data class Entry(
     public val restored: List<RestoredVaultLine> = emptyList(),
     /** One sentence per vault that stayed with the other phone (R-1047-R5). */
     public val stayed: List<String> = emptyList(),
+    /** DONE after a restore: every vault here, as the core answered it. Carries no secret. */
+    internal val restoredAt: List<RestoredVaultAt> = emptyList(),
+    /** DONE after a restore: the index of every vault that stayed (R-1047-R6). */
+    internal val stayedAt: List<Int> = emptyList(),
+    /** WORKING on a retry of what stayed, over DONE's lists (R-1047-R6). */
+    public val retrying: Boolean = false,
 ) {
     /** The verdict for exactly the words on screen, or null while one is in flight. */
     internal val currentVerdict: PhraseVerdict? get() = verdict?.takeIf { verdictRevision == revision }
@@ -399,6 +464,9 @@ public sealed interface EntryEffect {
 
     /** Restore from the seed this phone holds (Q-1047-18); no words. */
     public data class RestoreHeld(val endpoint: String) : EntryEffect
+
+    /** Ask again for the vaults that stayed, by index (R-1047-R6); no words. */
+    public data class RestoreStayed(val indices: List<Int>, val endpoint: String) : EntryEffect
 }
 
 public data class EntryStep(public val model: Entry, public val effects: List<EntryEffect> = emptyList())
@@ -443,6 +511,10 @@ public class WordsEntryFlow(
                 enrollment()?.restoreHeld(effect.endpoint.trim().ifEmpty { null })
                     ?: Enrollment.Restored.Unreachable,
             )
+            is EntryEffect.RestoreStayed -> EntryInput.Restored(
+                enrollment()?.restoreStayed(effect.indices, effect.endpoint.trim().ifEmpty { null })
+                    ?: Enrollment.Restored.Unreachable,
+            )
             is EntryEffect.Rekey -> EntryInput.Rekeyed(
                 enrollment()?.rekey(effect.words.map { it.trim() })
                     ?: Enrollment.Rekeyed.Refused(Enrollment.Refusal.STORE_REFUSED),
@@ -465,7 +537,7 @@ public class WordsEntryFlow(
  *    shields the screen, and every cell is a no-autocorrect, no-learning field
  *    with no clipboard (`screen.proto`'s words section);
  * 3. forwards `WordTyped` on every change, `SuggestionPicked`, `EndpointTyped`,
- *    `Primary` and `Secondary`;
+ *    `Primary`, `Secondary`, and `Retry` from `retry_label`'s control;
  * 4. closes the screen when the phase is `PHASE_CLOSED`.
  */
 public class WordsEntryBridge {

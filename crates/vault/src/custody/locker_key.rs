@@ -383,6 +383,50 @@ impl crate::file::Vault {
             })
         })
     }
+
+    /// One custom field's sealed value, for a reveal (#1047 T2). `None` when
+    /// no field `field_id` of a LIVE item `item_id` exists, or the field is not
+    /// of the `sealed` kind — the same `None` for each, so a reveal adds no
+    /// existence oracle beside the item's own (#873's sidecar rule: a trashed
+    /// item's sidecars stop revealing with it).
+    ///
+    /// The ciphertext's additional data binds it to the FIELD's id, not the
+    /// item's: a new sealed field carries the id it was sealed against
+    /// (D-1020-L9), and `locker.set_field` refuses one that does not.
+    ///
+    /// # Errors
+    /// A failed read.
+    pub fn locker_sealed_field_cell(
+        &self,
+        item_id: &str,
+        field_id: &str,
+    ) -> crate::error::Result<Option<SealedItemCell>> {
+        self.read(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT f.value_sealed, f.key_id
+                   FROM locker_item_field f
+                   JOIN locker_item i ON i.item_id = f.item_id
+                  WHERE f.field_id = ?1 AND f.item_id = ?2
+                    AND f.kind = 'sealed' AND i.deleted_at IS NULL",
+            )?;
+            let mut rows = statement.query([field_id, item_id])?;
+            Ok(match rows.next()? {
+                Some(row) => {
+                    let ciphertext: Option<String> = row.get(0)?;
+                    let ciphertext = ciphertext.filter(|value| !value.is_empty());
+                    Some(SealedItemCell {
+                        key_id: if ciphertext.is_some() {
+                            row.get(1)?
+                        } else {
+                            None
+                        },
+                        ciphertext,
+                    })
+                }
+                None => None,
+            })
+        })
+    }
 }
 
 #[cfg(test)]

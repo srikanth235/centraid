@@ -976,6 +976,9 @@ const RECEIPT_IS_WELL_FORMED: CommandCondition = CommandCondition {
                 "an unlock is about the vault, not about one item".to_owned(),
             ));
         }
+        if let Some(refusal) = field_receipt_refusal(ctx, object_type) {
+            return Ok(Some(refusal));
+        }
         // A REVEAL RECEIPT THAT NAMES A PLAIN COLUMN IS A LIE about what was
         // revealed, so the column set is checked against the sealed registry —
         // except for an unlock, which reveals no column at all.
@@ -1002,6 +1005,23 @@ const RECEIPT_IS_WELL_FORMED: CommandCondition = CommandCondition {
         Ok(None)
     },
 };
+
+/// A receipt that names a custom field names `value_sealed` and nothing else,
+/// on an item — the one sealed column a field has (#1047 T2).
+fn field_receipt_refusal(ctx: &CommandCtx<'_, '_>, object_type: &str) -> Option<String> {
+    ctx.optional_str("field_id")?;
+    let columns = ctx
+        .input
+        .get("columns")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let only_the_value = columns.len() == 1 && columns[0].as_str() == Some("value_sealed");
+    (object_type != ITEM_TYPE || !only_the_value).then(|| {
+        "a custom field's reveal names the item and `value_sealed`, the field's one sealed column"
+            .to_owned()
+    })
+}
 
 /// The member-facing half of a refusal, for a precondition's sentence.
 fn sentence_of(error: VaultError) -> String {
@@ -2058,22 +2078,34 @@ fn set_passkey() -> CommandDefinition {
             // STORAGE ONLY: this mints no challenge, signs nothing and speaks
             // no WebAuthn. The slot's `item_id` is its own primary key, so the
             // core already knows the id it seals against — no new id is needed.
-            let existing: Option<(Option<String>, String)> = ctx
+            let existing: Option<(Option<String>, Option<String>, String)> = ctx
                 .connection()
                 .query_row(
-                    "SELECT private_key, created_at FROM locker_item_passkey WHERE item_id = ?1",
+                    "SELECT private_key, key_id, created_at
+                       FROM locker_item_passkey WHERE item_id = ?1",
                     [&item_id],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                 )
                 .ok();
-            let stored = if private_key.as_deref() == Some(SEALED_PLACEHOLDER) {
-                existing.as_ref().and_then(|(key, _)| key.clone())
+            // THE PLACEHOLDER KEEPS THE KEY AND THE GENERATION IT WAS SEALED
+            // UNDER (#1047 T2). A rename sends `«sealed»` and no `key_id`,
+            // because a caller that never held the key has no generation to
+            // name; writing the input's absent `key_id` over the stored one
+            // left a ciphertext that named no generation.
+            let (stored, stored_key_id) = if private_key.as_deref() == Some(SEALED_PLACEHOLDER) {
+                existing.as_ref().map_or((None, None), |(key, key_id, _)| {
+                    (key.clone(), key_id.clone())
+                })
             } else {
-                private_key.filter(|value| !value.is_empty())
+                let key = private_key.filter(|value| !value.is_empty());
+                let key_id = key
+                    .as_ref()
+                    .and_then(|_| ctx.optional_str("key_id").map(str::to_owned));
+                (key, key_id)
             };
             let created_at = existing
                 .as_ref()
-                .map_or_else(|| ctx.now.clone(), |(_, created)| created.clone());
+                .map_or_else(|| ctx.now.clone(), |(_, _, created)| created.clone());
             ctx.connection().execute(
                 "INSERT INTO locker_item_passkey
                    (item_id, rp_id, user_handle, display_name, credential_id, algorithm,
@@ -2096,7 +2128,7 @@ fn set_passkey() -> CommandDefinition {
                     ctx.optional_str("credential_id"),
                     ctx.optional_str("algorithm"),
                     stored,
-                    ctx.optional_str("key_id"),
+                    stored_key_id,
                     created_at,
                     ctx.now
                 ],
@@ -2236,7 +2268,15 @@ fn totp_code() -> CommandDefinition {
     }];
     definition(
         "locker.totp_code",
-        item_id_only!(),
+        r#"{
+          "type": "object",
+          "required": ["item_id"],
+          "additionalProperties": false,
+          "properties": {
+            "item_id": { "type": "string", "minLength": 1 },
+            "use": { "type": "string", "enum": ["show", "copy"] }
+          }
+        }"#,
         Idempotency::RetrySafe,
         PRE,
         NONE,
@@ -2254,15 +2294,16 @@ fn totp_code() -> CommandDefinition {
             // The digits are computed by `crates/core::locker::phone` after
             // this receipt lands, over the `otp_seed` cell it opens under `K`,
             // with `crates/apps/locker::totp`'s RFC 6238 fold.
+            let mut context = serde_json::json!({ "kind": "reveal", "derivation": "totp" });
+            if let Some(used) = ctx.optional_str("use") {
+                context["use"] = serde_json::Value::String(used.to_owned());
+            }
             let receipt_id = ctx.write_subject_receipt(
                 "reveal locker.totp_code",
                 ITEM_TYPE,
                 Some(&item_id),
                 "allow",
-                serde_json::json!({
-                    "columns": ["otp_seed"],
-                    "context": { "kind": "reveal", "derivation": "totp" }
-                }),
+                serde_json::json!({ "columns": ["otp_seed"], "context": context }),
             )?;
             Ok(serde_json::json!({
                 "item_id": item_id,
@@ -2421,6 +2462,8 @@ fn reveal_receipt() -> CommandDefinition {
             "columns": { "type": "array", "minItems": 1,
               "items": { "type": "string", "minLength": 1 } },
             "kind": { "type": "string", "enum": ["reveal", "auth"] },
+            "field_id": { "type": "string", "minLength": 1 },
+            "use": { "type": "string", "enum": ["show", "copy"] },
             "allowed": { "type": "boolean" },
             "failing": { "type": "string" }
           }
@@ -2466,6 +2509,9 @@ fn reveal_receipt() -> CommandDefinition {
                         .collect()
                 })
                 .unwrap_or_default();
+            if let Some(refusal) = field_receipt_refusal(ctx, &object_type) {
+                return Err(invalid("field_id", refusal));
+            }
             // A REVEAL RECEIPT THAT NAMES A PLAIN COLUMN IS A LIE about what
             // was revealed, so the column set is checked against the sealed
             // registry — except for an unlock, which reveals no column at all
@@ -2503,8 +2549,23 @@ fn reveal_receipt() -> CommandDefinition {
                 "kind".to_owned(),
                 serde_json::Value::String(kind.to_owned()),
             );
+            // WHAT THE VALUE WAS FOR (#1047 T2): shown on the screen or put on
+            // the clipboard. Access history names a copy as a copy; neither
+            // is a value.
+            if let Some(used) = ctx.optional_str("use") {
+                context.insert("use".to_owned(), serde_json::Value::String(used.to_owned()));
+            }
             let mut detail = serde_json::Map::new();
             detail.insert("columns".to_owned(), serde_json::json!(columns));
+            // A CUSTOM FIELD'S REVEAL NAMES THE FIELD (#1047 T2): its id, never
+            // its label or its value, so the history can say which field
+            // while the field exists and "a custom field" once it is gone.
+            if let Some(field_id) = ctx.optional_str("field_id") {
+                detail.insert(
+                    "field_id".to_owned(),
+                    serde_json::Value::String(field_id.to_owned()),
+                );
+            }
             detail.insert("context".to_owned(), serde_json::Value::Object(context));
             if let Some(failing) = ctx.optional_str("failing") {
                 detail.insert(

@@ -115,6 +115,7 @@ class PerAppLayoutSpec : StringSpec({
                 "dev.centraid.shared.apps.people",
                 "dev.centraid.shared.apps.tasks",
                 "dev.centraid.shared.apps.locker",
+                "dev.centraid.shared.apps.agenda",
             ).all { packages.contains(it) }.shouldBeTrue()
         }
         // And `screen` is the CONTRACT and nothing else: two files, the machine

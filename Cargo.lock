@@ -673,31 +673,22 @@ dependencies = [
  "centraid-api-proto",
  "centraid-apps-kit",
  "centraid-apps-locker",
- "centraid-apps-tally",
  "centraid-blobs",
  "centraid-core",
- "centraid-core-ffi",
  "centraid-gateway-client",
  "centraid-gateway-core",
  "centraid-gateway-server",
  "centraid-identity",
  "centraid-ontology",
- "centraid-protocol",
  "centraid-vault",
  "clap",
- "flate2",
  "hex",
  "iroh",
- "prost",
  "rusqlite",
- "serde",
  "serde_json",
  "tempfile",
- "thiserror 2.0.20",
  "tokio",
- "tracing",
  "tracing-subscriber",
- "url",
 ]
 
 [[package]]
@@ -783,7 +774,6 @@ dependencies = [
  "centraid-apps-kit",
  "centraid-design",
  "rusqlite",
- "serde",
  "serde_json",
  "thiserror 2.0.20",
 ]
@@ -795,7 +785,6 @@ dependencies = [
  "centraid-apps-kit",
  "centraid-media",
  "rusqlite",
- "serde",
  "serde_json",
  "thiserror 2.0.20",
 ]
@@ -809,7 +798,6 @@ dependencies = [
  "centraid-ontology",
  "centraid-vault",
  "rusqlite",
- "serde",
  "serde_json",
  "thiserror 2.0.20",
 ]
@@ -832,15 +820,12 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "blake3",
  "bytes",
- "centraid-api-proto",
- "centraid-protocol",
  "centraid-vault",
  "hex",
  "iroh-blobs",
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -869,7 +854,6 @@ dependencies = [
  "hmac",
  "iroh",
  "prost",
- "rusqlite",
  "serde",
  "serde_json",
  "sha1",
@@ -912,7 +896,6 @@ dependencies = [
  "bytes",
  "centraid-api-proto",
  "centraid-gateway-core",
- "centraid-gateway-server",
  "centraid-identity",
  "ed25519-dalek",
  "hex",
@@ -920,11 +903,9 @@ dependencies = [
  "hyper",
  "hyper-util",
  "iroh",
- "rand 0.9.5",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
- "tempfile",
  "thiserror 2.0.20",
  "tokio",
 ]
@@ -947,7 +928,6 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "anyhow",
  "axum",
- "base64 0.22.1",
  "blake3",
  "centraid-api-proto",
  "centraid-gateway-client",
@@ -990,10 +970,8 @@ dependencies = [
  "prost",
  "qrcode",
  "rand 0.9.5",
- "serde",
  "serde_json",
  "sha2",
- "subtle",
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
@@ -1005,7 +983,6 @@ dependencies = [
 name = "centraid-media"
 version = "1.0.0-alpha.0"
 dependencies = [
- "aes-gcm 0.11.1",
  "anyhow",
  "base64 0.22.1",
  "blake3",
@@ -1038,13 +1015,9 @@ dependencies = [
 name = "centraid-protocol"
 version = "1.0.0-alpha.0"
 dependencies = [
- "base64 0.22.1",
  "centraid-api-proto",
- "proptest",
  "prost",
- "serde_json",
  "thiserror 2.0.20",
- "tokio",
 ]
 
 [[package]]

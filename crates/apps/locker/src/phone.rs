@@ -20,10 +20,11 @@ use centraid_apps_kit::row::{Cell, Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
 use crate::queries::{
-    FLAGS_SCHEME_URI, ITEM_COLUMNS, ITEMS_MAX, ItemRow, LOCKER_TAGS_SCHEME_URI, SEARCH_ROWS,
-    STARRED_NOTATION, TRASH_ROWS, items_window, subtitle_of,
+    AccessAnswer, FLAGS_SCHEME_URI, ITEM_COLUMNS, ITEMS_MAX, ItemRow, LOCKER_TAGS_SCHEME_URI,
+    SEALED_ITEM_COLUMNS, SEARCH_ROWS, STARRED_NOTATION, TRASH_ROWS, access_answer,
+    access_statement, access_window, items_window, subtitle_of,
 };
-use crate::sidecars::{Address, Passkey};
+use crate::transfer::{Entry, EntryField, EntryPasskey, Existing, type_columns};
 use crate::types::{ITEM_ENTITY_TYPE, ITEM_TYPES, degrade_type, degraded_from};
 
 /// How many tag, concept and alias rows a list walks before it stops. A tag
@@ -190,11 +191,25 @@ pub fn addresses_statement(item_id: &str) -> PageQuery {
 pub fn passkey_statement(item_id: &str) -> PageQuery {
     by_item(
         "locker.phone.passkey",
-        "item_id, rp_id, user_handle, display_name, private_key IS NOT NULL AS has_private_key",
+        "item_id, rp_id, user_handle, display_name, credential_id, algorithm, created_at, \
+         private_key IS NOT NULL AS has_private_key",
         "locker_item_passkey",
         "item_id",
         item_id,
     )
+}
+
+/// Every item not in the trash, each sealed cell as its presence — what an
+/// import's plan compares a file against (#1047 T2).
+#[must_use]
+pub fn presence_all_statement() -> PageQuery {
+    PageQuery::new(
+        "locker.phone.presence_all",
+        PRESENCE_COLUMNS,
+        "locker_item",
+        PageOrder::asc("item_id", "item_id"),
+    )
+    .filter("deleted_at IS NULL", Vec::new())
 }
 
 /// One item's memo (`knowledge.annotation`, `locker.set_memo`'s row).
@@ -223,6 +238,27 @@ fn by_item(name: &str, select: &str, from: &str, pk: &str, item_id: &str) -> Pag
 // ---------------------------------------------------------------------------
 // What the loaders answer.
 // ---------------------------------------------------------------------------
+
+/// One stored address beside a login's primary one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Address {
+    pub address_id: String,
+    pub url: String,
+    pub position: i64,
+}
+
+/// The passkey slot (L-passkey). **Key material is sealed; its presence is
+/// what draws**, and nothing on the phone reveals it (`KEY_NOT_SHOWN`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Passkey {
+    pub rp_id: String,
+    pub user_handle: Option<String>,
+    pub display_name: Option<String>,
+    pub credential_id: Option<String>,
+    pub algorithm: Option<String>,
+    pub created_at: Option<String>,
+    pub has_private_key: bool,
+}
 
 /// One row as a shelf draws it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -419,9 +455,9 @@ pub fn load_item(door: &dyn PageDoor, item_id: &str) -> KitResult<Option<ItemDat
             rp_id: text_of(row, "rp_id").unwrap_or_default(),
             user_handle: text_of(row, "user_handle"),
             display_name: text_of(row, "display_name"),
-            credential_id: None,
-            algorithm: None,
-            created_at: None,
+            credential_id: text_of(row, "credential_id"),
+            algorithm: text_of(row, "algorithm"),
+            created_at: text_of(row, "created_at"),
             has_private_key: truthy(row, "has_private_key"),
         });
     let memo = door
@@ -512,6 +548,207 @@ pub fn load_review(door: &dyn PageDoor, today: &str) -> KitResult<ReviewData> {
         }
     }
     Ok(review)
+}
+
+/// The access-history window's default on the item page.
+pub const ACCESS_DEFAULT: i64 = 50;
+
+/// ONE ITEM'S ACCESS HISTORY (#1047 T2, L-access): the receipts the vault
+/// already wrote about it — reveals, copies and one-time codes, refusals
+/// included — newest first, as metadata. A receipt never carried a value.
+pub fn load_access(
+    door: &dyn PageDoor,
+    item_id: &str,
+    limit: Option<i64>,
+) -> KitResult<AccessAnswer> {
+    let window = access_window(limit.or(Some(ACCESS_DEFAULT)));
+    let read = read_window(door, &access_statement(Some(item_id))?, window)?;
+    Ok(access_answer(window, &read.rows))
+}
+
+/// Every item an import could land on: live and archived, with which of its
+/// sealed cells hold a value (#1047 T2). The window is the shelves' ceiling.
+pub fn load_import_targets(door: &dyn PageDoor) -> KitResult<Vec<Existing>> {
+    let rows = read_window(door, &shelves_statement(), ITEMS_MAX)?.rows;
+    let presence: BTreeMap<String, Row> = read_window(door, &presence_all_statement(), ITEMS_MAX)?
+        .rows
+        .into_iter()
+        .filter_map(|row| text_of(&row, "item_id").map(|id| (id, row)))
+        .collect();
+    Ok(rows
+        .iter()
+        .map(ItemRow::of)
+        .map(|row| {
+            let item_type = degrade_type(&row.item_type).to_owned();
+            let sealed = presence
+                .get(&row.item_id)
+                .map_or_else(BTreeSet::new, |found| {
+                    SEALED_ITEM_COLUMNS
+                        .iter()
+                        .filter(|column| truthy(found, &format!("has_{column}")))
+                        .map(|column| (*column).to_owned())
+                        .collect()
+                });
+            Existing {
+                plain: plain_columns(&row),
+                sealed,
+                item_id: row.item_id,
+                title: row.title,
+                item_type,
+            }
+        })
+        .collect())
+}
+
+/// ONE ITEM TO EXPORT, WITHOUT ITS SECRETS: the plain half of the file's
+/// entry, and the addresses of the sealed values the core opens into it.
+#[derive(Debug, Clone)]
+pub struct ExportSource {
+    pub item_id: String,
+    /// Every plain column, tag, flag, field label and address; sealed cells
+    /// and sealed field values are empty until the core fills them.
+    pub entry: Entry,
+    /// The sealed cells this item's type carries that hold a value.
+    pub sealed_cells: Vec<&'static str>,
+    /// `(field_id, index into entry.fields)` for each sealed field that holds
+    /// a value.
+    pub sealed_fields: Vec<(String, usize)>,
+}
+
+/// EVERY ITEM AN EXPORT WRITES (#1047 T2): live and archived, oldest first,
+/// with its tags, star, memo, fields, addresses and passkey metadata. The
+/// trash is not exported. Nothing sealed is read: the core opens those.
+pub fn load_export(door: &dyn PageDoor) -> KitResult<Vec<ExportSource>> {
+    let mut rows: Vec<ItemRow> = read_window(door, &shelves_statement(), ITEMS_MAX)?
+        .rows
+        .iter()
+        .map(ItemRow::of)
+        .collect();
+    rows.sort_by(|left, right| {
+        left.created_at
+            .cmp(&right.created_at)
+            .then_with(|| left.item_id.cmp(&right.item_id))
+    });
+    let decorations = decorations(door)?;
+    let mut sources = Vec::with_capacity(rows.len());
+    for row in rows {
+        let item_id = row.item_id.clone();
+        let item_type = degrade_type(&row.item_type).to_owned();
+        let presence = door
+            .page(&presence_statement(&item_id), &first(1))?
+            .rows
+            .into_iter()
+            .next()
+            .unwrap_or_default();
+        let sealed_cells: Vec<&'static str> = secret_cells(&item_type)
+            .iter()
+            .copied()
+            .filter(|column| truthy(&presence, &format!("has_{column}")))
+            .collect();
+        let mut fields: Vec<PhoneField> =
+            read_window(door, &fields_statement(&item_id), DECORATION_ROWS)?
+                .rows
+                .iter()
+                .map(field_of)
+                .collect();
+        fields.sort_by(|left, right| {
+            left.section
+                .cmp(&right.section)
+                .then(left.position.cmp(&right.position))
+                .then(left.label.cmp(&right.label))
+        });
+        let sealed_fields = fields
+            .iter()
+            .enumerate()
+            .filter(|(_, field)| field.sealed && field.present)
+            .map(|(index, field)| (field.field_id.clone(), index))
+            .collect();
+        let mut addresses: Vec<Address> =
+            read_window(door, &addresses_statement(&item_id), DECORATION_ROWS)?
+                .rows
+                .iter()
+                .map(|row| Address {
+                    address_id: text_of(row, "address_id").unwrap_or_default(),
+                    url: text_of(row, "url").unwrap_or_default(),
+                    position: integer_of(row, "position"),
+                })
+                .collect();
+        addresses.sort_by_key(|address| address.position);
+        let passkey = door
+            .page(&passkey_statement(&item_id), &first(1))?
+            .rows
+            .first()
+            .map(|row| EntryPasskey {
+                rp_id: text_of(row, "rp_id").unwrap_or_default(),
+                user_handle: text_of(row, "user_handle").unwrap_or_default(),
+                display_name: text_of(row, "display_name").unwrap_or_default(),
+                credential_id: text_of(row, "credential_id").unwrap_or_default(),
+                algorithm: text_of(row, "algorithm").unwrap_or_default(),
+            });
+        let memo = door
+            .page(&memo_statement(&item_id), &first(1))?
+            .rows
+            .first()
+            .and_then(|row| text_of(row, "body_text"))
+            .unwrap_or_default();
+        let listed = decorations.listed(row);
+        let entry = Entry {
+            columns: plain_columns(&listed.row)
+                .into_iter()
+                .filter(|(column, _)| type_columns(&item_type).contains(&column.as_str()))
+                .collect(),
+            title: listed.row.title.clone(),
+            tags: listed.tags.clone(),
+            starred: listed.starred,
+            archived: listed.archived(),
+            compromised: listed.row.compromised,
+            memo,
+            fields: fields
+                .into_iter()
+                .map(|field| EntryField {
+                    section: field.section,
+                    label: field.label,
+                    kind: field.kind,
+                    value: field.value.unwrap_or_default(),
+                })
+                .collect(),
+            addresses: addresses.into_iter().map(|address| address.url).collect(),
+            passkey,
+            item_type,
+        };
+        sources.push(ExportSource {
+            item_id,
+            entry,
+            sealed_cells,
+            sealed_fields,
+        });
+    }
+    Ok(sources)
+}
+
+/// A row's non-empty plain columns, by the vault's column name.
+fn plain_columns(row: &ItemRow) -> BTreeMap<String, String> {
+    [
+        ("username", &row.username),
+        ("url", &row.url),
+        ("notes", &row.notes),
+        ("cardholder", &row.cardholder),
+        ("expiry", &row.expiry),
+        ("brand", &row.brand),
+        ("fullname", &row.fullname),
+        ("email", &row.email),
+        ("phone", &row.phone),
+        ("address", &row.address),
+        ("network", &row.network),
+    ]
+    .into_iter()
+    .filter_map(|(column, value)| {
+        value
+            .as_ref()
+            .filter(|value| !value.is_empty())
+            .map(|value| (column.to_owned(), value.clone()))
+    })
+    .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -708,6 +945,7 @@ mod tests {
             shelves_statement(),
             trashed_statement(),
             presence_statement("x"),
+            presence_all_statement(),
             fields_statement("x"),
             passkey_statement("x"),
         ];

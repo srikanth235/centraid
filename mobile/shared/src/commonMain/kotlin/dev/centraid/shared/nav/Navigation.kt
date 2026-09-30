@@ -373,6 +373,12 @@ public sealed interface Destination {
 
     /** The kit's trash, with Locker as its parameter: restore and Delete forever. */
     public data object LockerTrash : Destination
+
+    /** Every secret in a file (#1047 T2): `LockerExportBridge.open(parent)`. */
+    public data object LockerExport : Destination
+
+    /** A password-manager file, reviewed and sealed in (#1047 T2): `LockerImportBridge.open(parent)`. */
+    public data object LockerImport : Destination
 }
 
 /**

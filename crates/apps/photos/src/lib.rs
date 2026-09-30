@@ -34,7 +34,7 @@
 //! | Not allowed | What stops it |
 //! |---|---|
 //! | SQL, in any form | `cargo xtask rules`' `sql-confinement` scans this crate; SQL lives only under `crates/{ontology,vault,seat,search}` and `crates/apps/kit`. A statement here is a [`centraid_apps_kit::PageQuery`] — a projection, a `from`, a predicate and an order, as data |
-//! | A model, a codec or a hash | recognition is the automations lane's and the byte plane is `crates/media`'s; the only dependencies here are the kit and `serde` |
+//! | A model, a codec or a hash | recognition is the automations lane's and the byte plane is `crates/media`'s; the only dependencies here are the kit and `serde_json` |
 //! | A write from a query | [`queries`] holds statements and a [`centraid_apps_kit::PageDoor`], whose one method reads |
 //! | An invocation with no `invoke_key` | the field is required on [`commands::Invocation`] (D-1020-D3-5) |
 //! | A denial turned into an error | [`commands::Outcome::Denied`] and [`Denial`] are states a surface renders |

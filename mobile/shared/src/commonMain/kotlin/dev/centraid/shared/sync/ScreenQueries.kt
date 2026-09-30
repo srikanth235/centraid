@@ -243,7 +243,7 @@ internal fun AppQueryRequest.zone(): String? =
         ?: notes_search?.tz ?: notes_note?.tz ?: notes_link_targets?.tz
         ?: people_roster?.tz ?: people_touch?.tz ?: people_person?.tz ?: people_search?.tz ?: people_trash?.tz
         ?: tally_dashboard?.tz ?: tally_expense?.tz ?: tally_spending?.tz ?: tally_trash?.tz ?: tally_export?.tz
-        ?: locker_items?.tz ?: locker_item?.tz ?: locker_search?.tz ?: locker_review?.tz
+        ?: locker_items?.tz ?: locker_item?.tz ?: locker_search?.tz ?: locker_review?.tz ?: locker_access?.tz
 
 private const val NOTHING_TO_READ = "Centraid does not know what to read here."
 private const val NO_VAULT = "No vault is open on this device."

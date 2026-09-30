@@ -89,6 +89,7 @@ message AppQueryRequest {
     LockerItemRequest locker_item = 61;
     LockerSearchRequest locker_search = 62;
     LockerReviewRequest locker_review = 63;
+    LockerAccessRequest locker_access = 64;
   }
 }
 
@@ -137,6 +138,7 @@ message AppQueryResponse {
     LockerItemDetail locker_item = 61;
     LockerSearch locker_search = 62;
     LockerReview locker_review = 63;
+    LockerAccess locker_access = 64;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

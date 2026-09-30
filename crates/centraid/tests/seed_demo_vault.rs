@@ -336,6 +336,7 @@ fn reveal(
         wire::locker_session_request::Step::Reveal(wire::LockerReveal {
             item_id: item_id.to_owned(),
             column: column.to_owned(),
+            ..wire::LockerReveal::default()
         }),
     )
 }
@@ -377,8 +378,8 @@ fn the_demo_locker_reveals_under_the_demo_words_and_no_others() {
         stdout.contains(&format!("CENTRAID_DEMO_SEED={seed_hex}\n")),
         "the seeder did not print the seed it sealed under: {stdout}"
     );
-    // Five live items: the trashed one is not counted, as the tile does not.
-    assert!(stdout.contains(" locker=5"), "{stdout}");
+    // Six live items: the trashed one is not counted, as the tile does not.
+    assert!(stdout.contains(" locker=6"), "{stdout}");
 
     let elsewhere = tempfile::tempdir().expect("a second temp dir");
     let placed = elsewhere.path().join("placed.sqlite3");
@@ -408,6 +409,24 @@ fn the_demo_locker_reveals_under_the_demo_words_and_no_others() {
             .unwrap_or_else(|| panic!("{item}.{column} did not reveal"));
         assert_eq!(revealed.value, typed, "{item}.{column}");
     }
+    // THE SEALED CUSTOM FIELD opens under the same words (#1047 T2), and the
+    // demo passkey's key is refused like every passkey's.
+    let field = locker_step(
+        &phone,
+        wire::locker_session_request::Step::Reveal(wire::LockerReveal {
+            item_id: "demo-locker-bank".to_owned(),
+            column: "value_sealed".to_owned(),
+            field_id: "demo-locker-bank-recovery".to_owned(),
+            copy: false,
+        }),
+    )
+    .revealed
+    .expect("the demo's sealed field reveals");
+    assert_eq!(field.value, "SCU-7731-4402-9918");
+    assert_eq!(
+        reveal(&phone, "demo-locker-rentals", "private_key").refusal,
+        wire::LockerRevealRefusal::KeyNotShown as i32
+    );
     phone.close();
 
     let stranger = phone_over(

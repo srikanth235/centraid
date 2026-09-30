@@ -10282,6 +10282,7 @@ message LockerHomeEvent {
     string item_id = 1;
   }
 
+  // `import` and `export` push Locker's import and export pages (#1047 T2),
   // `trash` pushes Locker's trash; `lock` locks (the shell forwards
   // `LockTapped` to the gate); `facts` opens the facts sheet.
   message MorePicked {
@@ -10311,6 +10312,12 @@ message LockerItemState {
   optional LockerMemoSheet memo = 12;
   // The pushing page's title, which the back control says.
   string parent = 13;
+  // THE CUSTOM FIELD SHEET (#1047 T2), while it is open: one field, added or
+  // edited, saved on its own (`locker.set_field` is one field per command).
+  optional LockerFieldSheet field_sheet = 14;
+  // THE PASSKEY RENAME SHEET (#1047 T2), while it is open — the memo sheet's
+  // shape over the passkey's display name.
+  optional LockerMemoSheet passkey_name = 15;
 }
 
 message LockerItemChrome {
@@ -10353,6 +10360,8 @@ message LockerItemData {
 message LockerSection {
   string title = 1;
   repeated LockerFieldRow rows = 2;
+  // A sentence under the rows (the access history's rule); empty for none.
+  string note = 3;
 }
 
 // A FIELD ROW WITH VERBS (the handoff's recipe). Plain metadata shows its
@@ -10386,8 +10395,9 @@ message LockerCountdown {
 }
 
 message LockerVerb {
-  // `reveal`, `copy`, `conceal`, `open` — and on a one-time code, `code`
-  // (show it) and `copy_code`.
+  // `reveal`, `copy`, `conceal`, `open` — on a one-time code, `code` (show
+  // it) and `copy_code` — `edit` on a custom field (opens its sheet) and
+  // `rename` on a passkey's name (#1047 T2).
   string key = 1;
   string label = 2;
 }
@@ -10404,6 +10414,42 @@ message LockerMemoSheet {
   string hint = 3;
   string save_label = 4;
   string cancel_label = 5;
+}
+
+// ONE CUSTOM FIELD, ADDED OR EDITED (#1047 T2; #873 L-field). A field is a
+// section, a label, a kind and a value. A SEALED field's value is typed into
+// a secure entry and sealed by the core on Save; editing one shows nothing of
+// the stored value — an empty entry keeps it (`value_note` says so). The kind
+// is chosen when the field is added and fixed after, as an item's type is.
+message LockerFieldSheet {
+  // "New field" / "Edit field".
+  string title = 1;
+  string section_label = 2;
+  string section = 3;
+  string section_hint = 4;
+  string label_label = 5;
+  string label = 6;
+  string label_hint = 7;
+  // The kind chips on a NEW field (`text`, `sealed`); empty on an edit.
+  string kind_label = 8;
+  repeated LockerChoice kinds = 9;
+  string value_label = 10;
+  // What was typed; never a stored sealed value.
+  string value = 11;
+  string value_hint = 12;
+  // A sealed kind: a secure entry, never autocorrected or suggested, and out
+  // of the keyboard's learning.
+  bool secret = 13;
+  // "Sealed on this phone when you save …", "Kept sealed · type to replace
+  // it", "Plain text · shown on the item, never searched".
+  string value_note = 14;
+  string save_label = 15;
+  string cancel_label = 16;
+  // "Remove the field" on an edit; empty on a new one.
+  string remove_label = 17;
+  bool can_save = 18;
+  // Why Save is not enabled ("A label first …"); empty when it is.
+  string blocked = 19;
 }
 
 message LockerItemEvent {
@@ -10425,7 +10471,43 @@ message LockerItemEvent {
     EditTapped edit = 13;
     // The screen closed: every revealed value is dropped.
     Left left = 14;
+    // THE FIELD SHEET (#1047 T2). It opens from the `add_field` action or a
+    // field row's `edit` verb; `key` is `section`, `label` or `value`.
+    FieldTyped field_typed = 15;
+    FieldKindPicked field_kind = 16;
+    FieldSaved field_saved = 17;
+    // Remove the field being edited — confirmed first.
+    FieldRemoved field_removed = 18;
+    FieldClosed field_closed = 19;
+    // THE PASSKEY RENAME SHEET (#1047 T2); it opens from the name row's
+    // `rename` verb.
+    PasskeyNameTyped passkey_name_typed = 20;
+    PasskeyNameSaved passkey_name_saved = 21;
+    PasskeyNameClosed passkey_name_closed = 22;
   }
+
+  message FieldTyped {
+    string key = 1;
+    string value = 2;
+  }
+
+  message FieldKindPicked {
+    string key = 1;
+  }
+
+  message FieldSaved {}
+
+  message FieldRemoved {}
+
+  message FieldClosed {}
+
+  message PasskeyNameTyped {
+    string text = 1;
+  }
+
+  message PasskeyNameSaved {}
+
+  message PasskeyNameClosed {}
 
   message Opened {
     string item_id = 1;
@@ -10686,6 +10768,218 @@ message LockerGeneratorEvent {
   message UseTapped {}
 }
 
+// --- locker.export ----------------------------------------------------------
+
+// EVERY SECRET, IN A FILE (#1047 T2; the handoff's `locker/export`). The
+// lede is the handoff's, verbatim, in the net register. Writing is a
+// security-sensitive act, so it asks three times in order: the confirm, which
+// names the consequence; the phone's own owner check, raised afresh
+// (`prompt`, the lock wall's seam and outcome map); and the OS save sheet,
+// which is the only place the file is written. The file never rests on this
+// state or in app storage: the bridge hands it to the shell's save seam
+// (`LockerExportBridge.onSave`) and drops it on any answer.
+message LockerExportState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    Denied denied = 4;
+    LockerExportData data = 5;
+  }
+  LockerExportChrome chrome = 6;
+  // "Write every secret to a file?", before the owner check.
+  optional Confirm confirm = 7;
+  // PRESENT EXACTLY WHEN THE OWNER CHECK MUST BE RAISED NOW, once per token,
+  // answered with `LockerExportEvent.answered` carrying the same token —
+  // `LockerLockState.prompt`'s contract.
+  optional LockerPrompt prompt = 8;
+  Phase phase = 9;
+  // What the last attempt did: written, not saved, not confirmed.
+  optional StatusLine status = 10;
+  // The format picked, as a parameter (law 2): `csv` (empty) or `json`.
+  string format = 11;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_IDLE = 1;
+    // The owner check is up.
+    PHASE_CHECKING = 2;
+    // The core is opening every secret and rendering the file.
+    PHASE_WRITING = 3;
+    // The OS save sheet is up over the file.
+    PHASE_SAVING = 4;
+  }
+}
+
+message LockerExportChrome {
+  string title = 1;
+  string back_label = 2;
+  string retry = 3;
+}
+
+message LockerExportData {
+  // The handoff's export lede, verbatim; drawn in the net register.
+  string lede = 1;
+  // "What leaves" · "6 items · every field, in the clear".
+  string what_label = 2;
+  string what_value = 3;
+  // "Not in the file: the trash, previous passwords and passkeys' keys".
+  string leaves_out = 4;
+  string format_label = 5;
+  // `csv`, `json`.
+  repeated LockerChoice formats = 6;
+  string format_note = 7;
+  string where_label = 8;
+  string where_value = 9;
+  string where_note = 10;
+  // "Write the file"; empty while a write is under way or nothing is kept.
+  string commit_label = 11;
+  string commit_note = 12;
+}
+
+message LockerExportEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    FormatPicked format = 3;
+    CommitTapped commit = 4;
+    Confirmed confirmed = 5;
+    Dismissed dismissed = 6;
+    // The owner check's answer, the lock wall's outcome map.
+    LockerLockEvent.PromptAnswered answered = 7;
+    // The save sheet's answer: `saved`, else `cancelled`, else refused with
+    // `sentence`.
+    SaveSettled save_settled = 8;
+    Left left = 9;
+  }
+
+  message Opened {
+    string parent = 1;
+  }
+
+  message Refreshed {}
+
+  message FormatPicked {
+    string key = 1;
+  }
+
+  message CommitTapped {}
+
+  message Confirmed {}
+
+  message Dismissed {}
+
+  message SaveSettled {
+    bool saved = 1;
+    bool cancelled = 2;
+    string sentence = 3;
+  }
+
+  message Left {}
+}
+
+// --- locker.import ----------------------------------------------------------
+
+// A PASSWORD-MANAGER FILE, READ, REVIEWED AND SEALED IN (#1047 T2; the
+// handoff's `locker/import`, draft → review → publish). The file comes from
+// the OS picker (`LockerImportBridge.picked`, the bytes never on a state),
+// the core plans it row by row with the handoff's verdicts, and Add writes
+// the new and fill rows, sealing each secret on the way in. The vault wins
+// every collision; Discard writes nothing.
+message LockerImportState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    Denied denied = 4;
+    LockerImportData data = 5;
+  }
+  LockerImportChrome chrome = 6;
+  Phase phase = 7;
+  optional StatusLine status = 8;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    // No file.
+    PHASE_IDLE = 1;
+    // The core is reading and planning the file.
+    PHASE_READING = 2;
+    // A plan is drawn; Add or Discard.
+    PHASE_PLANNED = 3;
+    PHASE_PUBLISHING = 4;
+    // Added; the file is dropped.
+    PHASE_PUBLISHED = 5;
+  }
+}
+
+message LockerImportChrome {
+  string title = 1;
+  string back_label = 2;
+  string retry = 3;
+}
+
+message LockerImportData {
+  string lede = 1;
+  // "A file" · its name, or "None chosen".
+  string file_label = 2;
+  string file_value = 3;
+  string file_note = 4;
+  // "Choose a file" — an intent; empty while the core is reading or writing.
+  string choose_label = 5;
+  // The handoff's verdicts, each a chip and its sentence.
+  string verdicts_label = 6;
+  repeated LockerFact verdicts = 7;
+  // The plan: "2 new · 1 fills gaps · 1 held · 1 skipped", and its rows.
+  string counts = 8;
+  string rows_label = 9;
+  repeated LockerImportLine rows = 10;
+  // "Add to Locker" while PLANNED with something to write; empty otherwise.
+  string publish_label = 11;
+  string publish_note = 12;
+  // "Discard" while PLANNED.
+  string discard_label = 13;
+  // A file that planned no row at all.
+  optional EmptyState empty = 14;
+}
+
+// One row of a plan, as the item row draws it — never a secret.
+message LockerImportLine {
+  string key = 1;
+  string title = 2;
+  // "Login · maya@example.com · example.com · a new item".
+  string meta = 3;
+  // `NEW`, `FILLS`, `HELD` (seam), `SKIPPED` (seam).
+  StatusChip chip = 4;
+  string accessibility_label = 5;
+}
+
+message LockerImportEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    // INTENT: the shell opens the OS picker and answers through
+    // `LockerImportBridge.picked` / `pickCancelled`.
+    ChooseTapped choose = 3;
+    PublishTapped publish = 4;
+    DiscardTapped discard = 5;
+    Left left = 6;
+  }
+
+  message Opened {
+    string parent = 1;
+  }
+
+  message Refreshed {}
+
+  message ChooseTapped {}
+
+  message PublishTapped {}
+
+  message DiscardTapped {}
+
+  message Left {}
+}
+
 // ---------------------------------------------------------------------------
 // --- The 24 words ---
 // ---------------------------------------------------------------------------
@@ -10851,10 +11145,12 @@ message WordsEntryState {
   // could not claim (`RestoreResponse.unclaimed`, #1047 R-1047-R5) — it
   // stayed with the other phone, lease and all. Numbered with `restored` in
   // one sequence by derivation index, so "Vault 2" names one vault on both
-  // lists. Empty is the ordinary answer. There is no retry control: the core
-  // restores every index or none, and a second restore here would lay the
-  // claimed vaults down again under an open session.
+  // lists. Empty is the ordinary answer.
   repeated string stayed = 17;
+  // DONE with any `stayed`: the control that asks the laptop again for those
+  // vaults alone (`RestoreRequest.indices`, R-1047-R6), sending `Retry`.
+  // Empty hides it. The vaults already here are never laid down again.
+  string retry_label = 18;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -10928,12 +11224,16 @@ message WordsEntryEvent {
     EndpointTyped endpoint = 4;
     Primary primary = 5;
     Secondary secondary = 6;
+    // `retry_label`'s control: restore the vaults that stayed, on their own.
+    Retry retry = 7;
   }
 
   message Opened {
     WordsEntryState.Purpose purpose = 1;
     WordsEntryState.Origin origin = 2;
   }
+
+  message Retry {}
 
   message WordTyped {
     uint32 position = 1;

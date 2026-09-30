@@ -356,7 +356,7 @@ private fun StageContent(
     when {
         detail.kind == PhotoCell.Kind.KIND_VIDEO && original != null && player != null ->
             PlayerSurface(player)
-        drawsOriginal && original != null -> StageImage(path = original, description = spoken, full = true)
+        drawsOriginal -> StageImage(path = original, description = spoken, full = true)
     }
     if (live != null && live.showing) PlayerSurface(live)
 }

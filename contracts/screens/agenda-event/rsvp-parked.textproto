@@ -1,0 +1,56 @@
+# A REPLY REFUSED AFTER THE MEMBER LEFT, shown when the event is opened again:
+# the page is the event as the vault holds it, the refusal rides on a parked
+# card with its two ways on, and the choice on record is the old one.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+event_id: "event-0001"
+instance_key: "2026-03-11T08:15"
+original_start_local: "2026-03-11T08:15"
+day: "2026-03-11"
+data {
+  title: "Survey walk-through"
+  date_label: "Wednesday 11 March"
+  when_label: "08:15 – 09:30"
+  calendar_name: "Home"
+  calendar_hue_key: "cTeal"
+  facts { label: "Repeats" detail: "Every week on Wednesday" }
+  guest_heading: "2 guests · 1 awaiting"
+  guests { party_id: "party-self" name: "You" initial: "Y" reply_label: "awaiting" hue_key: "cTeal" is_you: true accessibility_label: "You, awaiting" }
+  guests { party_id: "party-0002" name: "Priya Raman" initial: "P" reply_label: "Going" hue_key: "cPlum" is_you: false accessibility_label: "Priya Raman, Going" }
+  rsvp {
+    question: "Are you going?"
+    choices { partstat: "accepted" label: "Going" selected: false enabled: true }
+    choices { partstat: "tentative" label: "Maybe" selected: false enabled: true }
+    choices { partstat: "declined" label: "Not going" selected: false enabled: true }
+    note: "Your answer is for every occurrence."
+  }
+  actions { key: "edit" label: "Edit" enabled: true destructive: false accessibility_label: "Edit this event" }
+  is_past: true
+  accessibility_label: "Survey walk-through, Wednesday 11 March, 08:15 to 09:30, repeats"
+}
+write {
+  phase: PHASE_IDLE
+}
+sheet: SHEET_NONE
+parked {
+  title: "Your reply was not saved"
+  body: "The vault could not be reached. Nothing was changed."
+  retry_label: "Try again"
+  dismiss_label: "Dismiss"
+}
+chrome {
+  title: "Event"
+  back: "Agenda"
+  loading: "Opening your calendar"
+  retry: "Retry"
+  scope_title: "Cancel a repeating event"
+  scope_body: "Pick which occurrences to cancel."
+  scope_commit: "Cancel event"
+  scope_keep: "Keep it"
+  confirm_keep: "Keep it"
+}
+dismissed: false
+cancel_armed: false

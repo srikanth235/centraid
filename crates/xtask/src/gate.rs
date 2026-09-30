@@ -185,12 +185,8 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // Two bun scripts and a clean-tree assertion — the shape `mobile-jvm`
         // already uses, on the profile that actually runs on a pull request.
         step("emitters", run_emitters),
-        // `desktop-unit` AND `extension-unit` STOOD HERE (#1029 §6). The
-        // desktop seat was an Electron shell around a `centraid seat` sidecar
-        // over a local socket, and the Companion's only server was that
-        // socket. There is no paired client and no seat; `desktop/` and
-        // `extension/` are deleted, and #1029 question 10 rules the extension
-        // re-proposed on top of a desktop reader if and when §6 is built.
+        // NO DESKTOP OR EXTENSION STEPS: the only shell is mobile, and there is
+        // no desktop shell and no browser extension (#1029 §6, R-1047-D3).
         // THE CI-SHAPE GATES, re-homed out of `scripts/ci/**` (D-1020-G3).
         // They are not v0's gates — they are gates about the shape of CI and
         // about the supply chain — so taking `ci.yml` off `pull_request` had to
@@ -202,10 +198,9 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // member's own data asked it to exceed its grant. `crates/assist` is
         // deleted and so is `Principal::Agent`, so there is no assistant to
         // hold an answer and no grant to exceed.
-        // `sim` STOOD HERE (#1029 §1). The deterministic simulation drove
-        // SEATS against a gateway over `turmoil` and asserted convergence;
-        // `crates/sim` is deleted with the plane it simulated. The
-        // responsiveness half of D-1020-D2-6 survives as `call-budget`, below.
+        // NO SIMULATION STEP: there is one writer, the phone, and nothing to
+        // converge (#1029 §1). D-1020-D2-6's responsiveness half is
+        // `call-budget`, below.
         step("call-budget", run_call_budget),
         // CLAUSE 9 AGAINST A REAL PANIC (#1020 wave 3, lane E finding 4). The
         // `debug-fault` feature is off in every other step and in every release
@@ -220,11 +215,8 @@ pub fn steps(profile: Profile) -> Vec<Step> {
     }
     let mut nightly = pr;
     nightly.extend([
-        // `sim-nightly`, `desktop-e2e` AND `extension-e2e` STOOD HERE
-        // (#1029 §1, §6). The 250-seed sweep simulated seats, the Electron
-        // run launched a real desktop shell over a real `centraid seat`
-        // sidecar, and the Companion run drove a headed Chromium against that
-        // shell's socket. All three subjects are deleted.
+        // The device end-to-end lanes are the phone's; there is no desktop or
+        // extension end-to-end (#1029 §6).
         step("device-lanes", run_device_lanes),
     ]);
     if profile == Profile::Nightly {
@@ -234,13 +226,9 @@ pub fn steps(profile: Profile) -> Vec<Step> {
     release.extend([
         step("artifact-identity", run_artifact_identity),
         step("prebuilt-core-required", run_prebuilt_core_required),
-        // `vps-smoke` STOOD HERE (D-1020-G5, #1029 §6). It installed the
-        // binary in a clean container, ran `centraid gateway`, redeemed a pair
-        // ticket from a SEAT over iroh in the same container, waited for the
-        // WAL capture tick and took a generation. `centraid gateway`, the seat
-        // and the capture tick are all deleted, so the script had nothing left
-        // to run. The end-to-end it stood for belongs to `crates/gateway-server`
-        // (#1029 W4b) and to the phone-shaped restore drill.
+        // The gateway's end-to-end is `crates/gateway-server`'s own tests
+        // (#1029 W4b) and the phone-shaped restore drill, not a container
+        // smoke (D-1020-G5, superseded by #1029 §6).
     ]);
     release
 }
@@ -1076,8 +1064,9 @@ fn run_ledgers(ctx: &Ctx) -> Result<Outcome> {
 /// Two commands, and the second one runs more than once. `buf lint` over both
 /// modules, then `buf breaking` against the PR base **and against every
 /// released tag inside the version window** — `N = 3` minors, open question 4 —
-/// because the promise #1020 makes is to seats that update on their own
-/// schedule, and a seat in the field is running a TAG, not the PR base. Checking
+/// because the promise #1020 makes is to installs that update on their own
+/// schedule — a phone and the laptop's gateway — and one in the field is
+/// running a TAG, not the PR base. Checking
 /// only the previous commit would let a field be renamed in two commits and
 /// pass both.
 ///
@@ -1153,8 +1142,8 @@ fn run_buf(ctx: &Ctx) -> Result<Outcome> {
 
 /// The last `N = 3` minor releases, newest first — the version window from
 /// #1020's Compatibility section (open question 4). Tags are `v<major>.<minor>.
-/// <patch>`; one tag per minor, the highest patch, because a seat in the field
-/// runs the newest patch of its minor.
+/// <patch>`; one tag per minor, the highest patch, because an install in the
+/// field runs the newest patch of its minor.
 fn window_tags(root: &Path) -> Vec<String> {
     const WINDOW: usize = 3;
     let Ok(output) = Command::new("git")
@@ -2082,9 +2071,6 @@ mod tests {
     /// promise proved after the code is merged. The drill did not leave the
     /// release profile; it arrived everywhere else, which the assertion below
     /// checks rather than assumes.
-    ///
-    /// `vps-smoke` was a fourth. It ran `centraid gateway` in a clean container
-    /// and paired a seat with it over iroh (#1029 §6).
     #[test]
     fn release_adds_the_identity_check_and_the_required_triples() {
         let nightly = names(Profile::Nightly);
@@ -2134,7 +2120,7 @@ mod tests {
 
     /// The version window is the last three MINORS, one tag each (the highest
     /// patch), newest first — and a prerelease is not a released tag. The
-    /// arithmetic is pinned with a table because #1020's promise is to seats
+    /// arithmetic is pinned with a table because #1020's promise is to installs
     /// running a tag, and a window that silently picked three patches of one
     /// minor would check one release three times.
     #[test]
@@ -2203,12 +2189,10 @@ mod tests {
     /// A REAL step of ANOTHER profile selects where it exists and is refused
     /// with THAT PROFILE'S step list where it does not.
     ///
-    /// Lane F hit `--lane desktop-e2e` being refused and read it as a bug in
-    /// the filter; it was a stale binary scanning another worktree (fixed in
-    /// `repo_root`, `tests/repo_root.rs`). The filter was right — but nothing
-    /// asserted that its refusal is ACTIONABLE, and a refusal that does not
-    /// name the profile's own steps is part of why a stale binary looked like
-    /// a filter bug (#1020 wave 3 lane F finding 1).
+    /// A refusal must be ACTIONABLE: one that does not name the profile's own
+    /// steps lets a stale binary scanning another worktree look like a filter
+    /// bug (#1020 wave 3 lane F finding 1; the stale binary is `repo_root`'s,
+    /// `tests/repo_root.rs`).
     #[test]
     fn a_step_of_another_profile_is_refused_with_this_profiles_own_step_names() {
         // `device-lanes` is a `nightly` step. It selects there…

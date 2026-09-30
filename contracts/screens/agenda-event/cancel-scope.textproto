@@ -1,0 +1,43 @@
+# CANCELLING ONE OCCURRENCE OF A SERIES: the scope sheet IS the confirm, so
+# there is no separate one. NONE IS PRE-CHOSEN — the three answers are equal —
+# so the commit is not armed until the member picks.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+event_id: "event-0003"
+instance_key: "2026-03-11T14:00"
+original_start_local: "2026-03-11T14:00"
+day: "2026-03-11"
+data {
+  title: "Book club"
+  date_label: "Wednesday 11 March"
+  when_label: "14:00 – 14:45"
+  calendar_name: "Home"
+  calendar_hue_key: "cTeal"
+  facts { label: "Repeats" detail: "Every week on Wednesday" }
+  facts { label: "Calendar" detail: "Home" }
+  actions { key: "edit" label: "Edit" enabled: true destructive: false accessibility_label: "Edit this event" }
+  actions { key: "cancel" label: "Cancel…" enabled: true destructive: true accessibility_label: "Cancel this event" }
+  is_past: false
+  accessibility_label: "Book club, Wednesday 11 March, 14:00 to 14:45, repeats"
+}
+write { phase: PHASE_IDLE }
+sheet: SHEET_CANCEL_SCOPE
+cancel_scopes { scope: AGENDA_SCOPE_OCCURRENCE label: "This occurrence" selected: false enabled: true }
+cancel_scopes { scope: AGENDA_SCOPE_FUTURE label: "This and the ones after" selected: false enabled: true }
+cancel_scopes { scope: AGENDA_SCOPE_SERIES label: "The whole series" selected: false enabled: true }
+chrome {
+  title: "Event"
+  back: "Agenda"
+  loading: "Opening your calendar"
+  retry: "Retry"
+  scope_title: "Cancel a repeating event"
+  scope_body: "Pick which occurrences to cancel."
+  scope_commit: "Cancel event"
+  scope_keep: "Keep it"
+  confirm_keep: "Keep it"
+}
+dismissed: false
+cancel_armed: false

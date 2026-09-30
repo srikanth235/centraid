@@ -941,3 +941,37 @@ fn a_note_body_may_be_created_empty_and_cleared_by_an_edit() {
         ""
     );
 }
+
+/// A TITLE MAY BE CLEARED TOO (#1047 T1, R-1047 F5): Notes derives a title
+/// from the body's first line where it draws one, so an empty stored title is
+/// "untitled", not a missing field. The member who clears both the title and
+/// the body must be able to save that — `edit_note`'s `title` refused `""`
+/// (`minLength: 1`), so the old name stayed in the vault and came back on the
+/// next read. The edit reads back as empty; the body is untouched.
+#[test]
+fn a_note_title_may_be_cleared_by_an_edit() {
+    let book = Notebook::open("note-clear-title");
+    let note_id = book.note("A name", "some words", "plain");
+    book.run(
+        "knowledge.edit_note",
+        json!({ "note_id": note_id, "title": "" }),
+    );
+    assert_eq!(
+        book.text(
+            "SELECT title FROM knowledge_note WHERE note_id = ?1",
+            &[&note_id]
+        )
+        .as_deref(),
+        Some("")
+    );
+    assert_eq!(
+        book.text(
+            "SELECT t.body_text FROM knowledge_note n
+               JOIN core_content_text t ON t.content_id = n.body_content_id
+              WHERE n.note_id = ?1",
+            &[&note_id]
+        )
+        .as_deref(),
+        Some("some words")
+    );
+}

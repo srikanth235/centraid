@@ -16,11 +16,11 @@
 //! at a phone's scanning distance) and cannot be hand-edited into a shape a
 //! lenient parser half-accepts.
 //!
-//! **No key rides the ticket**
-//! (`packages/core/src/protocol/seat-log.ts:143-158`). The ticket is read off a
-//! screen by a camera, survives in a photo roll, and is validated before any
-//! device exists to be a principal. The vault's Locker key reaches a seat over
-//! the authenticated post-pair channel only.
+//! **No key rides the ticket.** The ticket is read off a screen by a camera,
+//! survives in a photo roll, and is validated before any device exists to be a
+//! principal. Nothing pairing does needs one: the phone is the vault and derives
+//! every key it holds — Locker's among them — from the 24 words, and the laptop
+//! running `centraid-gateway` holds no key at all.
 //!
 //! Parsing **returns an option rather than throwing**, and refuses an unknown
 //! `v`. v0 does the same (`pairing-ticket-codec.ts:15-36`), and the reason is

@@ -116,6 +116,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.screen.v1.LockerHomeState.content.data")
         .boxed(".centraid.screen.v1.LockerItemState.content.data")
         .boxed(".centraid.screen.v1.LockerEditorState.content.data")
+        // An export's file and an import's plan ride the session's answer
+        // (#1047 T2); boxed so every other session step stays small.
+        .boxed(".centraid.core.v1.LockerSessionResponse.exported")
+        .boxed(".centraid.core.v1.LockerSessionResponse.import_plan")
+        .boxed(".centraid.screen.v1.LockerExportState.content.data")
+        .boxed(".centraid.screen.v1.LockerImportState.content.data")
         .compile_fds(descriptors)?;
     Ok(())
 }

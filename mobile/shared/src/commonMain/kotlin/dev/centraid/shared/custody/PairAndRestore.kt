@@ -84,6 +84,14 @@ public interface RestoreDoor {
      * keychain handed the seed and no words restores with.
      */
     public suspend fun restoreSeed(seedHex: String, endpoint: String?): RestoreResult
+
+    /**
+     * ONLY THE VAULTS THAT STAYED, from the seed this phone stored
+     * (`RestoreRequest.indices`, R-1047-R6): the [indices] are what an earlier
+     * answer named in [RestoreAnswer.unclaimed], never an index the shell
+     * chose. The core leaves every vault this phone holds as it is.
+     */
+    public suspend fun restoreStayed(seedHex: String, endpoint: String?, indices: List<Int>): RestoreResult
 }
 
 /** What a restore came back as. */

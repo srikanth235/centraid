@@ -161,9 +161,12 @@ message PairResponse {
 // BRING EVERY VAULT BACK FROM 24 WORDS (#1029 §5).
 //
 // The whole input, and F2 held structurally: there is no vault id here, no
-// index, no key and no path on the lost phone. What this core does with it is
-// derive, resolve, dial, ask the laptop which vaults it holds for this
-// identity, and fetch.
+// key and no path on the lost phone, and no index the shell chose — `indices`
+// only ever repeats what an earlier restore answered as `unclaimed`. What this
+// core does with it is derive, resolve, dial, ask the laptop which vaults it
+// holds for this identity, and fetch. **A vault this phone already holds is
+// never touched**: its file is left as it is, open session and all, and it is
+// neither answered nor counted a miss.
 message RestoreRequest {
   // The 24 words, as the member typed them. Parsed by
   // `centraid_identity::phrase::RecoveryPhrase::parse`, which refuses a bad
@@ -200,6 +203,14 @@ message RestoreRequest {
   // is refused as "not your 24 words". Like the phrase, it is never logged,
   // never quoted in an error and never kept by the core past this request.
   optional bytes seed = 4;
+  // BRING BACK ONLY THESE VAULTS (#1047 T1, R-1047-R6).
+  //
+  // Derivation indices, as `UnclaimedVault.index` named them: a vault that
+  // stayed with the old phone when a claim failed after another landed, asked
+  // for again on its own. Empty is the ordinary restore — every index, scanned
+  // upward to the gap limit. Set, the core probes exactly these and no others,
+  // skips any this phone already holds, and answers `gap_scanned` 0.
+  repeated uint32 indices = 5;
 }
 
 // One vault a restore brought back.
@@ -228,7 +239,10 @@ message RestoredVault {
 message RestoreResponse {
   // See `PairResponse.device_secret`. A restore ALWAYS mints: the lost phone's
   // device key is lost, which is the point, and the restored phone takes the
-  // lease at the next epoch as a new device (F3).
+  // lease at the next epoch as a new device (F3). A restore of named
+  // `indices` mints too, for the vaults it answers only: the shell keeps a
+  // device secret per vault, so no vault this phone already holds is re-keyed
+  // (R-1047-R6).
   bytes device_secret = 3;
   // Every vault the laptop holds for this identity, restored. Empty is a real
   // answer and not a failure: an identity the laptop has never seen has no
@@ -250,7 +264,8 @@ message RestoreResponse {
   // each one that was not is named here: its file is removed, its lease is
   // still the old phone's, and a second restore takes it. Empty is the
   // ordinary answer. When no claim landed at all the restore is refused
-  // instead, with the first claim's refusal.
+  // instead, with the first claim's refusal. A second restore naming these in
+  // `RestoreRequest.indices` asks for them alone (R-1047-R6).
   repeated UnclaimedVault unclaimed = 4;
 }
 

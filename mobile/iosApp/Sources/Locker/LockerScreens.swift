@@ -30,6 +30,10 @@ enum LockerScreens: AppScreens {
     static let generator = "locker.generator"
     /// The kit's trash with Locker as its parameter.
     static let trash = "locker.trash"
+    /// `LockerExportMachine.SCREEN_ID` (#1047 T2).
+    static let export = "locker.export"
+    /// `LockerImportMachine.SCREEN_ID` (#1047 T2).
+    static let importScreen = "locker.import"
     /// The lock wall's state.
     static let lock = "locker.lock"
 
@@ -39,6 +43,9 @@ enum LockerScreens: AppScreens {
     static let editorBridge = LockerEditorBridge()
     static let generatorBridge = LockerGeneratorBridge()
     static let itemBridge = LockerItemBridge()
+    /// The export's bridge, whose save seam `LockerTransferRoot` installs.
+    static let exportBridge = LockerExportBridge()
+    static let importBridge = LockerImportBridge()
     #endif
 
     // MARK: Routes
@@ -67,6 +74,8 @@ enum LockerScreens: AppScreens {
     }
 
     static let trashRoute = ShellModel.Route.screen(trash, Data())
+    static let exportRoute = ShellModel.Route.screen(export, Data())
+    static let importRoute = ShellModel.Route.screen(importScreen, Data())
 
     // MARK: Registration
 
@@ -91,6 +100,8 @@ enum LockerScreens: AppScreens {
         shell.register(.locker(editor, editorBridge))
         shell.register(.locker(generator, generatorBridge))
         shell.register(.of(trash, LockerTrashBridge(gate: LockerGate.Companion.shared.shared)))
+        shell.register(.locker(export, exportBridge))
+        shell.register(.locker(importScreen, importBridge))
         #endif
 
         func push(_ shell: ShellModel?) -> (ShellModel.Route) -> Void {
@@ -180,6 +191,51 @@ enum LockerScreens: AppScreens {
             }
         )
         shell.route(
+            export,
+            open: { [weak shell] _ in
+                guard let shell else { return }
+                LockerLockSeam.attached(shell)
+                #if canImport(CentraidShared)
+                exportBridge.open(parent: LockerWords.appName)
+                #endif
+            },
+            view: { shell, _ in
+                AnyView(LockerExportView(
+                    data: shell.state(export),
+                    lock: shell.state(lock),
+                    send: sender(shell, export),
+                    sendLock: sender(shell, lock),
+                    onBack: pop(shell),
+                    onDeparted: { [weak shell] in shell?.departed(export) }
+                ))
+            }
+        )
+        shell.route(
+            importScreen,
+            open: { [weak shell] _ in
+                guard let shell else { return }
+                LockerLockSeam.attached(shell)
+                #if canImport(CentraidShared)
+                importBridge.open(parent: LockerWords.appName)
+                #endif
+            },
+            view: { shell, _ in
+                AnyView(LockerImportView(
+                    data: shell.state(importScreen),
+                    lock: shell.state(lock),
+                    send: sender(shell, importScreen),
+                    sendLock: sender(shell, lock),
+                    onPicked: { name, bytes in
+                        #if canImport(CentraidShared)
+                        importBridge.picked(name: name, bytes: bytes.kotlin)
+                        #endif
+                    },
+                    onBack: pop(shell),
+                    onDeparted: { [weak shell] in shell?.departed(importScreen) }
+                ))
+            }
+        )
+        shell.route(
             trash,
             open: { [weak shell] _ in
                 guard let shell else { return }
@@ -203,10 +259,14 @@ enum LockerScreens: AppScreens {
 
     static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { homeRoute }
 
-    /// THE SEAM, AT THE ROOT: the OS prompt, the scene's phases.
+    /// THE SEAMS, AT THE ROOT: the OS prompt, the scene's phases, and the
+    /// export's save sheet (#1047 T2).
     @MainActor
     static func global(_ shell: ShellModel) -> AnyView? {
-        AnyView(LockerLockSeam(shell: shell))
+        AnyView(ZStack {
+            LockerLockSeam(shell: shell)
+            LockerTransferRoot()
+        })
     }
 }
 

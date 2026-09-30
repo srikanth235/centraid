@@ -140,7 +140,7 @@ class WordsEntrySpec : StringSpec({
         done.state.restored.single().safety_label shouldBe WordsCopy.RESTORED_SAFETY
     }
 
-    "a vault that stayed with the other phone is named, numbered with the ones that came back, and offers no retry" {
+    "a vault that stayed with the other phone is named, numbered with the ones that came back, and offers a retry" {
         // R-1047-R5: a claim failed after another landed. The claimed vaults are
         // answered; the rest are `unclaimed`, their leases still the old phone's.
         val working = reduce(filled(WordsEntryState.Purpose.PURPOSE_RESTORE), primary).model
@@ -161,9 +161,10 @@ class WordsEntrySpec : StringSpec({
         // vault at index 2 is "Vault 3", not a second "Vault 2".
         done.restored.map { it.line } shouldBe listOf("Vault 1: 3 rows.", "Vault 3: 1 row.")
         done.stayed shouldBe listOf(WordsCopy.RESTORED_STAYED.replace("{index}", "2"))
-        // NO RETRY: the core restores every index or none (the proto's `stayed`).
+        // A RETRY for what stayed (R-1047-R6); Done still closes.
         done.primary_label shouldBe WordsCopy.DONE
         done.secondary_label shouldBe ""
+        done.retry_label shouldBe WordsCopy.RESTORED_STAYED_RETRY
         // THE CORE'S REASON IS A SUPPORT LOG, never a member's sentence.
         done.stayed.single() shouldNotContain "ab".repeat(32)
 
@@ -175,6 +176,57 @@ class WordsEntrySpec : StringSpec({
         whole.title shouldBe WordsCopy.RESTORED_TITLE
         whole.body shouldBe ""
         whole.stayed.shouldBeEmpty()
+        whole.retry_label shouldBe ""
+    }
+
+    "a retry asks for the vaults that stayed alone, keeps what came back, and a refusal leaves both lists standing" {
+        // R-1047-R6: vaults 0 and 2 came back, vault 1 stayed. The retry names
+        // index 1 and the laptop address the member typed; the words are gone.
+        val typedAddress = reduce(
+            filled(WordsEntryState.Purpose.PURPOSE_RESTORE),
+            EntryInput.View(WordsEntryEvent(endpoint = WordsEntryEvent.EndpointTyped(text = "ab"))),
+        ).model
+        val working = reduce(typedAddress, primary).model
+        val first = RestoreAnswer(
+            vaults = listOf(RestoredVaultAt("/v/a/vault.db", 0, rows = 3), RestoredVaultAt("/v/c/vault.db", 2, rows = 1)),
+            unclaimed = listOf(UnclaimedVaultAt(index = 1, vaultId = "ab".repeat(32))),
+        )
+        val done = reduce(working, EntryInput.Restored(Enrollment.Restored.Done(first, 2))).model
+        done.holdsWords shouldBe false
+
+        val retry = EntryInput.View(WordsEntryEvent(retry = WordsEntryEvent.Retry()))
+        val retrying = reduce(done, retry)
+        retrying.effects shouldBe listOf(EntryEffect.RestoreStayed(listOf(1), "ab"))
+        retrying.model.state.phase shouldBe WordsEntryState.Phase.PHASE_WORKING
+        retrying.model.state.progress shouldBe WordsCopy.RESTORING
+        // NO GRID COMES BACK: the words are gone and nothing secret is drawn.
+        retrying.model.state.cells.shouldBeEmpty()
+        retrying.model.state.secure shouldBe false
+        retrying.model.state.retry_label shouldBe ""
+        retrying.model.state.stayed shouldHaveSize 1
+        // A SECOND TAP WHILE ONE RUNS asks nothing.
+        reduce(retrying.model, retry).effects.shouldBeEmpty()
+
+        // STILL REFUSED: back to DONE, both lists standing, the retry offered.
+        val still = reduce(retrying.model, EntryInput.Restored(Enrollment.Restored.NotTaken)).model.state
+        still.phase shouldBe WordsEntryState.Phase.PHASE_DONE
+        still.notice shouldBe WordsCopy.RESTORE_STAYED_STILL
+        still.restored.map { it.line } shouldBe listOf("Vault 1: 3 rows.", "Vault 3: 1 row.")
+        still.stayed shouldBe listOf(WordsCopy.RESTORED_STAYED.replace("{index}", "2"))
+        still.retry_label shouldBe WordsCopy.RESTORED_STAYED_RETRY
+        reduce(retrying.model, EntryInput.Restored(Enrollment.Restored.Unreachable)).model.state.notice shouldBe
+            WordsCopy.RESTORE_UNREACHABLE
+
+        // IT CAME BACK: one list, numbered as before, and the whole title.
+        val back = RestoreAnswer(vaults = listOf(RestoredVaultAt("/v/b/vault.db", 1, rows = 5)))
+        val whole = reduce(retrying.model, EntryInput.Restored(Enrollment.Restored.Done(back, 1))).model.state
+        whole.phase shouldBe WordsEntryState.Phase.PHASE_DONE
+        whole.title shouldBe WordsCopy.RESTORED_TITLE
+        whole.notice shouldBe ""
+        whole.restored.map { it.line } shouldBe listOf("Vault 1: 3 rows.", "Vault 2: 5 rows.", "Vault 3: 1 row.")
+        whole.stayed.shouldBeEmpty()
+        whole.retry_label shouldBe ""
+        whole.primary_label shouldBe WordsCopy.DONE
     }
 
     "an unreachable laptop and an empty one keep the words on screen, with the sentence and a way on" {

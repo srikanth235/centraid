@@ -259,7 +259,7 @@ public data class AppBandTab(
 
 /** The state-change curve, `--ease` at `--dur-1`. */
 private val STATE_CHANGE = tween<Dp>(
-    durationMillis = CentraidGeometry.DURATION_ONE.toInt(),
+    durationMillis = CentraidGeometry.DURATION_ONE,
     easing = CubicBezierEasing(0.3f, 0f, 0.4f, 1f),
 )
 

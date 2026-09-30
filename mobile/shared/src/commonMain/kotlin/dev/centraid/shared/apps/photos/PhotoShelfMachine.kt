@@ -352,7 +352,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
                     settled.album_title.isNotEmpty() &&
                     album != null
                 ) {
-                    state.shelf?.copy(album = album.copy(name = settled.album_title))
+                    state.shelf.copy(album = album.copy(name = settled.album_title))
                 } else {
                     state.shelf
                 }

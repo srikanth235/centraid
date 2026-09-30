@@ -4,6 +4,8 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.view.Window
 import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.net.toUri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -17,9 +19,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import centraid.screen.v1.LockerEditorEvent
+import centraid.screen.v1.LockerExportEvent
 import centraid.screen.v1.LockerGeneratorEvent
 import centraid.screen.v1.LockerHomeEvent
 import centraid.screen.v1.LockerHomeState
+import centraid.screen.v1.LockerImportEvent
 import centraid.screen.v1.LockerItemEvent
 import centraid.screen.v1.LockerLockEvent
 import centraid.screen.v1.LockerLockState
@@ -32,8 +36,10 @@ import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.words.SecureHolds
 import dev.centraid.design.copy.LockerCopy
 import dev.centraid.shared.apps.locker.LockerEditorBridge
+import dev.centraid.shared.apps.locker.LockerExportBridge
 import dev.centraid.shared.apps.locker.LockerGeneratorBridge
 import dev.centraid.shared.apps.locker.LockerHomeBridge
+import dev.centraid.shared.apps.locker.LockerImportBridge
 import dev.centraid.shared.apps.locker.LockerItemBridge
 import dev.centraid.shared.apps.locker.LockerLockBridge
 import dev.centraid.shared.apps.locker.LockerTrashBridge
@@ -41,7 +47,10 @@ import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * LOCKER'S ROUTES (#1047, D-5): `locker.home` (Items · Review · Generate ·
@@ -74,6 +83,11 @@ public class LockerRoutes(
     private val editor = LockerEditorBridge()
     private val generator = LockerGeneratorBridge()
     private val trash = LockerTrashBridge()
+    private val export = LockerExportBridge()
+    private val importer = LockerImportBridge()
+
+    /** The last export owner-check token raised: once per token, like the wall's. */
+    private var raisedExport: Long = 0L
 
     /** The wall's state, for Compose: the bridge's own bytes, decoded as they are published. */
     private val wall = MutableStateFlow(lock.lock)
@@ -86,7 +100,10 @@ public class LockerRoutes(
      * activity of its own, so ours stops under it — and a stop there is the
      * prompt, not the member leaving; the relock would drop the very prompt
      * being answered. (A member who does leave cancels the prompt, which
-     * answers CANCELLED; nothing is open meanwhile.)
+     * answers CANCELLED; nothing is open meanwhile.) The same holds for
+     * Locker's own system sheets (#1047 T2): the import's picker and the
+     * export's save sheet are activities Locker opened and waits on, and a
+     * relock under them would drop the very file being picked or saved.
      */
     private var prompting: Boolean = false
 
@@ -142,7 +159,7 @@ public class LockerRoutes(
 
     override fun handles(destination: Destination): Boolean = when (destination) {
         is Destination.LockerHome, is Destination.LockerItem, is Destination.LockerEditor,
-        Destination.LockerGenerator, Destination.LockerTrash,
+        Destination.LockerGenerator, Destination.LockerTrash, Destination.LockerExport, Destination.LockerImport,
         -> true
         else -> false
     }
@@ -161,6 +178,8 @@ public class LockerRoutes(
         editor.attach(session)
         generator.attach(session)
         trash.attach(session)
+        export.attach(session)
+        importer.attach(session)
     }
 
     /**
@@ -281,6 +300,8 @@ public class LockerRoutes(
                 val held by trash.host.state.collectAsStateWithLifecycle()
                 if (state.cover) CoveredPage(state, nav, unlock, words) else TrashListScreen(state = held, onEvent = trash::forward, onBack = nav::pop)
             }
+            Destination.LockerExport -> ExportRoute(nav, state, unlock, words)
+            Destination.LockerImport -> ImportRoute(nav, state, unlock, words)
             else -> Unit
         }
     }
@@ -326,6 +347,8 @@ public class LockerRoutes(
                     event.add != null -> push(nav, Destination.LockerEditor()) { editor.openAdd() }
                     event.item != null -> push(nav, Destination.LockerItem(event.item!!.item_id, parent = here))
                     event.more != null -> when (event.more!!.key) {
+                        "import" -> push(nav, Destination.LockerImport)
+                        "export" -> push(nav, Destination.LockerExport)
                         "trash" -> push(nav, Destination.LockerTrash)
                         "lock" -> lock.forward(LockerLockEvent(lock = LockerLockEvent.LockTapped()))
                         else -> Unit
@@ -373,6 +396,141 @@ public class LockerRoutes(
             LockerEditorScreen(state, onEvent = { event: LockerEditorEvent -> editor.forward(event) })
         }
     }
+
+    /**
+     * EVERY SECRET, IN A FILE (#1047 T2). The owner check is raised here, once
+     * per token the page carries — `BiometricPrompt` with the device
+     * credential, the wall's own seam and outcome map. The file goes from the
+     * bridge ([LockerExportBridge.onSave]) straight to the Storage Access
+     * Framework's `CreateDocument`, is written byte for byte through the
+     * member's chosen URI, and is held in memory only between the sheet going
+     * up and its answer — never in a state, a cache or app storage.
+     */
+    @Composable
+    private fun ExportRoute(nav: RouteNav, wallState: LockerLockState, unlock: () -> Unit, words: () -> Unit) {
+        val context = LocalContext.current
+        LaunchedEffect(Unit) { export.open(LockerCopy.APP_NAME) }
+        DisposableEffect(Unit) { onDispose { export.departed() } }
+        val held by export.host.state.collectAsStateWithLifecycle()
+        val screen = held.screen
+        val prompt = screen.prompt
+        LaunchedEffect(prompt?.token) {
+            if (prompt == null || prompt.token == 0L || prompt.token <= raisedExport) return@LaunchedEffect
+            raisedExport = prompt.token
+            val activity = context as? FragmentActivity
+            if (activity == null) {
+                export.forward(exportAnswered(prompt.token, LockerLockEvent.PromptAnswered.Outcome.OUTCOME_FAILED))
+                return@LaunchedEffect
+            }
+            prompting = true
+            LockerSeam.raise(activity, prompt) { outcome ->
+                prompting = false
+                export.forward(exportAnswered(prompt.token, outcome))
+            }
+        }
+        // The file between the sheet going up and its answer; never in a state.
+        val pending = remember { arrayOfNulls<ByteArray>(1) }
+        val written: (android.net.Uri?) -> Unit = { uri ->
+            prompting = false
+            val bytes = pending[0]
+            pending[0] = null
+            when {
+                uri == null -> export.saveCancelled()
+                bytes == null -> export.saveRefused("")
+                else -> nav.scope.launch {
+                    val wrote = withContext(Dispatchers.IO) {
+                        runCatching {
+                            context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) } != null
+                        }.getOrDefault(false)
+                    }
+                    bytes.fill(0)
+                    if (wrote) export.saved() else export.saveRefused("")
+                }
+            }
+        }
+        val csv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv"), written)
+        val json = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json"), written)
+        DisposableEffect(Unit) {
+            val save: (ByteArray, String, String) -> Unit = { bytes, fileName, mediaType ->
+                pending[0] = bytes
+                // THE SAVE SHEET IS OURS: the stop under it is not the member
+                // leaving (see [prompting]).
+                prompting = true
+                try {
+                    (if (mediaType == "application/json") json else csv).launch(fileName)
+                } catch (why: android.content.ActivityNotFoundException) {
+                    prompting = false
+                    pending[0] = null
+                    export.saveRefused("")
+                }
+            }
+            export.onSave = save
+            onDispose {
+                if (export.onSave === save) export.onSave = null
+                pending[0]?.fill(0)
+                pending[0] = null
+            }
+        }
+        if (wallState.cover) {
+            CoveredPage(wallState, nav, unlock, words)
+        } else {
+            LockerExportScreen(screen, onEvent = { event: LockerExportEvent -> export.forward(event) }, onBack = nav::pop)
+        }
+    }
+
+    /**
+     * A PASSWORD-MANAGER FILE, SEALED IN (#1047 T2). Choose opens the Storage
+     * Access Framework's `OpenDocument`; the chosen file is read through its
+     * own URI — never copied into app storage — and handed to the bridge.
+     */
+    @Composable
+    private fun ImportRoute(nav: RouteNav, wallState: LockerLockState, unlock: () -> Unit, words: () -> Unit) {
+        val context = LocalContext.current
+        LaunchedEffect(Unit) { importer.open(LockerCopy.APP_NAME) }
+        DisposableEffect(Unit) { onDispose { importer.departed() } }
+        val held by importer.host.state.collectAsStateWithLifecycle()
+        val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            prompting = false
+            if (uri == null) return@rememberLauncherForActivityResult
+            nav.scope.launch {
+                val read = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val resolver = context.contentResolver
+                        val name = resolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) cursor.getString(0) else null
+                        }.orEmpty()
+                        resolver.openInputStream(uri)?.use { it.readBytes() }?.let { name to it }
+                    }.getOrNull()
+                }
+                read?.let { (name, bytes) -> importer.picked(name, bytes) }
+            }
+        }
+        if (wallState.cover) {
+            CoveredPage(wallState, nav, unlock, words)
+        } else {
+            LockerImportScreen(
+                held.screen,
+                onEvent = { event: LockerImportEvent ->
+                    importer.forward(event)
+                    if (event.choose != null) {
+                        // THE PICKER IS OURS: the stop under it is not the
+                        // member leaving (see [prompting]).
+                        prompting = true
+                        try {
+                            pick.launch(arrayOf("text/csv", "text/comma-separated-values", "application/json", "text/plain", "application/octet-stream"))
+                        } catch (_: android.content.ActivityNotFoundException) {
+                            // No picker on this phone; nothing was read.
+                            prompting = false
+                        }
+                    }
+                },
+                onBack = nav::pop,
+            )
+        }
+    }
+
+    private fun exportAnswered(token: Long, outcome: LockerLockEvent.PromptAnswered.Outcome): LockerExportEvent =
+        LockerExportEvent(answered = LockerLockEvent.PromptAnswered(token = token, outcome = outcome))
 
     /**
      * A PUSHED LOCKER PAGE, COVERED: the wall in a page whose back returns to

@@ -55,10 +55,12 @@ use super::session::Session;
 use crate::error::{CoreError, Result};
 
 /// The commands whose sealed cells arrive as the member typed them and leave
-/// as ciphertext under `K`. Every other `locker.*` command carries no item
-/// cell (`set_field` and `set_passkey` seal a sidecar and are not on the phone
-/// yet — the view wave draws no field editor).
-pub const SEALING_COMMANDS: [&str; 2] = ["locker.add_item", "locker.edit_item"];
+/// as ciphertext under `K`: an item's five cells, and a custom field's value
+/// (#1047 T2). `locker.set_passkey` is not here and never will be on the
+/// phone: a passkey is storage only (L-passkey), no ceremony on the phone makes
+/// one, and a plaintext `private_key` reaching the vault is refused there
+/// (`passkey_is_sealed`) like every other plaintext secret.
+pub const SEALING_COMMANDS: [&str; 3] = ["locker.add_item", "locker.edit_item", "locker.set_field"];
 
 /// The session a handle holds: `None` until the first unlock.
 pub type Cell = Mutex<Option<Session>>;
@@ -88,7 +90,13 @@ pub fn answer(
         }
         Some(Step::Unlock(_)) => unlock(vault, registry, owner, keys, cell, now, changes),
         Some(Step::Reveal(asked)) => reveal(vault, registry, owner, cell, now, asked, changes),
-        Some(Step::Totp(asked)) => totp(vault, registry, owner, cell, now, &asked.item_id, changes),
+        Some(Step::Totp(asked)) => totp(vault, registry, owner, cell, now, asked, changes),
+        Some(Step::Export(asked)) => {
+            super::transfer::export(vault, registry, owner, cell, now, asked, changes)
+        }
+        Some(Step::ImportFile(asked)) => {
+            super::transfer::import(vault, registry, owner, cell, now, asked, changes)
+        }
     }
 }
 
@@ -99,14 +107,14 @@ pub fn relock(cell: &Cell) {
     }
 }
 
-fn lock_cell(cell: &Cell) -> std::sync::MutexGuard<'_, Option<Session>> {
+pub(super) fn lock_cell(cell: &Cell) -> std::sync::MutexGuard<'_, Option<Session>> {
     // A poisoned lock still holds a session that must be lockable: recover the
     // guard rather than leave a key in memory behind a panic.
     cell.lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-fn state_of(cell: &Cell, now_ms: i64) -> wire::LockerSessionResponse {
+pub(super) fn state_of(cell: &Cell, now_ms: i64) -> wire::LockerSessionResponse {
     let remaining = lock_cell(cell)
         .as_ref()
         .and_then(|session| match session.state(now_ms) {
@@ -130,7 +138,7 @@ fn generation_failure(error: &LockerKeyError) -> CoreError {
 }
 
 /// Run one registered command as the owner, and hand back its output.
-fn run(
+pub(super) fn run(
     vault: &Vault,
     registry: &Registry,
     owner: &Principal,
@@ -206,7 +214,7 @@ fn unlock(
 /// The session zeroes its own bytes on lock (`Session::lock`); the copy a
 /// caller works with was a plain `Vec` that went back to the allocator with
 /// `K` still in it. The same `fill(0)` the session uses, on the copy.
-struct LiveKey(Vec<u8>);
+pub(super) struct LiveKey(Vec<u8>);
 
 impl std::ops::Deref for LiveKey {
     type Target = [u8];
@@ -224,7 +232,7 @@ impl Drop for LiveKey {
 
 /// The key and its generation, if the session is open — and a touch, because
 /// deliberate use is what keeps a session alive.
-fn open_key(cell: &Cell, now_ms: i64) -> Option<(String, LiveKey)> {
+pub(super) fn open_key(cell: &Cell, now_ms: i64) -> Option<(String, LiveKey)> {
     let held = lock_cell(cell);
     let session = held.as_ref()?;
     let (key_id, key) = session.key(now_ms).ok()?;
@@ -254,11 +262,37 @@ fn reveal(
     if asked.column == "otp_seed" {
         return Ok(refused(wire::LockerRevealRefusal::SeedNotShown));
     }
+    // A PASSKEY'S KEY IS NEVER REVEALED (#1047 T2, L-passkey), for the same
+    // reason and in the same place: a passkey is storage only, nothing on the
+    // phone signs with it, and a key that can be shown can be copied out of
+    // the one device that holds it.
+    if asked.column == "private_key" {
+        return Ok(refused(wire::LockerRevealRefusal::KeyNotShown));
+    }
     // LOCKED IS A TYPED REFUSAL, NEVER A PROMPT: the shell shows its lock.
     let Some((live_id, live_key)) = open_key(cell, now_ms) else {
         return Ok(refused(wire::LockerRevealRefusal::Locked));
     };
-    let Some(sealed) = vault.locker_sealed_item_cell(&asked.item_id, &asked.column)? else {
+    // A CUSTOM FIELD'S VALUE (#1047 T2) reveals through the item's own
+    // door: the field must be a sealed field of a live item, its ciphertext
+    // is bound to the FIELD's id, and the receipt names the item and the
+    // field — never its label, never its value.
+    let field = !asked.field_id.is_empty();
+    let (sealed, bound_to) = if field {
+        if asked.column != "value_sealed" {
+            return Ok(refused(wire::LockerRevealRefusal::NotSealed));
+        }
+        (
+            vault.locker_sealed_field_cell(&asked.item_id, &asked.field_id)?,
+            asked.field_id.as_str(),
+        )
+    } else {
+        (
+            vault.locker_sealed_item_cell(&asked.item_id, &asked.column)?,
+            asked.item_id.as_str(),
+        )
+    };
+    let Some(sealed) = sealed else {
         return Ok(refused(wire::LockerRevealRefusal::NotSealed));
     };
     let Some(ciphertext) = sealed.ciphertext else {
@@ -267,24 +301,29 @@ fn reveal(
     // THE RECEIPT FIRST (D-1020-L3). A reveal that happened and was not
     // recorded is what the audit plane exists to make impossible, so a receipt
     // that did not land is an error here and no plaintext is produced.
+    let mut receipt_input = serde_json::json!({
+        "object_type": "locker.item",
+        "item_id": asked.item_id,
+        "columns": [asked.column],
+        "kind": "reveal",
+        "use": if asked.copy { "copy" } else { "show" },
+    });
+    if field {
+        receipt_input["field_id"] = serde_json::Value::String(asked.field_id.clone());
+    }
     let receipt = run(
         vault,
         registry,
         owner,
         "locker.reveal_receipt",
-        serde_json::json!({
-            "object_type": "locker.item",
-            "item_id": asked.item_id,
-            "columns": [asked.column],
-            "kind": "reveal",
-        }),
+        receipt_input,
         changes,
     )?;
     // ONE `K` PER VAULT ON THE PHONE: the seed's leaf. A cell naming another
     // generation was sealed under a key this phone does not derive, and its
     // AAD makes that a clean `DID_NOT_OPEN`, never a wrong plaintext.
     let generation = sealed.key_id.unwrap_or(live_id);
-    let opened = decrypt_under_locker_key(&live_key, &generation, &asked.item_id, &ciphertext).ok();
+    let opened = decrypt_under_locker_key(&live_key, &generation, bound_to, &ciphertext).ok();
     let Some(value) = opened else {
         return Ok(refused(wire::LockerRevealRefusal::DidNotOpen));
     };
@@ -292,6 +331,7 @@ fn reveal(
     answer.revealed = Some(wire::LockerRevealed {
         item_id: asked.item_id.clone(),
         column: asked.column.clone(),
+        field_id: asked.field_id.clone(),
         value,
         receipt_id: receipt["receipt_id"]
             .as_str()
@@ -332,9 +372,10 @@ fn totp(
     owner: &Principal,
     cell: &Cell,
     now_ms: i64,
-    item_id: &str,
+    asked: &wire::LockerTotpAsk,
     changes: &crate::events::ChangeFeed,
 ) -> Result<wire::LockerSessionResponse> {
+    let item_id = asked.item_id.as_str();
     let refused = |refusal: wire::LockerRevealRefusal| {
         let mut answer = state_of(cell, now_ms);
         answer.refusal = refusal as i32;
@@ -354,7 +395,7 @@ fn totp(
         registry,
         owner,
         "locker.totp_code",
-        serde_json::json!({ "item_id": item_id }),
+        serde_json::json!({ "item_id": item_id, "use": if asked.copy { "copy" } else { "show" } }),
         changes,
     )?;
     let generation = sealed.key_id.unwrap_or(live_id);
@@ -424,6 +465,9 @@ pub fn seal_command(
             .filter(|text| !text.is_empty() && *text != SEALED_PLACEHOLDER)
             .map(str::to_owned)
     };
+    if command.name == "locker.set_field" {
+        return seal_field(vault, cell, input, plaintext);
+    }
     let mut carried: Vec<(&str, String)> = SEALED_ITEM_CELLS
         .iter()
         .filter_map(|column| plaintext(&input[*column]).map(|value| (*column, value)))
@@ -483,6 +527,48 @@ pub fn seal_command(
             })?;
         input[column] = serde_json::Value::String(sealed);
     }
+    input["key_id"] = serde_json::Value::String(key_id);
+    serde_json::to_vec(&input)
+        .map(Some)
+        .map_err(|error| CoreError::Invariant {
+            context: format!("a sealed input is not JSON: {error}"),
+        })
+}
+
+/// A CUSTOM SEALED FIELD'S VALUE, SEALED AGAINST THE FIELD'S OWN ID (#1047
+/// T2). A plain field passes untouched; a sealed one carrying what the
+/// member typed needs the open session and the id the shell minted for it
+/// (D-1020-L9), because the ciphertext's additional data is that id.
+fn seal_field(
+    vault: &Vault,
+    cell: &Cell,
+    mut input: serde_json::Value,
+    plaintext: impl Fn(&serde_json::Value) -> Option<String>,
+) -> Result<Option<Vec<u8>>> {
+    if input["kind"].as_str() != Some("sealed") {
+        return Ok(None);
+    }
+    let Some(value) = plaintext(&input["value"]) else {
+        return Ok(None);
+    };
+    let Some((key_id, key)) = open_key(cell, vault.clock().now_ms()) else {
+        return Err(CoreError::InvalidRequest {
+            detail: "Locker is locked; a secret is sealed only while it is open".to_owned(),
+        });
+    };
+    let field_id = input["field_id"]
+        .as_str()
+        .filter(|id| !id.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| CoreError::InvalidRequest {
+            detail: "a sealed field is sealed against its own id, and none was named".to_owned(),
+        })?;
+    let sealed = encrypt_under_locker_key(&key, &key_id, &field_id, &value).map_err(|error| {
+        CoreError::Invariant {
+            context: format!("a Locker field would not seal: {error}"),
+        }
+    })?;
+    input["value"] = serde_json::Value::String(sealed);
     input["key_id"] = serde_json::Value::String(key_id);
     serde_json::to_vec(&input)
         .map(Some)

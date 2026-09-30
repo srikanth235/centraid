@@ -43,9 +43,8 @@
 use std::path::Path;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_kit::row::text_of;
 use centraid_apps_kit::testdoor::TestDoor;
-use centraid_apps_locker::queries as locker_queries;
+use centraid_apps_locker::phone as locker_phone;
 use centraid_core::phone::{self, Keyring, Laptop};
 use centraid_gateway_core::Gateway;
 use centraid_gateway_core::ids::{Key32, VaultId};
@@ -725,16 +724,12 @@ async fn a_vault_that_used_locker_restores_from_its_words_and_its_secret_reveals
             .with_vault(|vault| {
                 Ok(vault.read(|connection| {
                     let door = TestDoor::new(connection);
-                    let shelf = locker_queries::read_shelf(
-                        &door,
-                        &locker_queries::items_statement(locker_queries::Shelf::Live),
-                        locker_queries::items_window(None),
-                    )
-                    .expect("the Live shelf reads");
+                    let shelf =
+                        locker_phone::load_items(&door, false, None).expect("the Live shelf reads");
                     Ok(shelf
-                        .rows
+                        .items
                         .iter()
-                        .filter(|row| text_of(row, "title").as_deref() == Some("Bank"))
+                        .filter(|listed| listed.row.title == "Bank")
                         .count())
                 })?)
             })
@@ -749,6 +744,7 @@ async fn a_vault_that_used_locker_restores_from_its_words_and_its_secret_reveals
             wire::locker_session_request::Step::Reveal(wire::LockerReveal {
                 item_id: "r3-bank".to_owned(),
                 column: "password".to_owned(),
+                ..wire::LockerReveal::default()
             }),
         )
         .revealed
@@ -1207,6 +1203,135 @@ async fn a_claim_that_fails_after_another_landed_answers_the_claimed_vault() {
         write_and_drain(&old[1], 2),
         "an unclaimed vault's lease moved off the old phone"
     );
+    let_go(adopted.handle);
+    let_go_all(old);
+    drop(gateway);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A VAULT THAT STAYED COMES BACK ON ITS OWN** (#1047 T1, R-1047-R6).
+///
+/// Vault 1's head keeps moving under every claim the first restore makes, so
+/// it stays with the old phone while vault 0 is claimed, adopted and opened.
+/// A second restore then names the indices (`RestoreRequest.indices`): vault 0
+/// is skipped because this phone holds it — its file is not laid down again
+/// under the open core, which goes on draining — and vault 1 alone is fetched,
+/// checked and claimed. The old phone's next drain on vault 1 is then
+/// `VAULT_MOVED`, and the new phone drains it under the secret the second
+/// restore minted for it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_vault_that_stayed_comes_back_on_its_own_while_the_adopted_one_stays_open() {
+    let dir = centraid_ontology::golden::scratch_dir();
+    let (old, gateway) = an_old_phone_with(&dir, &[0, 1]).await;
+
+    let new_root = dir.join("new");
+    std::fs::create_dir_all(&new_root).expect("the new phone's directory");
+    let runtime = tokio::runtime::Handle::current();
+    // THE OLD PHONE COMMITS BEFORE EVERY ONE OF VAULT 1'S CLAIMS, so the head
+    // it checked is never the head the laptop holds and the claim runs out.
+    let mut raced = 0;
+    let first = tokio::task::block_in_place(|| {
+        phone::restore::run_observed(
+            &new_root.join("vault.db"),
+            &restore_request(&gateway),
+            &runtime,
+            &mut |index| {
+                if index == 1 {
+                    raced += 1;
+                    assert!(write_and_drain(&old[1], raced), "vault 1's commit lands");
+                }
+            },
+        )
+    })
+    .expect("a claimed vault is answered");
+    assert_eq!(
+        first.vaults.iter().map(|v| v.index).collect::<Vec<_>>(),
+        vec![0]
+    );
+    assert_eq!(
+        first.unclaimed.iter().map(|v| v.index).collect::<Vec<_>>(),
+        vec![1],
+        "vault 1 stayed"
+    );
+
+    // VAULT 0 IS ADOPTED AND OPEN.
+    let first_secret: [u8; 32] = first
+        .device_secret
+        .as_slice()
+        .try_into()
+        .expect("a device secret");
+    let vault_0 = Path::new(&first.vaults[0].path).to_path_buf();
+    let adopted = OldVault {
+        handle: phone_core(&vault_0, first_secret),
+        index: 0,
+    };
+    assert!(
+        write_and_drain(&adopted, 1),
+        "vault 0 drains on the new phone"
+    );
+    let held_rows = content_items(&vault_0);
+
+    // THE SECOND RESTORE NAMES THE INDICES, vault 0's among them, while vault
+    // 0's core is open.
+    let again = tokio::task::block_in_place(|| {
+        phone::restore::run(
+            &new_root.join("vault.db"),
+            &wire::RestoreRequest {
+                indices: vec![0, 1],
+                ..restore_request(&gateway)
+            },
+            &runtime,
+        )
+    })
+    .expect("the vault that stayed restores on its own");
+    assert_eq!(
+        again.vaults.iter().map(|v| v.index).collect::<Vec<_>>(),
+        vec![1],
+        "only vault 1 is answered; vault 0 is this phone's already"
+    );
+    assert!(again.unclaimed.is_empty());
+    assert_eq!(again.gap_scanned, 0, "a named restore scans no gap");
+    assert_ne!(
+        again.device_secret, first.device_secret,
+        "a restore mints for the vaults it answers"
+    );
+
+    // VAULT 0 WAS NOT TOUCHED: its open core commits and drains as before.
+    assert_eq!(
+        content_items(&vault_0),
+        held_rows,
+        "vault 0 was laid down again"
+    );
+    assert!(
+        write_and_drain(&adopted, 2),
+        "vault 0 stopped draining after the second restore"
+    );
+
+    // VAULT 1 MOVED: the old phone is fenced, the new one drains it.
+    assert!(
+        !write_and_drain(&old[1], 100),
+        "the old phone still writes vault 1"
+    );
+    let second_secret: [u8; 32] = again
+        .device_secret
+        .as_slice()
+        .try_into()
+        .expect("a device secret");
+    let vault_1 = OldVault {
+        handle: centraid_core::Core::open(
+            centraid_core::CoreConfig::new(&again.vaults[0].path)
+                .with_seed(RecoveryPhrase::parse(PHRASE).expect("the vector").seed(), 1)
+                .with_device_secret(second_secret),
+        )
+        .expect("a core opens"),
+        index: 1,
+    };
+    assert!(
+        write_and_drain(&vault_1, 200),
+        "vault 1 drains on the new phone"
+    );
+
+    let_go(vault_1.handle);
     let_go(adopted.handle);
     let_go_all(old);
     drop(gateway);

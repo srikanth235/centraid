@@ -1,8 +1,10 @@
-//! THE SEVENTEEN ACTIONS, as command invocations.
+//! THE SEVENTEEN ACTIONS, as the manifest's table (#1047).
 //!
-//! Every Locker action is a thin invocation of ONE typed vault command: the
-//! projection lives in the command, not the app. So this module is a
-//! table, not logic.
+//! Every Locker action is ONE typed vault command: the projection lives in the
+//! command, not the app. So this module is a table, not logic — the one
+//! `manifest::tests` hold the manifest to. On the phone a shell's machine
+//! names the command itself; v0's invocation door (`Invocation`, `Commands`,
+//! `Outcome`) had no production caller and is deleted (#1047 T2).
 //!
 //! `reveal` is not an action at all — it is the core's
 //! (`crates/core::locker::phone`), behind the unlock.
@@ -21,101 +23,6 @@
 //! `purge-item` and `export`; the `locker.*` catalogue's two command-level
 //! gates are on `locker.purge_item` and `locker.export`. Same count, different
 //! gates, and collapsing them loses the non-owner park (census §A0).
-
-use std::collections::BTreeMap;
-
-use serde_json::Value;
-
-/// What a command invocation carries.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Invocation {
-    /// The typed vault command, `<schema>.<name>`.
-    pub command: &'static str,
-    pub input: BTreeMap<String, Value>,
-    /// Which of this handler's calls this is. **Mandatory** (D-1020-D3-5): v0's
-    /// falls back to the call's ordinal, which is stable only for a handler
-    /// that makes the same call sequence every time.
-    pub invoke_key: String,
-    /// "This decorates the answer": a caller settles an optional invocation
-    /// that failed as failed, rather than refusing the whole run.
-    pub optional: bool,
-}
-
-impl Invocation {
-    /// One invocation of one command.
-    #[must_use]
-    pub fn new(command: &'static str, invoke_key: &str) -> Self {
-        Self {
-            command,
-            input: BTreeMap::new(),
-            invoke_key: invoke_key.to_owned(),
-            optional: false,
-        }
-    }
-
-    /// One input key.
-    #[must_use]
-    pub fn with(mut self, key: &str, value: Value) -> Self {
-        self.input.insert(key.to_owned(), value);
-        self
-    }
-
-    /// A decoration: the caller may settle it as failed.
-    #[must_use]
-    pub const fn optional(mut self) -> Self {
-        self.optional = true;
-        self
-    }
-}
-
-/// The six states a vault invocation settles in. `Denied` is one of them.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Outcome {
-    Executed {
-        output: Value,
-    },
-    Parked {
-        reason: Option<String>,
-    },
-    Queued,
-    InFlight,
-    Failed {
-        reason: Option<String>,
-    },
-    Denied {
-        reason: Option<String>,
-        code: Option<String>,
-    },
-}
-
-impl Outcome {
-    /// The output of an executed command, or `None` for every other state.
-    #[must_use]
-    pub const fn output(&self) -> Option<&Value> {
-        match self {
-            Self::Executed { output } => Some(output),
-            _ => None,
-        }
-    }
-
-    /// Whether the surface should show the write as still in flight.
-    #[must_use]
-    pub const fn pending(&self) -> bool {
-        matches!(self, Self::Queued | Self::InFlight | Self::Parked { .. })
-    }
-}
-
-/// The one door an app writes through.
-pub trait Commands {
-    fn invoke(&self, invocation: &Invocation) -> Result<Outcome, CommandsUnavailable>;
-}
-
-/// The door is not there. Fails closed, and says which command it was.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("the vault door is unavailable; {command} was not attempted")]
-pub struct CommandsUnavailable {
-    pub command: &'static str,
-}
 
 /// Whether the **dispatching surface** asks before dispatching.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -199,12 +106,5 @@ mod tests {
                 row.command
             );
         }
-    }
-
-    #[test]
-    fn an_optional_invocation_says_so_and_a_plain_one_does_not() {
-        let plain = Invocation::new("locker.counts", "k0");
-        assert!(!plain.optional);
-        assert!(Invocation::new("locker.counts", "k0").optional().optional);
     }
 }

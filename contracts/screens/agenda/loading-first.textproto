@@ -1,0 +1,20 @@
+# The first read, before any answer has said which day today is. The anchor
+# day is EMPTY rather than a device-clock guess, so the day bar is not shown:
+# there is nothing yet to anchor it. The band stands, because the surface is
+# Agenda's and only the gate has no band.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_DAY
+anchor_day: ""
+loading { first_load: true }
+sheet: SHEET_NONE
+band { key: "day" label: "Day" icon_key: "Clock" current: true }
+band { key: "schedule" label: "Schedule" icon_key: "List" current: false }
+band { key: "waiting" label: "Waiting" icon_key: "Inbox" current: false }
+band { key: "search" label: "Search" icon_key: "Search" current: false }
+band { key: "more" label: "More" icon_key: "more" current: false }
+toolbar { shown: false }
+chrome { title: "Agenda" loading: "Opening your calendar" retry: "Retry" }

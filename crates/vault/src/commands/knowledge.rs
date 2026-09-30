@@ -1024,8 +1024,12 @@ const RESTORE_VERSION_PRE: &[CommandCondition] = &[
 
 // ---------------------------------------------------------------------------
 // The schemas, verbatim from v0's `inputSchema` blocks.
-// One departure: `body_text` is `minLength: 0` on create and edit — a note
-// may be cleared (owner ruling 2026-09-24, QUALITY.md vault-writer entry).
+// Two departures: `body_text` is `minLength: 0` on create and edit — a note
+// may be cleared (owner ruling 2026-09-24) — and `title` is `minLength: 0` on
+// edit, because Notes draws an empty title as the body's first line (R-1047
+// F5's derived title), so a member who clears both the name and the body
+// saves an untitled note rather than keeping a name they removed (#1047 T1).
+// Create keeps `minLength: 1`: the editor refuses a new note with neither.
 // ---------------------------------------------------------------------------
 
 const CREATE_NOTE_SCHEMA: &str = r#"{
@@ -1050,7 +1054,7 @@ const EDIT_NOTE_SCHEMA: &str = r#"{
           "additionalProperties": false,
           "properties": {
             "note_id": { "type": "string", "minLength": 1 },
-            "title": { "type": "string", "minLength": 1 },
+            "title": { "type": "string", "minLength": 0 },
             "body_text": { "type": "string", "minLength": 0 },
             "format": { "type": "string", "enum": ["markdown", "html", "plain"] },
             "pinned": { "type": "integer", "minimum": 0, "maximum": 1 }

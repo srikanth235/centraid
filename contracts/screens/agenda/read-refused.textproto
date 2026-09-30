@@ -1,0 +1,27 @@
+# A READ THAT FAILED, which is not a denial: the band stands and the failure
+# carries its retry, because the next read may land.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_DAY
+anchor_day: "2026-03-11"
+failure {
+  kind: READ_FAILURE_KIND_UNAVAILABLE
+  sentence: "The vault could not be reached."
+  remedy: "Refresh"
+}
+sheet: SHEET_NONE
+band { key: "day" label: "Day" icon_key: "Clock" current: true }
+band { key: "schedule" label: "Schedule" icon_key: "List" current: false }
+band { key: "waiting" label: "Waiting" icon_key: "Inbox" current: false }
+band { key: "search" label: "Search" icon_key: "Search" current: false }
+band { key: "more" label: "More" icon_key: "more" current: false }
+toolbar {
+  shown: true
+  range_label: "Today"
+  month_label: "March 2026"
+  at_today: true
+}
+chrome { title: "Agenda" retry: "Retry" }

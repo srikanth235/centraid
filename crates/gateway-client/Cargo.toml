@@ -49,7 +49,4 @@ reqwest.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 
 [dev-dependencies]
-centraid-gateway-server = { path = "../gateway-server" }
-rand.workspace = true
-tempfile.workspace = true
 tokio = { workspace = true, features = ["net", "macros", "rt-multi-thread"] }

@@ -173,7 +173,7 @@ pub fn findings_block(reports: &[RuleReport]) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Rule 1 — SQL only under crates/{ontology,vault,seat,search} and crates/apps/kit
+// Rule 1 — SQL only under crates/{ontology,vault,search} and crates/apps/kit
 // ---------------------------------------------------------------------------
 
 pub fn sql_confinement(root: &Path) -> RuleReport {
@@ -308,13 +308,10 @@ fn function_name(signature: &str) -> Option<String> {
 
 /// THE ONE FILE THAT IS ALLOWED TO ACCEPT, AND WHY.
 ///
-/// The rule as #1020 wrote it said the blob door was "the only listener the
-/// product may ever have". That was true of the product #1020 described — a
-/// phone, a desktop shell and a browser Companion, all of them clients over
-/// iroh QUIC. #1029 §3 adds something #1020 had no word for: **a gateway
-/// anyone can self-host**, whose entire job is to be the thing a phone dials.
-/// A gateway that did not listen would not be a gateway, so the rule's subject
-/// grew and its wording had to say so.
+/// The phone is the vault and a client: it opens no inbound socket. The
+/// member's laptop runs `centraid-gateway`, whose entire job is to be the thing
+/// the phone dials (#1029 §3), so that one listener is the rule's one
+/// exemption. A gateway that did not listen would not be a gateway.
 ///
 /// **The rule was not weakened, it was pointed.** It still scans every crate,
 /// it still scans every other file inside `crates/gateway-server`, and the

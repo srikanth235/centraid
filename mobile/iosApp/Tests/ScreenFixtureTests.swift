@@ -60,7 +60,7 @@ final class ScreenFixtureTests: XCTestCase {
         let manifest = try Data(contentsOf: screens.appendingPathComponent("manifest.json"))
         let decoded = try JSONSerialization.jsonObject(with: manifest) as? [String: Any]
         let fixtures = decoded?["fixtures"] as? [[String: Any]] ?? []
-        XCTAssertEqual(fixtures.count, 63)
+        XCTAssertEqual(fixtures.count, 77)
         for fixture in fixtures {
             let binary = try XCTUnwrap(fixture["binary"] as? String)
             let name = String(binary.dropFirst("contracts/screens/".count).dropLast(".bin".count))
@@ -879,5 +879,162 @@ final class ScreenFixtureTests: XCTestCase {
             "photos-picker",
             ["already-in-album", "named-before-the-read"]
         ) { try Centraid_Screen_V1_PhotoPickerState(serializedBytes: $0).content != nil }
+    }
+
+    // MARK: - Agenda (#1046)
+
+    private func agenda(_ case_: String) throws -> Centraid_Screen_V1_AgendaHomeState {
+        try Centraid_Screen_V1_AgendaHomeState(serializedBytes: try bytes("agenda/\(case_)"))
+    }
+
+    private func agendaEvent(_ case_: String) throws -> Centraid_Screen_V1_AgendaEventState {
+        try Centraid_Screen_V1_AgendaEventState(serializedBytes: try bytes("agenda-event/\(case_)"))
+    }
+
+    private func agendaEditor(_ case_: String) throws -> Centraid_Screen_V1_AgendaEditorState {
+        try Centraid_Screen_V1_AgendaEditorState(serializedBytes: try bytes("agenda-editor/\(case_)"))
+    }
+
+    /// A denied Agenda is the gate, with no band and no day bar; a failed read
+    /// keeps both.
+    func testADeniedAgendaIsTheGateAndNotAFailure() throws {
+        let denied = try agenda("denied")
+        guard case .denied(let gate)? = denied.content else {
+            return XCTFail("a denial is its own arm")
+        }
+        XCTAssertEqual(gate.title, "Agenda cannot read your calendar")
+        XCTAssertTrue(denied.band.isEmpty)
+        XCTAssertFalse(denied.toolbar.shown)
+
+        let refused = try agenda("read-refused")
+        guard case .failure(let failure)? = refused.content else {
+            return XCTFail("a failed read is a failure")
+        }
+        XCTAssertEqual(failure.kind, .unavailable)
+        XCTAssertEqual(refused.band.count, 5)
+    }
+
+    /// The first load anchors on no day, so the day bar is not shown.
+    func testTheFirstLoadAnchorsOnNoDay() throws {
+        let loading = try agenda("loading-first")
+        XCTAssertTrue(loading.loading.firstLoad)
+        XCTAssertEqual(loading.anchorDay, "")
+        XCTAssertFalse(loading.toolbar.shown)
+        XCTAssertEqual(loading.band.map(\.key), ["day", "schedule", "waiting", "search", "more"])
+    }
+
+    /// The now line is a row among the events; a pending write is a row status.
+    func testTheNowLineIsARowAndPendingIsAStatus() throws {
+        let state = try agenda("today-with-now-line")
+        XCTAssertEqual(state.data.days.count, 1)
+        let today = state.data.days[0]
+        XCTAssertTrue(today.isToday)
+        let order: [String] = today.items.map { item in
+            if case .event(let row)? = item.kind { return row.eventID }
+            return "now"
+        }
+        XCTAssertEqual(order, ["event-0001", "now", "event-0002"])
+        XCTAssertEqual(today.items[0].event.status, .needsReply)
+        XCTAssertEqual(today.items[2].event.status, .pending)
+        XCTAssertEqual(state.pendingEventIds, ["event-0002"])
+        XCTAssertTrue(state.data.landing.nowLine)
+    }
+
+    /// An empty day is not an empty calendar.
+    func testAnEmptyDayIsNotAnEmptyCalendar() throws {
+        let day = try agenda("nothing-on-this-day").data
+        let dayOne = try agenda("day-one").data
+        XCTAssertEqual(day.empty, .nothingOnDay)
+        XCTAssertEqual(dayOne.empty, .dayOne)
+        XCTAssertEqual(day.emptyAction, "")
+        XCTAssertEqual(dayOne.emptyAction, "Add the first one")
+        XCTAssertNotEqual(day.emptyTitle, dayOne.emptyTitle)
+    }
+
+    /// Search results are not a window: the day bar hides while a term answers.
+    func testSearchResultsAreNotAWindow() throws {
+        let state = try agenda("search-no-match")
+        XCTAssertTrue(state.searchOpen)
+        XCTAssertFalse(state.toolbar.shown)
+        XCTAssertEqual(state.data.empty, .noMatch)
+        XCTAssertEqual(state.band.filter(\.current).map(\.key), ["search"])
+    }
+
+    /// A one-off asks once; a series' confirm IS the scope sheet, none pre-chosen.
+    func testASeriesConfirmIsTheScopeSheetWithNothingPreChosen() throws {
+        let single = try agendaEvent("cancel-confirm")
+        XCTAssertTrue(single.hasConfirm)
+        XCTAssertTrue(single.confirm.destructive)
+        XCTAssertEqual(single.sheet, .none)
+        XCTAssertTrue(single.cancelScopes.isEmpty)
+
+        let series = try agendaEvent("cancel-scope")
+        XCTAssertFalse(series.hasConfirm)
+        XCTAssertEqual(series.sheet, .cancelScope)
+        XCTAssertEqual(series.cancelScopes.map(\.scope), [.occurrence, .future, .series])
+        XCTAssertFalse(series.cancelScopes.contains(where: \.selected))
+        XCTAssertFalse(series.cancelArmed)
+    }
+
+    /// An occurrence that is gone is its own arm, not a failure.
+    func testAGoneOccurrenceIsNotAFailure() throws {
+        let gone = try agendaEvent("gone")
+        guard case .gone(let card)? = gone.content else {
+            return XCTFail("gone is its own arm")
+        }
+        XCTAssertEqual(card.actionLabel, "Back to Agenda")
+    }
+
+    /// A reply refused after leaving is a parked card over the event as held.
+    func testARefusedReplyIsParkedOverTheEventAsHeld() throws {
+        let state = try agendaEvent("rsvp-parked")
+        XCTAssertTrue(state.hasParked)
+        XCTAssertEqual(state.parked.retryLabel, "Try again")
+        XCTAssertEqual(state.write.phase, .idle)
+        XCTAssertFalse(state.data.rsvp.choices.contains(where: \.selected))
+    }
+
+    /// Create names no event, and a blocked Save says why in words.
+    func testABlockedSaveSaysWhy() throws {
+        let state = try agendaEditor("create-blocked")
+        XCTAssertEqual(state.mode, .create)
+        XCTAssertEqual(state.eventID, "")
+        XCTAssertFalse(state.data.canSave)
+        XCTAssertEqual(state.data.blockedReason, "Add a title to save.")
+    }
+
+    /// One occurrence of a series cannot take a repeat rule.
+    func testAnOccurrenceCannotTakeARepeatRule() throws {
+        let data = try agendaEditor("occurrence-repeat-locked").data
+        XCTAssertFalse(data.repeatEnabled)
+        XCTAssertEqual(data.repeatNote, "A repeat rule belongs to the whole series.")
+        XCTAssertTrue(data.showSkip)
+    }
+
+    /// A refused save keeps the editor and the member's words.
+    func testARefusedAgendaSaveKeepsTheEditor() throws {
+        let state = try agendaEditor("save-refused")
+        XCTAssertEqual(state.write.phase, .refused)
+        XCTAssertEqual(state.write.failure.kind, .unavailable)
+        XCTAssertFalse(state.dismissed)
+        guard case .data(let data)? = state.content else {
+            return XCTFail("a refused save keeps the editor")
+        }
+        XCTAssertEqual(data.draft.title, "Dentist, moved")
+        XCTAssertTrue(data.dirty)
+    }
+
+    /// Every Agenda fixture sets exactly one content arm.
+    func testEveryAgendaFixtureSetsExactlyOneContentState() throws {
+        for case_ in ["day-one", "denied", "loading-first", "nothing-on-this-day", "read-refused",
+                      "search-no-match", "today-with-now-line"] {
+            XCTAssertNotNil(try agenda(case_).content, "agenda/\(case_)")
+        }
+        for case_ in ["cancel-confirm", "cancel-scope", "gone", "rsvp-parked"] {
+            XCTAssertNotNil(try agendaEvent(case_).content, "agenda-event/\(case_)")
+        }
+        for case_ in ["create-blocked", "occurrence-repeat-locked", "save-refused"] {
+            XCTAssertNotNil(try agendaEditor(case_).content, "agenda-editor/\(case_)")
+        }
     }
 }

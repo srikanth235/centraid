@@ -9,8 +9,8 @@ import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import android.os.Build
 import android.provider.MediaStore
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -22,7 +22,10 @@ import centraid.screen.v1.MediaPermission
 import com.google.android.gms.auth.blockstore.Blockstore
 import com.google.android.gms.auth.blockstore.RetrieveBytesRequest
 import com.google.android.gms.auth.blockstore.StoreBytesData
+import java.security.KeyStore
 import java.util.concurrent.TimeUnit
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -88,55 +91,55 @@ public class AndroidPlatformServices(context: Context) : PlatformServices {
 }
 
 /**
- * Secrets under the `centraid.v1.` prefix, in `EncryptedSharedPreferences`
- * (#1025 S5).
+ * Secrets under the `centraid.v1.` prefix, sealed with Android Keystore keys
+ * into a private `SharedPreferences` file (#1025 S5; the sealing is
+ * `docs/decisions.md`'s R-1047-T3, "Android's device-only store without
+ * EncryptedSharedPreferences").
  *
- * THIS WAS A PLAIN `SharedPreferences` FILE. The comment said "Keystore-wrapped"
- * and the code called `getSharedPreferences(..., MODE_PRIVATE)`, which is an XML
- * file in the app's data directory in CLEARTEXT — readable by anything that
- * gets the directory (a rooted device, an `adb backup`, a filesystem dump). It
- * was the Android twin of the `NSUserDefaults` stand-in that the iOS half
- * refused to write, except this one shipped.
+ * A PLAIN `SharedPreferences` FILE IS CLEARTEXT — an XML file in the app's data
+ * directory, readable by anything that gets the directory (a rooted device, an
+ * `adb backup`, a filesystem dump). So nothing is written to it in the clear:
+ * [SealedEntries] seals every value with AES-256-GCM, bound to its entry's
+ * name, and stores it under an HMAC-SHA256 of that name.
  *
- * v0 put them in `expo-secure-store`, which on Android is a Keystore-wrapped
- * `SharedPreferences`, and this is that: a [MasterKey] generated inside the
- * ANDROID KEYSTORE — hardware-backed where the device has a TEE, and never
- * extractable either way — wrapping AES256-SIV key names and AES256-GCM values.
- * Deterministic SIV on the key names is what still allows a lookup by name;
- * GCM on the values is what makes a value unreadable and untamperable without
- * the Keystore. The prefix is carried over so a device that migrates finds its
- * own secrets, and **all** app data stays excluded from Auto Backup and
- * device-to-device transfer (`docs/mobile-offline.md:240-247`) — the same
- * property `ThisDeviceOnly` buys on the iOS half, since a Keystore key cannot
- * leave the device and a restored file would be undecryptable noise.
+ * BOTH KEYS LIVE IN THE ANDROID KEYSTORE — hardware-backed where the device has
+ * a TEE, and never extractable either way — generated on first use under the
+ * two aliases below. Neither needs user authentication: the background sync
+ * pass reads this device's endpoint key with the screen locked. **All** app
+ * data stays excluded from Auto Backup and device-to-device transfer
+ * (`docs/mobile-offline.md:240-247`) — the same property `ThisDeviceOnly` buys
+ * on the iOS half, since a Keystore key cannot leave the device and a restored
+ * file would be undecryptable noise.
  *
- * **UNVERIFIED BY ANY COMPILER IN THIS REPOSITORY.** There is no Android SDK
- * here, so `-Pcentraid.android=true` is off and this file is on no compilation's
- * source path. It is written against the same two rules the iOS half now proves,
- * and `mobile/README.md`'s owner hand-off is what turns it green.
+ * `EncryptedSharedPreferences`, which stood here, is deprecated with the rest
+ * of `androidx.security:security-crypto`. Its file is not read: v0 carries no
+ * migration, and a phone that held one starts from an empty store.
  */
 public class AndroidSecureStore(private val context: Context) : SecureStore {
     private val preferences by lazy {
-        EncryptedSharedPreferences.create(
-            context,
-            "centraid-secure",
-            MasterKey.Builder(context, MASTER_KEY_ALIAS)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build(),
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
+        context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
     }
 
-    override suspend fun read(key: String): String? =
-        preferences.getString(SecureStore.PREFIX + key, null)
+    private val sealing = SealedEntries(
+        valueKey = { keystoreKey(VALUE_KEY_ALIAS, KeyProperties.KEY_ALGORITHM_AES) },
+        nameKey = { keystoreKey(NAME_KEY_ALIAS, KeyProperties.KEY_ALGORITHM_HMAC_SHA256) },
+    )
+
+    override suspend fun read(key: String): String? = withContext(Dispatchers.IO) {
+        val name = SecureStore.PREFIX + key
+        preferences.getString(sealing.nameOf(name), null)?.let { sealing.open(name, it) }
+    }
 
     override suspend fun write(key: String, value: String) {
-        val name = SecureStore.PREFIX + key
-        // AN EMPTY VALUE DELETES (`secure-storage.ts:39-43`). A stored empty
-        // string reads back as a credential the app believes it has.
-        preferences.edit().apply { if (value.isEmpty()) remove(name) else putString(name, value) }
-            .commit()
+        withContext(Dispatchers.IO) {
+            val name = SecureStore.PREFIX + key
+            val stored = sealing.nameOf(name)
+            // AN EMPTY VALUE DELETES (`secure-storage.ts:39-43`). A stored empty
+            // string reads back as a credential the app believes it has.
+            preferences.edit().apply {
+                if (value.isEmpty()) remove(stored) else putString(stored, sealing.seal(name, value))
+            }.commit()
+        }
     }
 
     override suspend fun clear() {
@@ -144,17 +147,48 @@ public class AndroidSecureStore(private val context: Context) : SecureStore {
         // under the prefix" and nothing else's. `commit()` rather than
         // `apply()`: the lifecycle machine names this as an effect of locking,
         // and an effect that has not reached the disk when the process is
-        // killed did not happen.
-        preferences.edit().clear().commit()
+        // killed did not happen. The two Keystore keys stay; with no entries
+        // they open nothing.
+        withContext(Dispatchers.IO) { preferences.edit().clear().commit() }
     }
 
     private companion object {
+        const val FILE_NAME = "centraid-secure-store"
+
         /**
-         * The Keystore entry the preferences file is wrapped with. Named rather
-         * than defaulted so an owner can see it in `keystore` dumps and so a
-         * second store cannot silently share it.
+         * The Keystore entries the file is sealed with. Named rather than
+         * defaulted so an owner can see them in `keystore` dumps and so a
+         * second store cannot silently share them.
          */
-        const val MASTER_KEY_ALIAS = "centraid.v1.secure-store"
+        const val VALUE_KEY_ALIAS = "centraid.v1.secure-store.values"
+        const val NAME_KEY_ALIAS = "centraid.v1.secure-store.names"
+
+        private val keyLock = Any()
+
+        /**
+         * The Keystore key under [alias], generated on first use. Under a lock,
+         * so two first reads cannot each generate one and leave the file sealed
+         * under a key the second generation replaced.
+         */
+        fun keystoreKey(alias: String, algorithm: String): SecretKey = synchronized(keyLock) {
+            val keystore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+            (keystore.getKey(alias, null) as SecretKey?) ?: KeyGenerator.getInstance(algorithm, ANDROID_KEYSTORE)
+                .apply { init(specFor(alias, algorithm)) }
+                .generateKey()
+        }
+
+        fun specFor(alias: String, algorithm: String): KeyGenParameterSpec =
+            if (algorithm == KeyProperties.KEY_ALGORITHM_AES) {
+                KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .setKeySize(256)
+                    .build()
+            } else {
+                KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN).build()
+            }
+
+        const val ANDROID_KEYSTORE = "AndroidKeyStore"
     }
 }
 

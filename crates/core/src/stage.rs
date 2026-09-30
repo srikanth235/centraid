@@ -15,12 +15,10 @@
 //! the core names them. `Asset.sha256` is gone from `PlatformServices.kt`
 //! entirely, and this is where its answer comes from instead.
 //!
-//! ## The shape is the native-messaging stage door's, on purpose
+//! ## Three frames, because the C ABI takes one buffer
 //!
-//! `crates/centraid/src/cmd/native_host/stage.rs` solves the same problem for a
-//! browser: a hard ceiling on one message and no streaming, so bytes arrive in
-//! frames the receiver bounds. The C ABI has the same shape — `centraid_call`
-//! takes one buffer — so the same three frames answer it:
+//! `centraid_call` takes one request buffer and answers one, with no
+//! streaming, so bytes arrive in frames the receiver bounds:
 //!
 //! | Frame | Carries | Answers |
 //! |---|---|---|
@@ -62,9 +60,8 @@ use crate::error::{CoreError, Result};
 
 /// How many bytes one `chunk` frame may carry.
 ///
-/// 512 KiB, the native-messaging door's number, and for a related reason: the
-/// C ABI copies each request buffer across the boundary, so a frame is a
-/// transient allocation on both sides of it. A shell that wants fewer round
+/// 512 KiB, because the C ABI copies each request buffer across the boundary,
+/// so a frame is a transient allocation on both sides of it. A shell that wants fewer round
 /// trips raises its own read size, not this.
 pub const MAX_CHUNK_BYTES: usize = 512 * 1024;
 

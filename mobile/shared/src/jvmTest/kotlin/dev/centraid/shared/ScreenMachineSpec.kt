@@ -283,7 +283,7 @@ class ScreenMachineSpec : StringSpec({
         refusedSave.draft.shouldNotBeNull().body shouldBe "Book the cabin."
         refusedSave.failure.shouldBeNull()
         refusedSave.save shouldBe NotesEditorState.SaveState.SAVE_STATE_REFUSED
-        refusedSave.draft!!.save_failure.shouldNotBeNull()
+        refusedSave.draft.save_failure.shouldNotBeNull()
 
         val refusedRead = NotesEditorMachine.reduce(
             dirty,

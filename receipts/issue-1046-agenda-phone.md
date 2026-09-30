@@ -232,7 +232,7 @@ What proves the boxes on a device is the [final walk](#final-walk).
 
 **Still owed**, each with the reason it stays out of this umbrella:
 
-- There are no `contracts/screens/agenda/` fixtures, and `PerAppLayoutSpec` does not list `apps.agenda`. The fixture set is a per-app lane of its own, and the iOS test bundle covers no Agenda screen until those fixtures exist.
+- ~~There are no `contracts/screens/agenda/` fixtures, and `PerAppLayoutSpec` does not list `apps.agenda`.~~ **Landed after close (#1047 slice T3).** Fourteen fixtures in three directories, one per state message, built by `contracts/tools/build-screen-fixtures.ts`: `agenda/` (`AgendaHomeState`: `loading-first`, `denied`, `read-refused`, `today-with-now-line`, `nothing-on-this-day`, `day-one`, `search-no-match`), `agenda-event/` (`AgendaEventState`: `cancel-confirm`, `cancel-scope`, `gone`, `rsvp-parked`) and `agenda-editor/` (`AgendaEditorState`: `create-blocked`, `occurrence-repeat-locked`, `save-refused`). `ScreenFixtureSpec` and the iOS `ScreenFixtureTests` assert the same laws over the same bytes: a denial is the gate and not a failure, the first load anchors on no day, the now line is a row, an empty day is not an empty calendar, a series' cancel confirm is the scope sheet with nothing pre-chosen, gone is its own arm, a refused save keeps the editor, and every fixture sets exactly one content arm. `PerAppLayoutSpec` lists `dev.centraid.shared.apps.agenda`.
 - The editor's create mode has not been seen on a simulator. It is on the [final walk](#final-walk)'s list.
 - The issue leaves these out of scope: the month grid, the hour-grid Day, quick-create on a slot, attachments, birthday notifications and holidays.
 
@@ -314,5 +314,5 @@ No Agenda defect was found.
 
 **Owed, and not the auditor's to close:**
 - The gate profiles `pr` and `mobile-jvm`.
-- `contracts/screens/agenda/` fixtures.
+- `contracts/screens/agenda/` fixtures. **Landed after close (#1047 slice T3)**; see **Still owed** above.
 - Android Agenda's home on a quiet emulator.

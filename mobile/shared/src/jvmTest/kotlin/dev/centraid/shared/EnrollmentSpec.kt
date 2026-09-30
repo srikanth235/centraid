@@ -14,6 +14,7 @@ import dev.centraid.shared.platform.FakePlatformServices
 import dev.centraid.shared.shell.FoundResult
 import dev.centraid.shared.shell.Shelf
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotContain
@@ -65,6 +66,11 @@ class EnrollmentSpec : StringSpec({
 
             override suspend fun restoreSeed(seedHex: String, endpoint: String?): RestoreResult {
                 log += "restore-seed ${seedHex.take(4)} endpoint=$endpoint"
+                return answered()
+            }
+
+            override suspend fun restoreStayed(seedHex: String, endpoint: String?, indices: List<Int>): RestoreResult {
+                log += "restore-stayed ${seedHex.take(4)} endpoint=$endpoint indices=$indices"
                 return answered()
             }
         }
@@ -208,6 +214,40 @@ class EnrollmentSpec : StringSpec({
             done.added shouldBe 1
             phone.log shouldBe listOf("restore seed=false", "adopt [0] seed=true secret=64")
             done.answer.unclaimed.map { it.index } shouldBe listOf(1)
+        }
+    }
+
+    "a vault that stayed is asked for again by index from the seed already stored, and only what came back is held" {
+        runTest {
+            // R-1047-R6: the first restore stored the seed and held vault 0;
+            // vault 1 stayed. The retry needs no words: the seed is here.
+            val phone = Phone()
+            phone.restoreAnswer = RestoreAnswer(
+                vaults = listOf(RestoredVaultAt("/v/a/vault.db", 0)),
+                deviceSecretHex = "cd".repeat(32),
+                unclaimed = listOf(UnclaimedVaultAt(index = 1, vaultId = "ef".repeat(32))),
+            )
+            phone.enrollment.restore(wordsA, null).shouldBeInstanceOf<Enrollment.Restored.Done>()
+            phone.restoreAnswer = RestoreAnswer(
+                vaults = listOf(RestoredVaultAt("/v/c/vault.db", 1)),
+                deviceSecretHex = "ce".repeat(32),
+            )
+            val again = phone.enrollment.restoreStayed(listOf(1), "ab")
+                .shouldBeInstanceOf<Enrollment.Restored.Done>()
+            again.added shouldBe 1
+            phone.log.drop(2) shouldBe listOf(
+                "restore-stayed aaaa endpoint=ab indices=[1]",
+                "adopt [1] seed=true secret=64",
+            )
+            // STILL REFUSED, NOTHING HELD: the vaults already here are untouched.
+            phone.restoreAnswer = null
+            phone.refusal = RestoreRefusal.NOT_TAKEN
+            phone.enrollment.restoreStayed(listOf(1), null) shouldBe Enrollment.Restored.NotTaken
+            phone.log.last() shouldBe "restore-stayed aaaa endpoint=null indices=[1]"
+            // NO SEED HERE, NO RETRY: nothing is dialled.
+            val bare = Phone()
+            bare.enrollment.restoreStayed(listOf(1), null) shouldBe Enrollment.Restored.Refused(Enrollment.Refusal.NOT_A_PHRASE)
+            bare.log.shouldBeEmpty()
         }
     }
 

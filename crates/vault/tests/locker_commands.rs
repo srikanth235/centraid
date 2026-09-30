@@ -1303,3 +1303,204 @@ fn the_totp_door_receipts_and_refuses_an_item_with_no_seed() {
     // The digits are NOT here: the command plane cannot compute them.
     assert!(output.get("code").is_none());
 }
+
+/// A CUSTOM FIELD'S REVEAL IS RECEIPTED AGAINST ITS ITEM AND NAMES THE FIELD
+/// (#1047 T2): the field's id and `value_sealed` — never its label or value —
+/// and whether the value was shown or copied.
+#[test]
+fn a_field_reveal_receipt_names_the_field_and_what_the_value_was_for() {
+    let world = World::new("locker-field-receipt", "key-1");
+    world.login("item-1", "key-1");
+
+    world.ok(
+        "locker.reveal_receipt",
+        serde_json::json!({
+            "object_type": "locker.item",
+            "item_id": "item-1",
+            "columns": ["value_sealed"],
+            "field_id": "field-1",
+            "use": "copy",
+            "kind": "reveal"
+        }),
+    );
+    let (field, used): (String, String) = world
+        .scratch
+        .vault
+        .read(|connection| {
+            Ok(connection.query_row(
+                "SELECT json_extract(detail_json, '$.field_id'),
+                        json_extract(detail_json, '$.context.use')
+                   FROM access_receipt WHERE action = 'reveal locker.item'
+                  ORDER BY seq DESC LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?)
+        })
+        .expect("the receipt is there");
+    assert_eq!(field, "field-1");
+    assert_eq!(used, "copy");
+
+    // A FIELD RECEIPT THAT NAMES AN ITEM CELL is a lie about what opened.
+    let reason = world.refused(
+        "locker.reveal_receipt",
+        serde_json::json!({
+            "object_type": "locker.item",
+            "item_id": "item-1",
+            "columns": ["password"],
+            "field_id": "field-1"
+        }),
+    );
+    assert!(reason.contains("value_sealed"), "{reason}");
+    // And a use that is neither shown nor copied is not representable.
+    let outcome = world.run(
+        "locker.reveal_receipt",
+        serde_json::json!({
+            "object_type": "locker.item",
+            "item_id": "item-1",
+            "columns": ["password"],
+            "use": "fill"
+        }),
+    );
+    assert_eq!(outcome.status, CommandStatus::Failed);
+
+    // A CODE'S RECEIPT SAYS WHETHER IT WAS SHOWN OR COPIED, too.
+    world.ok(
+        "locker.edit_item",
+        serde_json::json!({
+            "item_id": "item-1",
+            "otp_seed": ciphertext("seed"),
+            "key_id": "key-1"
+        }),
+    );
+    world.ok(
+        "locker.totp_code",
+        serde_json::json!({ "item_id": "item-1", "use": "copy" }),
+    );
+    let used: String = world.one(
+        "SELECT json_extract(detail_json, '$.context.use') FROM access_receipt
+          WHERE action = 'reveal locker.totp_code' ORDER BY seq DESC LIMIT 1",
+        &[],
+    );
+    assert_eq!(used, "copy");
+}
+
+/// THE SEALED-FIELD DOOR (#1047 T2): a live item's sealed field, with the
+/// generation it names; nothing for a plain field, another item's field or a
+/// trashed item's.
+#[test]
+fn the_sealed_field_door_answers_a_live_items_sealed_field_only() {
+    let world = World::new("locker-field-door", "key-1");
+    world.login("item-1", "key-1");
+    world.login("item-2", "key-1");
+    world.ok(
+        "locker.set_field",
+        serde_json::json!({
+            "item_id": "item-1",
+            "field_id": "field-1",
+            "label": "Recovery code",
+            "kind": "sealed",
+            "value": ciphertext("field-1"),
+            "key_id": "key-1"
+        }),
+    );
+    let text = world.ok(
+        "locker.set_field",
+        serde_json::json!({
+            "item_id": "item-1",
+            "label": "Branch",
+            "kind": "text",
+            "value": "Leeds"
+        }),
+    );
+    let vault = &world.scratch.vault;
+    let cell = vault
+        .locker_sealed_field_cell("item-1", "field-1")
+        .expect("the door answers")
+        .expect("the field is there");
+    assert_eq!(
+        cell.ciphertext.as_deref(),
+        Some(ciphertext("field-1").as_str())
+    );
+    assert_eq!(cell.key_id.as_deref(), Some("key-1"));
+    let text_id = text["field_id"].as_str().expect("a field id");
+    assert!(
+        vault
+            .locker_sealed_field_cell("item-1", text_id)
+            .expect("the door answers")
+            .is_none(),
+        "a plain field answered as sealed"
+    );
+    assert!(
+        vault
+            .locker_sealed_field_cell("item-2", "field-1")
+            .expect("the door answers")
+            .is_none(),
+        "another item's field answered"
+    );
+    world.ok(
+        "locker.trash_item",
+        serde_json::json!({ "item_id": "item-1" }),
+    );
+    assert!(
+        vault
+            .locker_sealed_field_cell("item-1", "field-1")
+            .expect("the door answers")
+            .is_none(),
+        "a trashed item's field still reveals"
+    );
+}
+
+/// A PASSKEY RENAMED WITH THE PLACEHOLDER KEEPS ITS KEY AND ITS GENERATION
+/// (#1047 T2). The phone never holds the key, so it has no generation to
+/// name; the stored one stays with the ciphertext it describes.
+#[test]
+fn a_passkey_renamed_with_the_placeholder_keeps_its_key_and_generation() {
+    let world = World::new("locker-passkey-rename", "key-1");
+    world.login("item-1", "key-1");
+    world.ok(
+        "locker.set_passkey",
+        serde_json::json!({
+            "item_id": "item-1",
+            "rp_id": "bank.example",
+            "user_handle": "ada",
+            "display_name": "Ada",
+            "credential_id": "cred-1",
+            "algorithm": "ES256",
+            "private_key": ciphertext("key"),
+            "key_id": "key-1"
+        }),
+    );
+    world.ok(
+        "locker.set_passkey",
+        serde_json::json!({
+            "item_id": "item-1",
+            "rp_id": "bank.example",
+            "user_handle": "ada",
+            "display_name": "Ada at the bank",
+            "credential_id": "cred-1",
+            "algorithm": "ES256",
+            "private_key": "«sealed»"
+        }),
+    );
+    assert_eq!(
+        world.one::<String>(
+            "SELECT display_name FROM locker_item_passkey WHERE item_id = ?1",
+            &["item-1"]
+        ),
+        "Ada at the bank"
+    );
+    assert_eq!(
+        world.one::<String>(
+            "SELECT private_key FROM locker_item_passkey WHERE item_id = ?1",
+            &["item-1"]
+        ),
+        ciphertext("key")
+    );
+    assert_eq!(
+        world.one::<String>(
+            "SELECT key_id FROM locker_item_passkey WHERE item_id = ?1",
+            &["item-1"]
+        ),
+        "key-1"
+    );
+}

@@ -1,6 +1,13 @@
 package dev.centraid.shared
 
+import centraid.screen.v1.AgendaEditorState
+import centraid.screen.v1.AgendaEmpty
+import centraid.screen.v1.AgendaEventState
+import centraid.screen.v1.AgendaHomeState
+import centraid.screen.v1.AgendaRowStatus
+import centraid.screen.v1.AgendaScope
 import centraid.screen.v1.BackupState
+import centraid.screen.v1.WriteState
 import centraid.screen.v1.CollectionsDoor
 import centraid.screen.v1.DuplicateReviewState
 import centraid.screen.v1.DuplicatesState
@@ -112,7 +119,7 @@ class ScreenFixtureSpec : StringSpec({
         refused.failure.shouldNotBeNull().kind shouldBe ReadFailureKind.READ_FAILURE_KIND_REFUSED
 
         // The sentence is the access plane's, not its predicate.
-        refused.failure!!.sentence shouldBe "This is not shared with you."
+        refused.failure.sentence shouldBe "This is not shared with you."
         (empty == refused).shouldBeFalse()
     }
 
@@ -126,11 +133,11 @@ class ScreenFixtureSpec : StringSpec({
         rows.size shouldBe 2
         val yen = rows.single { it.amount?.currency == "JPY" }
         yen.amount.shouldNotBeNull().exponent shouldBe 0
-        yen.amount!!.locale shouldBe "ja-JP"
+        yen.amount.locale shouldBe "ja-JP"
         val dollars = rows.single { it.amount?.currency == "USD" }
         dollars.amount!!.exponent shouldBe 2
         // A keyset cursor, and it is the SORT KEY plus the primary key.
-        state.data_!!.next_cursor.shouldNotBeNull().contains('|').shouldBeTrue()
+        state.data_.next_cursor.shouldNotBeNull().contains('|').shouldBeTrue()
         // The pending-write overlay is on the STATE, not on the row.
         state.pending_expense_ids shouldContainExactly listOf("exp-0001")
     }
@@ -139,7 +146,7 @@ class ScreenFixtureSpec : StringSpec({
         val state = TallyListState.ADAPTER.decode(screens.bytes("tally/low-disk-parked"))
         state.failure.shouldNotBeNull().kind shouldBe
             ReadFailureKind.READ_FAILURE_KIND_LOW_DISK_PARKED
-        state.failure!!.remedy.isNotBlank().shouldBeTrue()
+        state.failure.remedy.isNotBlank().shouldBeTrue()
         state.seat.shouldNotBeNull().durability shouldBe
             SeatState.Durability.DURABILITY_PARKED_LOW_DISK
     }
@@ -149,7 +156,7 @@ class ScreenFixtureSpec : StringSpec({
         state.recurring_materialisation_withheld.shouldBeTrue()
         state.seat.shouldNotBeNull().durability shouldBe
             SeatState.Durability.DURABILITY_LOCAL_ONLY
-        state.seat!!.pending.shouldNotBeNull().queued_writes shouldBe 3
+        state.seat.pending.shouldNotBeNull().queued_writes shouldBe 3
         // Rows are still there: offline is not a failed read.
         state.data_.shouldNotBeNull().rows.size shouldBe 1
     }
@@ -165,14 +172,14 @@ class ScreenFixtureSpec : StringSpec({
         state.data_.shouldNotBeNull().cells.size shouldBe 1
         state.failure.shouldBeNull()
         state.backup.shouldNotBeNull().phase shouldBe BackupState.Phase.PHASE_IDLE
-        state.backup!!.paused_reason.contains("Settings").shouldBeTrue()
+        state.backup.paused_reason.contains("Settings").shouldBeTrue()
     }
 
     "photos/limited-selection is neither an empty library nor a denial" {
         val state = PhotosGridState.ADAPTER.decode(screens.bytes("photos/limited-selection"))
         state.permission shouldBe MediaPermission.MEDIA_PERMISSION_LIMITED
         state.backup.shouldNotBeNull().phase shouldBe BackupState.Phase.PHASE_TRANSFERRING
-        state.backup!!.transport shouldBe BackupState.Transport.TRANSPORT_IROH_BLOBS
+        state.backup.transport shouldBe BackupState.Transport.TRANSPORT_IROH_BLOBS
         // A Live Photo's still and its paired movie share one capture group.
         state.data_.shouldNotBeNull().cells.single().capture_group_id.shouldNotBeNull()
     }
@@ -183,11 +190,11 @@ class ScreenFixtureSpec : StringSpec({
         val evicted = PhotosGridState.ADAPTER
             .decode(screens.bytes("photos/more-sheet-open"))
         noPack.data_.shouldNotBeNull().thumbnail_pack_absent.shouldBeTrue()
-        noPack.data_!!.cells.single().thumbnail_path.shouldBeNull()
+        noPack.data_.cells.single().thumbnail_path.shouldBeNull()
         // The other case: a pack exists and these particular cells are not in
         // it. Same absent path, different sentence.
         evicted.data_.shouldNotBeNull().thumbnail_pack_absent.shouldBeFalse()
-        evicted.data_!!.cells.single().thumbnail_path.shouldBeNull()
+        evicted.data_.cells.single().thumbnail_path.shouldBeNull()
     }
 
     "photos/no-copy-yet is not a refusal" {
@@ -444,8 +451,8 @@ class ScreenFixtureSpec : StringSpec({
         // cards do not have, it has to be added here in front of a reviewer.
         map.data_.shouldNotBeNull().unplaced_count shouldBe
             cards.data_.shouldNotBeNull().unplaced_count
-        map.data_!!.places.all { row ->
-            cards.data_!!.places.any { it.place_id == row.place_id }
+        map.data_.places.all { row ->
+            cards.data_.places.any { it.place_id == row.place_id }
         }.shouldBeTrue()
     }
 
@@ -502,7 +509,7 @@ class ScreenFixtureSpec : StringSpec({
         val done = faces("worked-through")
         val off = faces("recognition-off")
         done.data_.shouldNotBeNull().candidates.size shouldBe 2
-        (done.cursor >= done.data_!!.candidates.size).shouldBeTrue()
+        (done.cursor >= done.data_.candidates.size).shouldBeTrue()
         done.recognition_enabled.shouldBeTrue()
 
         // The other screen with no question showing, and it is not a finish: a
@@ -541,8 +548,8 @@ class ScreenFixtureSpec : StringSpec({
         val clean = duplicates("scanned-and-clean")
         incomplete.data_.shouldNotBeNull().clusters.shouldContainExactly()
         clean.data_.shouldNotBeNull().clusters.shouldContainExactly()
-        incomplete.data_!!.scan_complete.shouldBeFalse()
-        clean.data_!!.scan_complete.shouldBeTrue()
+        incomplete.data_.scan_complete.shouldBeFalse()
+        clean.data_.scan_complete.shouldBeTrue()
         (incomplete.data_ == clean.data_).shouldBeFalse()
     }
 
@@ -585,8 +592,8 @@ class ScreenFixtureSpec : StringSpec({
         val none = memories("computed-and-empty")
         notYet.data_.shouldNotBeNull().memories.shouldContainExactly()
         none.data_.shouldNotBeNull().memories.shouldContainExactly()
-        notYet.data_!!.computed.shouldBeFalse()
-        none.data_!!.computed.shouldBeTrue()
+        notYet.data_.computed.shouldBeFalse()
+        none.data_.computed.shouldBeTrue()
         (notYet.data_ == none.data_).shouldBeFalse()
         // Data, not a failure: a retry does not make a pass run.
         notYet.failure.shouldBeNull()
@@ -743,7 +750,7 @@ class ScreenFixtureSpec : StringSpec({
         saveRefused.draft.shouldNotBeNull().body shouldBe "Book the cabin."
         saveRefused.failure.shouldBeNull()
         saveRefused.save shouldBe NotesEditorState.SaveState.SAVE_STATE_REFUSED
-        saveRefused.draft!!.save_failure.shouldNotBeNull().kind shouldBe
+        saveRefused.draft.save_failure.shouldNotBeNull().kind shouldBe
             ReadFailureKind.READ_FAILURE_KIND_UNAVAILABLE
 
         // A failed READ: there is nothing to edit, because the body never came.
@@ -756,7 +763,7 @@ class ScreenFixtureSpec : StringSpec({
         val state = NotesEditorState.ADAPTER.decode(screens.bytes("notes/draft-dirty"))
         state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_DIRTY
         state.draft.shouldNotBeNull().base_revision_id shouldBe "rev-0007"
-        state.draft!!.body.contains('\n').shouldBeTrue()
+        state.draft.body.contains('\n').shouldBeTrue()
     }
 
     // --- Seat -------------------------------------------------------------
@@ -807,14 +814,14 @@ class ScreenFixtureSpec : StringSpec({
         val firstRun = home("first-run")
 
         unreadable.data_.shouldNotBeNull().every_tile_unreadable.shouldBeTrue()
-        unreadable.data_!!.springboard shouldBe Springboard.SPRINGBOARD_CONTENT
-        unreadable.data_!!.tiles.all { it.status == TileStatus.TILE_STATUS_UNKNOWN }.shouldBeTrue()
+        unreadable.data_.springboard shouldBe Springboard.SPRINGBOARD_CONTENT
+        unreadable.data_.tiles.all { it.status == TileStatus.TILE_STATUS_UNKNOWN }.shouldBeTrue()
 
         firstRun.data_!!.springboard shouldBe Springboard.SPRINGBOARD_FIRST_RUN
-        firstRun.data_!!.every_tile_unreadable.shouldBeFalse()
+        firstRun.data_.every_tile_unreadable.shouldBeFalse()
 
         // The two must never decode to the same screen.
-        unreadable.data_!!.springboard shouldNotBe firstRun.data_!!.springboard
+        unreadable.data_.springboard shouldNotBe firstRun.data_.springboard
     }
 
     "home: a withheld count is ABSENT and never zero" {
@@ -825,7 +832,7 @@ class ScreenFixtureSpec : StringSpec({
         locker.status shouldBe TileStatus.TILE_STATUS_CONTENT
         locker.count.shouldBeNull()
         // The vault total OMITS it rather than adding zero: 1284 + 42 + 7.
-        content.data_!!.things!!.total shouldBe 1333
+        content.data_.things!!.total shouldBe 1333
     }
 
     "home: a capped count says the total is only a floor" {
@@ -869,6 +876,148 @@ class ScreenFixtureSpec : StringSpec({
         val sheet = home("all-apps-open")
         sheet.all_apps_sheet_open.shouldBeTrue()
         sheet.data_.shouldNotBeNull().tiles.size shouldBe 8
+    }
+
+    // --- Agenda (#1046) ---------------------------------------------------
+
+    fun agenda(case: String): AgendaHomeState =
+        AgendaHomeState.ADAPTER.decode(screens.bytes("agenda/$case"))
+
+    fun agendaEvent(case: String): AgendaEventState =
+        AgendaEventState.ADAPTER.decode(screens.bytes("agenda-event/$case"))
+
+    fun agendaEditor(case: String): AgendaEditorState =
+        AgendaEditorState.ADAPTER.decode(screens.bytes("agenda-editor/$case"))
+
+    "agenda: a denied Agenda is the gate — no band, no day bar — and not a failure" {
+        val denied = agenda("denied")
+        val refused = agenda("read-refused")
+        denied.denied.shouldNotBeNull().title shouldBe "Agenda cannot read your calendar"
+        denied.failure.shouldBeNull()
+        denied.band.shouldContainExactly()
+        denied.toolbar.shouldNotBeNull().shown.shouldBeFalse()
+        // A failed READ keeps the band and its retry: the next read may land.
+        refused.failure.shouldNotBeNull().kind shouldBe ReadFailureKind.READ_FAILURE_KIND_UNAVAILABLE
+        refused.denied.shouldBeNull()
+        refused.band.size shouldBe 5
+    }
+
+    "agenda: the first load anchors on no day, so the day bar is not shown" {
+        val loading = agenda("loading-first")
+        loading.loading.shouldNotBeNull().first_load.shouldBeTrue()
+        // Empty until an answer says which day today is: never a device-clock guess.
+        loading.anchor_day shouldBe ""
+        loading.toolbar.shouldNotBeNull().shown.shouldBeFalse()
+        loading.band.map { it.key } shouldBe listOf("day", "schedule", "waiting", "search", "more")
+    }
+
+    "agenda: the now line is a row among the events, and a pending write is a row status" {
+        val state = agenda("today-with-now-line")
+        val today = state.data_.shouldNotBeNull().days.single()
+        today.is_today.shouldBeTrue()
+        // Before, the line, after: the line is placed, not drawn over the list.
+        today.items.map { it.event?.event_id ?: "now" } shouldBe
+            listOf("event-0001", "now", "event-0002")
+        today.items[0].event.shouldNotBeNull().status shouldBe AgendaRowStatus.AGENDA_ROW_STATUS_NEEDS_REPLY
+        val pending = today.items[2].event.shouldNotBeNull()
+        pending.status shouldBe AgendaRowStatus.AGENDA_ROW_STATUS_PENDING
+        state.pending_event_ids shouldContainExactly listOf(pending.event_id)
+        state.data_.landing.shouldNotBeNull().now_line.shouldBeTrue()
+        state.data_.empty shouldBe AgendaEmpty.AGENDA_EMPTY_NONE
+    }
+
+    "agenda: an empty day is not an empty calendar" {
+        val day = agenda("nothing-on-this-day").data_.shouldNotBeNull()
+        val dayOne = agenda("day-one").data_.shouldNotBeNull()
+        day.empty shouldBe AgendaEmpty.AGENDA_EMPTY_NOTHING_ON_DAY
+        dayOne.empty shouldBe AgendaEmpty.AGENDA_EMPTY_DAY_ONE
+        // Only the calendar with nothing in it offers the first event.
+        day.empty_action shouldBe ""
+        dayOne.empty_action shouldBe "Add the first one"
+        day.empty_title shouldNotBe dayOne.empty_title
+    }
+
+    "agenda: search results are not a window, so the day bar hides while a term answers" {
+        val state = agenda("search-no-match")
+        state.search_open.shouldBeTrue()
+        state.toolbar.shouldNotBeNull().shown.shouldBeFalse()
+        state.data_.shouldNotBeNull().empty shouldBe AgendaEmpty.AGENDA_EMPTY_NO_MATCH
+        state.band.single { it.current }.key shouldBe "search"
+    }
+
+    "agenda-event: a one-off asks once; a series' confirm IS the scope sheet, none pre-chosen" {
+        val single = agendaEvent("cancel-confirm")
+        single.confirm.shouldNotBeNull().destructive.shouldBeTrue()
+        single.sheet shouldBe AgendaEventState.Sheet.SHEET_NONE
+        single.cancel_scopes.shouldContainExactly()
+
+        val series = agendaEvent("cancel-scope")
+        series.confirm.shouldBeNull()
+        series.sheet shouldBe AgendaEventState.Sheet.SHEET_CANCEL_SCOPE
+        series.cancel_scopes.map { it.scope } shouldBe listOf(
+            AgendaScope.AGENDA_SCOPE_OCCURRENCE,
+            AgendaScope.AGENDA_SCOPE_FUTURE,
+            AgendaScope.AGENDA_SCOPE_SERIES,
+        )
+        series.cancel_scopes.none { it.selected }.shouldBeTrue()
+        series.cancel_armed.shouldBeFalse()
+    }
+
+    "agenda-event: an occurrence that is gone is its own arm, not a failure" {
+        val gone = agendaEvent("gone")
+        gone.gone.shouldNotBeNull().action_label shouldBe "Back to Agenda"
+        gone.failure.shouldBeNull()
+        gone.data_.shouldBeNull()
+    }
+
+    "agenda-event: a reply refused after leaving is a parked card over the event as held" {
+        val state = agendaEvent("rsvp-parked")
+        state.parked.shouldNotBeNull().retry_label shouldBe "Try again"
+        state.write.shouldNotBeNull().phase shouldBe WriteState.Phase.PHASE_IDLE
+        // The choice on record is the old one: nothing optimistic survived the refusal.
+        state.data_.shouldNotBeNull().rsvp.shouldNotBeNull().choices.none { it.selected }.shouldBeTrue()
+    }
+
+    "agenda-editor: create names no event, and a blocked Save says why in words" {
+        val state = agendaEditor("create-blocked")
+        state.mode shouldBe AgendaEditorState.Mode.MODE_CREATE
+        state.event_id shouldBe ""
+        val data = state.data_.shouldNotBeNull()
+        data.can_save.shouldBeFalse()
+        data.blocked_reason shouldBe "Add a title to save."
+    }
+
+    "agenda-editor: one occurrence of a series cannot take a repeat rule" {
+        val data = agendaEditor("occurrence-repeat-locked").data_.shouldNotBeNull()
+        data.repeat_enabled.shouldBeFalse()
+        data.repeat_note shouldBe "A repeat rule belongs to the whole series."
+        data.show_skip.shouldBeTrue()
+    }
+
+    "agenda-editor: a refused save keeps the editor and the member's words" {
+        val state = agendaEditor("save-refused")
+        state.write.shouldNotBeNull().phase shouldBe WriteState.Phase.PHASE_REFUSED
+        state.write.failure.shouldNotBeNull().kind shouldBe ReadFailureKind.READ_FAILURE_KIND_UNAVAILABLE
+        state.failure.shouldBeNull()
+        state.dismissed.shouldBeFalse()
+        val data = state.data_.shouldNotBeNull()
+        data.draft.shouldNotBeNull().title shouldBe "Dentist, moved"
+        data.dirty.shouldBeTrue()
+    }
+
+    "agenda: every fixture of the three screens sets exactly one content state" {
+        screens.resolve("agenda").binFiles().forEach { file ->
+            val state = AgendaHomeState.ADAPTER.decode(file.readBytes())
+            contentCount(state.loading, state.failure, state.denied, state.data_) shouldBe 1
+        }
+        screens.resolve("agenda-event").binFiles().forEach { file ->
+            val state = AgendaEventState.ADAPTER.decode(file.readBytes())
+            contentCount(state.loading, state.failure, state.denied, state.data_, state.gone) shouldBe 1
+        }
+        screens.resolve("agenda-editor").binFiles().forEach { file ->
+            val state = AgendaEditorState.ADAPTER.decode(file.readBytes())
+            contentCount(state.loading, state.failure, state.denied, state.data_, state.gone) shouldBe 1
+        }
     }
 
 }) {

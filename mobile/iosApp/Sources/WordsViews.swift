@@ -244,6 +244,12 @@ struct WordsEntryView: View {
                         StayedLine(line: line, at: at)
                     }
 
+                    if !state.retryLabel.isEmpty {
+                        StayedRetry(label: state.retryLabel) {
+                            send(Self.event { $0.retry = .init() })
+                        }
+                    }
+
                     WordsControls(
                         primary: state.primaryLabel,
                         primaryEnabled: state.primaryEnabled,
@@ -371,8 +377,8 @@ private struct RestoredLine: View {
 
 /// One vault that stayed with the other phone (`WordsEntryState.stayed`,
 /// R-1047-R5): the machine's sentence behind a `seam` rule — "not yet, and
-/// not wrong" (DESIGN.md), since the vault is safe where it is. No control:
-/// the core has no retry for one vault.
+/// not wrong" (DESIGN.md), since the vault is safe where it is. The retry
+/// under the list is `StayedRetry`.
 private struct StayedLine: View {
     let line: String
     let at: Int
@@ -391,6 +397,27 @@ private struct StayedLine: View {
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("words-stayed-\(at)")
+    }
+}
+
+/// `retry_label`'s control (R-1047-R6): ask the laptop again for the vaults
+/// that stayed. A link-weight text button, like `WordsControls`' secondary;
+/// the label and when it shows are the machine's.
+private struct StayedRetry: View {
+    let label: String
+    let action: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .centraidType("smallStrong")
+                .foregroundStyle(Theme.color("link", scheme))
+                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("words-retry")
     }
 }
 
@@ -673,7 +700,14 @@ struct WordField: UIViewRepresentable {
         let shown = field.text ?? ""
         if shown == value {
             coordinator.sent = [value]
-        } else if !coordinator.sent.contains(value) {
+        } else if !coordinator.sent.contains(value) || Self.keptWord(of: shown) == value {
+            // THE SECOND CLAUSE IS A RUN THIS CELL SPREAD. Typing
+            // "abandon ability …" sent "abandon" on its way to the space, so
+            // the machine's answer — this cell keeps "abandon" and the rest go
+            // on — looked like a stale echo of that keystroke and the cell kept
+            // showing the whole run (#1047 E5). A cell holds one word, so text
+            // with a separator in it is never what it rests on: the machine's
+            // kept word replaces it.
             field.text = value
             coordinator.sent = [value]
         }
@@ -694,6 +728,17 @@ struct WordField: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    /// The word the machine keeps in this cell when `text` runs on past it:
+    /// everything before the first space, newline or tab, split exactly as
+    /// `WordsEntry`'s `spread` splits. Nil when `text` is one word.
+    static func keptWord(of text: String) -> String? {
+        let parts = text.split(
+            omittingEmptySubsequences: false,
+            whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" }
+        )
+        return parts.count > 1 ? String(parts[0]) : nil
+    }
 
     final class Coordinator: NSObject, UITextFieldDelegate, UITextDropDelegate {
         var parent: WordField

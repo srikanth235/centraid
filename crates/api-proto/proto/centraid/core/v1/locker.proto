@@ -175,6 +175,8 @@ message LockerField {
   string value = 5;
   bool sealed = 6;
   bool present = 7;
+  // The member's order within the section; an edit keeps it (#1047 T2).
+  int64 position = 8;
 }
 
 message LockerAddress {
@@ -185,11 +187,20 @@ message LockerAddress {
   reserved "match_policy";
 }
 
+// The passkey slot (L-passkey): STORAGE ONLY. The metadata is plain and
+// browsable; the key material is sealed, answered as its presence, and never
+// revealed, copied or exported on the phone (`LOCKER_REVEAL_REFUSAL_KEY_NOT_SHOWN`).
+// No WebAuthn ceremony exists in this vault, so the phone cannot make a
+// passkey; it shows, renames and removes one.
 message LockerPasskey {
   string rp_id = 1;
   string user_handle = 2;
   string display_name = 3;
   bool has_private_key = 4;
+  string credential_id = 5;
+  string algorithm = 6;
+  // When the slot was filled, as a day in the request's `tz`.
+  string created_local_day = 7;
 }
 
 // `locker.search` (62): title, username and address only (the handoff's
@@ -254,6 +265,17 @@ message LockerSessionRequest {
     // six digits, thirty seconds), receipted first through
     // `locker.totp_code`. The seed itself is never answered.
     LockerTotpAsk totp = 5;
+    // EVERY SECRET, IN A FILE (#1047 T2): the plaintext export, receipted as
+    // one mass reveal (`locker.export`) before a value is opened. Refused
+    // while locked. The shell asks the phone's owner check afresh before it
+    // sends this, and hands `LockerExported.content` to the OS save sheet —
+    // never to app storage.
+    LockerExportAsk export = 6;
+    // A PASSWORD-MANAGER FILE, READ AND THEN SEALED IN (#1047 T2). Without
+    // `publish` it is a plan and writes nothing; with it every row the plan
+    // calls new or gap-fill is written, each secret sealed under `K` on the
+    // way in. The vault wins every collision.
+    LockerImportAsk import_file = 7;
   }
 }
 
@@ -265,12 +287,108 @@ message LockerRelock {}
 
 message LockerReveal {
   string item_id = 1;
-  // One of `LockerSecret.column`.
+  // One of `LockerSecret.column` — or `value_sealed` with `field_id`, a
+  // custom sealed field's value (#1047 T2). `otp_seed` is refused
+  // `SEED_NOT_SHOWN` and a passkey's `private_key` `KEY_NOT_SHOWN`.
   string column = 2;
+  // A custom field of `item_id`, whose ciphertext is bound to this id.
+  string field_id = 3;
+  // The value goes to the clipboard, not the screen. Receipted as a copy;
+  // the value answered is the same.
+  bool copy = 4;
 }
 
 message LockerTotpAsk {
   string item_id = 1;
+  // The code goes to the clipboard, not the screen (receipted as a copy).
+  bool copy = 2;
+}
+
+enum LockerExportFormat {
+  LOCKER_EXPORT_FORMAT_UNSPECIFIED = 0;
+  // 1Password's CSV dialect — Title, Url, Username, Password, OTPAuth,
+  // Favorite, Archived, Tags, Notes — so the file lands in another manager
+  // without a converter. What has no column rides Notes as named lines.
+  LOCKER_EXPORT_FORMAT_CSV = 1;
+  // Centraid's own, `centraid-locker/1`: every type, field, address and tag,
+  // which an import reads back whole.
+  LOCKER_EXPORT_FORMAT_JSON = 2;
+}
+
+message LockerExportAsk {
+  // Unspecified is CSV.
+  LockerExportFormat format = 1;
+  // The zone the file's name is dated in; empty is the vault's.
+  string tz = 2;
+}
+
+// THE FILE, WITH ITS NAME. Live and archived items; the trash is not in it.
+// The bytes are the member's secrets in the clear: a shell hands them to the
+// OS save sheet and keeps no copy, and nothing logs them.
+message LockerExported {
+  bytes content = 1;
+  // `locker-YYYY-MM-DD.csv` / `.json`, dated in the ask's zone.
+  string file_name = 2;
+  string media_type = 3;
+  uint32 item_count = 4;
+  string receipt_id = 5;
+  // Sealed values that did not open under this phone's `K` (a cell sealed
+  // under a key the 24 words do not derive) and are NOT in the file. The
+  // screen says so; zero on every ordinary export.
+  uint32 unopened = 6;
+}
+
+message LockerImportAsk {
+  // The file as picked, byte for byte.
+  bytes content = 1;
+  // Write it. Without this the answer is the plan and nothing is written.
+  bool publish = 2;
+}
+
+// What an import would do, row by row — or, published, what it did. No row
+// carries a secret: `carries_secret` says one is in the file for it.
+message LockerImportPlan {
+  // `csv` (a password-manager export, by its header) or `json` (Centraid's).
+  string format = 1;
+  repeated LockerImportRow rows = 2;
+  uint32 new_count = 3;
+  uint32 fill_count = 4;
+  uint32 held_count = 5;
+  // Rows that are not an item (no title and no address) or repeat an earlier
+  // row of the same file.
+  uint32 skipped_count = 6;
+  // PUBLISHED: how many items were written new and filled, and how many
+  // rows the vault refused (a write that failed changes nothing of the rest).
+  bool published = 7;
+  uint32 created = 8;
+  uint32 filled = 9;
+  uint32 failed = 10;
+}
+
+message LockerImportRow {
+  string title = 1;
+  // `login`, `card`, … — the type the row lands as.
+  string type = 2;
+  // "maya@example.com · example.com" — the username and the address's host.
+  string subtitle = 3;
+  LockerImportVerdict verdict = 4;
+  // The live item a fill or a hold matched.
+  string matched_item_id = 5;
+  bool carries_secret = 6;
+}
+
+enum LockerImportVerdict {
+  LOCKER_IMPORT_VERDICT_UNSPECIFIED = 0;
+  // Nothing in the vault matches: a new item.
+  LOCKER_IMPORT_VERDICT_NEW = 1;
+  // A matching item has empty fields this row fills; nothing it holds is
+  // replaced.
+  LOCKER_IMPORT_VERDICT_FILL = 2;
+  // A matching item already holds everything this row has — or a different
+  // secret — and the vault wins.
+  LOCKER_IMPORT_VERDICT_HELD = 3;
+  // Not an item, or a repeat of an earlier row in the file.
+  LOCKER_IMPORT_VERDICT_SKIPPED = 4;
 }
 
 message LockerSessionResponse {
@@ -285,6 +403,10 @@ message LockerSessionResponse {
   LockerRevealRefusal refusal = 5;
   // A code's answer, when one was made.
   optional LockerTotp totp = 6;
+  // An export's file, when one was written.
+  optional LockerExported exported = 7;
+  // An import's plan, or what a publish wrote.
+  optional LockerImportPlan import_plan = 8;
 }
 
 enum LockerSessionState {
@@ -301,6 +423,8 @@ message LockerRevealed {
   string value = 3;
   string receipt_id = 4;
   uint64 expires_in_ms = 5;
+  // The custom field revealed, when it was one.
+  string field_id = 6;
 }
 
 // ONE CODE, WITH ITS LIFE. The code is what a site asks for and is only good
@@ -335,4 +459,56 @@ enum LockerRevealRefusal {
   // `totp` for a code and never for the seed, so the core refuses it before
   // the session is consulted and before any receipt (R-1047-D6).
   LOCKER_REVEAL_REFUSAL_SEED_NOT_SHOWN = 6;
+  // A reveal named a passkey's `private_key`. A passkey is storage only
+  // (L-passkey): nothing on the phone signs with it, so nothing needs it in
+  // the clear, and it is refused before the session is consulted and before
+  // any receipt (#1047 T2).
+  LOCKER_REVEAL_REFUSAL_KEY_NOT_SHOWN = 7;
+  // An import file that is neither a password-manager CSV (by its header)
+  // nor Centraid's own JSON.
+  LOCKER_REVEAL_REFUSAL_NOT_READABLE = 8;
+}
+
+// ---------------------------------------------------------------------------
+// `locker.access` (64): one item's access history (#1047 T2).
+// ---------------------------------------------------------------------------
+
+// The receipts the vault already wrote about an item — reveals, copies and
+// one-time codes, refusals included — newest first. METADATA ONLY: a receipt
+// names the act, the time and the column, and never carried a value.
+message LockerAccessRequest {
+  string item_id = 1;
+  // At most this many; 0 is 50. Clamped to 20–2,000.
+  uint32 limit = 2;
+  string tz = 3;
+}
+
+message LockerAccess {
+  repeated LockerAccessEntry entries = 1;
+  // More receipts than `window` name this item.
+  bool truncated = 2;
+  uint32 window = 3;
+}
+
+message LockerAccessEntry {
+  string receipt_id = 1;
+  LockerAccessKind kind = 2;
+  // The value went to the clipboard.
+  bool copied = 3;
+  // `false` for a refusal the vault receipted.
+  bool allowed = 4;
+  // The sealed columns named, `value_sealed` for a custom field.
+  repeated string columns = 5;
+  // The custom field, when one was revealed.
+  string field_id = 6;
+  // In the request's zone: `YYYY-MM-DD` and `HH:MM`.
+  string local_day = 7;
+  string local_time = 8;
+}
+
+enum LockerAccessKind {
+  LOCKER_ACCESS_KIND_UNSPECIFIED = 0;
+  LOCKER_ACCESS_KIND_REVEAL = 1;
+  // A one-time code made from the item's seed.
+  LOCKER_ACCESS_KIND_CODE = 2;
 }

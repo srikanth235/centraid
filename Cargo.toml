@@ -31,12 +31,6 @@ repository = "https://github.com/srikanth235/centraid"
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 flate2 = "1"
-# The free-space probe the bootstrap room check needs (#1025 S7, item 3).
-# A safe wrapper over `statvfs`/`GetDiskFreeSpaceEx`; the alternative was an
-# `unsafe` block in `crates/seat-link`, which is `#![forbid(unsafe_code)]` and
-# stays that way — the only crate in this workspace with an unsafe surface is
-# `crates/core-ffi`, where the C ABI is.
-fs4 = { version = "0.13", default-features = false }
 hex = "0.4"
 # THE ONE IMAGE CODEC (#1025 S3, D-1025-S7-50). Derivatives are generated at
 # the gateway, so the workspace needs a decoder and a JPEG encoder and nothing
@@ -146,8 +140,6 @@ hyper = { version = "1", default-features = false, features = [
 hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
 http-body-util = "0.1"
 rand = "0.9"
-rand_chacha = "0.9"
-turmoil = "0.7"
 tokio = { version = "1", features = [
   "macros",
   "rt-multi-thread",
@@ -178,27 +170,11 @@ aes-gcm = "0.11"
 # `contracts/crypto/object-vectors.json`, never routine housekeeping.
 chacha20poly1305 = "0.11"
 ryu-js = "1.0.3"
-subtle = "2"
 tempfile = "3"
 zstd = "0.13"
 
-# Wave 4 lane assist — the client half of the Agent Client Protocol (#1020,
-# D-1020-AS5). It replaces the JSON-RPC-over-stdio plumbing v0 hand-rolled
-# behind `@agentclientprotocol/sdk`: the `Client` role the gateway speaks, the
-# `Agent` it talks to, typed `ContentBlock`s (including
-# `ImageContent { data, mime_type }` — the shape v0's `multimodal.ts` warns is
-# NOT Anthropic's `source.media_type`), and `AcpAgent`, which spawns a harness
-# and frames its stdio.
-#
-# `unstable_mcp_over_acp` EXISTS in 2.1.0 and is deliberately NOT enabled: it is
-# recorded as the future collapse of `centraid mcp` into the ACP connection
-# itself, and it stays unadopted while it is unstable and while neither
-# first-party adapter implements the `type: "acp"` MCP transport
-# (`vault-mcp-server.ts:1`-`:16`).
-agent-client-protocol = "2.1"
-# Comes with the protocol crate's own API surface (`BoxFuture`, the
-# executor-agnostic streams its connection is built on), so it is declared here
-# rather than reached through a re-export.
+# `gateway-server`'s ACME state machine is a `Stream`; this is the crate whose
+# trait it is.
 futures = "0.3"
 
 # Wave 4 lane automations — civil time with a BUNDLED tzdb (#1020, D-1020-AU2).

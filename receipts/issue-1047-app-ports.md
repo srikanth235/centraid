@@ -718,27 +718,44 @@ governance: allow-doc-integrity QUALITY.md the Resolved #922 expression-index en
 - **A "NEEDS_WORDS → Enter your 24 words" door on the pair screen (E6)** — `PairLaptopState.words_label` and `PairLaptopEvent.WordsTapped`, as recommended (D-11).
 
 **Code, left for a sweep and not this umbrella:**
-- Much of `crates/apps/locker` beyond `phone.rs` has no production caller: `queries.rs`'s folds, `commands.rs`'s `Invocation`/`Commands`, `totp`'s unused half and `sidecars` (D3).
+- Much of `crates/apps/locker` beyond `phone.rs` has no production caller: `queries.rs`'s folds, `commands.rs`'s `Invocation`/`Commands`, `totp`'s unused half and `sidecars` (D3). **Landed after close (T2)**: deleted, and `tests/parity.rs` compares v0's answers with the phone's loaders ([R-1047-T2-7](../docs/decisions.md#lockers-follow-ups-on-the-phone-1047-t2)).
 - Dependencies in `crates/centraid/Cargo.toml` that no source uses (D3).
 - `crates/core/src/stage.rs` cites a deleted file.
 - Seat and desktop prose in `gateway-server/src/serve.rs` and `xtask/src/{rules,gate}.rs` (D3).
 - `crates/identity/src/ticket.rs:22` still says the Locker key "reaches a seat" (D3).
-- `crates/apps/locker/manifest.json` still has v0 descriptions (D3).
+- `crates/apps/locker/manifest.json` still has v0 descriptions (D3). **Landed after close (T2).**
 
-**Locker features not on the phone yet (L1):**
-- Editing and revealing custom sealed fields and passkeys.
-- Access history.
-- Import and export.
+**Locker features not on the phone yet (L1):** **Landed after close (T2)** ([R-1047-T2-1…6](../docs/decisions.md#lockers-follow-ups-on-the-phone-1047-t2)):
+- Editing and revealing custom sealed fields and passkeys — custom fields added, edited, removed and revealed from the item page, sealed by the core against their own id; a passkey shown, renamed and removed, its key refused `KEY_NOT_SHOWN`.
+- Access history — one item's receipts on its page (reveals, copies, codes). The whole-Locker route with unlocks is [Q-1047-21](../docs/decisions.md#open-questions-for-the-owner-1046-1047).
+- Import and export — plaintext CSV (1Password dialect) or Locker JSON after the confirm and a fresh owner check, to the OS save sheet only; import from a password-manager CSV or Locker JSON with the handoff's verdicts, sealed in. Whether the export carries one-time-code seeds is [Q-1047-20](../docs/decisions.md#open-questions-for-the-owner-1046-1047).
+- Walked on a throwaway iOS simulator over the demo vault (which now seeds a sealed and a plain custom field and a passkey login): a field revealed and its receipt listed live, a sealed field added, the passkey page, a CSV and a JSON export written through the save sheet into the Files provider only, and both read back as plans (CSV: 3 new · 2 fill · 1 held; JSON: 6 held). Android was built and linted, not walked (no emulator); it joins the Android walk above.
 
 **Cosmetic:**
-- When 24 words are typed as one run into cell 1 on iOS, that cell keeps showing the run (E5).
+- When 24 words are typed as one run into cell 1 on iOS, that cell keeps showing the run (E5). **Landed after close (T3).**
 - The Tally tile has no body by design (L2).
 
 **Gateway:** `centraid-gateway invite`, run while `serve` is up, prints a ticket with no direct addresses (E5). Pairing still worked through relay or discovery.
 
 **Residual, which no field can refuse:** Gboard's clipboard chip commits text through the input method (E3).
 
-**Older than #1047, and left:** Kotlin warnings in `HomeMachineSpec`, `ScreenFixtureSpec`, `DuplicatesSpec`, `AbiRoundTripSpec`, `PhotoShelfMachine`, `HomeBridge` and Android's `kit/Band.kt`, and the deprecated `EncryptedSharedPreferences`.
+**Older than #1047, and left:** Kotlin warnings in `HomeMachineSpec`, `ScreenFixtureSpec`, `DuplicatesSpec`, `AbiRoundTripSpec`, `PhotoShelfMachine`, `HomeBridge` and Android's `kit/Band.kt`, and the deprecated `EncryptedSharedPreferences`. **Landed after close (T3).**
+
+**Landed after close, by slice T1** (items above and QUALITY.md's two #1047 entries):
+- **Per-vault restore** ([R-1047-R6](../docs/decisions.md#a-restore-that-holds-1047-r3)): `RestoreRequest.indices`; a restore never touches a vault this phone already holds; the retry mints a device secret for the vaults it answers (the shell keeps one per vault); words.enter's DONE offers "Try again" (`retry_label`, `Retry`, `Enrollment.restoreStayed`, `WordsCopy.RESTORED_STAYED_RETRY` and `RESTORE_STAYED_STILL`), drawn on `WordsViews.swift` and `WordsScreens.kt`. Held by `drain_wire.rs::a_vault_that_stayed_comes_back_on_its_own_while_the_adopted_one_stays_open`, `WordsEntrySpec`, `EnrollmentSpec`, `WordsShelfSpec`.
+- **`RESTORE_HELD` reached no core.** `CoreRestoreDoor.restoreSeed` decoded the 64-byte seed with the 32-byte endpoint decoder, so it answered UNREACHABLE without asking; `hexToBytes` takes the length now (`WordsShelfSpec`). The device walk above still stands.
+- **`knowledge.edit_note` takes an empty title**, and Notes sends a cleared name empty when the body has no first line (`knowledge_commands.rs::a_note_title_may_be_cleared_by_an_edit`, the Notes manifest test, `NotesAppSpec`).
+- **Dependencies no source uses**, swept workspace-wide by a `use`/`::` scan and confirmed by `cargo check -p <crate> --all-targets` per crate: `crates/centraid` (apps-tally, protocol, flate2, prost, serde, thiserror, tracing, url, and the dev `core-ffi` and duplicate `api-proto`/`prost`; apps-kit, apps-locker and base64 moved to dev), `blobs` (api-proto, protocol, tracing), `core` (rusqlite), `media` (aes-gcm; base64 to dev), `identity` (subtle; dev serde), `gateway-server` (base64), `gateway-client` (dev gateway-server, rand, tempfile), `protocol` (tokio and every dev-dependency), `people`/`photos`/`tally` (serde), and the workspace entries `fs4`, `rand_chacha`, `turmoil`, `subtle`, `agent-client-protocol`.
+- **Stale prose**: `stage.rs` no longer cites the deleted native-host file; `serve.rs`, `xtask/src/{rules,gate}.rs` and `identity/src/ticket.rs` say the phone is the vault and the laptop runs `centraid-gateway`.
+- **`invite` beside a running `serve`**: the ticket carried no address because `invite` cannot bind the endpoint `serve` holds, so a `local_only` laptop's code was undialable. `serve` writes its endpoint's relay and direct addresses to `dial-hints.json` on bind and on every change; `invite` puts them on the ticket, and says so when there are none (`serve::tests::a_bound_endpoint_publishes_its_direct_addresses_for_invite`).
+
+**Landed after close, by slice T3** (the items marked above, and #1046's Agenda fixtures):
+- **Kotlin warnings.** Every warning older than #1047 in `:core`, `:shared` and `:androidApp` is fixed in code, with no suppression: `!!` on receivers the compiler already knows are non-null in `HomeMachineSpec`, `ScreenFixtureSpec`, `DuplicatesSpec`, `AbiRoundTripSpec`, `PendingWriteSpec`, `ScreenMachineSpec` and `TasksSpec`; a `?.` on a non-null shelf in `PhotoShelfMachine`; `HomeBridge`'s private `encode()` extension, shadowed by Wire's member, deleted; a redundant `.toInt()` in `kit/Band.kt` and `PhotosCollectionsScreen`; an always-true `original != null` in `PhotoLightboxStage`; `GlobalScope` in `AbiContractSpec` replaced by its own `CoroutineScope`; an always-true `is` check in `NavigationAndMountSpec` replaced by an assertion on the reason; and kotlin-reflect put on `:shared`'s jvmTest classpath for the two specs that call `sealedSubclasses` and `KClass.members`. What is left: `RestoreRequest.kt:250`, which is generated by Wire, and three `!!` in `LockerTransferSpec`, a Locker slice's file that was in flight.
+- **`EncryptedSharedPreferences` replaced** ([R-1047-T3](../docs/decisions.md#androids-device-only-store-without-encryptedsharedpreferences-1047)). `AndroidSecureStore` seals each value with AES-256-GCM, bound to its name, and stores it under an HMAC-SHA256 of the name. Both keys are Android Keystore keys of its own. `androidx.security:security-crypto` is gone from the catalog and the build. `SealedEntriesTest` (`:androidApp` unit tests, 6 cases) drives the sealing on the JVM with software keys.
+- **Agenda's screen fixtures** (#1046's owed item): 14 fixtures in `contracts/screens/agenda{,-event,-editor}/`, 11 laws in `ScreenFixtureSpec` and the same 11 in the iOS `ScreenFixtureTests`, and `apps.agenda` in `PerAppLayoutSpec`. The manifest lists 77 fixtures.
+- **words.enter on iOS.** `WordField` treated the machine's kept word as a stale echo, because the member had typed that word on the way to the space, so the cell kept showing the whole run. A cell now adopts the machine's value whenever its own text is a run whose first word, split as `WordsEntry.spread` splits it, is that value (`WordField.keptWord`, `WordFieldTests`). Paste stays disabled. This is proved by the unit test and not yet on a simulator.
+
+Verification (T3, 2026-09-29, JDK 21): `:shared:jvmTest` **1028 tests, 0 failures**; `:core:jvmTest` **33, 0 failures**; `:androidApp:assembleDebug`, `:androidApp:lintDebug` (0 errors; 27 warnings, none in a touched file) and `:androidApp:testDebugUnitTest` (8, 0 failures), all with `-Pcentraid.android=true`; `:shared:assembleCentraidSharedDebugXCFramework -Pcentraid.iosSimulatorOnly=true`; `xcodebuild … test` on the iOS 26.4 iPhone 17 simulator **TEST SUCCEEDED, 75 tests, 0 failures**; `bun run format:check` clean.
 
 **The doc pass's "owed, not started" list, re-checked at close.** Done in the tree:
 - the band icon keys;

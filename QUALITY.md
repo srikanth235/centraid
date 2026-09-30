@@ -2,19 +2,6 @@
 
 ## Open
 
-- **Vault-writer bugs the #1046 app_query arms surfaced.** One line each:
-  - `knowledge.edit_note` still refuses an empty title (`minLength: 1`); the body may be cleared.
-
-- **A vault that stayed with the old phone has no way back on its own**
-  (#1047 F8, [R-1047-R5](docs/decisions.md#a-restore-that-holds-1047-r3)).
-  `RestoreRequest` names no index, so the core restores every index or none;
-  a second restore on a phone that already adopted the claimed vaults would
-  discard and lay those files down again under an open session, and mint a
-  new device secret. words.enter therefore names each vault that stayed and
-  offers no retry. Owed: a per-index restore (`RestoreRequest.indices`, or a
-  restore that skips a vault this phone already holds) before the shells can
-  offer one.
-
 - **`.mjs` scripts should be TypeScript.** Hundreds of `.mjs` files under
   `scripts/` and `.governance/law/` exist because their call sites say
   `node …`, not because the runtime needs JS: Bun runs `.ts` natively and
@@ -53,6 +40,30 @@
   deliberately don't assert those bytes.
 
 ## Resolved
+
+- #1047 — **A vault that stayed with the old phone had no way back on its
+  own** (F8, [R-1047-R6](docs/decisions.md#a-restore-that-holds-1047-r3)).
+  `RestoreRequest` named no index, so the core restored every index or none,
+  and a second restore would have laid the claimed vaults down again under an
+  open session. `RestoreRequest.indices` now names the indices an earlier
+  answer called `unclaimed`, a restore never touches a vault this phone
+  already holds, and words.enter's DONE offers "Try again"
+  (`WordsEntryState.retry_label`, `Enrollment.restoreStayed`) from the stored
+  seed. On the way: `CoreRestoreDoor` read the 64-byte seed with the 32-byte
+  endpoint decoder, so every held-seed restore answered "could not reach your
+  laptop" without asking the core. Locks: `drain_wire.rs`
+  `a_vault_that_stayed_comes_back_on_its_own_while_the_adopted_one_stays_open`,
+  `WordsEntrySpec`, `EnrollmentSpec`, `WordsShelfSpec`.
+
+- #1047 — **`knowledge.edit_note` refused an empty title** (`minLength: 1`)
+  while Notes derives a title from the body's first line, so a member who
+  cleared both the name and the body kept the old name in the vault, and the
+  next read put it back in the field. `edit_note`'s `title` (and the manifest's
+  `edit-note`) takes `""` now, and the editor sends a cleared name empty when
+  the body has no first line. `create_note` keeps `minLength: 1`: the editor
+  refuses a new note with neither. Locks: `knowledge_commands.rs`
+  `a_note_title_may_be_cleared_by_an_edit`, the Notes manifest test,
+  `NotesAppSpec` "a cleared name saves as cleared…".
 
 - #1047 — **The shells did not draw `RestoreResponse.unclaimed`.** The core
   named each vault it checked and could not claim, and `CoreRestoreDoor`

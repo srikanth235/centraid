@@ -135,7 +135,7 @@ class NavigationAndMountSpec : StringSpec({
         // Not "names a placeholder file"; names nothing. The state carries a
         // reason a member can read and no key.
         val waiting = Mount.Waiting(Mount.Waiting.Reason.BOOTSTRAPPING)
-        (waiting is Mount.Waiting).shouldBeTrue()
+        waiting.because shouldBe Mount.Waiting.Reason.BOOTSTRAPPING
         Mount.Waiting.Reason.entries.size shouldBe 3
     }
 

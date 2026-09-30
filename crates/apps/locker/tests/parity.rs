@@ -10,11 +10,15 @@
 //! fixture passes in v0 too" is that one command and not a second suite.
 //!
 //! This file reads the same bundle from the other side: `rows.json` becomes a
-//! vault (`contracts/schema/vault-ddl.sql` + the kit's one insert), the port's
-//! own statements and folds run over it, and the answers are compared with
-//! `queries.json` — **ids and ORDER included**, because the rows and the
-//! answers were canonicalised in one pass over one vault, so an id in
-//! `queries.json` names the same row as the same id in `rows.json`.
+//! vault (`contracts/schema/vault-ddl.sql` + the kit's one insert), **the
+//! phone's own loaders** (`crate::phone`: `load_items`, `load_search`,
+//! `load_item`, and the access fold) run over it, and the answers are
+//! compared with `queries.json` (#1047 T2: v0's shelf folds had no production
+//! caller and are deleted, so parity is held against the code the phone
+//! runs). Ids compare as they are, because the rows and the answers were
+//! canonicalised in one pass over one vault. v0's trash shelf is the kit's
+//! page read on the phone and stays here as the record
+//! ([`the_trash_case_stays_as_the_record`]).
 //!
 //! ## THE FOUR ANSWERS THAT DO NOT COMPARE, EACH NAMED
 //!
@@ -48,7 +52,8 @@
 //! nothing dropped — and the ordering claim is made where it can be:
 //! [`every_shelf_declares_the_order_v0_declares`] asserts each statement's own
 //! declared order against v0's, and the sequence over distinct instants is
-//! proven in `src/queries.rs`'s own tests. The manifest records the pair as
+//! the phone's shelf statement declares ([`every_shelf_declares_the_same_order`]).
+//! The manifest records the pair as
 //! `order` / `orderWhy`, the way Photos records its three `localeCompare`
 //! rosters (D-1020-D3-6).
 //!
@@ -62,7 +67,6 @@
 //! none, a card's `•••• 1234` read as `Card` — and compares everything else.
 //! The bundle keeps v0's own values as the record.
 
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -70,7 +74,8 @@ use centraid_apps_kit::contract_vault::{FrozenRowMapping, open_contract_vault_wi
 use centraid_apps_kit::reads::read_window;
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_locker::manifest;
-use centraid_apps_locker::queries::{self, Decorated, Decorations, Severity, Shelf, Vocabulary};
+use centraid_apps_locker::phone::{self, Listed};
+use centraid_apps_locker::queries;
 use rusqlite::Connection;
 
 fn root() -> PathBuf {
@@ -136,82 +141,6 @@ fn case(query: &str, input: serde_json::Value) -> serde_json::Value {
         .unwrap_or_else(|| panic!("the bundle has no {query} case at {input}"))
 }
 
-/// Everything a shelf needs, read once off the fixture vault.
-///
-/// `alias` is a flag rather than always-on because **v0's shelves do not
-/// decorate alike**, and a port that decorated them all the
-/// same way would be a port that answered something v0 never answered. See
-/// [`only_the_live_shelf_carries_the_connector_alias_in_v0`].
-fn decorations(connection: &Connection, alias: bool) -> Decorations {
-    let door = TestDoor::new(connection);
-    let concepts = read_window(&door, &queries::concepts_statement(), 2_000)
-        .expect("the concept scheme reads")
-        .rows;
-    let schemes = read_window(&door, &queries::schemes_statement(), 2_000)
-        .expect("the scheme table reads")
-        .rows;
-    let vocabulary = Vocabulary::of(&concepts, &schemes);
-    let ids = live_ids(connection);
-    let tag_rows = read_window(
-        &door,
-        &queries::tags_statement(&ids).expect("the tag statement builds"),
-        2_000,
-    )
-    .expect("the tag plane reads")
-    .rows;
-    let alias_rows = read_window(
-        &door,
-        &queries::alias_statement(&ids).expect("the alias statement builds"),
-        2_000,
-    )
-    .expect("the alias table reads")
-    .rows;
-    Decorations {
-        tags: queries::fold_tags(&tag_rows, &vocabulary),
-        starred: vocabulary
-            .starred_concept()
-            .map(|concept| queries::fold_starred(&tag_rows, &concept))
-            .unwrap_or_default(),
-        alias: if alias {
-            alias_rows
-                .iter()
-                .filter_map(|row| {
-                    Some((
-                        centraid_apps_kit::row::text_of(row, "item_id")?,
-                        centraid_apps_kit::row::text_of(row, "alias")?,
-                    ))
-                })
-                .collect()
-        } else {
-            BTreeMap::new()
-        },
-    }
-}
-
-/// Every item id the fixture carries, for the two bounded sidecar reads.
-fn live_ids(connection: &Connection) -> Vec<String> {
-    let door = TestDoor::new(connection);
-    let mut ids: Vec<String> = Vec::new();
-    for shelf in [Shelf::Live, Shelf::Archived] {
-        let window =
-            read_window(&door, &queries::items_statement(shelf), 2_000).expect("a shelf reads");
-        for row in &window.rows {
-            if let Some(id) = centraid_apps_kit::row::text_of(row, "item_id") {
-                ids.push(id);
-            }
-        }
-    }
-    let window = read_window(&door, &queries::trash_statement(), 2_000).expect("trash reads");
-    for row in &window.rows {
-        if let Some(id) = centraid_apps_kit::row::text_of(row, "item_id") {
-            ids.push(id);
-        }
-    }
-    ids.sort_unstable();
-    ids.dedup();
-    ids
-}
-
 /// A value whose object keys are in sorted order, at every depth.
 ///
 /// **Why this exists and is not paranoia.** `same_rows` compares rendered
@@ -255,51 +184,52 @@ fn same_rows(mine: &[serde_json::Value], theirs: &[serde_json::Value], what: &st
     assert_eq!(mine.len(), theirs.len(), "{what}: the row COUNT moved");
 }
 
-/// One decorated row, as the fields the bundle carries.
-fn as_case(row: &Decorated) -> serde_json::Value {
+/// The fields of a row the PHONE answers and v0 answered alike (#1047 T2).
+///
+/// The phone's shelf row ([`Listed`]) carries the item's browsable half, its
+/// star and its tags. What v0 derived or decorated beyond that is NOT on a
+/// phone row and is not compared, each for a stated reason: `severity` (a
+/// render class derived from `compromised`, which is compared), a card's
+/// `•••• 1234` subtitle (derived by unsealing, Q-1047-16), and the connector
+/// `alias` (the phone answers it on the item, never on a list — see
+/// [`only_the_live_shelf_carries_the_connector_alias`]). `updated_at` is
+/// `<host-clock>` in the bundle.
+const COMPARED: [&str; 11] = [
+    "item_id",
+    "type",
+    "title",
+    "subtitle",
+    "favorite",
+    "tags",
+    "compromised",
+    "url",
+    "expiry",
+    "archived",
+    "password_set_at",
+];
+
+/// One phone row, as the compared fields.
+fn as_case(listed: &Listed) -> serde_json::Value {
+    let row = &listed.row;
     serde_json::json!({
         "item_id": row.item_id,
-        "type": row.item_type,
+        "type": listed.rendered_type(),
         "title": row.title,
-        "subtitle": row.subtitle,
-        "favorite": row.favorite,
-        "tags": row.tags,
+        "subtitle": listed.subtitle(),
+        "favorite": listed.starred,
+        "tags": listed.tags,
         "compromised": row.compromised,
-        "severity": match row.severity {
-            Severity::None => "",
-            Severity::Danger => "danger",
-        },
         "url": row.url,
         "expiry": row.expiry,
-        "alias": row.alias,
-        "archived": row.archived,
+        "archived": listed.archived(),
         "password_set_at": row.password_set_at,
-        "purge_at": row.purge_at,
     })
 }
 
 /// The same fields off a bundle row, so the two are compared as one value.
 fn from_case(row: &serde_json::Value) -> serde_json::Value {
     let mut picked = serde_json::Map::new();
-    for key in [
-        "item_id",
-        "type",
-        "title",
-        "subtitle",
-        "favorite",
-        "tags",
-        "compromised",
-        "severity",
-        "url",
-        "expiry",
-        "alias",
-        "archived",
-        "password_set_at",
-        "purge_at",
-    ] {
-        // `updated_at` is `<host-clock>` in the fixture and the real instant in
-        // the vault the rows rebuild, so it is the one field a token makes
-        // incomparable. Every other field on the row is compared.
+    for key in COMPARED {
         picked.insert(
             key.to_owned(),
             row.get(key).cloned().unwrap_or(serde_json::Value::Null),
@@ -307,9 +237,6 @@ fn from_case(row: &serde_json::Value) -> serde_json::Value {
     }
     // WHAT v0's DERIVATION PRODUCED, READ AS THE PORT ANSWERS WITHOUT IT
     // (Q-1047-16; this file's header).
-    if picked["severity"] == serde_json::json!("warn") {
-        picked.insert("severity".to_owned(), serde_json::json!(""));
-    }
     if picked["type"] == serde_json::json!("card")
         && picked["subtitle"]
             .as_str()
@@ -539,27 +466,21 @@ fn the_manifests_query_list_is_the_apps_query_list() {
 // THE EIGHT QUERIES, AGAINST v0's OWN ANSWERS
 // ---------------------------------------------------------------------------
 
-/// The `items` shelf at all three of v0's inputs — rows, order, decoration and
-/// the foot line's counts.
+/// The `items` shelf at all three of v0's inputs, through the PHONE's loader
+/// (`phone::load_items`, #1047 T2) — rows, the window and whether it filled.
 #[test]
 fn the_items_shelf_answers_what_v0_answered() {
     let connection = v0_vault();
     let door = TestDoor::new(&connection);
-    let decorations = decorations(&connection, true);
-
-    for (input, shelf) in [
-        (serde_json::json!({}), Shelf::Live),
-        (serde_json::json!({ "limit": 20 }), Shelf::Live),
-        (serde_json::json!({ "archived": true }), Shelf::Archived),
+    for (input, archived) in [
+        (serde_json::json!({}), false),
+        (serde_json::json!({ "limit": 20 }), false),
+        (serde_json::json!({ "archived": true }), true),
     ] {
         let expected = case("items", input.clone());
-        let window = queries::items_window(input["limit"].as_i64());
-        let read = queries::read_shelf(&door, &queries::items_statement(shelf), window)
-            .expect("the shelf reads");
-        let answer = queries::items_answer(shelf, window, &read, &decorations, None);
-
-        // THE WINDOW, which is the one arithmetic v0 got wrong somewhere else
-        // and gets right here: 300 by default, clamped UP from 20.
+        let answer =
+            phone::load_items(&door, archived, input["limit"].as_i64()).expect("the shelf reads");
+        // THE WINDOW: 300 by default, clamped UP from 20.
         assert_eq!(
             answer.window as u64,
             expected["output"]["window"].as_u64().expect("a window"),
@@ -572,9 +493,6 @@ fn the_items_shelf_answers_what_v0_answered() {
                 .expect("truncated"),
             "truncated at {input}"
         );
-        assert_eq!(answer.archived, shelf == Shelf::Archived);
-
-        // THE ROWS, in v0's own order, with every field the bundle carries.
         let mine: Vec<serde_json::Value> = answer.items.iter().map(as_case).collect();
         let theirs: Vec<serde_json::Value> = expected["output"]["items"]
             .as_array()
@@ -582,25 +500,16 @@ fn the_items_shelf_answers_what_v0_answered() {
             .iter()
             .map(from_case)
             .collect();
-        same_rows(
-            &mine,
-            &theirs,
-            &format!("the {shelf:?} shelf's rows at {input}"),
-        );
+        same_rows(&mine, &theirs, &format!("the shelf's rows at {input}"));
         assert!(!mine.is_empty(), "the shelf is empty at {input}");
     }
 }
 
-/// `search` at all four of v0's terms, including the two that find nothing for
-/// two different reasons.
+/// `search` at all four of v0's terms, through `phone::load_search`.
 #[test]
 fn search_answers_what_v0_answered() {
     let connection = v0_vault();
     let door = TestDoor::new(&connection);
-    // NO ALIAS MAP: v0's `search.ts:73` calls `decorate` with four arguments
-    // and the fifth is the alias. See
-    // `only_the_live_shelf_carries_the_connector_alias_in_v0`.
-    let decorations = decorations(&connection, false);
     let mut found = 0usize;
     for term in ["bank", "ada@", "", "combination"] {
         let expected = case("search", serde_json::json!({ "term": term }));
@@ -610,31 +519,13 @@ fn search_answers_what_v0_answered() {
             .iter()
             .map(from_case)
             .collect();
-        // An empty term is NO SEARCH, not every row — v0's own rule, and the
-        // one case where the port must not even read.
-        let mine: Vec<serde_json::Value> = if term.is_empty() {
-            Vec::new()
-        } else {
-            let mut statement = queries::search_statement();
-            statement = statement.filter(
-                "(title LIKE ? OR username LIKE ?) AND deleted_at IS NULL",
-                vec![
-                    centraid_apps_kit::statement::PageBindValue::Text(format!("%{term}%")),
-                    centraid_apps_kit::statement::PageBindValue::Text(format!("%{term}%")),
-                ],
-            );
-            let read = queries::read_shelf(&door, &statement, queries::SEARCH_ROWS)
-                .expect("the search reads");
-            let rows: Vec<centraid_apps_locker::queries::ItemRow> = read
-                .rows
-                .iter()
-                .map(centraid_apps_locker::queries::ItemRow::of)
-                .collect();
-            queries::decorate(&rows, &decorations)
-                .iter()
-                .map(as_case)
-                .collect()
-        };
+        // An empty term is NO SEARCH, not every row — v0's own rule.
+        let mine: Vec<serde_json::Value> = phone::load_search(&door, term, 0)
+            .expect("the search reads")
+            .items
+            .iter()
+            .map(as_case)
+            .collect();
         same_rows(&mine, &theirs, &format!("search {term:?}"));
         found += mine.len();
     }
@@ -646,68 +537,35 @@ fn search_answers_what_v0_answered() {
     );
 }
 
-/// The trash shelf: purge dates, the star kept, and the dash subtitle.
+/// THE TRASH SHELF IS NOT THIS CRATE'S ON THE PHONE (#1047, R-1047-K5): it
+/// is the kit's one trash screen over a page read (`LOCKER_TRASH`, compared
+/// by the shared layer's `AppReadsSpec`). v0's answer stays the record; what
+/// is asserted here is that it still says what the kit's screen draws — one
+/// row, with its purge date.
 #[test]
-fn the_trash_shelf_answers_what_v0_answered() {
-    let connection = v0_vault();
-    let door = TestDoor::new(&connection);
-    // NO ALIAS MAP: v0's `trash.ts:44` passes three arguments. A trashed row
-    // carries no connector handle.
-    let decorations = decorations(&connection, false);
+fn the_trash_case_stays_as_the_record() {
     let expected = case("trash", serde_json::json!({}));
-    let read = queries::read_shelf(&door, &queries::trash_statement(), queries::TRASH_ROWS)
-        .expect("the trash reads");
-    let rows: Vec<centraid_apps_locker::queries::ItemRow> = read
-        .rows
-        .iter()
-        .map(centraid_apps_locker::queries::ItemRow::of)
-        .collect();
-    let mine: Vec<serde_json::Value> = queries::decorate(&rows, &decorations)
-        .iter()
-        .map(|row| {
-            let mut value = as_case(row);
-            let object = value.as_object_mut().expect("an object");
-            object.remove("archived");
-            object.remove("alias");
-            value
-        })
-        .collect();
-    let theirs: Vec<serde_json::Value> = expected["output"]["items"]
-        .as_array()
-        .expect("a list")
-        .iter()
-        .map(|row| {
-            let mut value = from_case(row);
-            let object = value.as_object_mut().expect("an object");
-            object.remove("archived");
-            object.remove("alias");
-            value
-        })
-        .collect();
-    same_rows(&mine, &theirs, "the trash shelf");
-    assert_eq!(mine.len(), 1, "the corpus trashes exactly one row");
-    // AND THE PURGE DATE IS THERE, which is what this shelf exists to show.
+    let items = expected["output"]["items"].as_array().expect("a list");
+    assert_eq!(items.len(), 1, "the corpus trashes exactly one row");
     assert!(
-        mine[0]["purge_at"].is_string(),
+        items[0]["purge_at"].is_string(),
         "a trashed row with no purge date cannot be counted down"
     );
 }
 
 /// The detail pane at both of v0's ids, plus the wrong id that is `None` and
-/// never an error.
+/// never an error — through `phone::load_item`.
 #[test]
 fn the_item_pane_answers_what_v0_answered() {
     let connection = v0_vault();
     let door = TestDoor::new(&connection);
-    let decorations = decorations(&connection, true);
     let mut compared = 0usize;
     for entry in v0_cases() {
         if entry["query"] != serde_json::json!("item") {
             continue;
         }
         let item_id = entry["input"]["item_id"].as_str().expect("an id");
-        let row = queries::read_item_row(&door, item_id).expect("the row reads");
-        let Some(row) = row else {
+        let Some(detail) = phone::load_item(&door, item_id).expect("the item reads") else {
             assert!(
                 entry["output"]["item"].is_null(),
                 "the port found no {item_id} and v0 did"
@@ -719,15 +577,9 @@ fn the_item_pane_answers_what_v0_answered() {
             expected.is_object(),
             "v0 found no {item_id} and the port did"
         );
-        let detail = queries::item_detail(
-            row,
-            decorations.starred.contains(item_id),
-            decorations.tags.get(item_id).cloned().unwrap_or_default(),
-            decorations.alias.get(item_id).cloned(),
-            centraid_apps_locker::sidecars::Sidecars::default(),
-        );
+        let row = &detail.listed.row;
         assert_eq!(
-            serde_json::json!(detail.rendered_type),
+            serde_json::json!(detail.listed.rendered_type()),
             expected["type"],
             "the rendered type of {item_id}"
         );
@@ -735,19 +587,26 @@ fn the_item_pane_answers_what_v0_answered() {
             serde_json::json!(detail.degraded_from),
             expected["degraded_from"]
         );
-        assert_eq!(serde_json::json!(detail.favorite), expected["favorite"]);
-        assert_eq!(serde_json::json!(detail.tags), expected["tags"]);
+        assert_eq!(
+            serde_json::json!(detail.listed.starred),
+            expected["favorite"]
+        );
+        assert_eq!(serde_json::json!(detail.listed.tags), expected["tags"]);
         assert_eq!(serde_json::json!(detail.alias), expected["alias"]);
-        assert_eq!(serde_json::json!(detail.trashed), expected["trashed"]);
-        assert_eq!(serde_json::json!(detail.archived), expected["archived"]);
-        assert_eq!(serde_json::json!(detail.row.title), expected["title"]);
-        assert_eq!(serde_json::json!(detail.row.username), expected["username"]);
-        assert_eq!(serde_json::json!(detail.row.url), expected["url"]);
-        assert_eq!(serde_json::json!(detail.row.notes), expected["notes"]);
-        // EVERY SEALED CELL IS null IN V0'S OWN ANSWER — v0's gateway did not
-        // unseal a Locker row for a client (#996 R13, W6-D2), so the pane
-        // paints while the Locker is locked. The port carries no such field at
-        // all, which is the stronger version of the same fact.
+        assert_eq!(
+            serde_json::json!(row.deleted_at.is_some()),
+            expected["trashed"]
+        );
+        assert_eq!(
+            serde_json::json!(detail.listed.archived()),
+            expected["archived"]
+        );
+        assert_eq!(serde_json::json!(row.title), expected["title"]);
+        assert_eq!(serde_json::json!(row.username), expected["username"]);
+        assert_eq!(serde_json::json!(row.url), expected["url"]);
+        assert_eq!(serde_json::json!(row.notes), expected["notes"]);
+        // EVERY SEALED CELL IS null IN V0'S OWN ANSWER, and the phone carries
+        // each only as its presence — the stronger version of the same fact.
         for sealed in ["password", "otp_seed", "card_number", "cvv", "content"] {
             assert!(
                 expected[sealed].is_null(),
@@ -802,7 +661,7 @@ fn v0s_access_query_is_refused_by_its_own_door_and_the_port_answers() {
     let door = TestDoor::new(&connection);
     let window = queries::access_window(None);
     assert_eq!(window, queries::ACCESS_DEFAULT);
-    let read = queries::read_shelf(
+    let read = read_window(
         &door,
         &queries::access_statement(None).expect("the statement builds"),
         window,
@@ -896,20 +755,12 @@ fn v0s_access_query_is_refused_by_its_own_door_and_the_port_answers() {
 /// shelf by title is a red, and so is a v0 change to either column.
 #[test]
 fn every_shelf_declares_the_same_order() {
-    // The port's four shelves and its audit window.
-    for (what, order) in [
-        ("live", queries::items_statement(Shelf::Live).order.clone()),
-        (
-            "archived",
-            queries::items_statement(Shelf::Archived).order.clone(),
-        ),
-        ("search", queries::search_statement().order.clone()),
-        ("trash", queries::trash_statement().order.clone()),
-    ] {
-        assert_eq!(order.sort_column, "updated_at", "{what} sorts by");
-        assert_eq!(order.pk_column, "item_id", "{what} breaks ties by");
-        assert!(order.descending, "{what} is newest first");
-    }
+    // The phone's one shelf statement — live, archived and search all walk it
+    // (#1047 T2) — and its audit window.
+    let order = phone::shelves_statement().order.clone();
+    assert_eq!(order.sort_column, "updated_at", "the shelf sorts by");
+    assert_eq!(order.pk_column, "item_id", "the shelf breaks ties by");
+    assert!(order.descending, "the shelf is newest first");
     let audit = queries::access_statement(None)
         .expect("the statement builds")
         .order
@@ -927,31 +778,16 @@ fn every_shelf_declares_the_same_order() {
     // port's own declarations, which is what a later change would break.
 }
 
-/// ONLY THE LIVE SHELF CARRIES THE CONNECTOR ALIAS IN v0, and the port
-/// reproduces that rather than tidying it.
+/// ONLY THE LIVE SHELF CARRIES THE CONNECTOR ALIAS IN v0 — and on the phone
+/// no shelf does: the alias rides the item page alone (#1047).
 ///
-/// `decorate`'s fifth parameter is `aliasByItem` and v0 passes it from exactly
-/// one of its four callers: `items.ts:418`. `search.ts:73` passes four
-/// arguments, `trash.ts:44` three, `watchtower.ts:48` four. So a connector
-/// alias appears on the live shelf and vanishes from the same row found by
-/// search — with no rule stated anywhere for why.
-///
-/// **Re-judged rather than cited** (AGENTS.md: a citation is not a
-/// justification). Nothing depends on the asymmetry: `alias` is optional on
-/// `DecoratedItem`, no surface branches on its absence, and the alias is
-/// plaintext at rest on a row the shelf already read — so it is neither a
-/// secret being withheld nor a read being saved (the alias map is ONE bounded
-/// read the live shelf already does). It reads as an omission, not a decision.
-///
-/// It is reproduced here because parity is the exit criterion and a port that
-/// answered more than v0 would be unverifiable against it. **Owner question:**
-/// should the port decorate all four shelves with the alias? Options: (a) keep
-/// v0's asymmetry, and this test is the record of it; (b) decorate all four,
-/// which costs one bounded read on search and makes the
-/// connector handle stable wherever a row appears; (c) drop the alias from the
-/// live shelf too and let only the item pane carry it. **Recommendation: (b)**
-/// — the alias exists so a connector can name a row across a rotation, and a
-/// handle that depends on which screen found the row is not a handle.
+/// `decorate`'s fifth parameter was `aliasByItem` and v0 passed it from one of
+/// its four callers (`items.ts:418`), so a connector alias appeared on the live
+/// shelf and vanished from the same row found by search, with no rule stated.
+/// The phone answers the alias on `load_item` and on no list (the old owner
+/// question's option (c)); v0's asymmetry is kept below as the record, read
+/// off v0's own answers, and the phone's shelves are compared without it
+/// ([`COMPARED`]).
 #[test]
 fn only_the_live_shelf_carries_the_connector_alias() {
     // THE v0 SOURCE HALF IS DELETED (#1025 S4). It read `decorate(` out of four

@@ -53,5 +53,6 @@
 
 pub mod phone;
 pub mod session;
+mod transfer;
 
 pub use session::{REVEAL_WINDOW_MS, SESSION_TIMEOUT_MS, Session, SessionState};

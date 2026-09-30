@@ -1401,6 +1401,8 @@ mod phone_shaped {
                         .map(|addr: &std::net::SocketAddr| addr.to_string())
                         .collect(),
                     seed: None,
+                    // EVERY INDEX: the ordinary restore scans to the gap.
+                    indices: Vec::new(),
                 },
                 &runtime,
             )

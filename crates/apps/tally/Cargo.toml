@@ -20,7 +20,6 @@ vault-door = ["dep:centraid-vault"]
 centraid-apps-kit = { path = "../kit" }
 centraid-design = { path = "../../design" }
 centraid-vault = { path = "../../vault", optional = true }
-serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 

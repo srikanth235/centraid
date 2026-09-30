@@ -281,8 +281,13 @@ public object LockerHomeMachine :
         add_label = LockerCopy.ADD_ITEM,
         retry = LockerCopy.RETRY,
         more_title = LockerCopy.MORE_TITLE,
+        // THE HANDOFF'S MORE ROWS (`LK_MORE`), in its order, as far as the
+        // phone has them: Import, Trash, Export (#1047 T2) — then what the
+        // phone adds, the facts and the Lock (D-8).
         more_rows = listOf(
+            LockerMoreRow(key = "import", label = LockerCopy.MORE_IMPORT, meta = LockerCopy.MORE_IMPORT_META, icon_key = "Download"),
             LockerMoreRow(key = "trash", label = LockerCopy.MORE_TRASH, meta = LockerCopy.MORE_TRASH_META, icon_key = "Trash"),
+            LockerMoreRow(key = "export", label = LockerCopy.MORE_EXPORT, meta = LockerCopy.MORE_EXPORT_META, icon_key = "Share"),
             LockerMoreRow(key = "facts", label = LockerCopy.MORE_FACTS, meta = LockerCopy.MORE_FACTS_META, icon_key = "Info"),
             LockerMoreRow(key = "lock", label = LockerCopy.LOCK_NOW, meta = LockerCopy.MORE_LOCK_META, icon_key = "Lock"),
         ),

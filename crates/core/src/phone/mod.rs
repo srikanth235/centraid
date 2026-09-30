@@ -523,6 +523,7 @@ mod tests {
                 endpoint: None,
                 direct_addrs: Vec::new(),
                 seed: None,
+                indices: Vec::new(),
             },
             runtime.handle(),
         )
@@ -561,6 +562,7 @@ mod tests {
                     endpoint: Some(vec![0; 3]),
                     direct_addrs: Vec::new(),
                     seed,
+                    indices: Vec::new(),
                 },
                 runtime.handle(),
             )

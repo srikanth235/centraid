@@ -161,21 +161,26 @@ async fn main() -> anyhow::Result<()> {
             // And the same thing as something to scan. The endpoint id comes
             // from the key file rather than from a bound endpoint: minting an
             // invite must work while `serve` is running, and two processes
-            // cannot bind one UDP socket. No relay and no direct addresses ride
-            // this ticket — under the default n0 address lookup the endpoint id
-            // alone is dialable, and the hints are the running server's to give.
+            // cannot bind one UDP socket. THE DIALLING HINTS ARE THE SERVING
+            // ENDPOINT'S, as `serve` last published them (#1047 T1): a ticket
+            // with none is dialable only through n0's address lookup, which a
+            // local-only laptop does not use.
             let secret = serve::node_secret(&data_dir)?;
+            let hints = serve::DialHints::read(&data_dir).unwrap_or_default();
             let ticket = ticket::mint(
                 *secret.public().as_bytes(),
                 &invite.code,
                 u64::try_from(invite.expires_at.millis()).unwrap_or(0),
-                String::new(),
-                Vec::new(),
+                hints.relay_url.clone(),
+                hints.direct_addrs.clone(),
             );
             let encoded = ticket::encode(&ticket);
             println!("pair      {encoded}");
             if let Ok(rendered) = ticket::qr(&encoded) {
                 println!("{rendered}");
+            }
+            if hints.direct_addrs.is_empty() {
+                println!("{NO_HINTS}");
             }
             // WHAT TO COMPARE (W15-D5): not this laptop's id — the phone's key
             // is not known until the invite is redeemed, so the safety number
@@ -310,21 +315,13 @@ fn print_ticket(
     invite_code: &str,
     expires_at_ms: i64,
 ) -> anyhow::Result<()> {
-    let addr = endpoint.addr();
-    let relay = addr
-        .addrs
-        .iter()
-        .find_map(|transport| match transport {
-            iroh::TransportAddr::Relay(url) => Some(url.to_string()),
-            _ => None,
-        })
-        .unwrap_or_default();
+    let hints = serve::DialHints::of(&endpoint.addr());
     let ticket = ticket::mint(
         *endpoint.id().as_bytes(),
         invite_code,
         u64::try_from(expires_at_ms).unwrap_or(0),
-        relay,
-        addr.ip_addrs().map(ToString::to_string).collect(),
+        hints.relay_url,
+        hints.direct_addrs,
     );
     let encoded = ticket::encode(&ticket);
     println!("pair      {encoded}");
@@ -336,6 +333,11 @@ fn print_ticket(
     }
     Ok(())
 }
+
+/// What `invite` says when its ticket carries no address (#1047 T1).
+const NO_HINTS: &str = "This code carries no address for this laptop: `serve` has not published \
+     one here yet. A phone finds it by its id through n0's address lookup; on a local-only \
+     laptop, start `serve` and run `invite` again.";
 
 /// What `invite` says after the ticket: where the comparison happens.
 const COMPARE_HINT: &str =
@@ -406,6 +408,8 @@ async fn run(config: Config) -> anyhow::Result<()> {
         // screen is an endpoint id and something to scan.
         ListenerConfig::Iroh(iroh) => {
             let endpoint = serve::bind_iroh(&config.data_dir, iroh).await?;
+            // WHERE `invite` FINDS THIS ENDPOINT'S ADDRESSES (#1047 T1).
+            serve::publish_dial_hints(&endpoint, &config.data_dir)?;
             let store = state::SqliteState::open(&config.state_path()).map_err(store_error)?;
             let paired = print_pairing(&endpoint, &store, &config)?;
             tracing::info!(endpoint = %endpoint.id(), "the gateway is up");

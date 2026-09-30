@@ -195,6 +195,8 @@ class VaultWordsSpec : StringSpec({
                         RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
                     override suspend fun restoreSeed(seedHex: String, endpoint: String?): RestoreResult =
                         RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
+                    override suspend fun restoreStayed(seedHex: String, endpoint: String?, indices: List<Int>): RestoreResult =
+                        RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
                 },
                 keeper = object : Enrollment.Keeper {
                     override suspend fun found(): FoundResult {

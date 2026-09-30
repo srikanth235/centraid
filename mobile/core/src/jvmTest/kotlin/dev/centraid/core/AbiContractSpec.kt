@@ -226,7 +226,7 @@ class AbiContractSpec : StringSpec({
         // everything" are far apart. See the bound below.
         val offered = CentraidCore.EVENT_BUFFER * 4
         val arrived = java.util.concurrent.CountDownLatch(1)
-        val collector = kotlinx.coroutines.GlobalScope.launch(Dispatchers.Default) {
+        val collector = kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
             core.events.collect {
                 arrived.countDown()
                 // Never resumes. This is the stalled consumer.

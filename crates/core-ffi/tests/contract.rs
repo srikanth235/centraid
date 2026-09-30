@@ -1059,6 +1059,7 @@ fn the_phones_four_flows_round_trip_through_call() {
                 endpoint: None,
                 direct_addrs: Vec::new(),
                 seed: None,
+                indices: Vec::new(),
             }),
         ),
     );

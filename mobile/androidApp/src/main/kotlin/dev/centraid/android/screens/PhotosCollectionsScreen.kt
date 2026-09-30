@@ -338,7 +338,7 @@ private fun shelfTitle(row: ShelfRow): String = row.title.ifEmpty { "Untitled al
 private fun Section(title: String, isFolded: Boolean, onFold: () -> Unit, content: @Composable () -> Unit) {
     val turn by animateFloatAsState(
         targetValue = if (isFolded) -90f else 0f,
-        animationSpec = tween(CentraidGeometry.DURATION_ONE.toInt()),
+        animationSpec = tween(CentraidGeometry.DURATION_ONE),
         label = "fold",
     )
     Column(Modifier.fillMaxWidth().padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

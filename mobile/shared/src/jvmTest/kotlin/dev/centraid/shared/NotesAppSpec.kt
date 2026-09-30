@@ -807,6 +807,28 @@ class NotesAppSpec : StringSpec({
         ).state.draft!!.title shouldBe "Buy milk"
     }
 
+    "editor: a cleared name saves as cleared — the first line when there is one, else empty (#1047 T1)" {
+        val id = "0b7e3a52-1c7d-4d5e-9f00-1234567890ab"
+        fun opened(title: String, body: String) = NotesEditorMachine.run(
+            NotesEditorMachine.initial(),
+            NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = id)),
+            NotesEditorEvent(data_ = NotesEditorEvent.DataArrived(draft = NoteDraft(title = title, body = body))),
+        ).state
+        fun cleared(title: String, body: String): String = (
+            NotesEditorMachine.run(
+                opened(title, body),
+                NotesEditorEvent(title = NotesEditorEvent.TitleEdited(title = "")),
+                NotesEditorEvent(left = NotesEditorEvent.Left()),
+            ).effects.last() as ScreenEffect.SubmitWrite
+            ).inputJson
+        // A FIRST LINE NAMES IT, as ever.
+        cleared("Name", "Buy milk") shouldBe "{\"note_id\":\"$id\",\"title\":\"Buy milk\"}"
+        // NO FIRST LINE: the name the member removed is removed, not kept in
+        // the vault to come back on the next read (`edit_note`'s `title` takes
+        // `""`).
+        cleared("Name", "") shouldBe "{\"note_id\":\"$id\",\"title\":\"\"}"
+    }
+
     // --- Routing -----------------------------------------------------------
 
     "routing: the tile's note, else a new note, and nothing while loading" {

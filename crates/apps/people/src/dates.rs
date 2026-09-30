@@ -181,7 +181,7 @@ pub fn parse_month_day(month_day: &str) -> Option<(u32, u32)> {
 /// Milliseconds since the epoch for an ISO instant the vault wrote, or `None`.
 ///
 /// Hand-rolled for the reason Docs' parity mapping records: this crate's only
-/// dependencies are the kit and `serde`, and date arithmetic is not a reason to
+/// dependencies are the kit and `serde_json`, and date arithmetic is not a reason to
 /// add one. Only the shape the vault writes is accepted.
 #[must_use]
 pub fn parse_instant(text: &str) -> Option<i64> {

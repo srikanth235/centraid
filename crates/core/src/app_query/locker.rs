@@ -188,6 +188,7 @@ fn detail(data: ItemData, zone: &FireZone) -> wire::LockerItem {
                 value: field.value.unwrap_or_default(),
                 sealed: field.sealed,
                 present: field.present,
+                position: field.position,
             })
             .collect(),
         addresses: data
@@ -199,10 +200,13 @@ fn detail(data: ItemData, zone: &FireZone) -> wire::LockerItem {
             })
             .collect(),
         passkey: data.passkey.map(|passkey| wire::LockerPasskey {
+            created_local_day: day_of(zone, passkey.created_at.as_deref()),
             rp_id: passkey.rp_id,
             user_handle: passkey.user_handle.unwrap_or_default(),
             display_name: passkey.display_name.unwrap_or_default(),
             has_private_key: passkey.has_private_key,
+            credential_id: passkey.credential_id.unwrap_or_default(),
+            algorithm: passkey.algorithm.unwrap_or_default(),
         }),
     }
 }
@@ -249,6 +253,53 @@ pub(super) fn review(
             today: today.clone(),
         })
     })
+}
+
+/// ONE ITEM'S ACCESS HISTORY (#1047 T2): the receipts the vault already
+/// wrote about it, as metadata, each at its wall clock in the request's zone.
+pub(super) fn access(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    asked: &wire::LockerAccessRequest,
+) -> Result<Answer> {
+    let zone = zone_of(vault, &asked.tz)?;
+    let limit = (asked.limit > 0).then(|| i64::from(asked.limit));
+    answered(
+        door,
+        phone::load_access(door, &asked.item_id, limit),
+        |data| {
+            Answer::LockerAccess(wire::LockerAccess {
+                entries: data
+                    .entries
+                    .into_iter()
+                    .map(|entry| {
+                        let wall = entry
+                            .occurred_at
+                            .as_deref()
+                            .and_then(|at| local::now_local(&zone, at))
+                            .unwrap_or_default();
+                        let (local_day, local_time) = wall.split_once('T').unwrap_or(("", ""));
+                        wire::LockerAccessEntry {
+                            kind: if entry.derivation.as_deref() == Some("totp") {
+                                wire::LockerAccessKind::Code
+                            } else {
+                                wire::LockerAccessKind::Reveal
+                            } as i32,
+                            local_day: local_day.to_owned(),
+                            local_time: local_time.to_owned(),
+                            receipt_id: entry.receipt_id,
+                            copied: entry.copied,
+                            allowed: entry.allowed,
+                            columns: entry.columns.unwrap_or_default(),
+                            field_id: entry.field_id.unwrap_or_default(),
+                        }
+                    })
+                    .collect(),
+                truncated: data.truncated,
+                window: count(data.window),
+            })
+        },
+    )
 }
 
 #[cfg(test)]

@@ -55,10 +55,16 @@ public class LockerHomeBridge : LockerScreenBridge<LockerHomeState, LockerHomeEv
     }
 }
 
+/**
+ * One item. Its events carry CSPRNG bytes because a new custom field's id is
+ * minted from them: a sealed value is bound to its field's id before the row
+ * exists (D-1020-L9, #1047 T2).
+ */
 public class LockerItemBridge : LockerScreenBridge<LockerItemState, LockerItemEvent>(
     LockerItemMachine,
     LockerItemEvent.ADAPTER,
     LockerItemReads,
+    entropy = ENTROPY_BYTES,
 ) {
     /** [parent] is the pushing page's title, which the back control says. */
     public fun open(itemId: String, parent: String) {

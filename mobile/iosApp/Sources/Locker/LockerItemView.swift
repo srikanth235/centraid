@@ -130,6 +130,33 @@ struct LockerItemView: View {
             }
             .modifier(SheetPresentation())
         }
+        // THE CUSTOM FIELD SHEET (#1047 T2): one field, added or edited. A
+        // sealed value is typed into a secure entry, shielded like the memo.
+        .sheet(isPresented: Binding(
+            get: { state.hasFieldSheet },
+            set: { open in if !open, state.hasFieldSheet { send(Self.event { $0.fieldClosed = .init() }) } }
+        )) {
+            LockerShield(lock: lock) {
+                LockerFieldSheetView(sheet: state.fieldSheet, send: send)
+            }
+            .modifier(SheetPresentation())
+        }
+        // THE PASSKEY'S NAME (#1047 T2): the memo sheet's shape.
+        .sheet(isPresented: Binding(
+            get: { state.hasPasskeyName },
+            set: { open in if !open, state.hasPasskeyName { send(Self.event { $0.passkeyNameClosed = .init() }) } }
+        )) {
+            LockerShield(lock: lock) {
+                LockerMemoSheetView(
+                    memo: state.passkeyName,
+                    identifier: "locker-passkey-name",
+                    onType: { text in send(Self.event { $0.passkeyNameTyped = .with { $0.text = text } }) },
+                    onSave: { send(Self.event { $0.passkeyNameSaved = .init() }) },
+                    onClose: { send(Self.event { $0.passkeyNameClosed = .init() }) }
+                )
+            }
+            .modifier(SheetPresentation())
+        }
         .onDisappear(perform: onDeparted)
     }
 
@@ -157,6 +184,7 @@ struct LockerItemView: View {
             ForEach(section.rows, id: \.key) { row in
                 LockerFieldRowView(row: row) { verb in tapped(row, verb) }
             }
+            if !section.note.isEmpty { LockerNote(text: section.note) }
         }
         if !item.tags.isEmpty {
             FieldRow(key: item.tagsLabel, value: item.tags.joined(separator: " · "))
@@ -297,6 +325,7 @@ struct LockerCountdownRing: View {
 /// THE MEMO SHEET: one field, Save as the sheet's one ink button, Cancel.
 struct LockerMemoSheetView: View {
     let memo: Centraid_Screen_V1_LockerMemoSheet
+    var identifier: String = "locker-memo"
     let onType: (String) -> Void
     let onSave: () -> Void
     let onClose: () -> Void
@@ -307,13 +336,13 @@ struct LockerMemoSheetView: View {
         SheetRoom(
             title: memo.title,
             primary: SheetPrimary(label: memo.saveLabel, action: onSave),
-            titleIdentifier: "locker-memo"
+            titleIdentifier: identifier
         ) {
             MachineTextField(placeholder: memo.hint, value: memo.text, axis: .vertical, focusOnAppear: true, onEdit: onType)
                 .centraidType("body")
                 .foregroundStyle(Theme.color("text", scheme))
                 .lineLimit(3...8)
-                .accessibilityIdentifier("locker-memo-text")
+                .accessibilityIdentifier("\(identifier)-text")
             Button(action: onClose) {
                 Text(memo.cancelLabel)
                     .centraidType("labelOn")
@@ -322,7 +351,98 @@ struct LockerMemoSheetView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityIdentifier("locker-memo-cancel")
+            .accessibilityIdentifier("\(identifier)-cancel")
+        }
+    }
+}
+
+/// ONE CUSTOM FIELD (#1047 T2; `LockerFieldSheet`): its section, its label,
+/// its kind on a new field, and its value — a secure entry when sealed,
+/// never autocorrected, never suggested, out of the keyboard's learning.
+/// Save is the sheet's one ink button, offered only when the machine says;
+/// otherwise its reason stands where the status goes.
+struct LockerFieldSheetView: View {
+    let sheet: Centraid_Screen_V1_LockerFieldSheet
+    let send: (Data) -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    private func typed(_ key: String) -> (String) -> Void {
+        { value in send(LockerItemView.event { $0.fieldTyped = .with { $0.key = key; $0.value = value } }) }
+    }
+
+    var body: some View {
+        SheetRoom(
+            title: sheet.title,
+            status: sheet.blocked,
+            primary: sheet.canSave ? SheetPrimary(label: sheet.saveLabel) {
+                send(LockerItemView.event { $0.fieldSaved = .init() })
+            } : nil,
+            titleIdentifier: "locker-field-sheet"
+        ) {
+            labelled(sheet.sectionLabel) {
+                MachineTextField(placeholder: sheet.sectionHint, value: sheet.section, onEdit: typed("section"))
+                    .accessibilityIdentifier("locker-field-section")
+            }
+            labelled(sheet.labelLabel) {
+                MachineTextField(placeholder: sheet.labelHint, value: sheet.label, focusOnAppear: true, onEdit: typed("label"))
+                    .accessibilityIdentifier("locker-field-label")
+            }
+            if !sheet.kinds.isEmpty {
+                labelled(sheet.kindLabel) {
+                    LockerChoicePills(choices: sheet.kinds, identifier: "locker-field-kind") { key in
+                        send(LockerItemView.event { $0.fieldKind = .with { $0.key = key } })
+                    }
+                    .padding(.horizontal, -CentraidGeometry.pageMargin)
+                }
+            }
+            labelled(sheet.valueLabel) {
+                Group {
+                    if sheet.secret {
+                        LockerSecretField(placeholder: sheet.valueHint, value: sheet.value, concealed: false, onEdit: typed("value"))
+                            .centraidType("mono")
+                    } else {
+                        MachineTextField(placeholder: sheet.valueHint, value: sheet.value, axis: .vertical, onEdit: typed("value"))
+                            .textContentType(nil)
+                    }
+                }
+                .id(sheet.secret)
+                .accessibilityIdentifier("locker-field-value")
+            }
+            if !sheet.valueNote.isEmpty {
+                Text(sheet.valueNote)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
+            }
+            if !sheet.removeLabel.isEmpty {
+                KitOutlineButton(label: sheet.removeLabel, tone: "net") {
+                    send(LockerItemView.event { $0.fieldRemoved = .init() })
+                }
+                .accessibilityIdentifier("locker-field-remove")
+            }
+            Button {
+                send(LockerItemView.event { $0.fieldClosed = .init() })
+            } label: {
+                Text(sheet.cancelLabel)
+                    .centraidType("labelOn")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("locker-field-cancel")
+        }
+    }
+
+    @ViewBuilder
+    private func labelled(_ label: String, @ViewBuilder _ field: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .centraidType("annotLabel")
+                .foregroundStyle(Theme.color("textSoft", scheme))
+            field()
+                .centraidType("body")
+                .foregroundStyle(Theme.color("text", scheme))
         }
     }
 }

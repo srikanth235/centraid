@@ -3,6 +3,104 @@
   "$note": "Screen-state fixtures: one .textproto source, one .bin beside it. Decoded by mobile/shared's jvmTest (Wire) and by mobile/iosApp/Tests (SwiftProtobuf). Regenerate with `bun contracts/tools/build-screen-fixtures.ts && bun run format`; `git diff --exit-code contracts/screens` is the drift check (#1020).",
   "fixtures": [
     {
+      "case": "day-one",
+      "screen": "agenda",
+      "type": "centraid.screen.v1.AgendaHomeState",
+      "textproto": "contracts/screens/agenda/day-one.textproto",
+      "binary": "contracts/screens/agenda/day-one.bin"
+    },
+    {
+      "case": "denied",
+      "screen": "agenda",
+      "type": "centraid.screen.v1.AgendaHomeState",
+      "textproto": "contracts/screens/agenda/denied.textproto",
+      "binary": "contracts/screens/agenda/denied.bin"
+    },
+    {
+      "case": "loading-first",
+      "screen": "agenda",
+      "type": "centraid.screen.v1.AgendaHomeState",
+      "textproto": "contracts/screens/agenda/loading-first.textproto",
+      "binary": "contracts/screens/agenda/loading-first.bin"
+    },
+    {
+      "case": "nothing-on-this-day",
+      "screen": "agenda",
+      "type": "centraid.screen.v1.AgendaHomeState",
+      "textproto": "contracts/screens/agenda/nothing-on-this-day.textproto",
+      "binary": "contracts/screens/agenda/nothing-on-this-day.bin"
+    },
+    {
+      "case": "read-refused",
+      "screen": "agenda",
+      "type": "centraid.screen.v1.AgendaHomeState",
+      "textproto": "contracts/screens/agenda/read-refused.textproto",
+      "binary": "contracts/screens/agenda/read-refused.bin"
+    },
+    {
+      "case": "search-no-match",
+      "screen": "agenda",
+      "type": "centraid.screen.v1.AgendaHomeState",
+      "textproto": "contracts/screens/agenda/search-no-match.textproto",
+      "binary": "contracts/screens/agenda/search-no-match.bin"
+    },
+    {
+      "case": "today-with-now-line",
+      "screen": "agenda",
+      "type": "centraid.screen.v1.AgendaHomeState",
+      "textproto": "contracts/screens/agenda/today-with-now-line.textproto",
+      "binary": "contracts/screens/agenda/today-with-now-line.bin"
+    },
+    {
+      "case": "create-blocked",
+      "screen": "agenda-editor",
+      "type": "centraid.screen.v1.AgendaEditorState",
+      "textproto": "contracts/screens/agenda-editor/create-blocked.textproto",
+      "binary": "contracts/screens/agenda-editor/create-blocked.bin"
+    },
+    {
+      "case": "occurrence-repeat-locked",
+      "screen": "agenda-editor",
+      "type": "centraid.screen.v1.AgendaEditorState",
+      "textproto": "contracts/screens/agenda-editor/occurrence-repeat-locked.textproto",
+      "binary": "contracts/screens/agenda-editor/occurrence-repeat-locked.bin"
+    },
+    {
+      "case": "save-refused",
+      "screen": "agenda-editor",
+      "type": "centraid.screen.v1.AgendaEditorState",
+      "textproto": "contracts/screens/agenda-editor/save-refused.textproto",
+      "binary": "contracts/screens/agenda-editor/save-refused.bin"
+    },
+    {
+      "case": "cancel-confirm",
+      "screen": "agenda-event",
+      "type": "centraid.screen.v1.AgendaEventState",
+      "textproto": "contracts/screens/agenda-event/cancel-confirm.textproto",
+      "binary": "contracts/screens/agenda-event/cancel-confirm.bin"
+    },
+    {
+      "case": "cancel-scope",
+      "screen": "agenda-event",
+      "type": "centraid.screen.v1.AgendaEventState",
+      "textproto": "contracts/screens/agenda-event/cancel-scope.textproto",
+      "binary": "contracts/screens/agenda-event/cancel-scope.bin"
+    },
+    {
+      "case": "gone",
+      "screen": "agenda-event",
+      "type": "centraid.screen.v1.AgendaEventState",
+      "textproto": "contracts/screens/agenda-event/gone.textproto",
+      "binary": "contracts/screens/agenda-event/gone.bin"
+    },
+    {
+      "case": "rsvp-parked",
+      "screen": "agenda-event",
+      "type": "centraid.screen.v1.AgendaEventState",
+      "textproto": "contracts/screens/agenda-event/rsvp-parked.textproto",
+      "binary": "contracts/screens/agenda-event/rsvp-parked.bin"
+    },
+    {
       "case": "all-apps-open",
       "screen": "home",
       "type": "centraid.screen.v1.HomeState",

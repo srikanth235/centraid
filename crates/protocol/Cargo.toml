@@ -16,10 +16,3 @@ path = "src/lib.rs"
 centraid-api-proto = { path = "../api-proto" }
 prost.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true }
-
-[dev-dependencies]
-base64.workspace = true
-proptest.workspace = true
-serde_json.workspace = true
-tokio = { workspace = true, features = ["rt", "io-util", "macros", "time"] }

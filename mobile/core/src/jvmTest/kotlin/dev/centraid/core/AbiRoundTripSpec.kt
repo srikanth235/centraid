@@ -285,8 +285,8 @@ class AbiRoundTripSpec : StringSpec({
         val opened = (released as CoreOutcome.Answered).value
         try {
             opened.identityWarning!! shouldContain "NOT CHECKED"
-            opened.identityWarning!! shouldContain "this core is a development build"
-            opened.identityWarning!! shouldContain "b8b1e0f2c3d4e5f6"
+            opened.identityWarning shouldContain "this core is a development build"
+            opened.identityWarning shouldContain "b8b1e0f2c3d4e5f6"
         } finally {
             opened.close()
         }

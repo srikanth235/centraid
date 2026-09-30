@@ -150,8 +150,14 @@ public class CoreRestoreDoor(private val core: suspend () -> CentraidCore?) : Re
      * the core refuses a request carrying both.
      */
     override suspend fun restoreSeed(seedHex: String, endpoint: String?): RestoreResult {
-        val seed = hexToBytes(seedHex) ?: return RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
+        val seed = hexToBytes(seedHex, SEED_BYTES) ?: return RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
         return ask(RestoreRequest(seed = seed, endpoint = endpoint?.let { hexToBytes(it) }))
+    }
+
+    /** The vaults that stayed, by index, from the stored seed (R-1047-R6). */
+    override suspend fun restoreStayed(seedHex: String, endpoint: String?, indices: List<Int>): RestoreResult {
+        val seed = hexToBytes(seedHex, SEED_BYTES) ?: return RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
+        return ask(RestoreRequest(seed = seed, endpoint = endpoint?.let { hexToBytes(it) }, indices = indices))
     }
 
     private suspend fun ask(request: RestoreRequest): RestoreResult {
@@ -189,6 +195,9 @@ public class CoreRestoreDoor(private val core: suspend () -> CentraidCore?) : Re
 }
 
 private const val DEVICE_SECRET_BYTES: Int = 32
+
+/** What `RecoveryPhrase::seed` makes of the 24 words (`RestoreRequest.seed`). */
+private const val SEED_BYTES: Int = 64
 
 /**
  * `backup_status = 18` — what the backup row draws.
@@ -236,16 +245,20 @@ internal fun CoreFailure.isRefusedWith(code: ErrorCode): Boolean =
     this is CoreFailure.Refused && this.code == code.value
 
 /**
- * A 32-byte endpoint id from the hex a member typed, or null.
+ * [bytes] bytes from hex, or null: a 32-byte endpoint id a member typed, or
+ * the 64-byte seed ([SEED_BYTES]) the secure store holds.
  *
  * **Null rather than a throw, and null rather than a partial read.** A member
  * copying an id off a laptop screen mistypes it, and the core refusing a
- * malformed endpoint would be a refusal arriving as a crash.
+ * malformed endpoint would be a refusal arriving as a crash. The length is the
+ * caller's: a seed read as an endpoint id was null, so every restore from the
+ * seed answered "could not reach your laptop" without asking the core
+ * (#1047 T1).
  */
-internal fun hexToBytes(text: String): okio.ByteString? {
+internal fun hexToBytes(text: String, bytes: Int = 32): okio.ByteString? {
     val hex = text.trim().lowercase().filterNot { it == ' ' || it == '-' }
-    if (hex.length != 64 || hex.any { it !in "0123456789abcdef" }) return null
-    return ByteArray(32) { i ->
+    if (hex.length != bytes * 2 || hex.any { it !in "0123456789abcdef" }) return null
+    return ByteArray(bytes) { i ->
         ((hex[i * 2].digitToInt(16) shl 4) or hex[i * 2 + 1].digitToInt(16)).toByte()
     }.toByteString()
 }

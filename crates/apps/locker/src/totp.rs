@@ -29,10 +29,10 @@
 //! countdown shows nothing while the command answers.
 
 /// RFC 6238's step, and v0's.
-pub const PERIOD_SECONDS: u64 = 30;
+const PERIOD_SECONDS: u64 = 30;
 
 /// Six digits.
-pub const DIGITS: u32 = 6;
+const DIGITS: u32 = 6;
 
 const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
@@ -69,14 +69,14 @@ pub fn base32_decode(seed: &str) -> Option<Vec<u8>> {
 
 /// The counter for an instant: `floor(epoch_ms / 1000 / 30)`, big-endian.
 #[must_use]
-pub fn step_at(epoch_ms: i64) -> u64 {
+fn step_at(epoch_ms: i64) -> u64 {
     let seconds = epoch_ms.div_euclid(1_000).max(0);
     u64::try_from(seconds).unwrap_or(0) / PERIOD_SECONDS
 }
 
 /// The eight bytes a step is HMAC'd as.
 #[must_use]
-pub fn counter_bytes(step: u64) -> [u8; 8] {
+fn counter_bytes(step: u64) -> [u8; 8] {
     step.to_be_bytes()
 }
 
@@ -89,7 +89,7 @@ pub fn counter_bytes(step: u64) -> [u8; 8] {
 /// is — the check is here so a caller that passes a truncated digest gets a
 /// refusal rather than a panic.
 #[must_use]
-pub fn truncate(digest: &[u8]) -> Option<String> {
+fn truncate(digest: &[u8]) -> Option<String> {
     let last = *digest.last()?;
     let offset = usize::from(last & 0x0f);
     let window = digest.get(offset..offset + 4)?;
@@ -111,7 +111,7 @@ pub fn truncate(digest: &[u8]) -> Option<String> {
 /// step begins the answer is the full thirty, which is what a countdown ring
 /// draws.
 #[must_use]
-pub fn remaining_seconds(epoch_ms: i64) -> u64 {
+fn remaining_seconds(epoch_ms: i64) -> u64 {
     let seconds = u64::try_from(epoch_ms.div_euclid(1_000).max(0)).unwrap_or(0);
     PERIOD_SECONDS - (seconds % PERIOD_SECONDS)
 }
@@ -252,19 +252,9 @@ fn percent_decoded(value: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-/// The app's grouped spelling: `123 456`, as the pane shows it.
-///
-/// Kept apart from [`Code::code`] because the **command's** output is six
-/// digits and the **pane's** is six digits with a space, and v0 has both — the
-/// app's `computeTotp` returns `code.slice(0,3) + " " + code.slice(3)`. A port
-/// that grouped in the command would change a command's output shape.
-#[must_use]
-pub fn grouped(code: &str) -> String {
-    if code.len() != DIGITS as usize {
-        return code.to_owned();
-    }
-    format!("{} {}", &code[..3], &code[3..])
-}
+// THE GROUPED SPELLING (`123 456`) is the item page's, drawn by the shared
+// machine (`LockerItemMachine.codeRow`); v0's `grouped` here had no caller and
+// is deleted (#1047 T2).
 
 #[cfg(test)]
 mod tests {
@@ -351,15 +341,6 @@ mod tests {
             counter_bytes(0x0102_0304_0506_0708),
             [1, 2, 3, 4, 5, 6, 7, 8]
         );
-    }
-
-    #[test]
-    fn the_pane_groups_and_the_command_does_not() {
-        assert_eq!(grouped("123456"), "123 456");
-        assert_eq!(grouped("012345"), "012 345");
-        // Anything that is not six digits passes through rather than being
-        // sliced into nonsense.
-        assert_eq!(grouped("12345"), "12345");
     }
 
     /// WHAT A MEMBER PASTES: a bare key in any of its spellings, or the
