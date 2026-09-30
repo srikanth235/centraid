@@ -1,0 +1,58 @@
+{
+  "lane": "scale",
+  "measurements": [
+    {
+      "budget": 30000,
+      "name": "fixture seed",
+      "unit": "ms",
+      "value": 6694.955328
+    },
+    {
+      "budget": 2000,
+      "name": "50k-corpus ordered page read",
+      "unit": "ms",
+      "value": 8.73745400000007
+    },
+    {
+      "budget": 1000,
+      "name": "10k-one-day ordered page read",
+      "unit": "ms",
+      "value": 10.774457999999868
+    },
+    {
+      "budget": 2000,
+      "name": "day-bucket GROUP BY over the full 60k corpus",
+      "unit": "ms",
+      "value": 22.886473999999907
+    },
+    {
+      "name": "one-day degenerate corpus seed",
+      "unit": "ms",
+      "value": 1022.1008949999996
+    },
+    {
+      "name": "photos",
+      "unit": "rows",
+      "value": 50000
+    },
+    {
+      "name": "one-day photos",
+      "unit": "rows",
+      "value": 10000
+    },
+    {
+      "name": "distinct day buckets",
+      "unit": "rows",
+      "value": 1097
+    }
+  ],
+  "name": "50k-photo library plus a 10k-one-day degenerate corpus, at their own reads",
+  "owner": "tests/scale/photos-timeline.scale.test.ts",
+  "status": "passed",
+  "history": [
+    {
+      "at": "2026-09-29T11:48:12.717Z",
+      "value": 6694.955328
+    }
+  ]
+}

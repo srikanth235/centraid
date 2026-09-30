@@ -1,0 +1,24 @@
+{
+  "lane": "perf",
+  "owner": "tests/perf/agent-turn.perf.test.ts",
+  "name": "2000 runner turn dispatches",
+  "status": "passed",
+  "measurements": [
+    {
+      "name": "wall clock",
+      "value": 2.490970999999945,
+      "unit": "ms"
+    },
+    {
+      "name": "mean dispatch",
+      "value": 0.0012454854999999726,
+      "unit": "ms"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-29T11:47:46.937Z",
+      "value": 2.490970999999945
+    }
+  ]
+}
