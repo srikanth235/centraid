@@ -13,6 +13,7 @@ Rolling bot issue ([#1052](https://github.com/srikanth235/centraid/issues/1052))
 - `scripts/security/lifecycle-ledger.json` — the stale `electron-winstaller` entry removed (the ledger is tighten-only and its own gate demands it; the package no longer declares an install hook in this tree). The owner approved the edit after the session's permission layer had first refused it.
 - `scripts/lint-acp-min-versions.mjs` and its `package.json` / `lint:product` rows — retired: the registry it read (`packages/server/src/acp/registry.ts`) is gone.
 
+- `.github/dependabot.yml` — the `docker` ecosystem watched `/`, where no Dockerfile exists (`dependency_file_not_found`, run 36724665653); it now watches `/deploy/docker` and `/deploy/gateway-server`, the two Dockerfiles in the tree.
 - `CHANGELOG.md` — one `Changed` line under Unreleased.
 - `tests/journeys.json` is re-serialised through `oxfmt`, so one surviving number prints as `293` rather than `293.0`; the value is equal.
 
