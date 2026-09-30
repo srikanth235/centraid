@@ -1,14 +1,6 @@
 {
   "note": "W6.3 (#842) dependency-BEHAVIOUR ledger. Every dependency that declares preinstall/install/postinstall is pinned here with a digest over its command strings AND the bytes of the local scripts it invokes, so a republished tarball that changes install behaviour under the same version fails the gate. Tighten-only: entries are removed when the dependency stops declaring a hook, never added to make a run green. Regenerate the shape with `node scripts/security/lifecycle-audit.mjs --print-ledger`, then WRITE A REAL REASON for each entry — a generated TODO reason fails the audit. `executes: true` is reserved for packages listed in the root package.json `trustedDependencies`; today none are, so none of this code runs at install time.",
   "packages": {
-    "electron-winstaller": {
-      "version": "5.4.0",
-      "hooks": ["install"],
-      "digest": "c739b3887eade929895fcb96b9a61852bdc7e26be6da8ae497fde65f858d1313",
-      "signals": [],
-      "executes": false,
-      "reason": "script/select-7z-arch.js only copies the vendored 7z binary for the host arch out of the package's own vendor/ directory. No network, no spawn. Reviewed 2026-08 for #842 W6.3."
-    },
     "esbuild": {
       "version": "0.28.1",
       "hooks": ["postinstall"],

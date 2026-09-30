@@ -431,10 +431,10 @@ jobs:
           # were all built from one tree. A divergence means one leg built a
           # different commit, which is exactly the confusion the stamp exists to
           # make impossible.
-          digests="$(grep -ho '"digest":"[^"]*"' artifacts/prebuilt-core-*/centraid-*.identity.json | sort -u | wc -l)"
+          digests="$(grep -ho '"digest":"[^"]*"' artifacts/prebuilt-core-*/artifact/*/centraid-*.identity.json | sort -u | wc -l)"
           if [ "$digests" -gt 1 ]; then
             echo "::error title=Digests disagree::the published artifacts report more than one digest, so they were not all built from one tree"
-            grep -ho '"digest":"[^"]*"' artifacts/prebuilt-core-*/centraid-*.identity.json | sort -u
+            grep -ho '"digest":"[^"]*"' artifacts/prebuilt-core-*/artifact/*/centraid-*.identity.json | sort -u
             exit 1
           fi
           [ "$missing" -eq 0 ]
