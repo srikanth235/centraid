@@ -62,6 +62,6 @@ A new query is a new arm inside its app's range, appended ([R-1047-Q1](../../doc
 
 ## The `call` budget
 
-`cargo test -p centraid-core --test call_budget` measures p95 over 200 calls of one page of 100 rows and fails above `contracts/ledgers/call-budget.json`'s ceiling. `cargo xtask gate --profile pr`'s `call-budget` step runs it.
+`cargo test -p centraid-core --test call_budget` measures p95 over 200 calls of one page of 100 rows and fails above `contracts/ledgers/call-budget.json`'s ceiling. `cargo xtask gate --profile pr`'s `call-budget` step runs the same target as `cargo test --workspace --test call_budget`, so it reuses the `test` step's build rather than re-resolving features for one package.
 
 `cargo test -p centraid-core`.

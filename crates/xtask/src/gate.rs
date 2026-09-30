@@ -970,6 +970,15 @@ fn run_tests(ctx: &Ctx) -> Result<Outcome> {
 /// `--nocapture` so the measured p50/p95/p99 reach the gate's log: a budget
 /// that only says pass or fail cannot show a number trending towards its
 /// ceiling, and the ledger is down-only precisely so that trend matters.
+///
+/// **`--workspace --test call_budget`, NOT `-p centraid-core`**, for the reason
+/// [`run_restore_drill`] states: `-p` resolves features for one package, so it
+/// rebuilt 157 units the `test` step had just built under the workspace's
+/// resolution (measured with `--message-format=json` against that build), and
+/// on `ci-linux-x64-4c` that was 151.7-195 s of a cold `pr` run for one test
+/// binary. Naming the target across the workspace links the binary `test`
+/// already built. Only `crates/core` has a `call_budget` target, so the set of
+/// tests that runs is the same.
 fn run_call_budget(ctx: &Ctx) -> Result<Outcome> {
     process(
         ctx,
@@ -977,8 +986,7 @@ fn run_call_budget(ctx: &Ctx) -> Result<Outcome> {
         "cargo",
         &[
             "test",
-            "-p",
-            "centraid-core",
+            "--workspace",
             "--test",
             "call_budget",
             "--",
@@ -990,9 +998,18 @@ fn run_call_budget(ctx: &Ctx) -> Result<Outcome> {
 /// `fault-door` — clause 9 over a REAL panic inside `call`.
 ///
 /// One test, one extra compilation of `centraid-core` and `centraid-core-ffi`
-/// under `--features debug-fault`. Narrowed to the one test name on purpose:
-/// the point is the fault door, and re-running the other ten contract tests
-/// under a feature they do not use would buy nothing and cost a link.
+/// under `debug-fault`. Narrowed to the one test name on purpose: the point is
+/// the fault door, and re-running the other contract tests under a feature
+/// they do not use would buy nothing and cost a link.
+///
+/// **`--workspace --features centraid-core-ffi/debug-fault`, NOT `-p`.** The
+/// feature is the only thing that should differ from the `test` step's build,
+/// and `-p centraid-core-ffi` also re-resolved every dependency's features for
+/// that one package: 164 units rebuilt, 112-133 s on `ci-linux-x64-4c`. Under
+/// the workspace's resolution the same command rebuilds four: `centraid-core`,
+/// `centraid-core-ffi`, their build scripts and the `contract` binary. Only
+/// `crates/core-ffi` has a `contract` target, and the feature is still off in
+/// every other step, because it is named here and nowhere else.
 fn run_fault_door(ctx: &Ctx) -> Result<Outcome> {
     process(
         ctx,
@@ -1000,10 +1017,9 @@ fn run_fault_door(ctx: &Ctx) -> Result<Outcome> {
         "cargo",
         &[
             "test",
-            "-p",
-            "centraid-core-ffi",
+            "--workspace",
             "--features",
-            "debug-fault",
+            "centraid-core-ffi/debug-fault",
             "--test",
             "contract",
             "a_real_panic_inside_call_poisons_the_handle_through_the_abi",

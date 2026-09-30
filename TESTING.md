@@ -61,8 +61,8 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 | `release-build` | `cargo build --workspace --release`, timed against its ledger ceiling |
 | `ts-static` | `bun run check:push:static` when TypeScript exists under `crates/`, `contracts/` or `mobile/` |
 | `emitters` | Regenerates the design corpus and native theme ([`contracts/tools/`](contracts/tools)), formats, and fails on drift in `copy/`, `design/` or `mobile/` |
-| `call-budget` | `cargo test -p centraid-core --test call_budget -- --nocapture`: any bounded read over its ceiling in [`call-budget.json`](contracts/ledgers/call-budget.json) fails, and p50/p95/p99 reach the log |
-| `fault-door` | `cargo test -p centraid-core-ffi --features debug-fault --test contract …` — clause 9 of the C ABI against a real panic inside `call`. The only step that turns `debug-fault` on |
+| `call-budget` | `cargo test --workspace --test call_budget -- --nocapture` (the target is `centraid-core`'s; `--workspace` rather than `-p` so it links the binary `test` already built instead of re-resolving features): any bounded read over its ceiling in [`call-budget.json`](contracts/ledgers/call-budget.json) fails, and p50/p95/p99 reach the log |
+| `fault-door` | `cargo test --workspace --features centraid-core-ffi/debug-fault --test contract …` — clause 9 of the C ABI against a real panic inside `call`. The only step that turns `debug-fault` on |
 | `restore-drill` | The whole durability chain: found a vault, commit, capture, take a generation, commit more, **destroy the live vault, its WAL and its spool**, restore from the object store and the two keys derived from the 24 words, and prove the result is `restore_check`-clean, census-matched and **byte-identical**. It refuses a census of zero rows |
 | `artifact-identity` | The stale-core refusal in `crates/core/src/identity.rs` |
 | `prebuilt-core-required` | Artifact keys are computable and distinct for every required triple; that the artifacts **exist** is asserted by [`lane-prebuilt-core.yml`](.github/workflows/lane-prebuilt-core.yml) |
