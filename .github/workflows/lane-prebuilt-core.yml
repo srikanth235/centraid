@@ -23,8 +23,8 @@ name: lane-prebuilt-core
 #     `crates/xtask/src/artifact.rs`.
 #   * THE IDENTITY STAMP answers *is the artifact a shell just loaded the one
 #     this tree produced?* It is baked INTO the artifact during the build
-#     (`crates/centraid/build.rs`) and checked at load
-#     (`crates/centraid/src/identity.rs`'s `require_digest`) and at install
+#     (`crates/core/build.rs`) and checked at load
+#     (`crates/core/src/identity.rs`'s `require_digest`) and at install
 #     (`deploy/vps/install.sh`).
 #
 # A SYMBOL FILE BESIDE EVERY ARTIFACT. There is no precedent in this repository
@@ -427,16 +427,21 @@ jobs:
           cat artifacts/prebuilt-core-*/SHA256SUMS.* > SHA256SUMS
           sort -o SHA256SUMS SHA256SUMS
           cat SHA256SUMS
-          # Every published artifact must carry the SAME digest, because they
-          # were all built from one tree. A divergence means one leg built a
-          # different commit, which is exactly the confusion the stamp exists to
-          # make impossible.
-          digests="$(grep -ho '"digest":"[^"]*"' artifacts/prebuilt-core-*/artifact/*/centraid-*.identity.json | sort -u | wc -l)"
-          if [ "$digests" -gt 1 ]; then
-            echo "::error title=Digests disagree::the published artifacts report more than one digest, so they were not all built from one tree"
-            grep -ho '"digest":"[^"]*"' artifacts/prebuilt-core-*/artifact/*/centraid-*.identity.json | sort -u
-            exit 1
-          fi
+          # Every published artifact must come from ONE tree. The digest cannot
+          # say so: it is the artifact key, and the key hashes the triple, so
+          # each triple's digest differs by construction (each leg already
+          # proved above that its binary reports ITS OWN triple's key). What
+          # the legs share is the commit and the schema they were stamped with,
+          # and a divergence there means one leg built a different commit,
+          # which is exactly the confusion the stamp exists to make impossible.
+          for field in gitSha schemaVersion; do
+            values="$(grep -ho "\"${field}\":\"\?[^\",}]*" artifacts/prebuilt-core-*/artifact/*/centraid-*.identity.json | sort -u)"
+            if [ "$(printf '%s\n' "$values" | wc -l)" -gt 1 ]; then
+              echo "::error title=Stamps disagree::the published artifacts report more than one ${field}, so they were not all built from one tree"
+              printf '%s\n' "$values"
+              exit 1
+            fi
+          done
           [ "$missing" -eq 0 ]
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

@@ -112,7 +112,7 @@ The escape is `--allow-uncandidated`, which passes and **prints the reason it wa
 - [ ] GitHub Release body matches changelog
 - [ ] **Desktop** (if shipped): multi-OS package jobs green; installers attached **only when signing enrolled**
 - [ ] **Gateway image** (if shipped): GHCR job green; `latest` only if non-beta
-- [ ] **Prebuilt core**: `prebuilt-core-required` green; every artifact reports one digest
+- [ ] **Prebuilt core**: `prebuilt-core-required` green; every artifact reports one `gitSha` and one `schemaVersion`
 - [ ] **Mobile** (if shipped): `release.yml` dispatched with `surfaces: mobile`; store tracks checked
 
 ## D4 — Patch vs minor
@@ -162,7 +162,7 @@ Each lane declares the secrets it accepts via `on.workflow_call.secrets`, so the
 
 **The identity stamp** answers _is the artifact a shell just loaded the one this tree produced?_ Every build bakes in `{gitSha, digest, schemaVersion}` (`crates/core/build.rs`; the digest is the key above). `centraid --version --json` prints it, the release publishes the same document as `centraid-<triple>.identity.json`, and three places check it: `deploy/vps/install.sh` at install, `CENTRAID_EXPECTED_CORE_DIGEST` at gateway start, and `crates/core-ffi`'s `open` handshake. A mismatch is a refusal, never a warning — a stale core starts, answers, and answers from a schema the shell stopped speaking. A local build with no release stamp is marked `dev` and says so.
 
-**Required targets gate the publish**, the rest are reported: `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin` and `x86_64-pc-windows-msvc` are required; `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin` and `aarch64-pc-windows-msvc` are optional. `prebuilt-core-required` also asserts that every published artifact reports **one** digest, because they were all built from one tree.
+**Required targets gate the publish**, the rest are reported: `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin` and `x86_64-pc-windows-msvc` are required; `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin` and `aarch64-pc-windows-msvc` are optional. `prebuilt-core-required` also asserts that every published artifact reports **one** `gitSha` and **one** `schemaVersion`, because they were all built from one tree. It cannot assert one _digest_: the digest is the artifact key, the key hashes the triple, so each artifact's digest differs by construction — each build leg proves its own binary reports its own triple's key before it publishes.
 
 **A symbol file beside every artifact.** `[profile.release]` keeps line-table debuginfo with `split-debuginfo = "packed"` and the lane publishes `centraid.dwp` (Linux), `centraid.dSYM` (macOS) or `centraid.pdb` (Windows) beside a **stripped** binary. Stripping happens at packaging, after the symbols have been lifted out; a profile that stripped would have thrown them away before anything could keep them.
 

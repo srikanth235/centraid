@@ -164,11 +164,14 @@ jobs:
       # HEAD here, so they contribute their STANDING checks and nothing else —
       # which is exactly the half that went missing.
       - run: bun run lint:product
-      # The subject the commit-msg hook never saw. With `origin/main` at HEAD
-      # the directive's merge-base search finds nothing to compare against and
-      # falls back to validating the tip commit, which is the squash subject.
+      # The subject the commit-msg hook never saw. `commit-message-format` is
+      # a rule of the `law` directive (#1005), not a directive of its own, so
+      # the step runs the law: with `origin/main` at HEAD the range is the
+      # trunk's own recent commits and the rule judges the squash subject
+      # among them. (This step named a directive that no longer exists and
+      # failed on every run with "no directive matching".)
       - name: Commit message format on the merged tip
-        run: bash .governance/run.sh commit-message-format
+        run: bash .governance/run.sh law
       - name: Write lane evidence
         if: always()
         env:
