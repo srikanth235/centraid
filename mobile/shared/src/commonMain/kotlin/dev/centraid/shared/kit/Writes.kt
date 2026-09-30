@@ -84,7 +84,13 @@ public object WriteLaw {
         sentence.takeIf { it.isNotEmpty() }?.let { Reads.refused(it) }
 }
 
-/** A JSON string literal. `commonMain` carries no JSON library; inputs are small. */
+/**
+ * A JSON string literal. `commonMain` carries no JSON library; inputs are small.
+ *
+ * It does NOT have to be canonical: the command door canonicalises the parsed
+ * value before hashing, so a shell agreeing byte-for-byte with the vault's
+ * canonicaliser would be a second implementation of it.
+ */
 public fun jsonString(value: String): String = buildString {
     append('"')
     for (character in value) {

@@ -9,6 +9,7 @@ import centraid.screen.v1.PhotoLightboxState
 import centraid.screen.v1.PhotoPerson
 import centraid.screen.v1.PhotoPlaceChoice
 import centraid.screen.v1.SeatState
+import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -1043,37 +1044,4 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
      *  info sheet can honestly say about where the bytes are. */
     override fun seatChanged(seat: SeatState): PhotoLightboxEvent =
         PhotoLightboxEvent(seat_changed = PhotoLightboxEvent.SeatChanged(seat = seat))
-
-    /**
-     * A JSON string, escaped.
-     *
-     * `commonMain` carries no JSON dependency and `NotesEditorMachine` has the
-     * same eight lines — deliberately not shared, because `PerAppLayoutSpec`'s
-     * first rule is that an app knows no other app, and `apps.photos` importing
-     * `apps.notes` for a string escaper would be exactly the coupling it
-     * refuses. Two apps meet in the vault, as rows, and never in a reducer.
-     *
-     * It does NOT have to be canonical: the command door canonicalises the
-     * parsed value before hashing, so a shell agreeing byte-for-byte with the
-     * vault's canonicaliser would be a second implementation of it.
-     */
-    internal fun jsonString(value: String): String = buildString {
-        append('"')
-        for (character in value) {
-            when (character) {
-                '"' -> append("\\\"")
-                '\\' -> append("\\\\")
-                '\n' -> append("\\n")
-                '\r' -> append("\\r")
-                '\t' -> append("\\t")
-                else ->
-                    if (character < ' ') {
-                        append("\\u").append(character.code.toString(16).padStart(4, '0'))
-                    } else {
-                        append(character)
-                    }
-            }
-        }
-        append('"')
-    }
 }

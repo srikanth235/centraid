@@ -5,6 +5,7 @@ import centraid.screen.v1.PhotoPickerEvent
 import centraid.screen.v1.PhotoPickerState
 import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.SeatState
+import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -315,8 +316,8 @@ public object PhotoPickerMachine : ScreenMachine<PhotoPickerState, PhotoPickerEv
     public const val ADD_COMMAND: String = "media.add_to_album"
 
     internal fun addInput(collectionId: String, assetId: String): String =
-        "{\"album_id\":${PhotoShelfMachine.jsonString(collectionId)}," +
-            "\"asset_id\":${PhotoShelfMachine.jsonString(assetId)}}"
+        "{\"album_id\":${jsonString(collectionId)}," +
+            "\"asset_id\":${jsonString(assetId)}}"
 
     private fun firstLoad(state: PhotoPickerState): Step<PhotoPickerState> = Step(
         state.copy(

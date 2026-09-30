@@ -100,6 +100,10 @@ COPY --parents crates/*/Cargo.toml crates/apps/*/Cargo.toml ./
 # resolve and compile the graph; the real sources replace them below and only
 # our own crates recompile. `--bin centraid` is not available yet at this stage
 # (the placeholders have no bin target), so the whole graph is built as libs.
+#
+# `--locked` ON BOTH BUILDS: the image compiles exactly the graph `Cargo.lock`
+# names, and a manifest that no longer matches it fails the build instead of
+# resolving afresh inside the image.
 RUN set -eu; \
   for manifest in crates/*/Cargo.toml crates/apps/*/Cargo.toml; do \
     dir="$(dirname "$manifest")"; \
@@ -107,7 +111,7 @@ RUN set -eu; \
     : > "$dir/src/lib.rs"; \
     printf 'fn main() {}\n' > "$dir/src/main.rs"; \
   done; \
-  cargo build --profile dist --workspace || true
+  cargo build --locked --profile dist --workspace || true
 
 # The real sources. `contracts/` is copied because several crates read its
 # fixtures through `include_str!`-shaped paths at build time.
@@ -118,7 +122,7 @@ COPY buf.yaml buf.gen.yaml ./
 # `touch` defeats the placeholder mtimes cargo cached above.
 RUN set -eu; \
   find crates -name '*.rs' -exec touch {} +; \
-  cargo build --profile dist --bin centraid
+  cargo build --locked --profile dist --bin centraid
 
 # SYMBOLS ARE SPLIT, NOT DISCARDED (#1020, D-1020-G2/G7). `[profile.dist]`
 # carries `split-debuginfo = "packed"`, so cargo has already written the DWARF

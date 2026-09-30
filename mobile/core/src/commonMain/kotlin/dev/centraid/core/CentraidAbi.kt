@@ -37,15 +37,15 @@ internal interface CentraidAbi {
     val accounting: AbiAccounting
 }
 
-/** One answer from across the boundary: a status, and bytes when there are any. */
-internal data class AbiAnswer(val status: CoreStatus?, val rawCode: Int, val bytes: ByteArray?) {
-    // `data class` over a `ByteArray` gives reference equality on `bytes`, which
-    // is why nothing compares these. Declared explicitly so a future reader does
-    // not add an assertion that silently means "the same array".
-    override fun equals(other: Any?): Boolean = this === other
-
-    override fun hashCode(): Int = rawCode
-}
+/**
+ * One answer from across the boundary: a status, and bytes when there are any.
+ *
+ * A plain class, not a `data class`: structural equality over a `ByteArray`
+ * would compare the array by reference, so nothing compares these, and identity
+ * is the only equality it has — an assertion cannot silently mean "the same
+ * array".
+ */
+internal class AbiAnswer(val status: CoreStatus?, val rawCode: Int, val bytes: ByteArray?)
 
 /** Buffers handed over, buffers freed, bytes copied. See [CentraidAbi.accounting]. */
 internal interface AbiAccounting {

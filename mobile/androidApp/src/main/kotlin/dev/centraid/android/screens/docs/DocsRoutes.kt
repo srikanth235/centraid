@@ -236,7 +236,7 @@ public class DocsRoutes : AppRoutes {
             val photo = scanTarget.takeIf { it.isNotEmpty() }?.let(::File)
             scanTarget = ""
             if (!taken || photo == null) {
-                photo?.delete()
+                photo?.let(DocsIngestFiles::discard)
                 ingest.pickCancelled()
             } else {
                 nav.scope.launch {

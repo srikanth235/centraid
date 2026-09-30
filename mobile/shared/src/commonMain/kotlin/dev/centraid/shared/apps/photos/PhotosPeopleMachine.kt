@@ -9,6 +9,7 @@ import centraid.screen.v1.PhotosPeopleEvent
 import centraid.screen.v1.PhotosPeopleState
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.SeatState
+import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -262,27 +263,6 @@ public object PhotosPeopleMachine : ScreenMachine<PhotosPeopleState, PhotosPeopl
      */
     internal fun renameInput(partyId: String, displayName: String): String =
         "{\"party_id\":${jsonString(partyId)},\"display_name\":${jsonString(displayName)}}"
-
-    /** The same escaping `NotesEditorMachine` states; see its note. */
-    internal fun jsonString(value: String): String = buildString {
-        append('"')
-        for (character in value) {
-            when (character) {
-                '"' -> append("\\\"")
-                '\\' -> append("\\\\")
-                '\n' -> append("\\n")
-                '\r' -> append("\\r")
-                '\t' -> append("\\t")
-                else ->
-                    if (character < ' ') {
-                        append("\\u").append(character.code.toString(16).padStart(4, '0'))
-                    } else {
-                        append(character)
-                    }
-            }
-        }
-        append('"')
-    }
 
     private fun rename(
         data: PhotosPeopleData?,

@@ -10,6 +10,7 @@ import centraid.screen.v1.PhotoEditorEvent
 import centraid.screen.v1.PhotoEditorState
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
+import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeSession
@@ -417,20 +418,20 @@ public class PhotoEditorBridge {
             width: Int,
             height: Int,
         ): String = buildString {
-            append("{\"staged_sha\":").append(PhotoLightboxMachine.jsonString(hash))
+            append("{\"staged_sha\":").append(jsonString(hash))
             append(",\"kind\":\"photo\"")
             // THE ORIGINAL'S DATE, AS THE VAULT WROTE IT, and nothing when it
             // recorded none: a photograph with no capture time stays one.
             if (capturedAt.isNotEmpty()) {
-                append(",\"captured_at\":").append(PhotoLightboxMachine.jsonString(capturedAt))
+                append(",\"captured_at\":").append(jsonString(capturedAt))
             }
             if (tzOffsetMinutes != null) append(",\"tz_offset_min\":").append(tzOffsetMinutes)
             // EDIT LINEAGE (#711), and only when there is an original to name.
             if (sourceAssetId.isNotEmpty()) {
-                append(",\"source_asset_id\":").append(PhotoLightboxMachine.jsonString(sourceAssetId))
+                append(",\"source_asset_id\":").append(jsonString(sourceAssetId))
             }
             if (title.isNotEmpty()) {
-                append(",\"title\":").append(PhotoLightboxMachine.jsonString(title))
+                append(",\"title\":").append(jsonString(title))
             }
             if (width > 0) append(",\"width\":").append(width)
             if (height > 0) append(",\"height\":").append(height)
@@ -439,8 +440,8 @@ public class PhotoEditorBridge {
 
         /** `media.set_asset_place`'s input, hand-spelled for the same reason. */
         fun placeInput(assetId: String, placeId: String): String =
-            "{\"asset_id\":" + PhotoLightboxMachine.jsonString(assetId) +
-                ",\"place_id\":" + PhotoLightboxMachine.jsonString(placeId) + "}"
+            "{\"asset_id\":" + jsonString(assetId) +
+                ",\"place_id\":" + jsonString(placeId) + "}"
 
         /**
          * The new asset's id off the command's output — `{"asset_id": …}` from

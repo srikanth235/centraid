@@ -72,6 +72,8 @@ cd mobile && ./gradlew -Pcentraid.android=true :androidApp:assembleDebug
 
 Without the flag, `:androidApp` **is not in the build at all** and `mobile/settings.gradle.kts` says so once, on every configuration. With the flag and no `ANDROID_HOME`, it refuses with the sentence that names this section. It never skips silently.
 
+A **release** build (`assembleRelease`, and the release lane's `bundleRelease`) is shrunk and obfuscated by R8; a debug build is not. The keep rules are `androidApp/proguard-rules.pro`, and they exist for JNA: its native dispatcher reaches back into `com.sun.jna` by name, and `CentraidLibrary`'s method names are the C symbols. A class reached by name that a debug run exercises and a release run crashes on is a missing rule there.
+
 The AGP plugin is added to the build classpath **only** when the flag is set (`mobile/build.gradle.kts`'s `buildscript` block), so a machine with no SDK does not pay a download to reach a failure. The consequence is that `kotlin { androidLibrary { … } }` is configured **by name** rather than through typed accessors, and that block is therefore not type-checked here — the trade is stated in `mobile/core/build.gradle.kts` in full.
 
 ## The iOS hand-off

@@ -6,6 +6,7 @@ import centraid.core.v1.PageQuery
 import centraid.core.v1.Row
 import centraid.core.v1.Value
 import centraid.screen.v1.AlbumChoiceEntry
+import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeSession
@@ -240,8 +241,8 @@ public object AlbumChoice {
         return assetIds.filter { it.isNotEmpty() }.distinct().map { assetId ->
             ScreenEffect.SubmitWrite(
                 command = ADD_COMMAND,
-                inputJson = "{\"album_id\":${PhotoShelfMachine.jsonString(albumId)}," +
-                    "\"asset_id\":${PhotoShelfMachine.jsonString(assetId)}}",
+                inputJson = "{\"album_id\":${jsonString(albumId)}," +
+                    "\"asset_id\":${jsonString(assetId)}}",
                 invokeKey = "$ADD_COMMAND:$albumId:$assetId",
             )
         }
@@ -261,7 +262,7 @@ public object AlbumChoice {
         return listOf(
             ScreenEffect.SubmitWrite(
                 command = CREATE_COMMAND,
-                inputJson = "{\"title\":${PhotoShelfMachine.jsonString(name)}}",
+                inputJson = "{\"title\":${jsonString(name)}}",
                 invokeKey = "$CREATE_COMMAND:$name",
             ),
         )

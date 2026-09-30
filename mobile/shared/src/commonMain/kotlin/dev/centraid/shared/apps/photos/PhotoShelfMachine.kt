@@ -7,6 +7,7 @@ import centraid.screen.v1.PhotoShelfState
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.SeatState
+import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -803,34 +804,4 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
 
     override fun seatChanged(seat: SeatState): PhotoShelfEvent =
         PhotoShelfEvent(seat_changed = PhotoShelfEvent.SeatChanged(seat = seat))
-
-    /**
-     * A JSON string literal, escaped.
-     *
-     * The same function `NotesEditorMachine` carries and for the same reason:
-     * `commonMain` has no JSON dependency, the shapes here are two fields, and
-     * the escaping is the only part that can be wrong. It is duplicated rather
-     * than shared because `PerAppLayoutSpec` forbids one app's package from
-     * importing another's, and a shared JSON helper in `screen/` would widen a
-     * contract that is deliberately two files.
-     */
-    internal fun jsonString(value: String): String = buildString {
-        append('"')
-        for (character in value) {
-            when (character) {
-                '"' -> append("\\\"")
-                '\\' -> append("\\\\")
-                '\n' -> append("\\n")
-                '\r' -> append("\\r")
-                '\t' -> append("\\t")
-                else ->
-                    if (character < ' ') {
-                        append("\\u").append(character.code.toString(16).padStart(4, '0'))
-                    } else {
-                        append(character)
-                    }
-            }
-        }
-        append('"')
-    }
 }

@@ -263,8 +263,12 @@ class AbiRoundTripSpec : StringSpec({
                     "two vaults on two paths were refused: ${other.failure}",
                 )
             }
-            second.delete()
-            for (sidecar in listOf("-wal", "-shm")) File(second.path + sidecar).delete()
+            // A clean close may already have folded the sidecars away; what
+            // is still there must go, or the next run copies onto a stale one.
+            for (suffix in listOf("", "-wal", "-shm")) {
+                val left = File(second.path + suffix)
+                if (left.exists()) left.delete().shouldBeTrue()
+            }
         } finally {
             first.close()
         }

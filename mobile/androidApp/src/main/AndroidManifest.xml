@@ -9,6 +9,11 @@
   covers the legacy path, `dataExtractionRules` covers Android 12+ cloud backup
   and device-to-device transfer separately, and `fullBackupContent` covers the
   11-and-below fallback.
+
+  `android:usesCleartextTraffic="false"` is stated because the platform default
+  is `true` below API 28 and `minSdk` is 24. Nothing here speaks plain HTTP: the
+  gateway is reached by the Rust core over iroh's TLS, and the player reads
+  local files, so the flag costs nothing and closes the old-device default.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -42,7 +47,8 @@
         android:fullBackupContent="@xml/full_backup_content"
         android:label="Centraid"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Centraid">
+        android:theme="@style/Theme.Centraid"
+        android:usesCleartextTraffic="false">
         <activity
             android:name="dev.centraid.android.MainActivity"
             android:exported="true"

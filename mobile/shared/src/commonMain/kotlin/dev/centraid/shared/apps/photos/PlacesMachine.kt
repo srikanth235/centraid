@@ -7,6 +7,7 @@ import centraid.screen.v1.PlacesData
 import centraid.screen.v1.PlacesEvent
 import centraid.screen.v1.PlacesState
 import centraid.screen.v1.SeatState
+import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -439,26 +440,6 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
      */
     internal fun renameInput(placeId: String, name: String): String =
         "{\"place_id\":${jsonString(placeId)},\"name\":${jsonString(name)}}"
-
-    internal fun jsonString(value: String): String = buildString {
-        append('"')
-        for (character in value) {
-            when (character) {
-                '"' -> append("\\\"")
-                '\\' -> append("\\\\")
-                '\n' -> append("\\n")
-                '\r' -> append("\\r")
-                '\t' -> append("\\t")
-                else ->
-                    if (character < ' ') {
-                        append("\\u").append(character.code.toString(16).padStart(4, '0'))
-                    } else {
-                        append(character)
-                    }
-            }
-        }
-        append('"')
-    }
 
     /**
      * `core_place` AND `media_asset` — both halves of a card.

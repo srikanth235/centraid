@@ -7,6 +7,7 @@ import android.graphics.Rect
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import androidx.core.content.FileProvider
 import dev.centraid.android.screens.decodeUpright
 import java.io.File
@@ -64,9 +65,9 @@ internal object DocsIngestFiles {
                 file.outputStream().use { output -> input.copyTo(output) }
                 true
             } ?: false
-            if (copied) Copied(file.absolutePath, name, type) else null.also { file.delete() }
+            if (copied) Copied(file.absolutePath, name, type) else null.also { discard(file) }
         } catch (why: Exception) {
-            file.delete()
+            discard(file)
             null
         }
     }
@@ -105,8 +106,17 @@ internal object DocsIngestFiles {
         } catch (why: Exception) {
             return null
         } finally {
-            photo.delete()
+            discard(photo)
         }
+    }
+
+    /**
+     * Delete a file this object made. One that will not go stays under
+     * `cacheDir`, which the OS clears, so a failure is logged and never thrown:
+     * nothing here outlives an ingest by design, and a cache file by accident.
+     */
+    fun discard(file: File) {
+        if (file.exists() && !file.delete()) Log.w("Centraid", "docs ingest: could not delete ${file.name}")
     }
 }
 

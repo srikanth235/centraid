@@ -70,15 +70,13 @@ public class CoreDrainDoor(private val core: () -> CentraidCore?) : DrainDoor {
                     lastAckedAtMs = drained.acked_at_ms,
                 )
             }
-            is CoreOutcome.Failed -> when {
-                // A DRAIN IS ALREADY RUNNING. `phone.proto` says the core
-                // refuses rather than queueing and tells the shell so; the pass
-                // has its own try-lock, and this is the same answer arriving
-                // from the other side of the ABI — from a background window that
-                // cannot see a foreground pass.
-                answer.failure.isRefusedWith(ErrorCode.ERROR_CODE_INVALID_REQUEST) -> null
-                else -> null
-            }
+            // EVERY REFUSAL IS "NO DRAIN RAN", including the one that means a
+            // drain is already running: `phone.proto` says the core refuses
+            // (`ERROR_CODE_INVALID_REQUEST`) rather than queueing, the pass has
+            // its own try-lock, and this is the same answer arriving from the
+            // other side of the ABI — from a background window that cannot see
+            // a foreground pass.
+            is CoreOutcome.Failed -> null
         }
     }
 }

@@ -32,6 +32,22 @@ android {
 
     buildFeatures { compose = true }
 
+    // A RELEASE BUILD IS SHRUNK AND OBFUSCATED BY R8. The libraries carry their
+    // own consumer rules; what they cannot know is in `proguard-rules.pro` —
+    // JNA, whose native dispatcher reaches back into Java by class and member
+    // NAME, and `:core`'s `CentraidLibrary`, whose method names ARE the C
+    // symbols. A debug build is unshrunk, so a rule missing there shows only in
+    // a release build.
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            // Nothing looks a resource up by name (`getIdentifier`): fonts are
+            // `R.font`, the XML is named by the manifest.
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+
     // ALL APP DATA IS EXCLUDED FROM AUTO BACKUP AND DEVICE-TO-DEVICE TRANSFER
     // (`docs/mobile-offline.md:240-247`). In v0 this was written by
     // `plugins/withCentraidAndroidPrivacy.cjs` into a generated project; here

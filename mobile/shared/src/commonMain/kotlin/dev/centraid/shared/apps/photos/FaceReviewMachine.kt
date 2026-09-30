@@ -6,6 +6,7 @@ import centraid.screen.v1.FaceReviewEvent
 import centraid.screen.v1.FaceReviewState
 import centraid.screen.v1.Loading
 import centraid.screen.v1.SeatState
+import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -517,11 +518,11 @@ public object FaceReviewMachine : ScreenMachine<FaceReviewState, FaceReviewEvent
      */
     internal fun answerInput(regionId: String, answer: String, partyId: String?): String {
         val fields = mutableListOf(
-            "\"region_id\":${PhotosPeopleMachine.jsonString(regionId)}",
-            "\"answer\":${PhotosPeopleMachine.jsonString(answer)}",
+            "\"region_id\":${jsonString(regionId)}",
+            "\"answer\":${jsonString(answer)}",
         )
         if (answer == CONFIRM && !partyId.isNullOrEmpty()) {
-            fields += "\"party_id\":${PhotosPeopleMachine.jsonString(partyId)}"
+            fields += "\"party_id\":${jsonString(partyId)}"
         }
         return fields.joinToString(",", prefix = "{", postfix = "}")
     }
@@ -534,7 +535,7 @@ public object FaceReviewMachine : ScreenMachine<FaceReviewState, FaceReviewEvent
      * [confirmed] does not submit one.
      */
     internal fun createPersonInput(displayName: String): String =
-        "{\"display_name\":${PhotosPeopleMachine.jsonString(displayName)},\"cadence_days\":0}"
+        "{\"display_name\":${jsonString(displayName)},\"cadence_days\":0}"
 
     /**
      * THE QUESTION AN INVOKE KEY WAS ABOUT.

@@ -50,7 +50,9 @@ public interface AppRoutes {
      * filed document) is pushed from here, not from the page that started it.
      */
     @Composable
-    public fun Global(nav: RouteNav) {}
+    public fun Global(nav: RouteNav) {
+        // Most apps watch nothing app-wide; the one that does overrides this.
+    }
 }
 
 /**

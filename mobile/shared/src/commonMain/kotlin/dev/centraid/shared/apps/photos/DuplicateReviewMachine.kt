@@ -6,6 +6,7 @@ import centraid.screen.v1.DuplicateReviewState
 import centraid.screen.v1.Loading
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.SeatState
+import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -399,37 +400,6 @@ public object DuplicateReviewMachine :
      */
     private fun memberIds(data: DuplicateReviewData?): Set<String> =
         data?.members?.map { it.asset_id }?.toSet() ?: emptySet()
-
-    /**
-     * One JSON string, escaped.
-     *
-     * `commonMain` carries no JSON dependency and the payload is one field, so
-     * this is hand-built the way `NotesEditorMachine.saveInput` is. It is NOT
-     * shared with that one: `PerAppLayoutSpec`'s first rule is that an
-     * `apps.<x>` package imports no other `apps.<y>`, and two apps meet in the
-     * vault as rows and never in a reducer. An asset id has no character this
-     * would have to escape today; escaping anyway is what keeps that from being
-     * a property the next id scheme has to preserve.
-     */
-    private fun jsonString(value: String): String = buildString {
-        append('"')
-        for (character in value) {
-            when (character) {
-                '"' -> append("\\\"")
-                '\\' -> append("\\\\")
-                '\n' -> append("\\n")
-                '\r' -> append("\\r")
-                '\t' -> append("\\t")
-                else ->
-                    if (character < ' ') {
-                        append("\\u").append(character.code.toString(16).padStart(4, '0'))
-                    } else {
-                        append(character)
-                    }
-            }
-        }
-        append('"')
-    }
 
     /**
      * `media_asset` — the members' own rows, which is also what this screen

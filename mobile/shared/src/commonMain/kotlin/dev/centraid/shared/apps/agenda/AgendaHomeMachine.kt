@@ -228,7 +228,9 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                 )
             }
 
-            event.refreshed != null -> read(
+            // A PULL, OR A ROW MOVED. The held upcoming list is stale whatever
+            // search is doing, so the next read asks for it again.
+            event.refreshed != null || event.rows_changed != null -> read(
                 state.copy(screen = overRowsOrSkeleton(screen), heldWindow = null),
             )
 
@@ -333,12 +335,6 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                         ),
                     )
                 }
-
-            // A ROW MOVED. The held upcoming list is stale whatever search is
-            // doing, so the next read asks for it again.
-            event.rows_changed != null -> read(
-                state.copy(screen = overRowsOrSkeleton(screen), heldWindow = null),
-            )
 
             event.seat_changed != null ->
                 Step(state.copy(screen = screen.copy(seat = event.seat_changed.seat)))

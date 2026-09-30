@@ -8,6 +8,7 @@ import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.PhotosGridEvent
 import centraid.screen.v1.PhotosGridState
+import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -339,7 +340,7 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
                     picked.map { assetId ->
                         ScreenEffect.SubmitWrite(
                             command = PhotoLightboxMachine.DELETE_COMMAND,
-                            inputJson = "{\"asset_id\":" + PhotoShelfMachine.jsonString(assetId) + "}",
+                            inputJson = "{\"asset_id\":" + jsonString(assetId) + "}",
                             invokeKey = PhotoLightboxMachine.DELETE_COMMAND + ":" + assetId,
                         )
                     },
@@ -679,7 +680,7 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
         val value = if (on) "1" else "0"
         return ScreenEffect.SubmitWrite(
             command = PhotoLightboxMachine.FAVORITE_COMMAND,
-            inputJson = "{\"asset_id\":" + PhotoShelfMachine.jsonString(assetId) + ",\"favorite\":" + value + "}",
+            inputJson = "{\"asset_id\":" + jsonString(assetId) + ",\"favorite\":" + value + "}",
             invokeKey = PhotoLightboxMachine.FAVORITE_COMMAND + ":" + value + ":" + assetId,
         )
     }

@@ -6,6 +6,7 @@ import centraid.screen.v1.PhotosCollectionsEvent
 import centraid.screen.v1.PhotosCollectionsState
 import centraid.screen.v1.SeatState
 import centraid.screen.v1.ShelfRow
+import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -313,36 +314,6 @@ public object PhotosCollectionsMachine :
 
     internal fun deleteInput(collectionId: String): String =
         "{\"album_id\":${jsonString(collectionId)}}"
-
-    /**
-     * One JSON string literal, escaped.
-     *
-     * The same table `NotesEditorMachine` writes, and for the same reason: an
-     * album named `He said "hi"` produces input the vault cannot parse, and the
-     * failure lands as a command that never ran rather than as anything a
-     * member could read.
-     */
-    private fun jsonString(value: String): String {
-        val out = StringBuilder(value.length + 2)
-        out.append('"')
-        value.forEach { character ->
-            when (character) {
-                '"' -> out.append("\\\"")
-                '\\' -> out.append("\\\\")
-                '\n' -> out.append("\\n")
-                '\r' -> out.append("\\r")
-                '\t' -> out.append("\\t")
-                else ->
-                    if (character < ' ') {
-                        out.append("\\u").append(character.code.toString(16).padStart(4, '0'))
-                    } else {
-                        out.append(character)
-                    }
-            }
-        }
-        out.append('"')
-        return out.toString()
-    }
 
     /**
      * `core_collection` — the member's own albums, and the table this screen's
