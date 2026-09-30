@@ -32,6 +32,13 @@ paths = [
   '''(?i).*/fixtures?\.(ts|tsx|mjs|js)$''',
   '''(?i).*/__fixtures__/''',
   '''(?i).*/test-fixtures\.''',
+  # Published or fixed-input cryptographic test vectors (#1047): the BIP-39
+  # all-abandon phrase derived keys, RFC 9180 Appendix A.1's own bytes,
+  # and BLAKE3 derivations over fixed contexts. A key here is a known answer.
+  '''(?i)^contracts/crypto/[^/]+-vectors\.json$''',
+  # Rust integration tests and the demo-vault seeder: placeholder passwords.
+  '''(?i)^crates/.*/tests/''',
+  '''(?i)^crates/centraid/src/bin/seed-demo-vault\.rs$''',
   # Generated or vendored browser bindings (not human-authored secrets).
   '''(?i)apps/web/src/generated/''',
   '''(?i)apps/web/public/''',
@@ -45,3 +52,6 @@ paths = [
   '''(?i)\.claude/''',
   '''(?i)\.grok/''',
 ]
+# Unit-test literals inside src files (#1047): RFC 4226/6238's well-known
+# base32 example and a test invoke key.
+regexes = ['''JBSWY3DPEHPK3PXP''', '''w1-principal-from-the-handle''']
