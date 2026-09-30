@@ -1,0 +1,78 @@
+// THE ORIGINALS ON THIS PHONE, AND THE ALBUMS WHOSE ORIGINALS STAY (#1029,
+// the photos port — v0's "Keep originals on device" and "Free up vault").
+//
+// ## Why a request kind and not a registered command
+//
+// `phone.proto`'s answer, for a narrower reason. The keep list is a fact about
+// THIS PHONE'S DISK — "keep these albums' originals here" — and not about the
+// vault's content: it is kept beside the vault file, never sealed into a base,
+// and a command would write it into the one file the backup carries to the
+// laptop and hands back to a restored phone. The census is a read of two
+// places, the rows and the content store, and a page read reaches only the
+// first.
+//
+// ## What is deliberately NOT here: a release verb, and a `freeable` total
+//
+// v0 deleted a device's originals only where a copy elsewhere was PROVED. On a
+// phone that is the vault, the only copy elsewhere is the laptop's backup, and
+// the backup carries the vault's pages and never an original's bytes — the
+// drain seals bases, segments and manifests, and nothing outside the restore
+// drill admits an original into `backup_blob_custody`. So no original on any
+// phone can be proved held by the gateway today, and a verb that released one
+// would be releasing the only copy. The verb and the total arrive together,
+// with the plane that uploads originals and records the gateway's ack for each
+// object; until then there is nothing to put in either that would not be a
+// guess or an always-zero. See `docs/decisions.md` (R-1029-PH-1).
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// ONE ASK: read the keep list, change one album's place in it, or count.
+//
+// Every answer carries the keep list as it now stands, so a screen that
+// toggled one album never has to ask again to learn what it did.
+message OriginalsRequest {
+  oneof op {
+    // The keep list and nothing else. Cheap: one small file.
+    KeptAlbumsRead kept = 1;
+    // Put one album on the keep list, or take it off. Idempotent.
+    KeepAlbumOriginals keep = 2;
+    // Count the originals whole on this phone, and the kept share. Costs one
+    // listing of the content store and one read of the library's rows.
+    OriginalsCensusRead census = 3;
+  }
+}
+
+message KeptAlbumsRead {}
+
+message KeepAlbumOriginals {
+  string album_id = 1;
+  bool keep = 2;
+}
+
+message OriginalsCensusRead {}
+
+// A count and the bytes it adds up to.
+message OriginalsTotals {
+  uint64 count = 1;
+  uint64 bytes = 2;
+}
+
+message OriginalsResponse {
+  // The albums whose originals stay on this phone, sorted. An id may name an
+  // album deleted since: the pin outlives it on purpose, so an album brought
+  // back from the trash comes back still kept.
+  repeated string kept_album_ids = 1;
+  // Present only on a census, and only when this core holds a content store.
+  // ABSENT IS "NOT COUNTED", NEVER ZERO: a core with no store cannot say what
+  // is on the disk.
+  optional OriginalsCensus census = 2;
+}
+
+message OriginalsCensus {
+  // Every live photograph whose original is whole on this phone.
+  OriginalsTotals on_phone = 1;
+  // The part of `on_phone` in at least one kept album, counted once.
+  OriginalsTotals kept = 2;
+}

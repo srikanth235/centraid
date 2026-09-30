@@ -1,0 +1,59 @@
+# A DERIVATION WITH NO GUESS AT ALL, BESIDE ONE THAT HAS A NAME.
+#
+# `rgn-0010` is a face the plane found and cannot name: `proposed_party_id` and
+# `proposed_name` are empty and `confidence` is 0. That is a real question — "is
+# this someone?" — and the picker opens on the full list of known people rather
+# than on a guess. `rgn-0011` beside it has a name and a confidence. A screen
+# that assumed a proposal was always present would render an empty chip on the
+# first and call it a suggestion.
+#
+# THE BOXES ARE FRACTIONS OF THE IMAGE, NOT PIXELS. Every number here is between
+# 0 and 1, and `box_x + box_width` stays inside 1. Pixels would be wrong the
+# moment the thumbnail is not the original's size — which it never is: there is
+# no per-face derivative in the vault, so what the member looks at is the
+# ASSET's thumbnail with the box drawn over it at whatever size the view
+# rendered. Inventing a crop per face would be a second copy of every
+# photograph.
+#
+# `known_people` travels with the data so the picker needs no second read while
+# a member is mid-answer. A read that lands after the sheet is open is a list
+# that changes under a finger.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+data {
+  candidates {
+    region_id: "rgn-0010"
+    asset_id: "ast-0320"
+    thumbnail_path: "thumbs/ast-0320.jpg"
+    box_x: 0.04
+    box_y: 0.51
+    box_width: 0.17
+    box_height: 0.23
+  }
+  candidates {
+    region_id: "rgn-0011"
+    asset_id: "ast-0301"
+    box_x: 0.5
+    box_y: 0.5
+    box_width: 0.25
+    box_height: 0.25
+    proposed_party_id: "pty-0031"
+    proposed_name: "Ada Lovelace"
+    confidence: 0.73
+  }
+  next_cursor: "rgn-0011"
+  known_people {
+    party_id: "pty-0031"
+    display_name: "Ada Lovelace"
+  }
+  known_people {
+    party_id: "pty-0044"
+    display_name: "Grace Hopper"
+  }
+}
+cursor: 0
+naming: true
+recognition_enabled: true

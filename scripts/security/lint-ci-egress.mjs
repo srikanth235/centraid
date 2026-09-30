@@ -7,7 +7,7 @@
  * it runs anything at all — because the two failure modes are not the same. A
  * build step, a test, a codegen plugin, or a dependency Bun did decide to trust
  * can all open a socket, and CI is where the interesting secrets live
- * (NPM_TOKEN, GHCR push, Apple/Azure signing, Cloudflare deploy). Identity
+ * (NPM_TOKEN, GHCR push, store signing). Identity
  * gates cannot see any of that; a blocked egress policy turns an exfiltration
  * attempt into a failed DNS lookup with a named destination in the run log.
  *

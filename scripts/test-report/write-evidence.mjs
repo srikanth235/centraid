@@ -2,10 +2,9 @@
  * The one evidence writer (#915 Wave 3, contract C2).
  *
  * Every rung 2–5 lane ends with a `Write lane evidence` step that calls this
- * script with `if: always()`, so the report can tell "the lane failed" from
- * "the lane never spoke". The interface is deliberately stable — the CI slice
- * builds workflow steps against it and the report slice builds the reader
- * against the same schema module.
+ * script with `if: always()`, so the uploaded evidence tells "the lane
+ * failed" apart from "the lane never spoke". The interface is deliberately
+ * stable — workflow steps are built against it and `evidence-schema.mjs`.
  *
  *   node scripts/test-report/write-evidence.mjs \
  *     --lane <id> --rung <n> --platform <p> --verdict <v|auto> \
@@ -17,9 +16,8 @@
  * `--verdict auto` maps `job.status` (success → passed, anything else →
  * failed), which is why the step can be one line in YAML. A lane with an
  * unexpired park in the parks ledger is downgraded from `failed` to `parked`
- * here rather than in the report: the park is a fact about the lane at the
- * moment it ran, and writing it into the evidence keeps the report a pure
- * function of the directory.
+ * here, at write time: the park is a fact about the lane at the moment it
+ * ran, so the row carries it rather than leaving a reader to re-derive it.
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";

@@ -1,18 +1,14 @@
 import { accessSync } from "node:fs";
-import { access, readFile, rm } from "node:fs/promises";
-import path from "node:path";
+import { access } from "node:fs/promises";
 
 import { describe, expect, test } from "vitest";
 
 import { useFakeClock } from "./fake-clock.js";
 import { fc } from "./fast-check.js";
 import { flushMacrotasks } from "./flush.js";
-import { recordQualityResult } from "./quality-result.js";
 import { forEachSequentially } from "./sequential.js";
-import { plainSqliteRow, plainSqliteRows } from "./sqlite.js";
 import { tempDir, tempDirSync } from "./temp-dir.js";
 import { jsdomProject, nodeProject } from "./vitest.js";
-import { generateVolumeFixture } from "./volume-fixture.js";
 
 describe("test-kit", () => {
   test("tempDir creates an accessible tracked directory", async () => {
@@ -29,26 +25,6 @@ describe("test-kit", () => {
     const before = clock.now();
     await clock.advance(2_500);
     expect(clock.now()).toBe(before + 2_500);
-  });
-
-  test("volume fixtures are deterministic and preserve requested cardinality", () => {
-    const options = {
-      seed: 9,
-      parties: 3,
-      photos: 12,
-      replicaRows: 17,
-      conversations: 4,
-      turnsPerConversation: 7,
-    };
-    const first = generateVolumeFixture(options);
-    const second = generateVolumeFixture(options);
-    expect(second).toStrictEqual(first);
-    expect(first.photos).toHaveLength(12);
-    expect(first.blobs).toHaveLength(12);
-    expect(first.replicaRows).toHaveLength(17);
-    expect(
-      first.conversations.flatMap((conversation) => conversation.turns)
-    ).toHaveLength(28);
   });
 
   test("fast-check re-export runs a property", () => {
@@ -119,75 +95,6 @@ describe("test-kit", () => {
     expect(cfg.test?.setupFiles?.some((p) => p.includes("jsdom-setup"))).toBe(
       true
     );
-  });
-
-  test("recordQualityResult writes a stable artifact with rolling history", async () => {
-    const cwd = process.cwd();
-    const scratch = await tempDir("centraid-quality-result-");
-    process.chdir(scratch);
-    try {
-      await recordQualityResult({
-        lane: "perf",
-        owner: "gateway/low-end",
-        name: "p95",
-        status: "passed",
-        measurements: [{ name: "wall", value: 12.5, unit: "ms", budget: 50 }],
-      });
-      await recordQualityResult({
-        lane: "perf",
-        owner: "gateway/low-end",
-        name: "p95",
-        status: "passed",
-        measurements: [{ name: "wall", value: 11, unit: "ms" }],
-      });
-      const file = path.join(
-        scratch,
-        "artifacts",
-        "perf",
-        "gateway-low-end.json"
-      );
-      const body = JSON.parse(await readFile(file, "utf8")) as {
-        lane: string;
-        owner: string;
-        status: string;
-        measurements: Array<{ value: number }>;
-        history: Array<{ value: number }>;
-      };
-      expect(body.lane).toBe("perf");
-      expect(body.owner).toBe("gateway/low-end");
-      expect(body.status).toBe("passed");
-      expect(body.measurements[0]?.value).toBe(11);
-      expect(body.history).toHaveLength(2);
-      expect(body.history.map((h) => h.value)).toStrictEqual([12.5, 11]);
-    } finally {
-      process.chdir(cwd);
-      await rm(scratch, { recursive: true, force: true });
-    }
-  });
-
-  // #656 Layer 1F: these normalizers stand between driver rows and every
-  // `toStrictEqual` in the repo. A normalizer that dropped or renamed a column
-  // would make thousands of assertions quietly weaker, not red.
-  test("plainSqliteRow keeps every column and drops only the driver prototype", () => {
-    const driverRow = Object.assign(Object.create(null), {
-      id: "row-1",
-      count: 3,
-      missing: null,
-    }) as { id: string; count: number; missing: null };
-    const plain = plainSqliteRow(driverRow);
-    expect(plain).toStrictEqual({ id: "row-1", count: 3, missing: null });
-    expect(Object.getPrototypeOf(plain!)).toBe(Object.prototype);
-  });
-
-  test("plainSqliteRow passes a missing row through as undefined", () => {
-    expect(plainSqliteRow(undefined)).toBeUndefined();
-  });
-
-  test("plainSqliteRows normalizes every row and preserves order", () => {
-    const rows = [{ n: 1 }, { n: 2 }, { n: 3 }].map((row) =>
-      Object.assign(Object.create(null), row)
-    ) as Array<{ n: number }>;
-    expect(plainSqliteRows(rows)).toStrictEqual([{ n: 1 }, { n: 2 }, { n: 3 }]);
   });
 
   test("flushMacrotasks resolves after already-queued macrotask work", async () => {

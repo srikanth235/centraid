@@ -1,0 +1,8 @@
+# THE PLATFORM REFUSED TO SAY. Background App Refresh is off, or the permission
+# was never granted — and "Background App Refresh is off" is a sentence a member
+# reads, because registration is observable rather than assumed
+# (`docs/mobile-offline.md:214`). NOT the same value as OFFLINE.
+availability: AVAILABILITY_READY
+durability: DURABILITY_LOCAL_ONLY
+pending { queued_writes: 2 queued_uploads: 41 oldest_queued_seconds: 7200 }
+connectivity: CONNECTIVITY_UNKNOWN_PLATFORM_REFUSED

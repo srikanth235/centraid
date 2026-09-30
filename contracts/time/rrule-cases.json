@@ -1,0 +1,2803 @@
+{
+  "note": "GENERATED from packages/core/src/time by contracts/tools/export-time-corpus.ts — do not edit by hand (#1020).",
+  "cases": [
+    {
+      "rrule": "",
+      "canonical": "",
+      "line": "",
+      "summary": null,
+      "accepted": false,
+      "reason": "malformed",
+      "message": "recurrence rule has no supported FREQ (expected DAILY, WEEKLY, MONTHLY or YEARLY)"
+    },
+    {
+      "rrule": "  ",
+      "canonical": "",
+      "line": "",
+      "summary": null,
+      "accepted": false,
+      "reason": "malformed",
+      "message": "recurrence rule has no supported FREQ (expected DAILY, WEEKLY, MONTHLY or YEARLY)"
+    },
+    {
+      "rrule": ";;FREQ=DAILY",
+      "canonical": ";;FREQ=DAILY",
+      "line": "RRULE:;;FREQ=DAILY",
+      "summary": "Daily",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=",
+      "canonical": "FREQ=",
+      "line": "RRULE:FREQ=",
+      "summary": null,
+      "accepted": false,
+      "reason": "malformed",
+      "message": "recurrence rule has no supported FREQ (expected DAILY, WEEKLY, MONTHLY or YEARLY)"
+    },
+    {
+      "rrule": "FREQ=DAILY",
+      "canonical": "FREQ=DAILY",
+      "line": "RRULE:FREQ=DAILY",
+      "summary": "Daily",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;",
+      "canonical": "FREQ=DAILY;",
+      "line": "RRULE:FREQ=DAILY;",
+      "summary": "Daily",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;BYHOUR=9",
+      "canonical": "FREQ=DAILY;BYHOUR=9",
+      "line": "RRULE:FREQ=DAILY;BYHOUR=9",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYHOUR",
+      "message": "recurrence rule uses BYHOUR, which this engine cannot honour: it moves the time of day; the expander carries the anchor's wall clock unchanged"
+    },
+    {
+      "rrule": "FREQ=DAILY;BYMINUTE=30",
+      "canonical": "FREQ=DAILY;BYMINUTE=30",
+      "line": "RRULE:FREQ=DAILY;BYMINUTE=30",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYMINUTE",
+      "message": "recurrence rule uses BYMINUTE, which this engine cannot honour: it moves the time of day; the expander carries the anchor's wall clock unchanged"
+    },
+    {
+      "rrule": "FREQ=DAILY;BYMONTH=3",
+      "canonical": "FREQ=DAILY;BYMONTH=3",
+      "line": "RRULE:FREQ=DAILY;BYMONTH=3",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYMONTH",
+      "message": "recurrence rule uses BYMONTH, which this engine cannot honour: it restricts occurrences to named months; the expander does not filter by month"
+    },
+    {
+      "rrule": "FREQ=DAILY;BYMONTHDAY=-1",
+      "canonical": "FREQ=DAILY;BYMONTHDAY=-1",
+      "line": "RRULE:FREQ=DAILY;BYMONTHDAY=-1",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYMONTHDAY",
+      "message": "recurrence rule uses BYMONTHDAY, which this engine cannot honour: it pins occurrences to days of the month; the expander steps from the anchor day"
+    },
+    {
+      "rrule": "FREQ=DAILY;BYMONTHDAY=1",
+      "canonical": "FREQ=DAILY;BYMONTHDAY=1",
+      "line": "RRULE:FREQ=DAILY;BYMONTHDAY=1",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYMONTHDAY",
+      "message": "recurrence rule uses BYMONTHDAY, which this engine cannot honour: it pins occurrences to days of the month; the expander steps from the anchor day"
+    },
+    {
+      "rrule": "FREQ=DAILY;BYSECOND=15",
+      "canonical": "FREQ=DAILY;BYSECOND=15",
+      "line": "RRULE:FREQ=DAILY;BYSECOND=15",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYSECOND",
+      "message": "recurrence rule uses BYSECOND, which this engine cannot honour: it moves the time of day; the expander carries the anchor's wall clock unchanged"
+    },
+    {
+      "rrule": "FREQ=DAILY;BYSETPOS=-1",
+      "canonical": "FREQ=DAILY;BYSETPOS=-1",
+      "line": "RRULE:FREQ=DAILY;BYSETPOS=-1",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYSETPOS",
+      "message": "recurrence rule uses BYSETPOS, which this engine cannot honour: it selects the nth candidate within each period; the expander emits every candidate"
+    },
+    {
+      "rrule": "FREQ=DAILY;BYSETPOS=1",
+      "canonical": "FREQ=DAILY;BYSETPOS=1",
+      "line": "RRULE:FREQ=DAILY;BYSETPOS=1",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYSETPOS",
+      "message": "recurrence rule uses BYSETPOS, which this engine cannot honour: it selects the nth candidate within each period; the expander emits every candidate"
+    },
+    {
+      "rrule": "FREQ=DAILY;BYWEEKNO=12",
+      "canonical": "FREQ=DAILY;BYWEEKNO=12",
+      "line": "RRULE:FREQ=DAILY;BYWEEKNO=12",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYWEEKNO",
+      "message": "recurrence rule uses BYWEEKNO, which this engine cannot honour: it pins occurrences to ISO week numbers, which the expander does not compute"
+    },
+    {
+      "rrule": "FREQ=DAILY;BYYEARDAY=200",
+      "canonical": "FREQ=DAILY;BYYEARDAY=200",
+      "line": "RRULE:FREQ=DAILY;BYYEARDAY=200",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYYEARDAY",
+      "message": "recurrence rule uses BYYEARDAY, which this engine cannot honour: it pins occurrences to days of the year; the expander steps from the anchor day"
+    },
+    {
+      "rrule": "FREQ=DAILY;COUNT=-2",
+      "canonical": "FREQ=DAILY;COUNT=-2",
+      "line": "RRULE:FREQ=DAILY;COUNT=-2",
+      "summary": "Daily · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;COUNT=0",
+      "canonical": "FREQ=DAILY;COUNT=0",
+      "line": "RRULE:FREQ=DAILY;COUNT=0",
+      "summary": "Daily · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;COUNT=1",
+      "canonical": "FREQ=DAILY;COUNT=1",
+      "line": "RRULE:FREQ=DAILY;COUNT=1",
+      "summary": "Daily · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;COUNT=5",
+      "canonical": "FREQ=DAILY;COUNT=5",
+      "line": "RRULE:FREQ=DAILY;COUNT=5",
+      "summary": "Daily · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;COUNT=banana",
+      "canonical": "FREQ=DAILY;COUNT=banana",
+      "line": "RRULE:FREQ=DAILY;COUNT=banana",
+      "summary": "Daily",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=-4",
+      "canonical": "FREQ=DAILY;INTERVAL=-4",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=-4",
+      "summary": "Daily",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=0",
+      "canonical": "FREQ=DAILY;INTERVAL=0",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=0",
+      "summary": "Daily",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=1",
+      "canonical": "FREQ=DAILY;INTERVAL=1",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=1",
+      "summary": "Daily",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=13",
+      "canonical": "FREQ=DAILY;INTERVAL=13",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=13",
+      "summary": "Every 13 days",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 13
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=13;COUNT=-2",
+      "canonical": "FREQ=DAILY;INTERVAL=13;COUNT=-2",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=13;COUNT=-2",
+      "summary": "Every 13 days · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 13,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=13;COUNT=0",
+      "canonical": "FREQ=DAILY;INTERVAL=13;COUNT=0",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=13;COUNT=0",
+      "summary": "Every 13 days · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 13,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=13;COUNT=1",
+      "canonical": "FREQ=DAILY;INTERVAL=13;COUNT=1",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=13;COUNT=1",
+      "summary": "Every 13 days · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 13,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=13;COUNT=5",
+      "canonical": "FREQ=DAILY;INTERVAL=13;COUNT=5",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=13;COUNT=5",
+      "summary": "Every 13 days · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 13,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=13;UNTIL=2026-12-31",
+      "canonical": "FREQ=DAILY;INTERVAL=13;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=13;UNTIL=2026-12-31",
+      "summary": "Every 13 days · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 13,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=13;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=DAILY;INTERVAL=13;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=13;UNTIL=20261231T000000Z",
+      "summary": "Every 13 days · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 13,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=13;UNTIL=SOON",
+      "canonical": "FREQ=DAILY;INTERVAL=13;UNTIL=SOON",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=13;UNTIL=SOON",
+      "summary": "Every 13 days",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 13,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=1;COUNT=-2",
+      "canonical": "FREQ=DAILY;INTERVAL=1;COUNT=-2",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=-2",
+      "summary": "Daily · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=1;COUNT=0",
+      "canonical": "FREQ=DAILY;INTERVAL=1;COUNT=0",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=0",
+      "summary": "Daily · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=1;COUNT=1",
+      "canonical": "FREQ=DAILY;INTERVAL=1;COUNT=1",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=1",
+      "summary": "Daily · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=1;COUNT=5",
+      "canonical": "FREQ=DAILY;INTERVAL=1;COUNT=5",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=5",
+      "summary": "Daily · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=1;UNTIL=2026-12-31",
+      "canonical": "FREQ=DAILY;INTERVAL=1;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=1;UNTIL=2026-12-31",
+      "summary": "Daily · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=1;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=DAILY;INTERVAL=1;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=1;UNTIL=20261231T000000Z",
+      "summary": "Daily · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=1;UNTIL=SOON",
+      "canonical": "FREQ=DAILY;INTERVAL=1;UNTIL=SOON",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=1;UNTIL=SOON",
+      "summary": "Daily",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=2",
+      "canonical": "FREQ=DAILY;INTERVAL=2",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=2",
+      "summary": "Every other day",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 2
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=2;COUNT=-2",
+      "canonical": "FREQ=DAILY;INTERVAL=2;COUNT=-2",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=2;COUNT=-2",
+      "summary": "Every other day · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 2,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=2;COUNT=0",
+      "canonical": "FREQ=DAILY;INTERVAL=2;COUNT=0",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=2;COUNT=0",
+      "summary": "Every other day · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 2,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=2;COUNT=1",
+      "canonical": "FREQ=DAILY;INTERVAL=2;COUNT=1",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=2;COUNT=1",
+      "summary": "Every other day · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 2,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=2;COUNT=5",
+      "canonical": "FREQ=DAILY;INTERVAL=2;COUNT=5",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=2;COUNT=5",
+      "summary": "Every other day · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 2,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=2;UNTIL=2026-12-31",
+      "canonical": "FREQ=DAILY;INTERVAL=2;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=2;UNTIL=2026-12-31",
+      "summary": "Every other day · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 2,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=2;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=DAILY;INTERVAL=2;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=2;UNTIL=20261231T000000Z",
+      "summary": "Every other day · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 2,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=2;UNTIL=SOON",
+      "canonical": "FREQ=DAILY;INTERVAL=2;UNTIL=SOON",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=2;UNTIL=SOON",
+      "summary": "Every other day",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 2,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=3",
+      "canonical": "FREQ=DAILY;INTERVAL=3",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=3",
+      "summary": "Every 3 days",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 3
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=3;COUNT=-2",
+      "canonical": "FREQ=DAILY;INTERVAL=3;COUNT=-2",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=3;COUNT=-2",
+      "summary": "Every 3 days · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 3,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=3;COUNT=0",
+      "canonical": "FREQ=DAILY;INTERVAL=3;COUNT=0",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=3;COUNT=0",
+      "summary": "Every 3 days · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 3,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=3;COUNT=1",
+      "canonical": "FREQ=DAILY;INTERVAL=3;COUNT=1",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=3;COUNT=1",
+      "summary": "Every 3 days · once",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 3,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=3;COUNT=5",
+      "canonical": "FREQ=DAILY;INTERVAL=3;COUNT=5",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=3;COUNT=5",
+      "summary": "Every 3 days · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 3,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=3;UNTIL=2026-12-31",
+      "canonical": "FREQ=DAILY;INTERVAL=3;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=3;UNTIL=2026-12-31",
+      "summary": "Every 3 days · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 3,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=3;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=DAILY;INTERVAL=3;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=3;UNTIL=20261231T000000Z",
+      "summary": "Every 3 days · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 3,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=3;UNTIL=SOON",
+      "canonical": "FREQ=DAILY;INTERVAL=3;UNTIL=SOON",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=3;UNTIL=SOON",
+      "summary": "Every 3 days",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 3,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=banana",
+      "canonical": "FREQ=DAILY;INTERVAL=banana",
+      "line": "RRULE:FREQ=DAILY;INTERVAL=banana",
+      "summary": "Daily",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;UNTIL=2026-12-31",
+      "canonical": "FREQ=DAILY;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=DAILY;UNTIL=2026-12-31",
+      "summary": "Daily · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=DAILY;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=DAILY;UNTIL=20261231T000000Z",
+      "summary": "Daily · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;UNTIL=SOON",
+      "canonical": "FREQ=DAILY;UNTIL=SOON",
+      "line": "RRULE:FREQ=DAILY;UNTIL=SOON",
+      "summary": "Daily",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=FORTNIGHTLY",
+      "canonical": "FREQ=FORTNIGHTLY",
+      "line": "RRULE:FREQ=FORTNIGHTLY",
+      "summary": null,
+      "accepted": false,
+      "reason": "malformed",
+      "message": "recurrence rule has no supported FREQ (expected DAILY, WEEKLY, MONTHLY or YEARLY)"
+    },
+    {
+      "rrule": "FREQ=HOURLY",
+      "canonical": "FREQ=HOURLY",
+      "line": "RRULE:FREQ=HOURLY",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-freq",
+      "freq": "HOURLY",
+      "message": "recurrence rule uses FREQ=HOURLY, which this engine does not expand (sub-daily recurrence is not supported)"
+    },
+    {
+      "rrule": "FREQ=MINUTELY",
+      "canonical": "FREQ=MINUTELY",
+      "line": "RRULE:FREQ=MINUTELY",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-freq",
+      "freq": "MINUTELY",
+      "message": "recurrence rule uses FREQ=MINUTELY, which this engine does not expand (sub-daily recurrence is not supported)"
+    },
+    {
+      "rrule": "FREQ=MONTHLY",
+      "canonical": "FREQ=MONTHLY",
+      "line": "RRULE:FREQ=MONTHLY",
+      "summary": "Every month",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYDAY=+3WE",
+      "canonical": "FREQ=MONTHLY;BYDAY=+3WE",
+      "line": "RRULE:FREQ=MONTHLY;BYDAY=+3WE",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYDAY=-1FR",
+      "canonical": "FREQ=MONTHLY;BYDAY=-1FR",
+      "line": "RRULE:FREQ=MONTHLY;BYDAY=-1FR",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYDAY=2MO",
+      "canonical": "FREQ=MONTHLY;BYDAY=2MO",
+      "line": "RRULE:FREQ=MONTHLY;BYDAY=2MO",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYDAY=FR",
+      "canonical": "FREQ=MONTHLY;BYDAY=FR",
+      "line": "RRULE:FREQ=MONTHLY;BYDAY=FR",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYDAY=FR,MO",
+      "canonical": "FREQ=MONTHLY;BYDAY=FR,MO",
+      "line": "RRULE:FREQ=MONTHLY;BYDAY=FR,MO",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYDAY=MO",
+      "canonical": "FREQ=MONTHLY;BYDAY=MO",
+      "line": "RRULE:FREQ=MONTHLY;BYDAY=MO",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYDAY=MO,",
+      "canonical": "FREQ=MONTHLY;BYDAY=MO,",
+      "line": "RRULE:FREQ=MONTHLY;BYDAY=MO,",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR",
+      "canonical": "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR",
+      "line": "RRULE:FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYDAY=MO,WE,FR",
+      "canonical": "FREQ=MONTHLY;BYDAY=MO,WE,FR",
+      "line": "RRULE:FREQ=MONTHLY;BYDAY=MO,WE,FR",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYDAY=MO,XX",
+      "canonical": "FREQ=MONTHLY;BYDAY=MO,XX",
+      "line": "RRULE:FREQ=MONTHLY;BYDAY=MO,XX",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYDAY=SU",
+      "canonical": "FREQ=MONTHLY;BYDAY=SU",
+      "line": "RRULE:FREQ=MONTHLY;BYDAY=SU",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYDAY=SU,SA",
+      "canonical": "FREQ=MONTHLY;BYDAY=SU,SA",
+      "line": "RRULE:FREQ=MONTHLY;BYDAY=SU,SA",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYHOUR=9",
+      "canonical": "FREQ=MONTHLY;BYHOUR=9",
+      "line": "RRULE:FREQ=MONTHLY;BYHOUR=9",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYHOUR",
+      "message": "recurrence rule uses BYHOUR, which this engine cannot honour: it moves the time of day; the expander carries the anchor's wall clock unchanged"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYMINUTE=30",
+      "canonical": "FREQ=MONTHLY;BYMINUTE=30",
+      "line": "RRULE:FREQ=MONTHLY;BYMINUTE=30",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYMINUTE",
+      "message": "recurrence rule uses BYMINUTE, which this engine cannot honour: it moves the time of day; the expander carries the anchor's wall clock unchanged"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYMONTH=3",
+      "canonical": "FREQ=MONTHLY;BYMONTH=3",
+      "line": "RRULE:FREQ=MONTHLY;BYMONTH=3",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYMONTH",
+      "message": "recurrence rule uses BYMONTH, which this engine cannot honour: it restricts occurrences to named months; the expander does not filter by month"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYMONTHDAY=-1",
+      "canonical": "FREQ=MONTHLY;BYMONTHDAY=-1",
+      "line": "RRULE:FREQ=MONTHLY;BYMONTHDAY=-1",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYMONTHDAY",
+      "message": "recurrence rule uses BYMONTHDAY, which this engine cannot honour: it pins occurrences to days of the month; the expander steps from the anchor day"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYMONTHDAY=1",
+      "canonical": "FREQ=MONTHLY;BYMONTHDAY=1",
+      "line": "RRULE:FREQ=MONTHLY;BYMONTHDAY=1",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYMONTHDAY",
+      "message": "recurrence rule uses BYMONTHDAY, which this engine cannot honour: it pins occurrences to days of the month; the expander steps from the anchor day"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYSECOND=15",
+      "canonical": "FREQ=MONTHLY;BYSECOND=15",
+      "line": "RRULE:FREQ=MONTHLY;BYSECOND=15",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYSECOND",
+      "message": "recurrence rule uses BYSECOND, which this engine cannot honour: it moves the time of day; the expander carries the anchor's wall clock unchanged"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYSETPOS=-1",
+      "canonical": "FREQ=MONTHLY;BYSETPOS=-1",
+      "line": "RRULE:FREQ=MONTHLY;BYSETPOS=-1",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYSETPOS",
+      "message": "recurrence rule uses BYSETPOS, which this engine cannot honour: it selects the nth candidate within each period; the expander emits every candidate"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYSETPOS=1",
+      "canonical": "FREQ=MONTHLY;BYSETPOS=1",
+      "line": "RRULE:FREQ=MONTHLY;BYSETPOS=1",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYSETPOS",
+      "message": "recurrence rule uses BYSETPOS, which this engine cannot honour: it selects the nth candidate within each period; the expander emits every candidate"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYWEEKNO=12",
+      "canonical": "FREQ=MONTHLY;BYWEEKNO=12",
+      "line": "RRULE:FREQ=MONTHLY;BYWEEKNO=12",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYWEEKNO",
+      "message": "recurrence rule uses BYWEEKNO, which this engine cannot honour: it pins occurrences to ISO week numbers, which the expander does not compute"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYYEARDAY=200",
+      "canonical": "FREQ=MONTHLY;BYYEARDAY=200",
+      "line": "RRULE:FREQ=MONTHLY;BYYEARDAY=200",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYYEARDAY",
+      "message": "recurrence rule uses BYYEARDAY, which this engine cannot honour: it pins occurrences to days of the year; the expander steps from the anchor day"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;COUNT=-2",
+      "canonical": "FREQ=MONTHLY;COUNT=-2",
+      "line": "RRULE:FREQ=MONTHLY;COUNT=-2",
+      "summary": "Every month · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;COUNT=0",
+      "canonical": "FREQ=MONTHLY;COUNT=0",
+      "line": "RRULE:FREQ=MONTHLY;COUNT=0",
+      "summary": "Every month · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;COUNT=1",
+      "canonical": "FREQ=MONTHLY;COUNT=1",
+      "line": "RRULE:FREQ=MONTHLY;COUNT=1",
+      "summary": "Every month · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;COUNT=5",
+      "canonical": "FREQ=MONTHLY;COUNT=5",
+      "line": "RRULE:FREQ=MONTHLY;COUNT=5",
+      "summary": "Every month · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=1",
+      "canonical": "FREQ=MONTHLY;INTERVAL=1",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=1",
+      "summary": "Every month",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=13",
+      "canonical": "FREQ=MONTHLY;INTERVAL=13",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=13",
+      "summary": "Every 13 months",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 13
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=13;COUNT=-2",
+      "canonical": "FREQ=MONTHLY;INTERVAL=13;COUNT=-2",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=13;COUNT=-2",
+      "summary": "Every 13 months · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 13,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=13;COUNT=0",
+      "canonical": "FREQ=MONTHLY;INTERVAL=13;COUNT=0",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=13;COUNT=0",
+      "summary": "Every 13 months · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 13,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=13;COUNT=1",
+      "canonical": "FREQ=MONTHLY;INTERVAL=13;COUNT=1",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=13;COUNT=1",
+      "summary": "Every 13 months · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 13,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=13;COUNT=5",
+      "canonical": "FREQ=MONTHLY;INTERVAL=13;COUNT=5",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=13;COUNT=5",
+      "summary": "Every 13 months · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 13,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=13;UNTIL=2026-12-31",
+      "canonical": "FREQ=MONTHLY;INTERVAL=13;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=13;UNTIL=2026-12-31",
+      "summary": "Every 13 months · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 13,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=13;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=MONTHLY;INTERVAL=13;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=13;UNTIL=20261231T000000Z",
+      "summary": "Every 13 months · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 13,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=13;UNTIL=SOON",
+      "canonical": "FREQ=MONTHLY;INTERVAL=13;UNTIL=SOON",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=13;UNTIL=SOON",
+      "summary": "Every 13 months",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 13,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=1;COUNT=-2",
+      "canonical": "FREQ=MONTHLY;INTERVAL=1;COUNT=-2",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=1;COUNT=-2",
+      "summary": "Every month · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=1;COUNT=0",
+      "canonical": "FREQ=MONTHLY;INTERVAL=1;COUNT=0",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=1;COUNT=0",
+      "summary": "Every month · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=1;COUNT=1",
+      "canonical": "FREQ=MONTHLY;INTERVAL=1;COUNT=1",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=1;COUNT=1",
+      "summary": "Every month · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=1;COUNT=5",
+      "canonical": "FREQ=MONTHLY;INTERVAL=1;COUNT=5",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=1;COUNT=5",
+      "summary": "Every month · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=1;UNTIL=2026-12-31",
+      "canonical": "FREQ=MONTHLY;INTERVAL=1;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=1;UNTIL=2026-12-31",
+      "summary": "Every month · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=1;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=MONTHLY;INTERVAL=1;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=1;UNTIL=20261231T000000Z",
+      "summary": "Every month · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=1;UNTIL=SOON",
+      "canonical": "FREQ=MONTHLY;INTERVAL=1;UNTIL=SOON",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=1;UNTIL=SOON",
+      "summary": "Every month",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=2",
+      "canonical": "FREQ=MONTHLY;INTERVAL=2",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=2",
+      "summary": "Every other month",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 2
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=2;COUNT=-2",
+      "canonical": "FREQ=MONTHLY;INTERVAL=2;COUNT=-2",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=-2",
+      "summary": "Every other month · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 2,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=2;COUNT=0",
+      "canonical": "FREQ=MONTHLY;INTERVAL=2;COUNT=0",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=0",
+      "summary": "Every other month · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 2,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=2;COUNT=1",
+      "canonical": "FREQ=MONTHLY;INTERVAL=2;COUNT=1",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=1",
+      "summary": "Every other month · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 2,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=2;COUNT=5",
+      "canonical": "FREQ=MONTHLY;INTERVAL=2;COUNT=5",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=5",
+      "summary": "Every other month · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 2,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=2026-12-31",
+      "canonical": "FREQ=MONTHLY;INTERVAL=2;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=2;UNTIL=2026-12-31",
+      "summary": "Every other month · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 2,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=MONTHLY;INTERVAL=2;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=2;UNTIL=20261231T000000Z",
+      "summary": "Every other month · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 2,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=2;UNTIL=SOON",
+      "canonical": "FREQ=MONTHLY;INTERVAL=2;UNTIL=SOON",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=2;UNTIL=SOON",
+      "summary": "Every other month",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 2,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=3",
+      "canonical": "FREQ=MONTHLY;INTERVAL=3",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=3",
+      "summary": "Every 3 months",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 3
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=3;COUNT=-2",
+      "canonical": "FREQ=MONTHLY;INTERVAL=3;COUNT=-2",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=3;COUNT=-2",
+      "summary": "Every 3 months · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 3,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=3;COUNT=0",
+      "canonical": "FREQ=MONTHLY;INTERVAL=3;COUNT=0",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=3;COUNT=0",
+      "summary": "Every 3 months · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 3,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=3;COUNT=1",
+      "canonical": "FREQ=MONTHLY;INTERVAL=3;COUNT=1",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=3;COUNT=1",
+      "summary": "Every 3 months · once",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 3,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=3;COUNT=5",
+      "canonical": "FREQ=MONTHLY;INTERVAL=3;COUNT=5",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=3;COUNT=5",
+      "summary": "Every 3 months · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 3,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=3;UNTIL=2026-12-31",
+      "canonical": "FREQ=MONTHLY;INTERVAL=3;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=3;UNTIL=2026-12-31",
+      "summary": "Every 3 months · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 3,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=3;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=MONTHLY;INTERVAL=3;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=3;UNTIL=20261231T000000Z",
+      "summary": "Every 3 months · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 3,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;INTERVAL=3;UNTIL=SOON",
+      "canonical": "FREQ=MONTHLY;INTERVAL=3;UNTIL=SOON",
+      "line": "RRULE:FREQ=MONTHLY;INTERVAL=3;UNTIL=SOON",
+      "summary": "Every 3 months",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 3,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;UNTIL=2026-12-31",
+      "canonical": "FREQ=MONTHLY;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=MONTHLY;UNTIL=2026-12-31",
+      "summary": "Every month · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=MONTHLY;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=MONTHLY;UNTIL=20261231T000000Z",
+      "summary": "Every month · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;UNTIL=SOON",
+      "canonical": "FREQ=MONTHLY;UNTIL=SOON",
+      "line": "RRULE:FREQ=MONTHLY;UNTIL=SOON",
+      "summary": "Every month",
+      "accepted": true,
+      "rule": {
+        "freq": "MONTHLY",
+        "interval": 1,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=SECONDLY",
+      "canonical": "FREQ=SECONDLY",
+      "line": "RRULE:FREQ=SECONDLY",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-freq",
+      "freq": "SECONDLY",
+      "message": "recurrence rule uses FREQ=SECONDLY, which this engine does not expand (sub-daily recurrence is not supported)"
+    },
+    {
+      "rrule": "FREQ=WEEKLY",
+      "canonical": "FREQ=WEEKLY",
+      "line": "RRULE:FREQ=WEEKLY",
+      "summary": "Weekly",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=+3WE",
+      "canonical": "FREQ=WEEKLY;BYDAY=+3WE",
+      "line": "RRULE:FREQ=WEEKLY;BYDAY=+3WE",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=-1FR",
+      "canonical": "FREQ=WEEKLY;BYDAY=-1FR",
+      "line": "RRULE:FREQ=WEEKLY;BYDAY=-1FR",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=2MO",
+      "canonical": "FREQ=WEEKLY;BYDAY=2MO",
+      "line": "RRULE:FREQ=WEEKLY;BYDAY=2MO",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=FR",
+      "canonical": "FREQ=WEEKLY;BYDAY=FR",
+      "line": "RRULE:FREQ=WEEKLY;BYDAY=FR",
+      "summary": "Every Friday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "byDay": ["FR"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=FR,MO",
+      "canonical": "FREQ=WEEKLY;BYDAY=FR,MO",
+      "line": "RRULE:FREQ=WEEKLY;BYDAY=FR,MO",
+      "summary": "Every Friday and Monday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "byDay": ["FR", "MO"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "canonical": "FREQ=WEEKLY;BYDAY=MO",
+      "line": "RRULE:FREQ=WEEKLY;BYDAY=MO",
+      "summary": "Every Monday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "byDay": ["MO"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=MO,",
+      "canonical": "FREQ=WEEKLY;BYDAY=MO,",
+      "line": "RRULE:FREQ=WEEKLY;BYDAY=MO,",
+      "summary": null,
+      "accepted": false,
+      "reason": "malformed",
+      "message": "recurrence rule has no supported FREQ (expected DAILY, WEEKLY, MONTHLY or YEARLY)"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
+      "canonical": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
+      "line": "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
+      "summary": "Every Monday, Tuesday, Wednesday, Thursday and Friday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "byDay": ["MO", "TU", "WE", "TH", "FR"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+      "canonical": "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+      "line": "RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR",
+      "summary": "Every Monday, Wednesday and Friday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "byDay": ["MO", "WE", "FR"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=MO,XX",
+      "canonical": "FREQ=WEEKLY;BYDAY=MO,XX",
+      "line": "RRULE:FREQ=WEEKLY;BYDAY=MO,XX",
+      "summary": null,
+      "accepted": false,
+      "reason": "malformed",
+      "message": "recurrence rule has no supported FREQ (expected DAILY, WEEKLY, MONTHLY or YEARLY)"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=SU",
+      "canonical": "FREQ=WEEKLY;BYDAY=SU",
+      "line": "RRULE:FREQ=WEEKLY;BYDAY=SU",
+      "summary": "Every Sunday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "byDay": ["SU"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=SU,SA",
+      "canonical": "FREQ=WEEKLY;BYDAY=SU,SA",
+      "line": "RRULE:FREQ=WEEKLY;BYDAY=SU,SA",
+      "summary": "Every Sunday and Saturday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "byDay": ["SU", "SA"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;COUNT=-2",
+      "canonical": "FREQ=WEEKLY;COUNT=-2",
+      "line": "RRULE:FREQ=WEEKLY;COUNT=-2",
+      "summary": "Weekly · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;COUNT=0",
+      "canonical": "FREQ=WEEKLY;COUNT=0",
+      "line": "RRULE:FREQ=WEEKLY;COUNT=0",
+      "summary": "Weekly · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;COUNT=1",
+      "canonical": "FREQ=WEEKLY;COUNT=1",
+      "line": "RRULE:FREQ=WEEKLY;COUNT=1",
+      "summary": "Weekly · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;COUNT=5",
+      "canonical": "FREQ=WEEKLY;COUNT=5",
+      "line": "RRULE:FREQ=WEEKLY;COUNT=5",
+      "summary": "Weekly · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=1",
+      "canonical": "FREQ=WEEKLY;INTERVAL=1",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=1",
+      "summary": "Weekly",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=13",
+      "canonical": "FREQ=WEEKLY;INTERVAL=13",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=13",
+      "summary": "Every 13 weeks",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 13
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=13;COUNT=-2",
+      "canonical": "FREQ=WEEKLY;INTERVAL=13;COUNT=-2",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=13;COUNT=-2",
+      "summary": "Every 13 weeks · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 13,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=13;COUNT=0",
+      "canonical": "FREQ=WEEKLY;INTERVAL=13;COUNT=0",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=13;COUNT=0",
+      "summary": "Every 13 weeks · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 13,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=13;COUNT=1",
+      "canonical": "FREQ=WEEKLY;INTERVAL=13;COUNT=1",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=13;COUNT=1",
+      "summary": "Every 13 weeks · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 13,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=13;COUNT=5",
+      "canonical": "FREQ=WEEKLY;INTERVAL=13;COUNT=5",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=13;COUNT=5",
+      "summary": "Every 13 weeks · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 13,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=13;UNTIL=2026-12-31",
+      "canonical": "FREQ=WEEKLY;INTERVAL=13;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=13;UNTIL=2026-12-31",
+      "summary": "Every 13 weeks · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 13,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=13;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=WEEKLY;INTERVAL=13;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=13;UNTIL=20261231T000000Z",
+      "summary": "Every 13 weeks · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 13,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=13;UNTIL=SOON",
+      "canonical": "FREQ=WEEKLY;INTERVAL=13;UNTIL=SOON",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=13;UNTIL=SOON",
+      "summary": "Every 13 weeks",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 13,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=1;COUNT=-2",
+      "canonical": "FREQ=WEEKLY;INTERVAL=1;COUNT=-2",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=1;COUNT=-2",
+      "summary": "Weekly · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=1;COUNT=0",
+      "canonical": "FREQ=WEEKLY;INTERVAL=1;COUNT=0",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=1;COUNT=0",
+      "summary": "Weekly · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=1;COUNT=1",
+      "canonical": "FREQ=WEEKLY;INTERVAL=1;COUNT=1",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=1;COUNT=1",
+      "summary": "Weekly · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=1;COUNT=5",
+      "canonical": "FREQ=WEEKLY;INTERVAL=1;COUNT=5",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=1;COUNT=5",
+      "summary": "Weekly · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=1;UNTIL=2026-12-31",
+      "canonical": "FREQ=WEEKLY;INTERVAL=1;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=1;UNTIL=2026-12-31",
+      "summary": "Weekly · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=1;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=WEEKLY;INTERVAL=1;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=1;UNTIL=20261231T000000Z",
+      "summary": "Weekly · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=1;UNTIL=SOON",
+      "canonical": "FREQ=WEEKLY;INTERVAL=1;UNTIL=SOON",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=1;UNTIL=SOON",
+      "summary": "Weekly",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2",
+      "summary": "Every other week",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=+3WE",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=+3WE",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=+3WE",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=-1FR",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=-1FR",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=-1FR",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=2MO",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=2MO",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=2MO",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "BYDAY",
+      "message": "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule it can expand"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=FR",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=FR",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=FR",
+      "summary": "Every other Friday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "byDay": ["FR"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=FR,MO",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=FR,MO",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=FR,MO",
+      "summary": "Every other week on Friday and Monday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "byDay": ["FR", "MO"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO",
+      "summary": "Every other Monday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "byDay": ["MO"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,",
+      "summary": null,
+      "accepted": false,
+      "reason": "malformed",
+      "message": "recurrence rule has no supported FREQ (expected DAILY, WEEKLY, MONTHLY or YEARLY)"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TU,WE,TH,FR",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TU,WE,TH,FR",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TU,WE,TH,FR",
+      "summary": "Every other week on Monday, Tuesday, Wednesday, Thursday and Friday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "byDay": ["MO", "TU", "WE", "TH", "FR"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR",
+      "summary": "Every other week on Monday, Wednesday and Friday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "byDay": ["MO", "WE", "FR"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,XX",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,XX",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,XX",
+      "summary": null,
+      "accepted": false,
+      "reason": "malformed",
+      "message": "recurrence rule has no supported FREQ (expected DAILY, WEEKLY, MONTHLY or YEARLY)"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=MO",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=MO",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=MO",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "WKST",
+      "message": "recurrence rule sets WKST to a day other than SU with INTERVAL>1; this engine starts every week on Sunday, so the periods would not line up"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=SU",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=SU",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=SU",
+      "summary": "Every other Monday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "byDay": ["MO"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=WE",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=WE",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=WE",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "WKST",
+      "message": "recurrence rule sets WKST to a day other than SU with INTERVAL>1; this engine starts every week on Sunday, so the periods would not line up"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=SU",
+      "summary": "Every other Sunday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "byDay": ["SU"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,SA",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,SA",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,SA",
+      "summary": "Every other week on Sunday and Saturday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "byDay": ["SU", "SA"]
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;COUNT=-2",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;COUNT=-2",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;COUNT=-2",
+      "summary": "Every other week · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;COUNT=0",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;COUNT=0",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;COUNT=0",
+      "summary": "Every other week · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;COUNT=1",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;COUNT=1",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;COUNT=1",
+      "summary": "Every other week · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;COUNT=5",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;COUNT=5",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;COUNT=5",
+      "summary": "Every other week · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=2026-12-31",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;UNTIL=2026-12-31",
+      "summary": "Every other week · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;UNTIL=20261231T000000Z",
+      "summary": "Every other week · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;UNTIL=SOON",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;UNTIL=SOON",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;UNTIL=SOON",
+      "summary": "Every other week",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;WKST=MO",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;WKST=MO",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;WKST=MO",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "WKST",
+      "message": "recurrence rule sets WKST to a day other than SU with INTERVAL>1; this engine starts every week on Sunday, so the periods would not line up"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;WKST=SU",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;WKST=SU",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;WKST=SU",
+      "summary": "Every other week",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 2
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;WKST=WE",
+      "canonical": "FREQ=WEEKLY;INTERVAL=2;WKST=WE",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=2;WKST=WE",
+      "summary": null,
+      "accepted": false,
+      "reason": "unsupported-part",
+      "part": "WKST",
+      "message": "recurrence rule sets WKST to a day other than SU with INTERVAL>1; this engine starts every week on Sunday, so the periods would not line up"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=3",
+      "canonical": "FREQ=WEEKLY;INTERVAL=3",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=3",
+      "summary": "Every 3 weeks",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 3
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=3;COUNT=-2",
+      "canonical": "FREQ=WEEKLY;INTERVAL=3;COUNT=-2",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=3;COUNT=-2",
+      "summary": "Every 3 weeks · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 3,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=3;COUNT=0",
+      "canonical": "FREQ=WEEKLY;INTERVAL=3;COUNT=0",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=3;COUNT=0",
+      "summary": "Every 3 weeks · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 3,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=3;COUNT=1",
+      "canonical": "FREQ=WEEKLY;INTERVAL=3;COUNT=1",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=3;COUNT=1",
+      "summary": "Every 3 weeks · once",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 3,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=3;COUNT=5",
+      "canonical": "FREQ=WEEKLY;INTERVAL=3;COUNT=5",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=3;COUNT=5",
+      "summary": "Every 3 weeks · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 3,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=3;UNTIL=2026-12-31",
+      "canonical": "FREQ=WEEKLY;INTERVAL=3;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=3;UNTIL=2026-12-31",
+      "summary": "Every 3 weeks · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 3,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=3;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=WEEKLY;INTERVAL=3;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=3;UNTIL=20261231T000000Z",
+      "summary": "Every 3 weeks · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 3,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;INTERVAL=3;UNTIL=SOON",
+      "canonical": "FREQ=WEEKLY;INTERVAL=3;UNTIL=SOON",
+      "line": "RRULE:FREQ=WEEKLY;INTERVAL=3;UNTIL=SOON",
+      "summary": "Every 3 weeks",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 3,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;UNTIL=2026-12-31",
+      "canonical": "FREQ=WEEKLY;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=WEEKLY;UNTIL=2026-12-31",
+      "summary": "Weekly · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=WEEKLY;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=WEEKLY;UNTIL=20261231T000000Z",
+      "summary": "Weekly · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;UNTIL=SOON",
+      "canonical": "FREQ=WEEKLY;UNTIL=SOON",
+      "line": "RRULE:FREQ=WEEKLY;UNTIL=SOON",
+      "summary": "Weekly",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;WKST=MO",
+      "canonical": "FREQ=WEEKLY;WKST=MO",
+      "line": "RRULE:FREQ=WEEKLY;WKST=MO",
+      "summary": "Weekly",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;WKST=SU",
+      "canonical": "FREQ=WEEKLY;WKST=SU",
+      "line": "RRULE:FREQ=WEEKLY;WKST=SU",
+      "summary": "Weekly",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;WKST=WE",
+      "canonical": "FREQ=WEEKLY;WKST=WE",
+      "line": "RRULE:FREQ=WEEKLY;WKST=WE",
+      "summary": "Weekly",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY",
+      "canonical": "FREQ=YEARLY",
+      "line": "RRULE:FREQ=YEARLY",
+      "summary": "Every year",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;COUNT=-2",
+      "canonical": "FREQ=YEARLY;COUNT=-2",
+      "line": "RRULE:FREQ=YEARLY;COUNT=-2",
+      "summary": "Every year · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;COUNT=0",
+      "canonical": "FREQ=YEARLY;COUNT=0",
+      "line": "RRULE:FREQ=YEARLY;COUNT=0",
+      "summary": "Every year · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;COUNT=1",
+      "canonical": "FREQ=YEARLY;COUNT=1",
+      "line": "RRULE:FREQ=YEARLY;COUNT=1",
+      "summary": "Every year · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;COUNT=5",
+      "canonical": "FREQ=YEARLY;COUNT=5",
+      "line": "RRULE:FREQ=YEARLY;COUNT=5",
+      "summary": "Every year · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=1",
+      "canonical": "FREQ=YEARLY;INTERVAL=1",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=1",
+      "summary": "Every year",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=13",
+      "canonical": "FREQ=YEARLY;INTERVAL=13",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=13",
+      "summary": "Every 13 years",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 13
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=13;COUNT=-2",
+      "canonical": "FREQ=YEARLY;INTERVAL=13;COUNT=-2",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=13;COUNT=-2",
+      "summary": "Every 13 years · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 13,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=13;COUNT=0",
+      "canonical": "FREQ=YEARLY;INTERVAL=13;COUNT=0",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=13;COUNT=0",
+      "summary": "Every 13 years · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 13,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=13;COUNT=1",
+      "canonical": "FREQ=YEARLY;INTERVAL=13;COUNT=1",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=13;COUNT=1",
+      "summary": "Every 13 years · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 13,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=13;COUNT=5",
+      "canonical": "FREQ=YEARLY;INTERVAL=13;COUNT=5",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=13;COUNT=5",
+      "summary": "Every 13 years · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 13,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=13;UNTIL=2026-12-31",
+      "canonical": "FREQ=YEARLY;INTERVAL=13;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=13;UNTIL=2026-12-31",
+      "summary": "Every 13 years · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 13,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=13;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=YEARLY;INTERVAL=13;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=13;UNTIL=20261231T000000Z",
+      "summary": "Every 13 years · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 13,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=13;UNTIL=SOON",
+      "canonical": "FREQ=YEARLY;INTERVAL=13;UNTIL=SOON",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=13;UNTIL=SOON",
+      "summary": "Every 13 years",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 13,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=1;COUNT=-2",
+      "canonical": "FREQ=YEARLY;INTERVAL=1;COUNT=-2",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=1;COUNT=-2",
+      "summary": "Every year · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=1;COUNT=0",
+      "canonical": "FREQ=YEARLY;INTERVAL=1;COUNT=0",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=1;COUNT=0",
+      "summary": "Every year · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=1;COUNT=1",
+      "canonical": "FREQ=YEARLY;INTERVAL=1;COUNT=1",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=1;COUNT=1",
+      "summary": "Every year · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=1;COUNT=5",
+      "canonical": "FREQ=YEARLY;INTERVAL=1;COUNT=5",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=1;COUNT=5",
+      "summary": "Every year · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=1;UNTIL=2026-12-31",
+      "canonical": "FREQ=YEARLY;INTERVAL=1;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=1;UNTIL=2026-12-31",
+      "summary": "Every year · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=1;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=YEARLY;INTERVAL=1;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=1;UNTIL=20261231T000000Z",
+      "summary": "Every year · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=1;UNTIL=SOON",
+      "canonical": "FREQ=YEARLY;INTERVAL=1;UNTIL=SOON",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=1;UNTIL=SOON",
+      "summary": "Every year",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=2",
+      "canonical": "FREQ=YEARLY;INTERVAL=2",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=2",
+      "summary": "Every other year",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 2
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=2;COUNT=-2",
+      "canonical": "FREQ=YEARLY;INTERVAL=2;COUNT=-2",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=2;COUNT=-2",
+      "summary": "Every other year · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 2,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=2;COUNT=0",
+      "canonical": "FREQ=YEARLY;INTERVAL=2;COUNT=0",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=2;COUNT=0",
+      "summary": "Every other year · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 2,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=2;COUNT=1",
+      "canonical": "FREQ=YEARLY;INTERVAL=2;COUNT=1",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=2;COUNT=1",
+      "summary": "Every other year · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 2,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=2;COUNT=5",
+      "canonical": "FREQ=YEARLY;INTERVAL=2;COUNT=5",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=2;COUNT=5",
+      "summary": "Every other year · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 2,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=2;UNTIL=2026-12-31",
+      "canonical": "FREQ=YEARLY;INTERVAL=2;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=2;UNTIL=2026-12-31",
+      "summary": "Every other year · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 2,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=2;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=YEARLY;INTERVAL=2;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=2;UNTIL=20261231T000000Z",
+      "summary": "Every other year · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 2,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=2;UNTIL=SOON",
+      "canonical": "FREQ=YEARLY;INTERVAL=2;UNTIL=SOON",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=2;UNTIL=SOON",
+      "summary": "Every other year",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 2,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=3",
+      "canonical": "FREQ=YEARLY;INTERVAL=3",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=3",
+      "summary": "Every 3 years",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 3
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=3;COUNT=-2",
+      "canonical": "FREQ=YEARLY;INTERVAL=3;COUNT=-2",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=3;COUNT=-2",
+      "summary": "Every 3 years · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 3,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=3;COUNT=0",
+      "canonical": "FREQ=YEARLY;INTERVAL=3;COUNT=0",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=3;COUNT=0",
+      "summary": "Every 3 years · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 3,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=3;COUNT=1",
+      "canonical": "FREQ=YEARLY;INTERVAL=3;COUNT=1",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=3;COUNT=1",
+      "summary": "Every 3 years · once",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 3,
+        "count": 1
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=3;COUNT=5",
+      "canonical": "FREQ=YEARLY;INTERVAL=3;COUNT=5",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=3;COUNT=5",
+      "summary": "Every 3 years · 5 times",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 3,
+        "count": 5
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=3;UNTIL=2026-12-31",
+      "canonical": "FREQ=YEARLY;INTERVAL=3;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=3;UNTIL=2026-12-31",
+      "summary": "Every 3 years · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 3,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=3;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=YEARLY;INTERVAL=3;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=3;UNTIL=20261231T000000Z",
+      "summary": "Every 3 years · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 3,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;INTERVAL=3;UNTIL=SOON",
+      "canonical": "FREQ=YEARLY;INTERVAL=3;UNTIL=SOON",
+      "line": "RRULE:FREQ=YEARLY;INTERVAL=3;UNTIL=SOON",
+      "summary": "Every 3 years",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 3,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;UNTIL=2026-12-31",
+      "canonical": "FREQ=YEARLY;UNTIL=2026-12-31",
+      "line": "RRULE:FREQ=YEARLY;UNTIL=2026-12-31",
+      "summary": "Every year · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "until": "2026-12-31"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;UNTIL=20261231T000000Z",
+      "canonical": "FREQ=YEARLY;UNTIL=20261231T000000Z",
+      "line": "RRULE:FREQ=YEARLY;UNTIL=20261231T000000Z",
+      "summary": "Every year · until Dec 31, 2026",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "until": "20261231T000000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=YEARLY;UNTIL=SOON",
+      "canonical": "FREQ=YEARLY;UNTIL=SOON",
+      "line": "RRULE:FREQ=YEARLY;UNTIL=SOON",
+      "summary": "Every year",
+      "accepted": true,
+      "rule": {
+        "freq": "YEARLY",
+        "interval": 1,
+        "until": "SOON"
+      }
+    },
+    {
+      "rrule": "INTERVAL=2",
+      "canonical": "INTERVAL=2",
+      "line": "RRULE:INTERVAL=2",
+      "summary": null,
+      "accepted": false,
+      "reason": "malformed",
+      "message": "recurrence rule has no supported FREQ (expected DAILY, WEEKLY, MONTHLY or YEARLY)"
+    },
+    {
+      "rrule": "RRULE: FREQ = DAILY ",
+      "canonical": "FREQ=DAILY",
+      "line": "RRULE:FREQ=DAILY",
+      "summary": "Daily",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "RRULE:FREQ=DAILY",
+      "canonical": "FREQ=DAILY",
+      "line": "RRULE:FREQ=DAILY",
+      "summary": "Daily",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "banana",
+      "canonical": "banana",
+      "line": "RRULE:banana",
+      "summary": null,
+      "accepted": false,
+      "reason": "malformed",
+      "message": "recurrence rule has no supported FREQ (expected DAILY, WEEKLY, MONTHLY or YEARLY)"
+    },
+    {
+      "rrule": "freq=daily",
+      "canonical": "freq=daily",
+      "line": "RRULE:freq=daily",
+      "summary": "Daily",
+      "accepted": true,
+      "rule": {
+        "freq": "DAILY",
+        "interval": 1
+      }
+    },
+    {
+      "rrule": "rrule:FREQ=WEEKLY;BYDAY=MO",
+      "canonical": "FREQ=WEEKLY;BYDAY=MO",
+      "line": "RRULE:FREQ=WEEKLY;BYDAY=MO",
+      "summary": "Every Monday",
+      "accepted": true,
+      "rule": {
+        "freq": "WEEKLY",
+        "interval": 1,
+        "byDay": ["MO"]
+      }
+    }
+  ],
+  "cautionary": {
+    "rrule": "FREQ=MONTHLY;BYSETPOS=-1",
+    "canonical": "FREQ=MONTHLY;BYSETPOS=-1",
+    "line": "RRULE:FREQ=MONTHLY;BYSETPOS=-1",
+    "summary": null,
+    "accepted": false,
+    "reason": "unsupported-part",
+    "part": "BYSETPOS",
+    "message": "recurrence rule uses BYSETPOS, which this engine cannot honour: it selects the nth candidate within each period; the expander emits every candidate"
+  },
+  "supportedFreqs": ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"],
+  "refusedParts": [
+    "BYSETPOS",
+    "BYMONTHDAY",
+    "BYMONTH",
+    "BYYEARDAY",
+    "BYWEEKNO",
+    "BYHOUR",
+    "BYMINUTE",
+    "BYSECOND",
+    "BYDAY",
+    "WKST"
+  ]
+}

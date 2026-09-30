@@ -1,0 +1,16 @@
+# cinterop over the committed C header (#1020, D-1020-E2).
+#
+# `headers` names the header `crates/core-ffi` generates with cbindgen and
+# COMMITS; `includeDirs` is set in `mobile/core/build.gradle.kts` so this file
+# holds no path. `headerFilter` keeps the klib to this one header: without it
+# cinterop pulls in every `stdint.h`/`stdlib.h` declaration the header includes
+# and the generated Kotlin surface becomes libc.
+#
+# `staticLibraries`/`libraryPaths` are deliberately ABSENT. The framework links
+# against the XCFramework `lane-prebuilt-core.yml` (lane G) publishes, resolved
+# by Xcode through SPM — not by cinterop, which would need the artifact present
+# on every machine that merely compiles Kotlin.
+
+headers = centraid.h
+headerFilter = centraid.h
+package = dev.centraid.core.cinterop

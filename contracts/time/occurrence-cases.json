@@ -1,0 +1,544 @@
+{
+  "note": "GENERATED from packages/core/src/time by contracts/tools/export-time-corpus.ts — do not edit by hand (#1020).",
+  "column": "original_start_local",
+  "rows": [
+    {
+      "exception_id": "exc-1",
+      "target_type": "core.event",
+      "target_id": "event-1",
+      "original_start_local": "2026-03-09T09:00:00",
+      "recurrence_semantics": "zoned",
+      "scope": "occurrence",
+      "action": "skip",
+      "override_json": null
+    },
+    {
+      "exception_id": "exc-2",
+      "target_type": "core.event",
+      "target_id": "event-1",
+      "original_start_local": "2026-03-11T09:00:00",
+      "recurrence_semantics": "zoned",
+      "scope": "occurrence",
+      "action": "override",
+      "override_json": "{\"scope\":\"occurrence\",\"start\":\"2026-03-11T18:00:00.000Z\",\"summary\":\"Moved later\"}"
+    },
+    {
+      "exception_id": "exc-3",
+      "target_type": "core.event",
+      "target_id": "event-1",
+      "original_start_local": "2026-03-13T09:00:00",
+      "recurrence_semantics": "zoned",
+      "scope": "future",
+      "action": "override",
+      "override_json": "{\"scope\":\"future\",\"start\":\"2026-03-13T15:00:00.000Z\"}"
+    },
+    {
+      "exception_id": "exc-4",
+      "target_type": "core.event",
+      "target_id": "event-2",
+      "original_start_local": "2026-03-09T09:00:00",
+      "recurrence_semantics": "zoned",
+      "scope": "occurrence",
+      "action": "skip",
+      "override_json": null
+    },
+    {
+      "exception_id": "exc-5",
+      "target_type": "tally.recurring_expense",
+      "target_id": "event-1",
+      "original_start_local": "2026-03-09T09:00:00",
+      "recurrence_semantics": "zoned",
+      "scope": "occurrence",
+      "action": "skip",
+      "override_json": null
+    },
+    {
+      "exception_id": "exc-6",
+      "target_type": "core.event",
+      "target_id": "event-1",
+      "original_start_local": null,
+      "recurrence_semantics": "zoned",
+      "scope": "occurrence",
+      "action": "skip",
+      "override_json": null
+    },
+    {
+      "exception_id": "exc-7",
+      "target_type": "core.event",
+      "target_id": "event-1",
+      "original_start_local": "2026-03-17T09:00:00",
+      "recurrence_semantics": "zoned",
+      "scope": "occurrence",
+      "action": "override",
+      "override_json": "{"
+    }
+  ],
+  "series": {
+    "seriesType": "core.event",
+    "seriesId": "event-1"
+  },
+  "exceptions": [
+    {
+      "seriesType": "core.event",
+      "seriesId": "event-1",
+      "localStart": "2026-03-09T09:00:00",
+      "semantics": "zoned",
+      "token": "core.event:event-1:zoned:2026-03-09T09:00:00",
+      "action": "skip",
+      "scope": "occurrence",
+      "override": null
+    },
+    {
+      "seriesType": "core.event",
+      "seriesId": "event-1",
+      "localStart": "2026-03-11T09:00:00",
+      "semantics": "zoned",
+      "token": "core.event:event-1:zoned:2026-03-11T09:00:00",
+      "action": "override",
+      "scope": "occurrence",
+      "override": {
+        "scope": "occurrence",
+        "start": "2026-03-11T18:00:00.000Z",
+        "summary": "Moved later"
+      }
+    },
+    {
+      "seriesType": "core.event",
+      "seriesId": "event-1",
+      "localStart": "2026-03-13T09:00:00",
+      "semantics": "zoned",
+      "token": "core.event:event-1:zoned:2026-03-13T09:00:00",
+      "action": "override",
+      "scope": "future",
+      "override": {
+        "scope": "future",
+        "start": "2026-03-13T15:00:00.000Z"
+      }
+    },
+    {
+      "seriesType": "core.event",
+      "seriesId": "event-1",
+      "localStart": "2026-03-17T09:00:00",
+      "semantics": "zoned",
+      "token": "core.event:event-1:zoned:2026-03-17T09:00:00",
+      "action": "override",
+      "scope": "occurrence",
+      "override": null
+    }
+  ],
+  "overrideAt": [
+    {
+      "localStart": "2026-03-08T09:00:00",
+      "override": null
+    },
+    {
+      "localStart": "2026-03-11T09:00:00",
+      "override": {
+        "scope": "occurrence",
+        "start": "2026-03-11T18:00:00.000Z",
+        "summary": "Moved later"
+      }
+    },
+    {
+      "localStart": "2026-03-12T09:00:00",
+      "override": null
+    },
+    {
+      "localStart": "2026-03-13T09:00:00",
+      "override": {
+        "scope": "future",
+        "start": "2026-03-13T15:00:00.000Z"
+      }
+    },
+    {
+      "localStart": "2026-03-19T09:00:00",
+      "override": {
+        "scope": "future",
+        "start": "2026-03-13T15:00:00.000Z"
+      }
+    }
+  ],
+  "expansion": {
+    "zone": "Asia/Kolkata",
+    "rrule": "FREQ=DAILY",
+    "start": "2026-03-02T03:30:00.000Z",
+    "rangeFrom": "2026-03-01T00:00:00.000Z",
+    "rangeTo": "2026-03-20T00:00:00.000Z",
+    "before": [
+      {
+        "start": "2026-03-02T03:30:00.000Z",
+        "wallStart": "2026-03-02T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-03T03:30:00.000Z",
+        "wallStart": "2026-03-03T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-04T03:30:00.000Z",
+        "wallStart": "2026-03-04T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-05T03:30:00.000Z",
+        "wallStart": "2026-03-05T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-06T03:30:00.000Z",
+        "wallStart": "2026-03-06T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-07T03:30:00.000Z",
+        "wallStart": "2026-03-07T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-08T03:30:00.000Z",
+        "wallStart": "2026-03-08T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-09T03:30:00.000Z",
+        "wallStart": "2026-03-09T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-10T03:30:00.000Z",
+        "wallStart": "2026-03-10T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-11T03:30:00.000Z",
+        "wallStart": "2026-03-11T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-12T03:30:00.000Z",
+        "wallStart": "2026-03-12T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-13T03:30:00.000Z",
+        "wallStart": "2026-03-13T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-14T03:30:00.000Z",
+        "wallStart": "2026-03-14T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-15T03:30:00.000Z",
+        "wallStart": "2026-03-15T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-16T03:30:00.000Z",
+        "wallStart": "2026-03-16T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-17T03:30:00.000Z",
+        "wallStart": "2026-03-17T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-18T03:30:00.000Z",
+        "wallStart": "2026-03-18T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-19T03:30:00.000Z",
+        "wallStart": "2026-03-19T09:00:00",
+        "overlap": false
+      }
+    ],
+    "after": [
+      {
+        "start": "2026-03-02T03:30:00.000Z",
+        "wallStart": "2026-03-02T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-03T03:30:00.000Z",
+        "wallStart": "2026-03-03T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-04T03:30:00.000Z",
+        "wallStart": "2026-03-04T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-05T03:30:00.000Z",
+        "wallStart": "2026-03-05T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-06T03:30:00.000Z",
+        "wallStart": "2026-03-06T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-07T03:30:00.000Z",
+        "wallStart": "2026-03-07T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-08T03:30:00.000Z",
+        "wallStart": "2026-03-08T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-10T03:30:00.000Z",
+        "wallStart": "2026-03-10T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-11T18:00:00.000Z",
+        "wallStart": "2026-03-11T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-12T03:30:00.000Z",
+        "wallStart": "2026-03-12T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-13T15:00:00.000Z",
+        "wallStart": "2026-03-13T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-14T15:00:00.000Z",
+        "wallStart": "2026-03-14T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-15T15:00:00.000Z",
+        "wallStart": "2026-03-15T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-16T15:00:00.000Z",
+        "wallStart": "2026-03-16T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-17T03:30:00.000Z",
+        "wallStart": "2026-03-17T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-18T15:00:00.000Z",
+        "wallStart": "2026-03-18T09:00:00",
+        "overlap": false
+      },
+      {
+        "start": "2026-03-19T15:00:00.000Z",
+        "wallStart": "2026-03-19T09:00:00",
+        "overlap": false
+      }
+    ]
+  },
+  "ont25": {
+    "why": "the same skip keyed on the RESOLVED INSTANT matches no occurrence at all",
+    "instantKey": "2026-03-09T03:30:00.000Z",
+    "wallKey": "2026-03-09T09:00:00",
+    "keptWithInstantKey": 18,
+    "keptWithWallKey": 17,
+    "total": 18
+  },
+  "searchWindows": [
+    {
+      "localStart": "2026-03-29T09:00:00",
+      "window": {
+        "from": "2026-03-27T09:00:00.000Z",
+        "to": "2026-03-31T09:00:00.000Z"
+      }
+    },
+    {
+      "localStart": "2026-03-29",
+      "window": {
+        "from": "2026-03-27T00:00:00.000Z",
+        "to": "2026-03-31T00:00:00.000Z"
+      }
+    },
+    {
+      "localStart": "2026-11-01T01:30:00",
+      "window": {
+        "from": "2026-10-30T01:30:00.000Z",
+        "to": "2026-11-03T01:30:00.000Z"
+      }
+    },
+    {
+      "localStart": "banana",
+      "window": null
+    }
+  ],
+  "nextOccurrence": [
+    {
+      "rrule": "FREQ=DAILY",
+      "scheduledStart": "2026-03-01T09:00:00.000Z",
+      "after": "2026-03-01T09:00:00.000Z",
+      "anchor": "scheduled",
+      "zone": "Asia/Kolkata",
+      "next": "2026-03-02T09:00:00.000Z"
+    },
+    {
+      "rrule": "FREQ=DAILY",
+      "scheduledStart": "2026-03-01T09:00:00.000Z",
+      "after": "2026-03-05T10:00:00.000Z",
+      "anchor": "scheduled",
+      "zone": "Asia/Kolkata",
+      "next": "2026-03-06T09:00:00.000Z"
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=MO,FR",
+      "scheduledStart": "2026-03-02T09:00:00.000Z",
+      "after": "2026-03-03T09:00:00.000Z",
+      "anchor": "scheduled",
+      "zone": "Asia/Kolkata",
+      "next": "2026-03-06T09:00:00.000Z"
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=30",
+      "scheduledStart": "2026-03-01T09:00:00.000Z",
+      "after": "2026-04-15T09:00:00.000Z",
+      "anchor": "completion",
+      "zone": "Asia/Kolkata",
+      "next": "2026-05-15T09:00:00.000Z"
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYSETPOS=-1",
+      "scheduledStart": "2026-03-01T09:00:00.000Z",
+      "after": "2026-03-01T09:00:00.000Z",
+      "anchor": "scheduled",
+      "zone": "Asia/Kolkata",
+      "next": null
+    }
+  ],
+  "collapse": [
+    {
+      "rrule": "FREQ=DAILY",
+      "scheduledStart": "2026-03-01T09:00:00.000Z",
+      "now": "2026-03-05T10:00:00.000Z",
+      "anchor": "scheduled",
+      "zone": "Asia/Kolkata",
+      "collapsed": {
+        "missed": 5,
+        "nextDue": "2026-03-06T09:00:00.000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY",
+      "scheduledStart": "2026-03-01T09:00:00.000Z",
+      "now": "2026-03-05T10:00:00.000Z",
+      "anchor": "scheduled",
+      "lastCompletedAt": "2026-03-03T09:00:00.000Z",
+      "zone": "Asia/Kolkata",
+      "collapsed": {
+        "missed": 2,
+        "nextDue": "2026-03-06T09:00:00.000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "scheduledStart": "2026-01-05T09:00:00.000Z",
+      "now": "2026-03-05T10:00:00.000Z",
+      "anchor": "scheduled",
+      "zone": "Asia/Kolkata",
+      "collapsed": {
+        "missed": 9,
+        "nextDue": "2026-03-09T09:00:00.000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=7",
+      "scheduledStart": "2026-03-01T09:00:00.000Z",
+      "now": "2026-03-20T10:00:00.000Z",
+      "anchor": "completion",
+      "zone": "Asia/Kolkata",
+      "collapsed": {
+        "missed": 1,
+        "nextDue": "2026-03-01T09:00:00.000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=DAILY;INTERVAL=7",
+      "scheduledStart": "2026-03-01T09:00:00.000Z",
+      "now": "2026-03-20T10:00:00.000Z",
+      "anchor": "completion",
+      "lastCompletedAt": "2026-03-08T09:00:00.000Z",
+      "zone": "Asia/Kolkata",
+      "collapsed": {
+        "missed": 1,
+        "nextDue": "2026-03-15T09:00:00.000Z"
+      }
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYSETPOS=-1",
+      "scheduledStart": "2026-03-01T09:00:00.000Z",
+      "now": "2026-03-20T10:00:00.000Z",
+      "anchor": "scheduled",
+      "zone": "Asia/Kolkata",
+      "collapsed": {
+        "missed": 0,
+        "nextDue": null
+      }
+    }
+  ],
+  "temporal": [
+    {
+      "value": "2026-03-01T09:00:00Z",
+      "kind": "instant"
+    },
+    {
+      "value": "2026-03-01T09:00:00+05:30",
+      "kind": "instant"
+    },
+    {
+      "value": "2026-03-01T09:00",
+      "kind": "floating-datetime"
+    },
+    {
+      "value": "2026-03-01T09:00:00.123",
+      "kind": "floating-datetime"
+    },
+    {
+      "value": "2026-03-01",
+      "kind": "local-date"
+    },
+    {
+      "value": "02-29",
+      "kind": "month-day"
+    },
+    {
+      "value": "2027-02-29",
+      "kind": null
+    },
+    {
+      "value": "2026-02-31",
+      "kind": null
+    },
+    {
+      "value": "2026-13-01",
+      "kind": null
+    },
+    {
+      "value": "2026-03-01T25:00:00Z",
+      "kind": null
+    },
+    {
+      "value": "banana",
+      "kind": null
+    },
+    {
+      "value": "",
+      "kind": null
+    }
+  ]
+}

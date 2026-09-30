@@ -18,7 +18,9 @@
     "pi-arm64-4c": "A Pi-class self-hosted runner (4 arm64 cores, SD/USB flash) carrying the `centraid-pi` label — the machine the `constrained` hardware profile is NAMED for (#927 W4). Every number under that profile before this rung was taken on a cloud x64 runner with the profile pinned, which changes SQLite's durability mode and nothing about the disk underneath it, so a row here and a row on `ci-linux-x64-4c-constrained` must never be averaged together.",
     "any": "Hardware-independent — a build artifact weighed on disk, or a count of statements the product issues.",
     "ci-linux-x64-4c-standard": "The same runner as `ci-linux-x64-4c`, with CENTRAID_HARDWARE_PROFILE=standard pinned: SQLite `synchronous=FULL`, the desktop-class durability setting. The gateway resolves the profile at boot, so a number is only comparable to another taken under the SAME profile.",
-    "ci-linux-x64-4c-constrained": "The same runner with CENTRAID_HARDWARE_PROFILE=constrained: SQLite `synchronous=NORMAL`, the phone/low-end setting. Every gateway journey is stated under BOTH profiles because the durability mode is the single biggest lever on a write path and one number would hide which side of it moved."
+    "ci-linux-x64-4c-constrained": "The same runner with CENTRAID_HARDWARE_PROFILE=constrained: SQLite `synchronous=NORMAL`, the phone/low-end setting. Every gateway journey is stated under BOTH profiles because the durability mode is the single biggest lever on a write path and one number would hide which side of it moved.",
+    "device-android-mid": "Samsung Galaxy A55 (2024, Exynos 1480, 8 GB) — the [#1020](https://github.com/srikanth235/centraid/issues/1020) reference device for the v1 absolute targets, named by the owner (Q-1020-2, ruled 2026-09-12). This cell carries no measurement until a run on that phone happens. It is not `device-android-low-end`: the farm's low-end cell is a floor the experience must survive, and this one is the phone the targets are stated FOR.",
+    "device-iphone-oldest": "iPhone XR on iOS 17 — the oldest iPhone the v1 app supports and the [#1020](https://github.com/srikanth235/centraid/issues/1020) reference device, named by the owner (Q-1020-2, ruled 2026-09-12). Distinct from `device-iphone`, which is whatever handset the farm leased: an absolute target needs the SLOWEST supported device, not a representative one."
   },
   "volumes": {
     "year3": "The golden year-3 artifact: ~27,600 domain rows (5,000 parties, 10,000 photos, 200 conversations x 12 turns, 1,000 notes, 1,096 events, 12 grantees, 365 receipt days). packages/test-kit/src/year3-vault.ts.",
@@ -32,7 +34,14 @@
     "seeded-demo": "Every bundled app's own demo seed written through the gateway's write path, plus a stated number of Atlas `core.place` rows (the count is in each entry's provenance). NOT year-3, and the only rows still stated at it are the `gateway/*` bench journeys. The web e2e harness left it for `year3` in #927 W4, once `@centraid/test-kit` gained a `dist` build and `node --experimental-strip-types` could load the year-3 generator. It is a real volume through the real write path, and it is the volume the gateway numbers below are stated at.",
     "mock-gateway": "The desktop e2e fixture: a mock gateway, one app, a fresh userData directory. NOT year-3, and the harness cannot be pointed at the golden artifact from this container — Electron does not launch on a display-less runner, so the rig is landed and the number stays parked.",
     "device-fixture": "Whatever the CI gateway fixture seeded onto the simulator's device replica. NOT the declared year-3 50,000 replica rows / 90,000 photo assets: reaching those needs a device run, which this container has none of.",
-    "shared-album": "One album of 200 photos, shared whole. Big enough that projection dominates the grant plane's fixed cost."
+    "shared-album": "One album of 200 photos, shared whole. Big enough that projection dominates the grant plane's fixed cost.",
+    "year3-50k-assets": "50,000 photo assets in the library, on the device that is browsing them — the volume [#1020](https://github.com/srikanth235/centraid/issues/1020) states its memory, interaction and battery targets at. Distinct from `year3-photos` (90,000 assets), which is the GATEWAY-side library profile: 50k is the size at which a phone's grid, its thumbnail cache and its sync pass are all under real pressure at once, and stating a phone ceiling at 90k would be stating it at a volume no reference device has been asked to hold.",
+    "year3-tally": "Tally at year three: 2,000 expenses, 8,000 split rows, 40 groups, 240 pair rows. `crates/apps/kit::fixtures::year3_tally`. Distinct from `year3`, which is the whole golden vault — this volume is one app's plane at the size its own declared windows are stated for.",
+    "year3-docs": "The drive at year three: 8,000 documents (7,600 live / 400 trashed), 10,000 content items, 10,000 occurrences, 12,600 tags, 400 folders four levels deep, and 2,000 standing answers half of them on folders. `crates/apps/kit::fixtures::year3_docs`.",
+    "year3-notes": "The notebook at year three: 10,000 notes — 400 trashed, 200 pinned, 1,200 journal entries — with a 48 KiB body on 600 of them, the largest body the product holds. `crates/apps/kit::fixtures::year3_notes`.",
+    "year3-people": "The roster at year three: 5,000 people, 12,000 important dates, 20,000 interactions. `crates/apps/kit::fixtures::year3_people`. v0's own year-3 generator writes 5,000 `core_party` rows and no `people_profile` at all, so these reads had no artifact behind them before [#1020](https://github.com/srikanth235/centraid/issues/1020).",
+    "year3-agenda": "The calendar at year three: 12,000 events, 800 recurring series, 1,200 exceptions. `crates/apps/kit::fixtures::year3_agenda`. It is the volume at which a six-month `upcoming` window genuinely reaches the 1,500-instance expansion cap, which is what makes the cap's error a real answer rather than a synthetic one.",
+    "year3-tasks": "The board at year three: 12,000 tasks — 8,250 open, 3,750 closed, 800 cancelled. `crates/apps/kit::fixtures::year3_tasks`."
   },
   "journeys": {
     "cold-open": "Process start to the first screen the owner can act on.",
@@ -61,10 +70,14 @@
     "durable-save": "A change made with no radio to the phone saying it is saved on this device.",
     "pending-render": "A queued outbox to the pending rows and badges the screen draws for it.",
     "restart-recovery": "The app is killed and relaunched offline; pending work is on screen again.",
-    "reconnect-drain": "The radio returns to an empty outbox, every queued change executed in order."
+    "reconnect-drain": "The radio returns to an empty outbox, every queued change executed in order.",
+    "typing": "A keystroke to the character on screen, in a text editor over a real vault. Not `own-echo`: an echo may cost a round trip to the core, and a keystroke may not.",
+    "background-pass": "Not a journey — the battery a single scheduled background sync pass costs, as a percentage of the device's charge.",
+    "memory": "Not a journey — resident memory the app holds while a library of the stated volume is open and scrolling.",
+    "app-read": "Not a journey — the wall clock of one bundled app's declared read, folded, at the stated volume, measured through the v1 app crate's own query path ([#1020](https://github.com/srikanth235/centraid/issues/1020)). It is the gateway-side half of a screen: what the fold costs before a shell has drawn anything. The shell's half is `warm-switch` and `scroll`, and neither is measurable on a host with no device."
   },
   "entries": {
-    "approvedDeviation": "#996 W5 retires `mountedReplicaReadWithOutbox` and `year3-household` as above. Prior: #927. #927 W4 RE-KEYS the ten `web/*` entries from volume `seeded-demo` to `year3`, which the ratchet reads as ten removals plus ten additions. Every number is carried across BYTE-IDENTICAL — largestContentfulPaint 1200 ms, interactionToNextPaint 120 ms, cumulativeLayoutShift 0.1, and the eight unmeasured rows' `_intendedCeilingMs: null` — so not one ceiling widens; only the address moves. The move is a measurement, not a relabel: `@centraid/test-kit` gained a `dist` build in this same change set, so `apps/web/tests/e2e/server.ts` seeds the shared year-3 generator's golden daily-path profile instead of eight demo routes plus 2,000 Atlas rows, and all three vitals were re-observed there (LCP 484/516/524 ms against the unchanged 1200 ceiling, INP 24 ms, CLS 0). The `gateway/*` rows keep `seeded-demo`; they are seeded by `bench-journeys.mjs`, not by this harness.",
+    "approvedDeviation": "#996 W5 retires `mountedReplicaReadWithOutbox` and `year3-household` as above. Prior: #927. #927 W4 RE-KEYS the ten `web/*` entries from volume `seeded-demo` to `year3`, which the ratchet reads as ten removals plus ten additions. Every number is carried across BYTE-IDENTICAL — largestContentfulPaint 1200 ms, interactionToNextPaint 120 ms, cumulativeLayoutShift 0.1, and the eight unmeasured rows' `_intendedCeilingMs: null` — so not one ceiling widens; only the address moves. The move is a measurement, not a relabel: `@centraid/test-kit` gained a `dist` build in this same change set, so `apps/web/tests/e2e/server.ts` seeds the shared year-3 generator's golden daily-path profile instead of eight demo routes plus 2,000 Atlas rows, and all three vitals were re-observed there (LCP 484/516/524 ms against the unchanged 1200 ceiling, INP 24 ms, CLS 0). The `gateway/*` rows keep `seeded-demo`; they are seeded by `bench-journeys.mjs`, not by this harness. #1020's close pass ADDS seven `gateway/app-read/*` entries, one `app-read` journey and six year-3 volumes. Additions only: no existing entry is re-keyed, no ceiling moves, and every number the five carry is parked under a leading underscore (`_observedMs`) with `status: \"projected\"`, so the ratchet reads none of them. They exist so the v1 app crates' year-3 numbers have an address rather than living only in a receipt; the device lane of R-1020-20 is what turns one into a ceiling.",
     "web/own-echo/none/ci-linux-x64-4c": {
       "surface": "web",
       "journey": "own-echo",
@@ -1925,6 +1938,501 @@
           "status": "unmeasured",
           "probe": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs — the Android airplane arc on the `mobile-device-gate` emulator lane, extended in #996 wave 3 to the task chain (create, rename twice, due date, complete), a force-stop and relaunch while still offline, and the second-writer conflict. DEVICE-PENDING: the flow asserts the STATES today and times nothing. The number needs a run that stamps the four spans on the emulator; the sibling `none/ci-linux-x64-4c` row is the seat-side lower bound and is NOT this row's answer — Hermes, SQLCipher on flash and a real render are all absent from it.",
           "_reason": "NO PHONE IN THIS CONTAINER. An emulator's millisecond bounds the experience from below and can never become a ceiling (see the `device-android-low-end` note); this row exists so the gap is a row rather than an absence."
+        }
+      }
+    },
+    "mobile/own-echo/year3-50k-assets/device-android-mid": {
+      "surface": "mobile",
+      "journey": "own-echo",
+      "volume": "year3-50k-assets",
+      "hardware": "device-android-mid",
+      "spans": ["core.call", "client.interaction"],
+      "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
+      "tolerancePercent": 20,
+      "metrics": {
+        "interactionP95": {
+          "status": "_intended",
+          "probe": "NO RIG AND NO DEVICE. [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 0 could not take this baseline: the run that recorded it had no physical phone, no Xcode and no self-hosted runner, and the two reference devices are not even named yet (Q-1020-2). The ceiling below is an ABSOLUTE TARGET argued from the platform, not an observation plus headroom, so it is parked under a leading underscore and gates nothing. It is promoted by the first run on the named device, per R-1020-20.",
+          "_intendedCeilingMs": 100,
+          "_provenance": {
+            "at": "2026-09-12",
+            "host": "none — no measurement was taken; see `probe`",
+            "note": "A frame budget at 60 Hz is 16.7 ms, and every mobile target here is derived from it rather than from v0's numbers: [#1020](https://github.com/srikanth235/centraid/issues/1020) rules the platform move STRUCTURAL, and the only handler timing on record (188 ms for Tally's dashboard at 2,000 expenses) was taken on a 4-core Node host and says nothing about a phone, so 'better than v0' is not a target this ledger can hold. 100 ms is the ceiling at which an interaction still reads as a direct response to the finger rather than as the app thinking — about six frames — so p95 interaction latency is stated there and not at one frame: the target is that the response is not NOTICED as late, which is a weaker and more honest claim than that it never misses a frame. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "mobile/scroll/year3-50k-assets/device-android-mid": {
+      "surface": "mobile",
+      "journey": "scroll",
+      "volume": "year3-50k-assets",
+      "hardware": "device-android-mid",
+      "spans": ["client.frame", "seat.apply"],
+      "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
+      "tolerancePercent": 20,
+      "metrics": {
+        "frameMissesDuringSync": {
+          "status": "_intended",
+          "probe": "NO RIG AND NO DEVICE. [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 0 could not take this baseline: the run that recorded it had no physical phone, no Xcode and no self-hosted runner, and the two reference devices are not even named yet (Q-1020-2). The ceiling below is an ABSOLUTE TARGET argued from the platform, not an observation plus headroom, so it is parked under a leading underscore and gates nothing. It is promoted by the first run on the named device, per R-1020-20.",
+          "_intendedCeilingPercent": 1,
+          "_provenance": {
+            "at": "2026-09-12",
+            "host": "none — no measurement was taken; see `probe`",
+            "note": "A frame budget at 60 Hz is 16.7 ms, and every mobile target here is derived from it rather than from v0's numbers: [#1020](https://github.com/srikanth235/centraid/issues/1020) rules the platform move STRUCTURAL, and the only handler timing on record (188 ms for Tally's dashboard at 2,000 expenses) was taken on a 4-core Node host and says nothing about a phone, so 'better than v0' is not a target this ledger can hold. This is the measurement v0 has no answer for at all: a fling while a sync pass applies rows on the same device. 1 % of frames missed is roughly one hitch in a second and a half of scrolling, which is at the edge of what a member reports; the point of the target is that CONCURRENT SYNC is inside the measurement, because a smooth grid with the applier idle proves nothing about the product. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "mobile/typing/year3/device-android-mid": {
+      "surface": "mobile",
+      "journey": "typing",
+      "volume": "year3",
+      "hardware": "device-android-mid",
+      "spans": ["core.call", "client.interaction"],
+      "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
+      "tolerancePercent": 20,
+      "metrics": {
+        "keystrokeP95": {
+          "status": "_intended",
+          "probe": "NO RIG AND NO DEVICE. [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 0 could not take this baseline: the run that recorded it had no physical phone, no Xcode and no self-hosted runner, and the two reference devices are not even named yet (Q-1020-2). The ceiling below is an ABSOLUTE TARGET argued from the platform, not an observation plus headroom, so it is parked under a leading underscore and gates nothing. It is promoted by the first run on the named device, per R-1020-20.",
+          "_intendedCeilingMs": 16,
+          "_provenance": {
+            "at": "2026-09-12",
+            "host": "none — no measurement was taken; see `probe`",
+            "note": "A frame budget at 60 Hz is 16.7 ms, and every mobile target here is derived from it rather than from v0's numbers: [#1020](https://github.com/srikanth235/centraid/issues/1020) rules the platform move STRUCTURAL, and the only handler timing on record (188 ms for Tally's dashboard at 2,000 expenses) was taken on a 4-core Node host and says nothing about a phone, so 'better than v0' is not a target this ledger can hold. Typing is the one interaction where a member's own hand sets the clock, so p95 is stated at ONE FRAME (16 ms, the floor of 16.7) rather than at the 100 ms interaction ceiling: a character that lands a frame late is visible as the editor lagging the keyboard. Stated at `year3` rather than the photo volume because the vault a note is typed into is the golden year-3 artifact, and 1,000 notes is the number that artifact holds. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "mobile/memory/year3-50k-assets/device-android-mid": {
+      "surface": "mobile",
+      "journey": "memory",
+      "volume": "year3-50k-assets",
+      "hardware": "device-android-mid",
+      "spans": ["core.call"],
+      "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
+      "tolerancePercent": 20,
+      "metrics": {
+        "residentMemory": {
+          "status": "_intended",
+          "probe": "NO RIG AND NO DEVICE. [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 0 could not take this baseline: the run that recorded it had no physical phone, no Xcode and no self-hosted runner, and the two reference devices are not even named yet (Q-1020-2). The ceiling below is an ABSOLUTE TARGET argued from the platform, not an observation plus headroom, so it is parked under a leading underscore and gates nothing. It is promoted by the first run on the named device, per R-1020-20.",
+          "_intendedCeilingMb": 300,
+          "_provenance": {
+            "at": "2026-09-12",
+            "host": "none — no measurement was taken; see `probe`",
+            "note": "300 MB resident with a 50,000-asset library open is the number that keeps the app out of the OS's reclaim path on a mid-range phone, where a background app over roughly a third of a gigabyte is the first thing killed. The target is about SURVIVING A SWITCH AWAY AND BACK, not about frugality: an app that is killed while the member reads a message loses its warm state and pays a cold start to come back, which is why this is a ceiling and not a report. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "mobile/background-pass/year3-50k-assets/device-android-mid": {
+      "surface": "mobile",
+      "journey": "background-pass",
+      "volume": "year3-50k-assets",
+      "hardware": "device-android-mid",
+      "spans": ["core.call", "seat.apply"],
+      "consumers": [],
+      "lane": "gate-nightly.yml / battery-per-background-pass (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
+      "tolerancePercent": 20,
+      "metrics": {
+        "batteryPerPass": {
+          "status": "_intended",
+          "probe": "NO RIG AND NO DEVICE. [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 0 could not take this baseline: the run that recorded it had no physical phone, no Xcode and no self-hosted runner, and the two reference devices are not even named yet (Q-1020-2). The ceiling below is an ABSOLUTE TARGET argued from the platform, not an observation plus headroom, so it is parked under a leading underscore and gates nothing. It is promoted by the first run on the named device, per R-1020-20.",
+          "_intendedCeilingPercent": 1,
+          "_provenance": {
+            "at": "2026-09-12",
+            "host": "none — no measurement was taken; see `probe`",
+            "note": "1 % of charge per scheduled background sync pass is the ceiling at which a day of passes stays invisible in the OS's battery attribution screen. This target is what R-1020-25 exists to make achievable: `open` never blocks on the network, and the iroh endpoint IDLES when the app is backgrounded and resumes on foreground or on a scheduled pass — an open QUIC connection held behind a backgrounded app is precisely the shape that turns into a battery complaint with the product's name on it. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "mobile/cold-open/year3/device-android-mid": {
+      "surface": "mobile",
+      "journey": "cold-open",
+      "volume": "year3",
+      "hardware": "device-android-mid",
+      "spans": ["core.call", "client.interaction"],
+      "consumers": [],
+      "lane": "gate-nightly.yml / android-macrobenchmark / ios-xctest-metrics (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-android-mid reports one (R-1020-20, #1020 wave 3 lane G).",
+      "tolerancePercent": 20,
+      "metrics": {
+        "coldStartAtYear3": {
+          "status": "_intended",
+          "probe": "NO RIG AND NO DEVICE. [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 0 could not take this baseline: the run that recorded it had no physical phone, no Xcode and no self-hosted runner, and the two reference devices are not even named yet (Q-1020-2). The ceiling below is an ABSOLUTE TARGET argued from the platform, not an observation plus headroom, so it is parked under a leading underscore and gates nothing. It is promoted by the first run on the named device, per R-1020-20.",
+          "_intendedCeilingMs": 1500,
+          "_provenance": {
+            "at": "2026-09-12",
+            "host": "none — no measurement was taken; see `probe`",
+            "note": "A frame budget at 60 Hz is 16.7 ms, and every mobile target here is derived from it rather than from v0's numbers: [#1020](https://github.com/srikanth235/centraid/issues/1020) rules the platform move STRUCTURAL, and the only handler timing on record (188 ms for Tally's dashboard at 2,000 expenses) was taken on a 4-core Node host and says nothing about a phone, so 'better than v0' is not a target this ledger can hold. 1.5 s from launch to a screen the member can act on, at the year-3 volume, is the ceiling a member experiences as 'it opened' rather than as a wait. It is stated at year-3 and not at an empty vault deliberately: a cold start measured on a fresh install is the one number that cannot catch an O(vault-size) regression, and v0's own ledger records that failure mode. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "mobile/own-echo/year3-50k-assets/device-iphone-oldest": {
+      "surface": "mobile",
+      "journey": "own-echo",
+      "volume": "year3-50k-assets",
+      "hardware": "device-iphone-oldest",
+      "spans": ["core.call", "client.interaction"],
+      "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
+      "tolerancePercent": 20,
+      "metrics": {
+        "interactionP95": {
+          "status": "_intended",
+          "probe": "NO RIG AND NO DEVICE. [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 0 could not take this baseline: the run that recorded it had no physical phone, no Xcode and no self-hosted runner, and the two reference devices are not even named yet (Q-1020-2). The ceiling below is an ABSOLUTE TARGET argued from the platform, not an observation plus headroom, so it is parked under a leading underscore and gates nothing. It is promoted by the first run on the named device, per R-1020-20.",
+          "_intendedCeilingMs": 100,
+          "_provenance": {
+            "at": "2026-09-12",
+            "host": "none — no measurement was taken; see `probe`",
+            "note": "A frame budget at 60 Hz is 16.7 ms, and every mobile target here is derived from it rather than from v0's numbers: [#1020](https://github.com/srikanth235/centraid/issues/1020) rules the platform move STRUCTURAL, and the only handler timing on record (188 ms for Tally's dashboard at 2,000 expenses) was taken on a 4-core Node host and says nothing about a phone, so 'better than v0' is not a target this ledger can hold. 100 ms is the ceiling at which an interaction still reads as a direct response to the finger rather than as the app thinking — about six frames — so p95 interaction latency is stated there and not at one frame: the target is that the response is not NOTICED as late, which is a weaker and more honest claim than that it never misses a frame. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "mobile/scroll/year3-50k-assets/device-iphone-oldest": {
+      "surface": "mobile",
+      "journey": "scroll",
+      "volume": "year3-50k-assets",
+      "hardware": "device-iphone-oldest",
+      "spans": ["client.frame", "seat.apply"],
+      "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
+      "tolerancePercent": 20,
+      "metrics": {
+        "frameMissesDuringSync": {
+          "status": "_intended",
+          "probe": "NO RIG AND NO DEVICE. [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 0 could not take this baseline: the run that recorded it had no physical phone, no Xcode and no self-hosted runner, and the two reference devices are not even named yet (Q-1020-2). The ceiling below is an ABSOLUTE TARGET argued from the platform, not an observation plus headroom, so it is parked under a leading underscore and gates nothing. It is promoted by the first run on the named device, per R-1020-20.",
+          "_intendedCeilingPercent": 1,
+          "_provenance": {
+            "at": "2026-09-12",
+            "host": "none — no measurement was taken; see `probe`",
+            "note": "A frame budget at 60 Hz is 16.7 ms, and every mobile target here is derived from it rather than from v0's numbers: [#1020](https://github.com/srikanth235/centraid/issues/1020) rules the platform move STRUCTURAL, and the only handler timing on record (188 ms for Tally's dashboard at 2,000 expenses) was taken on a 4-core Node host and says nothing about a phone, so 'better than v0' is not a target this ledger can hold. This is the measurement v0 has no answer for at all: a fling while a sync pass applies rows on the same device. 1 % of frames missed is roughly one hitch in a second and a half of scrolling, which is at the edge of what a member reports; the point of the target is that CONCURRENT SYNC is inside the measurement, because a smooth grid with the applier idle proves nothing about the product. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "mobile/typing/year3/device-iphone-oldest": {
+      "surface": "mobile",
+      "journey": "typing",
+      "volume": "year3",
+      "hardware": "device-iphone-oldest",
+      "spans": ["core.call", "client.interaction"],
+      "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
+      "tolerancePercent": 20,
+      "metrics": {
+        "keystrokeP95": {
+          "status": "_intended",
+          "probe": "NO RIG AND NO DEVICE. [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 0 could not take this baseline: the run that recorded it had no physical phone, no Xcode and no self-hosted runner, and the two reference devices are not even named yet (Q-1020-2). The ceiling below is an ABSOLUTE TARGET argued from the platform, not an observation plus headroom, so it is parked under a leading underscore and gates nothing. It is promoted by the first run on the named device, per R-1020-20.",
+          "_intendedCeilingMs": 16,
+          "_provenance": {
+            "at": "2026-09-12",
+            "host": "none — no measurement was taken; see `probe`",
+            "note": "A frame budget at 60 Hz is 16.7 ms, and every mobile target here is derived from it rather than from v0's numbers: [#1020](https://github.com/srikanth235/centraid/issues/1020) rules the platform move STRUCTURAL, and the only handler timing on record (188 ms for Tally's dashboard at 2,000 expenses) was taken on a 4-core Node host and says nothing about a phone, so 'better than v0' is not a target this ledger can hold. Typing is the one interaction where a member's own hand sets the clock, so p95 is stated at ONE FRAME (16 ms, the floor of 16.7) rather than at the 100 ms interaction ceiling: a character that lands a frame late is visible as the editor lagging the keyboard. Stated at `year3` rather than the photo volume because the vault a note is typed into is the golden year-3 artifact, and 1,000 notes is the number that artifact holds. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "mobile/memory/year3-50k-assets/device-iphone-oldest": {
+      "surface": "mobile",
+      "journey": "memory",
+      "volume": "year3-50k-assets",
+      "hardware": "device-iphone-oldest",
+      "spans": ["core.call"],
+      "consumers": [],
+      "lane": "gate-nightly.yml / ios-xctest-metrics / android-macrobenchmark (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
+      "tolerancePercent": 20,
+      "metrics": {
+        "residentMemory": {
+          "status": "_intended",
+          "probe": "NO RIG AND NO DEVICE. [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 0 could not take this baseline: the run that recorded it had no physical phone, no Xcode and no self-hosted runner, and the two reference devices are not even named yet (Q-1020-2). The ceiling below is an ABSOLUTE TARGET argued from the platform, not an observation plus headroom, so it is parked under a leading underscore and gates nothing. It is promoted by the first run on the named device, per R-1020-20.",
+          "_intendedCeilingMb": 300,
+          "_provenance": {
+            "at": "2026-09-12",
+            "host": "none — no measurement was taken; see `probe`",
+            "note": "300 MB resident with a 50,000-asset library open is the number that keeps the app out of the OS's reclaim path on a mid-range phone, where a background app over roughly a third of a gigabyte is the first thing killed. The target is about SURVIVING A SWITCH AWAY AND BACK, not about frugality: an app that is killed while the member reads a message loses its warm state and pays a cold start to come back, which is why this is a ceiling and not a report. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "mobile/background-pass/year3-50k-assets/device-iphone-oldest": {
+      "surface": "mobile",
+      "journey": "background-pass",
+      "volume": "year3-50k-assets",
+      "hardware": "device-iphone-oldest",
+      "spans": ["core.call", "seat.apply"],
+      "consumers": [],
+      "lane": "gate-nightly.yml / battery-per-background-pass (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
+      "tolerancePercent": 20,
+      "metrics": {
+        "batteryPerPass": {
+          "status": "_intended",
+          "probe": "NO RIG AND NO DEVICE. [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 0 could not take this baseline: the run that recorded it had no physical phone, no Xcode and no self-hosted runner, and the two reference devices are not even named yet (Q-1020-2). The ceiling below is an ABSOLUTE TARGET argued from the platform, not an observation plus headroom, so it is parked under a leading underscore and gates nothing. It is promoted by the first run on the named device, per R-1020-20.",
+          "_intendedCeilingPercent": 1,
+          "_provenance": {
+            "at": "2026-09-12",
+            "host": "none — no measurement was taken; see `probe`",
+            "note": "1 % of charge per scheduled background sync pass is the ceiling at which a day of passes stays invisible in the OS's battery attribution screen. This target is what R-1020-25 exists to make achievable: `open` never blocks on the network, and the iroh endpoint IDLES when the app is backgrounded and resumes on foreground or on a scheduled pass — an open QUIC connection held behind a backgrounded app is precisely the shape that turns into a battery complaint with the product's name on it. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "mobile/cold-open/year3/device-iphone-oldest": {
+      "surface": "mobile",
+      "journey": "cold-open",
+      "volume": "year3",
+      "hardware": "device-iphone-oldest",
+      "spans": ["core.call", "client.interaction"],
+      "consumers": [],
+      "lane": "gate-nightly.yml / android-macrobenchmark / ios-xctest-metrics (self-hosted [self-hosted, macos, devices]; loud Skipped on a hosted runner). NO NUMBER IS PROMOTED BY NAMING A LANE: this cell stays `_intended` until a run on device-iphone-oldest reports one (R-1020-20, #1020 wave 3 lane G).",
+      "tolerancePercent": 20,
+      "metrics": {
+        "coldStartAtYear3": {
+          "status": "_intended",
+          "probe": "NO RIG AND NO DEVICE. [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 0 could not take this baseline: the run that recorded it had no physical phone, no Xcode and no self-hosted runner, and the two reference devices are not even named yet (Q-1020-2). The ceiling below is an ABSOLUTE TARGET argued from the platform, not an observation plus headroom, so it is parked under a leading underscore and gates nothing. It is promoted by the first run on the named device, per R-1020-20.",
+          "_intendedCeilingMs": 1500,
+          "_provenance": {
+            "at": "2026-09-12",
+            "host": "none — no measurement was taken; see `probe`",
+            "note": "A frame budget at 60 Hz is 16.7 ms, and every mobile target here is derived from it rather than from v0's numbers: [#1020](https://github.com/srikanth235/centraid/issues/1020) rules the platform move STRUCTURAL, and the only handler timing on record (188 ms for Tally's dashboard at 2,000 expenses) was taken on a 4-core Node host and says nothing about a phone, so 'better than v0' is not a target this ledger can hold. 1.5 s from launch to a screen the member can act on, at the year-3 volume, is the ceiling a member experiences as 'it opened' rather than as a wait. It is stated at year-3 and not at an empty vault deliberately: a cold start measured on a fresh install is the one number that cannot catch an O(vault-size) regression, and v0's own ledger records that failure mode. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-tally/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-tally",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/tally/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "dashboardFold": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-tally --test year3 -- --ignored --nocapture",
+          "_observedMs": 35,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "`load_tally` plus the three extra pages measured 107 / 107 / 127 ms over three runs; the dashboard's own fold is 34-35 ms of that, and the balance fold over 40 groups is 22-23 ms. `matches` and `history` answer in 0 ms over an EMPTY plane — the year-3 generator writes no `core_transaction` and no `core_entity_revision` row, so two of the ten view numbers are round because the plane is empty rather than because the fold is free. Named as a kit hand-off rather than left to be inferred."
+          }
+        },
+        "searchFold": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-tally --test year3 -- --ignored --nocapture",
+          "_observedMs": 218,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "209-218 ms over 1,960 decorated rows — the slowest of Tally's eight answers by an order of magnitude, and the one worth a device number first."
+          }
+        },
+        "writeThroughTheGate": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-tally --test year3 -- --ignored --nocapture",
+          "_observedMs": 4.45,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "`tally.add_expense` through the WHOLE gate order — authority, preconditions, the handler, the postconditions, the receipt and the replica commit pair: 200 writes in 889 ms."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-50k-assets/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-50k-assets",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/photos/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "libraryPage": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 48,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The library at its 500 default window. Asked for 2,000 it serves ONE page in 42 ms, deliberately: its sort column is nullable, so a keyset walk would silently drop every undated asset (D-1020-P11). Ten cursored pages are 458 ms."
+          }
+        },
+        "faceQueue": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 40,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "Over the 4,000-region window."
+          }
+        },
+        "duplicates": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 16,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "Over 4,000 clustered fingerprints. This is the number that says the year-3 library is NOT where the cost is: the pairwise clustering v0 avoids with multi-index banding is 16 ms here, which is why the banding is named as unported rather than ported without a rig that could check it."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-docs/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-docs",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/docs/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "driveWindowWalked": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-docs --test year3 -- --ignored --nocapture",
+          "_observedMs": 480,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "A 2,000-row drive answers 2,000 documents and 400 folders. The same read before D-1020-DC10 answered 500 of 7,600 live documents in 141 ms and discarded the cursor that said there were more — the number moves with the mechanism in both directions, which is what makes the walk real rather than a rename."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-notes/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-notes",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/notes/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "libraryFold": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture",
+          "_observedMs": 496,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "`library(limit=2000)` folds 2,200 rows plus 200 trashed — the window is 2,000 PLUS every pinned note on the shelf, which is the assertion that was wrong the first time. The same test prints that v0 would have folded 500 of those 2,200."
+          }
+        },
+        "editorOpenPull": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture",
+          "_observedMs": 1.13,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The on-open pull over the largest body the product holds (48 KiB). This is the RUST half of the typing target only: the round trip the target is stated on runs through the editor's state machine in Kotlin, which has no Rust twin, and that half is an owner hand-off."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-people/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-people",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/people/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "rosterWalk": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-people --test year3 -- --ignored --nocapture",
+          "_observedMs": 825,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "4,750 live rows walked. v0 asks for `window = 9_999` as ONE page and `MAX_PAGE_ROWS` clamps it to 500, so a vault with more than 500 live people reports `all: 500` with no `truncated` anywhere in the payload — the axis measures both, 4,750 against 500."
+          }
+        },
+        "dashboardFold": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-people --test year3 -- --ignored --nocapture",
+          "_observedMs": 4340,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The dashboard folds all 4,750. The largest number in this entry and the one that most wants a device figure beside it."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-agenda/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-agenda",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/agenda/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "dayContextRows": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-agenda --test year3 -- --ignored --nocapture",
+          "_observedRows": 813,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "One day's `day-context` folds 813 rows at 12,000 events / 800 recurring series / 1,200 exceptions. Recorded as the ROW COUNT rather than a wall clock, because the number the fold's cost scales with is the row count and the wall clock on a contended container is the noisier of the two."
+          }
+        },
+        "upcomingSixMonthWindow": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-agenda --test year3 -- --ignored --nocapture",
+          "_observedInstanceCap": 1500,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "A six-month `upcoming` window TRIPS the 1,500-instance cap, and tripping it is an error that names the query and the cap rather than a silently truncated calendar. v0 truncates at the same number and hands back a calendar that is quietly incomplete — the divergence is visible only at this volume, which is why this axis is the test's fixture rather than a hand-built series."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-tasks/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-tasks",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/tasks/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "boardWindowRows": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-tasks --test year3 -- --ignored --nocapture",
+          "_observedRows": 175,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-09-13",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The board's 500-row window folds to 125 open roots and 50 logbook rows, `truncated` true — the open page's own cursor, not a count comparison. At 12,000 tasks (8,250 open, 3,750 closed, 800 cancelled)."
+          }
         }
       }
     }

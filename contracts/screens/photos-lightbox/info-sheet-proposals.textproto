@@ -1,0 +1,56 @@
+# A GUESS MUST NOT BE DRAWN AS A FACT.
+#
+# Two fields on one detail say it twice, and this fixture is where they are
+# checked together:
+#
+#   - `people` holds CONFIRMED face regions only. A proposal belongs to face
+#     review; naming one here would put an unconfirmed guess in the facts panel,
+#     under a heading that says the vault knows this.
+#   - `labels` carry the member's own tags and a derivation's proposals in ONE
+#     list — they are the same table with different confidence — so each row
+#     says which with `confirmed`. This fixture carries one of each, because a
+#     view that drew them identically would pass a fixture with only one kind.
+#
+# `SHEET_INFO` is the surface that shows all of it, and it is a sheet over a
+# photograph that is still on screen, not a route away from it.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+asset_id: "ast-0320"
+detail {
+  asset_id: "ast-0320"
+  thumbnail_path: "thumbs/ast-0320.jpg"
+  original_path: "originals/ast-0320.mov"
+  title: "Ada at the lake"
+  captured_at: "2026-01-11T14:30:00Z"
+  captured_utc_offset_minutes: 330
+  kind: KIND_VIDEO
+  held: HELD_ORIGINAL
+  original_hash: "deadbeef00112233445566778899aabbccddeeff00112233445566778899aabb"
+  archived: true
+  width: 3840
+  height: 2160
+  duration_seconds: 47
+  byte_size: 214958080
+  place_name: "Vembanad"
+  place_id: "plc-0009"
+  people {
+    party_id: "pty-0031"
+    display_name: "Ada Lovelace"
+  }
+  labels {
+    concept_id: "cpt-lake"
+    label: "Lake"
+    confirmed: true
+  }
+  labels {
+    concept_id: "cpt-boat"
+    label: "Boat"
+    confirmed: false
+  }
+  camera: "Pixel 11"
+}
+chrome_visible: true
+sheet: SHEET_INFO

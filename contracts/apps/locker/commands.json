@@ -1,0 +1,493 @@
+[
+  {
+    "command": "locker.add_item",
+    "input": {
+      "alias": "bank",
+      "notes": "the joint account",
+      "otp_seed": "«secret»",
+      "password": "«secret»",
+      "tags": ["money", "money"],
+      "title": "The bank",
+      "type": "login",
+      "url": "https://login.bank.example",
+      "url_match_policy": "registrable-domain",
+      "username": "ada@example.com"
+    },
+    "output": {
+      "item_id": "id-0177"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.add_item",
+    "input": {
+      "password": "«secret»",
+      "title": "The pinned login",
+      "type": "login",
+      "url": "https://accounts.example.com",
+      "url_match_policy": "exact-host",
+      "username": "ada"
+    },
+    "output": {
+      "item_id": "id-0161"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.add_item",
+    "input": {
+      "brand": "visa",
+      "card_number": "«secret»",
+      "cardholder": "A Lovelace",
+      "cvv": "«secret»",
+      "expiry": "2030-01",
+      "title": "The card",
+      "type": "card"
+    },
+    "output": {
+      "item_id": "id-0165"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.add_item",
+    "input": {
+      "content": "«secret»",
+      "title": "A secure note",
+      "type": "note"
+    },
+    "output": {
+      "item_id": "id-0164"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.add_item",
+    "input": {
+      "notes": "in the drawer",
+      "title": "Passport",
+      "type": "passport"
+    },
+    "output": {
+      "item_id": "id-0175"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.add_item",
+    "input": {
+      "network": "Lovelace",
+      "password": "«secret»",
+      "title": "Home wifi",
+      "type": "wifi"
+    },
+    "output": {
+      "item_id": "id-0166"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.add_item",
+    "input": {
+      "password": "«secret»",
+      "title": "An old login",
+      "type": "login",
+      "url": "https://old.example",
+      "username": "ada"
+    },
+    "output": {
+      "item_id": "id-0151"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.add_item",
+    "input": {
+      "password": "«secret»",
+      "title": "A trashed login",
+      "type": "login"
+    },
+    "output": {
+      "item_id": "id-0182"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.edit_item",
+    "input": {
+      "alias": "bank",
+      "item_id": "id-0161"
+    },
+    "output": null,
+    "reason": "alias \"bank\" is already used by another live item",
+    "status": "failed"
+  },
+  {
+    "command": "locker.edit_item",
+    "input": {
+      "item_id": "id-0164",
+      "url_match_policy": "exact-host"
+    },
+    "output": null,
+    "reason": "url_match_policy is login-only",
+    "status": "failed"
+  },
+  {
+    "command": "locker.star_item",
+    "input": {
+      "item_id": "id-0177"
+    },
+    "output": {
+      "item_id": "id-0177"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.star_item",
+    "input": {
+      "item_id": "id-0165"
+    },
+    "output": {
+      "item_id": "id-0165"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.unstar_item",
+    "input": {
+      "item_id": "id-0165"
+    },
+    "output": {
+      "item_id": "id-0165"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.set_memo",
+    "input": {
+      "item_id": "id-0177",
+      "note": "the joint account, not the ISA"
+    },
+    "output": {
+      "item_id": "id-0177"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.set_field",
+    "input": {
+      "item_id": "id-0177",
+      "kind": "sealed",
+      "label": "Recovery code",
+      "position": 0,
+      "section": "Recovery",
+      "value": "«secret»"
+    },
+    "output": {
+      "field_id": "id-0178",
+      "item_id": "id-0177"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.set_field",
+    "input": {
+      "item_id": "id-0177",
+      "kind": "text",
+      "label": "Branch",
+      "position": 1,
+      "section": "Recovery",
+      "value": "«secret»"
+    },
+    "output": {
+      "field_id": "id-0158",
+      "item_id": "id-0177"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.set_addresses",
+    "input": {
+      "addresses": [
+        {
+          "url": "https://m.bank.example"
+        },
+        {
+          "match_policy": "exact-host",
+          "url": "https://secure.bank.example"
+        },
+        {
+          "url": "https://m.bank.example"
+        }
+      ],
+      "item_id": "id-0177"
+    },
+    "output": {
+      "count": 2,
+      "item_id": "id-0177"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.set_passkey",
+    "input": {
+      "algorithm": "ES256",
+      "credential_id": "cred-1",
+      "display_name": "Ada",
+      "item_id": "id-0177",
+      "private_key": "«secret»",
+      "rp_id": "bank.example",
+      "user_handle": "ada"
+    },
+    "output": {
+      "item_id": "id-0177"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.archive_item",
+    "input": {
+      "item_id": "id-0151"
+    },
+    "output": {
+      "item_id": "id-0151"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.trash_item",
+    "input": {
+      "item_id": "id-0182"
+    },
+    "output": {
+      "item_id": "id-0182"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.restore_item",
+    "input": {
+      "item_id": "id-0182"
+    },
+    "output": {
+      "item_id": "id-0182"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.trash_item",
+    "input": {
+      "item_id": "id-0182"
+    },
+    "output": {
+      "item_id": "id-0182"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.edit_item",
+    "input": {
+      "item_id": "id-0177",
+      "notes": "the joint account",
+      "otp_seed": "«secret»",
+      "password": "«secret»",
+      "url": "https://login.bank.example",
+      "username": "ada@example.com"
+    },
+    "output": {
+      "item_id": "id-0177"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.edit_item",
+    "input": {
+      "item_id": "id-0177",
+      "notes": "the joint account",
+      "otp_seed": "«secret»",
+      "password": "«secret»",
+      "tags": ["money", "joint"],
+      "url": "https://login.bank.example",
+      "username": "ada@example.com"
+    },
+    "output": {
+      "item_id": "id-0177"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.edit_item",
+    "input": {
+      "brand": "visa",
+      "card_number": "«secret»",
+      "cardholder": "A Lovelace",
+      "cvv": "«secret»",
+      "expiry": "2030-01",
+      "item_id": "id-0165"
+    },
+    "output": {
+      "item_id": "id-0165"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.duplicate_item",
+    "input": {
+      "item_id": "id-0177"
+    },
+    "output": {
+      "item_id": "id-0173",
+      "title": "The bank copy"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.clear_passkey",
+    "input": {
+      "item_id": "id-0173"
+    },
+    "output": {
+      "item_id": "id-0173"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.watchtower",
+    "input": {},
+    "output": {
+      "items": [
+        {
+          "item_id": "id-0165",
+          "last4": "4242",
+          "reused": false,
+          "weak": false
+        },
+        {
+          "item_id": "id-0161",
+          "reused": false,
+          "weak": false
+        },
+        {
+          "item_id": "id-0173",
+          "reused": true,
+          "weak": false
+        },
+        {
+          "item_id": "id-0151",
+          "reused": false,
+          "weak": true
+        },
+        {
+          "item_id": "id-0177",
+          "reused": true,
+          "weak": false
+        },
+        {
+          "item_id": "id-0166",
+          "reused": false,
+          "weak": false
+        }
+      ]
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.totp_code",
+    "input": {
+      "item_id": "id-0177"
+    },
+    "output": {
+      "code": "362319",
+      "period": 30,
+      "remaining": 2
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.totp_code",
+    "input": {
+      "item_id": "id-0165"
+    },
+    "output": null,
+    "reason": "item_has_seed: n eq 1",
+    "status": "failed"
+  },
+  {
+    "command": "locker.counts",
+    "input": {},
+    "output": {
+      "archived": 1,
+      "by_type": [
+        {
+          "n": 1,
+          "type": "card"
+        },
+        {
+          "n": 3,
+          "type": "login"
+        },
+        {
+          "n": 1,
+          "type": "note"
+        },
+        {
+          "n": 1,
+          "type": "passport"
+        },
+        {
+          "n": 1,
+          "type": "wifi"
+        }
+      ],
+      "live": 7,
+      "trashed": 1
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.export",
+    "input": {
+      "confirm": true
+    },
+    "output": {
+      "exported_at": "<host-clock>",
+      "item_count": 8,
+      "items": "«plaintext-elided»",
+      "items_elided": 8
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.export",
+    "input": {
+      "confirm": true,
+      "include_history": true
+    },
+    "output": {
+      "exported_at": "<host-clock>",
+      "item_count": 8,
+      "items": "«plaintext-elided»",
+      "items_elided": 8
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.purge_item",
+    "input": {
+      "item_id": "id-0166"
+    },
+    "output": {
+      "item_id": "id-0166"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "locker.purge_item",
+    "input": {
+      "item_id": "id-0166"
+    },
+    "output": null,
+    "reason": "item_exists: n eq 1",
+    "status": "failed"
+  }
+]

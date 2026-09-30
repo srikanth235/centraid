@@ -1,6 +1,0 @@
-{
-  "approvedDeviation": "#880 W0.1 seeded the mobile replica-read waivers as the P3 gate extended over apps/mobile/src. #996 wave 4 replaced those reads with paged walks, so the list is empty: a stale entry is a lie, and the list may only shrink.",
-  "_why": "An unbounded growth-entity read with no entry fails. The five phone debts #880 recorded are gone: those screens now walk `readPages` / `readById` (or an id-filtered replica request) rather than an unbounded SELECT.",
-  "_comment": "One entry per unbounded read of a growth entity. `query` is `<file>` for a blueprint query handler whose SELECT carries no bound, or `<file>#<entity>` for a read request. `reason` says why the read is unbounded TODAY and what replaces it. A stale entry — one whose read became bounded or disappeared — fails the gate, so this list can only shrink. Owner: tests/quality/user-facing-qualities.test.ts, test `P3: repo-authored query handlers are bounded or explicitly waived`.",
-  "entries": []
-}

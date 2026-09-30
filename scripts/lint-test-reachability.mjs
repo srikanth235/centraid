@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 // Every test file in the tree is reached by some runner (#931 item 1).
 //
-// `scripts/validate-ui-receipt.test.mjs` imported `vitest`, sat in no vitest
-// project, and was absent from `scripts:test`'s `node --test` list. Its cases
-// had never run, and nothing in the repo could have said so: vitest reports
+// A script test once imported `vitest`, sat in no vitest project, and was
+// absent from `scripts:test`'s `node --test` list. Its cases had never run,
+// and nothing in the repo could have said so: vitest reports
 // "no file matched this project's include" as a green suite, and `node --test`
 // only runs the files it is handed. `coverage-scope-reachability` asks the same
 // question of SOURCE trees; until this gate, tests had no equivalent.
@@ -19,8 +19,8 @@
 //      pattern.
 //
 // It deliberately runs under BUN rather than node: the vitest configs are
-// TypeScript modules that compose each other (`apps/mobile/vitest.projects.ts`
-// builds its two projects from one shared array), so the only faithful way to
+// TypeScript modules that compose each other (the root config builds its
+// project list from an exported array), so the only faithful way to
 // read an `include` is to import the module and look at the object vitest
 // itself would receive. A regex over the config text would answer a different
 // question — "what does the file look like" — and would go quietly wrong the
@@ -36,45 +36,32 @@ const ROOT = path.resolve(import.meta.dirname, "..");
  *
  * `cwd` matters and is not cosmetic: vitest resolves a project's `include`
  * against the project ROOT, and the root defaults to the process CWD rather
- * than to the config file's own folder (the comment in
- * `tests/integration-mobile/vitest.config.ts` is about exactly this). So the
- * lane's working directory is part of what the config means, and it is recorded
- * here beside the config it belongs to.
+ * than to the config file's own folder. So the lane's working directory is part
+ * of what the config means, and it is recorded here beside the config it
+ * belongs to.
  *
- * Configs NOT listed here are reached another way and must stay that way:
- * `vitest.quality.config.ts` is a project of the root config; the
+ * Configs NOT listed here are reached another way and must stay that way: the
  * `vitest.*mutation.config.ts` family is Stryker's, and every file it names is
- * also inside its package's own project; `vitest.diff-coverage.config.ts` and
- * `vitest.shard.config.ts` re-use `coverageProjects` from the root config.
+ * also inside its package's own project; `vitest.diff-coverage.config.ts`
+ * re-uses `coverageProjects` from the root config.
  * `assertEveryConfigModelled` below fails when a config appears that is none of
  * those things, so this list cannot silently fall behind the tree.
  */
 export const RUNNERS = Object.freeze([
   { config: "vitest.config.ts", cwd: "." },
-  { config: "vitest.perf.config.ts", cwd: "." },
-  { config: "vitest.scale.config.ts", cwd: "." },
-  // `bun run perf:waterfall` — the rung-0 developer command (#927). One file,
-  // eight apps; it is a vitest project only because the year-3 fixture ships as
-  // TypeScript sources.
-  { config: "vitest.waterfall.config.ts", cwd: "." },
   { config: "scripts/test-report/vitest.config.ts", cwd: "." },
-  { config: "scripts/fuzz/vitest.config.ts", cwd: "." },
   { config: "scripts/release/vitest.config.ts", cwd: "." },
-  { config: "tests/integration-mobile/vitest.config.ts", cwd: "." },
-  // `bun run --cwd packages/model-runtime test:live` — the real-weight lane.
-  {
-    config: "packages/model-runtime/vitest.live.config.ts",
-    cwd: "packages/model-runtime",
-  },
+  // `bun run --cwd desktop/electron test` and `bun run --cwd extension test`
+  // both hand vitest this one config, and `cargo xtask gate` runs it as its
+  // `desktop-unit` step. Its globs resolve against `desktop/`, and one of them
+  // (`../extension/src/**`) deliberately reaches out of that folder.
+  { config: "desktop/vitest.config.ts", cwd: "desktop" },
 ]);
 
 /** Configs that are reached without being an entry point of their own. */
 const NOT_ENTRY_POINTS = [
-  // A project of the root config.
-  "vitest.quality.config.ts",
   // Same `coverageProjects` list as the root config, different reporters.
   "vitest.diff-coverage.config.ts",
-  "vitest.shard.config.ts",
 ];
 
 /** Playwright's default `testMatch`. */
@@ -386,11 +373,17 @@ export function findOrphans({
     }
     const absolute = path.join(ROOT, file);
     const reached = projects.some((project) => {
-      if (!absolute.startsWith(`${project.root}${path.sep}`)) return false;
       const relative = path.relative(project.root, absolute);
+      // A file outside the project root is reached only by an include that
+      // names the way out itself (`../extension/src/**`): a bare `**/` would
+      // otherwise match `../` segments and report every orphan as reached.
+      const include = absolute.startsWith(`${project.root}${path.sep}`)
+        ? project.include
+        : project.include.filter((pattern) => pattern.startsWith("../"));
+      if (include.length === 0) return false;
       if (project.exclude.length > 0 && matchesAny(relative, project.exclude))
         return false;
-      return matchesAny(relative, project.include);
+      return matchesAny(relative, include);
     });
     if (!reached) orphans.push(file);
   }

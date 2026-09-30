@@ -2,12 +2,11 @@
  * The lane evidence contract (#915 Wave 3, contract C2).
  *
  * Every lane on rungs 2–5 writes exactly one `artifacts/evidence/<lane>.json`
- * describing what it proved on one candidate. The nightly report is a pure
- * function of a directory of these files plus `tests/claims.json`, so this
- * module is the only place the shape is defined: `write-evidence.mjs`
- * validates on write, `read-evidence.mjs` validates on read, and a file that
- * fails either check is an error the report renders — never a file that is
- * silently dropped.
+ * describing what it proved on one candidate, and the workflow uploads it.
+ * This module is the only place the shape is defined: `write-evidence.mjs`
+ * validates on write, so a malformed row fails the step that wrote it rather
+ * than landing as a file nobody can read. The v0 HTML report that read these
+ * rows back was retired with the v0 tree (#1020).
  *
  * The vocabulary is deliberately four words. `passed` and `failed` are what a
  * lane observed; `parked` is a failure the parks ledger has already put a date

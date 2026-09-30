@@ -1,0 +1,22 @@
+# OFFLINE, with the one verb a seat WITHHOLDS rather than queueing:
+# `materialize-recurring-expense`, whose occurrence id is minted by the
+# canonical engine (`docs/mobile-offline.md:257`).
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_LOCAL_ONLY
+  pending { queued_writes: 3 oldest_queued_seconds: 51840 }
+  connectivity: CONNECTIVITY_OFFLINE
+}
+destination: DESTINATION_ACTIVITY
+data {
+  rows {
+    expense_id: "exp-0003"
+    description: "Groceries"
+    amount { minor: 1899 currency: "USD" exponent: 2 locale: "en-US" }
+    group_name: "Flat"
+    payer_name: "Ada"
+    occurred_at: "2026-09-12T11:00:00+01:00"
+  }
+}
+pending_expense_ids: "exp-0003"
+recurring_materialisation_withheld: true

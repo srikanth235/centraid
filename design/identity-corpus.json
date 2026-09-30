@@ -1,0 +1,1625 @@
+{
+  "$generatedBy": "contracts/tools/export-design-corpus.ts",
+  "$note": "Inputs and outputs of packages/design's partyHueKey/partyHueValue and identityInitials, and of Tally's figureTone, run over a fixed corpus so crates/design is asserted against the functions rather than against a reading of them (#1020, D-1020-T1). `initials.units` are UTF-16 code units: identityInitials can answer half a surrogate pair, and a port has to reproduce that exactly.",
+  "brand": "#141414",
+  "hues": [
+    {
+      "party_id": "id-0001",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "forest",
+      "color": "var(--c-forest)"
+    },
+    {
+      "party_id": "id-0001",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "forest",
+      "color": "var(--c-forest)"
+    },
+    {
+      "party_id": "id-0001",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "forest",
+      "color": "var(--c-forest)"
+    },
+    {
+      "party_id": "id-0001",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "forest",
+      "color": "var(--c-forest)"
+    },
+    {
+      "party_id": "id-0001",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "id-0001",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "id-0001",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "id-0001",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "id-0002",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "id-0002",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "id-0002",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "id-0002",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "id-0002",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "id-0002",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "id-0002",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "id-0002",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "id-0003",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "slate",
+      "color": "var(--c-slate)"
+    },
+    {
+      "party_id": "id-0003",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "slate",
+      "color": "var(--c-slate)"
+    },
+    {
+      "party_id": "id-0003",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "slate",
+      "color": "var(--c-slate)"
+    },
+    {
+      "party_id": "id-0003",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "slate",
+      "color": "var(--c-slate)"
+    },
+    {
+      "party_id": "id-0003",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "id-0003",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "id-0003",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "id-0003",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "id-0004",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "indigo",
+      "color": "var(--c-indigo)"
+    },
+    {
+      "party_id": "id-0004",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "indigo",
+      "color": "var(--c-indigo)"
+    },
+    {
+      "party_id": "id-0004",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "indigo",
+      "color": "var(--c-indigo)"
+    },
+    {
+      "party_id": "id-0004",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "indigo",
+      "color": "var(--c-indigo)"
+    },
+    {
+      "party_id": "id-0004",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "id-0004",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "id-0004",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "id-0004",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "a",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "a",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "a",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "a",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "a",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "a",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "a",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "a",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "z",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "z",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "z",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "z",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "z",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "z",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "z",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "z",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "A",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "A",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "A",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "A",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "A",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "A",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "A",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "A",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": " ",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": " ",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": " ",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": " ",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": " ",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": " ",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": " ",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": " ",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "  spaced  ",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "  spaced  ",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "  spaced  ",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "  spaced  ",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "  spaced  ",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "  spaced  ",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "  spaced  ",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "  spaced  ",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "party:01JQ8ZQ0Y3K9WYD4V6N7M2B5XC",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "forest",
+      "color": "var(--c-forest)"
+    },
+    {
+      "party_id": "party:01JQ8ZQ0Y3K9WYD4V6N7M2B5XC",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "forest",
+      "color": "var(--c-forest)"
+    },
+    {
+      "party_id": "party:01JQ8ZQ0Y3K9WYD4V6N7M2B5XC",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "forest",
+      "color": "var(--c-forest)"
+    },
+    {
+      "party_id": "party:01JQ8ZQ0Y3K9WYD4V6N7M2B5XC",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "forest",
+      "color": "var(--c-forest)"
+    },
+    {
+      "party_id": "party:01JQ8ZQ0Y3K9WYD4V6N7M2B5XC",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "party:01JQ8ZQ0Y3K9WYD4V6N7M2B5XC",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "party:01JQ8ZQ0Y3K9WYD4V6N7M2B5XC",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "party:01JQ8ZQ0Y3K9WYD4V6N7M2B5XC",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "0",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "0",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "0",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "0",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "0",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "0",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "0",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "0",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "00000000-0000-0000-0000-000000000000",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "00000000-0000-0000-0000-000000000000",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "00000000-0000-0000-0000-000000000000",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "00000000-0000-0000-0000-000000000000",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "00000000-0000-0000-0000-000000000000",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "00000000-0000-0000-0000-000000000000",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "00000000-0000-0000-0000-000000000000",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "00000000-0000-0000-0000-000000000000",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "Ana",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "Ana",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "Ana",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "Ana",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "Ana",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "Ana",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "Ana",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "Ana",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "Ana Díaz",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "Ana Díaz",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "Ana Díaz",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "Ana Díaz",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "Ana Díaz",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "Ana Díaz",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "Ana Díaz",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "Ana Díaz",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "李明",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "李明",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "李明",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "李明",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "李明",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "李明",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "李明",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "李明",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "Ω",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "Ω",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "Ω",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "Ω",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "Ω",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "Ω",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "Ω",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "Ω",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "🙂",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "🙂",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "🙂",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "🙂",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "ochre",
+      "color": "var(--c-ochre)"
+    },
+    {
+      "party_id": "🙂",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "🙂",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "🙂",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "🙂",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "🙂🙂",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "🙂🙂",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "🙂🙂",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "🙂🙂",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "🙂🙂",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "🙂🙂",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "🙂🙂",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "🙂🙂",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "user@example.test",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "slate",
+      "color": "var(--c-slate)"
+    },
+    {
+      "party_id": "user@example.test",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "slate",
+      "color": "var(--c-slate)"
+    },
+    {
+      "party_id": "user@example.test",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "slate",
+      "color": "var(--c-slate)"
+    },
+    {
+      "party_id": "user@example.test",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "slate",
+      "color": "var(--c-slate)"
+    },
+    {
+      "party_id": "user@example.test",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "user@example.test",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "user@example.test",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "user@example.test",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "a-very-long-party-identifier-that-keeps-going-and-going-0123456789",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "a-very-long-party-identifier-that-keeps-going-and-going-0123456789",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "a-very-long-party-identifier-that-keeps-going-and-going-0123456789",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "a-very-long-party-identifier-that-keeps-going-and-going-0123456789",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "amber",
+      "color": "var(--c-amber)"
+    },
+    {
+      "party_id": "a-very-long-party-identifier-that-keeps-going-and-going-0123456789",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "a-very-long-party-identifier-that-keeps-going-and-going-0123456789",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "a-very-long-party-identifier-that-keeps-going-and-going-0123456789",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "a-very-long-party-identifier-that-keeps-going-and-going-0123456789",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": " ",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": " ",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": " ",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": " ",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": " ",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": " ",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": " ",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": " ",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "\t",
+      "avatar_color": null,
+      "avatar_color_absent": true,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "\t",
+      "avatar_color": null,
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "\t",
+      "avatar_color": "",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "\t",
+      "avatar_color": "   ",
+      "avatar_color_absent": false,
+      "hue_key": "rose",
+      "color": "var(--c-rose)"
+    },
+    {
+      "party_id": "\t",
+      "avatar_color": "var(--c-teal)",
+      "avatar_color_absent": false,
+      "hue_key": "teal",
+      "color": "var(--c-teal)"
+    },
+    {
+      "party_id": "\t",
+      "avatar_color": "var(--c-violet)",
+      "avatar_color_absent": false,
+      "hue_key": "violet",
+      "color": "var(--c-violet)"
+    },
+    {
+      "party_id": "\t",
+      "avatar_color": "var(--c-not-a-hue)",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    },
+    {
+      "party_id": "\t",
+      "avatar_color": "#8c4c61",
+      "avatar_color_absent": false,
+      "hue_key": null,
+      "color": null
+    }
+  ],
+  "initials": [
+    {
+      "name": "You",
+      "initials": "Y",
+      "units": [89]
+    },
+    {
+      "name": "Someone",
+      "initials": "S",
+      "units": [83]
+    },
+    {
+      "name": "Friend",
+      "initials": "F",
+      "units": [70]
+    },
+    {
+      "name": "Ana",
+      "initials": "A",
+      "units": [65]
+    },
+    {
+      "name": "Ana Díaz",
+      "initials": "AD",
+      "units": [65, 68]
+    },
+    {
+      "name": "ana díaz",
+      "initials": "AD",
+      "units": [65, 68]
+    },
+    {
+      "name": "Bo",
+      "initials": "B",
+      "units": [66]
+    },
+    {
+      "name": "Cleo",
+      "initials": "C",
+      "units": [67]
+    },
+    {
+      "name": "Priya Raman",
+      "initials": "PR",
+      "units": [80, 82]
+    },
+    {
+      "name": "  Priya   Raman  ",
+      "initials": "PR",
+      "units": [80, 82]
+    },
+    {
+      "name": "María-José de la Cruz",
+      "initials": "MC",
+      "units": [77, 67]
+    },
+    {
+      "name": "Jean-Luc",
+      "initials": "J",
+      "units": [74]
+    },
+    {
+      "name": "李 明",
+      "initials": "李明",
+      "units": [26446, 26126]
+    },
+    {
+      "name": "李明",
+      "initials": "李",
+      "units": [26446]
+    },
+    {
+      "name": "Ω Ψ",
+      "initials": "ΩΨ",
+      "units": [937, 936]
+    },
+    {
+      "name": "🙂 Smith",
+      "initials": null,
+      "units": [55357, 83]
+    },
+    {
+      "name": "🙂",
+      "initials": null,
+      "units": [55357]
+    },
+    {
+      "name": "Smith 🙂",
+      "initials": null,
+      "units": [83, 55357]
+    },
+    {
+      "name": "",
+      "initials": "·",
+      "units": [183]
+    },
+    {
+      "name": " ",
+      "initials": "·",
+      "units": [183]
+    },
+    {
+      "name": "   ",
+      "initials": "·",
+      "units": [183]
+    },
+    {
+      "name": "\t\n",
+      "initials": "·",
+      "units": [183]
+    },
+    {
+      "name": " Ana ",
+      "initials": "A",
+      "units": [65]
+    },
+    {
+      "name": "d'Angelo",
+      "initials": "D",
+      "units": [68]
+    },
+    {
+      "name": "van der Berg",
+      "initials": "VB",
+      "units": [86, 66]
+    },
+    {
+      "name": "O'Neill McTavish",
+      "initials": "OM",
+      "units": [79, 77]
+    },
+    {
+      "name": "x",
+      "initials": "X",
+      "units": [88]
+    },
+    {
+      "name": "X y",
+      "initials": "XY",
+      "units": [88, 89]
+    },
+    {
+      "name": "a b c d",
+      "initials": "AD",
+      "units": [65, 68]
+    },
+    {
+      "name": "ANA",
+      "initials": "A",
+      "units": [65]
+    }
+  ],
+  "tones": [
+    {
+      "net_minor": 0,
+      "tone": "settled"
+    },
+    {
+      "net_minor": 1,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -1,
+      "tone": "net"
+    },
+    {
+      "net_minor": 2,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -2,
+      "tone": "net"
+    },
+    {
+      "net_minor": 99,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -99,
+      "tone": "net"
+    },
+    {
+      "net_minor": 100,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -100,
+      "tone": "net"
+    },
+    {
+      "net_minor": 1000,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -1000,
+      "tone": "net"
+    },
+    {
+      "net_minor": 10001,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -10001,
+      "tone": "net"
+    },
+    {
+      "net_minor": 4200,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -4200,
+      "tone": "net"
+    },
+    {
+      "net_minor": 8333,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -8333,
+      "tone": "net"
+    },
+    {
+      "net_minor": 2147483647,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -2147483648,
+      "tone": "net"
+    },
+    {
+      "net_minor": 5000,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -5000,
+      "tone": "net"
+    },
+    {
+      "net_minor": 1333,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -1333,
+      "tone": "net"
+    },
+    {
+      "net_minor": 8416,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -8416,
+      "tone": "net"
+    },
+    {
+      "net_minor": 24000,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -24000,
+      "tone": "net"
+    },
+    {
+      "net_minor": 3500,
+      "tone": "owed"
+    },
+    {
+      "net_minor": -3500,
+      "tone": "net"
+    },
+    {
+      "net_minor": 12,
+      "tone": "owed"
+    }
+  ]
+}

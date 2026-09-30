@@ -1,0 +1,1189 @@
+[
+  {
+    "input": {},
+    "output": {
+      "links_available": true,
+      "lists": [
+        {
+          "list_id": "id-0040",
+          "name": "Family"
+        }
+      ],
+      "people": [
+        {
+          "avatar_color": null,
+          "cadence_days": 7,
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "last_contacted_at": "2099-06-01T09:00:05.000Z",
+          "linked": true,
+          "list_id": "id-0040",
+          "name": "Grandpa Ray",
+          "party_id": "id-0005",
+          "reminders": [
+            {
+              "date_id": "id-0152",
+              "label": "Birthday",
+              "month_day": "08-14"
+            }
+          ],
+          "role": "Grandfather",
+          "starred": true,
+          "vault_count": 1
+        },
+        {
+          "avatar_color": null,
+          "cadence_days": 45,
+          "created_at": "2099-06-01T09:00:01.000Z",
+          "last_contacted_at": "2099-06-01T09:00:46.000Z",
+          "linked": false,
+          "list_id": null,
+          "name": "Jake Bennett",
+          "party_id": "id-0004",
+          "reminders": [
+            {
+              "date_id": "id-0154",
+              "label": "Birthday",
+              "month_day": "02-29"
+            }
+          ],
+          "role": "Old roommate from Portland",
+          "starred": false,
+          "vault_count": 0
+        },
+        {
+          "avatar_color": null,
+          "cadence_days": 30,
+          "created_at": "2099-06-01T09:00:00.000Z",
+          "last_contacted_at": "2099-06-01T09:00:04.000Z",
+          "linked": true,
+          "list_id": null,
+          "name": "Maya Alvarez",
+          "party_id": "id-0003",
+          "reminders": [
+            {
+              "date_id": "id-0153",
+              "label": "Birthday",
+              "month_day": "11-02"
+            },
+            {
+              "date_id": "id-0107",
+              "label": "Anniversary",
+              "month_day": "03-02"
+            }
+          ],
+          "role": "College friend",
+          "starred": false,
+          "vault_count": 1
+        }
+      ],
+      "truncated": false,
+      "window": 9999
+    },
+    "query": "people"
+  },
+  {
+    "input": {
+      "limit": 20
+    },
+    "output": {
+      "links_available": true,
+      "lists": [
+        {
+          "list_id": "id-0040",
+          "name": "Family"
+        }
+      ],
+      "people": [
+        {
+          "avatar_color": null,
+          "cadence_days": 7,
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "last_contacted_at": "2099-06-01T09:00:05.000Z",
+          "linked": true,
+          "list_id": "id-0040",
+          "name": "Grandpa Ray",
+          "party_id": "id-0005",
+          "reminders": [
+            {
+              "date_id": "id-0152",
+              "label": "Birthday",
+              "month_day": "08-14"
+            }
+          ],
+          "role": "Grandfather",
+          "starred": true,
+          "vault_count": 1
+        },
+        {
+          "avatar_color": null,
+          "cadence_days": 45,
+          "created_at": "2099-06-01T09:00:01.000Z",
+          "last_contacted_at": "2099-06-01T09:00:46.000Z",
+          "linked": false,
+          "list_id": null,
+          "name": "Jake Bennett",
+          "party_id": "id-0004",
+          "reminders": [
+            {
+              "date_id": "id-0154",
+              "label": "Birthday",
+              "month_day": "02-29"
+            }
+          ],
+          "role": "Old roommate from Portland",
+          "starred": false,
+          "vault_count": 0
+        },
+        {
+          "avatar_color": null,
+          "cadence_days": 30,
+          "created_at": "2099-06-01T09:00:00.000Z",
+          "last_contacted_at": "2099-06-01T09:00:04.000Z",
+          "linked": true,
+          "list_id": null,
+          "name": "Maya Alvarez",
+          "party_id": "id-0003",
+          "reminders": [
+            {
+              "date_id": "id-0153",
+              "label": "Birthday",
+              "month_day": "11-02"
+            },
+            {
+              "date_id": "id-0107",
+              "label": "Anniversary",
+              "month_day": "03-02"
+            }
+          ],
+          "role": "College friend",
+          "starred": false,
+          "vault_count": 1
+        }
+      ],
+      "truncated": false,
+      "window": 20
+    },
+    "query": "people"
+  },
+  {
+    "input": {
+      "limit": 10000
+    },
+    "output": {
+      "links_available": true,
+      "lists": [
+        {
+          "list_id": "id-0040",
+          "name": "Family"
+        }
+      ],
+      "people": [
+        {
+          "avatar_color": null,
+          "cadence_days": 7,
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "last_contacted_at": "2099-06-01T09:00:05.000Z",
+          "linked": true,
+          "list_id": "id-0040",
+          "name": "Grandpa Ray",
+          "party_id": "id-0005",
+          "reminders": [
+            {
+              "date_id": "id-0152",
+              "label": "Birthday",
+              "month_day": "08-14"
+            }
+          ],
+          "role": "Grandfather",
+          "starred": true,
+          "vault_count": 1
+        },
+        {
+          "avatar_color": null,
+          "cadence_days": 45,
+          "created_at": "2099-06-01T09:00:01.000Z",
+          "last_contacted_at": "2099-06-01T09:00:46.000Z",
+          "linked": false,
+          "list_id": null,
+          "name": "Jake Bennett",
+          "party_id": "id-0004",
+          "reminders": [
+            {
+              "date_id": "id-0154",
+              "label": "Birthday",
+              "month_day": "02-29"
+            }
+          ],
+          "role": "Old roommate from Portland",
+          "starred": false,
+          "vault_count": 0
+        },
+        {
+          "avatar_color": null,
+          "cadence_days": 30,
+          "created_at": "2099-06-01T09:00:00.000Z",
+          "last_contacted_at": "2099-06-01T09:00:04.000Z",
+          "linked": true,
+          "list_id": null,
+          "name": "Maya Alvarez",
+          "party_id": "id-0003",
+          "reminders": [
+            {
+              "date_id": "id-0153",
+              "label": "Birthday",
+              "month_day": "11-02"
+            },
+            {
+              "date_id": "id-0107",
+              "label": "Anniversary",
+              "month_day": "03-02"
+            }
+          ],
+          "role": "College friend",
+          "starred": false,
+          "vault_count": 1
+        }
+      ],
+      "truncated": false,
+      "window": 9999
+    },
+    "query": "people"
+  },
+  {
+    "input": {
+      "limit": 9999
+    },
+    "output": {
+      "links_available": true,
+      "lists": [
+        {
+          "list_id": "id-0040",
+          "name": "Family"
+        }
+      ],
+      "people": [
+        {
+          "avatar_color": null,
+          "cadence_days": 7,
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "last_contacted_at": "2099-06-01T09:00:05.000Z",
+          "linked": true,
+          "list_id": "id-0040",
+          "name": "Grandpa Ray",
+          "party_id": "id-0005",
+          "reminders": [
+            {
+              "date_id": "id-0152",
+              "label": "Birthday",
+              "month_day": "08-14"
+            }
+          ],
+          "role": "Grandfather",
+          "starred": true,
+          "vault_count": 1
+        },
+        {
+          "avatar_color": null,
+          "cadence_days": 45,
+          "created_at": "2099-06-01T09:00:01.000Z",
+          "last_contacted_at": "2099-06-01T09:00:46.000Z",
+          "linked": false,
+          "list_id": null,
+          "name": "Jake Bennett",
+          "party_id": "id-0004",
+          "reminders": [
+            {
+              "date_id": "id-0154",
+              "label": "Birthday",
+              "month_day": "02-29"
+            }
+          ],
+          "role": "Old roommate from Portland",
+          "starred": false,
+          "vault_count": 0
+        },
+        {
+          "avatar_color": null,
+          "cadence_days": 30,
+          "created_at": "2099-06-01T09:00:00.000Z",
+          "last_contacted_at": "2099-06-01T09:00:04.000Z",
+          "linked": true,
+          "list_id": null,
+          "name": "Maya Alvarez",
+          "party_id": "id-0003",
+          "reminders": [
+            {
+              "date_id": "id-0153",
+              "label": "Birthday",
+              "month_day": "11-02"
+            },
+            {
+              "date_id": "id-0107",
+              "label": "Anniversary",
+              "month_day": "03-02"
+            }
+          ],
+          "role": "College friend",
+          "starred": false,
+          "vault_count": 1
+        }
+      ],
+      "truncated": false,
+      "window": 9999
+    },
+    "query": "people"
+  },
+  {
+    "input": {
+      "limit": 1
+    },
+    "output": {
+      "links_available": true,
+      "lists": [
+        {
+          "list_id": "id-0040",
+          "name": "Family"
+        }
+      ],
+      "people": [
+        {
+          "avatar_color": null,
+          "cadence_days": 7,
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "last_contacted_at": "2099-06-01T09:00:05.000Z",
+          "linked": true,
+          "list_id": "id-0040",
+          "name": "Grandpa Ray",
+          "party_id": "id-0005",
+          "reminders": [
+            {
+              "date_id": "id-0152",
+              "label": "Birthday",
+              "month_day": "08-14"
+            }
+          ],
+          "role": "Grandfather",
+          "starred": true,
+          "vault_count": 1
+        },
+        {
+          "avatar_color": null,
+          "cadence_days": 45,
+          "created_at": "2099-06-01T09:00:01.000Z",
+          "last_contacted_at": "2099-06-01T09:00:46.000Z",
+          "linked": false,
+          "list_id": null,
+          "name": "Jake Bennett",
+          "party_id": "id-0004",
+          "reminders": [
+            {
+              "date_id": "id-0154",
+              "label": "Birthday",
+              "month_day": "02-29"
+            }
+          ],
+          "role": "Old roommate from Portland",
+          "starred": false,
+          "vault_count": 0
+        },
+        {
+          "avatar_color": null,
+          "cadence_days": 30,
+          "created_at": "2099-06-01T09:00:00.000Z",
+          "last_contacted_at": "2099-06-01T09:00:04.000Z",
+          "linked": true,
+          "list_id": null,
+          "name": "Maya Alvarez",
+          "party_id": "id-0003",
+          "reminders": [
+            {
+              "date_id": "id-0153",
+              "label": "Birthday",
+              "month_day": "11-02"
+            },
+            {
+              "date_id": "id-0107",
+              "label": "Anniversary",
+              "month_day": "03-02"
+            }
+          ],
+          "role": "College friend",
+          "starred": false,
+          "vault_count": 1
+        }
+      ],
+      "truncated": false,
+      "window": 20
+    },
+    "query": "people"
+  },
+  {
+    "input": {
+      "limit": 50000
+    },
+    "output": {
+      "links_available": true,
+      "lists": [
+        {
+          "list_id": "id-0040",
+          "name": "Family"
+        }
+      ],
+      "people": [
+        {
+          "avatar_color": null,
+          "cadence_days": 7,
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "last_contacted_at": "2099-06-01T09:00:05.000Z",
+          "linked": true,
+          "list_id": "id-0040",
+          "name": "Grandpa Ray",
+          "party_id": "id-0005",
+          "reminders": [
+            {
+              "date_id": "id-0152",
+              "label": "Birthday",
+              "month_day": "08-14"
+            }
+          ],
+          "role": "Grandfather",
+          "starred": true,
+          "vault_count": 1
+        },
+        {
+          "avatar_color": null,
+          "cadence_days": 45,
+          "created_at": "2099-06-01T09:00:01.000Z",
+          "last_contacted_at": "2099-06-01T09:00:46.000Z",
+          "linked": false,
+          "list_id": null,
+          "name": "Jake Bennett",
+          "party_id": "id-0004",
+          "reminders": [
+            {
+              "date_id": "id-0154",
+              "label": "Birthday",
+              "month_day": "02-29"
+            }
+          ],
+          "role": "Old roommate from Portland",
+          "starred": false,
+          "vault_count": 0
+        },
+        {
+          "avatar_color": null,
+          "cadence_days": 30,
+          "created_at": "2099-06-01T09:00:00.000Z",
+          "last_contacted_at": "2099-06-01T09:00:04.000Z",
+          "linked": true,
+          "list_id": null,
+          "name": "Maya Alvarez",
+          "party_id": "id-0003",
+          "reminders": [
+            {
+              "date_id": "id-0153",
+              "label": "Birthday",
+              "month_day": "11-02"
+            },
+            {
+              "date_id": "id-0107",
+              "label": "Anniversary",
+              "month_day": "03-02"
+            }
+          ],
+          "role": "College friend",
+          "starred": false,
+          "vault_count": 1
+        }
+      ],
+      "truncated": false,
+      "window": 9999
+    },
+    "query": "people"
+  },
+  {
+    "input": {},
+    "output": {
+      "counts": {
+        "all": 3,
+        "linked": 2,
+        "reconnect": 0,
+        "starred": 1,
+        "to_link": 1,
+        "upcoming": 4
+      },
+      "recent": [
+        {
+          "avatar_color": null,
+          "interaction_id": "id-0050",
+          "kind": "message",
+          "name": "Jake Bennett",
+          "occurred_at": "2099-06-01T09:00:46.000Z",
+          "party_id": "id-0004",
+          "role": "Old roommate from Portland",
+          "text": "Asked about the deposit."
+        },
+        {
+          "avatar_color": null,
+          "interaction_id": "id-0048",
+          "kind": "visit",
+          "name": "Grandpa Ray",
+          "occurred_at": "2099-06-01T09:00:05.000Z",
+          "party_id": "id-0005",
+          "role": "Grandfather",
+          "text": "Sunday lunch. Blood pressure is under control again; he beat me at cribbage twice."
+        },
+        {
+          "avatar_color": null,
+          "interaction_id": "id-0047",
+          "kind": "call",
+          "name": "Maya Alvarez",
+          "occurred_at": "2099-06-01T09:00:04.000Z",
+          "party_id": "id-0003",
+          "role": "College friend",
+          "text": "Caught up about her Denver move; she wants the Tahoe dates."
+        }
+      ],
+      "reconnect": [],
+      "upcoming": [
+        {
+          "avatar_color": null,
+          "date_id": "id-0152",
+          "label": "Birthday",
+          "month_day": "08-14",
+          "name": "Grandpa Ray",
+          "party_id": "id-0005",
+          "role": "Grandfather"
+        },
+        {
+          "avatar_color": null,
+          "date_id": "id-0153",
+          "label": "Birthday",
+          "month_day": "11-02",
+          "name": "Maya Alvarez",
+          "party_id": "id-0003",
+          "role": "College friend"
+        },
+        {
+          "avatar_color": null,
+          "date_id": "id-0154",
+          "label": "Birthday",
+          "month_day": "02-29",
+          "name": "Jake Bennett",
+          "party_id": "id-0004",
+          "role": "Old roommate from Portland"
+        },
+        {
+          "avatar_color": null,
+          "date_id": "id-0107",
+          "label": "Anniversary",
+          "month_day": "03-02",
+          "name": "Maya Alvarez",
+          "party_id": "id-0003",
+          "role": "College friend"
+        }
+      ]
+    },
+    "query": "dashboard"
+  },
+  {
+    "input": {},
+    "output": {
+      "entries": [
+        {
+          "avatar_color": null,
+          "date": "2099-06-01T09:00:46.000Z",
+          "id": "id-0050",
+          "kind": "auto",
+          "name": "Jake Bennett",
+          "party_id": "id-0004",
+          "sort_at": "2099-06-01T09:00:46.000Z",
+          "text": "Asked about the deposit.",
+          "touch": "message"
+        },
+        {
+          "avatar_color": null,
+          "date": "2099-06-01T09:00:06.000Z",
+          "id": "id-0049",
+          "kind": "auto",
+          "name": "Chris Okafor",
+          "party_id": "id-0006",
+          "sort_at": "2099-06-01T09:00:06.000Z",
+          "text": "Sent the portfolio feedback he asked for.",
+          "touch": "message"
+        },
+        {
+          "avatar_color": null,
+          "date": "2099-06-01T09:00:05.000Z",
+          "id": "id-0048",
+          "kind": "auto",
+          "name": "Grandpa Ray",
+          "party_id": "id-0005",
+          "sort_at": "2099-06-01T09:00:05.000Z",
+          "text": "Sunday lunch. Blood pressure is under control again; he beat me at cribbage twice.",
+          "touch": "visit"
+        },
+        {
+          "avatar_color": null,
+          "date": "2099-06-01T09:00:04.000Z",
+          "id": "id-0047",
+          "kind": "auto",
+          "name": "Maya Alvarez",
+          "party_id": "id-0003",
+          "sort_at": "2099-06-01T09:00:04.000Z",
+          "text": "Caught up about her Denver move; she wants the Tahoe dates.",
+          "touch": "call"
+        },
+        {
+          "date": "2099-05-28",
+          "id": "id-0045",
+          "kind": "entry",
+          "mood": "Quiet",
+          "sort_at": "2099-05-28T12:00:00.000Z",
+          "text": "Nobody to call tonight."
+        }
+      ]
+    },
+    "query": "journal"
+  },
+  {
+    "input": {},
+    "output": {
+      "people": [
+        {
+          "name": "Chris Okafor",
+          "party_id": "id-0006",
+          "purge_at": "2099-07-01T09:01:12.000Z",
+          "role": "Design lead, ex-colleague"
+        }
+      ]
+    },
+    "query": "trash"
+  },
+  {
+    "input": {
+      "party_id": "id-0003"
+    },
+    "output": {
+      "person": {
+        "avatar_color": null,
+        "cadence_days": 30,
+        "contact": [
+          {
+            "channel_id": "id-0120",
+            "duplicate_names": [],
+            "duplicate_party_ids": [],
+            "kind": "phone",
+            "label": "mobile",
+            "normalized_value": "+14155550100",
+            "preferred": true,
+            "provenance": null,
+            "value": "+1 (415) 555-0100"
+          },
+          {
+            "channel_id": "id-0160",
+            "duplicate_names": [],
+            "duplicate_party_ids": [],
+            "kind": "email",
+            "label": null,
+            "normalized_value": "maya@example.com",
+            "preferred": false,
+            "provenance": null,
+            "value": "Maya@Example.com"
+          },
+          {
+            "channel_id": "id-0140",
+            "duplicate_names": [],
+            "duplicate_party_ids": [],
+            "kind": "email",
+            "label": null,
+            "normalized_value": "maya.alvarez@example.com",
+            "preferred": false,
+            "provenance": null,
+            "value": "maya.alvarez@example.com"
+          }
+        ],
+        "created_at": "2099-06-01T09:00:00.000Z",
+        "dates": [
+          {
+            "date_id": "id-0153",
+            "label": "Birthday",
+            "month_day": "11-02",
+            "reminder_on": true
+          },
+          {
+            "date_id": "id-0107",
+            "label": "Anniversary",
+            "month_day": "03-02",
+            "reminder_on": true
+          }
+        ],
+        "debts": [],
+        "gifts": [
+          {
+            "gift_id": "id-0060",
+            "state": "given",
+            "text": "A print of the lake"
+          }
+        ],
+        "interactions": [
+          {
+            "interaction_id": "id-0047",
+            "kind": "call",
+            "occurred_at": "2099-06-01T09:00:04.000Z",
+            "text": "Caught up about her Denver move; she wants the Tahoe dates."
+          }
+        ],
+        "last_contacted_at": "2099-06-01T09:00:04.000Z",
+        "list_id": null,
+        "met": "",
+        "name": "Maya Alvarez",
+        "nickname": "",
+        "notes": [
+          {
+            "annotation_id": "id-0142",
+            "created_at": "2099-06-01T09:01:07.000Z",
+            "text": "Same Maya, second card."
+          },
+          {
+            "annotation_id": "id-0158",
+            "created_at": "2099-06-01T09:00:30.000Z",
+            "text": "Loves the Tahoe photos."
+          }
+        ],
+        "party_id": "id-0003",
+        "relationships": [],
+        "role": "College friend",
+        "starred": false,
+        "tasks": [
+          {
+            "done": false,
+            "task_id": "id-0062",
+            "text": "Send the Denver dates"
+          }
+        ],
+        "vaults": [
+          {
+            "binding_id": "binding-live-a",
+            "linked_at": "2099-06-01T09:00:00.000Z",
+            "vault_id": "vault-alvarez"
+          }
+        ]
+      }
+    },
+    "query": "person"
+  },
+  {
+    "input": {
+      "party_id": "id-0003"
+    },
+    "output": {
+      "revisions": []
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "party_id": "id-0005"
+    },
+    "output": {
+      "person": {
+        "avatar_color": null,
+        "cadence_days": 7,
+        "contact": [],
+        "created_at": "2099-06-01T09:00:02.000Z",
+        "dates": [
+          {
+            "date_id": "id-0152",
+            "label": "Birthday",
+            "month_day": "08-14",
+            "reminder_on": true
+          }
+        ],
+        "debts": [],
+        "gifts": [
+          {
+            "gift_id": "id-0055",
+            "state": "idea",
+            "text": "Large-print edition of Lonesome Dove"
+          }
+        ],
+        "interactions": [
+          {
+            "interaction_id": "id-0048",
+            "kind": "visit",
+            "occurred_at": "2099-06-01T09:00:05.000Z",
+            "text": "Sunday lunch. Blood pressure is under control again; he beat me at cribbage twice."
+          }
+        ],
+        "last_contacted_at": "2099-06-01T09:00:05.000Z",
+        "list_id": "id-0040",
+        "met": "",
+        "name": "Grandpa Ray",
+        "nickname": "",
+        "notes": [],
+        "party_id": "id-0005",
+        "relationships": [
+          {
+            "kind": "wife",
+            "name": "Edith",
+            "pet": null,
+            "related_party_id": "id-0007",
+            "relationship_id": "id-0058"
+          },
+          {
+            "kind": "pet",
+            "name": "Biscuit",
+            "pet": "dog",
+            "related_party_id": "id-0008",
+            "relationship_id": "id-0063"
+          }
+        ],
+        "role": "Grandfather",
+        "starred": true,
+        "tasks": [],
+        "vaults": [
+          {
+            "binding_id": "binding-live-b",
+            "linked_at": "2099-06-01T09:00:00.000Z",
+            "vault_id": "vault-ray"
+          }
+        ]
+      }
+    },
+    "query": "person"
+  },
+  {
+    "input": {
+      "party_id": "id-0005"
+    },
+    "output": {
+      "revisions": []
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "party_id": "id-0004"
+    },
+    "output": {
+      "person": {
+        "avatar_color": null,
+        "cadence_days": 45,
+        "contact": [
+          {
+            "channel_id": "id-0162",
+            "duplicate_names": [],
+            "duplicate_party_ids": [],
+            "kind": "email",
+            "label": null,
+            "normalized_value": "jake@example.com",
+            "preferred": true,
+            "provenance": {
+              "source": "social.resolve_identity"
+            },
+            "value": "jake@example.com"
+          },
+          {
+            "channel_id": "id-0161",
+            "duplicate_names": [],
+            "duplicate_party_ids": [],
+            "kind": "phone",
+            "label": null,
+            "normalized_value": "4155550100",
+            "preferred": false,
+            "provenance": null,
+            "value": "415 555 0100"
+          }
+        ],
+        "created_at": "2099-06-01T09:00:01.000Z",
+        "dates": [
+          {
+            "date_id": "id-0154",
+            "label": "Birthday",
+            "month_day": "02-29",
+            "reminder_on": true
+          }
+        ],
+        "debts": [
+          {
+            "amount_minor": 15000,
+            "currency": "GBP",
+            "debt_id": "id-0163",
+            "direction": "owe",
+            "reason": "His half of the cabin deposit"
+          }
+        ],
+        "gifts": [],
+        "interactions": [
+          {
+            "interaction_id": "id-0050",
+            "kind": "message",
+            "occurred_at": "2099-06-01T09:00:46.000Z",
+            "text": "Asked about the deposit."
+          }
+        ],
+        "last_contacted_at": "2099-06-01T09:00:46.000Z",
+        "list_id": null,
+        "met": "",
+        "name": "Jake Bennett",
+        "nickname": "",
+        "notes": [],
+        "party_id": "id-0004",
+        "relationships": [],
+        "role": "Old roommate from Portland",
+        "starred": false,
+        "tasks": [],
+        "vaults": []
+      }
+    },
+    "query": "person"
+  },
+  {
+    "input": {
+      "party_id": "id-0004"
+    },
+    "output": {
+      "revisions": [
+        {
+          "operation": "restore",
+          "recorded_at": "2099-06-01T09:01:05.000Z",
+          "revision_id": "id-0150",
+          "snapshot": {
+            "avatar_color": null,
+            "cadence_days": 45,
+            "deleted_at": "2099-06-01T09:01:03.000Z",
+            "display_name": "Jake Bennett",
+            "last_contacted_at": "2099-06-01T09:00:46.000Z",
+            "met": null,
+            "profile_id": "id-0117",
+            "purge_at": "2099-07-01T09:01:03.000Z",
+            "role": "Old roommate from Portland"
+          },
+          "undo_until": "2099-06-01T09:01:15.000Z",
+          "undone_at": null
+        },
+        {
+          "operation": "trash",
+          "recorded_at": "2099-06-01T09:01:03.000Z",
+          "revision_id": "id-0147",
+          "snapshot": {
+            "avatar_color": null,
+            "cadence_days": 45,
+            "deleted_at": null,
+            "display_name": "Jake Bennett",
+            "last_contacted_at": "2099-06-01T09:00:46.000Z",
+            "met": null,
+            "profile_id": "id-0117",
+            "purge_at": null,
+            "role": "Old roommate from Portland"
+          },
+          "undo_until": "2099-06-01T09:01:13.000Z",
+          "undone_at": null
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "party_id": "id-0006"
+    },
+    "output": {
+      "person": null
+    },
+    "query": "person"
+  },
+  {
+    "input": {
+      "party_id": "id-0006"
+    },
+    "output": {
+      "revisions": [
+        {
+          "operation": "trash",
+          "recorded_at": "2099-06-01T09:01:12.000Z",
+          "revision_id": "id-0149",
+          "snapshot": {
+            "avatar_color": null,
+            "cadence_days": 60,
+            "deleted_at": null,
+            "display_name": "Chris Okafor",
+            "last_contacted_at": "2099-06-01T09:00:06.000Z",
+            "met": null,
+            "profile_id": "id-0074",
+            "purge_at": null,
+            "role": "Design lead, ex-colleague"
+          },
+          "undo_until": "2099-06-01T09:01:22.000Z",
+          "undone_at": null
+        },
+        {
+          "operation": "cadence",
+          "recorded_at": "2099-06-01T09:00:27.000Z",
+          "revision_id": "id-0146",
+          "snapshot": {
+            "avatar_color": null,
+            "cadence_days": 60,
+            "deleted_at": null,
+            "display_name": "Chris Okafor",
+            "last_contacted_at": "2099-06-01T09:00:06.000Z",
+            "met": "At the studio open day",
+            "profile_id": "id-0074",
+            "purge_at": null,
+            "role": "Design lead"
+          },
+          "undo_until": "2099-06-01T09:00:37.000Z",
+          "undone_at": null
+        },
+        {
+          "operation": "edit",
+          "recorded_at": "2099-06-01T09:00:26.000Z",
+          "revision_id": "id-0148",
+          "snapshot": {
+            "avatar_color": null,
+            "cadence_days": 60,
+            "deleted_at": null,
+            "display_name": "Chris Okafor",
+            "last_contacted_at": "2099-06-01T09:00:06.000Z",
+            "met": null,
+            "profile_id": "id-0074",
+            "purge_at": null,
+            "role": "Design lead, ex-colleague"
+          },
+          "undo_until": "2099-06-01T09:00:36.000Z",
+          "undone_at": "2099-06-01T09:00:28.000Z"
+        }
+      ]
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "party_id": "no-such-party"
+    },
+    "output": {
+      "person": null
+    },
+    "query": "person"
+  },
+  {
+    "input": {
+      "party_id": "id-0138"
+    },
+    "output": {
+      "person": null
+    },
+    "query": "person"
+  },
+  {
+    "input": {},
+    "output": {
+      "person": null
+    },
+    "query": "person"
+  },
+  {
+    "input": {
+      "party_id": "no-such-party"
+    },
+    "output": {
+      "revisions": []
+    },
+    "query": "history"
+  },
+  {
+    "input": {},
+    "output": {
+      "revisions": []
+    },
+    "query": "history"
+  },
+  {
+    "input": {
+      "term": "alvarez"
+    },
+    "output": {
+      "people": [
+        {
+          "avatar_color": null,
+          "cadence_days": 30,
+          "created_at": "2099-06-01T09:00:00.000Z",
+          "last_contacted_at": "2099-06-01T09:00:04.000Z",
+          "list_id": null,
+          "name": "Maya Alvarez",
+          "party_id": "id-0003",
+          "reminders": [],
+          "role": "College friend",
+          "snippet": "Maya ⟦Alvarez⟧",
+          "starred": false
+        }
+      ]
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "term": "grandfather"
+    },
+    "output": {
+      "people": [
+        {
+          "avatar_color": null,
+          "cadence_days": 7,
+          "created_at": "2099-06-01T09:00:02.000Z",
+          "last_contacted_at": "2099-06-01T09:00:05.000Z",
+          "list_id": "id-0040",
+          "name": "Grandpa Ray",
+          "party_id": "id-0005",
+          "reminders": [],
+          "role": "Grandfather",
+          "snippet": "⟦Grandfather⟧",
+          "starred": true
+        }
+      ]
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "term": "tahoe"
+    },
+    "output": {
+      "people": [
+        {
+          "avatar_color": null,
+          "cadence_days": 30,
+          "created_at": "2099-06-01T09:00:00.000Z",
+          "last_contacted_at": "2099-06-01T09:00:04.000Z",
+          "list_id": null,
+          "name": "Maya Alvarez",
+          "party_id": "id-0003",
+          "reminders": [],
+          "role": "College friend",
+          "snippet": "Loves the ⟦Tahoe⟧ photos.",
+          "starred": false
+        }
+      ]
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "term": "zzzz"
+    },
+    "output": {
+      "people": []
+    },
+    "query": "search"
+  },
+  {
+    "input": {
+      "term": ""
+    },
+    "output": {
+      "people": []
+    },
+    "query": "search"
+  }
+]

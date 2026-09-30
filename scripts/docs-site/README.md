@@ -17,7 +17,7 @@ scripts/docs-site/
 
 That file and the `assets/fonts/` beside it are committed generator output, because neither site has a build step that could produce them (Astro and `assemble.mjs` both copy `public/` verbatim). `bun run lint:site-tokens` fails on any drift, on a `var()` that resolves to nothing, on a literal font family, and on a font-CDN reference; `bun run site:tokens` re-emits.
 
-The theme is the product's: no `data-theme` means "follow the system", and the toggle pins `light` or `dark`. The one step beyond the product's type ramp is `--t-chapter-size` / `--t-hero-size` for a chapter opener, registered in [docs/design-divergences.md](../../docs/design-divergences.md).
+The theme is the product's: no `data-theme` means "follow the system", and the toggle pins `light` or `dark`. The one step beyond the product's type ramp is `--t-chapter-size` / `--t-hero-size` for a chapter opener, registered in [docs/design-machinery.md](../../docs/design-machinery.md).
 
 The ontology route keeps its bespoke CSS/JS inside `src/content` because it is a large interactive spec document; it reads the same tokens, and maps its two diagram colours onto the product's app-identity hue axis.
 

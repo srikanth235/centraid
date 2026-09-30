@@ -20,11 +20,6 @@
       "issue": 927,
       "expires": "2026-10-04",
       "why": "#927 W4 — the Pi-class gateway cell runs on a self-hosted runner labelled `centraid-pi`, which no repository has registered yet. Unblocked by registering one and setting vars.CENTRAID_PI_CELL=true. Until then the constrained hardware profile is only ever measured on a cloud x64 runner with the profile pinned, which changes SQLite's durability mode and nothing about the disk underneath it."
-    },
-    "web-e2e-cross-browser": {
-      "issue": 915,
-      "expires": "2026-09-16",
-      "why": "first green on a candidate is the baseline — this lane joined test-health-report's needs in #915 Wave 0 having never run green, so its first run is a measurement, not a regression. Parked so it renders as parked rather than red until it has one green run on a candidate; the park expiring is the prompt to read the number and either promote it to a gating verdict or fix it."
     }
   }
 }

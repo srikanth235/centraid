@@ -1,0 +1,9 @@
+# The first load. `first_load: true` is a spinner over an empty frame; the
+# refresh case below is a spinner over rows, and they are different screens.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_ACTIVITY
+loading { first_load: true }

@@ -1,0 +1,23 @@
+# "NOT WALKED YET" IS NOT "YOUR LIBRARY IS CLEAN".
+#
+# No clusters, `scan_complete: false`. Perceptual hashes are computed by a pass,
+# and a library the pass has not finished walking has no clusters for a reason
+# that has nothing to do with duplicates. The screen has to say so, because the
+# alternative — "No duplicates found" — is a claim the vault has not earned, and
+# a member who reads it stops looking.
+#
+# `total_reclaimable_bytes: 0` is honest here for the same reason and NOT a
+# separate signal: nothing has been measured, so nothing can be promised. A
+# screen must not read this zero as "there is nothing to gain"; it is
+# `scan_complete` that licenses that sentence.
+#
+# This is data, not a failure. The read landed and returned the true current
+# state of a pass in progress, and a retry does not make a pass finish sooner.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+data {
+  scan_complete: false
+}

@@ -2,11 +2,10 @@
 /**
  * Unsafe-edge audit over the first-party Rust crates (issue #842 W7.2).
  *
- * Centraid's Rust side is the tunnel data plane, its N-API native binding, and
- * the browser iroh WASM module — the three places where the product parses
- * bytes that arrived from a peer. `unsafe` there is where memory-safety
- * guarantees stop being the compiler's problem, so this lane makes every such
- * site visible and countable.
+ * Every crate under `crates/` is first-party Rust. `unsafe` is where
+ * memory-safety guarantees stop being the compiler's problem, so this lane
+ * makes every such site visible and countable; the C ABI in `crates/core-ffi`
+ * is where most of them live.
  *
  * Two rules, both tighten-only:
  *   1. Every `unsafe` site must carry a `// SAFETY:` comment on the same line
@@ -17,9 +16,9 @@
  *      lowered in the same change that removes the site, so the ratchet cannot
  *      silently slacken while looking green).
  *
- * Today every crate is at 0, so the lane is a tripwire on the first `unsafe`
- * anyone adds rather than a backlog. That is a real gate, not a vacuous one:
- * `unsafe-edge-audit.test.mjs` seeds an unsafe block and asserts it goes red.
+ * A crate at 0 makes the lane a tripwire on the first `unsafe` anyone adds.
+ * That is a real gate, not a vacuous one: `unsafe-edge-audit.test.mjs` seeds
+ * an unsafe block and asserts it goes red.
  *
  * Usage:  node scripts/security/unsafe-edge-audit.mjs [--root <dir>]
  * Exit:   0 clean · 1 unjustified site, count drift, or unknown crate

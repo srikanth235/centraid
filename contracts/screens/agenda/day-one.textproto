@@ -1,0 +1,41 @@
+# NOTHING IN THE CALENDAR AT ALL: Schedule's whole window is empty, with no
+# search and no calendar hidden. The one empty state with an action, and it
+# sends `NewEventRequested`.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_SCHEDULE
+anchor_day: "2026-03-11"
+data {
+  today: "2026-03-11"
+  now_local: "2026-03-11T09:42"
+  empty: AGENDA_EMPTY_DAY_ONE
+  empty_title: "Nothing in your calendar yet."
+  empty_body: "The first event is one field and a time."
+  empty_action: "Add the first one"
+  calendars {
+    calendar_id: "calendar-home"
+    name: "Home"
+    hue_key: "cTeal"
+    hidden: false
+    state_label: "Shown"
+  }
+  waiting_count: 0
+  event_count: 0
+  event_count_label: "0 events"
+}
+sheet: SHEET_NONE
+band { key: "day" label: "Day" icon_key: "Clock" current: false }
+band { key: "schedule" label: "Schedule" icon_key: "List" current: true }
+band { key: "waiting" label: "Waiting" icon_key: "Inbox" current: false }
+band { key: "search" label: "Search" icon_key: "Search" current: false }
+band { key: "more" label: "More" icon_key: "more" current: false }
+toolbar {
+  shown: true
+  range_label: "From today"
+  month_label: "March 2026"
+  at_today: true
+}
+chrome { title: "Agenda" new_event: "New event" today: "Today" }

@@ -1,0 +1,368 @@
+[
+  {
+    "command": "media.update_asset",
+    "input": {
+      "asset_id": "id-0025",
+      "favorite": 1,
+      "title": "A title the member typed"
+    },
+    "output": {
+      "asset_id": "id-0025"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.set_archived",
+    "input": {
+      "archived": 1,
+      "asset_id": "id-0027"
+    },
+    "output": {
+      "archived": 1,
+      "asset_id": "id-0027"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.set_favorite",
+    "input": {
+      "asset_id": "id-0027",
+      "favorite": 0
+    },
+    "output": {
+      "asset_id": "id-0027",
+      "favorite": 0
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.name_place",
+    "input": {
+      "kind": "home",
+      "name": "The cabin",
+      "place_id": "id-0112"
+    },
+    "output": {
+      "kind": "home",
+      "name": "The cabin",
+      "place_id": "id-0112"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.set_place_gazetteer",
+    "input": {
+      "country": "US",
+      "distance_km": 4.2,
+      "name": "Truckee, CA",
+      "place_id": "id-0113",
+      "source": "geonames-cities15000"
+    },
+    "output": {
+      "matched": true,
+      "name": "Truckee, CA",
+      "place_id": "id-0113"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.set_place_gazetteer",
+    "input": {
+      "place_id": "id-0114",
+      "source": "geonames-cities15000"
+    },
+    "output": {
+      "matched": false,
+      "place_id": "id-0114"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.set_asset_place",
+    "input": {
+      "asset_id": "id-0029",
+      "place_id": "id-0112"
+    },
+    "output": {
+      "asset_id": "id-0029",
+      "place_id": "id-0112"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.set_asset_place",
+    "input": {
+      "asset_id": "id-0029"
+    },
+    "output": {
+      "asset_id": "id-0029",
+      "place_id": null
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.answer_face_proposal",
+    "input": {
+      "answer": "confirm",
+      "party_id": "id-0002",
+      "region_id": "id-0130"
+    },
+    "output": {
+      "region_id": "id-0130",
+      "review_state": "confirmed"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.answer_face_proposal",
+    "input": {
+      "answer": "reject",
+      "region_id": "id-0121"
+    },
+    "output": {
+      "region_id": "id-0121",
+      "review_state": "rejected"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.answer_face_proposal",
+    "input": {
+      "answer": "dismiss",
+      "region_id": "id-0122"
+    },
+    "output": {
+      "region_id": "id-0122",
+      "review_state": "dismissed"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.answer_face_proposal",
+    "input": {
+      "answer": "confirm",
+      "region_id": "id-0123"
+    },
+    "output": null,
+    "reason": "a 'confirm' answer must name a party that exists in this vault, and 'reject'/'dismiss' must name none",
+    "status": "failed"
+  },
+  {
+    "command": "media.forget_person",
+    "input": {
+      "party_id": "id-0002"
+    },
+    "output": {
+      "embeddings_forgotten": 0,
+      "party_id": "id-0002",
+      "regions_forgotten": 1
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.answer_face_proposal",
+    "input": {
+      "answer": "confirm",
+      "party_id": "id-0003",
+      "region_id": "id-0124"
+    },
+    "output": {
+      "region_id": "id-0124",
+      "review_state": "confirmed"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.create_album",
+    "input": {
+      "title": "A second album"
+    },
+    "output": {
+      "album_id": "id-0107"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.add_to_album",
+    "input": {
+      "album_id": "id-0107",
+      "asset_id": "id-0025"
+    },
+    "output": {
+      "entry_id": "id-0131",
+      "position": 0
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.add_to_album",
+    "input": {
+      "album_id": "id-0107",
+      "asset_id": "id-0025"
+    },
+    "output": null,
+    "reason": "not_already_in_album: n eq 0",
+    "status": "failed"
+  },
+  {
+    "command": "media.set_album_cover",
+    "input": {
+      "album_id": "id-0107",
+      "asset_id": "id-0025"
+    },
+    "output": {
+      "album_id": "id-0107",
+      "asset_id": "id-0025"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.rename_album",
+    "input": {
+      "album_id": "id-0107",
+      "title": "Renamed"
+    },
+    "output": {
+      "album_id": "id-0107"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.remove_from_album",
+    "input": {
+      "album_id": "id-0107",
+      "asset_id": "id-0025"
+    },
+    "output": {
+      "album_id": "id-0107",
+      "asset_id": "id-0025"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.delete_album",
+    "input": {
+      "album_id": "id-0107"
+    },
+    "output": {
+      "album_id": "id-0107",
+      "revision_id": "id-0132",
+      "undo_until": "2099-06-01T09:00:30.000Z"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.restore_album",
+    "input": {
+      "album_id": "id-0107",
+      "revision_id": "id-0132"
+    },
+    "output": {
+      "album_id": "id-0107",
+      "revision_id": "id-0132"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.delete_asset",
+    "input": {
+      "asset_id": "id-0133"
+    },
+    "output": {
+      "asset_id": "id-0133",
+      "content_released": 1
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.delete_asset",
+    "input": {
+      "asset_id": "id-0133"
+    },
+    "output": null,
+    "reason": "asset_exists_live: n eq 1",
+    "status": "failed"
+  },
+  {
+    "command": "media.set_favorite",
+    "input": {
+      "asset_id": "id-0133",
+      "favorite": 1
+    },
+    "output": null,
+    "reason": "live_asset_exists: n eq 1",
+    "status": "failed"
+  },
+  {
+    "command": "media.restore_asset",
+    "input": {
+      "asset_id": "id-0133"
+    },
+    "output": {
+      "asset_id": "id-0133"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.purge_asset",
+    "input": {
+      "asset_id": "id-0133"
+    },
+    "output": null,
+    "reason": "Only a photograph that is already in the trash can be deleted forever.",
+    "status": "failed"
+  },
+  {
+    "command": "media.delete_asset",
+    "input": {
+      "asset_id": "id-0133"
+    },
+    "output": {
+      "asset_id": "id-0133",
+      "content_released": 1
+    },
+    "status": "executed"
+  },
+  {
+    "command": "media.purge_asset",
+    "input": {
+      "asset_id": "id-0133"
+    },
+    "output": {
+      "asset_id": "id-0133",
+      "content_released": 1
+    },
+    "status": "executed"
+  },
+  {
+    "command": "enrich.request_enrichment",
+    "input": {
+      "capability": "faces",
+      "entity_type": "media.asset",
+      "reason": "manual"
+    },
+    "output": {
+      "request_id": "id-0129"
+    },
+    "status": "executed"
+  },
+  {
+    "command": "enrich.request_enrichment",
+    "input": {
+      "entity_type": "media.asset",
+      "reason": "manual"
+    },
+    "output": null,
+    "reason": "enrich.request_enrichment: a 'manual' request must name the `capability` it is asking for — an untagged owner ask would enable every enricher, not the one the member consented to",
+    "status": "failed"
+  },
+  {
+    "command": "media.promote_caption",
+    "input": {
+      "asset_id": "id-0025"
+    },
+    "output": null,
+    "reason": "caption_exists: n gte 1",
+    "status": "failed"
+  }
+]

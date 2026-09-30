@@ -1,0 +1,57 @@
+# A CURSOR PAST THE END IS A REAL SCREEN AND NOT AN EMPTY ONE.
+#
+# Two candidates, `cursor: 2`. The queue is worked through: the member answered
+# both, and what they should read is "that's all of them" — a finish, with the
+# answers behind it. It is NOT the screen a member with no proposals at all
+# sees, and the bytes say so: `candidates` is non-empty and `next_cursor` is
+# absent.
+#
+# The cursor is on the STATE rather than being a position a view holds, because
+# a member who leaves and comes back must not be asked the first question again.
+# A view-local index resets on every recomposition, which turns a worked queue
+# back into a full one and asks a member to re-answer questions they have
+# already answered — each of which is a write.
+#
+# An index into `data.candidates` and not an id: the queue is ORDERED, and the
+# thing a member is at is a position in that order.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+data {
+  candidates {
+    region_id: "rgn-0001"
+    asset_id: "ast-0110"
+    thumbnail_path: "thumbs/ast-0110.jpg"
+    box_x: 0.31
+    box_y: 0.18
+    box_width: 0.22
+    box_height: 0.29
+    proposed_party_id: "pty-0031"
+    proposed_name: "Ada Lovelace"
+    confidence: 0.91
+  }
+  candidates {
+    region_id: "rgn-0002"
+    asset_id: "ast-0201"
+    thumbnail_path: "thumbs/ast-0201.jpg"
+    box_x: 0.605
+    box_y: 0.402
+    box_width: 0.115
+    box_height: 0.164
+    proposed_party_id: "pty-0044"
+    proposed_name: "Grace Hopper"
+    confidence: 0.58
+  }
+  known_people {
+    party_id: "pty-0031"
+    display_name: "Ada Lovelace"
+  }
+  known_people {
+    party_id: "pty-0044"
+    display_name: "Grace Hopper"
+  }
+}
+cursor: 2
+recognition_enabled: true

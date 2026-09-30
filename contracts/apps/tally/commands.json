@@ -1,0 +1,413 @@
+[
+  {
+    "command": "tally.add_friend",
+    "input": {
+      "name": "Ana"
+    },
+    "output_keys": ["party_id", "reused_party"]
+  },
+  {
+    "command": "tally.add_friend",
+    "input": {
+      "name": "Bo"
+    },
+    "output_keys": ["party_id", "reused_party"]
+  },
+  {
+    "command": "tally.add_friend",
+    "input": {
+      "name": "Cleo"
+    },
+    "output_keys": ["party_id", "reused_party"]
+  },
+  {
+    "command": "tally.create_group",
+    "input": {
+      "name": "Sitwell Road",
+      "icon": "🏠",
+      "currency": "GBP",
+      "member_ids": [
+        {
+          "$from": "0.party_id"
+        },
+        {
+          "$from": "1.party_id"
+        }
+      ]
+    },
+    "output_keys": ["group_id"]
+  },
+  {
+    "command": "tally.create_group",
+    "input": {
+      "name": "Lisbon",
+      "icon": "🏠",
+      "currency": "EUR",
+      "member_ids": [
+        {
+          "$from": "0.party_id"
+        },
+        {
+          "$from": "2.party_id"
+        }
+      ]
+    },
+    "output_keys": ["group_id"]
+  },
+  {
+    "command": "tally.create_group",
+    "input": {
+      "name": "Tokyo",
+      "icon": "🏠",
+      "currency": "JPY",
+      "member_ids": [
+        {
+          "$from": "1.party_id"
+        }
+      ]
+    },
+    "output_keys": ["group_id"]
+  },
+  {
+    "command": "tally.add_expense",
+    "input": {
+      "group_id": {
+        "$from": "3.group_id"
+      },
+      "description": "Groceries",
+      "amount_minor": 10001,
+      "paid_by": "$owner",
+      "category": "groceries",
+      "spent_on": "2099-05-04",
+      "splits": [
+        {
+          "party_id": "$owner",
+          "share_minor": 3334
+        },
+        {
+          "party_id": {
+            "$from": "0.party_id"
+          },
+          "share_minor": 3334
+        },
+        {
+          "party_id": {
+            "$from": "1.party_id"
+          },
+          "share_minor": 3333
+        }
+      ]
+    },
+    "output_keys": ["expense_id"]
+  },
+  {
+    "command": "tally.add_expense",
+    "input": {
+      "group_id": {
+        "$from": "3.group_id"
+      },
+      "description": "Boiler service",
+      "amount_minor": 24000,
+      "paid_by": {
+        "$from": "0.party_id"
+      },
+      "category": "groceries",
+      "spent_on": "2099-05-04",
+      "splits": [
+        {
+          "party_id": "$owner",
+          "share_minor": 8000
+        },
+        {
+          "party_id": {
+            "$from": "0.party_id"
+          },
+          "share_minor": 8000
+        },
+        {
+          "party_id": {
+            "$from": "1.party_id"
+          },
+          "share_minor": 8000
+        }
+      ],
+      "payers": [
+        {
+          "party_id": {
+            "$from": "0.party_id"
+          },
+          "paid_minor": 14000
+        },
+        {
+          "party_id": {
+            "$from": "1.party_id"
+          },
+          "paid_minor": 10000
+        }
+      ]
+    },
+    "output_keys": ["expense_id"]
+  },
+  {
+    "command": "tally.add_expense",
+    "input": {
+      "group_id": {
+        "$from": "4.group_id"
+      },
+      "description": "Pastéis",
+      "amount_minor": 10000,
+      "paid_by": "$owner",
+      "category": "groceries",
+      "spent_on": "2099-05-04",
+      "splits": [
+        {
+          "party_id": "$owner",
+          "share_minor": 5000
+        },
+        {
+          "party_id": {
+            "$from": "2.party_id"
+          },
+          "share_minor": 5000
+        }
+      ]
+    },
+    "output_keys": ["expense_id"]
+  },
+  {
+    "command": "tally.add_expense",
+    "input": {
+      "group_id": {
+        "$from": "5.group_id"
+      },
+      "description": "Ramen",
+      "amount_minor": 4200,
+      "paid_by": {
+        "$from": "1.party_id"
+      },
+      "category": "groceries",
+      "spent_on": "2099-05-04",
+      "splits": [
+        {
+          "party_id": "$owner",
+          "share_minor": 2100
+        },
+        {
+          "party_id": {
+            "$from": "1.party_id"
+          },
+          "share_minor": 2100
+        }
+      ]
+    },
+    "output_keys": ["expense_id"]
+  },
+  {
+    "command": "tally.add_expense",
+    "input": {
+      "description": "Cinema",
+      "amount_minor": 2500,
+      "paid_by": "$owner",
+      "category": "groceries",
+      "spent_on": "2099-05-04",
+      "splits": [
+        {
+          "party_id": "$owner",
+          "share_minor": 1250
+        },
+        {
+          "party_id": {
+            "$from": "0.party_id"
+          },
+          "share_minor": 1250
+        }
+      ]
+    },
+    "output_keys": ["expense_id"]
+  },
+  {
+    "command": "tally.add_expense",
+    "input": {
+      "group_id": {
+        "$from": "3.group_id"
+      },
+      "description": "Hardware shop",
+      "amount_minor": 3000,
+      "paid_by": {
+        "$from": "1.party_id"
+      },
+      "category": "groceries",
+      "spent_on": "2099-05-04",
+      "splits": [
+        {
+          "party_id": "$owner",
+          "share_minor": 2000
+        },
+        {
+          "party_id": {
+            "$from": "1.party_id"
+          },
+          "share_minor": 1000
+        }
+      ],
+      "split_method": "by_line",
+      "line_items": [
+        {
+          "kind": "item",
+          "description": "Paint",
+          "amount_minor": 2000,
+          "allocations": [
+            {
+              "party_id": "$owner",
+              "share_minor": 2000
+            }
+          ]
+        },
+        {
+          "kind": "item",
+          "description": "Brushes",
+          "amount_minor": 1000,
+          "allocations": [
+            {
+              "party_id": {
+                "$from": "1.party_id"
+              },
+              "share_minor": 1000
+            }
+          ]
+        }
+      ]
+    },
+    "output_keys": ["expense_id"]
+  },
+  {
+    "command": "tally.add_expense",
+    "input": {
+      "group_id": {
+        "$from": "3.group_id"
+      },
+      "description": "Cancelled order",
+      "amount_minor": 1500,
+      "paid_by": "$owner",
+      "category": "groceries",
+      "spent_on": "2099-05-04",
+      "splits": [
+        {
+          "party_id": "$owner",
+          "share_minor": 750
+        },
+        {
+          "party_id": {
+            "$from": "0.party_id"
+          },
+          "share_minor": 750
+        }
+      ]
+    },
+    "output_keys": ["expense_id"]
+  },
+  {
+    "command": "tally.delete_expense",
+    "input": {
+      "expense_id": {
+        "$from": "12.expense_id"
+      }
+    },
+    "output_keys": ["expense_id", "revision_id", "undo_until"]
+  },
+  {
+    "command": "tally.settle_up",
+    "input": {
+      "from_party": {
+        "$from": "0.party_id"
+      },
+      "to_party": "$owner",
+      "amount_minor": 5000,
+      "currency": "GBP",
+      "group_id": {
+        "$from": "3.group_id"
+      },
+      "paid_on": "2099-05-20"
+    },
+    "output_keys": ["settlement_id", "txn_id"]
+  },
+  {
+    "command": "tally.leave_group",
+    "input": {
+      "group_id": {
+        "$from": "3.group_id"
+      },
+      "party_id": {
+        "$from": "1.party_id"
+      }
+    },
+    "output_keys": ["group_id", "on_ledger", "party_id"]
+  },
+  {
+    "command": "tally.set_group_simplification",
+    "input": {
+      "group_id": {
+        "$from": "3.group_id"
+      },
+      "simplify": true
+    },
+    "output_keys": ["group_id", "simplify_opt_in"]
+  },
+  {
+    "command": "tally.save_recurring_expense",
+    "input": {
+      "group_id": {
+        "$from": "3.group_id"
+      },
+      "description": "Broadband",
+      "original_amount_minor": 3500,
+      "original_currency": "GBP",
+      "settlement_currency": "GBP",
+      "paid_by": "$owner",
+      "category": "utilities",
+      "splits": [
+        {
+          "party_id": "$owner",
+          "weight": 1
+        },
+        {
+          "party_id": {
+            "$from": "0.party_id"
+          },
+          "weight": 1
+        }
+      ],
+      "rrule": "FREQ=MONTHLY",
+      "anchor_start": "2099-01-01T09:00:00",
+      "tz": "Europe/London",
+      "status": "active"
+    },
+    "output_keys": ["preview", "template_id"]
+  },
+  {
+    "command": "tally.edit_recurring_expense_occurrence",
+    "input": {
+      "template_id": {
+        "$from": "17.template_id"
+      },
+      "original_start_local": "2099-07-01T09:00:00",
+      "scope": "occurrence",
+      "action": "skip"
+    },
+    "output_keys": ["scope", "template_id"]
+  },
+  {
+    "command": "tally.nudge",
+    "input": {
+      "party_id": {
+        "$from": "0.party_id"
+      },
+      "group_id": {
+        "$from": "3.group_id"
+      },
+      "as_of_minor": 1250,
+      "note": "when you get a chance"
+    },
+    "output_keys": ["nudge_id", "prepared_at", "sent"]
+  }
+]

@@ -86,7 +86,7 @@ describe("discoverSleepSites", () => {
     writeFileSync(target, source);
   }
 
-  test("walks the skip-budget population, including nested script tests and flows", async () => {
+  test("walks the skip-budget population, including nested script tests", async () => {
     const root = tempDirSync("sleep-inventory-");
     writeFixture(
       root,
@@ -98,16 +98,10 @@ describe("discoverSleepSites", () => {
       "scripts/gateway-package/nested.test.mjs",
       "setTimeout(resolve, 250);"
     );
-    writeFixture(
-      root,
-      "tests/agent-e2e-pairing/flows/flow.mjs",
-      "await new Promise((resolve) => {\n  setTimeout(resolve, 500);\n});"
-    );
     writeFixture(root, "packages/x/src/clean.test.ts", "expect(1).toBe(1);");
     expect(await discoverSleepSites({ root })).toStrictEqual({
       "packages/x/src/a.test.ts": 2,
       "scripts/gateway-package/nested.test.mjs": 1,
-      "tests/agent-e2e-pairing/flows/flow.mjs": 1,
     });
   });
 
@@ -127,9 +121,7 @@ describe("discoverSleepSites", () => {
     );
     expect(SCAN_EXCLUDE).toContain("scripts/test-report/");
     expect(SCAN_EXCLUDE).toContain("packages/test-kit/");
-    expect(SCAN_INCLUDE.some((pattern) => pattern.startsWith("tests/"))).toBe(
-      true
-    );
+    expect(SCAN_INCLUDE).toContain("scripts/**/*.test.mjs");
     expect(await discoverSleepSites({ root })).toStrictEqual({});
   });
 });

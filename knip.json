@@ -2,15 +2,9 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreBinaries": [
     "actionlint",
-    "eas",
     "gitleaks",
-    "hdiutil",
     "maestro",
     "osv-scanner",
-    "pmset",
-    "sqlite3",
-    "strace",
-    "systemd-creds",
     "trivy"
   ],
   "ignoreExportsUsedInFile": true,
@@ -19,142 +13,54 @@
     ".": {
       "entry": [
         "scripts/**/*.{js,mjs,ts}",
-        "tests/**/*.{js,mjs,ts,tsx}",
+        "contracts/tools/*.ts",
+        "desktop/renderer/src/main.tsx",
+        "desktop/e2e/*.{ts,mjs}",
+        "desktop/vitest.config.ts",
         ".github/workflows/*.{yml,yaml}"
       ],
-      "project": ["scripts/**/*.{js,mjs,ts}", "tests/**/*.{js,mjs,ts,tsx}"],
-      "ignoreUnresolved": ["react", "react-native"],
+      "project": [
+        "scripts/**/*.{js,mjs,ts}",
+        "desktop/renderer/src/**/*.{ts,tsx}"
+      ],
       "ignoreDependencies": [
-        "@stryker-mutator/core",
-        "@stryker-mutator/vitest-runner",
-        "fake-indexeddb",
-        "@playwright/test"
+        "@playwright/test",
+        "electron",
+        "react",
+        "react-dom"
       ]
     },
     "packages/*": {
       "entry": ["src/index.ts"],
       "project": ["src/**/*.{ts,tsx}"]
     },
-    "packages/core": {
-      "entry": [
-        "src/protocol/index.ts",
-        "src/blob/index.ts",
-        "src/time/index.ts",
-        "zero-dep-guard.ts"
-      ],
-      "project": ["src/**/*.{ts,tsx}", "zero-dep-guard.ts"]
-    },
-    "packages/server": {
-      "entry": [
-        "src/index.ts",
-        "src/engine/index.ts",
-        "src/automation/index.ts",
-        "src/acp/index.ts",
-        "src/cli/cli.ts",
-        "src/acp/cli/centraid-cli.ts",
-        "src/engine/worker/runner.ts",
-        "src/engine/worker/ts-loader-hooks.ts",
-        "src/automation/worker/runner.ts",
-        "scripts/*.mjs"
-      ],
-      "project": ["src/**/*.{ts,tsx}", "scripts/*.{mjs,ts}"],
-      "ignoreUnresolved": ["/usr/bin/security", "/sbin/mount"],
-      "ignoreDependencies": [
-        "@agentclientprotocol/claude-agent-acp",
-        "@agentclientprotocol/codex-acp"
-      ]
-    },
-    "packages/cli": {
-      "entry": ["src/cli.ts"],
-      "project": ["src/**/*.{ts,tsx}"]
-    },
-    "packages/client": {
-      "entry": [
-        "src/index.ts",
-        "src/replica/index.ts",
-        "src/replica/seat/index.ts",
-        "src/replica/seat/seat-worker.ts",
-        "src/replica/seat/node-seat-driver.ts",
-        "src/replica/seat/node-staging.ts"
-      ],
-      "project": ["src/**/*.{ts,tsx}"]
-    },
     "packages/design": {
       "entry": ["src/index.ts", "src/elements/index.ts"],
       "project": ["src/**/*.{ts,tsx}"]
-    },
-    "packages/blueprints": {
-      "entry": ["src/index.ts"],
-      "project": ["src/**/*.{ts,tsx}"],
-      "ignoreDependencies": [
-        "@centraid/core",
-        "@centraid/server",
-        "esbuild",
-        "pdfjs-dist",
-        "tldts"
-      ]
     },
     "packages/test-kit": {
       "entry": ["src/*.ts"],
       "project": ["src/**/*.{ts,tsx}"]
     },
-    "apps/desktop": {
+    "desktop/electron": {
       "entry": ["src/main.ts", "src/preload.ts"],
-      "project": ["src/**/*.{ts,tsx}"],
+      "project": ["src/**/*.ts"],
       "ignoreDependencies": [
         "react",
         "react-dom",
         "@types/react",
-        "@types/react-dom",
-        "electron-updater"
+        "@types/react-dom"
       ]
     },
-    "apps/web": {
-      "project": ["src/**/*.{ts,tsx}"],
-      "ignoreDependencies": [
-        "react",
-        "react-dom",
-        "@types/react",
-        "@types/react-dom",
-        "@axe-core/playwright"
-      ]
-    },
-    "apps/mobile": {
-      "entry": ["index.ts", "App.tsx", "navigators.tsx", "scripts/*.mjs"],
-      "project": [
-        "src/**/*.{ts,tsx}",
-        "lazy-screens.tsx",
-        "lazy-navigators.tsx",
-        "scripts/*.mjs"
-      ],
-      "ignoreDependencies": [
-        "@babel/core",
-        "expo-modules-core",
-        "expo-system-ui"
-      ]
-    },
-    "apps/oauth-worker": {
-      "entry": ["src/worker.ts"],
-      "project": ["src/**/*.{ts,tsx}"]
-    },
-    "apps/extension": {
+    "extension": {
       "entry": [
         "src/worker.ts",
         "src/content.ts",
         "src/popup.ts",
-        "src/pair.ts",
-        "scripts/*.{js,mjs}"
+        "scripts/*.mjs",
+        "e2e/*.{ts,mjs}"
       ],
-      "project": ["src/**/*.{ts,tsx}", "scripts/*.{js,mjs}"]
-    },
-    "packages/model-runtime": {
-      "entry": [
-        "setup.ts",
-        "build-automation-handlers.ts",
-        "automation-handlers/*.js"
-      ],
-      "project": ["src/**/*.ts", "automation-handlers/*.js"],
-      "ignoreDependencies": ["onnxruntime-node"]
+      "project": ["src/**/*.ts", "scripts/*.mjs"]
     }
   }
 }

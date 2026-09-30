@@ -53,37 +53,14 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 // it ratchets).
 //
 // 2026-08-03 — measured via `node scripts/lint-container-opacity.mjs`.
-// 2026-08-04 — client 25 → 21: the onboarding migration retired the glow blob,
-// the pulsing avatar ring and the faded "working" line, all of which expressed
-// something (depth, liveness, quiet) by dimming a container.
-// 2026-08-04 — blueprints 6 → 5: the docs "+ New" chevron's resting 0.85 fade
-// went with the hand-rolled button it decorated; the kit primary carries one
-// ink for the whole control.
-// 2026-08-11 — blueprints 5 → 4: #738 removed the duplicate app-owned pending
-// layers and their faded presentation branches; #739 concurrently added the
-// Places graticule leaf. Generated app-boot mirrors are excluded above so this
-// source budget remains stable under concurrent gates.
-// 2026-09-10 — #1015 (R-SH-13), re-measured after the room wave: client 21 → 13,
-// blueprints 4 → 2, design/elements 12 → 3. Nothing was reclassified; the
-// rooms and the kit's leaf-token disabled state simply removed the container
-// fades these budgets were still holding room for. The ratchet takes the
-// measured value, which is what a ratchet is for.
+// 2026-09-10 — #1015 (R-SH-13): design/elements 12 → 3. Nothing was
+// reclassified; the kit's leaf-token disabled state removed the container
+// fades this budget was still holding room for.
 const BUDGETS = {
-  "packages/client/src": 13,
-  "packages/blueprints": 2,
   "packages/design/src/elements": 3,
 };
 
-const SKIP_DIRS = new Set([
-  "node_modules",
-  "dist",
-  "build",
-  ".turbo",
-  // The blueprint boot harness mirrors source CSS here while check:push runs
-  // gates concurrently. Counting both the source and its generated mirror
-  // makes the shrink-only budget depend on scheduling rather than source.
-  ".app-boot",
-]);
+const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
 const EXTENSION = /\.css$/u;
 
 const INTERACTIVE_PSEUDO_RE =
@@ -311,174 +288,7 @@ export function lintContainerOpacity(root = ROOT, budgets = BUDGETS) {
   return perPackage;
 }
 
-// ── Mobile (React Native) — TS/TSX object-literal scan (issue #708 §B/gate
-// blind spot) ─────────────────────────────────────────────────────────────
-//
-// The CSS scan above is a brace-walk over CSS *rules*: it classifies a
-// declaration away by looking at the rule's *selector* (does it carry
-// `:hover`/`:active`, is it inside `@keyframes`, …). React Native
-// `StyleSheet.create({...})` objects have no selectors — the mobile
-// equivalent of "this state is momentary, not resting" is a `Pressable`
-// render-prop (`({ pressed }) => …`) or a style key named for that
-// interaction, not a CSS pseudo-class. So this scan classifies a declaration
-// away by looking at what immediately *introduces* its enclosing object
-// literal instead of what selects it:
-//
-//   1. Press/hover feedback — the key name (`tabPressed:`) or guard
-//      (`pressed && { … }`, `pressed ? { … } : …`) text immediately before
-//      the enclosing `{` contains "press" or "hover". HomeBand.tsx's
-//      `tabPressed: { opacity: 0.6 }` is the canonical legitimate case this
-//      must NOT count.
-//   2. Non-literal values (`opacity: fade`, `opacity: anim.interpolate(…)`)
-//      — an Animated/Reanimated value driving entrance/exit or gesture
-//      opacity, never a hardcoded state flag. Same treatment as the CSS
-//      side's `var(...)`/boundary exclusion: only a bare numeric literal
-//      strictly between 0 and 1 is examined at all, so these fall out
-//      automatically rather than needing their own rule.
-//
-// Everything else — including a hardcoded disabled/dim/recede fade on a key
-// that isn't press-guarded — counts against the budget below, unclassified,
-// exactly like the CSS side's philosophy: this scan does not adjudicate
-// whether a given container fade is "legitimate" beyond those two
-// mechanical cases, it ratchets.
-const TS_EXTENSION = /\.tsx?$/u;
-const PRESS_CONTEXT_RE = /press|hover/iu;
-const TS_OPACITY_DECL_RE = /(?<![\w-])opacity\s*:\s*(?<value>[^,;}]+)[,;}]/gu;
-
-// 2026-08-03 — measured via `node scripts/lint-container-opacity.mjs` after
-// closing the AllAppsSheet.tsx container-opacity BLOCKER (issue #708). The
-// scan surfaced pre-existing, out-of-territory hardcoded disabled/dim
-// fades this pass does not touch — Button.tsx `disabled` (0.45),
-// apps/locker/LockerHome.styles.ts `disabled` (0.5),
-// apps/automations/Automations.styles.ts `dim` (0.55), and
-// apps/photos/PhotosHome.tsx `heroEyebrow` (0.9) — each a genuine container-
-// or leaf-opacity state fade by the same rule, just not one this change
-// owns. The budget records that debt rather than hiding it; it only shrinks
-// from here.
-const TS_BUDGETS = {
-  // 2026-08-03: the four pre-existing fades this scanner first surfaced
-  // (kit Button, Locker's unlock primary, Automations' in-flight controls,
-  // Photos' hero eyebrow) are gone — each now recedes through leaf colour
-  // tokens. Native starts clean, so it starts at zero and stays there.
-  "apps/mobile/src": 0,
-};
-
-function blankJsComments(src) {
-  // Line + block comments only — string/template contents are irrelevant
-  // here, since `opacity:` never appears meaningfully inside one of these
-  // files' string literals.
-  return src
-    .replace(/\/\*[\s\S]*?\*\//gu, (m) => m.replace(/[^\n]/gu, " "))
-    .replace(/\/\/[^\n]*/gu, (m) => " ".repeat(m.length));
-}
-
-function walkExt(dir, extension, out = []) {
-  for (const entry of readdirSync(dir)) {
-    if (SKIP_DIRS.has(entry)) continue;
-    const p = path.resolve(dir, entry);
-    if (statSync(p).isDirectory()) walkExt(p, extension, out);
-    else if (extension.test(p)) out.push(p);
-  }
-  return out;
-}
-
-/** Backward brace-match: the index of the `{` that opens the object literal
- *  enclosing `idx`, by walking left and balancing braces. Mirrors the
- *  forward `nextBlock` walk above, just run in the other direction since we
- *  start from a declaration and want its container, not a selector and its
- *  body. */
-function enclosingBraceOpen(src, idx) {
-  let depth = 0;
-  for (let i = idx - 1; i >= 0; i -= 1) {
-    const c = src[i];
-    if (c === "}") depth += 1;
-    else if (c === "{") {
-      if (depth === 0) return i;
-      depth -= 1;
-    }
-  }
-  return -1;
-}
-
-function findTsOpacityDecls(src) {
-  const decls = [];
-  let match;
-  TS_OPACITY_DECL_RE.lastIndex = 0;
-  while ((match = TS_OPACITY_DECL_RE.exec(src))) {
-    decls.push({ raw: match.groups.value.trim(), index: match.index });
-  }
-  return decls;
-}
-
-/** Scan one .ts/.tsx file, returning classified findings (mirrors CSS
- *  `scanFile`'s shape). */
-function scanTsFile(src, rel) {
-  const counted = [];
-  const classifiedAway = { pressOrHover: 0, nonLiteral: 0 };
-
-  for (const decl of findTsOpacityDecls(src)) {
-    const value = numericValue(decl.raw);
-    if (value === null || !(value > 0 && value < 1)) {
-      if (value === null) classifiedAway.nonLiteral += 1;
-      continue; // 0, 1, or non-literal (Animated value, expression) — out of scope.
-    }
-
-    const openIdx = enclosingBraceOpen(src, decl.index);
-    const contextStart = Math.max(0, openIdx - 120);
-    const context = openIdx === -1 ? "" : src.slice(contextStart, openIdx);
-
-    if (PRESS_CONTEXT_RE.test(context)) {
-      classifiedAway.pressOrHover += 1;
-      continue;
-    }
-
-    const line = lineOf(src, decl.index);
-    const keyMatch = /(?<key>[A-Za-z_$][\w$]*)\s*:\s*$/u.exec(
-      context.trimEnd()
-    );
-    const where = keyMatch
-      ? `key "${keyMatch.groups.key}"`
-      : context.trim().slice(-40) || "(module scope)";
-    counted.push(`${rel}:${line} — ${where} { opacity: ${decl.raw} }`);
-  }
-
-  return { counted, classifiedAway };
-}
-
-export function lintContainerOpacityMobile(root = ROOT, budgets = TS_BUDGETS) {
-  const perPackage = {};
-  for (const pkg of Object.keys(budgets)) {
-    perPackage[pkg] = {
-      counted: [],
-      classifiedAway: { pressOrHover: 0, nonLiteral: 0 },
-      filesScanned: 0,
-    };
-  }
-
-  for (const pkg of Object.keys(budgets)) {
-    const dir = path.resolve(root, pkg);
-    if (!existsSync(dir)) {
-      perPackage[pkg].missingTarget = pkg;
-      continue;
-    }
-    for (const file of walkExt(dir, TS_EXTENSION)) {
-      const rel = path.relative(root, file);
-      perPackage[pkg].filesScanned += 1;
-      const src = blankJsComments(readFileSync(file, "utf8"));
-      const { counted, classifiedAway } = scanTsFile(src, rel);
-      perPackage[pkg].counted.push(...counted);
-      perPackage[pkg].classifiedAway.pressOrHover +=
-        classifiedAway.pressOrHover;
-      perPackage[pkg].classifiedAway.nonLiteral += classifiedAway.nonLiteral;
-    }
-  }
-
-  return perPackage;
-}
-
-/** Shared pass/fail report for one (perPackage, budgets, kind) triple —
- *  used for both the CSS scan and the mobile TS/TSX scan so the two stay
- *  visually and behaviourally identical at the CLI. */
+/** Pass/fail report for one (perPackage, budgets, kind) triple. */
 function report(perPackage, budgets, { fileKind, awaySummaryOf }) {
   let anyFail = false;
   let anyMissing = false;
@@ -539,19 +349,8 @@ function main() {
       `keyframes=${away.keyframes} interactive-pseudo=${away.interactivePseudo} ` +
       `disabled-token=${away.disabledToken} hover-reveal=${away.hoverReveal}`,
   });
-  const tsResult = report(lintContainerOpacityMobile(), TS_BUDGETS, {
-    fileKind: ".ts/.tsx",
-    awaySummaryOf: (away) =>
-      `press-or-hover=${away.pressOrHover} non-literal=${away.nonLiteral}`,
-  });
 
-  if (
-    cssResult.anyMissing ||
-    cssResult.anyFail ||
-    tsResult.anyMissing ||
-    tsResult.anyFail
-  )
-    process.exit(1);
+  if (cssResult.anyMissing || cssResult.anyFail) process.exit(1);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {

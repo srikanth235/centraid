@@ -92,14 +92,13 @@ const TEST_SEAM_IMPORTS = {
     {
       group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
       message:
-        "Import from the package root barrel (e.g. '@centraid/server/engine'), not its internals — keeps each package's public surface the real contract. See governance: no-deep-imports.",
+        "Import from the package root barrel (e.g. '@centraid/design/elements'), not its internals — keeps each package's public surface the real contract. See governance: no-deep-imports.",
     },
   ],
 };
 
-// The vitest-owned test files. Playwright's e2e specs match the same shape but
-// run under a different runner with no `onTestFinished`, so they are switched
-// back off in the last override.
+// The vitest-owned test files. The Playwright specs under `desktop/e2e` and
+// `extension/e2e` are named `*.e2e.ts`, so no glob here reaches them.
 const VITEST_TEST_FILES = [
   "**/*.{test,spec}.{ts,tsx}",
   // #781 — `.test.mjs` was invisible to the seam rules (11 files carried raw
@@ -109,38 +108,14 @@ const VITEST_TEST_FILES = [
   // here wholesale.
   "**/*.test.mjs",
   "**/*.test-fixtures.ts",
-  "tests/helpers/**/*.ts",
-  // #781 — the agent-e2e harness/flow sources drive the nightly journeys and
-  // had the same seam exposure (Math.random ports in the pairing harness);
-  // they are test infrastructure, so the seam rules apply.
-  "tests/agent-e2e-*/**/*.mjs",
 ];
-
-// Hermes compatibility, kept separate so the mobile/time-engine *test* files
-// can carry both this and the seam rules — an override replaces a rule's
-// configuration, so the two lists have to be spread together rather than
-// layered.
-// `toSorted` alone, because it is the only absence anything measured (#905):
-// the device threw on it, and #903's polyfill header reaches the same finding
-// from the engine side while recording that this Hermes build DOES ship
-// `toReversed`, `toSpliced`, `with` and `findLast`. Those four were briefly
-// banned here as a precaution; a gate that fails a build over a method the
-// engine implements is wrong rather than cautious, so they are gone.
-// `scripts/lint-hermes-array-surface.mjs` carries the full reasoning.
-const HERMES_ARRAY_PROPERTIES = [
-  {
-    property: "toSorted",
-    message:
-      "The reviewed Hermes runtime does not implement Array.prototype.toSorted; sort a fresh array with .sort instead.",
-  },
-] as const;
 
 // Ultracite is the reviewed policy seed; Oxlint is the only routine lint
 // command and this file is the repository's only lint configuration.
 // core + react are extended, while vitest is NOT: it applies
 // entirely through "overrides", and an extended preset's overrides outrank the
-// consumer's, so `extends: [vitest]` would leave no way to say "these rules,
-// but not on the Playwright specs". Its override is therefore spliced into
+// consumer's, so `extends: [vitest]` would leave no way to order the repo's
+// own vitest corrections after it. Its override is therefore spliced into
 // `overrides` below verbatim — same rules, same glob — which makes ordering
 // ours. See TESTING.md, "ultracite vitest preset (#573)".
 export default defineConfig({
@@ -153,30 +128,7 @@ export default defineConfig({
     typeAware: false,
     typeCheck: false,
   },
-  ignorePatterns: (core.ignorePatterns ?? []).concat([
-    "**/dist/**",
-    "**/.expo/**",
-    "**/node_modules/**",
-    "apps/oauth-worker/worker-configuration.d.ts",
-    "apps/web/src/generated/**",
-    // Written by `expo prebuild` (#996, tracked since #1011): a lint fix here
-    // dies at the next regeneration. Mobile's authored plugins/ and modules/
-    // are linted, and `ci:native-state` L1 watches these two trees.
-    "apps/mobile/{ios,android}/**",
-    // Release-generated recognition bundles carry minified/transformed module
-    // imports that are not authored lint input. Their source modules are linted
-    // under packages/model-runtime and the emitted handlers have manifest,
-    // behavior, and size conformance tests.
-    "packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js",
-    "packages/blueprints/automations/embed-image/automations/embed-image/handler.js",
-    "packages/blueprints/automations/embed-text/automations/embed-text/handler.js",
-    "packages/blueprints/automations/faces/automations/faces/handler.js",
-    // `place-names` (#816) is the same kind of artefact for a different reason:
-    // no model, but a vendored settlement table inlined into the bundle. Its
-    // authored halves — handler and lookup — are linted under model-runtime.
-    "packages/blueprints/automations/place-names/automations/place-names/handler.js",
-    "packages/blueprints/automations/transcript/automations/transcript/handler.js",
-  ]),
+  ignorePatterns: (core.ignorePatterns ?? []).concat(["**/dist/**"]),
   rules: {
     // Ultracite's core preset contains type-aware rules. They cannot execute
     // with options.typeAware=false, so force the complete pinned engine
@@ -238,7 +190,7 @@ export default defineConfig({
           {
             group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
             message:
-              "Import from the package root barrel (e.g. '@centraid/server/engine'), not its internals \u2014 keeps each package's public surface the real contract. See governance: no-deep-imports.",
+              "Import from the package root barrel (e.g. '@centraid/design/elements'), not its internals \u2014 keeps each package's public surface the real contract. See governance: no-deep-imports.",
           },
         ],
       },
@@ -338,15 +290,6 @@ export default defineConfig({
       rules: { "max-lines": "off" },
     },
     {
-      // The client package root is intentionally the single public contract
-      // barrel. Consumers import this boundary rather than reaching into
-      // implementation modules; the no-barrel rule remains active elsewhere.
-      files: ["packages/client/src/index.ts"],
-      rules: {
-        "oxc/no-barrel-file": "off",
-      },
-    },
-    {
       // This deliberate negative fixture proves the corresponding type-aware
       // rules emit. Disable only the ordinary equivalents so the fixture
       // remains linted by every unrelated rule.
@@ -360,74 +303,8 @@ export default defineConfig({
     // overrides outrank the consumer's — so extending it leaves no way to say
     // "not these files". Its single override is therefore spliced in here
     // verbatim (rules unchanged, glob unchanged: wholesale adoption) purely so
-    // the Playwright exclusion below can be ordered after it.
+    // the corrections below can be ordered after it.
     ...vitest.overrides,
-    {
-      // Blueprint automation handlers execute under the gateway's handler
-      // runtime. Connector pagination/batching is intentionally sequential,
-      // because each cursor or page token depends on the prior response.
-      // Every other rule from the root profile still applies.
-      files: ["packages/blueprints/automations/**/handler.js"],
-      env: {
-        browser: false,
-        es2024: true,
-        node: true,
-      },
-      rules: {
-        "no-await-in-loop": "off",
-      },
-    },
-    {
-      // Blueprint app handlers and seeds execute in the gateway's Bun/Node
-      // runtime; app roots and kit modules remain browser-profiled.
-      files: [
-        "packages/blueprints/apps/**/actions/*.js",
-        "packages/blueprints/apps/**/queries/*.js",
-        "packages/blueprints/apps/**/seed.js",
-      ],
-      env: {
-        browser: false,
-        es2024: true,
-        node: true,
-      },
-    },
-    {
-      // #915 Wave 2 — `shQuote` was USED and never imported in
-      // `tests/agent-e2e-mobile/flows/share-intent-in.mjs`, and it survived six
-      // passing assertions before throwing. Nothing caught it statically: a
-      // `promoting` member that has never run on a device is exactly where an
-      // unimported name lives, because nothing at any tier evaluates the module
-      // body. A bespoke "every referenced helper is imported" lint was tried and
-      // reverted — it needs a scope chain and fired on 29 of 37 files — and
-      // `no-undef` is the rule that already has one. Scoped to this tree, whose
-      // files are all Node ESM scripts, so the environment below is the whole
-      // configuration the rule needs to be right here without being enabled
-      // repo-wide (where TypeScript's own checker already answers it).
-      files: ["tests/agent-e2e-*/**/*.mjs"],
-      env: {
-        browser: false,
-        es2024: true,
-        node: true,
-      },
-      rules: {
-        "no-undef": "error",
-      },
-    },
-    {
-      // The one file in that tree that legitimately names browser and MV3
-      // globals: `extension-companion.mjs` serialises callbacks INTO the page
-      // and into the extension's service worker (`page.waitForFunction`,
-      // `worker.evaluate`), where `document` and `chrome` exist and the Node
-      // process's globals do not. Declaring exactly those two here keeps the
-      // rule above meaningful — turning on the whole `browser` env would let a
-      // genuine `document` typo in a Node-side flow pass unnoticed, which is
-      // the class of defect the rule was enabled for.
-      files: ["tests/agent-e2e-pairing/flows/extension-companion.mjs"],
-      globals: {
-        chrome: "readonly",
-        document: "readonly",
-      },
-    },
     {
       // The two rules in the preset that trade assertion precision for
       // brevity, and the only two that contradict a rule this repo already
@@ -468,157 +345,11 @@ export default defineConfig({
       },
     },
     {
-      // The vitest glob `**/*.{test,spec}.*` also catches the Playwright e2e
-      // specs — a different runner with its own `test`/`expect`. Left in scope,
-      // `prefer-importing-vitest-globals` autofixes a `from 'vitest'` import on
-      // top of the `@playwright/test` one and the files stop parsing. This is
-      // about which runner owns the file, not about opting out of a rule.
-      files: ["apps/desktop/tests/e2e/**", "apps/web/tests/e2e/**"],
-      plugins: ["vitest"],
-      rules: Object.fromEntries(
-        Object.keys(vitest.overrides[0].rules)
-          .filter((rule) => rule.startsWith("vitest/"))
-          .map((rule) => [rule, "off"])
-      ),
-    },
-    {
-      // react/react-compiler was adopted repo-wide in #573 (714 real sites
-      // fixed once the exhaustive-deps disables that made the compiler bail
-      // per-component were stripped). These seven app-roots are the one
-      // scoped exemption: the #505 imperative-shell architecture keeps all
-      // state in refs (stateRef/logicRef/dashRef), lazily constructed during
-      // render and mutated in place, which the compiler can never verify —
-      // unmasking them reports 473 findings that are the design, not bugs.
-      // Making them compiler-clean is a per-app state-model rewrite, tracked
-      // in #573's receipt as follow-up work; laundering the refs through
-      // useState just to satisfy the rule would be linter-gaming. Note
-      // photos/app-root.tsx is NOT here — it had the same shape and was
-      // genuinely converted, proving this list is architectural, not a dodge.
-      files: [
-        "packages/blueprints/apps/agenda/app-root.tsx",
-        "packages/blueprints/apps/docs/app-root.tsx",
-        "packages/blueprints/apps/locker/app-root.tsx",
-        "packages/blueprints/apps/notes/app-root.tsx",
-        "packages/blueprints/apps/people/app-root.tsx",
-        "packages/blueprints/apps/tally/app-root.tsx",
-        "packages/blueprints/apps/tasks/app-root.tsx",
-      ],
-      rules: {
-        "react/react-compiler": "off",
-      },
-    },
-    {
-      files: ["packages/server/src/engine/**/*.ts"],
-      rules: {
-        "no-restricted-imports": [
-          "error",
-          {
-            patterns: [
-              {
-                group: [
-                  "@centraid/*",
-                  "../automation",
-                  "../automation/*",
-                  "../acp",
-                  "../acp/*",
-                ],
-                message:
-                  "engine is the stable core of the server DAG — it must not import automation, acp, or other @centraid packages. Seams are path-based after #801.",
-              },
-            ],
-          },
-        ],
-      },
-    },
-    {
-      files: ["packages/server/src/automation/**/*.ts"],
-      rules: {
-        "no-restricted-imports": [
-          "error",
-          {
-            patterns: [
-              {
-                group: [
-                  "@centraid/server/acp",
-                  "@centraid/server/acp/*",
-                  "../acp",
-                  "../acp/*",
-                ],
-                message:
-                  "automation must not import the ACP turn driver — execution is an injected callback. Seams are path-based after #801.",
-              },
-              {
-                group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
-                message:
-                  "Import from the package root barrel, not its internals. See governance: no-deep-imports.",
-              },
-            ],
-          },
-        ],
-      },
-    },
-    {
-      // The mobile app and time-engine execute in Hermes. The Expo 57 / RN
-      // 0.86 runtime used by the reviewed iOS build does not implement these
-      // ES2023 Array helpers: `toSorted` caused the native Photos cover to
-      // redbox in the exact-HEAD journey, and time-engine is bundled into
-      // native Agenda/Tally. Keep compatibility mechanical rather than relying
-      // on Node-based unit tests, whose newer Array prototype masks the bug.
-      //
-      // THIS GLOB IS THE FAST SIGNAL, NOT THE GATE (#905). It covers the two
-      // trees an author is most likely to be editing, and it is a guess about
-      // reachability — the guess that failed, when eight crashing sites turned
-      // out to live in `packages/blueprints` and two more in `packages/client`.
-      // `bun run lint:hermes-surface` walks the import graph out of
-      // `apps/mobile/src` and checks what the bundle ACTUALLY reaches (793
-      // modules today), so widening this list is never the way to cover a new
-      // package: the walker already does, and derives it rather than guessing.
-      files: ["apps/mobile/src/**", "packages/core/src/time/**"],
-      rules: {
-        "no-restricted-properties": ["error", ...HERMES_ARRAY_PROPERTIES],
-      },
-    },
-    {
-      // #656 Layer 4 — the test seams. Ordered after the Hermes override so it
-      // wins on files both globs match; the next override puts Hermes back for
-      // mobile/time-engine test files specifically.
+      // #656 Layer 4 — the test seams.
       files: VITEST_TEST_FILES,
       rules: {
         "no-restricted-properties": ["error", ...TEST_SEAM_PROPERTIES],
         "no-restricted-imports": ["error", TEST_SEAM_IMPORTS],
-      },
-    },
-    {
-      // Mobile and time-engine test files need both lists. They are Node
-      // processes, so the Hermes entries gate nothing here — but a rule that
-      // silently stopped applying to half a tree because two globs overlapped
-      // is exactly the "reads as protection" failure this layer is about.
-      files: [
-        "apps/mobile/src/**/*.{test,spec}.{ts,tsx}",
-        "apps/mobile/src/**/*.test-fixtures.ts",
-        "packages/core/src/time/**/*.{test,spec}.{ts,tsx}",
-        "packages/core/src/time/**/*.test-fixtures.ts",
-      ],
-      rules: {
-        "no-restricted-properties": [
-          "error",
-          ...HERMES_ARRAY_PROPERTIES,
-          ...TEST_SEAM_PROPERTIES,
-        ],
-        "no-restricted-imports": ["error", TEST_SEAM_IMPORTS],
-      },
-    },
-    {
-      // Playwright, not vitest: no `onTestFinished`, so none of the kit
-      // helpers the seam rules point at exist for these files. Same reasoning
-      // as the vitest-rule exclusion above — which runner owns the file.
-      files: ["apps/desktop/tests/e2e/**", "apps/web/tests/e2e/**"],
-      rules: {
-        "no-restricted-properties": "off",
-        "no-restricted-imports": [
-          "error",
-          { patterns: TEST_SEAM_IMPORTS.patterns },
-        ],
       },
     },
   ],

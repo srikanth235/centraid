@@ -43,7 +43,7 @@ export const SLSA_PREDICATE_TYPE = "https://slsa.dev/provenance/v1";
 
 /**
  * RFC 8785-style canonical JSON. Byte-identical to `canonicalJson` in
- * `apps/desktop/src/main/update-signature-core.ts`; the cross-language
+ * `desktop/electron/src/main/update-signature-core.ts`; the cross-language
  * agreement is asserted by a test that signs here and verifies there.
  *
  * @param {unknown} value any JSON-representable document

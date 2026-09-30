@@ -1,0 +1,151 @@
+diff --git a/crates/xtask/src/gate.rs b/crates/xtask/src/gate.rs
+index f8a63b4d..7ad60dd6 100644
+--- a/crates/xtask/src/gate.rs
++++ b/crates/xtask/src/gate.rs
+@@ -90,9 +90,11 @@ const fn step(name: &'static str, run: Runner) -> Step {
+ /// in `pr` and missing from `release`.
+ pub fn steps(profile: Profile) -> Vec<Step> {
+     if profile == Profile::MobileJvm {
+-        // A ledger placeholder, not a runnable profile (D-1020-B2-3). Wave 3
+-        // lane E owns the Gradle steps and the measurement that sets its budget.
+-        return Vec::new();
++        // ONE STEP, AND EVERYTHING ELSE MOBILE IS AN OWNER HAND-OFF
++        // (#1020 wave 3 lane E). `mobile/README.md` carries the table of what
++        // is provable on a machine with no Android SDK, no Xcode and no device
++        // — and what is not.
++        return vec![step("mobile-jvm", run_mobile_jvm)];
+     }
+     let local = vec![
+         step("fmt", |ctx| {
+@@ -287,18 +289,89 @@ fn has_linked_artifact(names: &[String], member: &str) -> bool {
+     })
+ }
+ 
++/// `mobile-jvm` — the JVM-provable half of `mobile/` (#1020 wave 3 lane E).
++///
++/// Three things, in one step because they share a Gradle invocation and a
++/// Gradle daemon is expensive to start twice:
++///
++///   1. `cargo build -p centraid-core-ffi` and the fixture vault, because
++///      `:core:jvmTest` runs a REAL ABI round trip against the real cdylib.
++///      It is not a skip when they are missing — a binding test that skipped
++///      would read green on a machine where the ABI does not work at all.
++///   2. `./gradlew mobileJvm` = `:shared:jvmTest :core:jvmTest
++///      :shared:koverXmlReport`.
++///   3. The generated-artifact drift check. The token table, the copy tables
++///      and the screen fixtures are all emitted and committed; one emitter, N
++///      committed artifacts, one lint that fails on drift.
++///
++/// WHAT THIS STEP DOES NOT DO, and says so rather than skipping quietly: it
++/// does not compile Compose, does not link Kotlin/Native, does not run a
++/// simulator and does not touch a device. Those are the `device-lanes` step's
++/// loud `Skipped` in `nightly`, and `mobile/README.md`'s hand-off table.
++fn run_mobile_jvm(ctx: &Ctx) -> Result<Outcome> {
++    if !ctx.root.join("mobile/gradlew").is_file() {
++        return Ok(Outcome::Failed(
++            "mobile/gradlew is missing; the mobile tree brings its own wrapper (#1020)".to_owned(),
++        ));
++    }
++    // The cdylib and the founded vault the ABI round trip reads. Gradle's
++    // `:core:abiFixture` task runs the second one itself; the first is here so
++    // a missing library fails with a cargo command rather than with a JNA
++    // `UnsatisfiedLinkError` three frames into a Kotlin test.
++    let built = process(
++        ctx,
++        "mobile-jvm",
++        "cargo",
++        &["build", "-p", "centraid-core-ffi"],
++    )?;
++    if !matches!(built, Outcome::Passed) {
++        return Ok(built);
++    }
++    let gradle = process(ctx, "mobile-jvm", "mobile/gradlew", &["mobileJvm", "--no-daemon"])?;
++    if !matches!(gradle, Outcome::Passed) {
++        return Ok(gradle);
++    }
++    // THE DRIFT CHECK. `bun` is already a gate dependency (`ts-static`), and
++    // the check is a regeneration followed by a clean-tree assertion, which is
++    // the same shape `lint:site-tokens` uses for the CSS side.
++    let emitted = process(
++        ctx,
++        "mobile-jvm",
++        "bun",
++        &["contracts/tools/export-native-theme.ts"],
++    )?;
++    if !matches!(emitted, Outcome::Passed) {
++        return Ok(emitted);
++    }
++    let fixtures = process(
++        ctx,
++        "mobile-jvm",
++        "bun",
++        &["contracts/tools/build-screen-fixtures.ts"],
++    )?;
++    if !matches!(fixtures, Outcome::Passed) {
++        return Ok(fixtures);
++    }
++    process(
++        ctx,
++        "mobile-jvm",
++        "git",
++        &[
++            "diff",
++            "--exit-code",
++            "--",
++            "design",
++            "copy",
++            "mobile",
++            "contracts/screens",
++        ],
++    )
++}
++
+ /// Run a profile. Returns `true` when every step passed inside its budget.
+ pub fn run(profile: Profile, root: &Path, forced_cold: bool, lane: Option<String>) -> Result<bool> {
+     let hardware =
+         std::env::var("CENTRAID_GATE_HARDWARE").unwrap_or_else(|_| DEFAULT_HARDWARE.to_owned());
+-    if profile == Profile::MobileJvm {
+-        println!(
+-            "xtask gate — profile mobile-jvm · hardware {hardware}\n\n  REFUSED the `mobile-jvm` profile is a ledger placeholder with no steps. Its `budgetSeconds` in {} and `kotlinNativeLinkSeconds` in {} are both null, and wave 3 lane E — which lands the Kotlin Multiplatform shared module and its Gradle JVM suites — measures them and sets them (#1020, D-1020-B2-3). Running it here would report green for a suite that does not exist",
+-            ledger::BUDGETS,
+-            ledger::COMPILE_TIME
+-        );
+-        return Ok(false);
+-    }
+     let ctx = Ctx {
+         root: root.to_path_buf(),
+         lane: lane.clone(),
+diff --git a/crates/xtask/src/rules.rs b/crates/xtask/src/rules.rs
+index 199a7fe2..61fa2ecb 100644
+--- a/crates/xtask/src/rules.rs
++++ b/crates/xtask/src/rules.rs
+@@ -383,14 +383,25 @@ pub fn listener_hits(source: &str) -> Vec<(usize, &'static str)> {
+ 
+ pub fn commonmain_no_platform_import(root: &Path) -> RuleReport {
+     const NAME: &str = "commonmain-no-platform-import";
+-    let common = root.join("mobile/shared/src/commonMain");
+-    if !common.is_dir() {
++    // BOTH KMP MODULES. `mobile/core`'s `commonMain` is the ABI binding's
++    // shared half and is exactly as platform-free as `mobile/shared`'s: a JNA
++    // `Pointer` or a `kotlinx.cinterop` import leaking into it would be the
++    // same defect with a shorter blast radius (#1020 wave 3 lane E).
++    let roots = [
++        root.join("mobile/shared/src/commonMain"),
++        root.join("mobile/core/src/commonMain"),
++    ];
++    if !roots.iter().any(|dir| dir.is_dir()) {
+         return RuleReport::pending(
+             NAME,
+-            "mobile/shared lands in wave 3 lane E; Konsist replaces this rule there, and this cheap one stays",
++            "mobile/ lands in wave 3 lane E; Konsist replaces this rule there, and this cheap one stays",
+         );
+     }
+-    let files = source_files(&common, "kt");
++    let files: Vec<_> = roots
++        .iter()
++        .filter(|dir| dir.is_dir())
++        .flat_map(|dir| source_files(dir, "kt"))
++        .collect();
+     let mut findings = Vec::new();
+     for file in &files {
+         let rel = relative(root, file);

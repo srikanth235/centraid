@@ -1,9 +1,14 @@
 /**
  * Release surface catalog (issue #512).
+ *
+ * Three surfaces. The desktop (Electron) and the browser companion were struck
+ * from v0 by the scope amendment of 2026-09-21 on issue #1029, and their
+ * workflows were deleted with them; a catalog row naming a workflow that is not
+ * on disk is what `surfaces.test.mjs` refuses.
  * One product version stamps the monorepo; ship selection is per surface.
  */
 
-/** @typedef {'tag' | 'store' | 'continuous' | 'sideline'} SurfaceCadence */
+/** @typedef {'tag' | 'store' | 'sideline'} SurfaceCadence */
 
 /**
  * @typedef {{
@@ -21,17 +26,6 @@
 /** @type {ReleaseSurface[]} */
 export const RELEASE_SURFACES = [
   {
-    id: "desktop",
-    title: "Desktop (Electron)",
-    cadence: "tag",
-    defaultOnProductTag: true,
-    workflow: "lane-release-desktop.yml",
-    tagPattern: "v*",
-    secretGroups: ["desktop-apple", "desktop-azure"],
-    notes:
-      "Installers attach to GH Release when signing enrolled. Retry tags: desktop-v*, desktop-<os>-v*.",
-  },
-  {
     id: "gateway-image",
     title: "Gateway container (GHCR)",
     cadence: "tag",
@@ -42,14 +36,15 @@ export const RELEASE_SURFACES = [
     notes: "latest tag only for non-beta (D5).",
   },
   {
-    id: "gateway-npm",
-    title: "Gateway npm graph",
+    id: "prebuilt-core",
+    title: "Prebuilt core (binaries, Android ABIs, iOS XCFramework)",
     cadence: "tag",
     defaultOnProductTag: true,
-    workflow: "lane-release-gateway-npm.yml",
+    workflow: "lane-prebuilt-core.yml",
     tagPattern: "v*",
-    secretGroups: ["gateway-npm"],
-    notes: "Multi-OS tunnel NAPI (#511). Dry-run without NPM_TOKEN.",
+    secretGroups: [],
+    notes:
+      "Rides `all`: it submits nothing to anybody, and a release whose core was never built for a required triple is a partial release (D-1020-G2).",
   },
   {
     id: "mobile",
@@ -60,46 +55,6 @@ export const RELEASE_SURFACES = [
     secretGroups: ["mobile"],
     notes:
       "release.yml dispatch with surfaces: mobile only (J7) — never implied by a tag. Same product version stamp; ship is opt-in.",
-  },
-  {
-    id: "web",
-    title: "Web PWA (app.centraid.dev)",
-    cadence: "continuous",
-    defaultOnProductTag: false,
-    workflow: "web.yml",
-    secretGroups: ["web"],
-    notes: "Path-filtered main deploy — not part of v* publish checklist.",
-  },
-  {
-    id: "docs",
-    title: "Docs / marketing site",
-    cadence: "continuous",
-    defaultOnProductTag: false,
-    workflow: "ci.yml",
-    secretGroups: ["web"],
-    notes:
-      "Continuous on docs paths — the `docs` lane of ci.yml; Cloudflare Git integration deploys.",
-  },
-  {
-    id: "oauth-worker",
-    title: "Centraid Assist OAuth Worker",
-    cadence: "continuous",
-    defaultOnProductTag: false,
-    workflow: "oauth-worker.yml",
-    secretGroups: ["web"],
-    notes:
-      "Protected main deploy only after Google production/verification and Cloudflare edge evidence gates pass.",
-  },
-  {
-    id: "companion",
-    title: "Browser companion extension",
-    cadence: "sideline",
-    defaultOnProductTag: false,
-    workflow: "lane-release-companion.yml",
-    tagPattern: "companion-v* | product v* (prefer product stamp)",
-    secretGroups: [],
-    notes:
-      "Stamps the same product version. Prefer packaging from product tag; companion-v* is rebuild-only (surface retry), not a second product line.",
   },
 ];
 

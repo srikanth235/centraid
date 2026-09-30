@@ -1,0 +1,23 @@
+[package]
+name = "centraid-api-proto"
+description = "The two protobuf packages and their generated Rust types (#1020)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_api_proto"
+path = "src/lib.rs"
+
+[dependencies]
+prost.workspace = true
+
+[build-dependencies]
+# No `protoc` binary on the build machines (the common brief's registry table),
+# so `protox` parses the `.proto` files in pure Rust and hands prost-build a
+# FileDescriptorSet. `prost-build`'s own `protoc` path is never taken.
+prost-build.workspace = true
+protox.workspace = true

@@ -14,7 +14,7 @@
  * the waivers, or a reviewed widen of one ceiling would silently waive a drop
  * in another. `scripts/check-ledgers.mjs` (`bun run lint:ledgers`) holds the
  * rest of the merged shape (issue-and-expiry, the derived mirrors, the
- * inventory budgets); this module stays the numeric ratchet the report reads.
+ * inventory budgets); this module stays the numeric ratchet.
  *
  * Any decrease (or budget widen) fails unless the touched file's
  * `approvedDeviation` (flow-level: `approvedMinimumTestsDeviation`) was
@@ -39,8 +39,6 @@ const root = path.resolve(import.meta.dirname, "../..");
 
 /** Perf budget source files ratcheted under #532 (path → kind). */
 export const PERF_BUDGET_SOURCES = [
-  { path: "apps/web/tests/e2e/perf-budgets.ts", exportName: "perfBudgets" },
-  { path: "packages/server/benchmarks/low-end-budgets.json" },
   // #656 Layer 5 — the PR lane's total wall clock. Tighten-only for the same
   // reason as any perf ceiling: it is the only gate that pushes back on adding
   // tests, so widening it must be a reviewed edit rather than a quiet one.
@@ -65,13 +63,6 @@ export const PERF_BUDGET_SOURCES = [
   // until a real run fills it in; a leading underscore is invisible, which is
   // how an intended-but-unobserved ceiling is parked without gating.
   { path: "tests/journeys.json" },
-  // #842 W3.5 — the renderer-leak ceilings. Same tighten-only posture as every
-  // budget above: a ceiling may drop freely, and widening one must be a
-  // reviewed edit. These are load-bearing in a way a perf number is not — the
-  // lane's whole argument is that each ceiling sits strictly BELOW the cycle
-  // count, so a per-cycle residue cannot hide under it. Widening one past the
-  // cycle count silently converts a leak detector into a leak tolerator.
-  { path: "apps/web/tests/e2e/leak-budgets.ts", exportName: "leakBudgets" },
 ];
 
 /**
@@ -221,8 +212,8 @@ function retiredFlowMarkers(base, head, baseMap, headMap, errors) {
  * A flow can also be RETIRED OUTRIGHT, with no successor to carry its floor:
  * the test it fenced was deleted on purpose and nothing replaces it. The two
  * escapes above cannot say that — one needs a successor flow, the other needs
- * the row to survive, and a row whose owner no longer exists on disk is refused
- * by validate-claims.mjs. `removedMinimumTestsFlows` is that vocabulary: a map
+ * the row to survive, and a row whose owner no longer exists on disk is a claim
+ * with nothing behind it. `removedMinimumTestsFlows` is that vocabulary: a map
  * from the retired flow's id to `{ owner, reason, issue }`, where `reason`
  * cites the approval and `issue` names the change set. The ratchet's property
  * is unchanged — no floor drops SILENTLY — because a marker is a reviewed line

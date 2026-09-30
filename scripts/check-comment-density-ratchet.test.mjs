@@ -4,7 +4,7 @@
 // synthetic trees through their injectable roots. Uses `mkdtempSync` rather
 // than `@centraid/test-kit`'s `tempDir()`: that module registers a vitest
 // `afterAll` at import time and throws under `node --test`, which is the runner
-// this lane uses. Same pattern as scripts/lint-css-classes.test.mjs.
+// this lane uses. Same pattern as scripts/lint-law-registry.test.mjs.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 // oxlint-disable-next-line no-restricted-imports -- (#781) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is registered at creation via t.after below.

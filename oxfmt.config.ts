@@ -41,13 +41,6 @@ export default defineConfig({
     // generated code, coverage, mobile build trees, lockfiles, and generated
     // framework declarations. Those files have external or generator owners.
     ...base.ignorePatterns,
-    // The Iroh generator deliberately finalizes these committed bindings with
-    // Oxfmt before rebuild-and-diff CI. Re-include the directory and its three
-    // textual outputs after Ultracite's broad `**/generated` exclusion.
-    "!apps/web/src/generated/",
-    "!apps/web/src/generated/centraid_web_iroh.js",
-    "!apps/web/src/generated/centraid_web_iroh.d.ts",
-    "!apps/web/src/generated/centraid_web_iroh_bg.wasm.d.ts",
     // Xcode owns asset catalog metadata.
     "**/*.xcassets/**/Contents.json",
     // governance-kit owns this vendored tree and workflow byte-for-byte.
@@ -59,22 +52,14 @@ export default defineConfig({
     "CONSTITUTION.md",
     "QUALITY.md",
     // Generator-owned outputs with regeneration checks elsewhere in the repo.
-    "apps/web/public/sw.js",
     // The public site's token sheet is lowered from @centraid/design by
     // scripts/site-tokens.mjs; `lint:site-tokens` asserts it byte-for-byte.
     "scripts/*-site/public/assets/centraid-tokens.css",
     // The nightly report's sheet (#853) is the same lowering from the same
     // emitter, gated the same way — one file rather than a per-surface
     // `assets/` copy, because the report is published at two depths and
-    // inlines its faces. See docs/design-divergences.md#the-nightly-test-report.
+    // inlines its faces. See docs/design-machinery.md#the-nightly-test-report.
     "scripts/test-report/report-tokens.css",
     "scripts/docs-site/src/content/**",
-    "packages/blueprints/manifest.json",
-    // The peer-target differential corpus (#842 W2.1) is emitted by
-    // `serializeCorpus` and read UNCHANGED by a Rust test, so its bytes are the
-    // interface between the two languages. `peer-target-differential.test.ts`
-    // asserts them exactly; letting oxfmt restyle the braces makes that
-    // assertion fail on every regeneration while proving nothing about style.
-    "packages/tunnel/fixtures/peer-target-corpus.json",
   ],
 });

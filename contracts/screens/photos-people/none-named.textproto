@@ -1,0 +1,25 @@
+# THE SECOND CAUSE: FACES FOUND, NONE CONFIRMED.
+#
+# Recognition ran and has 63 proposals waiting. The list is empty because a
+# proposal is not a photograph of someone until a member has said so — which is
+# the same law `PersonRow.photo_count` keeps ("confirmed regions only") read
+# from the other end.
+#
+# This fixture and `photos-people/recognition-off` are byte-different in exactly
+# the two fields that matter, and a screen that only checked `people.isEmpty()`
+# would draw them identically. The answer here is a DOOR — review, with its
+# count on it — and the answer there is a setting. Offering review on a vault
+# with recognition off would open an empty queue; offering a setting to a member
+# with 63 questions waiting would hide the work.
+#
+# `EMPTY_REASON_NOT_RUN_YET`, the third cause, is the one v0's single sentence
+# fit least badly, and it is why the enum has three values and not a bool.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+data {
+  proposed_face_count: 63
+  empty_reason: EMPTY_REASON_NONE_NAMED
+}

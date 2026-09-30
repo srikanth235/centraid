@@ -1,20 +1,14 @@
 import { defineConfig } from "vitest/config";
 
 /**
- * Unit tests for pure test-report / mutation helpers + focused agent-e2e
- * harness helpers (not part of package projects). Coverage is seeded on the
- * ratchet-unit lane (#545 D10) so scripts/ helpers cannot silently drop
- * instrumented lines.
+ * Unit tests for the pure test-report helpers (not part of package projects).
+ * Coverage is seeded on the ratchet-unit lane (#545 D10) so scripts/ helpers
+ * cannot silently drop instrumented lines.
  */
 export default defineConfig({
   test: {
     name: "test-report-scripts",
-    include: [
-      "scripts/test-report/**/*.test.mjs",
-      "scripts/mutation/**/*.test.mjs",
-      "tests/agent-e2e-shared/**/*.test.mjs",
-      "tests/agent-e2e-mobile/lib/**/*.test.mjs",
-    ],
+    include: ["scripts/test-report/**/*.test.mjs"],
     environment: "node",
     pool: "forks",
     expect: { requireAssertions: true },
@@ -22,11 +16,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json-summary"],
       reportsDirectory: "./artifacts/coverage-scripts",
-      include: [
-        "scripts/test-report/**/*.{mjs,js,ts}",
-        "scripts/mutation/**/*.{mjs,js,ts}",
-        "tests/agent-e2e-shared/**/*.{mjs,js}",
-      ],
+      include: ["scripts/test-report/**/*.{mjs,js,ts}"],
       exclude: ["**/*.test.mjs", "**/*.test.ts", "**/vitest.config.ts"],
       // Conservative seed under realistic unit coverage of pure helpers
       // (~36% lines measured with current unit set); ratchet upward once

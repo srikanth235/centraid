@@ -1,0 +1,228 @@
+//! Founding a vault's own identity: the vault row and its owner.
+//!
+//! A freshly created file has a schema and no facts. This writes the two rows
+//! nothing else can be written without — `core_vault` and the owner's
+//! `core_party` — inside the commit guard, so they are the file's first log
+//! commit and a seat bootstrapped from a snapshot of it sees them.
+//!
+//! It is here and not in `Vault::create` on purpose: creating a file and
+//! deciding whose it is are two acts, and `centraid recover` (lane R) restores
+//! a file that already has an owner.
+
+use crate::error::Result;
+use crate::file::Vault;
+
+/// THE LINK RELATIONS, SEEDED AT FOUND TIME (#272; #1020, D-1020-N7).
+///
+/// **Relations are VOCABULARY, not caller text**: `core.link_entities` refuses a
+/// notation that is not already a concept in the relations scheme, which means
+/// the scheme has to exist before the first link — seeded here — and a
+/// create-on-demand path would turn "never caller-invented" into "invented on
+/// first use".
+///
+/// **`revises` IS DELIBERATELY ABSENT** (#996 R20(a)). Version lineage was a
+/// content→content link asserted by the document and note edit commands — a
+/// SECOND history mechanism beside `core_entity_revision`, which [#916] ruled
+/// the only one. A version is an occurrence now, the concept that named the edge
+/// has no writer, and seeding it would be dormant DDL (ONT-06).
+///
+/// **The other five seed schemes are still absent** — `activity-kinds`,
+/// `spend-categories`, `flags`, `vision` and `doctype`. Docs' folders and flags
+/// schemes are created on first use by `crates/vault/src/commands/core.rs`
+/// instead, which is a divergence from v0 this lane files as a finding rather
+/// than fixes in another slot's schema.
+const SEED_RELATIONS: &[(&str, &str)] = &[
+    ("same-as", "Same as"),
+    ("about", "About"),
+    ("works-for", "Works for"),
+    ("duplicate-of", "Duplicate of"),
+    // Cross-referencing relations (#272), which is what a `[[wikilink]]`
+    // compiles to.
+    ("references", "References"),
+    ("attachment-of", "Attachment of"),
+    // THE TWO ANSWERS TO A CROSS-SOURCE MATCH (#996 R20(c) / OQ-12). `same-as`
+    // is the acceptance; `distinct-from` is the refusal, and it has to be a
+    // relation rather than a dismissed notification because a refusal that is
+    // not written down is a proposal the member is shown again tomorrow.
+    ("distinct-from", "Distinct from"),
+];
+
+/// Seed the relations scheme and its notations. Idempotent over an existing
+/// scheme, so re-founding a restored file adds nothing.
+/// THE DEFAULT CALENDAR, WITHOUT WHICH AGENDA CANNOT BE USED AT ALL.
+///
+/// `schedule.propose_event` has a `calendar_exists` precondition and **no
+/// command mints a calendar** — events require a calendar, but no command
+/// mints one, so bootstrap seeds a private 'Personal' calendar here, or
+/// schedule cannot work from first boot. There is no other door: the app is
+/// inert without it.
+///
+/// UTC, and not a guess at the owner's zone — founding happens before
+/// anybody has said where they are, and a calendar stamped with the
+/// founding machine's zone is a wrong answer that looks like a right one.
+fn seed_default_calendar(
+    connection: &rusqlite::Connection,
+    ids: &dyn crate::clock::Ids,
+    owner_party_id: &str,
+    now: &str,
+) -> Result<()> {
+    connection.execute(
+        "INSERT INTO schedule_calendar
+           (calendar_id, owner_party_id, name, color, default_tz, visibility,
+            external_uri, created_at)
+         VALUES (?1, ?2, 'Personal', NULL, 'UTC', 'private', NULL, ?3)",
+        rusqlite::params![ids.next(), owner_party_id, now],
+    )?;
+    Ok(())
+}
+
+/// The enrichment-policy mirror, `gateway` on both domains.
+///
+/// v0 wrote these at bootstrap too (`bootstrap.ts:140-149`): the table shadows
+/// the settings bag, and a domain with no row is a domain whose reader has to
+/// invent a default — which is how two readers end up inventing two.
+fn seed_enrichment_policy(connection: &rusqlite::Connection, now: &str) -> Result<()> {
+    for domain in ["photos", "docs"] {
+        connection.execute(
+            "INSERT INTO enrich_policy (domain, tier, updated_at)
+             VALUES (?1, 'gateway', ?2)
+             ON CONFLICT (domain) DO NOTHING",
+            rusqlite::params![domain, now],
+        )?;
+    }
+    Ok(())
+}
+
+fn seed_relation_vocabulary(
+    connection: &rusqlite::Connection,
+    ids: &dyn crate::clock::Ids,
+    now: &str,
+) -> Result<()> {
+    let uri = crate::commands::core_links::RELATIONS_SCHEME_URI;
+    let scheme_id = match connection.query_row(
+        "SELECT scheme_id FROM core_concept_scheme WHERE uri = ?1",
+        [uri],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(scheme_id) => scheme_id,
+        Err(_) => {
+            let scheme_id = ids.next();
+            connection.execute(
+                "INSERT INTO core_concept_scheme
+                   (scheme_id, uri, title, publisher, version, created_at)
+                 VALUES (?1, ?2, 'Link relation types', NULL, '1', ?3)",
+                rusqlite::params![scheme_id, uri, now],
+            )?;
+            scheme_id
+        }
+    };
+    for (notation, label) in SEED_RELATIONS {
+        connection.execute(
+            "INSERT INTO core_concept
+               (concept_id, scheme_id, notation, pref_label, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+             ON CONFLICT (scheme_id, notation) DO NOTHING",
+            rusqlite::params![ids.next(), scheme_id, notation, label, now],
+        )?;
+    }
+    Ok(())
+}
+
+/// What founding produced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Founded {
+    pub vault_id: String,
+    pub owner_party_id: String,
+}
+
+impl Vault {
+    /// Write the vault row and its owner party.
+    pub fn found(&self, display_name: &str, owner_name: &str) -> Result<Founded> {
+        let now = self.clock().now_text();
+        let vault_id = self.ids().next();
+        let owner_party_id = self.ids().next();
+        self.commit(|tx| {
+            tx.set_producer("vault.found");
+            // The owner first: `core_vault.self_party_id` points at it, and a
+            // vault row with a dangling owner is a file that cannot answer
+            // "whose is this".
+            tx.connection().execute(
+                "INSERT INTO core_party
+                   (party_id, kind, display_name, created_at, updated_at)
+                 VALUES (?1, 'person', ?2, ?3, ?3)",
+                rusqlite::params![owner_party_id, owner_name, now],
+            )?;
+            tx.connection().execute(
+                "INSERT INTO core_vault
+                   (vault_id, self_party_id, display_name, status, base_currency,
+                    settings_json, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, 'active', 'USD', '{}', ?4, ?4)",
+                rusqlite::params![vault_id, owner_party_id, display_name, now],
+            )?;
+            seed_relation_vocabulary(tx.connection(), self.ids(), &now)?;
+            seed_default_calendar(tx.connection(), self.ids(), &owner_party_id, &now)?;
+            seed_enrichment_policy(tx.connection(), &now)?;
+            Ok(())
+        })?;
+        Ok(Founded {
+            vault_id,
+            owner_party_id,
+        })
+    }
+
+    /// The vault's own id, if it has been founded.
+    /// WHAT THIS VAULT IS CALLED, ASKED OF THE VAULT (#1025 S7-9).
+    ///
+    /// `core_vault.display_name`, which is the ONE place a vault's name lives.
+    /// A gateway used to answer a pairing with its own `--vault-name` flag — the
+    /// string it would have FOUNDED a vault under — so a seeded demo vault
+    /// called "Tahoe Demo" paired as "Centraid", and the phone's sheet said
+    /// "Paired with Centraid." The flag names a vault at founding and is a
+    /// stale guess at every moment after it.
+    pub fn display_name(&self) -> Result<Option<String>> {
+        self.read(|connection| {
+            Ok(connection
+                .query_row(
+                    "SELECT display_name FROM core_vault ORDER BY vault_id LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .ok())
+        })
+    }
+
+    /// THE VAULT'S OWN ZONE, when its settings name one — the second tier of
+    /// [`crate::time::zone::FireZone::resolve`], and there is no third.
+    ///
+    /// Founding writes `{}`, so a fresh vault names none; a caller that needs a
+    /// zone and gets `None` refuses rather than reading a host clock (#1046:
+    /// the app-query arm answers in the zone the device states, and this only
+    /// when it states none).
+    pub fn time_zone(&self) -> Result<Option<String>> {
+        self.read(|connection| {
+            let settings: Option<String> = connection
+                .query_row(
+                    "SELECT settings_json FROM core_vault ORDER BY vault_id LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .ok()
+                .flatten();
+            Ok(settings
+                .as_deref()
+                .and_then(crate::time::zone::zone_of_settings))
+        })
+    }
+
+    pub fn vault_id(&self) -> Result<Option<String>> {
+        self.read(|connection| {
+            Ok(connection
+                .query_row(
+                    "SELECT vault_id FROM core_vault ORDER BY vault_id LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .ok())
+        })
+    }
+}

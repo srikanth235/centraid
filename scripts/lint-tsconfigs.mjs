@@ -11,7 +11,10 @@ import path from "node:path";
 import ts from "typescript";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-const WORKSPACE_ROOTS = ["packages", "apps"];
+// The root workspaces: every child of `packages/`, plus the two seat
+// workspaces that live at fixed paths.
+const WORKSPACE_ROOTS = ["packages"];
+const WORKSPACES = ["desktop/electron", "extension"];
 const REMOVED_MODULE_RESOLUTIONS = new Set(["node", "node10", "classic"]);
 
 function readJsonc(file, root = ROOT) {
@@ -27,13 +30,17 @@ function readJsonc(file, root = ROOT) {
 }
 
 function workspaceDirs(root) {
-  return WORKSPACE_ROOTS.flatMap((workspaceRoot) => {
+  const children = WORKSPACE_ROOTS.flatMap((workspaceRoot) => {
     const dir = path.join(root, workspaceRoot);
     if (!existsSync(dir)) return [];
     return readdirSync(dir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => path.join(dir, entry.name));
   });
+  const fixed = WORKSPACES.map((rel) => path.join(root, rel)).filter((dir) =>
+    existsSync(dir)
+  );
+  return [...children, ...fixed];
 }
 
 function tsconfigs(dir) {

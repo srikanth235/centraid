@@ -1,0 +1,61 @@
+{
+  "digest": "5b50d566bf4c3fe88f5e63ce9e4610acdffe7554b796e9d5154758b13dc181cf",
+  "scenarios": [
+    {
+      "checks": [
+        {
+          "actual": "id-0117",
+          "claim": "the bytes still dedupe",
+          "expected": "id-0117"
+        },
+        {
+          "actual": ["id-0117", "id-0118"],
+          "claim": "A's edit is A's history",
+          "expected": ["id-0117", "id-0118"]
+        },
+        {
+          "actual": ["id-0117"],
+          "claim": "B is untouched by A's edit",
+          "expected": ["id-0117"]
+        },
+        {
+          "actual": ["id-0119", "id-0120", "id-0119"],
+          "claim": "A→B→A is three occurrences over two content ids",
+          "expected": ["id-0119", "id-0120", "id-0119"]
+        },
+        {
+          "actual": "failed",
+          "claim": "restoring another document's revision is refused",
+          "expected": "failed"
+        }
+      ],
+      "drift": "ONT-22",
+      "id": "ONT-22/a-revision-is-an-occurrence",
+      "surfaces": ["Docs — the version history", "Docs — restore"],
+      "title": "two documents with identical bytes keep separate histories"
+    },
+    {
+      "checks": [
+        {
+          "actual": [true, 1],
+          "claim": "one byte row under two documents",
+          "expected": [true, 1]
+        },
+        {
+          "actual": ["text/html", "text/plain"],
+          "claim": "each document reads the bytes its own way",
+          "expected": ["text/html", "text/plain"]
+        },
+        {
+          "actual": 0,
+          "claim": "the byte row has no reading of its own",
+          "expected": 0
+        }
+      ],
+      "drift": "ONT-28",
+      "id": "ONT-28/an-interpretation-is-not-a-property-of-bytes",
+      "surfaces": ["Docs — the document body", "Photos — the asset's reading"],
+      "title": "one byte row, two documents, two readings"
+    }
+  ]
+}

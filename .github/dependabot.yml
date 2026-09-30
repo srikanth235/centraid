@@ -77,12 +77,9 @@ updates:
         update-types: ["minor", "patch"]
 
   # ----------------------------------------------------------------- cargo --
-  # Three independent crates; Cargo.lock lives next to each manifest.
+  # One workspace; Cargo.lock lives at the repository root.
   - package-ecosystem: cargo
-    directories:
-      - /packages/tunnel/data-plane
-      - /packages/tunnel/native
-      - /apps/web/iroh-wasm
+    directory: /
     schedule:
       interval: weekly
       day: monday
@@ -96,8 +93,8 @@ updates:
         patterns: ["*"]
     ignore:
       # iroh is the wire protocol. A minor bump can change ALPN/relay behaviour
-      # that only the nightly pairing lanes prove — upgrade deliberately, with
-      # tests/agent-e2e-pairing green, never as a batched dependency PR.
+      # that only a real-network pairing run proves — upgrade deliberately,
+      # never as a batched dependency PR.
       - dependency-name: iroh
         update-types:
           ["version-update:semver-minor", "version-update:semver-major"]

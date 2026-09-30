@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Directive: coverage-scope-reachability (#532).
 #
-# Every packages/* or apps/* tree with non-test TS source must be:
+# Every packages/* tree with non-test TS source must be:
 #   (a) covered by a tests/floors.json#coverage glob, OR
 #   (b) named as an owner path prefix in the DERIVED flow view
 #       (`node scripts/test-report/derive-flows.mjs --json`), OR
@@ -19,22 +19,16 @@
 # Executable code co-located OUTSIDE `src/` is its own scope, not part of the
 # package's. A floor on `packages/<pkg>/src/**` cannot instrument a sibling
 # tree, so collapsing the two would let any non-`src` runtime tree ride into
-# "floored" on a floor that never measures it. This is why the bundled
-# blueprint `apps/` runtime is a separate scope (#630, #725) — and, since
-# #781, why every such tree is discovered rather than named:
-# `packages/model-runtime/automation-handlers` (the hand-authored source of
-# the published recognition bundles) was invisible for exactly this reason
-# while `packages/model-runtime/src/**` reported the package "floored".
+# "floored" on a floor that never measures it. Such trees are discovered
+# from the tracked file list rather than named (#781). A tree that moves INTO
+# `src/` stops being a scope of its own and rides its package's `src/**` floor
+# and the conventional coverage include (#799).
 #
-# The shared browser substrate was a second named tree (`packages/design/kit`)
-# until #799 folded it into `packages/design/src/elements`. A tree that moves
-# INTO `src/` stops being a scope of its own and rides its package's `src/**`
-# floor and the conventional coverage include — so the named assertion below
-# is one line shorter, and the generic discovery keeps watch over whatever
-# lands outside `src/` next.
+# Scope is the TypeScript `packages/*` workspace only. The v0 `apps/*` tree
+# and its co-located blueprint/automation runtime roots were deleted with the
+# v0 TypeScript tree (#1020), so no named root or `apps/*` class remains.
 #
-# Also: every tests/floors.json#coverage path-scope must sit under packages/ or
-# apps/.
+# Also: every tests/floors.json#coverage path-scope must sit under packages/.
 #
 # Bash 3.2 compatible (macOS /bin/bash) — no mapfile, no associative arrays.
 #
@@ -98,24 +92,20 @@ for k, v in data.items():
 PY
 )"
 
-# Vitest coverage include must still instrument the conventional source roots
-# plus the non-standard blueprint runtime root.
+# Vitest coverage include must still instrument the conventional source root.
 if [[ -f "$VITEST_CFG" ]]; then
     if ! grep -q "packages/\*/src/\*\*" "$VITEST_CFG" && ! grep -q 'packages/*/src/**' "$VITEST_CFG"; then
         violation "vitest.config.ts coverage.include must cover packages/*/src/** (floors would be unreachable)"
     fi
-    if ! grep -Fq "packages/blueprints/apps/**" "$VITEST_CFG"; then
-        violation "vitest.config.ts coverage.include must cover packages/blueprints/apps/** (bundled app code would be invisible)"
-    fi
 fi
 
-# Each floor glob must target packages/ or apps/.
+# Each floor glob must target packages/.
 while IFS= read -r glob; do
     [[ -z "$glob" ]] && continue
     case "$glob" in
-    packages/* | apps/*) ;;
+    packages/*) ;;
     *)
-        violation "coverage floor scope '$glob' is outside packages/*/src or apps/*/src — unreachable by default coverage include"
+        violation "coverage floor scope '$glob' is outside packages/*/src — unreachable by default coverage include"
         ;;
     esac
 done <<<"$FLOOR_GLOBS"
@@ -143,23 +133,19 @@ if [[ -z "$OWNERS" ]]; then
     violation "scripts/test-report/derive-flows.mjs emitted no flow owners - a silent empty view would let every unfloored package pass"
 fi
 
-# Package/app ids that have non-test source.
+# Package ids that have non-test source.
 # git's **/ requires an intervening directory, so also list flat src/*.ts
-# (blob-format, blueprints, cli, protocol, test-kit, tunnel, extension,
-# oauth-worker, web, …) — #545 A3.
+# (#545 A3).
 PKG_IDS="$(
     git -C "$REPO_ROOT" ls-files \
         'packages/*/src/**/*.ts' 'packages/*/src/**/*.tsx' \
-        'packages/*/src/*.ts' 'packages/*/src/*.tsx' \
-        'apps/*/src/**/*.ts' 'apps/*/src/**/*.tsx' \
-        'apps/*/src/*.ts' 'apps/*/src/*.tsx' 2>/dev/null \
+        'packages/*/src/*.ts' 'packages/*/src/*.tsx' 2>/dev/null \
         | grep -vE '\.(test|spec)\.(ts|tsx)$|\.d\.ts$' \
         | awk -F/ '{print $1"/"$2}' \
         | sort -u
 )"
 
-# Executable trees co-located OUTSIDE `src/` inside a package or app, e.g.
-# packages/blueprints/apps, packages/model-runtime/automation-handlers.
+# Executable trees co-located OUTSIDE `src/` inside a package.
 # Discovered, not enumerated
 # (#781): a hardcoded list only ever names the trees someone already thought
 # about, and the next one lands invisible. Each is its own scope id, so the
@@ -172,7 +158,7 @@ PKG_IDS="$(
 # a runtime scope.
 SCOPE_SKIP_DIRS='src|scripts|tests|test|spec|e2e|__tests__|benchmarks|fixtures|node_modules|dist|build|coverage|target'
 EXTRA_SCOPE_IDS="$(
-    git -C "$REPO_ROOT" ls-files 'packages/*/*/**' 'apps/*/*/**' 2>/dev/null \
+    git -C "$REPO_ROOT" ls-files 'packages/*/*/**' 2>/dev/null \
         | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' \
         | grep -vE '\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.d\.ts$' \
         | awk -F/ -v skip="^($SCOPE_SKIP_DIRS)$" '
@@ -214,9 +200,9 @@ has_flow_owner() {
     return 1
 }
 
-# An allowlisted package or app covers its own non-`src` trees too: a surface
-# that is deliberately ungated as a whole (apps/mobile, apps/web, …) does not
-# become gated by moving code out of src/.
+# An allowlisted package covers its own non-`src` trees too: a surface that is
+# deliberately ungated as a whole does not become gated by moving code out of
+# src/.
 is_allowlisted() {
     local pkg="$1"
     local a

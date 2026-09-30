@@ -1,0 +1,87 @@
+# A REFUSED SAVE KEEPS THE EDITOR. The draft is intact and still dirty, the
+# refusal rides on the write, and the screen is not dismissed: the member's
+# words are still here to try again with.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+mode: MODE_EDIT
+event_id: "event-0002"
+instance_key: "2026-03-11T14:00"
+day: "2026-03-11"
+data {
+  draft {
+    title: "Dentist, moved"
+    all_day: false
+    start_day: "2026-03-11"
+    start_time: "14:00"
+    end_day: "2026-03-11"
+    end_time: "15:00"
+    calendar_id: "calendar-home"
+    repeat_key: "never"
+    reminder_key: "none"
+  }
+  heading: "Edit event"
+  start_label: "Wednesday 11 March · 14:00"
+  end_label: "Wednesday 11 March · 15:00"
+  calendar_label: "Home"
+  calendar_hue_key: "cTeal"
+  calendars { key: "calendar-home" label: "Home" selected: true hue_key: "cTeal" accessibility_label: "Home" }
+  guests_label: "Nobody else"
+  repeat_label: "Does not repeat"
+  repeats { key: "never" label: "Does not repeat" selected: true }
+  repeats { key: "weekly" label: "Every week on Wednesday" selected: false }
+  repeat_enabled: true
+  repeat_note: ""
+  reminder_label: "No reminder"
+  reminders { key: "none" label: "No reminder" selected: true }
+  dirty: true
+  can_save: true
+  blocked_reason: ""
+  show_skip: false
+  skip_label: ""
+  foot_note: ""
+  scope_armed: false
+  start_day_label: "Wednesday 11 March"
+  start_time_label: "14:00"
+  end_day_label: "Wednesday 11 March"
+  end_time_label: "15:00"
+}
+write {
+  phase: PHASE_REFUSED
+  failure {
+    kind: READ_FAILURE_KIND_UNAVAILABLE
+    sentence: "The vault could not be reached."
+    remedy: "Refresh"
+  }
+  invoke_key: "agenda.update.event-0002.0001"
+}
+sheet: SHEET_NONE
+asking: ASKING_NONE
+chrome {
+  title_placeholder: "Add a title"
+  notes_placeholder: "Add notes"
+  link_placeholder: "Paste a joining link"
+  field_title: "Title"
+  field_all_day: "All day"
+  field_starts: "Starts"
+  field_ends: "Ends"
+  field_calendar: "Calendar"
+  field_guests: "Guests"
+  field_repeat: "Repeats"
+  field_reminder: "Reminder"
+  field_link: "Joining link"
+  field_notes: "Notes"
+  save: "Save"
+  close: "Close"
+  done: "Done"
+  keep_editing: "Keep editing"
+  loading: "Opening your calendar"
+  retry: "Retry"
+  scope_title: "This event repeats"
+  scope_question: "Which occurrences does this change?"
+  pick_date: "Pick a date"
+  pick_time: "Pick a time"
+}
+dismissed: false

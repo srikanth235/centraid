@@ -1,0 +1,44 @@
+# CARDS OR A MAP IS A PARAMETER, NOT A SCREEN.
+#
+# The rows here are the rows `photos-places/no-coordinate` has, read the same
+# way; only `presentation` differs. That is the whole claim: v0's `PlacesView`
+# and `PlacesMap` read the same table and differed in the draw, which bought two
+# reads, two empty states and two ways to be out of date. The member's own words
+# for the choice are "show me this as a map" — which is a control on one screen.
+#
+# A fixture is how the claim stays true. If the map ever needs a field the cards
+# do not have, it will have to be added HERE, in front of a reviewer, rather
+# than appearing quietly in a second state message.
+#
+# `unplaced_count` is the number v0 never showed, and the map is where it earns
+# its place: it is what a member needs to judge whether the pins are the library
+# or a corner of it. 1904 photographs with no place at all, beside 41 that have
+# one, is a very different screen from a map that looks complete.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+presentation: PRESENTATION_MAP
+data {
+  places {
+    place_id: "plc-0004"
+    name: "Dún Laoghaire"
+    asset_count: 62
+    cover_thumbnail_path: "thumbs/ast-0301.jpg"
+    latitude: 53.2941
+    longitude: -6.1358
+    has_coordinate: true
+    time_zone: "Europe/Dublin"
+  }
+  places {
+    place_id: "plc-0012"
+    name: "Grandma's house"
+    asset_count: 308
+    latitude: 0.0
+    longitude: 0.0
+    has_coordinate: false
+    time_zone: "America/Chicago"
+  }
+  unplaced_count: 1904
+}

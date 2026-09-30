@@ -1,0 +1,94 @@
+# Today, with the now line placed AMONG the rows rather than drawn over them,
+# an event awaiting the member's reply, and one whose write this device still
+# holds — a row status from `pending_event_ids`, never a separate list. The
+# landing is today's section, at its now line.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_DAY
+anchor_day: "2026-03-11"
+data {
+  today: "2026-03-11"
+  now_local: "2026-03-11T09:42"
+  days {
+    day: "2026-03-11"
+    day_number: "11"
+    weekday_short: "Wed"
+    heading: "Today"
+    is_today: true
+    is_past: false
+    due_count: 1
+    due { task_id: "task-0001" title: "Send the survey notes" }
+    due_label: "1 due"
+    due_open: false
+    items {
+      event {
+        event_id: "event-0001"
+        instance_key: "2026-03-11T08:15"
+        original_start_local: "2026-03-11T08:15"
+        row_key: "2026-03-11|2026-03-11T08:15"
+        title: "Survey walk-through"
+        time_label: "08:15 – 09:30"
+        meta: "repeats · 2 guests"
+        calendar_hue_key: "cTeal"
+        status: AGENDA_ROW_STATUS_NEEDS_REPLY
+        status_label: "needs a reply"
+        accessibility_label: "Survey walk-through, 08:15 to 09:30, repeats, 2 guests, needs a reply"
+        is_past: true
+      }
+    }
+    items {
+      now_line { label: "09:42" accessibility_label: "Now, 09:42" }
+    }
+    items {
+      event {
+        event_id: "event-0002"
+        instance_key: "2026-03-11T14:00"
+        row_key: "2026-03-11|2026-03-11T14:00"
+        title: "Dentist"
+        time_label: "14:00 – 14:45"
+        meta: ""
+        calendar_hue_key: "cPlum"
+        status: AGENDA_ROW_STATUS_PENDING
+        status_label: "pending"
+        accessibility_label: "Dentist, 14:00 to 14:45, pending"
+        is_past: false
+      }
+    }
+  }
+  empty: AGENDA_EMPTY_NONE
+  calendars {
+    calendar_id: "calendar-home"
+    name: "Home"
+    hue_key: "cTeal"
+    hidden: false
+    state_label: "Shown"
+  }
+  calendars {
+    calendar_id: "calendar-health"
+    name: "Health"
+    hue_key: "cPlum"
+    hidden: false
+    state_label: "Shown"
+  }
+  waiting_count: 1
+  event_count: 2
+  event_count_label: "2 events"
+  landing { day: "2026-03-11" now_line: true }
+}
+sheet: SHEET_NONE
+band { key: "day" label: "Day" icon_key: "Clock" current: true }
+band { key: "schedule" label: "Schedule" icon_key: "List" current: false }
+band { key: "waiting" label: "Waiting" icon_key: "Inbox" current: false }
+band { key: "search" label: "Search" icon_key: "Search" current: false }
+band { key: "more" label: "More" icon_key: "more" current: false }
+toolbar {
+  shown: true
+  range_label: "Today"
+  month_label: "March 2026"
+  at_today: true
+}
+chrome { title: "Agenda" new_event: "New event" today: "Today" }
+pending_event_ids: "event-0002"

@@ -1,0 +1,1464 @@
+//! THE `media` SCHEMA, END TO END, against a real founded vault.
+//!
+//! `commands.rs` proves the gate order over `core.add_party`; this proves the
+//! twenty `media.*` commands and the one `enrich.*` one do what Photos'
+//! eighteen actions need them to do (#1020, wave 4 lane Photos).
+//!
+//! **One `Vault::open` per test, and the reason is lane X3's bug**: `Vault::open`
+//! restarts `SeededIds`, so the first write after a reopen collides with the
+//! first write of the previous session. Every test here founds its own vault
+//! once and never reopens it, which sidesteps the collision without depending
+//! on the fix; when X3 lands, nothing here has to change.
+//!
+//! The asset rows are inserted directly rather than through
+//! `media.add_asset`, which is registered and refuses: moving bytes needs a
+//! blob door on `CommandCtx` (see that module's header). Everything a member
+//! does to a photograph AFTER it is in the library is exercised through the
+//! real command path.
+
+mod common;
+
+use centraid_vault::access::Principal;
+use centraid_vault::commands::{Command, CommandStatus, Registry};
+
+/// The registry this build serves.
+fn registry() -> Registry {
+    Registry::with_system_commands().expect("the system commands register")
+}
+
+struct World {
+    scratch: common::Scratch,
+    registry: Registry,
+    owner: String,
+}
+
+impl World {
+    /// A founded vault with the registry installed and one photograph in it.
+    fn new(seed: &str) -> Self {
+        let scratch = common::Scratch::founded(seed).expect("a vault is founded");
+        let registry = registry();
+        registry
+            .install(&scratch.vault)
+            .expect("the record installs");
+        let owner: String = scratch
+            .vault
+            .read(|connection| {
+                Ok(connection.query_row(
+                    "SELECT self_party_id FROM core_vault WHERE self_party_id IS NOT NULL",
+                    [],
+                    |row| row.get(0),
+                )?)
+            })
+            .expect("the vault has an owner");
+        Self {
+            scratch,
+            registry,
+            owner,
+        }
+    }
+
+    /// Insert one photograph and its bytes. See the module note on why this is
+    /// not `media.add_asset`.
+    fn photograph(&self, asset_id: &str, captured_at: &str) {
+        let content_id = format!("content-{asset_id}");
+        // Sixty-four hex characters, because the column's CHECK says so
+        // (#996, R21): a hash is a shape, not a string.
+        let sha = format!(
+            "{:0>64}",
+            asset_id
+                .bytes()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        );
+        self.scratch
+            .vault
+            .commit(|tx| {
+                tx.set_producer("test.fixture");
+                tx.connection().execute(
+                    "INSERT INTO core_content_item
+                       (content_id, content_uri, content_hash, byte_size, created_at)
+                     VALUES (?1, ?2, ?3, 1024, ?4)",
+                    rusqlite::params![
+                        content_id,
+                        format!("blob:{sha}"),
+                        sha,
+                        "2026-01-01T00:00:00.000Z"
+                    ],
+                )?;
+                tx.connection().execute(
+                    "INSERT INTO media_asset
+                       (asset_id, content_id, kind, captured_at, created_at, updated_at)
+                     VALUES (?1, ?2, 'photo', ?3, ?4, ?4)",
+                    rusqlite::params![
+                        asset_id,
+                        content_id,
+                        captured_at,
+                        "2026-01-01T00:00:00.000Z"
+                    ],
+                )?;
+                Ok(())
+            })
+            .expect("the photograph lands");
+    }
+
+    fn run(
+        &self,
+        command: &str,
+        input: serde_json::Value,
+    ) -> centraid_vault::commands::CommandOutcome {
+        self.scratch
+            .vault
+            .execute(
+                &self.registry,
+                &Principal::owner("phone"),
+                &Command::new(command, input),
+            )
+            .unwrap_or_else(|error| panic!("{command} did not run: {error}"))
+    }
+
+    fn executed(&self, command: &str, input: serde_json::Value) -> serde_json::Value {
+        let outcome = self.run(command, input);
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Executed,
+            "{command} answered {:?}: {:?}",
+            outcome.status,
+            outcome.reason
+        );
+        outcome.output
+    }
+
+    fn refused(&self, command: &str, input: serde_json::Value) -> String {
+        let outcome = self.run(command, input);
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Failed,
+            "{command} was expected to refuse"
+        );
+        outcome.reason.unwrap_or_default()
+    }
+
+    fn count(&self, sql: &str, id: &str) -> i64 {
+        self.scratch
+            .vault
+            .read(|connection| Ok(connection.query_row(sql, [id], |row| row.get(0))?))
+            .expect("the count reads")
+    }
+
+    fn text(&self, sql: &str, id: &str) -> Option<String> {
+        self.scratch
+            .vault
+            .read(|connection| Ok(connection.query_row(sql, [id], |row| row.get(0)).ok()))
+            .expect("the read runs")
+            .flatten()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Albums: the ordered curation, and its undo.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn an_album_is_created_filled_covered_deleted_and_restored_with_its_order() {
+    let world = World::new("album-lifecycle");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    world.photograph("asset-2", "2026-03-01T11:00:00.000Z");
+
+    let album = world.executed(
+        "media.create_album",
+        serde_json::json!({ "title": "Tahoe scouting" }),
+    );
+    let album_id = album["album_id"].as_str().expect("an id").to_owned();
+
+    // The FIRST photograph into a coverless album becomes its cover.
+    world.executed(
+        "media.add_to_album",
+        serde_json::json!({ "album_id": album_id, "asset_id": "asset-1" }),
+    );
+    assert_eq!(
+        world.text(
+            "SELECT cover_content_id FROM core_collection WHERE collection_id = ?1",
+            &album_id
+        ),
+        Some("content-asset-1".to_owned())
+    );
+    let second = world.executed(
+        "media.add_to_album",
+        serde_json::json!({ "album_id": album_id, "asset_id": "asset-2" }),
+    );
+    assert_eq!(second["position"], serde_json::json!(1));
+
+    // A second add of the same photograph is a RECEIPTED REFUSAL, not a
+    // constraint name.
+    let reason = world.refused(
+        "media.add_to_album",
+        serde_json::json!({ "album_id": album_id, "asset_id": "asset-1" }),
+    );
+    assert!(reason.contains("already in this album"), "{reason}");
+
+    world.executed(
+        "media.set_album_cover",
+        serde_json::json!({ "album_id": album_id, "asset_id": "asset-2" }),
+    );
+    world.executed(
+        "media.rename_album",
+        serde_json::json!({ "album_id": album_id, "title": "Tahoe, September" }),
+    );
+
+    // DELETE RECORDS THE UNDO, and the undo carries the ORDER.
+    let deleted = world.executed(
+        "media.delete_album",
+        serde_json::json!({ "album_id": album_id }),
+    );
+    let revision_id = deleted["revision_id"]
+        .as_str()
+        .expect("a revision")
+        .to_owned();
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM core_collection WHERE collection_id = ?1",
+            &album_id
+        ),
+        0
+    );
+    // The PHOTOGRAPHS are untouched: a curation went, not a library.
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM media_asset WHERE asset_id = ?1",
+            "asset-1"
+        ),
+        1
+    );
+
+    world.executed(
+        "media.restore_album",
+        serde_json::json!({ "album_id": album_id, "revision_id": revision_id }),
+    );
+    let entries: Vec<(String, i64)> = world
+        .scratch
+        .vault
+        .read(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT target_id, position FROM core_collection_entry
+                  WHERE collection_id = ?1 ORDER BY position",
+            )?;
+            let rows = statement.query_map([&album_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+        .expect("the entries read");
+    assert_eq!(
+        entries,
+        vec![("asset-1".to_owned(), 0), ("asset-2".to_owned(), 1)],
+        "the order came back with the membership"
+    );
+    assert_eq!(
+        world.text(
+            "SELECT name FROM core_collection WHERE collection_id = ?1",
+            &album_id
+        ),
+        Some("Tahoe, September".to_owned()),
+        "the restore replays the title the delete captured"
+    );
+
+    // A used undo record cannot restore twice.
+    let reason = world.refused(
+        "media.restore_album",
+        serde_json::json!({ "album_id": album_id, "revision_id": revision_id }),
+    );
+    assert!(reason.contains("already"), "{reason}");
+}
+
+#[test]
+fn a_cover_that_leaves_the_album_hands_off_to_the_next_member() {
+    let world = World::new("cover-handoff");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    world.photograph("asset-2", "2026-03-01T11:00:00.000Z");
+    let album_id =
+        world.executed("media.create_album", serde_json::json!({ "title": "Roll" }))["album_id"]
+            .as_str()
+            .expect("an id")
+            .to_owned();
+    for asset in ["asset-1", "asset-2"] {
+        world.executed(
+            "media.add_to_album",
+            serde_json::json!({ "album_id": album_id, "asset_id": asset }),
+        );
+    }
+    world.executed(
+        "media.remove_from_album",
+        serde_json::json!({ "album_id": album_id, "asset_id": "asset-1" }),
+    );
+    assert_eq!(
+        world.text(
+            "SELECT cover_content_id FROM core_collection WHERE collection_id = ?1",
+            &album_id
+        ),
+        Some("content-asset-2".to_owned())
+    );
+    // Removing a NON-cover leaves the cover alone.
+    world.executed(
+        "media.add_to_album",
+        serde_json::json!({ "album_id": album_id, "asset_id": "asset-1" }),
+    );
+    world.executed(
+        "media.remove_from_album",
+        serde_json::json!({ "album_id": album_id, "asset_id": "asset-1" }),
+    );
+    assert_eq!(
+        world.text(
+            "SELECT cover_content_id FROM core_collection WHERE collection_id = ?1",
+            &album_id
+        ),
+        Some("content-asset-2".to_owned())
+    );
+}
+
+#[test]
+fn a_seat_minted_album_id_is_honoured_and_a_taken_one_is_refused() {
+    let world = World::new("minted-album");
+    let output = world.executed(
+        "media.create_album",
+        serde_json::json!({ "album_id": "album-from-the-phone", "title": "Trip" }),
+    );
+    assert_eq!(
+        output["album_id"],
+        serde_json::json!("album-from-the-phone")
+    );
+    let reason = world.refused(
+        "media.create_album",
+        serde_json::json!({ "album_id": "album-from-the-phone", "title": "Trip again" }),
+    );
+    assert!(reason.contains("already exists"), "{reason}");
+}
+
+// ---------------------------------------------------------------------------
+// The star, the archive, and the trashed-asset door.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_star_is_a_tag_and_setting_it_twice_leaves_one_row() {
+    let world = World::new("star");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    for _ in 0..2 {
+        world.executed(
+            "media.set_favorite",
+            serde_json::json!({ "asset_id": "asset-1", "favorite": 1 }),
+        );
+    }
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM core_tag WHERE target_type = 'media.asset' AND target_id = ?1",
+            "asset-1"
+        ),
+        1,
+        "the star is one row in one place"
+    );
+    // And there is no `favorite` column to disagree with it.
+    let columns: Vec<String> = world
+        .scratch
+        .vault
+        .read(|connection| {
+            let mut statement = connection.prepare("PRAGMA table_info(media_asset)")?;
+            let rows = statement.query_map([], |row| row.get::<_, String>(1))?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+        .expect("the columns read");
+    assert!(!columns.contains(&"favorite".to_owned()));
+
+    world.executed(
+        "media.set_favorite",
+        serde_json::json!({ "asset_id": "asset-1", "favorite": 0 }),
+    );
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM core_tag WHERE target_type = 'media.asset' AND target_id = ?1",
+            "asset-1"
+        ),
+        0
+    );
+}
+
+/// A TRASHED ASSET IS NOT EDITABLE (#916, adversarial BUG-7). Both flag
+/// commands, because the bug was in both.
+#[test]
+fn a_trashed_photograph_can_be_neither_starred_nor_archived() {
+    let world = World::new("trashed-flags");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    world.executed(
+        "media.delete_asset",
+        serde_json::json!({ "asset_id": "asset-1" }),
+    );
+    for (command, field) in [
+        ("media.set_favorite", "favorite"),
+        ("media.set_archived", "archived"),
+    ] {
+        let reason = world.refused(
+            command,
+            serde_json::json!({ "asset_id": "asset-1", field: 1 }),
+        );
+        assert!(reason.contains("in the trash"), "{command}: {reason}");
+    }
+}
+
+#[test]
+fn archiving_hides_a_photograph_without_trashing_it() {
+    let world = World::new("archive");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    world.executed(
+        "media.set_archived",
+        serde_json::json!({ "asset_id": "asset-1", "archived": 1 }),
+    );
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM media_asset
+              WHERE asset_id = ?1 AND archived_at IS NOT NULL AND deleted_at IS NULL",
+            "asset-1"
+        ),
+        1
+    );
+    world.executed(
+        "media.set_archived",
+        serde_json::json!({ "asset_id": "asset-1", "archived": 0 }),
+    );
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM media_asset WHERE asset_id = ?1 AND archived_at IS NULL",
+            "asset-1"
+        ),
+        1
+    );
+}
+
+#[test]
+fn one_edit_command_moves_the_title_the_time_the_star_and_the_archive_together() {
+    let world = World::new("update-asset");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    world.executed(
+        "media.update_asset",
+        serde_json::json!({
+            "asset_id": "asset-1",
+            "title": "Dusk over the west shore",
+            "captured_at": "2026-03-02T20:00:00.000Z",
+            "favorite": 1
+        }),
+    );
+    assert_eq!(
+        world.text(
+            "SELECT title FROM media_asset WHERE asset_id = ?1",
+            "asset-1"
+        ),
+        Some("Dusk over the west shore".to_owned())
+    );
+    assert_eq!(
+        world.text(
+            "SELECT captured_at FROM media_asset WHERE asset_id = ?1",
+            "asset-1"
+        ),
+        Some("2026-03-02T20:00:00.000Z".to_owned())
+    );
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM core_tag WHERE target_type = 'media.asset' AND target_id = ?1",
+            "asset-1"
+        ),
+        1
+    );
+    // THE AUTHORED TITLE IS THE ASSET'S (#996, R20(b)): the shared byte row
+    // has no title column to overwrite.
+    let content_columns: Vec<String> = world
+        .scratch
+        .vault
+        .read(|connection| {
+            let mut statement = connection.prepare("PRAGMA table_info(core_content_item)")?;
+            let rows = statement.query_map([], |row| row.get::<_, String>(1))?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+        .expect("the columns read");
+    assert!(!content_columns.contains(&"title".to_owned()));
+}
+
+// ---------------------------------------------------------------------------
+// Trash, restore, purge.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn trashing_a_photograph_drops_its_album_entries_and_releases_unrented_bytes() {
+    let world = World::new("trash");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    world.photograph("asset-2", "2026-03-01T11:00:00.000Z");
+    let album_id =
+        world.executed("media.create_album", serde_json::json!({ "title": "Roll" }))["album_id"]
+            .as_str()
+            .expect("an id")
+            .to_owned();
+    // `asset-1` becomes the cover, so `asset-2`'s bytes are rented by nothing
+    // but `asset-2` itself — which is the case that can be released.
+    for asset in ["asset-1", "asset-2"] {
+        world.executed(
+            "media.add_to_album",
+            serde_json::json!({ "album_id": album_id, "asset_id": asset }),
+        );
+    }
+
+    let output = world.executed(
+        "media.delete_asset",
+        serde_json::json!({ "asset_id": "asset-2" }),
+    );
+    assert_eq!(output["content_released"], serde_json::json!(1));
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM core_collection_entry WHERE target_id = ?1",
+            "asset-2"
+        ),
+        0,
+        "album membership does not survive the trash"
+    );
+    // The grace window is thirty days, on the asset's own row (#274).
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM media_asset
+              WHERE asset_id = ?1 AND deleted_at IS NOT NULL AND purge_at IS NOT NULL",
+            "asset-2"
+        ),
+        1
+    );
+    // A SECOND delete fails loudly rather than re-stamping the window.
+    let reason = world.refused(
+        "media.delete_asset",
+        serde_json::json!({ "asset_id": "asset-2" }),
+    );
+    assert!(reason.contains("already in the trash"), "{reason}");
+
+    // Restore brings the bytes back and NOT the album membership.
+    world.executed(
+        "media.restore_asset",
+        serde_json::json!({ "asset_id": "asset-2" }),
+    );
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM media_asset a JOIN core_content_item c
+                ON c.content_id = a.content_id
+              WHERE a.asset_id = ?1 AND a.deleted_at IS NULL AND c.deleted_at IS NULL",
+            "asset-2"
+        ),
+        1
+    );
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM core_collection_entry WHERE target_id = ?1",
+            "asset-2"
+        ),
+        0
+    );
+}
+
+/// Bytes a SECOND asset still rents do not soft-delete. The reference list is
+/// the registry's, and this is the case it exists for.
+#[test]
+fn bytes_another_photograph_still_rents_are_not_released() {
+    let world = World::new("shared-bytes");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    // A second asset over the SAME content item is refused by the UNIQUE
+    // constraint, so the second renter is an album cover instead — which is
+    // exactly the registry entry a port would forget.
+    let album_id =
+        world.executed("media.create_album", serde_json::json!({ "title": "Roll" }))["album_id"]
+            .as_str()
+            .expect("an id")
+            .to_owned();
+    world.executed(
+        "media.add_to_album",
+        serde_json::json!({ "album_id": album_id, "asset_id": "asset-1" }),
+    );
+    // The cover is set and the entry is removed, so the cover is the LAST
+    // reference the asset does not hold.
+    world.executed(
+        "media.set_album_cover",
+        serde_json::json!({ "album_id": album_id, "asset_id": "asset-1" }),
+    );
+    let output = world.executed(
+        "media.delete_asset",
+        serde_json::json!({ "asset_id": "asset-1" }),
+    );
+    assert_eq!(
+        output["content_released"],
+        serde_json::json!(0),
+        "the album's cover still rents these bytes"
+    );
+}
+
+#[test]
+fn purging_refuses_a_live_photograph_and_one_an_edited_copy_still_names() {
+    let world = World::new("purge-doors");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    let reason = world.refused(
+        "media.purge_asset",
+        serde_json::json!({ "asset_id": "asset-1" }),
+    );
+    assert!(reason.contains("already in the trash"), "{reason}");
+
+    world.photograph("asset-2", "2026-03-02T10:00:00.000Z");
+    world
+        .scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.fixture");
+            tx.connection().execute(
+                "UPDATE media_asset SET source_asset_id = 'asset-1' WHERE asset_id = 'asset-2'",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("the lineage lands");
+    world.executed(
+        "media.delete_asset",
+        serde_json::json!({ "asset_id": "asset-1" }),
+    );
+    let reason = world.refused(
+        "media.purge_asset",
+        serde_json::json!({ "asset_id": "asset-1" }),
+    );
+    assert!(reason.contains("edited copy"), "{reason}");
+}
+
+#[test]
+fn purging_destroys_the_row_its_faces_and_every_pointer_at_it() {
+    let world = World::new("purge");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    world.executed(
+        "core.tag_item",
+        serde_json::json!({
+            "subject_type": "media.asset", "subject_id": "asset-1", "label": "sunset"
+        }),
+    );
+    world
+        .scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.fixture");
+            tx.connection().execute(
+                "INSERT INTO media_asset_phash (asset_id, phash, computed_at)
+                 VALUES ('asset-1', '3727170f8b494d6e', '2026-03-01T10:00:00.000Z')",
+                [],
+            )?;
+            tx.connection().execute(
+                "INSERT INTO media_face_region
+                   (region_id, asset_id, bbox_json, review_state, created_at, updated_at)
+                 VALUES ('region-1', 'asset-1', '{\"x\":0,\"y\":0,\"w\":1,\"h\":1}',
+                         'proposed', '2026-03-01T10:00:00.000Z', '2026-03-01T10:00:00.000Z')",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("the derived rows land");
+
+    world.executed(
+        "media.delete_asset",
+        serde_json::json!({ "asset_id": "asset-1" }),
+    );
+    let output = world.executed(
+        "media.purge_asset",
+        serde_json::json!({ "asset_id": "asset-1" }),
+    );
+    assert_eq!(output["content_released"], serde_json::json!(1));
+    // THE WHOLE POSTCONDITION, restated as the test's own claim.
+    for (table, column) in [
+        ("media_asset", "asset_id"),
+        ("media_face_region", "asset_id"),
+        ("media_asset_phash", "asset_id"),
+    ] {
+        assert_eq!(
+            world.count(
+                &format!("SELECT COUNT(*) FROM {table} WHERE {column} = ?1"),
+                "asset-1"
+            ),
+            0,
+            "{table} still names the purged photograph"
+        );
+    }
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM core_tag WHERE target_type = 'media.asset' AND target_id = ?1",
+            "asset-1"
+        ),
+        0
+    );
+    // The bytes were handed to the sweep: the grace window collapsed to NOW,
+    // not to thirty days out — a purge is not a second trip through the trash.
+    let purge_at = world
+        .text(
+            "SELECT purge_at FROM core_content_item WHERE content_id = ?1",
+            "content-asset-1",
+        )
+        .expect("the bytes carry a purge date");
+    let deleted_at = world
+        .text(
+            "SELECT deleted_at FROM core_content_item WHERE content_id = ?1",
+            "content-asset-1",
+        )
+        .expect("the bytes carry a delete date");
+    assert_eq!(purge_at, deleted_at);
+}
+
+// ---------------------------------------------------------------------------
+// Places.
+// ---------------------------------------------------------------------------
+
+fn insert_place(world: &World, place_id: &str, name: &str) {
+    world
+        .scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.fixture");
+            tx.connection().execute(
+                "INSERT INTO core_place
+                   (place_id, name, geo_lat, geo_lng, address_json, created_at, updated_at)
+                 VALUES (?1, ?2, 39.0021, -120.1131, ?3, ?4, ?4)",
+                rusqlite::params![
+                    place_id,
+                    name,
+                    r#"{"street":"the member's own address"}"#,
+                    "2026-01-01T00:00:00.000Z"
+                ],
+            )?;
+            Ok(())
+        })
+        .expect("the place lands");
+}
+
+#[test]
+fn setting_and_clearing_a_place_are_the_same_command() {
+    let world = World::new("set-place");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    insert_place(&world, "place-1", "39.0021, -120.1131");
+    world.executed(
+        "media.set_asset_place",
+        serde_json::json!({ "asset_id": "asset-1", "place_id": "place-1" }),
+    );
+    assert_eq!(
+        world.text(
+            "SELECT place_id FROM media_asset WHERE asset_id = ?1",
+            "asset-1"
+        ),
+        Some("place-1".to_owned())
+    );
+    // An OMITTED place_id CLEARS it.
+    world.executed(
+        "media.set_asset_place",
+        serde_json::json!({ "asset_id": "asset-1" }),
+    );
+    assert_eq!(
+        world.text(
+            "SELECT place_id FROM media_asset WHERE asset_id = ?1",
+            "asset-1"
+        ),
+        None
+    );
+    // There is no app-plane command that mints a place.
+    let reason = world.refused(
+        "media.set_asset_place",
+        serde_json::json!({ "asset_id": "asset-1", "place_id": "place-nowhere" }),
+    );
+    assert!(reason.contains("knows no place"), "{reason}");
+}
+
+#[test]
+fn naming_a_place_writes_the_name_and_leaves_the_derived_address_alone() {
+    let world = World::new("name-place");
+    insert_place(&world, "place-1", "39.0021, -120.1131");
+    // The machine half runs first, as the automation would.
+    world.executed(
+        "media.set_place_gazetteer",
+        serde_json::json!({
+            "place_id": "place-1",
+            "name": "Tahoe City, CA",
+            "country": "US",
+            "distance_km": 4.2,
+            "source": "geonames-cities15000"
+        }),
+    );
+    // Then the member names it.
+    world.executed(
+        "media.name_place",
+        serde_json::json!({ "place_id": "place-1", "name": "  The cabin  ", "kind": "home" }),
+    );
+    assert_eq!(
+        world.text("SELECT name FROM core_place WHERE place_id = ?1", "place-1"),
+        Some("The cabin".to_owned()),
+        "the name is trimmed"
+    );
+    assert_eq!(
+        world.text("SELECT kind FROM core_place WHERE place_id = ?1", "place-1"),
+        Some("home".to_owned())
+    );
+    // THE DERIVED ADDRESS SURVIVES A RENAME, and so does the member's own.
+    let address = world
+        .text(
+            "SELECT address_json FROM core_place WHERE place_id = ?1",
+            "place-1",
+        )
+        .expect("an address document");
+    let parsed: serde_json::Value = serde_json::from_str(&address).expect("JSON");
+    assert_eq!(
+        parsed["gazetteer"]["name"],
+        serde_json::json!("Tahoe City, CA")
+    );
+    assert_eq!(
+        parsed["street"],
+        serde_json::json!("the member's own address"),
+        "every other key in the document survives"
+    );
+
+    // A rename with no `kind` does not clear the declared one.
+    world.executed(
+        "media.name_place",
+        serde_json::json!({ "place_id": "place-1", "name": "Home" }),
+    );
+    assert_eq!(
+        world.text("SELECT kind FROM core_place WHERE place_id = ?1", "place-1"),
+        Some("home".to_owned())
+    );
+
+    let reason = world.refused(
+        "media.name_place",
+        serde_json::json!({ "place_id": "place-1", "name": "   " }),
+    );
+    assert!(reason.contains("whitespace"), "{reason}");
+}
+
+/// A MISS IS A RESULT. Without the none-marker the automation re-examines every
+/// mid-ocean coordinate forever.
+#[test]
+fn a_gazetteer_miss_is_recorded_as_a_result_and_never_touches_the_members_name() {
+    let world = World::new("gazetteer-miss");
+    insert_place(&world, "place-1", "The cabin");
+    world.executed(
+        "media.set_place_gazetteer",
+        serde_json::json!({ "place_id": "place-1", "source": "geonames-cities15000" }),
+    );
+    let address = world
+        .text(
+            "SELECT address_json FROM core_place WHERE place_id = ?1",
+            "place-1",
+        )
+        .expect("an address document");
+    let parsed: serde_json::Value = serde_json::from_str(&address).expect("JSON");
+    assert_eq!(parsed["gazetteer"]["none"], serde_json::json!(true));
+    assert!(parsed["gazetteer"]["checked_at"].is_string());
+    assert_eq!(
+        world.text("SELECT name FROM core_place WHERE place_id = ?1", "place-1"),
+        Some("The cabin".to_owned()),
+        "the machine half never writes the member's name"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The face queue's one writer, and forgetting a person.
+// ---------------------------------------------------------------------------
+
+fn insert_region(world: &World, region_id: &str, asset_id: &str, party_id: Option<&str>) {
+    world
+        .scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.fixture");
+            tx.connection().execute(
+                "INSERT INTO media_face_region
+                   (region_id, asset_id, bbox_json, party_id, confidence, review_state,
+                    created_at, updated_at)
+                 VALUES (?1, ?2, '{\"x\":0,\"y\":0,\"w\":1,\"h\":1}', ?3, 0.94, 'proposed', ?4, ?4)",
+                rusqlite::params![region_id, asset_id, party_id, "2026-03-01T10:00:00.000Z"],
+            )?;
+            Ok(())
+        })
+        .expect("the region lands");
+}
+
+#[test]
+fn the_three_answers_are_one_command_and_a_rejection_keeps_the_row() {
+    let world = World::new("answer-face");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    for (index, answer) in ["confirm", "reject", "dismiss"].iter().enumerate() {
+        let region_id = format!("region-{index}");
+        insert_region(&world, &region_id, "asset-1", Some(&world.owner));
+        let input = if *answer == "confirm" {
+            serde_json::json!({
+                "region_id": region_id, "answer": answer, "party_id": world.owner
+            })
+        } else {
+            serde_json::json!({ "region_id": region_id, "answer": answer })
+        };
+        let output = world.executed("media.answer_face_proposal", input);
+        let expected = match *answer {
+            "confirm" => "confirmed",
+            "reject" => "rejected",
+            _ => "dismissed",
+        };
+        assert_eq!(output["review_state"], serde_json::json!(expected));
+        // A REJECTION DOES NOT DELETE THE ROW: gone from the list is not gone
+        // from the vault, and the enricher may not propose the face again.
+        assert_eq!(
+            world.count(
+                "SELECT COUNT(*) FROM media_face_region WHERE region_id = ?1",
+                &region_id
+            ),
+            1
+        );
+    }
+    // A confirmed region names its confirmer; a refused one names nobody.
+    assert_eq!(
+        world.text(
+            "SELECT confirmed_by_party_id FROM media_face_region WHERE region_id = ?1",
+            "region-0"
+        ),
+        Some(world.owner.clone())
+    );
+    assert_eq!(
+        world.text(
+            "SELECT party_id FROM media_face_region WHERE region_id = ?1",
+            "region-1"
+        ),
+        None
+    );
+}
+
+#[test]
+fn the_union_rule_refuses_a_confirm_with_no_party_and_a_reject_with_one() {
+    let world = World::new("answer-union");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    insert_region(&world, "region-1", "asset-1", None);
+    let reason = world.refused(
+        "media.answer_face_proposal",
+        serde_json::json!({ "region_id": "region-1", "answer": "confirm" }),
+    );
+    assert!(reason.contains("must name the person"), "{reason}");
+    let reason = world.refused(
+        "media.answer_face_proposal",
+        serde_json::json!({
+            "region_id": "region-1", "answer": "reject", "party_id": world.owner
+        }),
+    );
+    assert!(reason.contains("name nobody"), "{reason}");
+    // And a confirm naming a party this vault does not hold.
+    let reason = world.refused(
+        "media.answer_face_proposal",
+        serde_json::json!({
+            "region_id": "region-1", "answer": "confirm", "party_id": "party-nobody"
+        }),
+    );
+    assert!(reason.contains("exists in this vault"), "{reason}");
+}
+
+/// Answering the same region twice is how a member CORRECTS THEMSELF, so the
+/// second answer must land rather than be refused as a replay.
+#[test]
+fn a_second_answer_to_one_region_lands() {
+    let world = World::new("answer-twice");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    insert_region(&world, "region-1", "asset-1", Some(&world.owner));
+    world.executed(
+        "media.answer_face_proposal",
+        serde_json::json!({
+            "region_id": "region-1", "answer": "confirm", "party_id": world.owner
+        }),
+    );
+    world.executed(
+        "media.answer_face_proposal",
+        serde_json::json!({ "region_id": "region-1", "answer": "reject" }),
+    );
+    assert_eq!(
+        world.text(
+            "SELECT review_state FROM media_face_region WHERE region_id = ?1",
+            "region-1"
+        ),
+        Some("rejected".to_owned())
+    );
+}
+
+#[test]
+fn forgetting_a_person_takes_every_face_that_names_them_and_nothing_else() {
+    let world = World::new("forget");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    insert_region(&world, "region-1", "asset-1", Some(&world.owner));
+    insert_region(&world, "region-2", "asset-1", None);
+    world
+        .scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.fixture");
+            tx.connection().execute(
+                "INSERT INTO media_face_cluster (region_id, cluster_id, computed_at)
+                 VALUES ('region-1', 'region-1', '2026-03-01T10:00:00.000Z')",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("the grouping lands");
+
+    let output = world.executed(
+        "media.forget_person",
+        serde_json::json!({ "party_id": world.owner }),
+    );
+    assert_eq!(output["regions_forgotten"], serde_json::json!(1));
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM media_face_region WHERE region_id = ?1",
+            "region-1"
+        ),
+        0
+    );
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM media_face_cluster WHERE region_id = ?1",
+            "region-1"
+        ),
+        0,
+        "the grouping goes with the region"
+    );
+    // The face that named NOBODY is untouched, and the PARTY survives —
+    // deleting a person is `people.trash_person`, not this.
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM media_face_region WHERE region_id = ?1",
+            "region-2"
+        ),
+        1
+    );
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM core_party WHERE party_id = ?1",
+            &world.owner
+        ),
+        1
+    );
+
+    // RETRY-SAFE: a second call finds nothing and says so.
+    let output = world.executed(
+        "media.forget_person",
+        serde_json::json!({ "party_id": world.owner }),
+    );
+    assert_eq!(output["regions_forgotten"], serde_json::json!(0));
+}
+
+/// **"FORGET ME" MUST NOT MEAN "ERASE EVERYONE"** (#1020, R-1020-35,
+/// D-1020-CL2).
+///
+/// `confirmed_by_party_id` names the member who JUDGED a region, not the person
+/// in it — and in a single-member vault the owner is the judge of every
+/// confirmation. The command deleted on both columns, so the one gesture a
+/// member has for erasing their own face data destroyed every confirmed face of
+/// everyone else in the library. The judgement is cleared in place instead, and
+/// the state goes with it because the schema pins the two together.
+#[test]
+fn forgetting_the_only_member_clears_their_judgements_and_erases_nobody_elses_face() {
+    let world = World::new("forget-one-member");
+    world.photograph("asset-1", "2026-03-01T10:00:00.000Z");
+    let ana = world.executed(
+        "core.add_party",
+        serde_json::json!({ "kind": "person", "display_name": "Ana" }),
+    )["party_id"]
+        .as_str()
+        .expect("a party id")
+        .to_owned();
+    insert_region(&world, "region-ana", "asset-1", Some(&ana));
+    world.executed(
+        "media.answer_face_proposal",
+        serde_json::json!({
+            "region_id": "region-ana", "answer": "confirm", "party_id": ana
+        }),
+    );
+    assert_eq!(
+        world.text(
+            "SELECT confirmed_by_party_id FROM media_face_region WHERE region_id = ?1",
+            "region-ana"
+        ),
+        Some(world.owner.clone()),
+        "the owner is the judge, because there is nobody else to be one"
+    );
+
+    // The owner is in no photograph here, so there is nothing OF them to
+    // forget.
+    let output = world.executed(
+        "media.forget_person",
+        serde_json::json!({ "party_id": world.owner }),
+    );
+    assert_eq!(output["regions_forgotten"], serde_json::json!(0));
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM media_face_region WHERE region_id = ?1",
+            "region-ana"
+        ),
+        1,
+        "Ana's face survives the owner forgetting themself"
+    );
+    // What DID go is the member's own act — and the region is a proposal
+    // again, because nobody vouches for it now.
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM media_face_region
+              WHERE party_id = ?1 OR confirmed_by_party_id = ?1",
+            &world.owner
+        ),
+        0
+    );
+    assert_eq!(
+        world.text(
+            "SELECT review_state FROM media_face_region WHERE region_id = ?1",
+            "region-ana"
+        ),
+        Some("proposed".to_owned())
+    );
+    assert_eq!(
+        world.text(
+            "SELECT party_id FROM media_face_region WHERE region_id = ?1",
+            "region-ana"
+        ),
+        Some(ana),
+        "the person in the photograph is untouched"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The enrichment hint.
+// ---------------------------------------------------------------------------
+
+// TWO TESTS STOOD HERE, AND THEIR COMMAND IS DELETED (#1029 §1, question 9).
+//
+// `a_hint_is_a_row_and_nothing_else` and
+// `a_manual_ask_with_no_capability_is_refused_with_a_sentence` both drove
+// `enrich.request_enrichment`, which queued an `enrich_request` row for an
+// enrichment WORKER to drain. The worker was `crates/automations` over
+// `crates/assist`, both deleted, so the queue has a writer and no reader — and
+// a command that files work nothing will ever do is worse than no command.
+
+// ---------------------------------------------------------------------------
+// `media.add_asset` — the door that took a blob store to open.
+//
+// It was registered with its real schema and REFUSED every call, because
+// `CommandCtx` had no way to move bytes: the port carried v0's
+// text-versus-binary split without the store behind it, so a vault could hold
+// a note and not a photograph. `Vault::with_blobs` is that store, and these
+// are both halves — what a vault WITH one does, and what a vault without one
+// still refuses.
+// ---------------------------------------------------------------------------
+
+/// A one-pixel PNG, as base64. Real bytes with a real header, so the sha is a
+/// real sha and the media type is not a claim.
+const ONE_PIXEL_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+fn png_uri() -> String {
+    format!("data:image/png;base64,{ONE_PIXEL_PNG}")
+}
+
+/// A PHOTOGRAPH ENTERS THE LIBRARY, bytes and all.
+#[test]
+fn adding_an_asset_spills_its_bytes_and_writes_a_row_that_points_at_them() {
+    let scratch = common::Scratch::founded_with_blobs("add-asset-real").expect("a vault");
+    let registry = registry();
+    registry
+        .install(&scratch.vault)
+        .expect("the record installs");
+    let outcome = scratch
+        .vault
+        .execute(
+            &registry,
+            &Principal::owner("phone"),
+            &Command::new(
+                "media.add_asset",
+                serde_json::json!({
+                    "data_uri": png_uri(),
+                    "kind": "photo",
+                    "title": "A single pixel",
+                    "width": 1,
+                    "height": 1,
+                }),
+            ),
+        )
+        .expect("the command runs");
+    assert_eq!(
+        outcome.status,
+        CommandStatus::Executed,
+        "{:?}",
+        outcome.reason
+    );
+
+    let (kind, title, uri, size, content_id, asset_id): (
+        String,
+        String,
+        String,
+        i64,
+        String,
+        String,
+    ) = scratch
+        .vault
+        .read(|connection| {
+            Ok(connection.query_row(
+                "SELECT a.kind, a.title, c.content_uri, c.byte_size, c.content_id, a.asset_id
+                   FROM media_asset a JOIN core_content_item c USING (content_id)",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
+            )?)
+        })
+        .expect("the row reads");
+    assert_eq!(kind, "photo");
+    assert_eq!(title, "A single pixel");
+    // THE ROW NAMES THE BYTES BY DIGEST, never by carrying them: a photograph
+    // inside a `data:` URI in a column is a photograph in the journal.
+    assert!(uri.starts_with("blob:blake3-"), "{uri}");
+    assert!(size > 0);
+
+    // And the bytes are ACTUALLY THERE. A `content_uri` naming bytes nothing
+    // kept is the failure the refusal used to prevent, so this is the assertion
+    // that has to replace it.
+    // READ BACK THROUGH THE VAULT'S OWN DOOR, which since #1025 S3 is the byte
+    // plane's one store. Opening a second store beside the file — which this
+    // assertion used to do — is the arrangement that slice deleted, and it is
+    // what let the flat CAS go a year without any other reader.
+    let sha = uri.trim_start_matches("blob:blake3-");
+    let store = scratch
+        .vault
+        .blobs()
+        .expect("the vault has a content store");
+    let bytes = store.get(sha).expect("the bytes read");
+    assert_eq!(i64::try_from(bytes.len()).unwrap_or_default(), size);
+    assert_eq!(&bytes[1..4], b"PNG");
+
+    // AND THE GRID'S ANSWER IS A FILE. `content_location` returns iroh's data
+    // file for a complete blob (D-1025-S3-2: nothing is inlined, so a one-pixel
+    // PNG has one), and it reads byte-identical.
+    let located = scratch
+        .vault
+        .content_location(&content_id, "media.asset", &asset_id)
+        .expect("the location reads");
+    let path = located.path.expect("the bytes are on this device");
+    assert_eq!(std::fs::read(&path).expect("the file reads"), bytes);
+}
+
+/// THE SAME BYTES TWICE ARE ONE PHOTOGRAPH. `media_asset.content_id` is unique
+/// and says so; a second call adopts the row rather than duplicating it.
+#[test]
+fn the_same_bytes_twice_adopt_one_asset() {
+    let scratch = common::Scratch::founded_with_blobs("add-asset-dedupe").expect("a vault");
+    let registry = registry();
+    registry
+        .install(&scratch.vault)
+        .expect("the record installs");
+    let add = || {
+        scratch
+            .vault
+            .execute(
+                &registry,
+                &Principal::owner("phone"),
+                &Command::new(
+                    "media.add_asset",
+                    serde_json::json!({ "data_uri": png_uri(), "kind": "photo" }),
+                ),
+            )
+            .expect("the command runs")
+    };
+    let first = add();
+    assert_eq!(first.status, CommandStatus::Executed, "{:?}", first.reason);
+    let second = add();
+    assert_eq!(
+        second.status,
+        CommandStatus::Executed,
+        "{:?}",
+        second.reason
+    );
+    assert_eq!(
+        second.output.get("deduped"),
+        Some(&serde_json::json!(1)),
+        "the second call must say it adopted rather than minted"
+    );
+    let assets: i64 = scratch
+        .vault
+        .read(|connection| {
+            Ok(connection.query_row("SELECT COUNT(*) FROM media_asset", [], |row| row.get(0))?)
+        })
+        .expect("the count reads");
+    assert_eq!(assets, 1);
+}
+
+/// A COORDINATE IS A PAIR. Half of one is no location at all, and accepting it
+/// would let a caller believe it had placed a photograph it had not.
+#[test]
+fn half_a_coordinate_is_refused() {
+    let scratch = common::Scratch::founded_with_blobs("add-asset-half-coord").expect("a vault");
+    let registry = registry();
+    registry
+        .install(&scratch.vault)
+        .expect("the record installs");
+    let outcome = scratch
+        .vault
+        .execute(
+            &registry,
+            &Principal::owner("phone"),
+            &Command::new(
+                "media.add_asset",
+                serde_json::json!({ "data_uri": png_uri(), "latitude": 39.0 }),
+            ),
+        )
+        .expect("the command runs");
+    assert_eq!(outcome.status, CommandStatus::Failed);
+    assert!(
+        outcome
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("latitude and a longitude")),
+        "{:?}",
+        outcome.reason
+    );
+}
+
+/// A VAULT WITH NO CONTENT STORE STILL REFUSES, and names the cause.
+///
+/// This is the half the old gap test was really asserting, and it is still
+/// true: writing a `core_content_item` whose `content_uri` names bytes nothing
+/// kept would be a library of rows with no photographs in it.
+#[test]
+fn a_vault_with_no_content_store_refuses_binary_bytes_and_writes_nothing() {
+    let world = World::new("add-asset-no-store");
+    let outcome = world.run(
+        "media.add_asset",
+        serde_json::json!({ "data_uri": png_uri(), "kind": "photo" }),
+    );
+    assert_eq!(outcome.status, CommandStatus::Failed);
+    assert!(
+        outcome
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("no local content store")),
+        "{:?}",
+        outcome.reason
+    );
+    let assets: i64 = world
+        .scratch
+        .vault
+        .read(|connection| {
+            Ok(connection.query_row("SELECT COUNT(*) FROM media_asset", [], |row| row.get(0))?)
+        })
+        .expect("the count reads");
+    assert_eq!(assets, 0);
+}
+
+/// The SCHEMA is the first gate, before any of the above.
+#[test]
+fn a_malformed_kind_is_refused_by_the_schema() {
+    let world = World::new("add-asset-schema");
+    let outcome = world.run("media.add_asset", serde_json::json!({ "kind": "hologram" }));
+    assert_eq!(outcome.status, CommandStatus::Failed);
+    assert!(
+        outcome
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("kind")),
+        "{:?}",
+        outcome.reason
+    );
+}
+
+/// THE READ HALF: a photograph that entered the library can be LOCATED again.
+///
+/// The write half spilling bytes into the store is only half a photograph; a
+/// row naming bytes is not something a member can see. This is the other half,
+/// and it is the one Home's mosaic reads.
+#[test]
+fn a_seeded_photograph_can_be_located_by_the_owner_that_reads_it() {
+    let scratch = common::Scratch::founded_with_blobs("locate-asset").expect("a vault");
+    let registry = registry();
+    registry
+        .install(&scratch.vault)
+        .expect("the record installs");
+    let outcome = scratch
+        .vault
+        .execute(
+            &registry,
+            &Principal::owner("phone"),
+            &Command::new(
+                "media.add_asset",
+                serde_json::json!({ "data_uri": png_uri(), "kind": "photo" }),
+            ),
+        )
+        .expect("the command runs");
+    assert_eq!(
+        outcome.status,
+        CommandStatus::Executed,
+        "{:?}",
+        outcome.reason
+    );
+    let asset_id = outcome.output["asset_id"].as_str().expect("an asset id");
+    let content_id = outcome.output["content_id"].as_str().expect("a content id");
+
+    let found = scratch
+        .vault
+        .content_location(content_id, "media.asset", asset_id)
+        .expect("the lookup runs");
+    let path = found.path.expect("the bytes are on this device");
+    assert!(path.is_file(), "{}", path.display());
+    assert_eq!(std::fs::read(&path).expect("the file reads")[1..4], *b"PNG");
+    // THE MEDIA TYPE IS THE ASSET'S READING of the bytes, off the
+    // representation and never off the byte row (#996 R20(b)).
+    assert_eq!(found.media_type, "image/png");
+    assert!(found.embeddable);
+    assert!(found.absent_reason.is_empty());
+    assert!(found.byte_size > 0);
+}
+
+/// NO READING IS NOT PERMISSION. An owner this vault has no representation for
+/// gets the bytes located and **not** marked embeddable — the whole reason the
+/// never-inline list exists is that the bytes may be authored by someone else.
+#[test]
+fn an_unknown_owner_locates_the_bytes_and_refuses_to_call_them_embeddable() {
+    let scratch = common::Scratch::founded_with_blobs("locate-unknown-owner").expect("a vault");
+    let registry = registry();
+    registry
+        .install(&scratch.vault)
+        .expect("the record installs");
+    let outcome = scratch
+        .vault
+        .execute(
+            &registry,
+            &Principal::owner("phone"),
+            &Command::new(
+                "media.add_asset",
+                serde_json::json!({ "data_uri": png_uri(), "kind": "photo" }),
+            ),
+        )
+        .expect("the command runs");
+    let content_id = outcome.output["content_id"].as_str().expect("a content id");
+    let found = scratch
+        .vault
+        .content_location(content_id, "media.asset", "not-an-asset-in-this-vault")
+        .expect("the lookup runs");
+    assert!(found.path.is_some(), "the bytes are still there");
+    assert!(found.media_type.is_empty());
+    assert!(!found.embeddable);
+}
+
+/// A CONTENT ITEM THIS VAULT DOES NOT HOLD is an absent answer with a sentence,
+/// never an error: a failed lookup would take a whole mosaic down over one cell.
+#[test]
+fn a_content_id_that_is_not_here_is_absent_with_a_sentence() {
+    let scratch = common::Scratch::founded_with_blobs("locate-missing").expect("a vault");
+    let found = scratch
+        .vault
+        .content_location("no-such-content", "media.asset", "no-such-asset")
+        .expect("the lookup runs");
+    assert!(found.path.is_none());
+    assert!(!found.absent_reason.is_empty());
+    // NEVER A PATH, NEVER A SHA, NEVER A STACK — this sentence reaches a member.
+    assert!(
+        !found.absent_reason.contains('/'),
+        "{}",
+        found.absent_reason
+    );
+}

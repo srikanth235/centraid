@@ -10,7 +10,7 @@ Probe without printing values: `bun run release:verify-secrets`.
 
 - [ ] Enroll / renew Apple Developer Program membership (legal entity matches shipping name).
 - [ ] Create App IDs for desktop helper needs if any, and for mobile: `dev.centraid.mobile`, share extension `dev.centraid.mobile.share` ([identifiers.md](identifiers.md)).
-- [ ] Create distribution certificate + provisioning profiles (or use automatic signing in Xcode/EAS with the correct team).
+- [ ] Create distribution certificate + provisioning profiles (or use automatic signing in Xcode with the correct team).
 - [ ] Note notarization credentials path for CI (App Store Connect API key preferred over password): store in **GitHub Actions secrets** / org secrets — never commit.
 - [ ] Confirm hardened-runtime and notarization plan for Electron (I2); JIT / unsigned-executable-memory entitlements only if a native addon requires them.
 
@@ -21,6 +21,8 @@ Probe without printing values: `bun run release:verify-secrets`.
 | `APPLE_API_KEY` | App Store Connect API key (`.p8` contents or path per electron-builder) |
 | `APPLE_API_KEY_ID` | Key id |
 | `APPLE_API_ISSUER` | Issuer id |
+
+**GitHub Actions secret names (mobile iOS, `lane-release-mobile.yml`):** `APPLE_API_KEY_ID`, `APPLE_API_ISSUER_ID`, `APPLE_API_PRIVATE_KEY`. Without them the lane builds for the simulator only.
 
 **Blocks:** I2 desktop signing/notarization; mobile TestFlight.
 
@@ -49,63 +51,53 @@ Probe without printing values: `bun run release:verify-secrets`.
 - [ ] Enroll in **Play App Signing** — Google holds the **release** key.
 - [ ] Generate and store a recoverable **upload** key; put the keystore + passwords in **GitHub Actions secrets** (J1).
 - [ ] Configure internal testing track for beta (replaces a separate Centraid mobile beta channel — D5).
-- [ ] Store lanes must set `CENTRAID_REQUIRE_RELEASE_SIGNING=1` (or provide `CENTRAID_UPLOAD_*`) so release never uses the committed **debug** keystore.
 
-**GitHub Actions / env secret names (Android upload key — J1):**
+**GitHub Actions secret names (Android, `lane-release-mobile.yml` — J1):**
 
-| Name                             | Purpose                                 |
-| -------------------------------- | --------------------------------------- |
-| `CENTRAID_UPLOAD_STORE_FILE`     | Path to upload keystore file in the job |
-| `CENTRAID_UPLOAD_STORE_PASSWORD` | Keystore password                       |
-| `CENTRAID_UPLOAD_KEY_ALIAS`      | Key alias                               |
-| `CENTRAID_UPLOAD_KEY_PASSWORD`   | Key password                            |
+| Name                        | Purpose                        |
+| --------------------------- | ------------------------------ |
+| `ANDROID_KEYSTORE_BASE64`   | Upload keystore, base64        |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore password              |
+| `ANDROID_KEY_ALIAS`         | Key alias                      |
+| `PLAY_SERVICE_ACCOUNT_JSON` | Play internal-track submission |
+
+Without the keystore the lane runs `assembleDebug` only and reports it.
 
 **Blocks:** J1 production Android; store submission.
 
-## 4. Expo / EAS (mobile build + submit)
+## 4. Cloudflare (public site)
 
-- [ ] Create Expo account + EAS project for `apps/mobile`.
-- [ ] Set `EAS_PROJECT_ID` to enable the emergency EAS hotfix lane. Without it, generated app config deliberately sets `updates.enabled = false` and routine releases remain store-only.
-- [ ] Store `EXPO_TOKEN` in GitHub Actions for `lane-release-mobile.yml` (reached via `release.yml`).
-- [ ] Add the real numeric `ascAppId` to the iOS submit profiles in `apps/mobile/eas.json` after the App Store Connect app exists. Until then, iOS non-interactive submission is intentionally not configured; no fake store id ships.
-- [ ] **Do not** add routine `eas update` to CI (J7 — dormant hotfix lane only).
-
-| Name             | Purpose                               |
-| ---------------- | ------------------------------------- |
-| `EXPO_TOKEN`     | EAS CI auth                           |
-| `EAS_PROJECT_ID` | Expo project id for updates URL + EAS |
-
-## 5. Cloudflare (public web PWA)
-
-- [ ] Bind **`app.centraid.dev`** to the `centraid-web` worker/assets project (`apps/web/wrangler.json`).
-- [ ] Store deploy credentials if using GHA wrangler (optional if CF Git integration is used instead).
+The public marketing and docs site is the apex `centraid` Workers static-assets project ([`wrangler.json`](../wrangler.json)). **This is the only Cloudflare surface the product has**: the Centraid Assist OAuth Worker and its `oauth-production` environment were deleted with the hosted tier ([#1029](https://github.com/srikanth235/centraid/issues/1029)).
 
 | Name                    | Purpose         |
 | ----------------------- | --------------- |
 | `CLOUDFLARE_API_TOKEN`  | Wrangler deploy |
 | `CLOUDFLARE_ACCOUNT_ID` | Account         |
 
-Marketing + docs remain the apex `centraid` worker (`wrangler.json` → `./dist/site`).
-
-### Centraid Assist OAuth edge
-
-- [ ] Bind **`oauth.centraid.dev`** as the only custom route for `apps/oauth-worker`; disable `workers.dev` and preview URLs.
-- [ ] Create protected GitHub Environment **`oauth-production`** with the maintainer as required reviewer.
-- [ ] Set repository variable `OAUTH_WORKER_DEPLOY_ENABLED=true` only after [the Google/Cloudflare evidence gates](release/oauth-assist-google.md) pass.
-- [ ] Store `GOOGLE_CLIENT_SECRET` and `CALLBACK_RECEIPT_SECRET` with Cloudflare Worker Secrets, not GitHub or the gateway. The public `GOOGLE_CLIENT_ID` is a Worker variable and gateway coordinate.
-- [ ] Establish two alert recipients and a rotation owner; exercise the [Assist recovery runbook](recovery/oauth-assist.md).
-
-## 6. Cross-cutting
+## 5. Cross-cutting
 
 - [ ] GitHub Environments **`release`** / **`mobile-release`** with required reviewer = maintainer (aligns with [release.md](release.md) D1). Workflows already reference these environment names.
 - [ ] Confirm secret rotation owners and recovery: upload key recoverable; Apple API keys rotatable; Azure identity recoverable via Azure portal.
 - [ ] Do **not** commit: `.p12`, `.jks`, `.mobileprovision`, raw API keys, or notarization passwords.
 
-## 7. Device enrollment vocabulary
+## 6. Device enrollment
 
-Routine device pairing is identity-preserving: a bare `centraid-gateway pair --data-dir …` targets the existing owner. Creating a new household member must be explicit with `--new-member`; selecting an existing one uses `--member`. Device display names belong to the redeeming browser/extension and remain distinct from the gateway connection label. See [recovery/pairing.md](recovery/pairing.md) for the operational runbook.
+A phone pairs with the member's laptop by redeeming a one-time invite the laptop prints: `centraid-gateway invite --data-dir <dir> --quota-gib <n>` beside a running `centraid-gateway serve`, then the phone's **Pair with your laptop** screen (the band's More sheet), with the `pair` payload pasted or its QR scanned ([R-1047-E12](decisions.md#the-24-words-on-the-phone-1047-e1)). The phone redeems the invite, claims the lease and keeps the laptop's endpoint id in `backup/laptop.json` beside its vault; the member compares the **safety number** the phone shows with the one `serve` prints once the invite is redeemed ([D-9](decisions.md#the-owners-rulings-of-2026-09-29-1047)). There is no member or owner flag and no desktop or headless seat: v0 enrols phones only. The protocol is [gateway.md](gateway.md#pairing); the operational runbook is [recovery/pairing.md](recovery/pairing.md).
 
-**Pairing a phone to the desktop enrols it too** ([#1015](https://github.com/srikanth235/centraid/issues/1015), ruling R-NY-18). The QR gesture admits the phone at two layers, and both are the same gesture: the desktop's `devices.json` is the iroh transport allowlist, and `POST /centraid/_gateway/phone-link` — host custody only — is where that EndpointId becomes a device row under the host's own owner in the gateway's enrolment store. A tunnelled request reaches the gateway as the phone, never as the host, so that row is what every vault door resolves. Revoking the phone in Settings drops the live connections **and** revokes the row; re-pairing the same phone clears the tombstone, because scanning the code again is the same admission gesture made at the same desk.
+Two operational facts worth knowing before restarting a laptop:
+
+- **An invite survives a restart until it is redeemed or expires.** Invites live in the laptop's state file, as the hash of their secret; `centraid-gateway invites` lists what became of each, and a spent or expired one is replaced by minting another, never revived.
+- **The laptop's endpoint identity survives it too**, as `<data-dir>/node.key` ([gateway.md](gateway.md#nodekey)). Losing that file changes the endpoint id, and every paired phone must pair again.
+
+## 7. The member's 24 words (on the phone)
+
+Not a human checklist item, and listed here because it is the other half of enrolling a phone: the words are what a vault's keys derive from, and a device-pairing ticket above is useless to a phone that holds none. Nothing about them is done on a laptop or in a console.
+
+- **Making the first vault mints them.** The phone's core mints 24 BIP39 words from the OS CSPRNG, the phone shows them once on a capture-shielded screen and asks three back, and only then stores the seed and founds the vault, keyed at index 0 ([R-1047-E1](decisions.md#the-24-words-on-the-phone-1047-e1)). Later vaults take the next index from the same seed with no new words (R-1047-E2).
+- **The seed is kept by the platform, the words by the phone and the member.** The seed goes to the synchronised keychain (iCloud Keychain, Android Block Store), or to this phone only where the platform will not take it (R-1047-E6). The words are also kept in this phone's device-only store, so **Show my 24 words** in the band's More sheet can show them again behind the phone's owner check (R-1047-E10); they never sync. The member's written words are the only way back when neither the seed nor the phone survives — [recovery/backup-restore.md](recovery/backup-restore.md).
+- **A new phone is restored, not re-minted.** Restore from the words — or from the synchronised seed, with no words typed (R-1047-E9) — brings each vault back at its own index with a device secret the restore mints (R-1047-E3); a phone that lost only its seed is re-keyed from Locker's "Enter your 24 words" (R-1047-E5).
+- **Pairing with the laptop** is the phone's **Pair with your laptop** screen over `centraid-gateway invite`'s ticket, pasted or scanned (iOS reads the QR with AVFoundation; Android with CameraX and ZXing, asking for the camera at the tap — R-1047-E14): the invite is redeemed, the lease claimed, and the pairing's 60-digit safety number shown to compare with the `safety` line `serve` prints once the invite is redeemed (D-9, superseding R-1047-E12's grouped endpoint). A vault open without its words is offered **Enter your 24 words** (D-11). A laptop that answered and refused says so (R-1047-E13). Each vault lives in its own directory with its own backup home (R-1047-E8).
+- **The device secret is the core's.** It is minted at pair or restore, handed to the shell once, kept in the device-only store and passed at every keyed open (R-1047-E4).
 
 ## After enrollment
 

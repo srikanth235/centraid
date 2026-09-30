@@ -10,15 +10,13 @@
  *   2. Otherwise run ONLY the vitest projects owning the changed files,
  *      instrumented, via vitest.diff-coverage.config.ts.
  *
- * Measured on this repo (M-series Mac): the full instrumented run is 418s on
- * every push. Scoped to the one package a gateway change touches it is 219s,
- * and a diff with no instrumentable source in it — docs, config, workflow, or
- * tests-only — costs 3s, almost all of it the `git fetch`.
+ * A diff with no instrumentable source in it — docs, config, workflow, or
+ * tests-only — costs seconds, almost all of it the `git fetch`.
  *
- * The full repo-wide `bun run coverage` remains the authority: it is what the
- * CI `verify` job runs, what enforces the seeded floors, and what catches a
- * file covered only by another package's tests. This lane is the fast local
- * preview of that gate, not a replacement for it.
+ * The full repo-wide `bun run coverage` remains the authority: it is what
+ * enforces the seeded floors and what catches a file covered only by another
+ * package's tests. This lane is the fast local preview of that gate, not a
+ * replacement for it.
  *
  * Usage:
  *   node scripts/test-report/diff-coverage-run.mjs
@@ -95,12 +93,10 @@ export function changedFiles(baseRef) {
 /**
  * Map a repo-relative source path to the workspace directory owning it.
  * @param {string} filePath Repo-relative path.
- * @returns {string | null} e.g. "packages/server", or null.
+ * @returns {string | null} e.g. "packages/design", or null.
  */
 export function workspaceDirOf(filePath) {
-  const m = /^(?<workspaceDir>(?:packages|apps|tools)\/[^/]+)\//u.exec(
-    filePath
-  );
+  const m = /^(?<workspaceDir>packages\/[^/]+)\//u.exec(filePath);
   return m?.groups?.workspaceDir ?? null;
 }
 

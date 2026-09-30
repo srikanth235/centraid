@@ -1,0 +1,675 @@
+[
+  {
+    "case": "odd-amount-three-ways",
+    "claim": "matching off exhausts both sides exactly, with no remainder to place",
+    "currency": "GBP",
+    "data": {
+      "expenses": [
+        {
+          "amount_minor": 10001,
+          "group_id": "g",
+          "paid_by": "me",
+          "payers": {
+            "me": 10001
+          },
+          "splits": {
+            "a": 3334,
+            "b": 3333,
+            "me": 3334
+          }
+        }
+      ],
+      "members_by_group": [["g", ["me", "a", "b"]]],
+      "settlements": []
+    },
+    "expected": {
+      "attributions": [
+        [
+          {
+            "amount_minor": 3334,
+            "from": "a",
+            "to": "me"
+          },
+          {
+            "amount_minor": 3334,
+            "from": "me",
+            "to": "me"
+          },
+          {
+            "amount_minor": 3333,
+            "from": "b",
+            "to": "me"
+          }
+        ]
+      ],
+      "minimal_transfers": [
+        {
+          "amount": {
+            "amount_minor": 3334,
+            "currency": "GBP"
+          },
+          "from": "a",
+          "to": "me"
+        },
+        {
+          "amount": {
+            "amount_minor": 3333,
+            "currency": "GBP"
+          },
+          "from": "b",
+          "to": "me"
+        }
+      ],
+      "net": [
+        ["a", -3334],
+        ["b", -3333],
+        ["me", 6667]
+      ],
+      "open_debts": 2,
+      "pairwise": [
+        ["a", [["me", 3334]]],
+        ["b", [["me", 3333]]],
+        [
+          "me",
+          [
+            ["a", -3334],
+            ["b", -3333]
+          ]
+        ]
+      ],
+      "simplification_off": {
+        "debts_before": 2,
+        "opted_in": false,
+        "payments_after": 2,
+        "transfers": []
+      },
+      "simplification_on": {
+        "debts_before": 2,
+        "opted_in": true,
+        "payments_after": 2,
+        "transfers": [
+          {
+            "amount": {
+              "amount_minor": 3334,
+              "currency": "GBP"
+            },
+            "from": "a",
+            "to": "me"
+          },
+          {
+            "amount": {
+              "amount_minor": 3333,
+              "currency": "GBP"
+            },
+            "from": "b",
+            "to": "me"
+          }
+        ]
+      }
+    },
+    "group_id": "g"
+  },
+  {
+    "case": "two-payers",
+    "claim": "every pair row sums to that member's net with the sign flipped, so the pairwise view is a refinement and not a second opinion",
+    "currency": "GBP",
+    "data": {
+      "expenses": [
+        {
+          "amount_minor": 24000,
+          "group_id": "g",
+          "paid_by": "a",
+          "payers": {
+            "a": 14000,
+            "b": 10000
+          },
+          "splits": {
+            "a": 8000,
+            "b": 8000,
+            "me": 8000
+          }
+        }
+      ],
+      "members_by_group": [["g", ["me", "a", "b"]]],
+      "settlements": []
+    },
+    "expected": {
+      "attributions": [
+        [
+          {
+            "amount_minor": 8000,
+            "from": "a",
+            "to": "a"
+          },
+          {
+            "amount_minor": 6000,
+            "from": "b",
+            "to": "a"
+          },
+          {
+            "amount_minor": 2000,
+            "from": "b",
+            "to": "b"
+          },
+          {
+            "amount_minor": 8000,
+            "from": "me",
+            "to": "b"
+          }
+        ]
+      ],
+      "minimal_transfers": [
+        {
+          "amount": {
+            "amount_minor": 6000,
+            "currency": "GBP"
+          },
+          "from": "me",
+          "to": "a"
+        },
+        {
+          "amount": {
+            "amount_minor": 2000,
+            "currency": "GBP"
+          },
+          "from": "me",
+          "to": "b"
+        }
+      ],
+      "net": [
+        ["a", 6000],
+        ["b", 2000],
+        ["me", -8000]
+      ],
+      "open_debts": 2,
+      "pairwise": [
+        ["a", [["b", -6000]]],
+        [
+          "b",
+          [
+            ["a", 6000],
+            ["me", -8000]
+          ]
+        ],
+        ["me", [["b", 8000]]]
+      ],
+      "simplification_off": {
+        "debts_before": 2,
+        "opted_in": false,
+        "payments_after": 2,
+        "transfers": []
+      },
+      "simplification_on": {
+        "debts_before": 2,
+        "opted_in": true,
+        "payments_after": 2,
+        "transfers": [
+          {
+            "amount": {
+              "amount_minor": 6000,
+              "currency": "GBP"
+            },
+            "from": "me",
+            "to": "a"
+          },
+          {
+            "amount": {
+              "amount_minor": 2000,
+              "currency": "GBP"
+            },
+            "from": "me",
+            "to": "b"
+          }
+        ]
+      }
+    },
+    "group_id": "g"
+  },
+  {
+    "case": "settlement-reduces-what-you-owe",
+    "claim": "paying someone reduces what you owe them and nothing else",
+    "currency": "GBP",
+    "data": {
+      "expenses": [
+        {
+          "amount_minor": 10000,
+          "group_id": "g",
+          "paid_by": "me",
+          "payers": {
+            "me": 10000
+          },
+          "splits": {
+            "a": 5000,
+            "me": 5000
+          }
+        }
+      ],
+      "members_by_group": [["g", ["me", "a"]]],
+      "settlements": [
+        {
+          "amount_minor": 5000,
+          "from_party": "a",
+          "group_id": "g",
+          "to_party": "me"
+        }
+      ]
+    },
+    "expected": {
+      "attributions": [
+        [
+          {
+            "amount_minor": 5000,
+            "from": "a",
+            "to": "me"
+          },
+          {
+            "amount_minor": 5000,
+            "from": "me",
+            "to": "me"
+          }
+        ]
+      ],
+      "minimal_transfers": [],
+      "net": [
+        ["a", 0],
+        ["me", 0]
+      ],
+      "open_debts": 0,
+      "pairwise": [
+        ["a", [["me", 0]]],
+        ["me", [["a", 0]]]
+      ],
+      "simplification_off": {
+        "debts_before": 0,
+        "opted_in": false,
+        "payments_after": 0,
+        "transfers": []
+      },
+      "simplification_on": {
+        "debts_before": 0,
+        "opted_in": true,
+        "payments_after": 0,
+        "transfers": []
+      }
+    },
+    "group_id": "g"
+  },
+  {
+    "case": "zero-share-does-not-participate",
+    "claim": "only positive shares and positive payments participate",
+    "currency": "GBP",
+    "data": {
+      "expenses": [
+        {
+          "amount_minor": 6000,
+          "group_id": "g",
+          "paid_by": "me",
+          "payers": {
+            "a": 0,
+            "me": 6000
+          },
+          "splits": {
+            "a": 3000,
+            "b": 0,
+            "me": 3000
+          }
+        }
+      ],
+      "members_by_group": [["g", ["me", "a", "b"]]],
+      "settlements": []
+    },
+    "expected": {
+      "attributions": [
+        [
+          {
+            "amount_minor": 3000,
+            "from": "a",
+            "to": "me"
+          },
+          {
+            "amount_minor": 3000,
+            "from": "me",
+            "to": "me"
+          }
+        ]
+      ],
+      "minimal_transfers": [
+        {
+          "amount": {
+            "amount_minor": 3000,
+            "currency": "GBP"
+          },
+          "from": "a",
+          "to": "me"
+        }
+      ],
+      "net": [
+        ["a", -3000],
+        ["b", 0],
+        ["me", 3000]
+      ],
+      "open_debts": 1,
+      "pairwise": [
+        ["a", [["me", 3000]]],
+        ["b", []],
+        ["me", [["a", -3000]]]
+      ],
+      "simplification_off": {
+        "debts_before": 1,
+        "opted_in": false,
+        "payments_after": 1,
+        "transfers": []
+      },
+      "simplification_on": {
+        "debts_before": 1,
+        "opted_in": true,
+        "payments_after": 1,
+        "transfers": [
+          {
+            "amount": {
+              "amount_minor": 3000,
+              "currency": "GBP"
+            },
+            "from": "a",
+            "to": "me"
+          }
+        ]
+      }
+    },
+    "group_id": "g"
+  },
+  {
+    "case": "departed-member-still-owes",
+    "claim": "circle membership is current state and the ledger is durable history, so a member who left is still on the matrix",
+    "currency": "GBP",
+    "data": {
+      "expenses": [
+        {
+          "amount_minor": 9000,
+          "group_id": "g",
+          "paid_by": "me",
+          "payers": {
+            "me": 9000
+          },
+          "splits": {
+            "a": 3000,
+            "gone": 3000,
+            "me": 3000
+          }
+        }
+      ],
+      "members_by_group": [["g", ["me", "a"]]],
+      "settlements": []
+    },
+    "expected": {
+      "attributions": [
+        [
+          {
+            "amount_minor": 3000,
+            "from": "a",
+            "to": "me"
+          },
+          {
+            "amount_minor": 3000,
+            "from": "gone",
+            "to": "me"
+          },
+          {
+            "amount_minor": 3000,
+            "from": "me",
+            "to": "me"
+          }
+        ]
+      ],
+      "minimal_transfers": [
+        {
+          "amount": {
+            "amount_minor": 3000,
+            "currency": "GBP"
+          },
+          "from": "a",
+          "to": "me"
+        },
+        {
+          "amount": {
+            "amount_minor": 3000,
+            "currency": "GBP"
+          },
+          "from": "gone",
+          "to": "me"
+        }
+      ],
+      "net": [
+        ["a", -3000],
+        ["gone", -3000],
+        ["me", 6000]
+      ],
+      "open_debts": 2,
+      "pairwise": [
+        ["a", [["me", 3000]]],
+        ["gone", [["me", 3000]]],
+        [
+          "me",
+          [
+            ["a", -3000],
+            ["gone", -3000]
+          ]
+        ]
+      ],
+      "simplification_off": {
+        "debts_before": 2,
+        "opted_in": false,
+        "payments_after": 2,
+        "transfers": []
+      },
+      "simplification_on": {
+        "debts_before": 2,
+        "opted_in": true,
+        "payments_after": 2,
+        "transfers": [
+          {
+            "amount": {
+              "amount_minor": 3000,
+              "currency": "GBP"
+            },
+            "from": "a",
+            "to": "me"
+          },
+          {
+            "amount": {
+              "amount_minor": 3000,
+              "currency": "GBP"
+            },
+            "from": "gone",
+            "to": "me"
+          }
+        ]
+      }
+    },
+    "group_id": "g"
+  },
+  {
+    "case": "four-way-simplification",
+    "claim": "each transfer zeroes a party, so at most n-1 payments, and the order does not reshuffle between reads",
+    "currency": "GBP",
+    "data": {
+      "expenses": [
+        {
+          "amount_minor": 12000,
+          "group_id": "g",
+          "paid_by": "me",
+          "payers": {
+            "me": 12000
+          },
+          "splits": {
+            "a": 3000,
+            "b": 3000,
+            "c": 3000,
+            "me": 3000
+          }
+        },
+        {
+          "amount_minor": 8000,
+          "group_id": "g",
+          "paid_by": "a",
+          "payers": {
+            "a": 8000
+          },
+          "splits": {
+            "a": 2000,
+            "b": 3000,
+            "c": 3000
+          }
+        }
+      ],
+      "members_by_group": [["g", ["me", "a", "b", "c"]]],
+      "settlements": []
+    },
+    "expected": {
+      "attributions": [
+        [
+          {
+            "amount_minor": 3000,
+            "from": "a",
+            "to": "me"
+          },
+          {
+            "amount_minor": 3000,
+            "from": "b",
+            "to": "me"
+          },
+          {
+            "amount_minor": 3000,
+            "from": "c",
+            "to": "me"
+          },
+          {
+            "amount_minor": 3000,
+            "from": "me",
+            "to": "me"
+          }
+        ],
+        [
+          {
+            "amount_minor": 3000,
+            "from": "b",
+            "to": "a"
+          },
+          {
+            "amount_minor": 3000,
+            "from": "c",
+            "to": "a"
+          },
+          {
+            "amount_minor": 2000,
+            "from": "a",
+            "to": "a"
+          }
+        ]
+      ],
+      "minimal_transfers": [
+        {
+          "amount": {
+            "amount_minor": 6000,
+            "currency": "GBP"
+          },
+          "from": "b",
+          "to": "me"
+        },
+        {
+          "amount": {
+            "amount_minor": 3000,
+            "currency": "GBP"
+          },
+          "from": "c",
+          "to": "me"
+        },
+        {
+          "amount": {
+            "amount_minor": 3000,
+            "currency": "GBP"
+          },
+          "from": "c",
+          "to": "a"
+        }
+      ],
+      "net": [
+        ["a", 3000],
+        ["b", -6000],
+        ["c", -6000],
+        ["me", 9000]
+      ],
+      "open_debts": 5,
+      "pairwise": [
+        [
+          "a",
+          [
+            ["b", -3000],
+            ["c", -3000],
+            ["me", 3000]
+          ]
+        ],
+        [
+          "b",
+          [
+            ["a", 3000],
+            ["me", 3000]
+          ]
+        ],
+        [
+          "c",
+          [
+            ["a", 3000],
+            ["me", 3000]
+          ]
+        ],
+        [
+          "me",
+          [
+            ["a", -3000],
+            ["b", -3000],
+            ["c", -3000]
+          ]
+        ]
+      ],
+      "simplification_off": {
+        "debts_before": 5,
+        "opted_in": false,
+        "payments_after": 5,
+        "transfers": []
+      },
+      "simplification_on": {
+        "debts_before": 5,
+        "opted_in": true,
+        "payments_after": 3,
+        "transfers": [
+          {
+            "amount": {
+              "amount_minor": 6000,
+              "currency": "GBP"
+            },
+            "from": "b",
+            "to": "me"
+          },
+          {
+            "amount": {
+              "amount_minor": 3000,
+              "currency": "GBP"
+            },
+            "from": "c",
+            "to": "me"
+          },
+          {
+            "amount": {
+              "amount_minor": 3000,
+              "currency": "GBP"
+            },
+            "from": "c",
+            "to": "a"
+          }
+        ]
+      }
+    },
+    "group_id": "g"
+  }
+]

@@ -17,7 +17,7 @@
  *   - a rig cross-link naming an entry that is gone;
  *   - a `measured` metric with no numeric ceiling, an `unmeasured` one that
  *     ships a number anyway, or a `bound` one that does not argue its bound;
- *   - a hole in the nine-journey x four-surface grid;
+ *   - a hole in the nine-journey x three-surface grid;
  *   - ANY surviving reference to the files this ledger replaced.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -29,13 +29,19 @@ const RETIRED = [
   "tests/budgets.json#qualityRigs",
   "tests/quality-rig-budgets.json",
 ];
-const SEARCH_ROOTS = ["apps", "packages", "scripts", "tests", ".github"];
+const SEARCH_ROOTS = [
+  "packages",
+  "desktop",
+  "extension",
+  "scripts",
+  "tests",
+  ".github",
+];
 const SEARCH_SUFFIXES = [".ts", ".tsx", ".mjs", ".js", ".json", ".yml"];
 const EXEMPT = new Set([
   "scripts/lint-journey-ledger.mjs",
   "scripts/lint-journey-ledger.test.mjs",
   "tests/journeys.json",
-  "tests/quality/classification-ratchet.json",
 ]);
 
 /**
@@ -131,7 +137,7 @@ export function lintJourneyLedger(root = ROOT) {
     }
   }
 
-  // THE GRID. Nine journeys x four surfaces, and every cell has an entry —
+  // THE GRID. Nine journeys x three surfaces, and every cell has an entry —
   // `unmeasured` with a reason is an answer, a missing row is not. Before this
   // the absence of a share number on any surface was invisible: nothing named
   // the journeys, so nothing could notice one had no home.
@@ -149,7 +155,7 @@ export function lintJourneyLedger(root = ROOT) {
   const covered = new Set(
     Object.values(entries).map((entry) => `${entry.surface}/${entry.journey}`)
   );
-  for (const surface of ["web", "desktop", "mobile", "gateway"])
+  for (const surface of ["desktop", "mobile", "gateway"])
     for (const journey of NINE)
       if (!covered.has(`${surface}/${journey}`))
         errors.push(
@@ -165,8 +171,7 @@ export function lintJourneyLedger(root = ROOT) {
     for (const file of sources(path.join(root, dir))) {
       const rel = path.relative(root, file);
       // A file may name what was replaced when naming it IS its subject: this
-      // linter and its test, the ledger's own comment, and the classification
-      // ratchet's approvedDeviation, which is the governed record of the move.
+      // linter and its test, and the ledger's own comment.
       if (EXEMPT.has(rel)) continue;
       const text = readFileSync(file, "utf8");
       for (const retired of RETIRED)

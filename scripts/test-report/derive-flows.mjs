@@ -3,11 +3,14 @@
  * The derived flow-ownership view (#915 Wave 3).
  *
  * The constitution's `coverage-scope-reachability` directive used to read
- * `tests/matrix.json#flows[].owner` directly. `tests/claims.json` keeps the
- * hand-typed half of that register and the mobile roster owns the rest, so the
- * directive now shells out to this CLI instead of parsing either file: one
- * deterministic, offline view, and one place to change when the sources move
- * again.
+ * `tests/matrix.json#flows[].owner` directly. `tests/claims.json` keeps that
+ * register now, so the directive shells out to this CLI instead of parsing the
+ * file: one deterministic, offline view, and one place to change when the
+ * source moves again. The mobile roster that used to contribute the other half
+ * of the flows was retired with the v0 tree (#1020).
+ *
+ * Deterministic and offline on purpose — a network call or a clock read here
+ * would make a governance check nondeterministic.
  *
  *   node scripts/test-report/derive-flows.mjs --json   # {"flows":[{id,owner}]}
  *   node scripts/test-report/derive-flows.mjs          # one owner path per line
@@ -16,15 +19,31 @@
 import path from "node:path";
 
 import { loadClaims } from "./claims-schema.mjs";
-import { deriveFlows, loadRoster } from "./derive.mjs";
+
+/**
+ * The flow ownership view: every flow the claims file declares, sorted by id.
+ * @param {object} claims a parsed claims file
+ * @returns {{id: string, owner: string, surface: string|null, dimension: string|null, tier: string|null, minimumTests: number|null}[]} one row per declared flow
+ */
+export function deriveFlows(claims) {
+  return (claims.flows ?? [])
+    .map((flow) => ({
+      id: flow.id,
+      owner: flow.owner,
+      surface: flow.surface ?? null,
+      dimension: flow.dimension ?? null,
+      tier: flow.tier ?? null,
+      minimumTests: flow.minimumTests ?? null,
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
 
 /** The `{flows:[{id, owner}]}` view, sorted by id. */
-export async function flowOwnerView() {
+export function flowOwnerView() {
   const { claims, errors } = loadClaims();
   if (!claims) throw new Error(errors.join("; "));
-  const roster = await loadRoster();
   return {
-    flows: deriveFlows(claims, roster).map((flow) => ({
+    flows: deriveFlows(claims).map((flow) => ({
       id: flow.id,
       owner: flow.owner,
     })),
@@ -36,7 +55,7 @@ if (
   path.resolve(process.argv[1]) === path.resolve(import.meta.filename)
 ) {
   try {
-    const view = await flowOwnerView();
+    const view = flowOwnerView();
     const wantsJson = process.argv.includes("--json");
     process.stdout.write(
       wantsJson

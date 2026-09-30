@@ -10,7 +10,14 @@ import { lintJourneyLedger } from "./lint-journey-ledger.mjs";
 /** A minimal tree the linter can walk: a ledger plus the roots it sweeps. */
 function fixture(ledger, files = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "journey-ledger-"));
-  for (const dir of ["apps", "packages", "scripts", "tests", ".github"])
+  for (const dir of [
+    "packages",
+    "desktop",
+    "extension",
+    "scripts",
+    "tests",
+    ".github",
+  ])
     mkdirSync(path.join(root, dir), { recursive: true });
   writeFileSync(
     path.join(root, "tests/journeys.json"),
@@ -43,10 +50,10 @@ const BASE = {
   rigs: {},
 };
 
-/** Fills the 9x4 grid so a case fails only for the reason it is testing. */
+/** Fills the 9x3 grid so a case fails only for the reason it is testing. */
 function grid(extra = {}) {
   const filled = {};
-  for (const surface of ["web", "desktop", "mobile", "gateway"])
+  for (const surface of ["desktop", "mobile", "gateway"])
     for (const journey of [
       "cold-open",
       "warm-switch",
@@ -72,11 +79,11 @@ function grid(extra = {}) {
 }
 
 const entry = (over = {}) => ({
-  surface: "web",
+  surface: "desktop",
   journey: "cold-open",
   volume: "year3",
   hardware: "any",
-  spans: ["web.boot"],
+  spans: ["desktop.boot"],
   consumers: ["tests/probe.ts"],
   tolerancePercent: 20,
   metrics: { coldOpen: { status: "measured", ceilingMs: 900 } },
@@ -85,10 +92,13 @@ const entry = (over = {}) => ({
 
 test("a hole in the nine-journey grid fails", () => {
   const root = fixture(
-    { ...BASE, entries: { "web/cold-open/year3/any": entry() } },
+    { ...BASE, entries: { "desktop/cold-open/year3/any": entry() } },
     { "tests/probe.ts": "" }
   );
-  assert.match(lintJourneyLedger(root).join("\n"), /no entry for web\/share/u);
+  assert.match(
+    lintJourneyLedger(root).join("\n"),
+    /no entry for desktop\/share/u
+  );
 });
 
 test("the entries section's own approvedDeviation is not read as a journey", () => {
@@ -96,8 +106,8 @@ test("the entries section's own approvedDeviation is not read as a journey", () 
     {
       ...BASE,
       entries: {
-        approvedDeviation: "#927 W4 re-keyed the web rows onto year3.",
-        ...grid({ "web/cold-open/year3/any": entry() }),
+        approvedDeviation: "#927 W4 re-keyed the desktop rows onto year3.",
+        ...grid({ "desktop/cold-open/year3/any": entry() }),
       },
     },
     { "tests/probe.ts": "// the consumer" }
@@ -107,7 +117,7 @@ test("the entries section's own approvedDeviation is not read as a journey", () 
 
 test("a well-formed ledger passes", () => {
   const root = fixture(
-    { ...BASE, entries: grid({ "web/cold-open/year3/any": entry() }) },
+    { ...BASE, entries: grid({ "desktop/cold-open/year3/any": entry() }) },
     { "tests/probe.ts": "// the consumer" }
   );
   assert.deepEqual(lintJourneyLedger(root), []);
@@ -117,7 +127,7 @@ test("a key that disagrees with its own fields fails", () => {
   const root = fixture(
     {
       ...BASE,
-      entries: { "web/cold-open/year3/any": entry({ surface: "desktop" }) },
+      entries: { "desktop/cold-open/year3/any": entry({ surface: "mobile" }) },
     },
     { "tests/probe.ts": "" }
   );
@@ -132,7 +142,7 @@ test("an undeclared volume fails, so nobody writes a ceiling at an unnamed volum
     {
       ...BASE,
       entries: grid({
-        "web/cold-open/huge/any": entry({ volume: "huge" }),
+        "desktop/cold-open/huge/any": entry({ volume: "huge" }),
       }),
     },
     { "tests/probe.ts": "" }
@@ -144,7 +154,7 @@ test("an entry with no span and no consumer fails", () => {
   const root = fixture({
     ...BASE,
     entries: grid({
-      "web/cold-open/year3/any": entry({ spans: [], consumers: [] }),
+      "desktop/cold-open/year3/any": entry({ spans: [], consumers: [] }),
     }),
   });
   assert.match(
@@ -156,7 +166,7 @@ test("an entry with no span and no consumer fails", () => {
 test("a consumer that does not exist fails", () => {
   const root = fixture({
     ...BASE,
-    entries: grid({ "web/cold-open/year3/any": entry() }),
+    entries: grid({ "desktop/cold-open/year3/any": entry() }),
   });
   assert.match(lintJourneyLedger(root).join("\n"), /which does not exist/u);
 });
@@ -166,7 +176,7 @@ test("an unmeasured metric that ships a number fails", () => {
     {
       ...BASE,
       entries: grid({
-        "web/cold-open/year3/any": entry({
+        "desktop/cold-open/year3/any": entry({
           metrics: { coldOpen: { status: "unmeasured", ceilingMs: 900 } },
         }),
       }),
@@ -181,7 +191,7 @@ test("a catastrophe bound must argue itself", () => {
     {
       ...BASE,
       entries: grid({
-        "web/cold-open/year3/any": entry({
+        "desktop/cold-open/year3/any": entry({
           metrics: { coldOpen: { status: "bound", maxPercent: 50 } },
         }),
       }),
@@ -198,7 +208,7 @@ test("a rig cross-link to a missing entry fails", () => {
   const root = fixture(
     {
       ...BASE,
-      entries: { "web/cold-open/year3/any": entry() },
+      entries: { "desktop/cold-open/year3/any": entry() },
       rigs: {
         "tests/perf/x.perf.test.ts": { entries: ["web/gone/year3/any"] },
       },
@@ -210,7 +220,7 @@ test("a rig cross-link to a missing entry fails", () => {
 
 test("a surviving reference to a replaced file fails", () => {
   const root = fixture(
-    { ...BASE, entries: grid({ "web/cold-open/year3/any": entry() }) },
+    { ...BASE, entries: grid({ "desktop/cold-open/year3/any": entry() }) },
     {
       "tests/probe.ts": "",
       "tests/old.ts": 'import x from "tests/experience-budgets/web.json";',

@@ -1,0 +1,23 @@
+# "NOT YET" IS NOT "THERE ARE NONE".
+#
+# Memories are COMPUTED, by a pass that may not have run. An empty list with
+# `computed: false` means nobody has looked; the screen says so, and a member
+# who reads "You have no memories" instead has been told something about their
+# library that the vault never established.
+#
+# It is the same shape as `DuplicatesData.scan_complete`, and for the same
+# reason: both screens are a pass's output, both have an empty list while the
+# pass is pending, and both would otherwise report the pending state as a
+# finished answer. `photos-memories/computed-and-empty` is the pair that makes
+# this falsifiable — one boolean apart, and only one of them may say "none".
+#
+# This is DATA, not a failure: the read landed, and what it returned is the
+# true state of a pass that has not run. A retry does not make one run.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+data {
+  computed: false
+}

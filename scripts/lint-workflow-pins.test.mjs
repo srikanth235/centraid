@@ -130,7 +130,7 @@ test("a named-step install is caught too, not just `- run:`", () => {
   assert.match(errors[0], /runs `bun install` by hand/u);
 });
 
-test("only ci.yml may listen on pull_request", () => {
+test("only the one PR entry point may listen on pull_request", () => {
   const source = `name: web
 on:
   pull_request:
@@ -139,15 +139,31 @@ on:
 ${clean.slice(clean.indexOf("jobs:"))}`;
   const errors = lintWorkflowSource(".github/workflows/web.yml", source);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /only ci\.yml may/u);
+  assert.match(errors[0], /only \.github\/workflows\/gate\.yml may/u);
 });
 
-test("ci.yml itself may listen on pull_request", () => {
+test("gate.yml itself may listen on pull_request", () => {
+  const source = `name: gate
+on:
+  pull_request:
+${clean.slice(clean.indexOf("jobs:"))}`;
+  assert.deepEqual(
+    lintWorkflowSource(".github/workflows/gate.yml", source),
+    []
+  );
+});
+
+// #1020 moved the entry point off ci.yml. The property is "exactly one", so the
+// file that used to hold it must be refused like any other once it lets go —
+// otherwise the allowlist is two and a PR's verdict has two sources.
+test("ci.yml is no longer exempt now that gate.yml holds the role", () => {
   const source = `name: ci
 on:
   pull_request:
 ${clean.slice(clean.indexOf("jobs:"))}`;
-  assert.deepEqual(lintWorkflowSource(".github/workflows/ci.yml", source), []);
+  const errors = lintWorkflowSource(".github/workflows/ci.yml", source);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /only \.github\/workflows\/gate\.yml may/u);
 });
 
 test("closed-only pull_request is allowed for post-merge housekeeping", () => {
@@ -170,7 +186,7 @@ on:
 ${clean.slice(clean.indexOf("jobs:"))}`;
   const errors = lintWorkflowSource(".github/workflows/extra.yml", source);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /only ci\.yml may/u);
+  assert.match(errors[0], /only \.github\/workflows\/gate\.yml may/u);
 });
 
 test("a `pull_request` mention that is not a trigger is not flagged", () => {
@@ -281,7 +297,7 @@ test("a SHA-pinned rust-toolchain with `toolchain:` as a child key is clean", ()
 
 test("`toolchain:` is found in the `- name:` step form too, where `with:` is a sibling of `uses:`", () => {
   // `- name:` / `uses:` / `with:` puts `with:` at the SAME indent as `uses:`,
-  // not deeper — the shape `lane-release-gateway-npm.yml` uses. A scan that
+  // not deeper — the shape a release lane used. A scan that
   // stops at equal indent reports a false positive here.
   const source = clean.replace(
     "      - run: bun test\n",

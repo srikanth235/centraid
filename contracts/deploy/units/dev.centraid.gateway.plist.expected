@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>dev.centraid.gateway</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/centraid</string>
+		<string>gateway</string>
+		<string>--data-dir</string>
+		<string>/Users/owner/Library/Application Support/Centraid</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/owner/Library/Application Support/Centraid</string>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>StandardOutPath</key>
+	<string>/Users/owner/Library/Logs/Centraid/gateway.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/owner/Library/Logs/Centraid/gateway.err.log</string>
+</dict>
+</plist>

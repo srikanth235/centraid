@@ -1,0 +1,43 @@
+# CANCELLING AN EVENT THAT DOES NOT REPEAT asks once, with a destructive
+# confirm, and no scope sheet: there is only one occurrence to reach.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+event_id: "event-0002"
+instance_key: "2026-03-11T14:00"
+day: "2026-03-11"
+data {
+  title: "Dentist"
+  date_label: "Wednesday 11 March"
+  when_label: "14:00 – 14:45"
+  calendar_name: "Home"
+  calendar_hue_key: "cTeal"
+  facts { label: "Calendar" detail: "Home" }
+  actions { key: "edit" label: "Edit" enabled: true destructive: false accessibility_label: "Edit this event" }
+  actions { key: "cancel" label: "Cancel event" enabled: true destructive: true accessibility_label: "Cancel this event" }
+  is_past: false
+  accessibility_label: "Dentist, Wednesday 11 March, 14:00 to 14:45"
+}
+write { phase: PHASE_IDLE }
+sheet: SHEET_NONE
+confirm {
+  title: "Cancel this event?"
+  body: "It comes off your calendar, and its guests see it as cancelled."
+  confirm_label: "Cancel event"
+  destructive: true
+}
+chrome {
+  title: "Event"
+  back: "Agenda"
+  loading: "Opening your calendar"
+  retry: "Retry"
+  scope_title: "Cancel a repeating event"
+  scope_body: "Pick which occurrences to cancel."
+  scope_commit: "Cancel event"
+  scope_keep: "Keep it"
+  confirm_keep: "Keep it"
+}
+dismissed: false
+cancel_armed: false

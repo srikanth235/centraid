@@ -1,0 +1,40 @@
+[package]
+name = "centraid-gateway-core"
+description = "Every rule a Centraid gateway enforces, written once (#1029 §3)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_gateway_core"
+path = "src/lib.rs"
+
+# A PURE STATE MACHINE BY CONSTRUCTION (#1029 §3). The dependency list is as
+# much a rule as anything in `src/`: no tokio, no rusqlite, no filesystem, no
+# ambient clock and no thread. Time and randomness are INPUTS to the rules,
+# never globals they reach for — `tests/pure_rules.rs` is the scan that keeps
+# that true. The list was shaped by the struck hosted adapter's `wasm32` build
+# (scope amendment 2026-09-21); the property it forced is kept on its own
+# merits.
+[dependencies]
+# The wire types. The mapping from a rule to the code it answers with belongs
+# beside the rule, not in each adapter.
+centraid-api-proto = { path = "../api-proto" }
+# ONE HASH: an object's name is the BLAKE3-256 of its ciphertext.
+blake3.workspace = true
+# Request signatures. This crate deliberately does NOT depend on
+# `centraid-identity`: the certificate's byte layout belongs to the crate that
+# mints it, and these rules take a decoded `auth::CertifiedDevice` as an input
+# rather than reaching for a DNS client's dependency tree to get one.
+ed25519-dalek.workspace = true
+hex.workspace = true
+# THE REFUSAL BODY IS A PROTOCOL FACT, so it is declared here and both ends
+# import it (#1029 W17-5). `serde` reaches no clock, no socket and no
+# filesystem, so `tests/pure_rules.rs` is unaffected; the alternative was a
+# hand-rolled JSON writer, which is a second serializer to disagree with the
+# first.
+serde = { workspace = true }
+thiserror.workspace = true

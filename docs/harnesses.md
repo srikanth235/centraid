@@ -1,5 +1,7 @@
 # Harnesses
 
+> **Superseded, 2026-09-21 — not current state.** The assistant plane (`crates/assist`), the harness registry and every `packages/server` path below were deleted from v0 by the [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795) and the waves under [#1029](https://github.com/srikanth235/centraid/issues/1029). **Nothing in this repository drives a harness.** This document is kept as the design of record should the plane return; read every sentence below in the past tense.
+
 A **harness** is a coding CLI Centraid can drive to produce a turn — `codex`, `claude-code`, `gemini`, `qwen`, `opencode`, `grok`, `kimi`, `copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`, `droid`, `pi`, or a custom `acp` binary. The user-facing ids (`HarnessKind`) are stable; how we talk to them is not.
 
 ## Registry and offered roster
@@ -243,6 +245,18 @@ Issue #504 batch 4. The **single registration surface** for vault tools is the b
 4. **Native tool injection** stays **gated** on an ACP capability that **both** first-party adapters implement — do not prefer native injection or fork per harness.
 
 **Mechanical vs judgment:** judgment + review; no second adapter without an ACP standard both adapters implement.
+
+## v1: the registry is a file, the harness is a process, and MCP has no port ([#1020](https://github.com/srikanth235/centraid/issues/1020))
+
+The v1 assistant plane is [`crates/assist`](../crates/assist/README.md). What it changes is not the model of a harness — that is unchanged, and the tables above are still the roster — but where each piece lives.
+
+- **The registry is a generated fixture, not code.** The seventeen kinds live in `contracts/assist/harnesses.json`, emitted from v0's `registry.ts`. They differ only in _how the process is launched_, and `registry::LaunchPlan` is the one answer the module gives; the turn plane, preflight and model enumeration take a `LaunchPlan` and have no opinion about the kind that produced it. **A `match kind` anywhere outside `registry.rs` is a bug, and a grep for one is the test.** The two lists are both carried: seventeen registered, **five supported** (`codex`, `claude-code`, `opencode`, `grok`, `pi`). Keeping one list would mean either dropping twelve working kinds or claiming support for twelve nobody verified.
+- **Two arguments are refused rather than documented.** `--mdns` for opencode, because it defaults its listen host to `0.0.0.0` and publishes an unauthenticated code-execution harness to the LAN; and `--port` for copilot, which is stdio only. In v0 these were prose comments, and a comment cannot stop a member typing one into the extra-args box.
+- **The two adapter kinds are discovered, never fetched.** Fifteen kinds speak ACP natively. `codex` and `claude-code` speak it through a pinned npm package, so the process spawned is `node <adapter>/bin.js` with the member's own binary passed in through an environment variable. That is the one runtime dependency the Rust gateway cannot satisfy itself, and `centraid assist adapters --install` **prints** the install command rather than running it, because installing an adapter downloads and then executes third-party code.
+- **`preflight` probes the CLI, not the kind.** `VersionProbe::version` takes the CLI path and the environment explicitly, so the adapter kinds are probed through what is actually launched. An older-than-minimum version **warns and stays reachable**; a version that cannot be read claims nothing.
+- **`centraid mcp` is a stdio child with no listener** ([D-1020-AS2](decisions.md#wave-4-lane-rulings-1020)). The harness spawns it; **stdout is the protocol**. It reaches the vault through the local **seat** socket with a per-turn capability token that is single-use and clamped to ten minutes — never by opening the vault file itself, which is the tempting fallback and the one that would make the child a second gateway. `vault_sql` over that channel is not wired yet: the grammar, the row cap and the principal check exist in `crates/vault`, and the local channel deliberately carries only _named_ reads and commands, so the child answers `vault_sql` with a principal refusal rather than reaching around.
+- **The ACP fixtures are a live fake agent, not a recorded frame log** ([D-1020-AS9](decisions.md#wave-4-lane-rulings-1020)). `fake-acp-harness` is a real ACP `Agent` binary with four modes, run against over a real pipe. A replayed log tests the mapper and asserts the framing it was recorded with; it cannot fail when `initialize` stops negotiating or when notifications arrive out of order, and those are the failures that break a turn. The cost is named: **no recorded v0 wire bytes are committed**, so a divergence between v0's frames and the crate's would not be caught here.
+- **The prompt-injection corpus is a gate step of its own**, not one suite among many, because it guards a security property no other step covers: the standing answer when content inside the member's own data asks the assistant to exceed its grant. The gate prints the count — payloads, proven, deferred — because `cargo test --workspace` prints none of it.
 
 ## Automations ride the same single ACP path
 

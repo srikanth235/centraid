@@ -158,14 +158,14 @@ describe("validate-release-wiring", () => {
 
   test("rejects a lane that grows its own trigger", () => {
     const errors = lintFixture({
-      "lane-release-companion.yml": (text) =>
+      "lane-release-extension.yml": (text) =>
         text.replace(
           "on:\n  workflow_call:",
           "on:\n  workflow_call:\n  push:\n    branches: [main]"
         ),
     });
     expect(errors).toContain(
-      "lane-release-companion.yml declares its own push: trigger — lanes are called by release.yml only"
+      "lane-release-extension.yml declares its own push: trigger — lanes are called by release.yml only"
     );
   });
 
@@ -183,7 +183,7 @@ describe("validate-release-wiring", () => {
     const errors = lintFixture({
       "release.yml": (text) =>
         text.replace(
-          "uses: ./.github/workflows/lane-release-companion.yml",
+          "uses: ./.github/workflows/lane-release-extension.yml",
           "uses: ./.github/workflows/lane-release-typo.yml"
         ),
     });
@@ -196,12 +196,12 @@ describe("validate-release-wiring", () => {
     const errors = lintFixture({
       "release.yml": (text) =>
         text.replace(
-          `      NPM_TOKEN: ${secretExpr("NPM_TOKEN")}`,
-          `      NPM_TOKEN: ${secretExpr("NPM_TOKEN")}\n      APPLE_API_KEY: ${secretExpr("APPLE_API_KEY")}`
+          `      CENTRAID_RELEASE_SIGNING_KEY: ${secretExpr("CENTRAID_RELEASE_SIGNING_KEY")}`,
+          `      CENTRAID_RELEASE_SIGNING_KEY: ${secretExpr("CENTRAID_RELEASE_SIGNING_KEY")}\n      NPM_TOKEN: ${secretExpr("NPM_TOKEN")}`
         ),
     });
     expect(errors).toContain(
-      "release.yml job gateway-npm forwards APPLE_API_KEY, which lane-release-gateway-npm.yml does not declare under on.workflow_call.secrets"
+      "release.yml job desktop forwards NPM_TOKEN, which lane-release-desktop.yml does not declare under on.workflow_call.secrets"
     );
   });
 
@@ -209,7 +209,7 @@ describe("validate-release-wiring", () => {
     const errors = lintFixture({
       "release.yml": (text) =>
         text.replace(
-          `    secrets:\n      NPM_TOKEN: ${secretExpr("NPM_TOKEN")}`,
+          `    secrets:\n      APPLE_API_KEY: ${secretExpr("APPLE_API_KEY")}`,
           "    secrets: inherit"
         ),
     });
@@ -238,27 +238,6 @@ describe("validate-release-wiring", () => {
     });
     expect(errors).toContain(
       "release.yml must default to workflow-level `permissions: contents: read`"
-    );
-  });
-
-  test("rejects a gateway-npm job that loses OIDC for provenance", () => {
-    const errors = lintFixture({
-      "release.yml": (text) => text.replace("      id-token: write\n", ""),
-    });
-    expect(errors).toContain(
-      "gateway-npm job needs `id-token: write` for `npm publish --provenance`"
-    );
-  });
-
-  test("rejects a gateway-npm job that forgets to restate contents: read", () => {
-    // Job-level permissions REPLACE the workflow block, so dropping the restate
-    // silently removes checkout's read access.
-    const errors = lintFixture({
-      "release.yml": (text) =>
-        text.replace("      contents: read\n      # OIDC", "      # OIDC"),
-    });
-    expect(errors).toContain(
-      "gateway-npm job must restate `contents: read` — job permissions replace the workflow block"
     );
   });
 

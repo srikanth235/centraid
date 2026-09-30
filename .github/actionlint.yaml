@@ -1,6 +1,12 @@
 # Custom labels for self-hosted runners actionlint does not ship.
 # `device-rung-gateway-pi` in .github/workflows/e2e.yml pins `centraid-pi`
 # so only a registered Pi-class machine takes that cell.
+# `devices` is the label the wave 3 device lanes pin ([#1020](https://github.com/srikanth235/centraid/issues/1020),
+# D-1020-G4): a self-hosted macOS machine with one iPhone and one Android
+# attached. The runner does not exist yet — it is open question 13 and an owner
+# hand-off — and the label is declared here anyway so the workflow that will use
+# it lints today instead of on the day somebody enrols the machine.
 self-hosted-runner:
   labels:
     - centraid-pi
+    - devices

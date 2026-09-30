@@ -35,7 +35,7 @@ jobs:
           - [ ] Review rules added, removed, or semantically changed.
           - [ ] Regenerate and review \`typeAwareOnlyRules\` against the installed oxlint-tsgolint rule surface.
           - [ ] Isolate formatter churn, safe lint fixes, and behavioral corrections in separate commits.
-          - [ ] Run \`bun run check:full\`.
+          - [ ] Run \`bun run check:full\` and \`cargo xtask gate --profile pr\`.
 
           This issue is the monthly owner for tools excluded from weekly Dependabot batches by #639.
 

@@ -66,24 +66,19 @@ describe("run", () => {
 });
 
 describe("workspaceDirOf", () => {
-  test("maps packages/ and apps/ sources to their workspace dir", () => {
-    expect(workspaceDirOf("packages/server/src/serve/build-gateway.ts")).toBe(
-      "packages/server"
+  test("maps packages/ sources to their workspace dir", () => {
+    expect(workspaceDirOf("packages/design/src/elements/kit-avatar.ts")).toBe(
+      "packages/design"
     );
-    expect(workspaceDirOf("apps/mobile/src/lib/upload/enqueue.ts")).toBe(
-      "apps/mobile"
+    expect(workspaceDirOf("packages/test-kit/src/clock.ts")).toBe(
+      "packages/test-kit"
     );
-    expect(workspaceDirOf("packages/model-runtime/src/ctc.ts")).toBe(
-      "packages/model-runtime"
-    );
-    expect(
-      workspaceDirOf("packages/blueprints/apps/tasks/handlers/create.ts")
-    ).toBe("packages/blueprints");
   });
 
   test("root-level and non-workspace paths own no project", () => {
     expect(workspaceDirOf("scripts/test-report/diff-coverage.mjs")).toBeNull();
     expect(workspaceDirOf("package.json")).toBeNull();
+    expect(workspaceDirOf("desktop/electron/src/main/ipc.ts")).toBeNull();
     expect(workspaceDirOf("packages")).toBeNull();
   });
 });

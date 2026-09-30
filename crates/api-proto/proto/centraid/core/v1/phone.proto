@@ -1,0 +1,396 @@
+// THE PHONE'S TWO FLOWS, OVER THE ABI (#1029 §2, §5, W15).
+//
+// The shell has exactly two things to ask this core that it could not ask
+// before: **drain what is waiting to my laptop**, and **bring my vaults back
+// from 24 words**. Two more ride with them because a shell cannot draw either
+// screen without them: **pair with the laptop** (the QR it scanned) and **what
+// is the state of my backup**.
+//
+// ## Why four REQUEST KINDS and not four registered commands
+//
+// Same answer `vault.proto` gives for founding, one layer further out. A
+// `Command` runs through `centraid_vault::commands::Registry`, whose gate order
+// evaluates a `Principal` against `core_vault.self_party_id` and ends in a
+// receipt row. **A restore has no vault to be a principal in** — that is the
+// whole of what it is for — and a drain is not a write to the vault at all: it
+// moves sealed ciphertext the vault already produced out to a laptop. Neither
+// is a command, and a command exempted from the gate order would be a second
+// command plane wearing the first one's name.
+//
+// ## The five symbols are not touched
+//
+// A new flow is a new arm on `Request.kind` through `centraid_call`
+// (`crates/core-ffi/CONTRACT.md` §10). There is no sixth symbol here and there
+// never will be: `nm -D --defined-only libcentraid_core_ffi.so | grep ' T
+// centraid_'` is 5 and `abi-five-symbols` counts the declarations on every
+// gate run.
+//
+// ## The gateway is blind, and so is this file
+//
+// Nothing here carries a key to or from the LAPTOP. `RestoreRequest` carries
+// the 24 words INWARD — from the member's own fingers into their own device's
+// core — and a restoring phone **derives**; it never downloads a key (#1029
+// §0, §5). Three secrets do cross this ABI, and only between the core and its
+// own shell on the same device: the device secret a pair or a restore mints
+// (for the device-only store), and the words and seed of `PhraseRequest`
+// (#1047 E1, for the screen that shows them once and the synchronised store).
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// ------------------------------------------------------------------ drain --
+
+// RUN ONE DRAIN PASS. Replaces `BackupNow` (`admin.proto`), which answered
+// `NotYetAvailable` and classed itself unbounded over a door that did not
+// exist.
+//
+// Seal what the spool holds, upload over this vault's transport until the spool
+// is empty or the deadline is near, and answer with what the GATEWAY acked.
+//
+// **Idempotent, and a second call while one runs is REFUSED, not queued.** A
+// queue behind this door would make a background window's call sit waiting for
+// a foreground pass it cannot see, and expire holding nothing. The shell is
+// told `ERROR_CODE_INVALID_REQUEST` with "a drain is already running" and
+// decides for itself whether to wait.
+message DrainRequest {
+  // How long this pass may take, in milliseconds from when it starts. `0` is
+  // "no deadline" — the foreground case, where the member is watching a
+  // progress bar and the pass runs until the spool is empty.
+  //
+  // It is a DURATION and not a wall-clock instant on purpose: a background
+  // window hands out a budget ("you have 28 seconds"), not a moment, and a
+  // shell converting one to the other against a phone clock the gateway has
+  // already corrected would be converting against the wrong clock.
+  uint64 deadline_ms = 1;
+}
+
+// Why the pass stopped. Every arm is a fact about the spool or the laptop, and
+// none of them is a failure the shell should draw as one: two of the three are
+// ordinary.
+enum DrainStop {
+  DRAIN_STOP_UNSPECIFIED = 0;
+  // The spool is empty. Everything this vault had is on the laptop and acked.
+  DRAIN_STOP_EMPTY = 1;
+  // The deadline came up first. `pending_bytes` is what is left; the next pass
+  // continues from `acked_txid` and re-sends nothing.
+  DRAIN_STOP_DEADLINE = 2;
+  // The laptop did not answer. Nothing was lost — the spool is intact and the
+  // next pass starts where this one did.
+  DRAIN_STOP_UNREACHABLE = 3;
+}
+
+message DrainResponse {
+  // THE TXID THE GATEWAY ACKED, and only that. Not what was sealed, not what
+  // was sent, not what is believed to have arrived: the last txid covered by a
+  // commit the gateway answered (#1029 §2; `gateway_client::CommitAck`).
+  //
+  // Zero means this pass acked nothing new, which is the honest answer when
+  // the laptop was unreachable or the deadline came up before the first
+  // commit.
+  uint64 acked_txid = 1;
+  // Sealed bytes still in the spool when the pass stopped. The number a shell
+  // draws as "3.2 MB left to back up".
+  uint64 pending_bytes = 2;
+  DrainStop stopped = 3;
+  // When the gateway acked, on the GATEWAY's clock — the only moment a member
+  // may be shown as "last backed up". Absent when this pass acked nothing.
+  optional int64 acked_at_ms = 4;
+}
+
+// ------------------------------------------------------------------- pair --
+
+// REDEEM THE PAIRING PAYLOAD THE MEMBER SCANNED (#1029 W17).
+//
+// The laptop prints `base64url(PairTicket)` as text and as a QR
+// (`centraid_identity::ticket`); the phone's camera reads it and hands it
+// here whole. The core parses it, redeems the invite against the laptop over
+// iroh, keeps the laptop's `EndpointId`, and publishes this vault's identity
+// record so a restore from another device can find the same laptop by DNS.
+message PairRequest {
+  // The scanned string, exactly as it was read. **Not a decoded struct**: the
+  // ticket is the one message with no handshake in front of it, and a shell
+  // that parsed it would be a second parser to disagree with
+  // `centraid_identity::ticket`.
+  string payload = 1;
+}
+
+message PairResponse {
+  // The laptop's iroh `EndpointId`, 32 raw bytes — what this phone will dial
+  // from now on without re-resolving DNS.
+  bytes gateway_endpoint = 1;
+  // THE DEVICE SECRET, HANDED OVER EXACTLY ONCE (#1029 W15-D3).
+  //
+  // 32 raw bytes. Present **only on the call that minted it** — the shell puts
+  // it in the platform secure store, marked "this device only" and never
+  // synced, and hands it back at every later `centraid_open`
+  // (`CONTRACT.md` §4b). Absent means this core was opened with one already
+  // and nothing was minted.
+  //
+  // It is answered here rather than pushed as an event, and that is the whole
+  // of why minting happens at pair and at restore and never at open: the event
+  // queue is bounded and a shell may not be draining it yet when a core opens,
+  // and a device secret the shell MISSED is a phone that silently re-mints next
+  // launch — a fresh epoch on every launch, which is F1's `VAULT_MOVED` fired
+  // at nobody. A response cannot be missed.
+  bytes device_secret = 3;
+  // Whether the identity record reached the pkarr resolver. **False is not a
+  // failure of the pairing**: the phone is paired and can back up over the
+  // endpoint it just learned. What an unpublished record costs is a RESTORE
+  // from a device that never scanned this QR, which is why the shell is told
+  // rather than reassured.
+  bool record_published = 2;
+  // WHAT THE MEMBER COMPARES, AND IT IS NOT A HEX ID (#1029 W15-D5).
+  //
+  // `centraid_identity::pairing_safety_number` over this phone's vault
+  // identity key and the laptop's endpoint key, grouped for reading aloud —
+  // the one function `centraid-gateway serve` prints its digits with once the
+  // invite is redeemed, so the two screens agree. A 64-character
+  // hex endpoint id is a string people check four characters of and stop —
+  // which catches a typo and misses an attacker, who gets to choose the other
+  // sixty. The safety number is short enough to be read out in full, and being
+  // read out in full is the whole of what it is for.
+  //
+  // Empty means this build could not compute one; `pair.laptop` refuses such
+  // a pairing rather than show it — never "it matched".
+  string safety_number = 4;
+}
+
+// ---------------------------------------------------------------- restore --
+
+// BRING EVERY VAULT BACK FROM 24 WORDS (#1029 §5).
+//
+// The whole input, and F2 held structurally: there is no vault id here, no
+// key and no path on the lost phone, and no index the shell chose — `indices`
+// only ever repeats what an earlier restore answered as `unclaimed`. What this
+// core does with it is derive, resolve, dial, ask the laptop which vaults it
+// holds for this identity, and fetch. **A vault this phone already holds is
+// never touched**: its file is left as it is, open session and all, and it is
+// neither answered nor counted a miss.
+message RestoreRequest {
+  // The 24 words, as the member typed them. Parsed by
+  // `centraid_identity::phrase::RecoveryPhrase::parse`, which refuses a bad
+  // checksum rather than deriving from nonsense.
+  string phrase = 1;
+  // THE LAPTOP'S ENDPOINT ID, TYPED, WHEN DNS COULD NOT ANSWER (§5).
+  //
+  // 32 raw bytes. Absent is the ordinary path: the identity record is
+  // published under the vault's own key and `centraid_identity::discovery`
+  // resolves it. Present is the member reading the id off their laptop's own
+  // screen because the resolver is down or the network is walled — which is
+  // the case a restore must not be unable to survive, since the resolver is
+  // the one piece of this that is somebody else's uptime.
+  optional bytes endpoint = 2;
+  // DIALLING HINTS FOR THE TYPED PATH, and never authority.
+  //
+  // `<ip>:<port>`, the same values `PairTicket.direct_addrs` carries and for
+  // the same reason (D-1020-C15): with no relay and no address-lookup service
+  // there is nothing an endpoint id ALONE can be dialled through, so a
+  // LAN-only laptop needs them. iroh's TLS proves the endpoint id, so a
+  // tampered address reaches the right laptop or nothing — which is what makes
+  // it safe for a value read off a screen to carry them.
+  //
+  // Empty is the ordinary case: a relayed or DNS-resolvable laptop is reached
+  // by its id.
+  repeated string direct_addrs = 3;
+  // THE SEED IN PLACE OF THE WORDS (#1047, Q-1047-18, answered 2026-09-29).
+  //
+  // 64 raw bytes — what `RecoveryPhrase::seed` makes of the 24 words. A phone
+  // that received the seed through the platform's synchronised keychain holds
+  // no words and cannot type them; the seed is what every key derives from, so
+  // it restores exactly what the words would. EXACTLY ONE of `phrase` and
+  // `seed` is set: both is refused (two answers to "whose vaults"), and neither
+  // is refused as "not your 24 words". Like the phrase, it is never logged,
+  // never quoted in an error and never kept by the core past this request.
+  optional bytes seed = 4;
+  // BRING BACK ONLY THESE VAULTS (#1047 T1, R-1047-R6).
+  //
+  // Derivation indices, as `UnclaimedVault.index` named them: a vault that
+  // stayed with the old phone when a claim failed after another landed, asked
+  // for again on its own. Empty is the ordinary restore — every index, scanned
+  // upward to the gap limit. Set, the core probes exactly these and no others,
+  // skips any this phone already holds, and answers `gap_scanned` 0.
+  repeated uint32 indices = 5;
+}
+
+// One vault a restore brought back.
+message RestoredVault {
+  // The vault's identity public key, hex — which IS its id (#1029 §0).
+  string vault_id = 1;
+  // The derivation index this vault was found at. Reported so the shell can
+  // show "2 vaults" honestly and so a support log names which index a failure
+  // was at; **never reused** (F2) and never chosen by the shell.
+  uint32 index = 2;
+  // Where the restored file landed, under the directory the core was opened
+  // on.
+  string path = 3;
+  // The txid the restored file stands at.
+  uint64 txid = 4;
+  // Rows the generation's census promised at that txid, summed. The number
+  // that makes "your vault is back" a claim rather than a hope: a perfect page
+  // tree over no rows passes `integrity_check` and is a total loss (§2).
+  int64 rows = 5;
+  // See `PairResponse.safety_number`. **Per vault**, because each vault has its
+  // own identity key — one number for all of them would confirm nothing about
+  // any of them.
+  string safety_number = 6;
+}
+
+message RestoreResponse {
+  // See `PairResponse.device_secret`. A restore ALWAYS mints: the lost phone's
+  // device key is lost, which is the point, and the restored phone takes the
+  // lease at the next epoch as a new device (F3). A restore of named
+  // `indices` mints too, for the vaults it answers only: the shell keeps a
+  // device secret per vault, so no vault this phone already holds is re-keyed
+  // (R-1047-R6).
+  bytes device_secret = 3;
+  // Every vault the laptop holds for this identity, restored. Empty is a real
+  // answer and not a failure: an identity the laptop has never seen has no
+  // vaults, and a shell that drew an error would tell a member their words
+  // were wrong when they were right.
+  repeated RestoredVault vaults = 1;
+  // How many derivation indices were tried past the last one that answered.
+  // The gap limit, reported, so "we looked" is checkable.
+  uint32 gap_scanned = 2;
+  // VAULTS THAT CHECKED AND WHOSE LEASE WOULD NOT MOVE (#1047 M1).
+  //
+  // Every vault is fetched, laid down and checked before any lease is
+  // claimed, so a vault that fails its checks refuses the whole restore and
+  // moves nothing. What can still fail is a claim itself, after an earlier
+  // vault's claim landed — the laptop dropped, or refused. Refusing the whole
+  // restore then would drop the vaults already claimed and the device secret
+  // that drains them, and the old phone would be frozen on them with nothing
+  // restored anywhere. So the claimed vaults are answered in `vaults`, and
+  // each one that was not is named here: its file is removed, its lease is
+  // still the old phone's, and a second restore takes it. Empty is the
+  // ordinary answer. When no claim landed at all the restore is refused
+  // instead, with the first claim's refusal. A second restore naming these in
+  // `RestoreRequest.indices` asks for them alone (R-1047-R6).
+  repeated UnclaimedVault unclaimed = 4;
+}
+
+// One vault a restore checked and could not claim (`RestoreResponse.unclaimed`).
+message UnclaimedVault {
+  // The derivation index, as `RestoredVault.index`.
+  uint32 index = 1;
+  // The vault's identity public key, hex, as `RestoredVault.vault_id`.
+  string vault_id = 2;
+  // Why the claim did not land, for a support log. Carries no key and no
+  // word.
+  string reason = 3;
+}
+
+// ----------------------------------------------------------------- status --
+
+// WHAT THE SHELL DRAWS ON THE BACKUP SCREEN. Reads local state and the last
+// thing the gateway said; it dials nothing of its own.
+message BackupStatusRequest {}
+
+message BackupStatusResponse {
+  // The last txid a gateway acked, and when — on the GATEWAY's clock. Both
+  // absent is a vault that has never been backed up, which is a state and not
+  // a fault.
+  optional uint64 acked_txid = 1;
+  optional int64 acked_at_ms = 2;
+  // Sealed bytes waiting in the spool right now.
+  uint64 pending_bytes = 3;
+  // Whether this core has a laptop to reach at all — a pairing, with an
+  // endpoint. **It is not a ping**: a status read that dialled would make
+  // drawing a screen depend on somebody else's network.
+  bool laptop_paired = 4;
+}
+
+// ----------------------------------------------------------------- phrase --
+
+// THE 24 WORDS, MINTED, JUDGED AND TURNED INTO A SEED — IN RUST (#1047 E1).
+//
+// BIP39 lives in `centraid_identity::phrase` and nowhere else: the shell has
+// no word list, no checksum and no PBKDF2, and a second implementation in
+// Kotlin would be a second opinion about which words are a member's vaults.
+// So the three things a words screen needs are one request kind. `mint` is 24
+// words from the operating system's CSPRNG, for the make-vault screen to show
+// ONCE. `check` judges each cell against the list, with suggestions, and gives
+// the whole phrase's verdict (count, unknown word, checksum) for the entry
+// grid. `seed` is the 64-byte seed the words derive, for the shell's
+// synchronised secure store (`CONTRACT.md` §4b), where every later open reads
+// it.
+//
+// **It needs no vault**, like `restore`: a phone making its first vault, or
+// restoring onto a fresh install, has none. It is bounded, and it is not a
+// command, so it writes no receipt — the words and the seed reach no row, no
+// log line and no error detail. A refused `seed` names the count or "not a
+// valid phrase", never a word.
+message PhraseRequest {
+  oneof op {
+    PhraseMint mint = 1;
+    PhraseCheck check = 2;
+    PhraseSeed seed = 3;
+  }
+}
+
+message PhraseMint {}
+
+// The cells as typed, in order. Each is trimmed and lowercased here, because
+// a keyboard's capital or a trailing space is not a wrong word.
+message PhraseCheck {
+  repeated string words = 1;
+}
+
+message PhraseSeed {
+  repeated string words = 1;
+}
+
+message PhraseResponse {
+  oneof answer {
+    PhraseMinted minted = 1;
+    PhraseChecked checked = 2;
+    PhraseSeeded seeded = 3;
+  }
+}
+
+// 24 lowercase English words, in order. Shown once and held by the shell only
+// until the seed they derive is stored.
+message PhraseMinted {
+  repeated string words = 1;
+}
+
+message PhraseChecked {
+  // One per cell sent, in order.
+  repeated PhraseWord words = 1;
+  Verdict verdict = 2;
+  // The 1-based position of the first cell that is not a list word, or 0.
+  uint32 first_unknown = 3;
+
+  enum Verdict {
+    VERDICT_UNSPECIFIED = 0;
+    // Fewer than 24 filled cells.
+    VERDICT_INCOMPLETE = 1;
+    // A filled cell is not on BIP39's English list; `first_unknown` names it.
+    VERDICT_UNKNOWN_WORD = 2;
+    // Every word is on the list and the checksum does not close: a word is
+    // in the wrong place, or is the wrong list word.
+    VERDICT_BAD_CHECKSUM = 3;
+    // A phrase `seed` will accept.
+    VERDICT_VALID = 4;
+    // More than 24 filled cells.
+    VERDICT_TOO_MANY = 5;
+  }
+}
+
+message PhraseWord {
+  // 1-based.
+  uint32 position = 1;
+  // The cell is empty.
+  bool empty = 2;
+  // The cell is a word on the list.
+  bool known = 3;
+  // Up to four list words beginning with what the cell holds, when it is
+  // filled and not yet a list word. Empty otherwise.
+  repeated string suggestions = 4;
+}
+
+// The 64-byte BIP39 seed, no passphrase (`phrase.rs`'s header). The shell
+// stores it in the synchronised secure store and drops it.
+message PhraseSeeded {
+  bytes seed = 1;
+}

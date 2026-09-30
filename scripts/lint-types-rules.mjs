@@ -86,18 +86,9 @@ export const compatibilityRules = [
 
 export const fixtureRules = [...compatibilityRules];
 
-// Blueprint React/DOM callback slots intentionally launch narrated async
-// actions. The engine's CLI cannot retain condition checks while disabling
-// void-return callbacks, and wrapping 126 handlers in `void` would only erase
-// the type signal without adding rejection handling.
-export const blueprintCompatibilityRules = allFileCompatibilityRules.filter(
-  (rule) => rule !== "typescript/no-misused-promises"
-);
-
 function printRules(group) {
   const groups = {
     all: allFileCompatibilityRules,
-    blueprint: blueprintCompatibilityRules,
     source: sourceOnlyCompatibilityRules,
   };
   const rules = groups[group];

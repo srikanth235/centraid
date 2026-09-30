@@ -6,8 +6,7 @@
           failure domain. A dead disk, a stolen laptop, a bad <code>rm</code> don't ask permission.
           Offsite custody turns that loss into an outage: databases and code travel in encrypted
           snapshots, while attachments are born as sealed bytes in your provider's
-          content-addressed store. There's one home for those bytes — <em>on this device</em> or
-          <em>hosted</em> — and the provider sees storage, never content or keys.
+          content-addressed store.
         </p>
       </section>
 
@@ -95,18 +94,7 @@ backup: {
             The same shape covers both cases the config supports: a <b>local-folder provider</b> —
             an external drive or a mounted network share, the zero-setup default — and a
             <b>remote provider</b> speaking the open storage protocol, where <code>endpoint</code> and
-            <code>apiKey</code> are all the gateway needs to know. <b>Clawgnition</b> is the first
-            commercial one: client-side encryption (the same as the local case — Clawgnition never
-            gets a key), S3-direct writes straight to Cloudflare R2, zero-egress restores.
-          </p>
-          <p class="prose r" style="--d: 0.23s; margin-top: 14px">
-            There's no per-attachment routing to reason about any more. A vault is either
-            <b>On this device</b> or <b>Hosted</b> — a single <b>home connection</b>, one managed
-            provider bundle that carries snapshots, blobs and their derivatives together. You wire
-            it in <b>Settings → Account → Storage</b>: under <b>Hosted storage</b>,
-            <b>Connect your storage provider</b> (a name, a provider URL, an access key), then flip
-            <b>This vault</b> from <b>On this device</b> to <b>Hosted</b>. Bring-your-own buckets and
-            per-use assignment are gone — one home, or none.
+            <code>apiKey</code> are all the gateway needs to know.
           </p>
           <div class="term r" style="--d: 0.26s; margin-top: 22px; max-width: 720px">
             <div class="term-bar"><span>backup CLI · admin shell</span></div>

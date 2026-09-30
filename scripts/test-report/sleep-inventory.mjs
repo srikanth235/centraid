@@ -69,15 +69,7 @@ export const SCAN_INCLUDE = [
   "packages/*/src/**/*.test.tsx",
   "packages/*/src/**/*.test.mjs",
   "packages/*/tests/**/*.test.ts",
-  "apps/*/src/**/*.test.ts",
-  "apps/*/src/**/*.test.tsx",
-  "apps/*/tests/**/*.spec.ts",
-  "apps/*/tests/**/*.test.ts",
-  "tests/**/*.test.ts",
-  "tests/**/*.test.mjs",
-  "tests/agent-e2e-*/flows/*.mjs",
   "scripts/**/*.test.mjs",
-  "apps/*/scripts/**/*.test.mjs",
 ];
 
 /**

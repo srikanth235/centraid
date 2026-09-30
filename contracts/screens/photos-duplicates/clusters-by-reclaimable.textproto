@@ -1,0 +1,44 @@
+# THE SHELF IS ORDERED BY WHAT RESOLVING EACH CLUSTER GIVES BACK.
+#
+# `reclaimable_bytes` descending — 214958080, 8412672, 1048576 — because that is
+# the number that makes the work worth doing, and a list of duplicate clusters
+# in any other order asks a member to hunt for the one that matters. A cluster
+# of four small screenshots is not the same job as two copies of a 200MB video.
+#
+# `total_reclaimable_bytes` is 224419328, the sum of exactly these three, and
+# the page is COMPLETE — no `next_cursor`, so `total_capped` stays false and the
+# number is a total rather than a floor. This is the only shape in which that is
+# true, and `photos-duplicates/clusters-partial-page` is the same screen one
+# page short: same shelf, same ordering, `total_capped: true`, and a total that
+# is deliberately less than what the library holds.
+#
+# `member_count` is likewise counted from rows that were read, and no cluster
+# here sets `member_count_capped`. Two, four and two; the numbers are honest
+# because the clusters are whole. A screen that printed a capped and an uncapped
+# count identically is wrong about one of these two fixtures.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+data {
+  clusters {
+    cluster_id: "dup-0001"
+    member_count: 2
+    reclaimable_bytes: 214958080
+    cover_thumbnail_path: "thumbs/ast-0320.jpg"
+  }
+  clusters {
+    cluster_id: "dup-0002"
+    member_count: 4
+    reclaimable_bytes: 8412672
+    cover_thumbnail_path: "thumbs/ast-0301.jpg"
+  }
+  clusters {
+    cluster_id: "dup-0003"
+    member_count: 2
+    reclaimable_bytes: 1048576
+  }
+  total_reclaimable_bytes: 224419328
+  scan_complete: true
+}

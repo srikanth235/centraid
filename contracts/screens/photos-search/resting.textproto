@@ -1,0 +1,49 @@
+# NOTHING TYPED YET — AND THAT IS A THIRD THING, NOT AN EMPTY RESULT.
+#
+# `resting` is its own arm of the `content` oneof beside `loading`, `failure`
+# and `hits`, because a member who has typed nothing has not searched and a
+# screen that told them "No results" would be answering a question nobody asked.
+# v0 had `PhotosSearchRestingState` and `PhotosSearchEmptyState` as two
+# components with two sentences and no type-level guarantee they stayed
+# different; here they are two arms and `query` is empty in exactly one of them.
+#
+# What resting offers is the vocabulary a member can actually search BY:
+# concepts the enrichment plane has attached to THIS vault's photographs, people
+# it holds rows for, places with photographs behind them — each as the shelf it
+# opens, so a tap costs no second lookup. Never a fixed list of words the
+# product hopes are there — a suggestion that matches nothing is a promise the
+# search cannot keep.
+#
+# The labels here are `confirmed: false`: the enrichment plane proposed them and
+# no member has affirmed them. They are still searchable, which is why the field
+# is on the label rather than a filter over the list.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+query: ""
+resting {
+  suggested_labels {
+    concept_id: "cpt-lake"
+    label: "Lake"
+    confirmed: false
+  }
+  suggested_labels {
+    concept_id: "cpt-bicycle"
+    label: "Bicycle"
+    confirmed: false
+  }
+  people {
+    party_id: "pty-0031"
+    display_name: "Ada Lovelace"
+  }
+  places {
+    place_id: "plc-0007"
+    place_name: "Dún Laoghaire"
+  }
+  places {
+    place_id: "plc-0021"
+    place_name: "Vembanad"
+  }
+}

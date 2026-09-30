@@ -1,0 +1,60 @@
+# Home: the three springboards, and the two that are easy to confuse.
+#
+# THE POINT OF THIS FLOW is the same as the Tally one's, one level up. An empty
+# vault and an unreadable one both produce a Home with no content in it, and
+# only one of them may say the vault is empty. A unit test asserts the state; a
+# flow is the only thing that can assert the two RENDER differently, which is
+# where the confusion actually reaches a member.
+appId: dev.centraid
+name: home
+---
+- launchApp:
+    clearState: true
+# The grid is the root. Every other screen in the product is reached through it.
+- assertVisible:
+    id: "home-grid"
+- assertVisible:
+    id: "home-status"
+
+# DAY ONE is a claim about the vault, and only a settled, readable, empty vault
+# earns it. When it shows, first moves show with it — never dashed placeholders.
+- runFlow:
+    when:
+      visible:
+        id: "home-day-one"
+    commands:
+      - assertVisible: "Nothing in here yet"
+      - assertVisible:
+          id: "home-first-moves"
+      # An unreadable Home must NOT be able to reach this screen.
+      - assertNotVisible: "Not copied to this device yet"
+
+# EVERY TILE UNREADABLE still shows the grid — demoting them all would leave a
+# launcher with no tiles — and it must never claim the vault is empty.
+- runFlow:
+    when:
+      visible: "Not copied to this device yet"
+    commands:
+      - assertVisible:
+          id: "home-grid"
+      - assertNotVisible: "Nothing in here yet"
+
+# A Home that could not load at all has NO grid: it does not invent eight empty
+# apps out of one failure.
+- runFlow:
+    when:
+      visible:
+        id: "home-failure"
+    commands:
+      - assertNotVisible:
+          id: "home-grid"
+
+# The all-apps listing is a SHEET and never a destination: BACK dismisses it and
+# leaves Home, rather than popping to a screen behind Home.
+- tapOn:
+    id: "home-all-apps"
+- assertVisible:
+    id: "home-all-apps-sheet"
+- back
+- assertVisible:
+    id: "home-grid"
