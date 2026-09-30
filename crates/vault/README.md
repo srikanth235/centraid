@@ -55,7 +55,7 @@ Each with its reason in the module, and each recorded as a decision on #1020.
 - **The commit pair is the only writable connection** (D-1020-D1-5). `Vault::read` sets `PRAGMA query_only`, so a write through a read is refused by SQLite rather than by a reviewer — the `bracketed-replica-writes` invariant as a type.
 - **Doors are functions, not routes** (D-1020-D1-6). The local socket, the iroh handler and a test call the same function, so they cannot disagree about the paging rules.
 - **One snapshot, three uses** (D-1020-D1-7), content-addressed on `blake3(epoch:seq)`.
-- **`VaultError::DiskFull` is a typed answer** (D-1020-D1-8), classified on SQLite's primary code in `From<rusqlite::Error>` so a handler's own `?` carries it.
+- **`VaultError::DiskFull` is a typed answer** (D-1020-D1-8), classified on SQLite's primary code in `From<rusqlite::Error>`, and on `ErrorKind::StorageFull` (ENOSPC) in `From<std::io::Error>`, so a handler's own `?` carries it.
 - **The baseline migration and its `contracts/` fixture are ONE file** (D-1020-D1-13).
 - **The entity-kind registry is derived from the DDL** (D-1020-D1-15), not transcribed.
 

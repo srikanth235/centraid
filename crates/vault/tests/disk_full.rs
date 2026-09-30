@@ -12,15 +12,20 @@
 //! VACUUM), and SQLite clamps `max_page_count` UP to the current size, so
 //! there is nothing for a cap to refuse. What a build can run out of is DISK,
 //! at the two file writes — the `VACUUM INTO` and the gzip. So the fault
-//! redirects the copy to `/dev/full`, which returns ENOSPC on every write and
-//! makes SQLite report a genuine `SQLITE_FULL` (verified: code 13,
-//! `database or disk is full`). Privilege-free and deterministic on Linux.
+//! redirects the gzip to `/dev/full`, which returns ENOSPC on every write.
+//! Privilege-free and deterministic on Linux.
+//!
+//! Not the `VACUUM INTO` (#1047): SQLite opens a rollback journal beside the
+//! target, and `/dev/full-journal` is a file only root can create, so an
+//! unprivileged copy aimed at `/dev/full` fails `SQLITE_READONLY` before it
+//! writes a page. The earlier form of this test passed only as root.
 //!
 //! `VaultError::DiskFull` is classified on SQLite's PRIMARY CODE, never on the
 //! message: `disk I/O error` and `database or disk is full` are both things
-//! SQLite says and only one of them is this. And the classification lives in
-//! `From<rusqlite::Error>`, not in a helper a call site has to remember —
-//! because a handler's own `?` is the commonest way one reaches a caller.
+//! SQLite says and only one of them is this. For a Rust write it is
+//! `ErrorKind::StorageFull` (ENOSPC). Both classifications live in a `From`,
+//! not in a helper a call site has to remember — because a handler's own `?`
+//! is the commonest way one reaches a caller.
 
 mod common;
 
@@ -147,16 +152,16 @@ fn a_full_disk_during_a_snapshot_build_leaves_no_partial_artifact() {
     let dir = scratch.join("snap");
     std::fs::create_dir_all(&dir).expect("the directory is made");
 
-    // A REAL ENOSPC at the copy. `/dev/full` accepts an open and fails every
-    // write with ENOSPC, which SQLite reports as `SQLITE_FULL` — the same code
-    // a genuinely full filesystem produces, and the same code the log-insert
-    // test produces by a different route.
+    // A REAL ENOSPC at the gzip. `/dev/full` accepts an open and fails every
+    // write with ENOSPC — the errno a genuinely full filesystem returns, which
+    // reaches the caller as the same `DiskFull` the log-insert test reaches
+    // through `SQLITE_FULL`.
     scratch
         .vault
-        .inject_fault(Some(centraid_vault::Fault::CopyTo("/dev/full")));
+        .inject_fault(Some(centraid_vault::Fault::GzipTo("/dev/full")));
 
     let outcome = centraid_vault::build_snapshot(&scratch.vault, &dir);
-    let error = outcome.expect_err("a capped copy must fail");
+    let error = outcome.expect_err("a build whose write meets a full disk must fail");
     assert!(
         error.is_disk_full(),
         "the snapshot failure is not DiskFull: {error}"
