@@ -438,8 +438,9 @@ message PhotosGridState {
   }
 
   enum ReadMode {
-    // Nothing in flight.
-    READ_MODE_NONE = 0;
+    // Nothing in flight. The zero value, so buf's STANDARD lint names it
+    // `_UNSPECIFIED`; an unset field reads as nothing in flight.
+    READ_MODE_UNSPECIFIED = 0;
     // The library from its first page, drawn over skeletons.
     READ_MODE_FIRST = 1;
     // The next page, appended.

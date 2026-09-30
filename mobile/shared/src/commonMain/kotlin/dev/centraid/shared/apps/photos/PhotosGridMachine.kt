@@ -446,7 +446,7 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
         MediaPermission.MEDIA_PERMISSION_UNSPECIFIED -> ""
     }
 
-    private val NONE: PhotosGridState.ReadMode = PhotosGridState.ReadMode.READ_MODE_NONE
+    private val NONE: PhotosGridState.ReadMode = PhotosGridState.ReadMode.READ_MODE_UNSPECIFIED
     private val FIRST: PhotosGridState.ReadMode = PhotosGridState.ReadMode.READ_MODE_FIRST
     private val MORE: PhotosGridState.ReadMode = PhotosGridState.ReadMode.READ_MODE_MORE
     private val REFRESH: PhotosGridState.ReadMode = PhotosGridState.ReadMode.READ_MODE_REFRESH
