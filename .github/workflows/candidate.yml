@@ -321,7 +321,7 @@ jobs:
             {
               printf '## %s\n\n' "$title"
               printf '%s\n\n' "$(printf '%s' "$finding" | jq -r '.detail')"
-              printf 'Rule: `%s`. Measured over the trailing 30 `candidate.yml` runs on `main`.\n\n' "$(printf '%s' "$finding" | jq -r '.kind')"
+              printf "Rule: \`%s\`. Measured over the trailing 30 \`candidate.yml\` runs on \`main\`.\n\n" "$(printf '%s' "$finding" | jq -r '.kind')"
               printf 'This issue is rolling: its body is rewritten every run and never appended to. Close it when the rule stops firing.\n\n'
               printf 'Run: %s\n' "$RUN_URL"
             } > /tmp/rule-body.md

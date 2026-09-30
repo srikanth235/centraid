@@ -299,12 +299,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/android/symbols
-          for lib in $(find dist/android/jni -name '*.so'); do
+          while IFS= read -r -d '' lib; do
             abi="$(basename "$(dirname "$lib")")"
             mkdir -p "dist/android/symbols/${abi}"
             cp "$lib" "dist/android/symbols/${abi}/"
             "${ANDROID_NDK_HOME:-/usr/local/lib/android/sdk/ndk-bundle}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" "$lib" || true
-          done
+          done < <(find dist/android/jni -name '*.so' -print0)
           (cd dist/android && zip -qr ../../centraid-android-symbols.zip symbols)
           {
             echo "### prebuilt-core: the Android AAR is NOT assembled"
