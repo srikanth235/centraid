@@ -76,6 +76,14 @@ jobs:
           # history the `buf` step would compare the schema against nothing and
           # report a pass, which is a gate that gates nothing.
           fetch-depth: 0
+      # buf reads `.git#branch=main` as a LOCAL branch. On a pull request the
+      # checkout is a detached merge commit and `main` exists only as
+      # `origin/main`, so buf's clone fails with "couldn't find remote ref
+      # main" (#1047). Point a local `main` at the fetched one when it is absent.
+      - name: Give the buf step a local main branch
+        run: |
+          set -euo pipefail
+          git show-ref --verify --quiet refs/heads/main || git branch main origin/main
       # Bun and Node for the profile's `ts-static` step, which runs
       # `bun run check:push:static` over whatever TypeScript the v1 tree grows,
       # and the v1 Cargo cache (`target/` plus `~/.cargo/bin`, so cargo-deny
