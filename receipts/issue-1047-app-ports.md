@@ -540,7 +540,7 @@ As of the doc pass, and including the shared hot spots #1046 also edited; #1046'
 
 ## Close
 
-Appended at the close pass on 2026-09-29. The sections above are left as the doc pass wrote them. Everything below happened after `0a20e33a6`, the commit that landed the doc pass. When this was written it was an uncommitted working tree that included two staged deletions. The owner widened the umbrella twice on the way: on 2026-09-25 Locker came in (D-5), and on 2026-09-29 the 24-word enrollment and pairing came in. Where this section and a state doc disagree, the doc is current.
+Appended at the close pass on 2026-09-29. The sections above are left as the doc pass wrote them. Everything below happened after `883ed247f`, the commit that landed the doc pass. When this was written it was an uncommitted working tree that included two staged deletions. The owner widened the umbrella twice on the way: on 2026-09-25 Locker came in (D-5), and on 2026-09-29 the 24-word enrollment and pairing came in. Where this section and a state doc disagree, the doc is current.
 
 ### Checklist, reconciled
 
@@ -772,7 +772,7 @@ The final walk re-judges what is left: back labels, the kit's disabled button, t
 
 ### Files
 
-At close the tree holds 303 changed, 11 deleted (two of them staged) and 48 untracked paths against `0a20e33a6`. The root regenerates the full list against the commit, as the doc pass did. These are the new trees and files:
+At close the tree holds 303 changed, 11 deleted (two of them staged) and 48 untracked paths against `883ed247f`. The root regenerates the full list against the commit, as the doc pass did. These are the new trees and files:
 
 - **Contracts:** `contracts/migrations/007_locker_key_one_generation.sql`, `008_locker_no_match_policy.sql` and `009_no_notices.sql`, and `copy/words.json`.
 - **Rust:**

@@ -200,7 +200,7 @@ As of the doc pass, beside the shared hot spots (`screen.proto`, `nav/Navigation
 
 ## Close
 
-Appended at the close pass on 2026-09-29, after #1047's last lanes; the sections above are left as the doc pass wrote them. The working tree was not yet committed when this was written, so the files below are named against `0a20e33a6`, the commit that landed the doc pass.
+Appended at the close pass on 2026-09-29, after #1047's last lanes; the sections above are left as the doc pass wrote them. The working tree was not yet committed when this was written, so the files below are named against `883ed247f`, the commit that landed the doc pass.
 
 ### Checklist, reconciled
 
@@ -212,7 +212,7 @@ What proves the boxes on a device is the [final walk](#final-walk).
 
 ### The doc pass's open items, and how each ended
 
-**Landed in `0a20e33a6`** (they were in flight when the doc pass was written):
+**Landed in `883ed247f`** (they were in flight when the doc pass was written):
 
 - The editor writes a wall clock plus `tz` ([R-1046-9](../docs/decisions.md#agenda-on-the-phone-1046)). The event page reads `agenda_event` by id instead of a window padded around the picked day, and it shows `location_name`.
 - `AgendaDenied` is gone, and Agenda uses the kit's `Denied`.
@@ -249,7 +249,7 @@ These are the #1047 lanes' runs over the shared tree, plus the close's own. The 
 | `cargo xtask rules`, after the fix below | **all four ok**: `sql-confinement` (250 files, clean), `abi-five-symbols`, `no-listening-socket` and `commonmain-no-platform-import`. |
 | `cargo test -p centraid-apps-agenda`, after the fix | green: `detail.rs` 3 passed, and every other test target |
 
-**Landed at close: `sql-confinement` on `crates/apps/agenda/tests/detail.rs`.** The fixture read `schedule_calendar` with a `SELECT` and wrote `core_place` with an `INSERT`, both string literals outside the four crates that may hold SQL; it was already there in `0a20e33a6`. The test now reads the founding calendar through the app's own `load_upcoming`, and seeds the place through a new kit fixture, `centraid_apps_kit::fixtures::seed_place`, which lives in an allowed crate. The rule was not touched.
+**Landed at close: `sql-confinement` on `crates/apps/agenda/tests/detail.rs`.** The fixture read `schedule_calendar` with a `SELECT` and wrote `core_place` with an `INSERT`, both string literals outside the four crates that may hold SQL; it was already there in `883ed247f`. The test now reads the founding calendar through the app's own `load_upcoming`, and seeds the place through a new kit fixture, `centraid_apps_kit::fixtures::seed_place`, which lives in an allowed crate. The rule was not touched.
 
 **Known failures:**
 
@@ -306,7 +306,7 @@ No Agenda defect was found.
 
 **Findings:**
 
-- **L1 (low, cosmetic).** `crates/core/src/app_query.rs:238`: the `ZoneUnset::Missing` refusal is a multi-line string literal with no `\` continuations, so the detail carries two runs of 36 spaces. It was already in `0a20e33a6`.
+- **L1 (low, cosmetic).** `crates/core/src/app_query.rs:238`: the `ZoneUnset::Missing` refusal is a multi-line string literal with no `\` continuations, so the detail carries two runs of 36 spaces. It was already in `883ed247f`.
 - **L2 (low, wording).** The Verification row says "nothing in Kotlin or Swift parses … an rrule". `AgendaEditorMachine.repeatKeyOf` (`AgendaEditorMachine.kt:586`) does tokenise a stored rule on `;` to recognise a preset. That is a classification, not an expansion, so R-1046-1 holds, but the sentence overstates what the grep proves.
 - **L3 (low, process).** "Commands re-run at close" was inserted inside the doc-pass `## Verification`, above sections the header says are never edited. `doc-integrity` allows this, because the receipt is new on this branch. It was placed there because `receipt-per-issue` reads only `## Verification` for a fence.
 

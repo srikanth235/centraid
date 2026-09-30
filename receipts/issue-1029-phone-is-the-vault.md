@@ -3747,8 +3747,8 @@ The root posts this; this lane does not.
 Added 2026-09-29 by slice F6 of [#1047](https://github.com/srikanth235/centraid/issues/1047). This receipt rides in the same branch range, and `receipt-per-issue` asks every receipt the range adds for this section. It is an index of what the waves above already record, plus what git holds. It is not new evidence.
 
 - **Where each wave's changes are recorded.** Each wave section above has its own landed-commit table or file list. **W9 — the close** summarises the umbrella in "What v0 is", "What was struck", "What the umbrella built" and "What is honestly not done". It also re-judges the frozen `## Checklist` line by line: W0.5–W4 and W9 done, W10 not started.
-- **What git holds.** 156 commits on this branch carry `(#1029)` in their subject. The first is `d93cdd05e` (2026-09-17, "retire the v0 directives with the tree they policed"). The last is `d049f19bd` (2026-09-23, the native Photos app). The receipt itself was opened in `f74e73f14`.
-- **What came after the close.** `d1d08eb3a` and `038d8bb89` are two doc fixes the exit greps found. `d049f19bd` is Photos on SwiftUI and Compose, with no backup claim for photos. [#1047](https://github.com/srikanth235/centraid/issues/1047) then changed the restore this umbrella built. It claims last (R-1047-R2), checks every vault before any claim, and claims only the head it checked (R-1047-R5).
+- **What git holds.** 156 commits on this branch carry `(#1029)` in their subject. The first is `d93cdd05e` (2026-09-17, "retire the v0 directives with the tree they policed"). The last is `5bd7c9c98` (2026-09-23, the native Photos app). The receipt itself was opened in `f74e73f14`.
+- **What came after the close.** `d1d08eb3a` and `038d8bb89` are two doc fixes the exit greps found. `5bd7c9c98` is Photos on SwiftUI and Compose, with no backup claim for photos. [#1047](https://github.com/srikanth235/centraid/issues/1047) then changed the restore this umbrella built. It claims last (R-1047-R2), checks every vault before any claim, and claims only the head it checked (R-1047-R5).
 
 ## Verification
 
