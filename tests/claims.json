@@ -585,15 +585,6 @@
       "qualities": ["durability", "performance"],
       "surfaces": ["gateway", "vault"],
       "status": "gating"
-    },
-    {
-      "id": "real-model-goldens",
-      "rung": 5,
-      "platform": "any",
-      "budgetMs": 2700000,
-      "qualities": ["compat", "correctness"],
-      "surfaces": ["model-runtime"],
-      "status": "advisory"
     }
   ],
   "claims": [
@@ -1408,247 +1399,7 @@
       }
     }
   ],
-  "laws": {
-    "consent-denial-monotone": {
-      "statement": "Withdrawing a standing answer, replacing it with a declined row, or narrowing a clamp verb can only turn an allow into a deny, never a deny into an allow.",
-      "owner": "packages/vault/src/gateway/access-properties.test.ts",
-      "flow": "consent-chain-properties"
-    },
-    "consent-clamp-order-independent": {
-      "statement": "The decision, the set of returned rowFilter clauses, and the fieldMask are invariant under permutation of identity.scopeClamp.",
-      "owner": "packages/vault/src/gateway/access-properties.test.ts",
-      "flow": "consent-chain-properties"
-    },
-    "consent-clamp-only-narrows": {
-      "statement": "For every allow, the returned rowFilter is exactly the covering clamp scopes' clauses and the fieldMask exactly their intersection (null only when every covering scope leaves it null); a standing answer contributes no rows and no fields of its own.",
-      "owner": "packages/vault/src/gateway/access-properties.test.ts",
-      "flow": "consent-chain-properties"
-    },
-    "consent-reveal-never-rides": {
-      "statement": "No standing answer ever confers reveal, so an automation is refused reveal whatever it holds; a clamp scope carrying only 'reveal' satisfies no read or act request.",
-      "owner": "packages/vault/src/gateway/access-properties.test.ts",
-      "flow": "consent-chain-properties"
-    },
-    "consent-standing-answer-required": {
-      "statement": "No caller but the owner's own device reaches anything without a live granted share_authority row covering the entity for the verb, and naming a first-party surface confers nothing: a surface identity reaches exactly what the bare owner device reaches.",
-      "owner": "packages/vault/src/gateway/access-properties.test.ts",
-      "flow": "consent-chain-properties"
-    },
-    "consent-onbehalf-cap-precedes-grants": {
-      "statement": "When onBehalfOfOwner.mayAct is false, no standing answer produces an allow for act or reveal, and the deny names the owner id, checked before any answer is consulted.",
-      "owner": "packages/vault/src/gateway/access-properties.test.ts",
-      "flow": "consent-chain-properties"
-    },
-    "untrusted-display-total": {
-      "statement": "displayText never throws for any input (non-strings included), preserves code-point length and is idempotent for strings, and emits no character in the forbidden C0-control/DEL/bidi-override/bidi-isolate set.",
-      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
-      "flow": "untrusted-render-properties"
-    },
-    "untrusted-url-allowlist-closed": {
-      "statement": "safeExternalUrl/safeMediaUrl/safeDocumentUrl each return null or a value in that function's own scheme allowlist, never matching javascript:/vbscript:/data:text/html/data:image/svg; safeExternalUrl additionally never returns a value carrying a control code unit (<=32 or 127).",
-      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
-      "flow": "untrusted-render-properties"
-    },
-    "untrusted-media-subsumed-by-document": {
-      "statement": "Every value safeMediaUrl accepts, safeDocumentUrl accepts with an identical result; the converse (document accepts, media rejects) occurs only for data:application/pdf and data:text/plain.",
-      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
-      "flow": "untrusted-render-properties"
-    },
-    "untrusted-background-image-unescapable": {
-      "statement": "safeBackgroundImage output is undefined or a single sealed CSS url(\"…\") token whose every quote and backslash is escaped and which recovers exactly the URL the media sink admitted, so no member string can break out of the quoted string.",
-      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
-      "flow": "untrusted-render-properties"
-    },
-    "placement-registry-parity": {
-      "statement": "Every placeable blueprint entity is enumerated once and Locker is structurally excluded.",
-      "owner": "packages/blueprints/src/placement-registry.test.ts",
-      "flow": "blueprint-placement-law"
-    },
-    "pending-overlay": {
-      "statement": "Every blueprint local read is replica plus durable outbox, with per-action projection declarations and structural exclusions owned by one engine.",
-      "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts",
-      "flow": "blueprint-pending-overlay-law"
-    },
-    "custody-seat-exclusion": {
-      "statement": "Record-only blueprint apps never import or render byte-custody machinery.",
-      "owner": "packages/blueprints/src/blueprint-seats.test.ts",
-      "flow": "blueprint-custody-law"
-    },
-    "consent-domain-parity": {
-      "statement": "Blueprint consent surfaces and automation scheduling recognize the same enrichment domains.",
-      "owner": "packages/blueprints/apps/_shared/consent-gate.test.ts",
-      "flow": "blueprint-consent-law"
-    },
-    "triage-session-progress": {
-      "statement": "Proposal queues share frozen progress, distinct skip semantics, and reachable completion.",
-      "owner": "packages/blueprints/apps/_shared/triage-session.test.ts",
-      "flow": "blueprint-triage-law"
-    },
-    "search-scaffold-grouping": {
-      "statement": "Search entity configuration owns grouping, ordering, caps, and result-state truth.",
-      "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
-      "flow": "blueprint-search-law"
-    },
-    "per-scope-reach": {
-      "statement": "Every mounted scope reports whether search reached it, was offline, or refused the query instead of collapsing those states into no matches.",
-      "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
-      "flow": "blueprint-search-law"
-    },
-    "mask-refuses-not-no-matches": {
-      "statement": "A field-masked search refusal remains a typed refusal through the replica and search-scaffold boundary and is never rendered as an honest empty result.",
-      "owner": "packages/blueprints/apps/_shared/search-scaffold.test.ts",
-      "flow": "blueprint-search-law"
-    },
-    "recognition-self-contained": {
-      "statement": "Blueprint apps, automations, and mobile code use host-owned model seams and never resurrect provider SDKs or deleted inference roads.",
-      "owner": "packages/blueprints/src/no-inference-client.test.ts",
-      "flow": "blueprint-enrichment-law"
-    },
-    "provider-egress-dispatch": {
-      "statement": "Outbound provider requests leave centraid only through the ACP dispatch path — runTurn resolving a HARNESSES spec and spawning it via harnessSpawnEnv, downstream of decideEnrichmentGate — never through a provider SDK import, a provider API host literal, or a host-path HTTP client.",
-      "owner": "packages/server/src/provider-egress-dispatch.test.ts"
-    },
-    "one-computation": {
-      "statement": "A pure product-law computation is a projection or a shared module imported by every seat, never two seat-local implementations.",
-      "owner": "packages/blueprints/src/one-computation.test.ts",
-      "flow": "blueprint-one-computation-law"
-    },
-    "app-entity-tripwire": {
-      "statement": "Every table a bundled app's query handlers read is declared in that app's app.json#vault.scopes, checked against the statements those handlers actually RAN against a real vault through the paged door — minimisation is a build-time check over the manifest and its committed query plans, not a runtime grant evaluation (#928 A1, #996 R8).",
-      "owner": "packages/server/src/serve/app-query-plans.test.ts",
-      "flow": "blueprint-app-entity-tripwire-law"
-    },
-    "select-all-filtered": {
-      "statement": "Select-all takes the rows the current filter shows, never the whole table, and a selection survives a filter change through pruneSelection rather than being carried onto rows the member never saw.",
-      "owner": "packages/blueprints/src/select-all-scope.test.ts",
-      "flow": "blueprint-select-all-law"
-    },
-    "people-photograph-counts": {
-      "statement": "Every seat counts distinct confirmed photographs, not face regions or unconfirmed proposals, and keeps unnamed groups separate.",
-      "owner": "packages/blueprints/apps/_shared/people-counts.test.ts",
-      "flow": "blueprint-one-computation-law"
-    },
-    "enrichment-model-lock": {
-      "statement": "Every live-model file and native runtime dependency is immutable by version/digest and its permissive licence is recorded in LICENSES.md.",
-      "owner": "packages/model-runtime/src/models-lock.test.ts",
-      "flow": "enrichment-service-contract"
-    },
-    "enrichment-live": {
-      "statement": "Pinned real weights satisfy the advertised capability/model handshake and the committed OCR, embedding, and face-geometry goldens.",
-      "owner": "packages/model-runtime/src/model-goldens.live.test.ts",
-      "flow": "enrichment-service-contract"
-    },
-    "backup-round-trip": {
-      "statement": "A restored snapshot reproduces the vault byte-identically — same files, same directory tree, plus the quarantine marker.",
-      "owner": "packages/backup/src/engine.test.ts",
-      "flow": "backup-round-trip"
-    },
-    "backup-incremental": {
-      "statement": "A second snapshot after a small change uploads far fewer chunks than the first, so backup cost tracks change, not vault size.",
-      "owner": "packages/backup/src/engine.test.ts",
-      "flow": "backup-round-trip"
-    },
-    "backup-no-change": {
-      "statement": "A run over an unchanged vault registers nothing and returns null, so an idle machine never mints snapshots.",
-      "owner": "packages/backup/src/engine.test.ts",
-      "flow": "backup-round-trip"
-    },
-    "backup-restore-refusal": {
-      "statement": "Restore refuses a non-empty destination, a newer vaultUserVersion, an unknown format, and a manifest whose hash does not verify — and refuses before fetching or materializing anything.",
-      "owner": "packages/backup/src/engine.test.ts",
-      "flow": "backup-round-trip"
-    },
-    "backup-verify": {
-      "statement": "Verification detects a deleted chunk and a corrupted chunk, and reports a clean snapshot as clean.",
-      "owner": "packages/backup/src/engine.test.ts",
-      "flow": "backup-round-trip"
-    },
-    "share-closure-confinement": {
-      "statement": "A share closure carries only the rows reachable from the items it names — no other row, derivative or blob of the origin vault crosses — and an item the origin does not hold refuses the whole read rather than yielding a partial closure.",
-      "owner": "packages/vault/src/share/closure-confinement.contract.test.ts",
-      "flow": "share-closure-confinement"
-    },
-    "share-receipt-authority": {
-      "statement": "A cross-vault access receipt exists exactly when a placement's rows landed at the audience, naming the authorised origin scope and the audience ids created, once per placement token; a refused placement, one this gateway could not perform, and a malformed scope each leave none.",
-      "owner": "packages/server/src/routes/placement-routes.test.ts",
-      "flow": "share-receipt-authority"
-    },
-    "experimental-gate-parity": {
-      "statement": "An experimental feature is advertised in the C1 handshake exactly when its own routes are mounted: gated off it is absent from capabilities and its surfaces are unowned; gated on, and only then, they answer.",
-      "owner": "packages/server/src/serve/experimental-gating.test.ts",
-      "flow": "gateway-experimental-gate-law"
-    },
-    "insights-rollup-render-or-withhold": {
-      "statement": "Every field of the gateway's insights rollup is rendered on Analytics or withheld on the record with a stated reason; a field that is neither is a silent deletion.",
-      "owner": "packages/client/src/react/screens/InsightsScreen.test.tsx",
-      "flow": "insights-rollup-law"
-    },
-    "native-block-flag-marks": {
-      "statement": "Every semantic flag the shared block contracts declare produces a mark on the phone that the unflagged form does not — accepting a flag and drawing the ordinary control is not parity.",
-      "owner": "apps/mobile/src/kit/components/blockParity.test.tsx",
-      "flow": "mobile-block-parity-law"
-    },
-    "people-overdue-never": {
-      "statement": "Cadence 0 is Never and never overdue.",
-      "owner": "apps/mobile/src/apps/people/people-model.test.ts",
-      "flow": "people-crm"
-    },
-    "people-link-tristate": {
-      "statement": "The link fact is linked, unlinked, or absent — never a false unlinked on a denied share read.",
-      "owner": "apps/mobile/src/apps/people/people-model.test.ts",
-      "flow": "people-crm"
-    },
-    "people-roster-sub": {
-      "statement": "A linked roster row's second line leads with Linked, then the role if any.",
-      "owner": "apps/mobile/src/apps/people/people-model.test.ts",
-      "flow": "people-crm"
-    },
-    "people-trash-split": {
-      "statement": "Deleted profiles are the trash shelf, not roster rows, and carry purge_at.",
-      "owner": "apps/mobile/src/apps/people/people-model.test.ts",
-      "flow": "people-crm"
-    },
-    "people-search-scope": {
-      "statement": "People search covers name, role and notes.",
-      "owner": "apps/mobile/src/apps/people/people-model.test.ts",
-      "flow": "people-crm"
-    },
-    "people-avatar-hue": {
-      "statement": "A stored avatar hue round-trips as a wheel key, honours a hex verbatim, and otherwise derives from the party id.",
-      "owner": "apps/mobile/src/apps/people/people-model.test.ts",
-      "flow": "people-crm"
-    },
-    "people-link-ring": {
-      "statement": "The avatar ring states the link and only the link: solid when linked, dashed when unlinked, nothing when unknown.",
-      "owner": "apps/mobile/src/apps/people/PeopleKit.test.tsx",
-      "flow": "people-crm"
-    },
-    "people-row-marks": {
-      "statement": "The People row's meta takes net only as a consequence of being overdue.",
-      "owner": "apps/mobile/src/apps/people/PeopleKit.test.tsx",
-      "flow": "people-crm"
-    },
-    "people-star-a11y": {
-      "statement": "The star names its person and its direction.",
-      "owner": "apps/mobile/src/apps/people/PeopleKit.test.tsx",
-      "flow": "people-crm"
-    },
-    "people-readonly-star": {
-      "statement": "A person in a read-only source withholds the star: the press is refused instead of letting the write throw, the control reports itself disabled and carries the reason, and it still names Star or Unstar.",
-      "owner": "apps/mobile/src/apps/people/PeopleKit.test.tsx",
-      "flow": "people-crm"
-    },
-    "people-row-pending": {
-      "statement": "A queued People change says so on its own row: the overlay sentence is a third line under the sub, and a row with no pending change draws no pending line at all.",
-      "owner": "apps/mobile/src/apps/people/PeopleKit.test.tsx",
-      "flow": "people-crm"
-    },
-    "pending-destructive-projection": {
-      "statement": "Every destructive action the eight blueprint apps declare projects a delete or a tombstone while its intent is queued, or carries a written structural exclusion; a plain patch that leaves the row on screen is a finding.",
-      "owner": "packages/blueprints/src/pending-projection-tripwire.test.ts",
-      "flow": "blueprint-pending-overlay-law"
-    }
-  },
+  "laws": {},
   "consentLedger": [
     {
       "id": "vault-consent-gateway",
@@ -3592,107 +3343,107 @@
     "_comment": "#927 RIG DIET. Each entry retires a flow whose owning rig was DELETED with maintainer approval on 2026-09-05 for citing no tests/journeys.json entry. A rig earns its wall clock by fencing an interval a vault owner can feel; these timed machine costs with nothing above them, so their floors have no successor to carry. ONE-SHOT: scripts/test-report/ratchet-floors.mjs validates a marker only while it is new against the base, so these rows are inert once landed and are dropped by the next change set that touches this file.",
     "vault-write-budget": {
       "owner": "tests/perf/vault-write.perf.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "ontology-10k-query": {
       "owner": "tests/scale/ontology.scale.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "blob-egress-budget": {
       "owner": "tests/perf/blob-egress.perf.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "blob-gc-volume": {
       "owner": "tests/scale/blob-gc.scale.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "backup-big-vault": {
       "owner": "tests/scale/backup-restore.scale.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "replica-bootstrap-volume": {
       "owner": "tests/scale/replica-bootstrap.scale.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 mobile/first-bootstrap is the entry a successor would answer to. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — mobile/first-bootstrap is the entry a successor would answer to. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "conversation-years": {
       "owner": "tests/scale/conversation-ledger.scale.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "pwa-waterfall-budget": {
       "owner": "tests/perf/pwa-waterfall.perf.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "tunnel-throughput": {
       "owner": "tests/perf/tunnel-throughput.perf.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "backup-throughput-budget": {
       "owner": "tests/perf/backup-throughput.perf.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — no restore/backup entry exists for a successor to answer to, and inventing one to keep the rig alive would be the same mistake in the other direction. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "app-engine-handler-budget": {
       "owner": "tests/perf/app-engine-handler.perf.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "automation-fire-budget": {
       "owner": "tests/perf/automation-fire.perf.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "harness-turn-budget": {
       "owner": "tests/perf/harness-turn.perf.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "harness-sessions-volume": {
       "owner": "tests/scale/harness-sessions.scale.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "blueprint-clones-volume": {
       "owner": "tests/scale/blueprint-clones.scale.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "desktop-windows-volume": {
       "owner": "tests/scale/desktop-windows.scale.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "web-tabs-volume": {
       "owner": "tests/scale/web-tabs.scale.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "tunnel-pairs-volume": {
       "owner": "tests/scale/tunnel-pairs.scale.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "mobile-volume-proof": {
       "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 ruled a machine cost with no journey above it. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — ruled a machine cost with no journey above it. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "photos.scale-50k": {
       "owner": "tests/scale/photos-timeline.scale.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 web|mobile/scroll at year3-photos is the entry a successor would answer to. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — web|mobile/scroll at year3-photos is the entry a successor would answer to. No surviving rig's floor moves.",
       "issue": "#927"
     },
     "photos.memories-scale-50k": {
       "owner": "tests/scale/photos-memories.scale.test.ts",
-      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright \u2014 web|mobile/scroll at year3-photos is the entry a successor would answer to. No surviving rig's floor moves.",
+      "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — web|mobile/scroll at year3-photos is the entry a successor would answer to. No surviving rig's floor moves.",
       "issue": "#927"
     }
   },
