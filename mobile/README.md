@@ -63,6 +63,25 @@ Current stable, pinned, and **not** the container's preinstalled versions (D-102
 
 **`org.gradle.warning.mode=fail`**: a deprecated Gradle feature is a red, not a line in the log. A Gradle or plugin upgrade therefore reds here first, which is the point. `mobile/gradle/libs.versions.toml` is the one place a version lives.
 
+### Dependency locks
+
+Every resolvable configuration of every project is locked (`dependencyLocking { lockAllConfigurations() }` in `mobile/build.gradle.kts`), in Gradle's default lock mode: a resolution that differs from the lock fails the build. The lock state is committed as `settings-gradle.lockfile` (the version catalogue) and one `gradle.lockfile` per project — `core/`, `shared/` and `androidApp/`. After changing a version or a dependency, rewrite them in **both** modes, no-flag first:
+
+```sh
+cd mobile
+./gradlew dependencies :core:dependencies :shared:dependencies --write-locks
+ANDROID_HOME=/path/to/Android/sdk ./gradlew -Pcentraid.android=true \
+    dependencies :core:dependencies :shared:dependencies :androidApp:dependencies --write-locks
+```
+
+Each run rewrites the configurations it resolved and keeps the rest, so the second run adds the Android configurations beside the JVM and iOS ones rather than replacing them. The lock names modules and versions only, never a host classifier, so a Linux runner and a Mac resolve the same file (`kotlin-native-prebuilt` is one entry on both).
+
+Three things are not locked, on purpose:
+
+- **The buildscript classpath**, where AGP arrives only under `-Pcentraid.android=true`; a lock of it would fail whichever mode did not write it. AGP's version is `libs.versions.toml`'s `agp`.
+- **`allSourceSetsCompileDependenciesMetadata` and `allTestSourceSetsCompileDependenciesMetadata`**, the Kotlin plugin's IDE-import aggregates: with the flag they carry `androidMain`'s AndroidX graph and without it they cannot, so no single lock fits both modes. No build task resolves them, and every per-source-set configuration they aggregate is locked.
+- **The commonized cinterop configurations** (`appleMainCInterop` and its siblings). They have no lock state because the `dependencies` report cannot resolve them: a published library has no commonized-cinterop variant. The build reads them leniently.
+
 ## Building the Android app
 
 ```sh
