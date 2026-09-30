@@ -92,7 +92,7 @@ Standing checks over `.github/**`, `tests/path-filter-ledger.json`, the working 
 
 ### The `ts-static` step
 
-When any `.ts`/`.tsx`/`.mts`/`.cts` file exists under `crates/`, `contracts/`, `mobile/`, `desktop/` or `extension/` — which `desktop/`, `extension/` and `contracts/tools/` make true — the step runs `bun run check:push:static` (format check, lint and affected typecheck through `scripts/ci/run-gates.mjs`). With none, it loud-skips and names that command.
+When any `.ts`/`.tsx`/`.mts`/`.cts` file exists under `crates/`, `contracts/` or `mobile/` — which `contracts/tools/` makes true — the step runs `bun run check:push:static` (format check, lint and affected typecheck through `scripts/ci/run-gates.mjs`). With none, it loud-skips and names that command.
 
 ### Governance is NOT a step here
 
