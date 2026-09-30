@@ -20,7 +20,7 @@
  *   - a hole in the nine-journey x three-surface grid;
  *   - ANY surviving reference to the files this ledger replaced.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -49,6 +49,9 @@ const EXEMPT = new Set([
  * @yields {string} Absolute path of one candidate file.
  */
 function* sources(dir) {
+  // A root the tree no longer has (v1 deleted `desktop/` and `extension/`)
+  // holds no stale reference; it is not an error to look for one there.
+  if (!existsSync(dir)) return;
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === "node_modules" || entry.name === "dist") continue;
     const abs = path.join(dir, entry.name);

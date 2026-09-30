@@ -51,11 +51,6 @@ export const RUNNERS = Object.freeze([
   { config: "vitest.config.ts", cwd: "." },
   { config: "scripts/test-report/vitest.config.ts", cwd: "." },
   { config: "scripts/release/vitest.config.ts", cwd: "." },
-  // `bun run --cwd desktop/electron test` and `bun run --cwd extension test`
-  // both hand vitest this one config, and `cargo xtask gate` runs it as its
-  // `desktop-unit` step. Its globs resolve against `desktop/`, and one of them
-  // (`../extension/src/**`) deliberately reaches out of that folder.
-  { config: "desktop/vitest.config.ts", cwd: "desktop" },
 ]);
 
 /** Configs that are reached without being an entry point of their own. */
