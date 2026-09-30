@@ -52,11 +52,9 @@ const SOURCE_EXCLUSIONS = [
   "packages/test-kit/**",
   "packages/**/dist/**",
   "**/*.wasm",
-  // SQLite DDL and migrations. Autoscan hands `.sql` to the Oracle PL/SQL
-  // analyzer, whose rules (NULL-vs-'' comparison, quoted identifiers, CREATE
-  // OR REPLACE) do not apply to SQLite, and the three DDL snapshots (frozen or
-  // generated copies of one schema) dominate CPD. SQL is owned by the ladder and
-  // baseline tests and by the `sql-confinement` rule of `cargo xtask rules`.
+  // SQLite DDL: Autoscan applies Oracle PL/SQL rules, and the three DDL
+  // snapshots (copies of one schema) dominate CPD. SQL is owned by the ladder
+  // and baseline tests and `cargo xtask rules`' sql-confinement.
   "**/*.sql",
   "**/*.map",
   "receipts/**",
@@ -159,16 +157,10 @@ const NOISE_RULES = [
   ruleKey("githubactions", "S8233"), // workflow-level permissions (reviewed)
 ];
 
-/**
- * Rules silenced on one path only, via the same issue-ignore multicriteria.
- * Each entry is a known false positive in a file set, not a project-wide
- * opinion about the rule.
- */
+/** Rules silenced on one path only: a known false positive in a file set. */
 const SCOPED_IGNORES = [
-  // The mobile copy registry: `*_PASSWORD`-named constants are UI copy keys
-  // (their values are sentences), checked string-for-string against
-  // copy/<app>.json by KitTimeMoneyCopySpec. S2068 (hard-coded credential)
-  // stays active everywhere else.
+  // Copy registry: `*_PASSWORD` names are UI copy keys whose values are
+  // sentences, checked against copy/<app>.json by KitTimeMoneyCopySpec.
   {
     ruleKey: "kotlin:S2068",
     resourceKey:
@@ -284,7 +276,7 @@ async function setMulticriteria() {
     );
   }
   console.log(
-    `  multicriteria: ${NOISE_RULES.length} rules + ${SCOPED_IGNORES.length} scoped (HTTP ${status})`
+    `  multicriteria: ${fieldValues.length} entries (HTTP ${status})`
   );
 }
 
