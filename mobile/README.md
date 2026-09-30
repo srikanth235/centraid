@@ -174,7 +174,7 @@ The simulator bundle is the route now, and it is the better one regardless: `Fon
 
 `dev.centraid.core.CentraidCore` is the only thing above `mobile/core` that knows the ABI exists. It opens, runs the handshake, checks the artifact identity, and hands up `CoreOutcome<Envelope>` — an answer or a typed refusal, never `null`. Every buffer the library allocates is copied into a Kotlin `ByteArray` and freed in the same `finally`, on every path including the timeout; `buffersHandedOver == buffersFreed` is asserted after two hundred calls. `call` is `suspend` and hops to the core dispatcher before it touches the ABI, and it asserts it is not on the UI thread **after** the hop — because the realistic bug is a shell that passed `Dispatchers.Main` as the core dispatcher, and that is the case the assertion has to catch. Read [`crates/core-ffi/CONTRACT.md`](../crates/core-ffi/CONTRACT.md) before touching any of it: ten clauses, each with a Rust test, and a shell's memory safety depends on claims that are not visible in the signatures.
 
-`crates/core-ffi/spike/jna` is a throwaway measurement of the same binding (D-1020-D2-7). **`mobile/core` supersedes it**; the spike stays where it is as the record of the numbers that fixed the ABI's shape.
+`mobile/core` is the JVM binding spike (D-1020-D2-7) grown up. The spike's throwaway Gradle project was deleted in [#1047](https://github.com/srikanth235/centraid/issues/1047); the numbers that fixed the ABI's shape are in its receipt.
 
 ## Generated files — do not edit
 

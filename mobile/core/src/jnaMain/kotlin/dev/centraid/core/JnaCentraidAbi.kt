@@ -19,8 +19,8 @@ import kotlin.concurrent.atomics.AtomicLong
  * binding and only the UI-thread question differs (a `Looper` on Android, a
  * thread name on a JVM host).
  *
- * It supersedes `crates/core-ffi/spike/jna` (D-1020-D2-7), which stays where it
- * is as the throwaway measurement it was.
+ * It is the JVM binding spike (D-1020-D2-7) grown up; the spike's throwaway
+ * Gradle project was deleted in #1047.
  *
  * ## Why JNA and not the Foreign Function & Memory API
  *
