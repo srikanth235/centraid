@@ -74,7 +74,7 @@ A failing step writes its whole output under `target/xtask/<profile>/<step>/` â€
 
 `cargo-deny` is a separate binary. When it is absent the step **loud-skips with the install command locally** and **fails in CI**, where the workflow installs it and a missing binary is therefore an infrastructure failure. That is the same contract [`scripts/security/rust-supply-chain.mjs`](../../scripts/security/rust-supply-chain.mjs) states, and it exists because a guarded skip that could be mistaken for a pass is worse than no lane at all. The policy is the repo's one shared [`deny.toml`](../../deny.toml); there is no per-crate copy to drift.
 
-`cargo nextest` gets the same treatment in the other direction: `test` uses `cargo nextest run --workspace` when the binary is on PATH and `cargo test --workspace` when it is not, and the step's line says which one ran.
+`cargo nextest` gets the same treatment in the other direction: `test` uses `cargo nextest run --workspace` when the binary is on PATH and `cargo test --workspace` when it is not, and the step's line says which one ran. nextest never runs doctests, so its branch is followed by `cargo test --workspace --doc` over the libraries it just built: the two branches run the same tests, and a doctest written tomorrow is not silently skipped because the runner changed. `gate.yml` installs a pinned, checksum-verified nextest release binary, because it runs the ~150 test binaries concurrently rather than back to back â€” the one part of the `test` step that is not compilation ([#1047](https://github.com/srikanth235/centraid/issues/1047)).
 
 ### The `ci-policy`, `secrets` and `osv` steps
 

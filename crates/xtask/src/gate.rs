@@ -956,11 +956,30 @@ fn cargo_subcommand_available(root: &Path, subcommand: &str) -> bool {
 /// of a 120 s budget. The simulation simulated SEATS, and there are none
 /// (#1029 §1, §6): the crate, the step and the exclusion all go, and every
 /// profile now runs one unqualified `--workspace`.
+///
+/// **nextest does not run doctests, so the doctests run after it** (#1047).
+/// `cargo test --workspace` runs every lib's doctests after its test binaries;
+/// `cargo nextest run` never does. There are none today (23 libraries, 0
+/// doctests), and that is exactly when a runner swap drops coverage without
+/// anybody seeing it: the first doctest written would be compiled by nobody. So
+/// the nextest branch is followed by `cargo test --workspace --doc`, which
+/// reuses the libraries nextest just built and runs what `cargo test` would
+/// have. Both runners therefore run the same set of tests; what nextest changes
+/// is that the ~150 test binaries run concurrently instead of one after another
+/// (measured over one build on an 8-core Mac: 1763 passed and 7 ignored under
+/// both; 240 s of test time back to back under `cargo test`, a 69 s run under
+/// nextest).
 fn run_tests(ctx: &Ctx) -> Result<Outcome> {
-    if cargo_subcommand_available(&ctx.root, "nextest") {
-        process(ctx, "test", "cargo", &["nextest", "run", "--workspace"])
-    } else {
-        process(ctx, "test", "cargo", &["test", "--workspace"])
+    if !cargo_subcommand_available(&ctx.root, "nextest") {
+        return process(ctx, "test", "cargo", &["test", "--workspace"]);
+    }
+    let nextest = process(ctx, "test", "cargo", &["nextest", "run", "--workspace"])?;
+    let Outcome::Ok(nextest) = nextest else {
+        return Ok(nextest);
+    };
+    match process(ctx, "test", "cargo", &["test", "--workspace", "--doc"])? {
+        Outcome::Ok(doc) => Ok(Outcome::Ok(format!("{nextest}, then {doc}"))),
+        other => Ok(other),
     }
 }
 

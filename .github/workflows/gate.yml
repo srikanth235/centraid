@@ -121,6 +121,24 @@ jobs:
           else
             cargo install cargo-deny --locked
           fi
+      # The `test` step runs `cargo nextest run --workspace` (then the doctests,
+      # which nextest does not run) when nextest is on PATH. Without it the ~150
+      # test binaries run one after another, and that serial tail is an estimated 40 %
+      # of the `test` step on a cold run (#1047). A release BINARY, pinned by
+      # version and by the SHA-256 GitHub records for the asset, rather than
+      # `cargo install`, which would compile ~300 crates before the gate starts.
+      - name: Install cargo-nextest
+        env:
+          NEXTEST_VERSION: 0.9.144
+          NEXTEST_SHA256: 8a4f726272b0a1c499bd87ca3978bfbb1a8c20bb08ccf075b9996e2081bd1e1e
+        run: |
+          set -euo pipefail
+          archive="cargo-nextest-${NEXTEST_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          curl -sSfL "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-${NEXTEST_VERSION}/${archive}" \
+            -o "${RUNNER_TEMP}/${archive}"
+          echo "${NEXTEST_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C /usr/local/bin cargo-nextest
+          cargo nextest --version
       - name: Install actionlint, gitleaks, osv-scanner and buf
         env:
           # actionlint: the version ci.yml's `static` job pins as a container

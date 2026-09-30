@@ -51,7 +51,7 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 | Step | What it runs |
 | --- | --- |
 | `fmt`, `clippy` | `cargo fmt --all --check`; `cargo clippy --workspace --all-targets -- -D warnings` |
-| `test` | `cargo nextest run --workspace` when nextest is installed, otherwise `cargo test --workspace`; the step line says which |
+| `test` | `cargo nextest run --workspace` then `cargo test --workspace --doc` when nextest is installed (nextest runs no doctests, so the second command keeps the set of tests the same), otherwise `cargo test --workspace`; the step line says which. `gate.yml` installs nextest, so CI runs the first |
 | `rules` | The structural rules: `sql-confinement` (SQL only under `crates/{ontology,vault,search}` and `crates/apps/kit`), `abi-five-symbols`, `no-listening-socket` (the phone dials and accepts nothing; the one exemption is `crates/gateway-server/src/serve.rs`), `commonmain-no-platform-import`. Also `cargo xtask rules` on its own |
 | `ledgers` | Every number in `contracts/ledgers/` against the merge base — see [the ledgers](#the-ledgers-915-wave-4-927) |
 | `buf` | `buf lint`, then `buf breaking` against the PR base **and** every released tag inside the version window |
