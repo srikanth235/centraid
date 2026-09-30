@@ -10,6 +10,7 @@ Rolling bot issue ([#1052](https://github.com/srikanth235/centraid/issues/1052))
 - `scripts/lint-journey-ledger.mjs` (+ test) — search roots that no longer exist are skipped instead of crashing; the grid no longer requires a `desktop` surface.
 - `tests/journeys.json` — 24 entries of the deleted web, desktop, client and Expo app-weight surfaces and 20 rigs whose test files are gone are deleted; dead consumers on the surviving gateway/mobile rows become `[]`. No surviving ceiling moves. The root, `entries` and `rigs` `approvedDeviation` notes carry the rationale (the ratchet reads the first `approvedDeviation` in the file up to its first quote or backtick, so the root note opens in plain text).
 - `.github/workflows/enrichment-live-weekly.yml`, `scripts/test-report/enrichment-live-run.mjs`, its `package.json`, `lane-rules.mjs` and `egress-ledger.json` rows — retired: the workflow read the deleted `packages/model-runtime`. `docs/recognition-automations.md` states there is no live-model lane.
+- `scripts/security/lifecycle-ledger.json` — the stale `electron-winstaller` entry removed (the ledger is tighten-only and its own gate demands it; the package no longer declares an install hook in this tree). The owner approved the edit after the session's permission layer had first refused it.
 - `scripts/lint-acp-min-versions.mjs` and its `package.json` / `lint:product` rows — retired: the registry it read (`packages/server/src/acp/registry.ts`) is gone.
 
 - `CHANGELOG.md` — one `Changed` line under Unreleased.
@@ -19,8 +20,7 @@ Owner rulings (this session): retire the v0-only journey rows, retire the weekly
 
 ## Not changed
 
-- `scripts/security/lifecycle-ledger.json` still carries a stale `electron-winstaller` entry, so `security:lifecycle` stays red. The edit was refused by the session's permission layer and was not routed around; it is a one-entry removal for the owner.
-- `scripts/ci/gate-classes.json` still classifies `lint:acp-min-versions` (law estate; second change set).
+- `scripts/ci/gate-classes.json` still classifies `lint:acp-min-versions` (law estate; second change set, #1062).
 
 ## Verification
 
@@ -34,7 +34,8 @@ bun run test:ratchet                               # ratchet-floors: ok (no decr
 bun run lint:test-reachability                     # 99 test files, every one reached by a runner. exit 0
 bun run lint:ci-egress                             # 5 workflow(s) enforce an egress policy, 2 pinned as debt. exit 0
 node --test scripts/lint-journey-ledger.test.mjs scripts/check-ledgers.test.mjs scripts/security/unsafe-edge-audit.test.mjs scripts/lint-test-reachability.test.mjs   # pass 56, fail 0
-bun run lint:product                               # 21/24 pass; red: test:advisory-expiry, lint:law-registry (law estate), security:lifecycle (refused edit). exit 1
+bun run security:lifecycle                         # 1 dependency(ies) declare install-time code, all ledgered. exit 0
+bun run lint:product                               # 22/24 pass; red: test:advisory-expiry, lint:law-registry (both law estate, #1062). exit 1
 ```
 
 The workflow glob is verified by reading the layout `upload-artifact` produces against the run's own log (tarball and sums at the artifact root, identity file under `artifact/<triple>/`); it has not been observed green in CI yet.
