@@ -166,6 +166,8 @@ const SCOPED_IGNORES = [
     resourceKey:
       "mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/**",
   },
+  // Gradle root resolves nothing, so no lockfile; resolving projects commit one.
+  { ruleKey: "text:S8569", resourceKey: "mobile/build.gradle.kts" },
 ];
 
 const GATE_CONDITIONS = [
