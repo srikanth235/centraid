@@ -20,7 +20,7 @@
 # Base images are digest-pinned, matching the Action SHA pin posture of
 # `.github/workflows/**` and the sibling Dockerfile.
 
-FROM rust:1.94.1-slim-trixie@sha256:cf09adf8c3ebaba10779e5c23ff7fe4df4cccdab8a91f199b0c142c53fef3e1a AS build
+FROM rust:1.98.1-slim-trixie@sha256:4cd829461bd5c4d511c32e269da9cb8929223b666519d8004e35fc8d1d771ab7 AS build
 WORKDIR /src
 
 # `rusqlite` is built with `bundled`, so the SQLite amalgamation is compiled
