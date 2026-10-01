@@ -598,9 +598,11 @@ Meanwhile the gap is narrowed rather than left open: `mutation-canary` and `mobi
 
 _Superseded in part: the `check` aggregate was `ci.yml`'s, removed in [#1020](https://github.com/srikanth235/centraid/issues/1020); the PR entry point is `gate.yml`. `governance.yml` still runs separately._
 
+_**Superseded 2026-10-01 ([#1072](https://github.com/srikanth235/centraid/issues/1072)): the required set is `gate` and `governance`, not `check`.** No workflow reports a check named `check` any more, so while the repository ruleset still lists it every pull request shows `check` as "Expected — Waiting for status to be reported" and is `blocked` for want of a status that can never arrive; merging needs an administrator bypass, which also lets a red `gate` through. The ruleset is repository configuration and no gate in this tree can assert it: an owner replaces `check` with `gate` (the `gate.yml` job that runs `cargo xtask gate --profile pr`), keeps `governance`, and adds `prebuilt-core / prebuilt-core-required` only if a release is to be gated on it._
+
 `governance.yml` is exempt from the only-`ci.yml`-listens-on-`pull_request` rule because it is kit-managed (`# governance-kit:managed`), which `scripts/lint-workflow-pins.mjs` skips by design — its policy lives upstream. The consequence is easy to miss and worth stating: **it is not part of the required `check` aggregate**, so unless the repository's ruleset lists `governance` as a required status check of its own, a red governance run blocks nothing.
 
-That entry is repository configuration, not repository content, so no gate in this tree can assert it — the honest thing is to name it here rather than to pretend a linter covers it. The required set should be exactly two entries: `check` (which aggregates every `ci.yml` lane) and `governance`.
+That entry is repository configuration, not repository content, so no gate in this tree can assert it — the honest thing is to name it here rather than to pretend a linter covers it. The required set should be exactly two entries: `check` (which aggregates every `ci.yml` lane) and `governance`. _(`check` is superseded by `gate`; see above.)_
 
 ## Portable export custody (#630)
 

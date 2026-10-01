@@ -157,18 +157,27 @@ jobs:
           egress-policy: audit
       - id: start
         run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      # Depth 2, not the default 1: the law judges the range HEAD~1..HEAD when
+      # `origin/main` is HEAD, and in a one-commit clone there is no HEAD~1, so
+      # the range is empty and the commit-subject step below passes without
+      # judging any subject.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
       - uses: ./.github/actions/setup
       # The whole rung-1 bundle, on the merged tree. The diff-scoped members
       # (the ratchets, the UI receipt) compare HEAD against `main`, which is
       # HEAD here, so they contribute their STANDING checks and nothing else —
       # which is exactly the half that went missing.
       - run: bun run lint:product
-      # The subject the commit-msg hook never saw. With `origin/main` at HEAD
-      # the directive's merge-base search finds nothing to compare against and
-      # falls back to validating the tip commit, which is the squash subject.
+      # The subject the commit-msg hook never saw. `commit-message-format` is
+      # a rule of the `law` directive (#1005), not a directive of its own, so
+      # the step runs the law: with `origin/main` at HEAD the range is
+      # HEAD~1..HEAD, the tip commit alone, which is the squash subject. (This
+      # step named a directive that no longer exists and failed on every run
+      # with "no directive matching".)
       - name: Commit message format on the merged tip
-        run: bash .governance/run.sh commit-message-format
+        run: bash .governance/run.sh law
       - name: Write lane evidence
         if: always()
         env:
