@@ -1,0 +1,2075 @@
+{
+  "me": "Priya Raman",
+  "currency": "USD",
+  "epoch": "2025-11-01T09:00",
+  "seed": "evalA",
+  "people": [
+    {
+      "key": "tomas",
+      "name": "Tomás Herrera",
+      "role": "fiancé",
+      "nickname": "Tomi",
+      "starred": true,
+      "last_contacted": "2026-10-13T21:00"
+    },
+    {
+      "key": "amma",
+      "name": "Lakshmi Raman",
+      "role": "mom",
+      "nickname": "Amma",
+      "cadence": 7,
+      "starred": true,
+      "last_contacted": "2026-10-11T19:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "arjun",
+      "name": "Arjun Raman",
+      "role": "brother",
+      "cadence": 14,
+      "last_contacted": "2026-09-20T18:00"
+    },
+    {
+      "key": "meera_i",
+      "name": "Meera Iyer",
+      "role": "college friend",
+      "met": "UT Austin 2014",
+      "cadence": 21,
+      "last_contacted": "2026-09-02T12:00"
+    },
+    {
+      "key": "meera_s",
+      "name": "Meera Shah",
+      "role": "yoga friend",
+      "met": "yoga studio",
+      "last_contacted": "2026-10-06T19:30"
+    },
+    {
+      "key": "jordan_b",
+      "name": "Jordan Blake",
+      "role": "friend",
+      "last_contacted": "2026-09-28T20:00"
+    },
+    { "key": "jordan_l", "name": "Jordan Lee", "role": "Tomás's coworker" },
+    {
+      "key": "kenji",
+      "name": "Kenji Watanabe",
+      "role": "climbing buddy",
+      "cadence": 14,
+      "last_contacted": "2026-08-30T10:00"
+    },
+    {
+      "key": "chloe",
+      "name": "Chloe Dubois",
+      "role": "friend",
+      "nickname": "Clo",
+      "last_contacted": "2026-10-03T22:00"
+    },
+    {
+      "key": "rachel_k",
+      "name": "Rachel Kim",
+      "role": "book club",
+      "last_contacted": "2026-09-24T20:00"
+    },
+    {
+      "key": "rachel_g",
+      "name": "Rachel Goldberg",
+      "role": "wedding planner",
+      "last_contacted": "2026-10-09T15:00"
+    },
+    {
+      "key": "dana",
+      "name": "Dana Whitfield",
+      "role": "manager",
+      "cadence": 7,
+      "last_contacted": "2026-10-08T10:30"
+    },
+    {
+      "key": "luis",
+      "name": "Luis Ortega",
+      "role": "engineer",
+      "last_contacted": "2026-10-12T16:00"
+    },
+    {
+      "key": "farah",
+      "name": "Farah Haddad",
+      "role": "designer",
+      "starred": true,
+      "last_contacted": "2026-10-07T13:00"
+    },
+    { "key": "cho", "name": "Elaine Cho", "role": "dentist" },
+    { "key": "marco", "name": "Marco Bellini", "role": "plumber" },
+    {
+      "key": "greg",
+      "name": "Greg Patterson",
+      "role": "landlord",
+      "last_contacted": "2026-08-15T09:00"
+    },
+    { "key": "ananya", "name": "Ananya Desai", "role": "yoga teacher" },
+    {
+      "key": "bev",
+      "name": "Bev Lawson",
+      "role": "neighbor",
+      "nickname": "Miss Bev",
+      "last_contacted": "2026-10-10T08:00"
+    },
+    {
+      "key": "sofia",
+      "name": "Sofía Herrera",
+      "role": "Tomás's sister",
+      "cadence": 30,
+      "last_contacted": "2026-10-04T21:00"
+    },
+    { "key": "ramon", "name": "Ramón Herrera", "role": "Tomás's dad" },
+    {
+      "key": "nikhil",
+      "name": "Nikhil Menon",
+      "role": "cousin",
+      "cadence": 30,
+      "last_contacted": "2026-07-19T11:00"
+    },
+    { "key": "hannah", "name": "Hannah Brooks", "role": "vet" },
+    {
+      "key": "olivia",
+      "name": "Olivia Park",
+      "role": "college friend",
+      "met": "UT Austin 2013"
+    },
+    {
+      "key": "ben",
+      "name": "Ben Adeyemi",
+      "role": "run club",
+      "last_contacted": "2026-10-10T07:45"
+    },
+    { "key": "tasha", "name": "Tasha Morgan", "role": "hairdresser" },
+    {
+      "key": "wei",
+      "name": "Wei Zhang",
+      "role": "accountant",
+      "cadence": 90,
+      "last_contacted": "2026-09-30T17:00"
+    },
+    { "key": "isabel", "name": "Isabel Cruz", "role": "neighbor" },
+    {
+      "key": "craig",
+      "name": "Craig Nolan",
+      "role": "ex-colleague",
+      "trashed": "2026-06-01T09:00"
+    },
+    {
+      "key": "derek",
+      "name": "Derek Hall",
+      "role": "old landlord",
+      "trashed": "2026-03-12T10:00"
+    },
+    {
+      "key": "gayatri",
+      "name": "Gayatri Raman",
+      "role": "aunt",
+      "nickname": "Gayu chithi"
+    },
+    {
+      "key": "pooja",
+      "name": "Pooja Venkat",
+      "role": "bridesmaid",
+      "starred": true,
+      "last_contacted": "2026-10-12T21:30"
+    }
+  ],
+  "groups": [
+    {
+      "key": "casa",
+      "name": "Casa Bills",
+      "currency": "USD",
+      "members": ["tomas"]
+    },
+    {
+      "key": "bigbend",
+      "name": "Big Bend Trip",
+      "currency": "USD",
+      "members": ["tomas", "jordan_b", "chloe", "kenji"]
+    },
+    {
+      "key": "bookclub",
+      "name": "Book Club",
+      "currency": "USD",
+      "members": ["meera_i", "rachel_k", "farah", "olivia"]
+    },
+    {
+      "key": "potluck",
+      "name": "Diwali Potluck",
+      "currency": "USD",
+      "members": ["meera_s", "nikhil", "arjun", "tomas"]
+    },
+    {
+      "key": "lunch",
+      "name": "Office Lunch Pool",
+      "currency": "USD",
+      "members": ["dana", "luis", "farah"]
+    }
+  ],
+  "expenses": [
+    {
+      "group": "casa",
+      "name": "Rent September",
+      "amount": 2400,
+      "paid_by": "me",
+      "split": ["me", "tomas"],
+      "date": "2026-09-01"
+    },
+    {
+      "group": "casa",
+      "name": "HEB groceries",
+      "amount": 142.35,
+      "paid_by": "tomas",
+      "split": ["me", "tomas"],
+      "date": "2026-09-06"
+    },
+    {
+      "group": "casa",
+      "name": "Internet",
+      "amount": 70,
+      "paid_by": "me",
+      "split": ["me", "tomas"],
+      "date": "2026-09-10"
+    },
+    {
+      "group": "casa",
+      "name": "Electric bill",
+      "amount": 118.2,
+      "paid_by": "tomas",
+      "split": ["me", "tomas"],
+      "date": "2026-09-18"
+    },
+    {
+      "group": "casa",
+      "name": "Rent October",
+      "amount": 2400,
+      "paid_by": "tomas",
+      "split": ["me", "tomas"],
+      "date": "2026-10-01"
+    },
+    {
+      "group": "casa",
+      "name": "Costco run",
+      "amount": 213.77,
+      "paid_by": "me",
+      "split": ["me", "tomas"],
+      "date": "2026-10-04"
+    },
+    {
+      "group": "casa",
+      "name": "HEB groceries",
+      "amount": 96.1,
+      "paid_by": "me",
+      "split": ["me", "tomas"],
+      "date": "2026-10-11"
+    },
+    {
+      "group": "bigbend",
+      "name": "Terlingua cabin",
+      "amount": 640,
+      "paid_by": "me",
+      "split": ["me", "tomas", "jordan_b", "chloe", "kenji"],
+      "date": "2026-09-11"
+    },
+    {
+      "group": "bigbend",
+      "name": "Gas",
+      "amount": 88,
+      "paid_by": "jordan_b",
+      "split": ["me", "tomas", "jordan_b", "chloe", "kenji"],
+      "date": "2026-09-11"
+    },
+    {
+      "group": "bigbend",
+      "name": "Groceries",
+      "amount": 154.2,
+      "paid_by": "chloe",
+      "split": ["me", "tomas", "jordan_b", "chloe", "kenji"],
+      "date": "2026-09-11"
+    },
+    {
+      "group": "bigbend",
+      "name": "Park entry",
+      "amount": 150,
+      "paid_by": "kenji",
+      "split": ["me", "tomas", "jordan_b", "chloe", "kenji"],
+      "date": "2026-09-12"
+    },
+    {
+      "group": "bigbend",
+      "name": "Starlight Theatre dinner",
+      "amount": 210.5,
+      "paid_by": "tomas",
+      "split": ["me", "tomas", "jordan_b", "chloe", "kenji"],
+      "date": "2026-09-13"
+    },
+    {
+      "group": "bookclub",
+      "name": "Wine",
+      "amount": 45,
+      "paid_by": "rachel_k",
+      "split": ["me", "meera_i", "rachel_k", "farah", "olivia"],
+      "date": "2026-09-24"
+    },
+    {
+      "group": "bookclub",
+      "name": "Snacks",
+      "amount": 30,
+      "paid_by": "me",
+      "split": ["me", "meera_i", "rachel_k", "farah", "olivia"],
+      "date": "2026-09-24"
+    },
+    {
+      "group": "potluck",
+      "name": "Diyas and decorations",
+      "amount": 60,
+      "paid_by": "me",
+      "split": ["me", "meera_s", "nikhil", "arjun", "tomas"],
+      "date": "2026-10-09"
+    },
+    {
+      "group": "potluck",
+      "name": "Sweets from the mithai shop",
+      "amount": 85,
+      "paid_by": "nikhil",
+      "split": ["me", "meera_s", "nikhil", "arjun", "tomas"],
+      "date": "2026-10-12"
+    },
+    {
+      "group": "lunch",
+      "name": "Pizza Friday",
+      "amount": 64,
+      "paid_by": "dana",
+      "split": ["me", "dana", "luis", "farah"],
+      "date": "2026-10-02"
+    },
+    {
+      "group": "lunch",
+      "name": "Tacos",
+      "amount": 48,
+      "paid_by": "me",
+      "split": ["me", "dana", "luis", "farah"],
+      "date": "2026-10-09"
+    }
+  ],
+  "lists": [
+    { "key": "home", "name": "Home", "area": "household" },
+    { "key": "work", "name": "Work", "area": "job" },
+    { "key": "wedding", "name": "Wedding", "area": "wedding" },
+    { "key": "errands", "name": "Errands" }
+  ],
+  "events": [
+    {
+      "key": "yoga0",
+      "name": "Yoga with Ananya",
+      "start": "2026-08-04T18:30",
+      "end": "2026-08-04T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone0",
+      "name": "1:1 with Dana",
+      "start": "2026-08-06T10:00",
+      "end": "2026-08-06T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "yoga1",
+      "name": "Yoga with Ananya",
+      "start": "2026-08-11T18:30",
+      "end": "2026-08-11T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone1",
+      "name": "1:1 with Dana",
+      "start": "2026-08-13T10:00",
+      "end": "2026-08-13T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "yoga2",
+      "name": "Yoga with Ananya",
+      "start": "2026-08-18T18:30",
+      "end": "2026-08-18T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone2",
+      "name": "1:1 with Dana",
+      "start": "2026-08-20T10:00",
+      "end": "2026-08-20T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "physical",
+      "name": "Annual physical",
+      "start": "2026-08-21T10:00"
+    },
+    {
+      "key": "yoga3",
+      "name": "Yoga with Ananya",
+      "start": "2026-08-25T18:30",
+      "end": "2026-08-25T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone3",
+      "name": "1:1 with Dana",
+      "start": "2026-08-27T10:00",
+      "end": "2026-08-27T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "yoga4",
+      "name": "Yoga with Ananya",
+      "start": "2026-09-01T18:30",
+      "end": "2026-09-01T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone4",
+      "name": "1:1 with Dana",
+      "start": "2026-09-03T10:00",
+      "end": "2026-09-03T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "yoga5",
+      "name": "Yoga with Ananya",
+      "start": "2026-09-08T18:30",
+      "end": "2026-09-08T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone5",
+      "name": "1:1 with Dana",
+      "start": "2026-09-10T10:00",
+      "end": "2026-09-10T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "bigbend_ev",
+      "name": "Big Bend trip",
+      "start": "2026-09-11T08:00",
+      "end": "2026-09-14T18:00",
+      "attendees": ["tomas", "jordan_b", "chloe", "kenji"]
+    },
+    {
+      "key": "yoga6",
+      "name": "Yoga with Ananya",
+      "start": "2026-09-15T18:30",
+      "end": "2026-09-15T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone6",
+      "name": "1:1 with Dana",
+      "start": "2026-09-17T10:00",
+      "end": "2026-09-17T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "yoga7",
+      "name": "Yoga with Ananya",
+      "start": "2026-09-22T18:30",
+      "end": "2026-09-22T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone7",
+      "name": "1:1 with Dana",
+      "start": "2026-09-24T10:00",
+      "end": "2026-09-24T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "kayak",
+      "name": "Kayak rental",
+      "start": "2026-09-26T10:00",
+      "cancelled": true
+    },
+    {
+      "key": "yoga8",
+      "name": "Yoga with Ananya",
+      "start": "2026-09-29T18:30",
+      "end": "2026-09-29T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "taxmeet",
+      "name": "Tax meeting with Wei",
+      "start": "2026-09-30T16:00",
+      "end": "2026-09-30T17:00",
+      "attendees": ["wei"]
+    },
+    {
+      "key": "oneonone8",
+      "name": "1:1 with Dana",
+      "start": "2026-10-01T10:00",
+      "end": "2026-10-01T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "acl",
+      "name": "ACL Fest",
+      "start": "2026-10-02T12:00",
+      "end": "2026-10-02T23:00",
+      "attendees": ["jordan_b", "chloe"]
+    },
+    {
+      "key": "sofia_dinner",
+      "name": "Dinner with Sofía",
+      "start": "2026-10-04T19:00",
+      "attendees": ["sofia"]
+    },
+    {
+      "key": "yoga9",
+      "name": "Yoga with Ananya",
+      "start": "2026-10-06T18:30",
+      "end": "2026-10-06T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone9",
+      "name": "1:1 with Dana",
+      "start": "2026-10-08T10:00",
+      "end": "2026-10-08T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "movie",
+      "name": "Movie night",
+      "start": "2026-10-09T20:00",
+      "attendees": ["tomas"]
+    },
+    { "key": "market", "name": "Farmers market", "start": "2026-10-10T09:00" },
+    {
+      "key": "yoga10",
+      "name": "Yoga with Ananya",
+      "start": "2026-10-13T18:30",
+      "end": "2026-10-13T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "plumber",
+      "name": "Plumber visit",
+      "start": "2026-10-14T13:00",
+      "end": "2026-10-14T14:00",
+      "attendees": ["marco"]
+    },
+    {
+      "key": "haircut",
+      "name": "Haircut with Tasha",
+      "start": "2026-10-14T17:30",
+      "end": "2026-10-14T18:15",
+      "attendees": ["tasha"]
+    },
+    {
+      "key": "oneonone10",
+      "name": "1:1 with Dana",
+      "start": "2026-10-15T10:00",
+      "end": "2026-10-15T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "pottery",
+      "name": "Pottery class",
+      "start": "2026-10-15T18:00",
+      "end": "2026-10-15T20:00",
+      "cancelled": true
+    },
+    {
+      "key": "vet",
+      "name": "Biscuit vet checkup",
+      "start": "2026-10-16T09:30",
+      "end": "2026-10-16T10:00",
+      "attendees": ["hannah"]
+    },
+    {
+      "key": "runclub",
+      "name": "Town Lake run club",
+      "start": "2026-10-17T07:00",
+      "end": "2026-10-17T08:00",
+      "attendees": ["ben"]
+    },
+    {
+      "key": "venue",
+      "name": "Wedding venue tour",
+      "start": "2026-10-17T11:00",
+      "end": "2026-10-17T12:30",
+      "attendees": ["tomas", "rachel_g"]
+    },
+    {
+      "key": "amma_call",
+      "name": "Weekly call with Amma",
+      "start": "2026-10-18T08:00",
+      "attendees": ["amma"]
+    },
+    {
+      "key": "climb",
+      "name": "Climbing at Crux",
+      "start": "2026-10-18T09:00",
+      "end": "2026-10-18T11:00",
+      "attendees": ["kenji"]
+    },
+    {
+      "key": "arjuncall",
+      "name": "Call with Arjun",
+      "start": "2026-10-19T20:00",
+      "end": "2026-10-19T20:30",
+      "attendees": ["arjun"]
+    },
+    {
+      "key": "dentist",
+      "name": "Dentist – Dr. Cho",
+      "start": "2026-10-20T15:00",
+      "end": "2026-10-20T15:45",
+      "attendees": ["cho"]
+    },
+    {
+      "key": "yoga11",
+      "name": "Yoga with Ananya",
+      "start": "2026-10-20T18:30",
+      "end": "2026-10-20T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "mehndi",
+      "name": "Mehndi planning call",
+      "start": "2026-10-21T19:00",
+      "attendees": ["pooja", "rachel_g"]
+    },
+    {
+      "key": "oneonone11",
+      "name": "1:1 with Dana",
+      "start": "2026-10-22T10:00",
+      "end": "2026-10-22T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "bookclub_ev",
+      "name": "Book club: Tomorrow, and Tomorrow, and Tomorrow",
+      "start": "2026-10-22T19:00",
+      "end": "2026-10-22T21:00",
+      "attendees": ["meera_i", "rachel_k", "farah", "olivia"]
+    },
+    {
+      "key": "carservice",
+      "name": "Car service at Toyota",
+      "start": "2026-10-23T08:00"
+    },
+    {
+      "key": "bday",
+      "name": "Tomás birthday dinner",
+      "start": "2026-10-24T19:30",
+      "end": "2026-10-24T22:00",
+      "attendees": ["tomas"],
+      "description": "Uchi, reservation under Raman"
+    },
+    {
+      "key": "brunch",
+      "name": "Brunch with Meera",
+      "start": "2026-10-25T11:00",
+      "end": "2026-10-25T12:30",
+      "attendees": ["meera_s"]
+    },
+    {
+      "key": "parents_zoom",
+      "name": "Zoom with Tomás's parents",
+      "start": "2026-10-26T18:00",
+      "attendees": ["ramon", "tomas"]
+    },
+    {
+      "key": "offsite",
+      "name": "Q4 planning offsite",
+      "start": "2026-10-27T09:00",
+      "end": "2026-10-27T17:00",
+      "attendees": ["dana", "luis", "farah"]
+    },
+    {
+      "key": "yoga12",
+      "name": "Yoga with Ananya",
+      "start": "2026-10-27T18:30",
+      "end": "2026-10-27T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone12",
+      "name": "1:1 with Dana",
+      "start": "2026-10-29T10:00",
+      "end": "2026-10-29T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "halloween",
+      "name": "Halloween party at Chloe's",
+      "start": "2026-10-31T20:00",
+      "attendees": ["chloe"]
+    },
+    {
+      "key": "cake",
+      "name": "Cake tasting",
+      "start": "2026-11-01T14:00",
+      "end": "2026-11-01T15:00",
+      "attendees": ["tomas", "rachel_g"]
+    },
+    {
+      "key": "yoga13",
+      "name": "Yoga with Ananya",
+      "start": "2026-11-03T18:30",
+      "end": "2026-11-03T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone13",
+      "name": "1:1 with Dana",
+      "start": "2026-11-05T10:00",
+      "end": "2026-11-05T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "diwali",
+      "name": "Diwali potluck",
+      "start": "2026-11-08T18:00",
+      "end": "2026-11-08T22:00",
+      "attendees": ["meera_s", "nikhil", "arjun", "tomas"],
+      "description": "at our place; everyone brings one dish"
+    },
+    {
+      "key": "yoga14",
+      "name": "Yoga with Ananya",
+      "start": "2026-11-10T18:30",
+      "end": "2026-11-10T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone14",
+      "name": "1:1 with Dana",
+      "start": "2026-11-12T10:00",
+      "end": "2026-11-12T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "yoga15",
+      "name": "Yoga with Ananya",
+      "start": "2026-11-17T18:30",
+      "end": "2026-11-17T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone15",
+      "name": "1:1 with Dana",
+      "start": "2026-11-19T10:00",
+      "end": "2026-11-19T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "yoga16",
+      "name": "Yoga with Ananya",
+      "start": "2026-11-24T18:30",
+      "end": "2026-11-24T19:30",
+      "attendees": ["ananya"]
+    },
+    {
+      "key": "oneonone16",
+      "name": "1:1 with Dana",
+      "start": "2026-11-26T10:00",
+      "end": "2026-11-26T10:30",
+      "attendees": ["dana"]
+    },
+    {
+      "key": "friendsgiving",
+      "name": "Friendsgiving",
+      "start": "2026-11-26T16:00",
+      "attendees": ["jordan_b", "chloe", "kenji", "meera_i"]
+    },
+    {
+      "key": "leasedl",
+      "name": "Lease renewal deadline",
+      "start": "2026-11-30T09:00"
+    },
+    {
+      "key": "flight_out",
+      "name": "Flight to Chennai",
+      "start": "2026-12-18T22:40",
+      "description": "AA 2461 via DFW"
+    },
+    {
+      "key": "flight_back",
+      "name": "Flight home from Chennai",
+      "start": "2027-01-03T02:10"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "rent0",
+      "name": "Pay rent",
+      "due": "2025-12-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2025-12-01T08:15"
+    },
+    {
+      "key": "rent1",
+      "name": "Pay rent",
+      "due": "2026-01-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-01-01T08:15"
+    },
+    {
+      "key": "rent2",
+      "name": "Pay rent",
+      "due": "2026-02-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-02-01T08:15"
+    },
+    {
+      "key": "rent3",
+      "name": "Pay rent",
+      "due": "2026-03-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-03-01T08:15"
+    },
+    {
+      "key": "rent4",
+      "name": "Pay rent",
+      "due": "2026-04-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-04-01T08:15"
+    },
+    {
+      "key": "rent5",
+      "name": "Pay rent",
+      "due": "2026-05-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-05-01T08:15"
+    },
+    {
+      "key": "rent6",
+      "name": "Pay rent",
+      "due": "2026-06-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-06-01T08:15"
+    },
+    {
+      "key": "rent7",
+      "name": "Pay rent",
+      "due": "2026-07-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-07-01T08:15"
+    },
+    {
+      "key": "rent8",
+      "name": "Pay rent",
+      "due": "2026-08-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-08-01T08:15"
+    },
+    {
+      "key": "rent9",
+      "name": "Pay rent",
+      "due": "2026-09-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-09-01T08:15"
+    },
+    {
+      "key": "rent10",
+      "name": "Pay rent",
+      "due": "2026-10-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-10-01T08:15"
+    },
+    {
+      "key": "rent11",
+      "name": "Pay rent",
+      "due": "2026-11-01",
+      "list": "home",
+      "priority": 1
+    },
+    {
+      "key": "faucet",
+      "name": "Fix leaky kitchen faucet",
+      "due": "2026-10-14",
+      "list": "home",
+      "effort": 60
+    },
+    {
+      "key": "dogfood",
+      "name": "Buy dog food for Biscuit",
+      "due": "2026-10-15",
+      "list": "errands",
+      "effort": 20
+    },
+    {
+      "key": "garage",
+      "name": "Clean out garage",
+      "due": "2026-10-25",
+      "list": "home",
+      "effort": 180,
+      "priority": 5
+    },
+    {
+      "key": "acfilter",
+      "name": "Change AC filter",
+      "due": "2026-10-01",
+      "list": "home",
+      "status": "completed",
+      "completed": "2026-10-01T18:00"
+    },
+    {
+      "key": "plants",
+      "name": "Water the plants",
+      "due": "2026-10-12",
+      "list": "home",
+      "status": "completed",
+      "completed": "2026-10-12T09:00"
+    },
+    {
+      "key": "lights",
+      "name": "Hang the Diwali lights",
+      "due": "2026-11-05",
+      "list": "home",
+      "effort": 45
+    },
+    {
+      "key": "fridge",
+      "name": "Deep clean fridge",
+      "list": "home",
+      "status": "in_progress",
+      "effort": 40
+    },
+    {
+      "key": "amazon",
+      "name": "Return Amazon package",
+      "due": "2026-10-16",
+      "list": "errands",
+      "effort": 15
+    },
+    {
+      "key": "carreg",
+      "name": "Renew car registration",
+      "due": "2026-10-31",
+      "list": "errands",
+      "priority": 1
+    },
+    { "key": "furnace", "name": "Schedule furnace inspection", "list": "home" },
+    {
+      "key": "roadmap",
+      "name": "Write Q4 roadmap draft",
+      "due": "2026-10-16T17:00",
+      "list": "work",
+      "priority": 1,
+      "effort": 240,
+      "status": "in_progress"
+    },
+    {
+      "key": "review_luis",
+      "name": "Review Luis's design doc",
+      "due": "2026-10-15",
+      "list": "work",
+      "effort": 45
+    },
+    {
+      "key": "slides",
+      "name": "Prepare slides for offsite",
+      "due": "2026-10-26",
+      "list": "work",
+      "effort": 120
+    },
+    {
+      "key": "expense",
+      "name": "Submit expense report",
+      "due": "2026-10-09",
+      "list": "work",
+      "effort": 30
+    },
+    {
+      "key": "feedback",
+      "name": "Send feedback to Farah",
+      "due": "2026-10-08",
+      "list": "work",
+      "status": "completed",
+      "completed": "2026-10-08T16:30"
+    },
+    {
+      "key": "offroom",
+      "name": "Book offsite room",
+      "due": "2026-09-30",
+      "list": "work",
+      "status": "completed",
+      "completed": "2026-09-29T11:00"
+    },
+    {
+      "key": "okr",
+      "name": "Update OKR tracker",
+      "due": "2026-10-20",
+      "list": "work",
+      "effort": 30
+    },
+    {
+      "key": "shortlist",
+      "name": "Shortlist venues",
+      "due": "2026-09-25",
+      "list": "wedding",
+      "status": "completed",
+      "completed": "2026-09-24T21:00"
+    },
+    {
+      "key": "deposit",
+      "name": "Pay wedding venue deposit",
+      "due": "2026-10-20",
+      "list": "wedding",
+      "priority": 1
+    },
+    {
+      "key": "guests",
+      "name": "Guest list",
+      "due": "2026-11-15",
+      "list": "wedding"
+    },
+    {
+      "key": "guests_r",
+      "name": "Guest list – Raman side",
+      "parent": "guests",
+      "list": "wedding"
+    },
+    {
+      "key": "guests_h",
+      "name": "Guest list – Herrera side",
+      "parent": "guests",
+      "list": "wedding"
+    },
+    {
+      "key": "photog",
+      "name": "Ask Rachel about photographers",
+      "list": "wedding"
+    },
+    {
+      "key": "invites",
+      "name": "Order invitation samples",
+      "due": "2026-11-02",
+      "list": "wedding",
+      "effort": 30
+    },
+    {
+      "key": "caterer",
+      "name": "Pick a caterer",
+      "list": "wedding",
+      "priority": 2
+    },
+    {
+      "key": "drycleaning",
+      "name": "Pick up dry cleaning",
+      "due": "2026-10-15",
+      "list": "errands"
+    },
+    {
+      "key": "passport",
+      "name": "Renew passport",
+      "due": "2026-11-15",
+      "priority": 1
+    },
+    {
+      "key": "passphotos",
+      "name": "Get passport photos",
+      "due": "2026-10-21",
+      "list": "errands",
+      "parent": "passport"
+    },
+    {
+      "key": "library",
+      "name": "Drop off library books",
+      "list": "errands",
+      "trashed": "2026-10-05T10:00"
+    },
+    {
+      "key": "gift",
+      "name": "Buy birthday gift for Tomás",
+      "due": "2026-10-22",
+      "list": "errands",
+      "priority": 2
+    },
+    {
+      "key": "ammapkg",
+      "name": "Mail Amma's package",
+      "due": "2026-10-18",
+      "list": "errands",
+      "effort": 30
+    },
+    {
+      "key": "pharmacy",
+      "name": "Pharmacy pickup",
+      "due": "2026-10-10",
+      "list": "errands",
+      "status": "completed",
+      "completed": "2026-10-10T12:20"
+    },
+    {
+      "key": "callamma",
+      "name": "Call Amma about December trip",
+      "due": "2026-10-18"
+    },
+    {
+      "key": "bbplan",
+      "name": "Plan Big Bend trip",
+      "due": "2026-09-05",
+      "status": "completed",
+      "completed": "2026-09-05T20:00"
+    },
+    {
+      "key": "bbcabin",
+      "name": "Book Terlingua cabin",
+      "parent": "bbplan",
+      "status": "completed",
+      "completed": "2026-08-20T12:00"
+    },
+    {
+      "key": "bbpass",
+      "name": "Buy park pass",
+      "parent": "bbplan",
+      "status": "completed",
+      "completed": "2026-09-01T12:00"
+    },
+    {
+      "key": "esttax",
+      "name": "File quarterly estimated taxes",
+      "due": "2027-01-15",
+      "priority": 2
+    },
+    {
+      "key": "flights",
+      "name": "Book Chennai flights",
+      "status": "completed",
+      "completed": "2026-09-15T22:00"
+    },
+    { "key": "weiinv", "name": "Pay Wei's invoice", "due": "2026-10-30" },
+    {
+      "key": "readbook",
+      "name": "Finish Tomorrow, and Tomorrow, and Tomorrow",
+      "due": "2026-10-22",
+      "status": "in_progress"
+    },
+    {
+      "key": "halfmarathon",
+      "name": "Sign up for Austin half marathon",
+      "effort": 15
+    },
+    {
+      "key": "gym",
+      "name": "Cancel old gym membership",
+      "status": "cancelled"
+    },
+    {
+      "key": "biketire",
+      "name": "Fix bike tire",
+      "trashed": "2026-10-08T09:00"
+    },
+    {
+      "key": "ammaalbum",
+      "name": "Make photo album for Amma",
+      "due": "2026-12-10",
+      "effort": 120
+    },
+    { "key": "thankyou", "name": "Write thank-you notes", "effort": 60 },
+    { "key": "sweets", "name": "Order Diwali sweets", "due": "2026-11-06" },
+    {
+      "key": "insurance",
+      "name": "Compare renter's insurance quotes",
+      "due": "2026-11-20",
+      "effort": 60
+    },
+    {
+      "key": "vetbill",
+      "name": "Pay vet bill",
+      "due": "2026-10-16",
+      "list": "errands"
+    }
+  ],
+  "links": [
+    { "from": "review_luis", "to": "luis" },
+    { "from": "feedback", "to": "farah" },
+    { "from": "callamma", "to": "amma" },
+    { "from": "ammapkg", "to": "amma" },
+    { "from": "ammaalbum", "to": "amma" },
+    { "from": "gift", "to": "tomas" },
+    { "from": "photog", "to": "rachel_g" },
+    { "from": "faucet", "to": "marco" },
+    { "from": "weiinv", "to": "wei" },
+    { "from": "j5", "to": "amma" },
+    { "from": "w2", "to": "dana" },
+    { "from": "meera_bday", "to": "meera_i" },
+    { "from": "wd3", "to": "pooja" }
+  ],
+  "notebooks": [
+    { "key": "journal", "name": "Journal" },
+    { "key": "recipes", "name": "Recipes" },
+    { "key": "worknotes", "name": "Work notes" },
+    { "key": "weddingideas", "name": "Wedding ideas" }
+  ],
+  "notes": [
+    {
+      "key": "j1",
+      "name": "Big Bend – day 1",
+      "body": "Drove 7 hours, cabin smells like cedar. Jordan got us lost twice.",
+      "notebook": "journal",
+      "created": "2026-09-11T22:00"
+    },
+    {
+      "key": "j2",
+      "name": "Big Bend – day 3",
+      "body": "Santa Elena Canyon at sunrise. Kenji fell in the river.",
+      "notebook": "journal",
+      "created": "2026-09-13T21:30"
+    },
+    {
+      "key": "j3",
+      "name": "Rough day at work",
+      "body": "Roadmap review went sideways. Dana was kind about it.",
+      "notebook": "journal",
+      "created": "2026-10-01T22:15"
+    },
+    {
+      "key": "j4",
+      "name": "Sunday reflections",
+      "body": "Slow morning, pancakes, long walk with Biscuit.",
+      "notebook": "journal",
+      "created": "2026-10-11T20:00"
+    },
+    {
+      "key": "j5",
+      "name": "After the call with Amma",
+      "body": "She wants the wedding in Chennai too. Two weddings?",
+      "notebook": "journal",
+      "created": "2026-10-11T21:10"
+    },
+    {
+      "key": "j6",
+      "name": "Engagement anniversary",
+      "body": "One year since Tomás asked at Mount Bonnell.",
+      "notebook": "journal",
+      "created": "2026-08-02T23:00"
+    },
+    {
+      "key": "r1",
+      "name": "Amma's sambar",
+      "body": "toor dal, tamarind, sambar powder, drumsticks, curry leaves",
+      "notebook": "recipes",
+      "created": "2026-01-18T12:00"
+    },
+    {
+      "key": "r2",
+      "name": "Tomás's chilaquiles",
+      "body": "tortilla chips, salsa verde, crema, queso fresco, fried egg",
+      "notebook": "recipes",
+      "created": "2026-03-08T11:00"
+    },
+    {
+      "key": "r3",
+      "name": "Masala chai",
+      "body": "ginger, cardamom, black tea, whole milk, jaggery",
+      "notebook": "recipes",
+      "created": "2026-02-02T08:00",
+      "pinned": true
+    },
+    {
+      "key": "r4",
+      "name": "Green chutney",
+      "body": "cilantro, mint, green chili, lemon, salt",
+      "notebook": "recipes",
+      "created": "2026-05-14T18:00"
+    },
+    {
+      "key": "r5",
+      "name": "Banana bread",
+      "body": "3 ripe bananas, walnuts, brown sugar, cinnamon; 60 min at 350F",
+      "notebook": "recipes",
+      "created": "2026-04-20T15:00"
+    },
+    {
+      "key": "w1",
+      "name": "Offsite agenda ideas",
+      "body": "roadmap bets, hiring plan, team health survey",
+      "notebook": "worknotes",
+      "created": "2026-10-05T14:00"
+    },
+    {
+      "key": "w2",
+      "name": "1:1 notes – Dana",
+      "body": "promo packet in January; mentor Luis",
+      "notebook": "worknotes",
+      "created": "2026-10-08T11:00"
+    },
+    {
+      "key": "w3",
+      "name": "Roadmap risks",
+      "body": "payments migration slips if vendor contract stalls",
+      "notebook": "worknotes",
+      "created": "2026-10-02T09:30"
+    },
+    {
+      "key": "w4",
+      "name": "Hiring loop feedback",
+      "body": "strong yes on the senior PM candidate",
+      "notebook": "worknotes",
+      "created": "2026-09-17T17:00"
+    },
+    {
+      "key": "wd1",
+      "name": "Venue shortlist",
+      "body": "Laguna Gloria, Barr Mansion, Pecan Springs",
+      "notebook": "weddingideas",
+      "created": "2026-09-20T20:00"
+    },
+    {
+      "key": "wd2",
+      "name": "Color palette",
+      "body": "marigold, deep teal, ivory",
+      "notebook": "weddingideas",
+      "created": "2026-09-22T21:00"
+    },
+    {
+      "key": "wd3",
+      "name": "Mehndi night ideas",
+      "body": "Pooja's playlist, henna artist from Houston",
+      "notebook": "weddingideas",
+      "created": "2026-10-03T22:00"
+    },
+    {
+      "key": "wd4",
+      "name": "Wedding budget",
+      "body": "venue 12k, food 9k, photo 4k, attire 5k",
+      "notebook": "weddingideas",
+      "created": "2026-09-28T19:00",
+      "pinned": true
+    },
+    {
+      "key": "giftideas",
+      "name": "Gift ideas for Tomás",
+      "body": "vintage film camera, Spurs tickets, pour-over kettle",
+      "pinned": true,
+      "created": "2026-09-30T22:00"
+    },
+    {
+      "key": "books",
+      "name": "Books to read",
+      "body": "Demon Copperhead, The Covenant of Water, Piranesi",
+      "created": "2026-06-10T21:00"
+    },
+    {
+      "key": "garagesale",
+      "name": "Garage sale inventory",
+      "body": "old bike, bookshelf, two lamps, camping stove",
+      "created": "2026-10-06T10:00"
+    },
+    {
+      "key": "wifitips",
+      "name": "Wifi troubleshooting",
+      "body": "restart the router, then the mesh node in the office",
+      "created": "2026-07-01T20:00"
+    },
+    {
+      "key": "packing",
+      "name": "Packing list Chennai",
+      "body": "gifts for cousins, sarees, adapters, meds",
+      "pinned": true,
+      "created": "2026-10-09T21:00"
+    },
+    {
+      "key": "oldgrocery",
+      "name": "Old grocery list",
+      "body": "eggs, milk, coffee",
+      "trashed": "2026-10-02T09:00",
+      "created": "2026-08-01T09:00"
+    },
+    {
+      "key": "biscuitnotes",
+      "name": "Biscuit's vet notes",
+      "body": "allergic to chicken; next rabies shot due November",
+      "created": "2026-08-21T12:00"
+    },
+    {
+      "key": "meera_bday",
+      "name": "Meera birthday ideas",
+      "body": "pottery class voucher, cookbook",
+      "created": "2026-09-05T20:00"
+    }
+  ],
+  "folders": [
+    { "key": "taxes", "name": "Taxes" },
+    { "key": "house", "name": "House" },
+    { "key": "medical", "name": "Medical" },
+    { "key": "travel", "name": "Travel" },
+    { "key": "workdocs", "name": "Work" }
+  ],
+  "documents": [
+    {
+      "key": "w2form",
+      "name": "W-2 2025",
+      "text": "Employer wages 2025",
+      "folder": "taxes",
+      "starred": true,
+      "created": "2026-02-03T10:00"
+    },
+    {
+      "key": "int1099",
+      "name": "1099-INT Chase 2025",
+      "text": "interest income",
+      "folder": "taxes",
+      "created": "2026-02-10T10:00"
+    },
+    {
+      "key": "return",
+      "name": "2025 tax return",
+      "text": "federal return as filed",
+      "folder": "taxes",
+      "starred": true,
+      "created": "2026-04-10T21:00"
+    },
+    {
+      "key": "lease",
+      "name": "Lease agreement 2026",
+      "text": "12 month lease, 2208 Kinney Ave",
+      "folder": "house",
+      "starred": true,
+      "created": "2025-12-01T10:00"
+    },
+    {
+      "key": "renters",
+      "name": "Renter's insurance policy",
+      "text": "Lemonade policy",
+      "folder": "house",
+      "created": "2026-01-05T10:00"
+    },
+    {
+      "key": "xray",
+      "name": "Dental x-ray report",
+      "text": "no cavities",
+      "folder": "medical",
+      "created": "2026-04-02T10:00"
+    },
+    {
+      "key": "vaccines",
+      "name": "Vaccination record",
+      "text": "covid, flu, tdap",
+      "folder": "medical",
+      "created": "2026-03-15T10:00"
+    },
+    {
+      "key": "biscuitvax",
+      "name": "Biscuit vaccination certificate",
+      "text": "rabies, DHPP",
+      "folder": "medical",
+      "created": "2026-08-21T12:30"
+    },
+    {
+      "key": "passportscan",
+      "name": "Passport scan",
+      "text": "scan of passport data page",
+      "folder": "travel",
+      "starred": true,
+      "created": "2026-05-01T10:00"
+    },
+    {
+      "key": "itinerary",
+      "name": "Chennai flight itinerary",
+      "text": "AA 2461 DFW-DOH-MAA",
+      "folder": "travel",
+      "created": "2026-09-15T22:10"
+    },
+    {
+      "key": "parkpass",
+      "name": "Big Bend park pass",
+      "text": "annual pass receipt",
+      "folder": "travel",
+      "created": "2026-09-01T12:05"
+    },
+    {
+      "key": "offer",
+      "name": "Offer letter",
+      "text": "product manager offer",
+      "folder": "workdocs",
+      "created": "2025-11-02T10:00"
+    },
+    {
+      "key": "perfreview",
+      "name": "Q3 performance review",
+      "text": "exceeds expectations",
+      "folder": "workdocs",
+      "created": "2026-10-06T10:00"
+    },
+    {
+      "key": "handbook",
+      "name": "Employee handbook",
+      "text": "PTO policy",
+      "folder": "workdocs",
+      "created": "2025-11-03T10:00"
+    },
+    {
+      "key": "cartitle",
+      "name": "Car title",
+      "text": "2019 Toyota RAV4",
+      "folder": "house",
+      "created": "2026-01-20T10:00"
+    },
+    {
+      "key": "venuecontract",
+      "name": "Wedding venue contract draft",
+      "text": "Barr Mansion draft contract",
+      "created": "2026-10-10T16:00"
+    },
+    {
+      "key": "utility",
+      "name": "Utility bill September",
+      "text": "Austin Energy",
+      "folder": "house",
+      "created": "2026-09-18T10:00"
+    },
+    {
+      "key": "oldlease",
+      "name": "Old lease 2024",
+      "text": "previous apartment",
+      "trashed": "2026-01-10T10:00",
+      "created": "2025-11-05T10:00"
+    },
+    {
+      "key": "marriagelic",
+      "name": "Marriage license checklist",
+      "text": "Travis County clerk requirements",
+      "created": "2026-10-12T20:00"
+    }
+  ],
+  "albums": [
+    { "key": "bigbend_al", "name": "Big Bend 2026" },
+    { "key": "biscuit_al", "name": "Biscuit" },
+    { "key": "chennai_al", "name": "Chennai 2025" },
+    { "key": "engagement_al", "name": "Engagement" }
+  ],
+  "photos": [
+    {
+      "key": "bb0",
+      "name": "Santa Elena Canyon",
+      "taken": "2026-09-13T07:10",
+      "albums": ["bigbend_al"],
+      "people": [],
+      "starred": true
+    },
+    {
+      "key": "bb1",
+      "name": "Sunrise at Chisos",
+      "taken": "2026-09-12T06:55",
+      "albums": ["bigbend_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "bb2",
+      "name": "Hot springs",
+      "taken": "2026-09-12T16:00",
+      "albums": ["bigbend_al"],
+      "people": ["tomas"],
+      "starred": false
+    },
+    {
+      "key": "bb3",
+      "name": "Campfire",
+      "taken": "2026-09-11T21:30",
+      "albums": ["bigbend_al"],
+      "people": ["jordan_b", "chloe"],
+      "starred": false
+    },
+    {
+      "key": "bb4",
+      "name": "Group photo on Lost Mine trail",
+      "taken": "2026-09-12T10:20",
+      "albums": ["bigbend_al"],
+      "people": ["tomas", "jordan_b", "chloe", "kenji"],
+      "starred": true
+    },
+    {
+      "key": "bb5",
+      "name": "Kenji in the river",
+      "taken": "2026-09-13T08:00",
+      "albums": ["bigbend_al"],
+      "people": ["kenji"],
+      "starred": false
+    },
+    {
+      "key": "bb6",
+      "name": "Terlingua ghost town",
+      "taken": "2026-09-14T11:00",
+      "albums": ["bigbend_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "bb7",
+      "name": "Starlight Theatre",
+      "taken": "2026-09-13T20:00",
+      "albums": ["bigbend_al"],
+      "people": ["tomas"],
+      "starred": false
+    },
+    {
+      "key": "bb8",
+      "name": "Roadrunner",
+      "taken": "2026-09-12T14:30",
+      "albums": ["bigbend_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "bb9",
+      "name": "Desert wildflowers",
+      "taken": "2026-09-14T09:10",
+      "albums": ["bigbend_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "bis0",
+      "name": "Biscuit at Zilker",
+      "taken": "2026-03-14T10:00",
+      "albums": ["biscuit_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "bis1",
+      "name": "Biscuit sleeping",
+      "taken": "2026-05-02T22:00",
+      "albums": ["biscuit_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "bis2",
+      "name": "Biscuit's birthday cake",
+      "taken": "2026-06-18T18:00",
+      "albums": ["biscuit_al"],
+      "people": [],
+      "starred": true
+    },
+    {
+      "key": "bis3",
+      "name": "Biscuit in the lake",
+      "taken": "2026-07-04T11:00",
+      "albums": ["biscuit_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "bis4",
+      "name": "Biscuit and Miss Bev",
+      "taken": "2026-08-09T09:00",
+      "albums": ["biscuit_al"],
+      "people": ["bev"],
+      "starred": false
+    },
+    {
+      "key": "bis5",
+      "name": "Biscuit with the cone",
+      "taken": "2026-08-22T19:00",
+      "albums": ["biscuit_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "bis6",
+      "name": "Biscuit Halloween costume",
+      "taken": "2025-10-31T18:00",
+      "albums": ["biscuit_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "bis7",
+      "name": "Biscuit on the couch",
+      "taken": "2026-10-12T20:10",
+      "albums": ["biscuit_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "ch0",
+      "name": "Marina Beach",
+      "taken": "2025-12-22T17:00",
+      "albums": ["chennai_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "ch1",
+      "name": "Amma's kolam",
+      "taken": "2025-12-24T07:30",
+      "albums": ["chennai_al"],
+      "people": ["amma"],
+      "starred": false
+    },
+    {
+      "key": "ch2",
+      "name": "Kapaleeshwarar temple",
+      "taken": "2025-12-23T10:00",
+      "albums": ["chennai_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "ch3",
+      "name": "Family dinner",
+      "taken": "2025-12-25T20:00",
+      "albums": ["chennai_al"],
+      "people": ["amma", "arjun", "gayatri"],
+      "starred": true
+    },
+    {
+      "key": "ch4",
+      "name": "Filter coffee",
+      "taken": "2025-12-26T08:00",
+      "albums": ["chennai_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "ch5",
+      "name": "Arjun's new scooter",
+      "taken": "2025-12-27T12:00",
+      "albums": ["chennai_al"],
+      "people": ["arjun"],
+      "starred": false
+    },
+    {
+      "key": "ch6",
+      "name": "Mylapore market",
+      "taken": "2025-12-28T11:00",
+      "albums": ["chennai_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "ch7",
+      "name": "Airport goodbye",
+      "taken": "2025-12-30T01:00",
+      "albums": ["chennai_al"],
+      "people": ["amma"],
+      "starred": false
+    },
+    {
+      "key": "en0",
+      "name": "The proposal",
+      "taken": "2025-08-02T19:40",
+      "albums": ["engagement_al"],
+      "people": ["tomas"],
+      "starred": true
+    },
+    {
+      "key": "en1",
+      "name": "Ring close-up",
+      "taken": "2025-08-02T19:45",
+      "albums": ["engagement_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "en2",
+      "name": "Engagement party",
+      "taken": "2025-09-20T21:00",
+      "albums": ["engagement_al"],
+      "people": ["tomas", "pooja", "meera_i", "chloe"],
+      "starred": false
+    },
+    {
+      "key": "en3",
+      "name": "Sofía and Tomás",
+      "taken": "2025-09-20T22:00",
+      "albums": ["engagement_al"],
+      "people": ["sofia", "tomas"],
+      "starred": false
+    },
+    {
+      "key": "en4",
+      "name": "Mount Bonnell sunset",
+      "taken": "2026-08-02T19:30",
+      "albums": ["engagement_al"],
+      "people": ["tomas"],
+      "starred": false
+    },
+    {
+      "key": "lo0",
+      "name": "Farmers market haul",
+      "taken": "2026-10-10T10:00",
+      "people": []
+    },
+    {
+      "key": "lo1",
+      "name": "ACL Fest crowd",
+      "taken": "2026-10-02T20:00",
+      "people": ["jordan_b", "chloe"]
+    },
+    {
+      "key": "lo2",
+      "name": "Pottery bowl",
+      "taken": "2026-09-17T20:00",
+      "people": []
+    },
+    {
+      "key": "lo3",
+      "name": "Screenshot 2026-10-01",
+      "taken": "2026-10-01T12:00",
+      "people": []
+    },
+    {
+      "key": "lo4",
+      "name": "Whiteboard notes",
+      "taken": "2026-10-05T15:00",
+      "people": []
+    },
+    {
+      "key": "lo5",
+      "name": "Meera's birthday",
+      "taken": "2026-09-06T21:00",
+      "people": ["meera_i"]
+    },
+    {
+      "key": "lo6",
+      "name": "Blurry photo",
+      "taken": "2026-10-09T20:05",
+      "people": [],
+      "trashed": "2026-10-09T21:00"
+    },
+    {
+      "key": "lo7",
+      "name": "Receipt for dry cleaning",
+      "taken": "2026-10-08T12:00",
+      "people": []
+    },
+    {
+      "key": "lo8",
+      "name": "Diwali rangoli 2025",
+      "taken": "2025-11-01T19:00",
+      "people": ["meera_s"]
+    },
+    {
+      "key": "lo9",
+      "name": "Pooja's dress fitting",
+      "taken": "2026-10-12T15:00",
+      "people": ["pooja"]
+    }
+  ],
+  "debts": [
+    {
+      "key": "acltix",
+      "person": "jordan_b",
+      "direction": "owes_me",
+      "amount": 85,
+      "name": "ACL ticket",
+      "date": "2026-10-02"
+    },
+    {
+      "key": "uber",
+      "person": "chloe",
+      "direction": "i_owe",
+      "amount": 32.4,
+      "name": "Uber from the airport",
+      "date": "2026-09-14"
+    },
+    {
+      "key": "lunchluis",
+      "person": "luis",
+      "direction": "owes_me",
+      "amount": 18,
+      "name": "lunch at Veracruz",
+      "date": "2026-09-20",
+      "settled": "2026-09-25T12:00"
+    },
+    {
+      "key": "magazine",
+      "person": "meera_i",
+      "direction": "i_owe",
+      "amount": 12,
+      "name": "bridal magazines",
+      "date": "2026-09-06"
+    },
+    {
+      "key": "concert",
+      "person": "kenji",
+      "direction": "owes_me",
+      "amount": 60,
+      "name": "Khruangbin concert ticket",
+      "date": "2026-08-15"
+    },
+    {
+      "key": "mehndi_dep",
+      "person": "pooja",
+      "direction": "i_owe",
+      "amount": 150,
+      "name": "henna artist deposit",
+      "date": "2026-10-12"
+    },
+    {
+      "key": "sofia_loan",
+      "person": "sofia",
+      "direction": "owes_me",
+      "amount": 200,
+      "name": "flight change fee",
+      "date": "2026-07-02",
+      "settled": "2026-08-01T10:00"
+    },
+    {
+      "key": "bev_plants",
+      "person": "bev",
+      "direction": "i_owe",
+      "amount": 25,
+      "name": "plant sitting",
+      "date": "2026-09-15"
+    },
+    {
+      "key": "arjun_gift",
+      "person": "arjun",
+      "direction": "owes_me",
+      "amount": 40,
+      "name": "half of Amma's gift",
+      "date": "2026-10-11"
+    },
+    {
+      "key": "nikhil_cab",
+      "person": "nikhil",
+      "direction": "i_owe",
+      "amount": 22.5,
+      "name": "cab share",
+      "date": "2026-07-19",
+      "settled": "2026-07-25T09:00"
+    },
+    {
+      "key": "jordan_gas",
+      "person": "jordan_b",
+      "direction": "i_owe",
+      "amount": 15,
+      "name": "gas money",
+      "date": "2026-09-28"
+    },
+    {
+      "key": "farah_book",
+      "person": "farah",
+      "direction": "owes_me",
+      "amount": 27.99,
+      "name": "book club book",
+      "date": "2026-09-24"
+    }
+  ],
+  "locker": [
+    {
+      "key": "wifi",
+      "name": "Home wifi",
+      "type": "wifi",
+      "password": "biscuit-2208",
+      "starred": true
+    },
+    {
+      "key": "officewifi",
+      "name": "Office wifi",
+      "type": "wifi",
+      "password": "Welcome2026!"
+    },
+    {
+      "key": "netflix",
+      "name": "Netflix",
+      "type": "login",
+      "username": "priya.raman@example.com",
+      "url": "https://netflix.com",
+      "password": "tacos&dosa"
+    },
+    {
+      "key": "chase",
+      "name": "Chase bank",
+      "type": "login",
+      "username": "praman",
+      "url": "https://chase.com",
+      "password": "R4man!Chase"
+    },
+    {
+      "key": "amex",
+      "name": "Amex Gold card",
+      "type": "card",
+      "starred": true
+    },
+    {
+      "key": "passportlk",
+      "name": "Passport",
+      "type": "passport",
+      "notes": "expires 2027-02-01"
+    },
+    {
+      "key": "license",
+      "name": "Driver's license",
+      "type": "driving_licence",
+      "notes": "Texas, expires 2029"
+    },
+    {
+      "key": "garagecode",
+      "name": "Garage door code",
+      "type": "note",
+      "notes": "side door keypad"
+    },
+    {
+      "key": "spotify",
+      "name": "Spotify",
+      "type": "login",
+      "username": "priyar",
+      "url": "https://spotify.com",
+      "password": "sambar4life"
+    },
+    { "key": "aws", "name": "AWS root account", "type": "api_credential" },
+    {
+      "key": "healthins",
+      "name": "Health insurance card",
+      "type": "membership",
+      "notes": "BCBS PPO"
+    },
+    {
+      "key": "costco",
+      "name": "Costco membership",
+      "type": "membership",
+      "notes": "executive, renews March"
+    },
+    {
+      "key": "router",
+      "name": "Router admin",
+      "type": "login",
+      "username": "admin",
+      "url": "http://192.168.1.1",
+      "password": "n3tgear-admin"
+    },
+    {
+      "key": "oldgym",
+      "name": "Old gym login",
+      "type": "login",
+      "username": "priya",
+      "trashed": "2026-09-20T09:00"
+    }
+  ],
+  "today": "2026-10-14T08:40"
+}

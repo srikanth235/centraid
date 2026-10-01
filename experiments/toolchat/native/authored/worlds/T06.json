@@ -1,0 +1,2148 @@
+{
+  "me": "Lukas Brandt",
+  "epoch": "2023-01-05T09:00",
+  "seed": "T06",
+  "currency": "EUR",
+  "people": [
+    {
+      "key": "mira",
+      "name": "Mira Hoffmann",
+      "role": "flatmate",
+      "cadence": 7,
+      "starred": true,
+      "last_contacted": "2026-02-07T19:00",
+      "last_contacted_kind": "message",
+      "met": "WG casting 2023"
+    },
+    {
+      "key": "jonas_k",
+      "name": "Jonas Keller",
+      "role": "flatmate",
+      "cadence": 7,
+      "last_contacted": "2026-02-06T22:00",
+      "last_contacted_kind": "message"
+    },
+    {
+      "key": "jonas_w",
+      "name": "Jonas Wirth",
+      "role": "drummer, Kaeltewelle",
+      "cadence": 7,
+      "last_contacted": "2026-02-03T22:15",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "lena",
+      "name": "Lena Vogt",
+      "role": "singer, Kaeltewelle",
+      "starred": true,
+      "cadence": 7,
+      "last_contacted": "2026-02-05T18:30",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "kalle",
+      "name": "Karl Schmitz",
+      "role": "guitarist, Kaeltewelle",
+      "nickname": "Kalle",
+      "cadence": 14,
+      "last_contacted": "2026-02-03T22:15",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "ute",
+      "name": "Ute Brandt",
+      "role": "mum",
+      "nickname": "Mama",
+      "cadence": 7,
+      "starred": true,
+      "last_contacted": "2026-02-01T11:00",
+      "last_contacted_kind": "call",
+      "met": "Halle"
+    },
+    {
+      "key": "dieter",
+      "name": "Dieter Brandt",
+      "role": "dad",
+      "nickname": "Papa",
+      "cadence": 14,
+      "last_contacted": "2026-01-01T13:00",
+      "last_contacted_kind": "visit",
+      "met": "Halle"
+    },
+    {
+      "key": "sophie",
+      "name": "Sophie Brandt",
+      "role": "sister",
+      "cadence": 10,
+      "last_contacted": "2026-01-25T17:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "anke",
+      "name": "Anke Schmidtke",
+      "role": "booker, Club Tonkeller",
+      "cadence": 30,
+      "last_contacted": "2026-01-28T12:00",
+      "last_contacted_kind": "email"
+    },
+    {
+      "key": "tobi",
+      "name": "Tobias Richter",
+      "role": "festival crew lead",
+      "nickname": "Tobi",
+      "cadence": 14,
+      "last_contacted": "2026-01-29T22:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "nele",
+      "name": "Nele Franke",
+      "role": "festival crew, stage manager",
+      "cadence": 30,
+      "last_contacted": "2026-01-29T22:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "emre",
+      "name": "Emre Yilmaz",
+      "role": "festival crew, lighting",
+      "cadence": 30,
+      "last_contacted": "2025-12-12T20:00",
+      "last_contacted_kind": "message"
+    },
+    {
+      "key": "olli",
+      "name": "Oliver Krause",
+      "role": "sound engineer",
+      "nickname": "Olli",
+      "cadence": 21,
+      "last_contacted": "2026-01-10T23:30",
+      "last_contacted_kind": "visit",
+      "met": "Tonmeister course 2019"
+    },
+    {
+      "key": "hannah_s",
+      "name": "Hannah Seidel",
+      "role": "owner, Studio Plagwitz",
+      "cadence": 21,
+      "last_contacted": "2026-01-22T18:00",
+      "last_contacted_kind": "meeting"
+    },
+    {
+      "key": "hannah_b",
+      "name": "Hannah Bauer",
+      "role": "climbing friend",
+      "cadence": 14,
+      "last_contacted": "2026-01-25T17:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "marek",
+      "name": "Marek Novak",
+      "role": "promoter, Klub Rybka Prague",
+      "last_contacted": "2026-02-02T10:00",
+      "last_contacted_kind": "email",
+      "met": "Prague 2024"
+    },
+    {
+      "key": "pavla",
+      "name": "Pavla Dvorakova",
+      "role": "sound tech, Klub Rybka"
+    },
+    {
+      "key": "felix",
+      "name": "Felix Wagner",
+      "role": "technical director, Theater Lindenau",
+      "cadence": 30,
+      "last_contacted": "2026-02-02T15:00",
+      "last_contacted_kind": "meeting"
+    },
+    {
+      "key": "greta",
+      "name": "Greta Lindner",
+      "role": "podcast host, client",
+      "cadence": 14,
+      "last_contacted": "2026-01-30T16:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "steffi",
+      "name": "Stefanie Maier",
+      "role": "tax advisor",
+      "nickname": "Steffi",
+      "last_contacted": "2025-11-20T09:00",
+      "last_contacted_kind": "meeting"
+    },
+    {
+      "key": "kuhn",
+      "name": "Bernd Kuhn",
+      "role": "landlord"
+    },
+    {
+      "key": "yusuf",
+      "name": "Yusuf Demir",
+      "role": "friend, bike mechanic",
+      "cadence": 30,
+      "last_contacted": "2025-12-20T14:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "ines",
+      "name": "Ines Walter",
+      "role": "photographer friend",
+      "cadence": 30,
+      "last_contacted": "2026-02-04T15:00",
+      "last_contacted_kind": "coffee"
+    },
+    {
+      "key": "paul",
+      "name": "Paul Zimmer",
+      "role": "session bassist"
+    },
+    {
+      "key": "rico",
+      "name": "Rico Hartmann",
+      "role": "van rental, Hartmann Transporte"
+    },
+    {
+      "key": "bea",
+      "name": "Beate Schulz",
+      "role": "neighbour, 2nd floor",
+      "nickname": "Bea"
+    },
+    {
+      "key": "albrecht",
+      "name": "Dr. Petra Albrecht",
+      "role": "dentist"
+    },
+    {
+      "key": "clara",
+      "name": "Clara Neumann",
+      "role": "ex-keyboarder, Kaeltewelle",
+      "last_contacted": "2025-10-02T20:00",
+      "last_contacted_kind": "message"
+    },
+    {
+      "key": "frank",
+      "name": "Frank Otto",
+      "role": "gear buyer from Kleinanzeigen",
+      "trashed": "2026-01-30T10:00"
+    }
+  ],
+  "groups": [
+    {
+      "key": "kitty",
+      "name": "WG Kasse",
+      "members": ["mira", "jonas_k"],
+      "created": "2023-10-01T10:00"
+    },
+    {
+      "key": "band",
+      "name": "Kaeltewelle band fund",
+      "members": ["jonas_w", "lena", "kalle", "paul"],
+      "created": "2024-03-01T20:00"
+    },
+    {
+      "key": "crew",
+      "name": "Festival crew 2026",
+      "members": ["tobi", "nele", "emre", "olli"],
+      "created": "2026-01-29T22:30"
+    },
+    {
+      "key": "prague",
+      "name": "Prague gig trip",
+      "currency": "CZK",
+      "members": ["jonas_w", "lena", "kalle", "marek"],
+      "created": "2026-01-12T21:00"
+    },
+    {
+      "key": "harz",
+      "name": "Harz weekend",
+      "members": ["sophie", "hannah_b", "yusuf"],
+      "created": "2026-01-10T12:00"
+    },
+    {
+      "key": "mama60",
+      "name": "Mama's 60th present",
+      "members": ["sophie", "dieter"],
+      "created": "2026-01-18T19:00"
+    }
+  ],
+  "expenses": [
+    {
+      "group": "kitty",
+      "name": "Toilet paper and dish soap",
+      "amount": 18.4,
+      "paid_by": "mira",
+      "split": ["me", "mira", "jonas_k"],
+      "date": "2026-01-09"
+    },
+    {
+      "group": "kitty",
+      "name": "Internet January",
+      "amount": 39.9,
+      "paid_by": "me",
+      "split": ["me", "mira", "jonas_k"],
+      "date": "2026-01-15"
+    },
+    {
+      "group": "kitty",
+      "name": "Big Rewe shop",
+      "amount": 64.5,
+      "paid_by": "jonas_k",
+      "split": ["me", "mira", "jonas_k"],
+      "date": "2026-01-24"
+    },
+    {
+      "group": "kitty",
+      "name": "Internet February",
+      "amount": 39.9,
+      "paid_by": "me",
+      "split": ["me", "mira", "jonas_k"],
+      "date": "2026-02-02"
+    },
+    {
+      "group": "band",
+      "name": "Rehearsal room January",
+      "amount": 160,
+      "paid_by": "me",
+      "split": ["me", "jonas_w", "lena", "kalle"],
+      "date": "2026-01-05"
+    },
+    {
+      "group": "band",
+      "name": "Merch shirts",
+      "amount": 240,
+      "paid_by": "lena",
+      "split": ["me", "jonas_w", "lena", "kalle"],
+      "date": "2026-01-20"
+    },
+    {
+      "group": "band",
+      "name": "Drum heads",
+      "amount": 58,
+      "paid_by": "jonas_w",
+      "split": ["me", "jonas_w", "lena", "kalle"],
+      "date": "2026-02-01"
+    },
+    {
+      "group": "crew",
+      "name": "Kickoff dinner",
+      "amount": 132,
+      "paid_by": "tobi",
+      "split": ["me", "tobi", "nele", "emre"],
+      "date": "2026-01-29"
+    },
+    {
+      "group": "crew",
+      "name": "Gaffer tape and cable ties",
+      "amount": 46,
+      "paid_by": "me",
+      "split": ["me", "tobi", "nele", "emre"],
+      "date": "2026-02-03"
+    },
+    {
+      "group": "prague",
+      "name": "Van deposit",
+      "amount": 4000,
+      "paid_by": "me",
+      "split": ["me", "jonas_w", "lena", "kalle"],
+      "date": "2026-01-14"
+    },
+    {
+      "group": "prague",
+      "name": "Hostel Zizkov",
+      "amount": 6400,
+      "paid_by": "kalle",
+      "split": ["me", "jonas_w", "lena", "kalle"],
+      "date": "2026-01-20"
+    },
+    {
+      "group": "mama60",
+      "name": "Weekend spa voucher",
+      "amount": 210,
+      "paid_by": "sophie",
+      "split": ["me", "sophie", "dieter"],
+      "date": "2026-01-19"
+    }
+  ],
+  "lists": [
+    {
+      "key": "bandlist",
+      "name": "Band",
+      "area": "band"
+    },
+    {
+      "key": "flatlist",
+      "name": "Flat",
+      "area": "home"
+    },
+    {
+      "key": "adminlist",
+      "name": "Freelance admin",
+      "area": "work"
+    },
+    {
+      "key": "festlist",
+      "name": "Festival crew",
+      "area": "work"
+    },
+    {
+      "key": "praguelist",
+      "name": "Prague trip",
+      "area": "travel"
+    },
+    {
+      "key": "gearlist",
+      "name": "Gear",
+      "area": "studio"
+    }
+  ],
+  "events": [
+    {
+      "key": "reh_0106",
+      "name": "Band rehearsal",
+      "start": "2026-01-06T19:00",
+      "end": "2026-01-06T22:00",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "Proberaum Plagwitz, room 4"
+    },
+    {
+      "key": "reh_0113",
+      "name": "Band rehearsal",
+      "start": "2026-01-13T19:00",
+      "end": "2026-01-13T22:00",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "Proberaum Plagwitz, room 4"
+    },
+    {
+      "key": "reh_0120",
+      "name": "Band rehearsal",
+      "start": "2026-01-20T19:00",
+      "end": "2026-01-20T22:00",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "Proberaum Plagwitz, room 4",
+      "cancelled": "2026-01-19T12:00"
+    },
+    {
+      "key": "reh_0127",
+      "name": "Band rehearsal",
+      "start": "2026-01-27T19:00",
+      "end": "2026-01-27T22:00",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "Proberaum Plagwitz, room 4"
+    },
+    {
+      "key": "reh_0203",
+      "name": "Band rehearsal",
+      "start": "2026-02-03T19:00",
+      "end": "2026-02-03T22:00",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "Proberaum Plagwitz, room 4"
+    },
+    {
+      "key": "reh_0210",
+      "name": "Band rehearsal",
+      "start": "2026-02-10T19:00",
+      "end": "2026-02-10T22:00",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "Proberaum Plagwitz, room 4"
+    },
+    {
+      "key": "reh_0217",
+      "name": "Band rehearsal",
+      "start": "2026-02-17T19:00",
+      "end": "2026-02-17T22:00",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "Proberaum Plagwitz, room 4"
+    },
+    {
+      "key": "reh_0224",
+      "name": "Band rehearsal",
+      "start": "2026-02-24T19:00",
+      "end": "2026-02-24T22:00",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "Proberaum Plagwitz, room 4"
+    },
+    {
+      "key": "reh_0303",
+      "name": "Band rehearsal",
+      "start": "2026-03-03T19:00",
+      "end": "2026-03-03T22:00",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "Proberaum Plagwitz, room 4"
+    },
+    {
+      "key": "reh_0310",
+      "name": "Band rehearsal",
+      "start": "2026-03-10T19:00",
+      "end": "2026-03-10T22:00",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "Proberaum Plagwitz, room 4"
+    },
+    {
+      "key": "reh_0317",
+      "name": "Band rehearsal",
+      "start": "2026-03-17T19:00",
+      "end": "2026-03-17T22:00",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "Proberaum Plagwitz, room 4"
+    },
+    {
+      "key": "reh_0324",
+      "name": "Band rehearsal",
+      "start": "2026-03-24T19:00",
+      "end": "2026-03-24T22:00",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "Proberaum Plagwitz, room 4"
+    },
+    {
+      "key": "reh_0331",
+      "name": "Band rehearsal",
+      "start": "2026-03-31T19:00",
+      "end": "2026-03-31T22:00",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "Proberaum Plagwitz, room 4"
+    },
+    {
+      "key": "sc_lindenau",
+      "name": "Soundcheck Kulturhaus Lindenau",
+      "start": "2026-01-17T16:00",
+      "end": "2026-01-17T17:30",
+      "attendees": ["jonas_w", "lena", "kalle"]
+    },
+    {
+      "key": "gig_lindenau",
+      "name": "Kaeltewelle live at Kulturhaus Lindenau",
+      "start": "2026-01-17T20:00",
+      "end": "2026-01-17T23:30",
+      "attendees": ["jonas_w", "lena", "kalle"]
+    },
+    {
+      "key": "sc_0213",
+      "name": "Soundcheck Tonkeller",
+      "start": "2026-02-13T16:00",
+      "end": "2026-02-13T17:30",
+      "attendees": ["jonas_w", "lena", "kalle", "anke"]
+    },
+    {
+      "key": "gig_tonkeller",
+      "name": "Kaeltewelle live at Tonkeller",
+      "start": "2026-02-13T20:00",
+      "end": "2026-02-13T23:30",
+      "attendees": ["jonas_w", "lena", "kalle"],
+      "description": "doors 19:30, 45 min set"
+    },
+    {
+      "key": "sc_0306",
+      "name": "Soundcheck Tonkeller",
+      "start": "2026-03-06T16:00",
+      "end": "2026-03-06T17:30",
+      "attendees": ["anke"]
+    },
+    {
+      "key": "foh_blau",
+      "name": "FOH for Blaue Stunde at Tonkeller",
+      "start": "2026-03-06T19:30",
+      "end": "2026-03-06T23:30",
+      "attendees": ["anke"]
+    },
+    {
+      "key": "theatre_tech",
+      "name": "Tech run Theater Lindenau",
+      "start": "2026-02-10T10:00",
+      "end": "2026-02-10T16:00",
+      "attendees": ["felix"],
+      "description": "bring the wireless rack"
+    },
+    {
+      "key": "premiere",
+      "name": "Premiere Theater Lindenau",
+      "start": "2026-02-12T18:00",
+      "end": "2026-02-12T22:30",
+      "attendees": ["felix"]
+    },
+    {
+      "key": "mix_greta1",
+      "name": "Mixing session with Greta",
+      "start": "2026-02-09T10:00",
+      "end": "2026-02-09T14:00",
+      "attendees": ["greta"]
+    },
+    {
+      "key": "mix_greta2",
+      "name": "Mixing session with Greta",
+      "start": "2026-02-16T10:00",
+      "end": "2026-02-16T14:00",
+      "attendees": ["greta"]
+    },
+    {
+      "key": "mix_greta3",
+      "name": "Mixing session with Greta",
+      "start": "2026-03-02T10:00",
+      "end": "2026-03-02T14:00",
+      "attendees": ["greta"]
+    },
+    {
+      "key": "podcast",
+      "name": "Podcast recording at Studio Plagwitz",
+      "start": "2026-02-11T14:00",
+      "end": "2026-02-11T17:00",
+      "attendees": ["greta", "hannah_s"],
+      "description": "episode 12, two guests"
+    },
+    {
+      "key": "studio_jan",
+      "name": "Studio day Plagwitz",
+      "start": "2026-01-22T10:00",
+      "end": "2026-01-22T18:00",
+      "attendees": ["hannah_s"]
+    },
+    {
+      "key": "studio_feb",
+      "name": "Studio day Plagwitz",
+      "start": "2026-02-25T10:00",
+      "end": "2026-02-25T18:00",
+      "attendees": ["hannah_s", "paul"]
+    },
+    {
+      "key": "radio",
+      "name": "Radio interview on Radio Blau",
+      "start": "2026-02-20T11:00",
+      "end": "2026-02-20T11:45",
+      "attendees": ["lena"],
+      "description": "talk about the Prague show"
+    },
+    {
+      "key": "wg_jan",
+      "name": "WG meeting",
+      "start": "2026-01-11T18:00",
+      "end": "2026-01-11T19:00",
+      "attendees": ["mira", "jonas_k"]
+    },
+    {
+      "key": "wg_feb",
+      "name": "WG meeting",
+      "start": "2026-02-08T18:00",
+      "end": "2026-02-08T19:00",
+      "attendees": ["mira", "jonas_k"],
+      "description": "heating, cleaning rota"
+    },
+    {
+      "key": "crew_dinner",
+      "name": "Crew kickoff dinner",
+      "start": "2026-01-29T19:30",
+      "end": "2026-01-29T22:00",
+      "attendees": ["tobi", "nele", "emre"]
+    },
+    {
+      "key": "crew_call1",
+      "name": "Festival crew call",
+      "start": "2026-02-18T19:00",
+      "end": "2026-02-18T20:30",
+      "attendees": ["tobi", "nele", "emre", "olli"]
+    },
+    {
+      "key": "crew_call2",
+      "name": "Festival crew call",
+      "start": "2026-03-04T19:00",
+      "end": "2026-03-04T20:30",
+      "attendees": ["tobi", "nele"]
+    },
+    {
+      "key": "site_visit",
+      "name": "Festival site visit",
+      "start": "2026-03-21T10:00",
+      "end": "2026-03-21T15:00",
+      "attendees": ["tobi", "nele", "emre"]
+    },
+    {
+      "key": "load_in",
+      "name": "Festival load-in",
+      "start": "2026-06-18T08:00",
+      "end": "2026-06-18T20:00",
+      "attendees": ["tobi", "nele", "emre", "olli"]
+    },
+    {
+      "key": "festival",
+      "name": "Festival weekend",
+      "start": "2026-06-19T12:00",
+      "end": "2026-06-21T23:00",
+      "attendees": ["tobi", "nele", "emre", "olli"]
+    },
+    {
+      "key": "van_pickup",
+      "name": "Van pickup at Rico's",
+      "start": "2026-02-26T18:00",
+      "end": "2026-02-26T18:30",
+      "attendees": ["rico"]
+    },
+    {
+      "key": "drive_prague",
+      "name": "Drive to Prague",
+      "start": "2026-02-27T09:00",
+      "end": "2026-02-27T13:00",
+      "attendees": ["jonas_w", "lena", "kalle"]
+    },
+    {
+      "key": "gig_prague",
+      "name": "Kaeltewelle live at Klub Rybka",
+      "start": "2026-02-27T21:00",
+      "end": "2026-02-27T23:30",
+      "attendees": ["jonas_w", "lena", "kalle", "marek", "pavla"]
+    },
+    {
+      "key": "drive_back",
+      "name": "Drive back from Prague",
+      "start": "2026-02-28T12:00",
+      "end": "2026-02-28T16:00",
+      "attendees": ["jonas_w", "lena", "kalle"]
+    },
+    {
+      "key": "van_return",
+      "name": "Van return at Rico's",
+      "start": "2026-02-28T17:00",
+      "end": "2026-02-28T17:30",
+      "attendees": ["rico"]
+    },
+    {
+      "key": "brunch",
+      "name": "New Year's brunch at Mama's",
+      "start": "2026-01-01T11:00",
+      "end": "2026-01-01T14:00",
+      "attendees": ["ute", "dieter", "sophie"]
+    },
+    {
+      "key": "mama_dinner",
+      "name": "Mama's 60th birthday dinner",
+      "start": "2026-02-21T18:30",
+      "end": "2026-02-21T22:00",
+      "attendees": ["ute", "dieter", "sophie"],
+      "description": "Zum Anker, table for 8"
+    },
+    {
+      "key": "harz_trip",
+      "name": "Harz weekend",
+      "start": "2026-01-24T09:00",
+      "end": "2026-01-25T18:00",
+      "attendees": ["sophie", "hannah_b", "yusuf"]
+    },
+    {
+      "key": "coffee_ines",
+      "name": "Coffee with Ines",
+      "start": "2026-02-04T15:00",
+      "end": "2026-02-04T16:00",
+      "attendees": ["ines"]
+    },
+    {
+      "key": "open_mic",
+      "name": "Open mic at Cafe Kaput",
+      "start": "2026-02-05T20:00",
+      "end": "2026-02-05T22:00",
+      "attendees": ["olli"],
+      "cancelled": "2026-02-04T10:00"
+    },
+    {
+      "key": "bike",
+      "name": "Bike repair with Yusuf",
+      "start": "2026-02-14T11:00",
+      "end": "2026-02-14T12:00",
+      "attendees": ["yusuf"]
+    },
+    {
+      "key": "climbing",
+      "name": "Climbing with Hannah",
+      "start": "2026-02-15T16:00",
+      "end": "2026-02-15T18:00",
+      "attendees": ["hannah_b"]
+    },
+    {
+      "key": "dentist",
+      "name": "Dentist check-up",
+      "start": "2026-02-19T08:30",
+      "end": "2026-02-19T09:00",
+      "attendees": ["albrecht"]
+    },
+    {
+      "key": "tax_meet",
+      "name": "Tax meeting with Steffi",
+      "start": "2026-02-24T09:00",
+      "end": "2026-02-24T10:00",
+      "attendees": ["steffi"],
+      "description": "bring all 2025 invoices"
+    },
+    {
+      "key": "kalle_bday",
+      "name": "Kalle's birthday drinks",
+      "start": "2026-03-12T20:00",
+      "end": "2026-03-12T23:30",
+      "attendees": ["kalle", "jonas_w", "lena"]
+    },
+    {
+      "key": "gear_swap",
+      "name": "Gear swap meet",
+      "start": "2026-03-14T11:00",
+      "end": "2026-03-14T14:00",
+      "attendees": ["olli"]
+    },
+    {
+      "key": "flea",
+      "name": "Flea market stall with Mira",
+      "start": "2026-01-31T09:00",
+      "end": "2026-01-31T14:00",
+      "attendees": ["mira"],
+      "cancelled": "2026-01-30T18:00"
+    },
+    {
+      "key": "pub_quiz",
+      "name": "Pub quiz with Olli",
+      "start": "2026-02-19T20:00",
+      "end": "2026-02-19T22:00",
+      "attendees": ["olli"],
+      "trashed": "2026-02-03T09:00"
+    },
+    {
+      "key": "clara_coffee",
+      "name": "Coffee with Clara",
+      "start": "2025-12-06T15:00",
+      "end": "2025-12-06T16:00",
+      "attendees": ["clara"],
+      "trashed": "2025-12-05T09:00"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "setlists",
+      "name": "Print setlists for Tonkeller",
+      "due": "2026-02-13",
+      "list": "bandlist",
+      "effort": 15
+    },
+    {
+      "key": "snake",
+      "name": "Fix the stage snake",
+      "due": "2026-02-10",
+      "list": "bandlist",
+      "effort": 30,
+      "priority": 2
+    },
+    {
+      "key": "reh_room",
+      "name": "Book rehearsal room for April",
+      "due": "2026-02-20",
+      "list": "bandlist",
+      "priority": 3
+    },
+    {
+      "key": "live_mix",
+      "name": "Mix the Tonkeller live recording",
+      "due": "2026-02-28",
+      "list": "bandlist",
+      "effort": 240,
+      "status": "in_progress",
+      "description": "multitrack from the X32, 9 songs"
+    },
+    {
+      "key": "live_mix_import",
+      "name": "Import the multitrack",
+      "parent": "live_mix",
+      "due": "2026-02-15"
+    },
+    {
+      "key": "live_mix_vox",
+      "name": "Clean up vocal bleed",
+      "parent": "live_mix",
+      "due": "2026-02-22"
+    },
+    {
+      "key": "epk",
+      "name": "Update band EPK",
+      "list": "bandlist",
+      "effort": 60
+    },
+    {
+      "key": "rider",
+      "name": "Send Prague rider to Marek",
+      "due": "2026-02-12",
+      "list": "praguelist",
+      "priority": 1,
+      "effort": 20
+    },
+    {
+      "key": "merch",
+      "name": "Count merch stock",
+      "due": "2026-02-12",
+      "list": "bandlist",
+      "effort": 30,
+      "completed": "2026-02-06T21:00"
+    },
+    {
+      "key": "kuhn_heat",
+      "name": "Call Herr Kuhn about the heating",
+      "due": "2026-02-09",
+      "list": "flatlist",
+      "priority": 2
+    },
+    {
+      "key": "bin_bags",
+      "name": "Buy bin bags",
+      "due": "2026-02-08",
+      "list": "flatlist",
+      "effort": 10
+    },
+    {
+      "key": "fridge",
+      "name": "Clean the fridge",
+      "due": "2026-02-15",
+      "list": "flatlist",
+      "effort": 45
+    },
+    {
+      "key": "kettle",
+      "name": "Descale the kettle",
+      "list": "flatlist",
+      "completed": "2026-01-18T10:00"
+    },
+    {
+      "key": "cleaning_rota",
+      "name": "Make a new cleaning rota",
+      "due": "2026-02-08",
+      "list": "flatlist",
+      "effort": 30,
+      "description": "bathroom weekly, kitchen twice a week"
+    },
+    {
+      "key": "inv_jan",
+      "name": "Send invoice to Theater Lindenau",
+      "due": "2026-02-02",
+      "list": "adminlist",
+      "priority": 1,
+      "description": "January tech runs, 4 days"
+    },
+    {
+      "key": "inv_feb",
+      "name": "Send invoice to Theater Lindenau",
+      "due": "2026-02-28",
+      "list": "adminlist",
+      "priority": 2
+    },
+    {
+      "key": "inv_greta",
+      "name": "Invoice Greta for podcast mix",
+      "due": "2026-02-20",
+      "list": "adminlist",
+      "effort": 15
+    },
+    {
+      "key": "vat",
+      "name": "Quarterly VAT return",
+      "due": "2026-02-10",
+      "list": "adminlist",
+      "priority": 1,
+      "effort": 120,
+      "description": "Q4 2025"
+    },
+    {
+      "key": "rates",
+      "name": "Update rate card",
+      "list": "adminlist",
+      "effort": 30
+    },
+    {
+      "key": "ksk",
+      "name": "Send income estimate to KSK",
+      "due": "2026-03-31",
+      "list": "adminlist",
+      "priority": 2
+    },
+    {
+      "key": "backup",
+      "name": "Back up the studio drives",
+      "status": "in_progress",
+      "effort": 60,
+      "list": "gearlist"
+    },
+    {
+      "key": "receipts",
+      "name": "Sort 2025 receipts for Steffi",
+      "due": "2026-02-20",
+      "list": "adminlist",
+      "effort": 90
+    },
+    {
+      "key": "stage_plot",
+      "name": "Draft stage plot for the festival",
+      "due": "2026-03-01",
+      "list": "festlist",
+      "effort": 90
+    },
+    {
+      "key": "pa_quotes",
+      "name": "Get quotes for PA hire",
+      "due": "2026-02-25",
+      "list": "festlist",
+      "priority": 2
+    },
+    {
+      "key": "crew_shirts",
+      "name": "Order crew shirts",
+      "due": "2026-04-15",
+      "list": "festlist"
+    },
+    {
+      "key": "crew_rota",
+      "name": "Build festival crew rota",
+      "due": "2026-05-01",
+      "list": "festlist",
+      "effort": 90
+    },
+    {
+      "key": "radios",
+      "name": "Rent walkie-talkies",
+      "due": "2026-05-20",
+      "list": "festlist",
+      "status": "cancelled"
+    },
+    {
+      "key": "hostel",
+      "name": "Book hostel in Prague",
+      "list": "praguelist",
+      "completed": "2026-01-20T21:00"
+    },
+    {
+      "key": "czk",
+      "name": "Get Czech crowns",
+      "due": "2026-02-26",
+      "list": "praguelist",
+      "effort": 20
+    },
+    {
+      "key": "van_ins",
+      "name": "Check van insurance for Czechia",
+      "due": "2026-02-20",
+      "list": "praguelist"
+    },
+    {
+      "key": "xlr",
+      "name": "Replace the broken XLR cables",
+      "due": "2026-02-14",
+      "list": "gearlist",
+      "effort": 30
+    },
+    {
+      "key": "sell_mixer",
+      "name": "Sell the old Behringer mixer",
+      "list": "gearlist"
+    },
+    {
+      "key": "mackie",
+      "name": "Repair the Mackie monitor",
+      "list": "gearlist",
+      "status": "cancelled"
+    },
+    {
+      "key": "in_ears",
+      "name": "Order new in-ear tips",
+      "due": "2026-02-11",
+      "list": "gearlist",
+      "effort": 5
+    },
+    {
+      "key": "mama_gift",
+      "name": "Birthday present for Mama",
+      "due": "2026-02-20",
+      "priority": 2
+    },
+    {
+      "key": "call_sophie",
+      "name": "Call Sophie about Mama's party",
+      "due": "2026-02-09",
+      "effort": 20
+    },
+    {
+      "key": "book_dentist",
+      "name": "Book dentist appointment",
+      "completed": "2026-01-12T09:00"
+    },
+    {
+      "key": "dticket",
+      "name": "Renew Deutschlandticket",
+      "due": "2026-02-28",
+      "effort": 10
+    },
+    {
+      "key": "bike_light",
+      "name": "Buy a new bike light",
+      "due": "2026-02-14",
+      "effort": 15
+    },
+    {
+      "key": "climb_shoes",
+      "name": "Resole climbing shoes",
+      "effort": 30
+    },
+    {
+      "key": "library",
+      "name": "Return library books",
+      "due": "2026-02-06",
+      "trashed": "2026-02-01T10:00"
+    },
+    {
+      "key": "gym",
+      "name": "Sign up for the bouldering gym",
+      "trashed": "2025-12-10T10:00"
+    },
+    {
+      "key": "flyers",
+      "name": "Print flyers for Tonkeller",
+      "due": "2026-02-06",
+      "list": "bandlist",
+      "trashed": "2026-02-02T11:00"
+    },
+    {
+      "key": "kitty_09",
+      "name": "Top up WG Kasse",
+      "due": "2025-09-01",
+      "effort": 5,
+      "completed": "2025-09-01T20:00",
+      "list": "flatlist"
+    },
+    {
+      "key": "kitty_10",
+      "name": "Top up WG Kasse",
+      "due": "2025-10-01",
+      "effort": 5,
+      "completed": "2025-10-01T20:00",
+      "list": "flatlist"
+    },
+    {
+      "key": "kitty_11",
+      "name": "Top up WG Kasse",
+      "due": "2025-11-01",
+      "effort": 5,
+      "completed": "2025-11-01T20:00",
+      "list": "flatlist"
+    },
+    {
+      "key": "kitty_12",
+      "name": "Top up WG Kasse",
+      "due": "2025-12-01",
+      "effort": 5,
+      "completed": "2025-12-01T20:00",
+      "list": "flatlist"
+    },
+    {
+      "key": "kitty_01",
+      "name": "Top up WG Kasse",
+      "due": "2026-01-01",
+      "effort": 5,
+      "completed": "2026-01-01T20:00",
+      "list": "flatlist"
+    },
+    {
+      "key": "kitty_02",
+      "name": "Top up WG Kasse",
+      "due": "2026-02-01",
+      "effort": 5,
+      "list": "flatlist"
+    },
+    {
+      "key": "rent_11",
+      "name": "Pay rent",
+      "due": "2025-11-03",
+      "completed": "2025-11-03T09:00",
+      "list": "flatlist"
+    },
+    {
+      "key": "rent_12",
+      "name": "Pay rent",
+      "due": "2025-12-03",
+      "completed": "2025-12-03T09:00",
+      "list": "flatlist"
+    },
+    {
+      "key": "rent_01",
+      "name": "Pay rent",
+      "due": "2026-01-03",
+      "completed": "2026-01-03T09:00",
+      "list": "flatlist"
+    },
+    {
+      "key": "rent_02",
+      "name": "Pay rent",
+      "due": "2026-02-03",
+      "list": "flatlist",
+      "priority": 1
+    },
+    {
+      "key": "rent_03",
+      "name": "Pay rent",
+      "due": "2026-03-03",
+      "list": "flatlist"
+    }
+  ],
+  "notebooks": [
+    {
+      "key": "mix_nb",
+      "name": "Mixing notes"
+    },
+    {
+      "key": "band_nb",
+      "name": "Band"
+    },
+    {
+      "key": "flat_nb",
+      "name": "Flat"
+    },
+    {
+      "key": "fest_nb",
+      "name": "Festival"
+    },
+    {
+      "key": "recipe_nb",
+      "name": "Recipes"
+    },
+    {
+      "key": "old_nb",
+      "name": "Old tour diary"
+    }
+  ],
+  "notes": [
+    {
+      "key": "vocal_chain",
+      "name": "Lena vocal chain",
+      "body": "SM58, HPF 100 Hz, 1176 fast, 2 dB cut at 3k, plate reverb",
+      "notebook": "mix_nb",
+      "created": "2026-01-17T23:50",
+      "pinned": true
+    },
+    {
+      "key": "kick_eq",
+      "name": "Kick drum EQ",
+      "body": "Beta 91 inside, cut 400, boost 60 and 4k, gate at -30",
+      "notebook": "mix_nb",
+      "created": "2026-01-06T22:30"
+    },
+    {
+      "key": "tonkeller_room",
+      "name": "Tonkeller room notes",
+      "body": "ring at 250 Hz, sub in the corner booms, limit 99 dB",
+      "notebook": "mix_nb",
+      "created": "2025-11-14T01:10"
+    },
+    {
+      "key": "podcast_chain",
+      "name": "Podcast chain",
+      "body": "SM7B, Cloudlifter, gentle de-ess, -16 LUFS for Spotify",
+      "notebook": "mix_nb",
+      "created": "2026-01-30T17:00"
+    },
+    {
+      "key": "theatre_rf",
+      "name": "Theatre RF plan",
+      "body": "8 Sennheiser packs, channels 1-8 in the 823 MHz block",
+      "notebook": "mix_nb",
+      "created": "2026-02-02T16:00"
+    },
+    {
+      "key": "setlist_note",
+      "name": "Setlist Tonkeller",
+      "body": "Nachtzug, Glas, Kaeltewelle, Fernweh, Asphalt, encore: Glas reprise",
+      "notebook": "band_nb",
+      "created": "2026-02-03T22:40",
+      "pinned": true
+    },
+    {
+      "key": "prague_plan",
+      "name": "Prague plan",
+      "body": "leave 9:00, load in 17:00 at Rybka, Pavla does monitors",
+      "notebook": "band_nb",
+      "created": "2026-01-14T21:00"
+    },
+    {
+      "key": "lyrics_glas",
+      "name": "Glas lyric changes",
+      "body": "second verse new line from Lena, bridge half time",
+      "notebook": "band_nb",
+      "created": "2026-01-27T22:10"
+    },
+    {
+      "key": "band_money",
+      "name": "Band money split",
+      "body": "gig fees into the band fund, merch profit split four ways",
+      "notebook": "band_nb",
+      "created": "2025-12-02T21:00"
+    },
+    {
+      "key": "heating",
+      "name": "Heating problems",
+      "body": "radiator in the bathroom cold since 2 Feb, Kuhn not answering",
+      "notebook": "flat_nb",
+      "created": "2026-02-04T09:30"
+    },
+    {
+      "key": "rota_note",
+      "name": "Cleaning rota ideas",
+      "body": "swap kitchen and bathroom weekly, Jonas does bins",
+      "notebook": "flat_nb",
+      "created": "2026-02-06T20:00"
+    },
+    {
+      "key": "wifi_note",
+      "name": "Router reset steps",
+      "body": "hold reset 10s, login admin, channel 36",
+      "notebook": "flat_nb",
+      "created": "2025-12-28T14:00"
+    },
+    {
+      "key": "fest_power",
+      "name": "Festival power plan",
+      "body": "main stage 125A CEE, second stage 63A, generator backup",
+      "notebook": "fest_nb",
+      "created": "2026-01-29T23:00",
+      "pinned": true
+    },
+    {
+      "key": "fest_contacts",
+      "name": "Festival contacts",
+      "body": "Tobi for stages, Nele for artists, Emre for lights",
+      "notebook": "fest_nb",
+      "created": "2026-01-30T10:00"
+    },
+    {
+      "key": "fest_budget",
+      "name": "Festival sound budget",
+      "body": "PA hire max 6000, backline 1500, crew food 800",
+      "notebook": "fest_nb",
+      "created": "2026-02-05T21:30"
+    },
+    {
+      "key": "soljanka",
+      "name": "Soljanka",
+      "body": "pickles, sausage, tomato paste, lemon and sour cream on top",
+      "notebook": "recipe_nb",
+      "created": "2025-12-14T18:00"
+    },
+    {
+      "key": "curry",
+      "name": "Mira's lentil curry",
+      "body": "red lentils, coconut milk, lots of ginger",
+      "notebook": "recipe_nb",
+      "created": "2026-01-20T19:30"
+    },
+    {
+      "key": "tour_2023",
+      "name": "Tour 2023 highlights",
+      "body": "Dresden sold out, van broke in Chemnitz",
+      "notebook": "old_nb",
+      "created": "2023-09-10T12:00"
+    },
+    {
+      "key": "ideas",
+      "name": "Studio business ideas",
+      "body": "mixing packages for podcasts, mastering add-on at 40 per track",
+      "created": "2026-01-08T23:00"
+    },
+    {
+      "key": "gift_note",
+      "name": "Gift ideas for Mama",
+      "body": "spa voucher with Sophie, photo book from Harz, orchid",
+      "created": "2026-01-18T20:00"
+    },
+    {
+      "key": "goals",
+      "name": "Goals 2026",
+      "body": "raise day rate to 350, two festival gigs, climb 6b outdoors",
+      "created": "2026-01-01T15:00",
+      "pinned": true
+    },
+    {
+      "key": "gear_list",
+      "name": "Gear to sell",
+      "body": "Behringer X1204, two old DI boxes, stand pack",
+      "created": "2026-01-26T21:00"
+    },
+    {
+      "key": "harz_note",
+      "name": "Harz weekend packing",
+      "body": "crampons for Sophie, thermos, snow chains",
+      "created": "2026-01-21T20:00"
+    },
+    {
+      "key": "old_contacts",
+      "name": "Old venue contacts",
+      "body": "numbers from 2022, mostly dead",
+      "created": "2022-05-01T10:00",
+      "trashed": "2026-01-20T10:00"
+    },
+    {
+      "key": "draft_mail",
+      "name": "Draft mail to Kuhn",
+      "body": "dear Herr Kuhn, the heating ...",
+      "created": "2026-02-04T10:00",
+      "trashed": "2026-02-05T08:00"
+    }
+  ],
+  "folders": [
+    {
+      "key": "inv_f",
+      "name": "Invoices"
+    },
+    {
+      "key": "contracts_f",
+      "name": "Contracts"
+    },
+    {
+      "key": "tax_f",
+      "name": "Tax 2025"
+    },
+    {
+      "key": "band_f",
+      "name": "Band"
+    },
+    {
+      "key": "flat_f",
+      "name": "Flat"
+    },
+    {
+      "key": "old_f",
+      "name": "Old projects"
+    }
+  ],
+  "documents": [
+    {
+      "key": "inv_2025_12",
+      "name": "Invoice 2025-12 Theater Lindenau",
+      "folder": "inv_f",
+      "created": "2025-12-30T10:00"
+    },
+    {
+      "key": "inv_2026_01",
+      "name": "Invoice 2026-01 Greta Lindner",
+      "folder": "inv_f",
+      "created": "2026-01-31T11:00"
+    },
+    {
+      "key": "inv_2026_02",
+      "name": "Invoice 2026-02 Studio Plagwitz",
+      "folder": "inv_f",
+      "created": "2026-02-02T09:00"
+    },
+    {
+      "key": "theatre_contract",
+      "name": "Theater Lindenau contract 2026",
+      "folder": "contracts_f",
+      "starred": true,
+      "created": "2026-01-05T12:00"
+    },
+    {
+      "key": "fest_contract",
+      "name": "Festival crew agreement",
+      "folder": "contracts_f",
+      "created": "2026-01-30T14:00"
+    },
+    {
+      "key": "rybka_contract",
+      "name": "Klub Rybka booking confirmation",
+      "folder": "contracts_f",
+      "created": "2026-01-13T10:00"
+    },
+    {
+      "key": "tax_return",
+      "name": "Tax return 2024 notice",
+      "folder": "tax_f",
+      "created": "2025-10-15T10:00"
+    },
+    {
+      "key": "ksk_letter",
+      "name": "KSK contribution letter",
+      "folder": "tax_f",
+      "starred": true,
+      "created": "2026-01-09T10:00"
+    },
+    {
+      "key": "receipts_doc",
+      "name": "Receipts scan 2025",
+      "folder": "tax_f",
+      "created": "2026-02-01T18:00"
+    },
+    {
+      "key": "rider_doc",
+      "name": "Kaeltewelle tech rider",
+      "folder": "band_f",
+      "starred": true,
+      "created": "2025-11-20T21:00"
+    },
+    {
+      "key": "stage_plot_doc",
+      "name": "Kaeltewelle stage plot",
+      "folder": "band_f",
+      "created": "2025-11-20T21:30"
+    },
+    {
+      "key": "epk_doc",
+      "name": "Band EPK 2025",
+      "folder": "band_f",
+      "created": "2025-06-01T10:00"
+    },
+    {
+      "key": "lease",
+      "name": "WG lease",
+      "folder": "flat_f",
+      "created": "2023-10-01T10:00"
+    },
+    {
+      "key": "heating_letter",
+      "name": "Heating cost statement 2025",
+      "folder": "flat_f",
+      "created": "2026-01-28T10:00"
+    },
+    {
+      "key": "manual",
+      "name": "X32 manual",
+      "created": "2025-09-12T10:00"
+    },
+    {
+      "key": "rental_offer",
+      "name": "PA rental offer",
+      "created": "2026-02-05T16:00"
+    },
+    {
+      "key": "van_contract",
+      "name": "Van rental contract",
+      "created": "2026-01-14T12:00"
+    },
+    {
+      "key": "old_cv",
+      "name": "CV 2023",
+      "created": "2023-02-01T10:00",
+      "trashed": "2026-01-25T10:00"
+    }
+  ],
+  "albums": [
+    {
+      "key": "gig_album",
+      "name": "Tonkeller and Lindenau gigs"
+    },
+    {
+      "key": "harz_album",
+      "name": "Harz weekend"
+    },
+    {
+      "key": "studio_album",
+      "name": "Studio"
+    },
+    {
+      "key": "wg_album",
+      "name": "WG life"
+    },
+    {
+      "key": "sale_album",
+      "name": "Gear for sale"
+    },
+    {
+      "key": "prague_album",
+      "name": "Prague 2026"
+    }
+  ],
+  "photos": [
+    {
+      "key": "p_stage",
+      "name": "Lindenau stage from FOH",
+      "taken": "2026-01-17T21:05",
+      "albums": ["gig_album"],
+      "starred": true
+    },
+    {
+      "key": "p_lena",
+      "name": "Lena at the mic",
+      "taken": "2026-01-17T21:20",
+      "albums": ["gig_album"],
+      "people": ["lena"]
+    },
+    {
+      "key": "p_drums",
+      "name": "Jonas behind the kit",
+      "taken": "2026-01-17T21:40",
+      "albums": ["gig_album"],
+      "people": ["jonas_w"]
+    },
+    {
+      "key": "p_crowd",
+      "name": "Crowd at Lindenau",
+      "taken": "2026-01-17T22:10",
+      "albums": ["gig_album"]
+    },
+    {
+      "key": "p_desk",
+      "name": "Mixing desk at Lindenau",
+      "taken": "2026-01-17T19:30",
+      "albums": ["gig_album", "studio_album"]
+    },
+    {
+      "key": "p_soundcheck",
+      "name": "Soundcheck selfie",
+      "taken": "2026-01-17T16:30",
+      "albums": ["gig_album"],
+      "people": ["kalle", "lena"]
+    },
+    {
+      "key": "p_band",
+      "name": "Band photo after the show",
+      "taken": "2026-01-17T23:45",
+      "albums": ["gig_album"],
+      "people": ["jonas_w", "lena", "kalle"],
+      "starred": true
+    },
+    {
+      "key": "p_brocken",
+      "name": "Brocken summit",
+      "taken": "2026-01-24T13:00",
+      "albums": ["harz_album"],
+      "people": ["sophie", "hannah_b", "yusuf"],
+      "starred": true
+    },
+    {
+      "key": "p_snow",
+      "name": "Snowy forest path",
+      "taken": "2026-01-24T11:10",
+      "albums": ["harz_album"]
+    },
+    {
+      "key": "p_hut",
+      "name": "Hut dinner",
+      "taken": "2026-01-24T19:30",
+      "albums": ["harz_album"],
+      "people": ["sophie", "yusuf"]
+    },
+    {
+      "key": "p_sophie_sled",
+      "name": "Sophie on the sled",
+      "taken": "2026-01-25T10:15",
+      "albums": ["harz_album"],
+      "people": ["sophie"]
+    },
+    {
+      "key": "p_train",
+      "name": "Harz train",
+      "taken": "2026-01-25T15:30",
+      "albums": ["harz_album"]
+    },
+    {
+      "key": "p_studio_a",
+      "name": "Studio Plagwitz live room",
+      "taken": "2026-01-22T11:00",
+      "albums": ["studio_album"],
+      "people": ["hannah_s"]
+    },
+    {
+      "key": "p_mics",
+      "name": "Mic locker",
+      "taken": "2026-01-22T11:30",
+      "albums": ["studio_album"]
+    },
+    {
+      "key": "p_greta",
+      "name": "Greta recording episode 11",
+      "taken": "2026-01-30T15:00",
+      "albums": ["studio_album"],
+      "people": ["greta"]
+    },
+    {
+      "key": "p_rf",
+      "name": "Wireless rack at the theatre",
+      "taken": "2026-02-02T15:30",
+      "albums": ["studio_album"]
+    },
+    {
+      "key": "p_wg_dinner",
+      "name": "WG dinner",
+      "taken": "2026-01-11T20:00",
+      "albums": ["wg_album"],
+      "people": ["mira", "jonas_k"]
+    },
+    {
+      "key": "p_cat",
+      "name": "Neighbour's cat on our balcony",
+      "taken": "2026-02-01T09:40",
+      "albums": ["wg_album"],
+      "starred": true
+    },
+    {
+      "key": "p_kitchen",
+      "name": "Kitchen after the party",
+      "taken": "2026-01-02T01:30",
+      "albums": ["wg_album"]
+    },
+    {
+      "key": "p_radiator",
+      "name": "Cold radiator",
+      "taken": "2026-02-04T09:20",
+      "albums": ["wg_album"]
+    },
+    {
+      "key": "p_mira_plants",
+      "name": "Mira's plant shelf",
+      "taken": "2026-01-19T12:00",
+      "albums": ["wg_album"],
+      "people": ["mira"]
+    },
+    {
+      "key": "p_mixer_sale",
+      "name": "Behringer mixer for sale",
+      "taken": "2026-01-26T20:00",
+      "albums": ["sale_album"]
+    },
+    {
+      "key": "p_di_sale",
+      "name": "DI boxes for sale",
+      "taken": "2026-01-26T20:05",
+      "albums": ["sale_album"]
+    },
+    {
+      "key": "p_stands_sale",
+      "name": "Mic stands for sale",
+      "taken": "2026-01-26T20:10",
+      "albums": ["sale_album", "studio_album"]
+    },
+    {
+      "key": "p_brunch",
+      "name": "New Year's brunch",
+      "taken": "2026-01-01T12:30",
+      "people": ["ute", "dieter", "sophie"]
+    },
+    {
+      "key": "p_mama",
+      "name": "Mama with the cake",
+      "taken": "2025-12-24T17:00",
+      "people": ["ute"],
+      "starred": true
+    },
+    {
+      "key": "p_crew",
+      "name": "Crew kickoff dinner",
+      "taken": "2026-01-29T21:00",
+      "people": ["tobi", "nele", "emre"]
+    },
+    {
+      "key": "p_ines",
+      "name": "Coffee with Ines",
+      "taken": "2026-02-04T15:30",
+      "people": ["ines"]
+    },
+    {
+      "key": "p_climb",
+      "name": "Hannah on the overhang",
+      "taken": "2026-02-01T17:00",
+      "people": ["hannah_b"]
+    },
+    {
+      "key": "p_bike",
+      "name": "Bike with the flat tyre",
+      "taken": "2026-02-06T08:10"
+    },
+    {
+      "key": "p_moon",
+      "name": "Moon over Plagwitz",
+      "taken": "2026-02-06T23:40"
+    },
+    {
+      "key": "p_setlist",
+      "name": "Setlist on the floor",
+      "taken": "2026-01-17T23:20",
+      "albums": ["gig_album"]
+    },
+    {
+      "key": "p_blurry",
+      "name": "Blurry soundcheck shot",
+      "taken": "2026-01-17T16:40",
+      "trashed": "2026-02-01T10:00"
+    },
+    {
+      "key": "p_screenshot",
+      "name": "Parking ticket screenshot",
+      "taken": "2026-01-17T15:00",
+      "trashed": "2026-01-20T10:00"
+    },
+    {
+      "key": "p_old_van",
+      "name": "Old tour van",
+      "taken": "2023-09-10T12:00",
+      "trashed": "2025-12-15T10:00"
+    }
+  ],
+  "debts": [
+    {
+      "key": "d_mira_pizza",
+      "person": "mira",
+      "direction": "owes_me",
+      "amount": 12.5,
+      "name": "Pizza night",
+      "date": "2026-01-30"
+    },
+    {
+      "key": "d_jonask_bvg",
+      "person": "jonas_k",
+      "direction": "i_owe",
+      "amount": 8,
+      "name": "Tram tickets",
+      "date": "2026-02-03"
+    },
+    {
+      "key": "d_lena_cables",
+      "person": "lena",
+      "direction": "i_owe",
+      "amount": 35,
+      "name": "Cables from Thomann",
+      "date": "2026-01-21"
+    },
+    {
+      "key": "d_kalle_beer",
+      "person": "kalle",
+      "direction": "owes_me",
+      "amount": 22,
+      "name": "Beer crate for the gig",
+      "date": "2026-01-17"
+    },
+    {
+      "key": "d_kalle_strings",
+      "person": "kalle",
+      "direction": "owes_me",
+      "amount": 16,
+      "name": "Guitar strings",
+      "date": "2026-02-03"
+    },
+    {
+      "key": "d_olli_mic",
+      "person": "olli",
+      "direction": "i_owe",
+      "amount": 90,
+      "name": "Borrowed mic money",
+      "date": "2025-12-12"
+    },
+    {
+      "key": "d_sophie_train",
+      "person": "sophie",
+      "direction": "owes_me",
+      "amount": 27.8,
+      "name": "Harz train tickets",
+      "date": "2026-01-24"
+    },
+    {
+      "key": "d_yusuf_parts",
+      "person": "yusuf",
+      "direction": "i_owe",
+      "amount": 14,
+      "name": "Bike parts",
+      "date": "2025-12-20",
+      "settled": "2026-01-05T10:00"
+    },
+    {
+      "key": "d_ines_prints",
+      "person": "ines",
+      "direction": "i_owe",
+      "amount": 45,
+      "name": "Gig photo prints",
+      "date": "2026-01-19"
+    },
+    {
+      "key": "d_paul_session",
+      "person": "paul",
+      "direction": "owes_me",
+      "amount": 60,
+      "name": "Session advance",
+      "date": "2025-11-28"
+    },
+    {
+      "key": "d_hannah_b",
+      "person": "hannah_b",
+      "direction": "owes_me",
+      "amount": 9.5,
+      "name": "Climbing day pass",
+      "date": "2026-02-01"
+    },
+    {
+      "key": "d_tobi_van",
+      "person": "tobi",
+      "direction": "owes_me",
+      "amount": 30,
+      "name": "Fuel for the crew van",
+      "date": "2026-01-10",
+      "settled": "2026-01-29T22:00"
+    },
+    {
+      "key": "d_greta_dinner",
+      "person": "greta",
+      "direction": "i_owe",
+      "amount": 19,
+      "name": "Dinner after recording",
+      "date": "2026-01-30"
+    }
+  ],
+  "locker": [
+    {
+      "key": "thomann",
+      "name": "Thomann login",
+      "type": "login",
+      "username": "lukas.brandt",
+      "url": "https://www.thomann.de",
+      "password": "Kabel-Salat-26"
+    },
+    {
+      "key": "elster",
+      "name": "ELSTER login",
+      "type": "login",
+      "username": "lbrandt_tax",
+      "url": "https://www.elster.de",
+      "password": "Umsatz-Q4!",
+      "starred": true
+    },
+    {
+      "key": "gls",
+      "name": "GLS debit card",
+      "type": "card",
+      "card_number": "4917 3300 1276 5521",
+      "cvv": "412",
+      "starred": true
+    },
+    {
+      "key": "visa",
+      "name": "DKB Visa",
+      "type": "card",
+      "card_number": "4001 9192 5566 7710",
+      "cvv": "857"
+    },
+    {
+      "key": "wifi",
+      "name": "WG wifi",
+      "type": "wifi",
+      "password": "plagwitz-kasse-42"
+    },
+    {
+      "key": "studio_wifi",
+      "name": "Studio Plagwitz wifi",
+      "type": "wifi",
+      "password": "reverbtail77"
+    },
+    {
+      "key": "door_code",
+      "name": "Proberaum door code",
+      "type": "note",
+      "notes": "4711 then # , room 4 key in the box"
+    },
+    {
+      "key": "id_card",
+      "name": "Personalausweis",
+      "type": "identity",
+      "password": "L01X00T47"
+    },
+    {
+      "key": "x32_pw",
+      "name": "X32 remote password",
+      "type": "password",
+      "password": "foh-only-1234"
+    },
+    {
+      "key": "nas_ssh",
+      "name": "Studio NAS SSH key",
+      "type": "ssh_key",
+      "notes": "synology in the machine room",
+      "password": "ssh-ed25519 AAAAC3Nz-nas-plagwitz"
+    },
+    {
+      "key": "dropbox_api",
+      "name": "Dropbox API token",
+      "type": "api_credential",
+      "notes": "for the upload script",
+      "code": "sl.dbx-77aa-plag"
+    },
+    {
+      "key": "passport",
+      "name": "Reisepass",
+      "type": "passport",
+      "notes": "expires August 2029"
+    },
+    {
+      "key": "gls_account",
+      "name": "GLS business account",
+      "type": "bank_account",
+      "notes": "IBAN ends 4410, invoices go here"
+    },
+    {
+      "key": "licence",
+      "name": "Fuehrerschein",
+      "type": "driving_licence",
+      "notes": "class B, van up to 3.5t"
+    },
+    {
+      "key": "protools",
+      "name": "Pro Tools licence",
+      "type": "software_licence",
+      "code": "PT-9921-KW",
+      "notes": "renews in May"
+    },
+    {
+      "key": "ledger_wallet",
+      "name": "Old Bitcoin wallet",
+      "type": "crypto_wallet",
+      "notes": "0.01 BTC, seed phrase in the drawer"
+    },
+    {
+      "key": "ksk_member",
+      "name": "KSK membership",
+      "type": "membership",
+      "notes": "Kuenstlersozialkasse no. 55 120481 B 017"
+    },
+    {
+      "key": "vdt",
+      "name": "VDT membership",
+      "type": "membership",
+      "notes": "Verband Deutscher Tonmeister",
+      "starred": true
+    },
+    {
+      "key": "gema",
+      "name": "GEMA registration",
+      "type": "document",
+      "notes": "band registered 2024"
+    },
+    {
+      "key": "old_paypal",
+      "name": "Old PayPal login",
+      "type": "login",
+      "username": "lukas_b89",
+      "password": "oldpay1",
+      "trashed": "2026-01-15T09:00"
+    }
+  ],
+  "links": [
+    {
+      "from": "rider",
+      "to": "marek"
+    },
+    {
+      "from": "kuhn_heat",
+      "to": "kuhn"
+    },
+    {
+      "from": "inv_jan",
+      "to": "felix"
+    },
+    {
+      "from": "inv_feb",
+      "to": "felix"
+    },
+    {
+      "from": "inv_greta",
+      "to": "greta"
+    },
+    {
+      "from": "vat",
+      "to": "steffi"
+    },
+    {
+      "from": "receipts",
+      "to": "steffi"
+    },
+    {
+      "from": "stage_plot",
+      "to": "tobi"
+    },
+    {
+      "from": "pa_quotes",
+      "to": "tobi"
+    },
+    {
+      "from": "pa_quotes",
+      "to": "emre"
+    },
+    {
+      "from": "crew_rota",
+      "to": "tobi"
+    },
+    {
+      "from": "crew_rota",
+      "to": "nele"
+    },
+    {
+      "from": "crew_shirts",
+      "to": "nele"
+    },
+    {
+      "from": "van_ins",
+      "to": "rico"
+    },
+    {
+      "from": "mama_gift",
+      "to": "ute"
+    },
+    {
+      "from": "mama_gift",
+      "to": "sophie"
+    },
+    {
+      "from": "call_sophie",
+      "to": "sophie"
+    },
+    {
+      "from": "live_mix",
+      "to": "lena"
+    },
+    {
+      "from": "setlists",
+      "to": "lena"
+    },
+    {
+      "from": "sell_mixer",
+      "to": "olli"
+    },
+    {
+      "from": "cleaning_rota",
+      "to": "mira"
+    },
+    {
+      "from": "cleaning_rota",
+      "to": "jonas_k"
+    },
+    {
+      "from": "vocal_chain",
+      "to": "lena"
+    },
+    {
+      "from": "prague_plan",
+      "to": "pavla"
+    },
+    {
+      "from": "heating",
+      "to": "kuhn"
+    },
+    {
+      "from": "rota_note",
+      "to": "jonas_k"
+    },
+    {
+      "from": "fest_contacts",
+      "to": "tobi"
+    },
+    {
+      "from": "fest_contacts",
+      "to": "nele"
+    },
+    {
+      "from": "fest_contacts",
+      "to": "emre"
+    },
+    {
+      "from": "curry",
+      "to": "mira"
+    },
+    {
+      "from": "gift_note",
+      "to": "ute"
+    },
+    {
+      "from": "podcast_chain",
+      "to": "greta"
+    }
+  ]
+}

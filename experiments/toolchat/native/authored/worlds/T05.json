@@ -1,0 +1,2131 @@
+{
+  "me": "Priya Raman",
+  "epoch": "2019-01-05T09:00",
+  "seed": "T05",
+  "currency": "INR",
+  "people": [
+    {
+      "key": "amma",
+      "name": "Lakshmi Raman",
+      "role": "mother",
+      "nickname": "Amma",
+      "cadence": 1,
+      "starred": true,
+      "last_contacted": "2026-01-19T21:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "appa",
+      "name": "Venkatesh Raman",
+      "role": "father",
+      "nickname": "Appa",
+      "cadence": 1,
+      "last_contacted": "2026-01-19T21:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "karthik",
+      "name": "Karthik Raman",
+      "role": "brother",
+      "nickname": "Karthi",
+      "starred": true,
+      "cadence": 1,
+      "last_contacted": "2026-01-19T22:30",
+      "last_contacted_kind": "message"
+    },
+    {
+      "key": "paati",
+      "name": "Sundari Ammal",
+      "role": "grandmother, Thanjavur",
+      "nickname": "Paati",
+      "cadence": 7,
+      "last_contacted": "2026-01-15T11:00",
+      "last_contacted_kind": "visit",
+      "met": "Thanjavur"
+    },
+    {
+      "key": "ramesh_mama",
+      "name": "Ramesh Iyer",
+      "role": "uncle",
+      "nickname": "Ramesh mama",
+      "cadence": 30,
+      "last_contacted": "2026-01-14T12:00",
+      "last_contacted_kind": "visit",
+      "met": "Thanjavur"
+    },
+    {
+      "key": "meena",
+      "name": "Meena Iyer",
+      "role": "aunt",
+      "cadence": 30,
+      "last_contacted": "2025-12-25T18:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "anand",
+      "name": "Anand Iyer",
+      "role": "cousin, Bengaluru",
+      "cadence": 60,
+      "last_contacted": "2025-11-02T20:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "divya_s",
+      "name": "Divya Srinivasan",
+      "role": "ICU staff nurse",
+      "met": "Kauvery ICU, 2021",
+      "cadence": 7,
+      "starred": true,
+      "last_contacted": "2026-01-17T19:00",
+      "last_contacted_kind": "shift"
+    },
+    {
+      "key": "divya_k",
+      "name": "Divya Krishnan",
+      "role": "friend, cricket gang",
+      "met": "college, 2015",
+      "cadence": 14,
+      "last_contacted": "2026-01-11T22:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "sowmya",
+      "name": "Sowmya Raghavan",
+      "role": "ICU charge nurse",
+      "cadence": 14,
+      "last_contacted": "2026-01-17T07:00",
+      "last_contacted_kind": "meeting"
+    },
+    {
+      "key": "farhan",
+      "name": "Farhan Sheikh",
+      "role": "ICU staff nurse",
+      "met": "Kauvery ICU, 2023",
+      "last_contacted": "2026-01-10T07:00",
+      "last_contacted_kind": "shift"
+    },
+    {
+      "key": "ramesh_d",
+      "name": "Ramesh Babu",
+      "role": "carpool driver",
+      "last_contacted": "2026-01-18T06:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "jaya",
+      "name": "Jayanthi Pillai",
+      "role": "ICU nurse, carpool",
+      "nickname": "Jaya",
+      "cadence": 7,
+      "last_contacted": "2026-01-10T19:00",
+      "last_contacted_kind": "message"
+    },
+    {
+      "key": "rajan",
+      "name": "Dr. Rajan Mehta",
+      "role": "ICU consultant",
+      "last_contacted": "2025-12-30T10:00",
+      "last_contacted_kind": "meeting"
+    },
+    {
+      "key": "nirmala",
+      "name": "Nirmala Joseph",
+      "role": "nursing superintendent"
+    },
+    {
+      "key": "vignesh",
+      "name": "Vignesh Kumar",
+      "role": "cricket gang, hosts match nights",
+      "nickname": "Vicky",
+      "cadence": 14,
+      "last_contacted": "2026-01-11T23:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "arjun",
+      "name": "Arjun Menon",
+      "role": "cricket gang",
+      "cadence": 14,
+      "last_contacted": "2025-12-28T22:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "suresh",
+      "name": "Suresh Natarajan",
+      "role": "cricket gang",
+      "nickname": "Suri",
+      "last_contacted": "2026-01-11T23:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "gopal",
+      "name": "Gopalakrishnan S",
+      "role": "temple committee secretary",
+      "cadence": 7,
+      "last_contacted": "2026-01-10T18:00",
+      "last_contacted_kind": "meeting",
+      "met": "Kapaleeshwarar temple"
+    },
+    {
+      "key": "revathi",
+      "name": "Revathi Subramanian",
+      "role": "temple committee treasurer",
+      "cadence": 14,
+      "last_contacted": "2026-01-10T18:00",
+      "last_contacted_kind": "meeting",
+      "met": "Kapaleeshwarar temple"
+    },
+    {
+      "key": "balu",
+      "name": "Balasubramaniam K",
+      "role": "temple priest",
+      "nickname": "Balu sir"
+    },
+    {
+      "key": "kavya",
+      "name": "Kavya Narayanan",
+      "role": "school friend",
+      "met": "PSBB school",
+      "cadence": 30,
+      "last_contacted": "2025-12-06T17:00",
+      "last_contacted_kind": "coffee"
+    },
+    {
+      "key": "nandini",
+      "name": "Nandini Rao",
+      "role": "school friend",
+      "met": "PSBB school",
+      "last_contacted": "2025-10-20T17:00",
+      "last_contacted_kind": "coffee"
+    },
+    {
+      "key": "rao_doc",
+      "name": "Dr. Prakash Rao",
+      "role": "ophthalmologist, Amma's cataract"
+    },
+    {
+      "key": "dentist",
+      "name": "Dr. Shalini Das",
+      "role": "dentist"
+    },
+    {
+      "key": "muthu",
+      "name": "Muthu Selvam",
+      "role": "electrician"
+    },
+    {
+      "key": "selvi",
+      "name": "Selvi",
+      "role": "house help"
+    },
+    {
+      "key": "harish",
+      "name": "Harish Chandran",
+      "role": "Karthik's friend, Dubai",
+      "met": "Karthik's college"
+    },
+    {
+      "key": "tanvi",
+      "name": "Tanvi Shah",
+      "role": "yoga teacher",
+      "trashed": "2026-01-08T10:00"
+    },
+    {
+      "key": "old_agent",
+      "name": "Mohan LIC agent",
+      "role": "insurance agent",
+      "trashed": "2025-11-20T10:00"
+    }
+  ],
+  "groups": [
+    {
+      "key": "home_g",
+      "name": "Home expenses",
+      "members": ["karthik", "appa"],
+      "created": "2025-04-01T10:00"
+    },
+    {
+      "key": "carpool",
+      "name": "Night shift carpool",
+      "members": ["divya_s", "jaya", "ramesh_d"],
+      "created": "2025-08-01T10:00"
+    },
+    {
+      "key": "cricket_g",
+      "name": "Cricket gang",
+      "members": ["vignesh", "arjun", "suresh", "divya_k"],
+      "created": "2025-10-05T20:00"
+    },
+    {
+      "key": "temple_g",
+      "name": "Temple committee fund",
+      "members": ["gopal", "revathi"],
+      "created": "2025-06-15T18:00"
+    },
+    {
+      "key": "dubai_g",
+      "name": "Dubai trip",
+      "currency": "AED",
+      "members": ["karthik", "harish", "anand"],
+      "created": "2025-12-01T21:00"
+    },
+    {
+      "key": "farewell_g",
+      "name": "Farhan farewell gift",
+      "members": [],
+      "created": "2026-01-16T20:00"
+    }
+  ],
+  "expenses": [
+    {
+      "group": "home_g",
+      "name": "EB bill December",
+      "amount": 4200,
+      "paid_by": "me",
+      "split": ["me", "karthik", "appa"],
+      "date": "2025-12-10"
+    },
+    {
+      "group": "home_g",
+      "name": "Groceries Pongal",
+      "amount": 6300,
+      "paid_by": "appa",
+      "split": ["me", "karthik", "appa"],
+      "date": "2026-01-12"
+    },
+    {
+      "group": "home_g",
+      "name": "Water can refill",
+      "amount": 900,
+      "paid_by": "karthik",
+      "split": ["me", "karthik", "appa"],
+      "date": "2026-01-05"
+    },
+    {
+      "group": "home_g",
+      "name": "Broadband January",
+      "amount": 1180,
+      "paid_by": "me",
+      "split": ["me", "karthik"],
+      "date": "2026-01-03"
+    },
+    {
+      "group": "carpool",
+      "name": "Fuel week 1",
+      "amount": 2400,
+      "paid_by": "ramesh_d",
+      "split": ["me", "divya_s", "jaya", "ramesh_d"],
+      "date": "2026-01-07"
+    },
+    {
+      "group": "carpool",
+      "name": "Fuel week 2",
+      "amount": 2000,
+      "paid_by": "me",
+      "split": ["me", "divya_s", "jaya", "ramesh_d"],
+      "date": "2026-01-14"
+    },
+    {
+      "group": "carpool",
+      "name": "Toll and parking",
+      "amount": 480,
+      "paid_by": "jaya",
+      "split": ["me", "divya_s", "jaya"],
+      "date": "2026-01-16"
+    },
+    {
+      "group": "cricket_g",
+      "name": "Biryani for the final",
+      "amount": 2800,
+      "paid_by": "vignesh",
+      "split": ["me", "vignesh", "arjun", "suresh"],
+      "date": "2025-11-23"
+    },
+    {
+      "group": "cricket_g",
+      "name": "Projector rental",
+      "amount": 1500,
+      "paid_by": "me",
+      "split": ["me", "vignesh", "arjun", "suresh", "divya_k"],
+      "date": "2026-01-11"
+    },
+    {
+      "group": "cricket_g",
+      "name": "Snacks and cool drinks",
+      "amount": 950,
+      "paid_by": "divya_k",
+      "split": ["me", "vignesh", "divya_k"],
+      "date": "2026-01-11"
+    },
+    {
+      "group": "temple_g",
+      "name": "Flowers for Thai Poosam",
+      "amount": 3500,
+      "paid_by": "revathi",
+      "split": ["me", "gopal", "revathi"],
+      "date": "2026-01-18"
+    },
+    {
+      "group": "temple_g",
+      "name": "Annadhanam rice",
+      "amount": 7200,
+      "paid_by": "me",
+      "split": ["me", "gopal", "revathi"],
+      "date": "2026-01-10"
+    },
+    {
+      "group": "dubai_g",
+      "name": "Desert safari booking",
+      "amount": 900,
+      "paid_by": "karthik",
+      "split": ["me", "karthik", "harish"],
+      "date": "2025-12-20"
+    },
+    {
+      "group": "dubai_g",
+      "name": "Hotel deposit",
+      "amount": 1500,
+      "paid_by": "me",
+      "split": ["me", "karthik"],
+      "date": "2025-12-22"
+    }
+  ],
+  "lists": [
+    {
+      "key": "homelist",
+      "name": "Home",
+      "area": "family"
+    },
+    {
+      "key": "templelist",
+      "name": "Temple committee",
+      "area": "community"
+    },
+    {
+      "key": "iculist",
+      "name": "ICU",
+      "area": "work"
+    },
+    {
+      "key": "cricketlist",
+      "name": "Cricket gang",
+      "area": "friends"
+    },
+    {
+      "key": "surgerylist",
+      "name": "Amma's surgery",
+      "area": "family"
+    }
+  ],
+  "events": [
+    {
+      "key": "day_0105",
+      "name": "ICU day shift",
+      "start": "2026-01-05T07:00",
+      "end": "2026-01-05T19:00",
+      "description": "Kauvery ICU, bed 1-8"
+    },
+    {
+      "key": "day_0106",
+      "name": "ICU day shift",
+      "start": "2026-01-06T07:00",
+      "end": "2026-01-06T19:00",
+      "description": "Kauvery ICU, bed 1-8"
+    },
+    {
+      "key": "day_0107",
+      "name": "ICU day shift",
+      "start": "2026-01-07T07:00",
+      "end": "2026-01-07T19:00",
+      "description": "Kauvery ICU, bed 1-8"
+    },
+    {
+      "key": "day_0116",
+      "name": "ICU day shift",
+      "start": "2026-01-16T07:00",
+      "end": "2026-01-16T19:00",
+      "description": "Kauvery ICU, bed 1-8"
+    },
+    {
+      "key": "day_0117",
+      "name": "ICU day shift",
+      "start": "2026-01-17T07:00",
+      "end": "2026-01-17T19:00",
+      "description": "Kauvery ICU, bed 1-8"
+    },
+    {
+      "key": "day_0120",
+      "name": "ICU day shift",
+      "start": "2026-01-20T07:00",
+      "end": "2026-01-20T19:00",
+      "description": "Kauvery ICU, bed 1-8"
+    },
+    {
+      "key": "day_0121",
+      "name": "ICU day shift",
+      "start": "2026-01-21T07:00",
+      "end": "2026-01-21T19:00",
+      "description": "Kauvery ICU, bed 1-8"
+    },
+    {
+      "key": "day_0130",
+      "name": "ICU day shift",
+      "start": "2026-01-30T07:00",
+      "end": "2026-01-30T19:00",
+      "description": "Kauvery ICU, bed 1-8"
+    },
+    {
+      "key": "day_0131",
+      "name": "ICU day shift",
+      "start": "2026-01-31T07:00",
+      "end": "2026-01-31T19:00",
+      "description": "Kauvery ICU, bed 1-8"
+    },
+    {
+      "key": "day_0203",
+      "name": "ICU day shift",
+      "start": "2026-02-03T07:00",
+      "end": "2026-02-03T19:00",
+      "description": "Kauvery ICU, bed 1-8"
+    },
+    {
+      "key": "day_0204",
+      "name": "ICU day shift",
+      "start": "2026-02-04T07:00",
+      "end": "2026-02-04T19:00",
+      "description": "Kauvery ICU, bed 1-8"
+    },
+    {
+      "key": "day_0210",
+      "name": "ICU day shift",
+      "start": "2026-02-10T07:00",
+      "end": "2026-02-10T19:00",
+      "description": "Kauvery ICU, bed 1-8"
+    },
+    {
+      "key": "day_0211",
+      "name": "ICU day shift",
+      "start": "2026-02-11T07:00",
+      "end": "2026-02-11T19:00",
+      "description": "Kauvery ICU, bed 1-8"
+    },
+    {
+      "key": "night_0109",
+      "name": "ICU night shift",
+      "start": "2026-01-09T19:30",
+      "end": "2026-01-10T07:00",
+      "attendees": ["divya_s", "jaya"],
+      "description": "carpool pickup 18:45"
+    },
+    {
+      "key": "night_0110",
+      "name": "ICU night shift",
+      "start": "2026-01-10T19:30",
+      "end": "2026-01-11T07:00",
+      "attendees": ["divya_s", "jaya"],
+      "description": "carpool pickup 18:45"
+    },
+    {
+      "key": "night_0123",
+      "name": "ICU night shift",
+      "start": "2026-01-23T19:30",
+      "end": "2026-01-24T07:00",
+      "attendees": ["divya_s", "jaya"],
+      "description": "carpool pickup 18:45"
+    },
+    {
+      "key": "night_0124",
+      "name": "ICU night shift",
+      "start": "2026-01-24T19:30",
+      "end": "2026-01-25T07:00",
+      "attendees": ["divya_s", "jaya"],
+      "description": "carpool pickup 18:45"
+    },
+    {
+      "key": "night_0127",
+      "name": "ICU night shift",
+      "start": "2026-01-27T19:30",
+      "end": "2026-01-28T07:00",
+      "attendees": ["divya_s", "jaya"],
+      "description": "carpool pickup 18:45"
+    },
+    {
+      "key": "night_0128",
+      "name": "ICU night shift",
+      "start": "2026-01-28T19:30",
+      "end": "2026-01-29T07:00",
+      "attendees": ["divya_s", "jaya"],
+      "description": "carpool pickup 18:45"
+    },
+    {
+      "key": "night_0206",
+      "name": "ICU night shift",
+      "start": "2026-02-06T19:30",
+      "end": "2026-02-07T07:00",
+      "attendees": ["divya_s", "jaya"],
+      "description": "carpool pickup 18:45"
+    },
+    {
+      "key": "night_0207",
+      "name": "ICU night shift",
+      "start": "2026-02-07T19:30",
+      "end": "2026-02-08T07:00",
+      "attendees": ["divya_s", "jaya"],
+      "description": "carpool pickup 18:45"
+    },
+    {
+      "key": "cric_1123",
+      "name": "Cricket night at Vicky's",
+      "start": "2025-11-23T13:30",
+      "end": "2025-11-23T22:00",
+      "attendees": ["vignesh", "arjun", "suresh"]
+    },
+    {
+      "key": "cric_1228",
+      "name": "Cricket night at Vicky's",
+      "start": "2025-12-28T14:00",
+      "end": "2025-12-28T22:00",
+      "attendees": ["vignesh", "arjun", "divya_k"],
+      "cancelled": "2025-12-27T20:00"
+    },
+    {
+      "key": "cric_0111",
+      "name": "Cricket night at Vicky's",
+      "start": "2026-01-11T13:30",
+      "end": "2026-01-11T22:30",
+      "attendees": ["vignesh", "arjun", "suresh", "divya_k"]
+    },
+    {
+      "key": "cric_0125",
+      "name": "Cricket night at Vicky's",
+      "start": "2026-01-25T14:00",
+      "end": "2026-01-25T22:30",
+      "attendees": ["vignesh", "suresh", "divya_k"]
+    },
+    {
+      "key": "cric_0208",
+      "name": "Cricket night at Vicky's",
+      "start": "2026-02-08T14:00",
+      "end": "2026-02-08T22:00",
+      "attendees": ["vignesh", "arjun"]
+    },
+    {
+      "key": "chepauk",
+      "name": "Ranji match at Chepauk",
+      "start": "2026-02-01T09:30",
+      "end": "2026-02-01T16:30",
+      "attendees": ["arjun", "divya_k"],
+      "description": "gate 6, bring caps"
+    },
+    {
+      "key": "nets",
+      "name": "Box cricket at Turf 22",
+      "start": "2026-01-29T19:00",
+      "end": "2026-01-29T20:30",
+      "attendees": ["suresh", "arjun"]
+    },
+    {
+      "key": "tc_0110",
+      "name": "Temple committee meeting",
+      "start": "2026-01-10T10:00",
+      "end": "2026-01-10T11:30",
+      "attendees": ["gopal", "revathi"],
+      "description": "Thai Poosam volunteer list"
+    },
+    {
+      "key": "tc_0124",
+      "name": "Temple committee meeting",
+      "start": "2026-01-24T10:00",
+      "end": "2026-01-24T11:30",
+      "attendees": ["gopal", "revathi", "balu"]
+    },
+    {
+      "key": "tc_0207",
+      "name": "Temple committee meeting",
+      "start": "2026-02-07T10:00",
+      "end": "2026-02-07T11:30",
+      "attendees": ["gopal", "revathi"]
+    },
+    {
+      "key": "poosam",
+      "name": "Thai Poosam annadhanam",
+      "start": "2026-02-01T05:30",
+      "end": "2026-02-01T09:00",
+      "attendees": ["gopal", "revathi", "balu"],
+      "description": "serve from 6, kitchen shed"
+    },
+    {
+      "key": "kolam",
+      "name": "Kolam competition judging",
+      "start": "2026-01-14T07:00",
+      "end": "2026-01-14T09:00",
+      "attendees": ["revathi"]
+    },
+    {
+      "key": "accounts",
+      "name": "Temple accounts review",
+      "start": "2026-01-26T17:00",
+      "end": "2026-01-26T18:00",
+      "attendees": ["revathi"]
+    },
+    {
+      "key": "pongal",
+      "name": "Pongal at Paati's",
+      "start": "2026-01-14T10:00",
+      "end": "2026-01-15T18:00",
+      "attendees": ["paati", "amma", "appa", "karthik", "ramesh_mama"],
+      "description": "Thanjavur"
+    },
+    {
+      "key": "cataract_1",
+      "name": "Amma cataract consultation",
+      "start": "2026-01-22T10:30",
+      "end": "2026-01-22T11:30",
+      "attendees": ["amma", "rao_doc"],
+      "description": "Sankara Nethralaya, bring old reports"
+    },
+    {
+      "key": "cataract_2",
+      "name": "Amma cataract surgery",
+      "start": "2026-02-13T08:00",
+      "end": "2026-02-13T12:00",
+      "attendees": ["amma", "rao_doc"]
+    },
+    {
+      "key": "cataract_3",
+      "name": "Amma cataract follow-up",
+      "start": "2026-02-14T10:00",
+      "end": "2026-02-14T10:30",
+      "attendees": ["amma", "rao_doc"]
+    },
+    {
+      "key": "appa_bday",
+      "name": "Appa's birthday dinner",
+      "start": "2026-02-02T19:30",
+      "end": "2026-02-02T21:30",
+      "attendees": ["appa", "amma", "karthik"],
+      "description": "Sangeetha, T Nagar"
+    },
+    {
+      "key": "karthik_flight",
+      "name": "Karthik flight to Dubai",
+      "start": "2026-02-20T04:10",
+      "end": "2026-02-20T07:00",
+      "attendees": ["karthik"],
+      "description": "EK 547"
+    },
+    {
+      "key": "meena_visit",
+      "name": "Visit Meena chithi",
+      "start": "2026-01-18T16:00",
+      "end": "2026-01-18T18:00",
+      "attendees": ["meena"]
+    },
+    {
+      "key": "wedding",
+      "name": "Anand's wedding reception",
+      "start": "2026-02-22T18:30",
+      "end": "2026-02-22T22:00",
+      "attendees": ["anand", "meena", "ramesh_mama"],
+      "description": "Bengaluru"
+    },
+    {
+      "key": "cne",
+      "name": "CNE session on ventilator care",
+      "start": "2026-01-29T14:00",
+      "end": "2026-01-29T16:00",
+      "attendees": ["sowmya", "rajan"]
+    },
+    {
+      "key": "bls",
+      "name": "BLS recertification",
+      "start": "2026-02-05T09:00",
+      "end": "2026-02-05T13:00",
+      "attendees": ["divya_s", "farhan"]
+    },
+    {
+      "key": "audit_mtg",
+      "name": "Infection control audit",
+      "start": "2026-01-22T14:00",
+      "end": "2026-01-22T15:00",
+      "attendees": ["sowmya", "nirmala"]
+    },
+    {
+      "key": "farewell",
+      "name": "Farhan's farewell",
+      "start": "2026-01-30T19:30",
+      "end": "2026-01-30T21:30",
+      "attendees": ["farhan", "divya_s", "sowmya", "jaya"]
+    },
+    {
+      "key": "appraisal",
+      "name": "Appraisal with Nirmala madam",
+      "start": "2026-01-19T15:00",
+      "end": "2026-01-19T15:30",
+      "attendees": ["nirmala"],
+      "cancelled": "2026-01-18T09:00"
+    },
+    {
+      "key": "duty_swap",
+      "name": "Duty swap talk with Sowmya",
+      "start": "2026-01-26T12:00",
+      "end": "2026-01-26T12:20",
+      "attendees": ["sowmya", "divya_s"]
+    },
+    {
+      "key": "dentist_ev",
+      "name": "Dentist appointment",
+      "start": "2026-01-26T10:00",
+      "end": "2026-01-26T10:45",
+      "attendees": ["dentist"]
+    },
+    {
+      "key": "kavya_coffee",
+      "name": "Coffee with Kavya",
+      "start": "2026-01-22T17:00",
+      "end": "2026-01-22T18:00",
+      "attendees": ["kavya"]
+    },
+    {
+      "key": "yoga",
+      "name": "Yoga class",
+      "start": "2026-01-18T06:30",
+      "end": "2026-01-18T07:30",
+      "attendees": ["tanvi"],
+      "trashed": "2026-01-08T10:00"
+    },
+    {
+      "key": "movie",
+      "name": "Movie with Divya",
+      "start": "2026-01-25T10:00",
+      "end": "2026-01-25T12:45",
+      "attendees": ["divya_k"]
+    },
+    {
+      "key": "saree",
+      "name": "Saree shopping at Nalli",
+      "start": "2026-02-15T11:00",
+      "end": "2026-02-15T13:00",
+      "attendees": ["amma"]
+    },
+    {
+      "key": "electrician",
+      "name": "Electrician visit",
+      "start": "2026-01-27T09:00",
+      "end": "2026-01-27T10:00",
+      "attendees": ["muthu"]
+    },
+    {
+      "key": "beach_walk",
+      "name": "Besant Nagar beach walk",
+      "start": "2026-01-18T05:45",
+      "end": "2026-01-18T06:15",
+      "cancelled": "2026-01-17T21:00"
+    },
+    {
+      "key": "bank",
+      "name": "Bank visit for FD renewal",
+      "start": "2026-01-28T11:00",
+      "end": "2026-01-28T11:45"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "eb_jan",
+      "name": "Pay EB bill",
+      "due": "2026-01-25",
+      "list": "homelist",
+      "priority": 2,
+      "description": "paid online"
+    },
+    {
+      "key": "eb_dec",
+      "name": "Pay EB bill",
+      "due": "2025-12-25",
+      "completed": "2025-12-10T20:00",
+      "list": "homelist",
+      "description": "paid online"
+    },
+    {
+      "key": "gas",
+      "name": "Book gas cylinder",
+      "due": "2026-01-22",
+      "list": "homelist",
+      "effort": 10,
+      "description": "cash"
+    },
+    {
+      "key": "water_can",
+      "name": "Order water cans",
+      "due": "2026-01-21",
+      "list": "homelist",
+      "effort": 5
+    },
+    {
+      "key": "fridge",
+      "name": "Get fridge serviced",
+      "due": "2026-02-05",
+      "list": "homelist",
+      "effort": 30,
+      "description": "cash"
+    },
+    {
+      "key": "flowers_1",
+      "name": "Buy flowers for pooja",
+      "due": "2026-01-23",
+      "list": "homelist",
+      "effort": 15
+    },
+    {
+      "key": "flowers_2",
+      "name": "Buy flowers for pooja",
+      "completed": "2026-01-13T07:00",
+      "list": "homelist",
+      "effort": 15
+    },
+    {
+      "key": "selvi_pay",
+      "name": "Pay Selvi's salary",
+      "due": "2026-02-01",
+      "list": "homelist",
+      "priority": 1,
+      "description": "cash"
+    },
+    {
+      "key": "tax",
+      "name": "Pay property tax",
+      "due": "2026-03-31",
+      "list": "homelist",
+      "priority": 3,
+      "effort": 30,
+      "description": "at the corporation office"
+    },
+    {
+      "key": "curtains",
+      "name": "Stitch new curtains",
+      "status": "cancelled",
+      "list": "homelist"
+    },
+    {
+      "key": "inverter",
+      "name": "Replace inverter battery",
+      "due": "2026-01-31",
+      "priority": 2,
+      "effort": 60
+    },
+    {
+      "key": "volunteers",
+      "name": "Finalise Thai Poosam volunteer list",
+      "due": "2026-01-24",
+      "list": "templelist",
+      "priority": 1,
+      "effort": 60,
+      "status": "in_progress",
+      "description": "20 people, two shifts"
+    },
+    {
+      "key": "vol_call",
+      "name": "Call the college volunteers",
+      "parent": "volunteers",
+      "due": "2026-01-22",
+      "effort": 30
+    },
+    {
+      "key": "vol_print",
+      "name": "Print the volunteer badges",
+      "parent": "volunteers",
+      "due": "2026-01-29",
+      "effort": 30
+    },
+    {
+      "key": "rice_order",
+      "name": "Order annadhanam rice",
+      "completed": "2026-01-10T19:00",
+      "list": "templelist"
+    },
+    {
+      "key": "receipts",
+      "name": "Hand over receipts to Revathi",
+      "due": "2026-01-24",
+      "list": "templelist",
+      "effort": 15
+    },
+    {
+      "key": "banner",
+      "name": "Get Thai Poosam banner printed",
+      "due": "2026-01-28",
+      "list": "templelist",
+      "priority": 2,
+      "description": "at the bank"
+    },
+    {
+      "key": "kolam_prizes",
+      "name": "Buy kolam prizes",
+      "completed": "2026-01-12T18:00",
+      "list": "templelist"
+    },
+    {
+      "key": "donor_list",
+      "name": "Type up donor list",
+      "due": "2026-02-10",
+      "list": "templelist",
+      "effort": 90
+    },
+    {
+      "key": "bls_cert",
+      "name": "Renew BLS certificate",
+      "due": "2026-02-05",
+      "list": "iculist",
+      "priority": 1
+    },
+    {
+      "key": "cne_hours",
+      "name": "Log CNE hours",
+      "due": "2026-01-31",
+      "list": "iculist",
+      "effort": 30
+    },
+    {
+      "key": "tnnmc",
+      "name": "Renew TNNMC registration",
+      "due": "2026-03-15",
+      "list": "iculist",
+      "priority": 2,
+      "effort": 60,
+      "description": "online portal"
+    },
+    {
+      "key": "handover_sheet",
+      "name": "Update handover sheet template",
+      "list": "iculist",
+      "status": "in_progress",
+      "effort": 45
+    },
+    {
+      "key": "farhan_card",
+      "name": "Get a card for Farhan",
+      "due": "2026-01-29",
+      "list": "iculist"
+    },
+    {
+      "key": "uniform",
+      "name": "Collect new uniforms",
+      "completed": "2026-01-07T19:30",
+      "list": "iculist"
+    },
+    {
+      "key": "vap_poster",
+      "name": "Make VAP bundle poster",
+      "due": "2026-02-12",
+      "list": "iculist",
+      "effort": 120
+    },
+    {
+      "key": "leave",
+      "name": "Apply leave for Amma's surgery",
+      "due": "2026-01-23",
+      "list": "iculist",
+      "priority": 1,
+      "effort": 15
+    },
+    {
+      "key": "projector",
+      "name": "Return the projector",
+      "due": "2026-01-21",
+      "list": "cricketlist",
+      "effort": 30
+    },
+    {
+      "key": "jersey",
+      "name": "Order team jerseys",
+      "due": "2026-02-06",
+      "list": "cricketlist",
+      "priority": 4
+    },
+    {
+      "key": "tickets",
+      "name": "Book Chepauk tickets",
+      "completed": "2026-01-15T22:00",
+      "list": "cricketlist"
+    },
+    {
+      "key": "fantasy",
+      "name": "Set up fantasy league",
+      "list": "cricketlist",
+      "status": "cancelled"
+    },
+    {
+      "key": "reports",
+      "name": "Collect Amma's old eye reports",
+      "due": "2026-01-21",
+      "list": "surgerylist",
+      "priority": 1,
+      "effort": 30
+    },
+    {
+      "key": "insurance_claim",
+      "name": "File cashless insurance pre-auth",
+      "due": "2026-02-06",
+      "list": "surgerylist",
+      "priority": 1,
+      "effort": 60,
+      "description": "online portal"
+    },
+    {
+      "key": "eye_drops",
+      "name": "Buy eye drops",
+      "due": "2026-02-12",
+      "list": "surgerylist",
+      "effort": 15
+    },
+    {
+      "key": "ride",
+      "name": "Arrange ride to Sankara Nethralaya",
+      "due": "2026-02-12",
+      "list": "surgerylist"
+    },
+    {
+      "key": "fasting",
+      "name": "Remind Amma about fasting",
+      "due": "2026-02-12",
+      "list": "surgerylist",
+      "effort": 5
+    },
+    {
+      "key": "passport",
+      "name": "Renew passport",
+      "due": "2026-04-30",
+      "priority": 3,
+      "effort": 120
+    },
+    {
+      "key": "dubai_visa",
+      "name": "Help Karthik with Dubai visa papers",
+      "due": "2026-02-10",
+      "priority": 2,
+      "effort": 60
+    },
+    {
+      "key": "kavya_gift",
+      "name": "Return Kavya's book",
+      "due": "2026-01-22"
+    },
+    {
+      "key": "phone",
+      "name": "Fix phone screen",
+      "effort": 60
+    },
+    {
+      "key": "recipe",
+      "name": "Write down Paati's vathal kuzhambu recipe",
+      "effort": 30
+    },
+    {
+      "key": "gym",
+      "name": "Join gym near hospital",
+      "status": "cancelled"
+    },
+    {
+      "key": "yoga_mat",
+      "name": "Buy yoga mat",
+      "trashed": "2026-01-08T10:00"
+    },
+    {
+      "key": "old_rent",
+      "name": "Transfer PG rent",
+      "trashed": "2025-11-10T10:00"
+    },
+    {
+      "key": "lic_07",
+      "name": "Pay LIC premium",
+      "due": "2025-07-10",
+      "completed": "2025-07-09T20:00",
+      "description": "paid online"
+    },
+    {
+      "key": "lic_08",
+      "name": "Pay LIC premium",
+      "due": "2025-08-10",
+      "completed": "2025-08-09T20:00",
+      "description": "paid online"
+    },
+    {
+      "key": "lic_09",
+      "name": "Pay LIC premium",
+      "due": "2025-09-10",
+      "completed": "2025-09-09T20:00",
+      "description": "paid online"
+    },
+    {
+      "key": "lic_10",
+      "name": "Pay LIC premium",
+      "due": "2025-10-10",
+      "completed": "2025-10-09T20:00",
+      "description": "paid online"
+    },
+    {
+      "key": "lic_11",
+      "name": "Pay LIC premium",
+      "due": "2025-11-10",
+      "completed": "2025-11-09T20:00",
+      "description": "paid online"
+    },
+    {
+      "key": "lic_12",
+      "name": "Pay LIC premium",
+      "due": "2025-12-10",
+      "completed": "2025-12-09T20:00",
+      "description": "paid online"
+    },
+    {
+      "key": "lic_01",
+      "name": "Pay LIC premium",
+      "due": "2026-01-10",
+      "completed": "2026-01-11T09:00",
+      "description": "paid online"
+    },
+    {
+      "key": "lic_02",
+      "name": "Pay LIC premium",
+      "due": "2026-02-10",
+      "priority": 2
+    }
+  ],
+  "notebooks": [
+    {
+      "key": "icu_nb",
+      "name": "ICU"
+    },
+    {
+      "key": "temple_nb",
+      "name": "Temple"
+    },
+    {
+      "key": "recipes_nb",
+      "name": "Recipes"
+    },
+    {
+      "key": "cricket_nb",
+      "name": "Cricket"
+    },
+    {
+      "key": "journal_nb",
+      "name": "Journal"
+    },
+    {
+      "key": "hindi_nb",
+      "name": "Hindi class"
+    }
+  ],
+  "notes": [
+    {
+      "key": "abg",
+      "name": "ABG interpretation",
+      "body": "pH first, then pCO2 vs HCO3, check compensation, anion gap",
+      "notebook": "icu_nb",
+      "created": "2025-10-12T03:10",
+      "pinned": true
+    },
+    {
+      "key": "vap",
+      "name": "VAP bundle",
+      "body": "head up 30-45, daily sedation hold, oral care chlorhexidine, cuff pressure",
+      "notebook": "icu_nb",
+      "created": "2025-11-04T02:40"
+    },
+    {
+      "key": "noradr",
+      "name": "Noradrenaline dilution",
+      "body": "4 mg in 50 ml NS, start 0.05 mcg/kg/min, central line only",
+      "notebook": "icu_nb",
+      "created": "2025-12-02T04:00",
+      "pinned": true
+    },
+    {
+      "key": "handover",
+      "name": "Handover checklist",
+      "body": "lines, drains, drips, pending labs, family updates",
+      "notebook": "icu_nb",
+      "created": "2026-01-05T06:50"
+    },
+    {
+      "key": "sedation",
+      "name": "RASS scoring",
+      "body": "-5 unrousable to +4 combative, target -1 to 0",
+      "notebook": "icu_nb",
+      "created": "2026-01-16T03:30"
+    },
+    {
+      "key": "poosam_plan",
+      "name": "Thai Poosam plan",
+      "body": "serving from 6am, 20 volunteers, 150 kg rice, banana leaves",
+      "notebook": "temple_nb",
+      "created": "2026-01-10T12:00",
+      "pinned": true
+    },
+    {
+      "key": "donors",
+      "name": "Donor names",
+      "body": "Venkat stores 5000, Lakshmi jewellers 10000, anonymous 2000",
+      "notebook": "temple_nb",
+      "created": "2026-01-10T12:30"
+    },
+    {
+      "key": "tc_minutes",
+      "name": "Committee minutes 10 Jan",
+      "body": "banner by 28th, kolam results, accounts review 26th",
+      "notebook": "temple_nb",
+      "created": "2026-01-10T11:40"
+    },
+    {
+      "key": "vathal",
+      "name": "Vathal kuzhambu",
+      "body": "manathakkali vathal, tamarind, sambar powder, gingelly oil",
+      "notebook": "recipes_nb",
+      "created": "2026-01-15T16:00"
+    },
+    {
+      "key": "pongal_r",
+      "name": "Sakkarai pongal",
+      "body": "raw rice, moong dal, jaggery, ghee, cashews, cardamom",
+      "notebook": "recipes_nb",
+      "created": "2026-01-13T20:00"
+    },
+    {
+      "key": "rasam",
+      "name": "Pepper rasam",
+      "body": "pepper, cumin, garlic, tamarind, curry leaves",
+      "notebook": "recipes_nb",
+      "created": "2025-12-20T19:00"
+    },
+    {
+      "key": "adai",
+      "name": "Adai batter",
+      "body": "rice, toor, chana, urad, red chillies, soak 4 hours",
+      "notebook": "recipes_nb",
+      "created": "2025-11-18T21:00",
+      "trashed": "2026-01-12T10:00"
+    },
+    {
+      "key": "fantasy_n",
+      "name": "Fantasy picks",
+      "body": "Gill captain, Kuldeep, Jadeja, Rahul keeper",
+      "notebook": "cricket_nb",
+      "created": "2026-01-10T22:00"
+    },
+    {
+      "key": "match_bets",
+      "name": "Match night bets",
+      "body": "Suri owes a biryani if NZ chase 300",
+      "notebook": "cricket_nb",
+      "created": "2026-01-11T21:00"
+    },
+    {
+      "key": "night_journal",
+      "name": "After the night shifts",
+      "body": "slept till 2, the bed 4 patient finally extubated",
+      "notebook": "journal_nb",
+      "created": "2026-01-11T15:00"
+    },
+    {
+      "key": "pongal_journal",
+      "name": "Pongal at Thanjavur",
+      "body": "Paati made us all draw kolams, Karthi burnt the pongal",
+      "notebook": "journal_nb",
+      "created": "2026-01-15T21:30"
+    },
+    {
+      "key": "goals",
+      "name": "2026 goals",
+      "body": "finish critical care certificate, save for Dubai, walk 5k daily",
+      "notebook": "journal_nb",
+      "created": "2026-01-01T08:00",
+      "pinned": true
+    },
+    {
+      "key": "dubai_n",
+      "name": "Dubai trip ideas",
+      "body": "Global Village, desert safari, Karthik's flat in Al Nahda",
+      "created": "2025-12-01T21:30"
+    },
+    {
+      "key": "surgery_n",
+      "name": "Amma surgery questions",
+      "body": "which lens, how many days of drops, can she climb stairs",
+      "created": "2026-01-17T22:00"
+    },
+    {
+      "key": "carpool_n",
+      "name": "Carpool timings",
+      "body": "pickup 18:45 at Luz corner, Ramesh anna waits 5 min max",
+      "created": "2025-08-02T09:00"
+    },
+    {
+      "key": "wifi_n",
+      "name": "Wifi reset steps",
+      "body": "hold reset 10s, login 192.168.1.1, change channel",
+      "created": "2025-09-10T20:00"
+    },
+    {
+      "key": "old_roster",
+      "name": "December roster",
+      "body": "nights 9-10, 23-24, days rest",
+      "created": "2025-11-28T10:00",
+      "trashed": "2026-01-05T09:00"
+    },
+    {
+      "key": "old_shopping",
+      "name": "Diwali shopping list",
+      "body": "crackers, sweets, new dress for Amma",
+      "created": "2025-10-10T10:00",
+      "trashed": "2025-11-15T10:00"
+    },
+    {
+      "key": "hindi_words",
+      "name": "Hindi phrases",
+      "body": "kaise ho, dard kahan hai, saans lijiye",
+      "created": "2025-09-01T10:00",
+      "trashed": "2026-01-14T09:00"
+    }
+  ],
+  "folders": [
+    {
+      "key": "med_f",
+      "name": "Medical"
+    },
+    {
+      "key": "work_f",
+      "name": "Nursing"
+    },
+    {
+      "key": "house_f",
+      "name": "House"
+    },
+    {
+      "key": "temple_f",
+      "name": "Temple"
+    },
+    {
+      "key": "ins_f",
+      "name": "Insurance"
+    },
+    {
+      "key": "old_f",
+      "name": "Old bills"
+    }
+  ],
+  "documents": [
+    {
+      "key": "amma_reports",
+      "name": "Amma eye reports 2024",
+      "folder": "med_f",
+      "created": "2024-11-10T10:00"
+    },
+    {
+      "key": "amma_scan",
+      "name": "Amma biometry scan",
+      "folder": "med_f",
+      "created": "2026-01-16T12:00",
+      "starred": true
+    },
+    {
+      "key": "my_blood",
+      "name": "My blood test December",
+      "folder": "med_f",
+      "created": "2025-12-18T09:00"
+    },
+    {
+      "key": "reg_cert",
+      "name": "TNNMC registration certificate",
+      "folder": "work_f",
+      "starred": true,
+      "created": "2021-06-01T10:00"
+    },
+    {
+      "key": "bls_doc",
+      "name": "BLS certificate 2024",
+      "folder": "work_f",
+      "created": "2024-02-10T10:00"
+    },
+    {
+      "key": "offer",
+      "name": "Kauvery offer letter",
+      "folder": "work_f",
+      "created": "2021-05-20T10:00"
+    },
+    {
+      "key": "payslip_dec",
+      "name": "Payslip December",
+      "folder": "work_f",
+      "created": "2026-01-02T09:00"
+    },
+    {
+      "key": "roster_doc",
+      "name": "ICU roster January",
+      "folder": "work_f",
+      "starred": true,
+      "created": "2025-12-28T09:00"
+    },
+    {
+      "key": "sale_deed",
+      "name": "House sale deed",
+      "folder": "house_f",
+      "starred": true,
+      "created": "2019-03-01T10:00"
+    },
+    {
+      "key": "tax_receipt",
+      "name": "Property tax receipt 2025",
+      "folder": "house_f",
+      "created": "2025-04-10T10:00"
+    },
+    {
+      "key": "eb_receipt",
+      "name": "EB bill receipt December",
+      "folder": "house_f",
+      "created": "2025-12-10T20:05"
+    },
+    {
+      "key": "donor_sheet",
+      "name": "Donor spreadsheet",
+      "folder": "temple_f",
+      "created": "2026-01-10T13:00"
+    },
+    {
+      "key": "volunteer_doc",
+      "name": "Volunteer rota Thai Poosam",
+      "folder": "temple_f",
+      "created": "2026-01-12T21:00"
+    },
+    {
+      "key": "health_pol",
+      "name": "Star Health policy",
+      "folder": "ins_f",
+      "starred": true,
+      "created": "2025-07-01T10:00"
+    },
+    {
+      "key": "lic_pol",
+      "name": "LIC policy bond",
+      "folder": "ins_f",
+      "created": "2020-07-10T10:00"
+    },
+    {
+      "key": "aadhaar",
+      "name": "Aadhaar scan",
+      "created": "2025-02-01T10:00"
+    },
+    {
+      "key": "pan",
+      "name": "PAN card scan",
+      "created": "2025-02-01T10:05",
+      "starred": true
+    },
+    {
+      "key": "payslip_nov",
+      "name": "Payslip November",
+      "created": "2025-12-02T09:00",
+      "trashed": "2026-01-10T10:00"
+    },
+    {
+      "key": "rent_agree",
+      "name": "PG rental agreement 2024",
+      "created": "2024-01-05T10:00",
+      "trashed": "2025-11-01T10:00"
+    }
+  ],
+  "albums": [
+    {
+      "key": "pongal_al",
+      "name": "Pongal 2026"
+    },
+    {
+      "key": "cricket_al",
+      "name": "Cricket nights"
+    },
+    {
+      "key": "temple_al",
+      "name": "Temple"
+    },
+    {
+      "key": "family_al",
+      "name": "Family"
+    },
+    {
+      "key": "icu_al",
+      "name": "ICU team"
+    },
+    {
+      "key": "memes_al",
+      "name": "Memes"
+    }
+  ],
+  "photos": [
+    {
+      "key": "pot",
+      "name": "Pongal pot boiling over",
+      "taken": "2026-01-14T08:10",
+      "albums": ["pongal_al", "family_al"],
+      "people": ["paati", "amma"],
+      "starred": true
+    },
+    {
+      "key": "kolam_pic",
+      "name": "Kolam in front of Paati's house",
+      "taken": "2026-01-14T06:50",
+      "albums": ["pongal_al"],
+      "people": ["paati"]
+    },
+    {
+      "key": "cows",
+      "name": "Mattu Pongal cows",
+      "taken": "2026-01-15T09:30",
+      "albums": ["pongal_al"]
+    },
+    {
+      "key": "sugarcane",
+      "name": "Karthi with sugarcane",
+      "taken": "2026-01-14T11:00",
+      "albums": ["pongal_al"],
+      "people": ["karthik"]
+    },
+    {
+      "key": "family_pongal",
+      "name": "Family photo at Thanjavur",
+      "taken": "2026-01-14T17:30",
+      "albums": ["pongal_al", "family_al"],
+      "people": ["paati", "amma", "appa", "karthik", "ramesh_mama"],
+      "starred": true
+    },
+    {
+      "key": "big_temple",
+      "name": "Big temple at dusk",
+      "taken": "2026-01-15T18:05",
+      "albums": ["pongal_al", "temple_al"]
+    },
+    {
+      "key": "blurry_kolam",
+      "name": "Blurry kolam shot",
+      "taken": "2026-01-14T06:52",
+      "albums": ["pongal_al"]
+    },
+    {
+      "key": "screen",
+      "name": "Projector screen at Vicky's",
+      "taken": "2026-01-11T14:10",
+      "albums": ["cricket_al"],
+      "people": ["vignesh"]
+    },
+    {
+      "key": "gang_selfie",
+      "name": "Gang selfie",
+      "taken": "2026-01-11T21:40",
+      "albums": ["cricket_al"],
+      "people": ["vignesh", "arjun", "suresh", "divya_k"],
+      "starred": true
+    },
+    {
+      "key": "biryani",
+      "name": "Biryani spread",
+      "taken": "2025-11-23T19:00",
+      "albums": ["cricket_al"]
+    },
+    {
+      "key": "final_score",
+      "name": "Final score on TV",
+      "taken": "2025-11-23T21:55",
+      "albums": ["cricket_al"]
+    },
+    {
+      "key": "suri_dance",
+      "name": "Suri dancing after the win",
+      "taken": "2026-01-11T22:05",
+      "albums": ["cricket_al"],
+      "people": ["suresh"]
+    },
+    {
+      "key": "gopuram",
+      "name": "Kapaleeshwarar gopuram",
+      "taken": "2025-12-12T18:00",
+      "albums": ["temple_al"]
+    },
+    {
+      "key": "annadhanam_pic",
+      "name": "Annadhanam queue last year",
+      "taken": "2025-01-25T07:00",
+      "albums": ["temple_al"],
+      "people": ["gopal", "revathi"]
+    },
+    {
+      "key": "committee_pic",
+      "name": "Committee meeting group photo",
+      "taken": "2026-01-10T11:35",
+      "albums": ["temple_al"],
+      "people": ["gopal", "revathi", "balu"]
+    },
+    {
+      "key": "lamp",
+      "name": "Karthigai lamps",
+      "taken": "2025-12-03T19:00",
+      "albums": ["temple_al", "family_al"]
+    },
+    {
+      "key": "amma_appa",
+      "name": "Amma and Appa anniversary",
+      "taken": "2025-11-30T20:00",
+      "albums": ["family_al"],
+      "people": ["amma", "appa"]
+    },
+    {
+      "key": "paati_bday",
+      "name": "Paati's 80th",
+      "taken": "2025-09-14T12:00",
+      "albums": ["family_al"],
+      "people": ["paati", "amma", "ramesh_mama", "meena"]
+    },
+    {
+      "key": "karthik_grad",
+      "name": "Karthik's graduation",
+      "taken": "2025-07-20T11:00",
+      "albums": ["family_al"],
+      "people": ["karthik", "amma", "appa"]
+    },
+    {
+      "key": "icu_xmas",
+      "name": "ICU Christmas cake",
+      "taken": "2025-12-25T15:00",
+      "albums": ["icu_al"],
+      "people": ["divya_s", "sowmya", "farhan"]
+    },
+    {
+      "key": "night_team",
+      "name": "Night team at 4am",
+      "taken": "2026-01-10T04:00",
+      "albums": ["icu_al"],
+      "people": ["divya_s", "jaya"]
+    },
+    {
+      "key": "nurses_day",
+      "name": "Nurses day banner",
+      "taken": "2025-05-12T10:00",
+      "albums": ["icu_al"],
+      "people": ["sowmya", "nirmala"]
+    },
+    {
+      "key": "farhan_pic",
+      "name": "Farhan's last night shift",
+      "taken": "2026-01-17T05:30",
+      "albums": ["icu_al"],
+      "people": ["farhan", "divya_s"]
+    },
+    {
+      "key": "meme_1",
+      "name": "Night shift meme",
+      "taken": "2026-01-09T23:00",
+      "albums": ["memes_al"]
+    },
+    {
+      "key": "meme_2",
+      "name": "Chai meme",
+      "taken": "2026-01-12T16:00",
+      "albums": ["memes_al"]
+    },
+    {
+      "key": "beach",
+      "name": "Marina sunrise",
+      "taken": "2025-12-21T06:20",
+      "starred": true
+    },
+    {
+      "key": "filter_coffee",
+      "name": "Filter coffee at Saravana",
+      "taken": "2026-01-02T08:00"
+    },
+    {
+      "key": "rain",
+      "name": "Rain from the ICU window",
+      "taken": "2025-12-04T15:30"
+    },
+    {
+      "key": "receipt_pic",
+      "name": "Pharmacy receipt",
+      "taken": "2026-01-16T19:30"
+    },
+    {
+      "key": "whiteboard",
+      "name": "Roster whiteboard",
+      "taken": "2026-01-05T07:10"
+    },
+    {
+      "key": "kavya_pic",
+      "name": "Kavya and me at Besant Nagar",
+      "taken": "2025-12-06T17:30",
+      "people": ["kavya"]
+    },
+    {
+      "key": "dubai_ad",
+      "name": "Dubai flat listing screenshot",
+      "taken": "2026-01-08T22:00"
+    },
+    {
+      "key": "old_selfie",
+      "name": "Old hostel selfie",
+      "taken": "2019-03-03T20:00",
+      "trashed": "2026-01-12T10:00"
+    },
+    {
+      "key": "dup_cows",
+      "name": "Cows duplicate",
+      "taken": "2026-01-15T09:31",
+      "trashed": "2026-01-16T08:00"
+    },
+    {
+      "key": "old_meme",
+      "name": "Exam meme",
+      "taken": "2024-02-02T10:00",
+      "trashed": "2025-10-01T10:00"
+    }
+  ],
+  "debts": [
+    {
+      "key": "d_divya_k",
+      "person": "divya_k",
+      "direction": "owes_me",
+      "amount": 450,
+      "name": "Movie tickets",
+      "date": "2026-01-04"
+    },
+    {
+      "key": "d_arjun",
+      "person": "arjun",
+      "direction": "owes_me",
+      "amount": 1200,
+      "name": "Chepauk ticket",
+      "date": "2026-01-15"
+    },
+    {
+      "key": "d_suresh",
+      "person": "suresh",
+      "direction": "owes_me",
+      "amount": 500,
+      "name": "Biryani bet",
+      "date": "2026-01-11"
+    },
+    {
+      "key": "d_karthik",
+      "person": "karthik",
+      "direction": "owes_me",
+      "amount": 3000,
+      "name": "Visa fee advance",
+      "date": "2026-01-08"
+    },
+    {
+      "key": "d_jaya",
+      "person": "jaya",
+      "direction": "i_owe",
+      "amount": 250,
+      "name": "Canteen dinner",
+      "date": "2026-01-10"
+    },
+    {
+      "key": "d_divya_s",
+      "person": "divya_s",
+      "direction": "i_owe",
+      "amount": 500,
+      "name": "Farhan gift share",
+      "date": "2026-01-16"
+    },
+    {
+      "key": "d_ramesh_mama",
+      "person": "ramesh_mama",
+      "direction": "i_owe",
+      "amount": 2000,
+      "name": "Train tickets to Thanjavur",
+      "date": "2026-01-12"
+    },
+    {
+      "key": "d_kavya",
+      "person": "kavya",
+      "direction": "owes_me",
+      "amount": 350,
+      "name": "Coffee and cake",
+      "date": "2025-12-06",
+      "settled": "2025-12-20T10:00"
+    },
+    {
+      "key": "d_farhan",
+      "person": "farhan",
+      "direction": "i_owe",
+      "amount": 180,
+      "name": "Chai and samosa",
+      "date": "2025-12-30",
+      "settled": "2026-01-02T08:00"
+    },
+    {
+      "key": "d_appa",
+      "person": "appa",
+      "direction": "i_owe",
+      "amount": 15000,
+      "name": "Scooty down payment",
+      "date": "2025-06-01"
+    },
+    {
+      "key": "d_vignesh",
+      "person": "vignesh",
+      "direction": "owes_me",
+      "amount": 700,
+      "name": "Jersey advance",
+      "date": "2025-12-15"
+    },
+    {
+      "key": "d_sowmya",
+      "person": "sowmya",
+      "direction": "owes_me",
+      "amount": 500,
+      "name": "Uniform stitching",
+      "date": "2026-01-07",
+      "settled": "2026-01-17T08:00"
+    },
+    {
+      "key": "d_revathi",
+      "person": "revathi",
+      "direction": "i_owe",
+      "amount": 820,
+      "name": "Pooja items",
+      "date": "2026-01-18"
+    }
+  ],
+  "locker": [
+    {
+      "key": "his",
+      "name": "Hospital HIS login",
+      "type": "login",
+      "username": "priya.r.icu",
+      "url": "https://his.kauvery.local",
+      "password": "Bed4-Vent!26",
+      "starred": true
+    },
+    {
+      "key": "tnnmc_login",
+      "name": "TNNMC portal login",
+      "type": "login",
+      "username": "TN-RN-448812",
+      "url": "https://tnnmc.org",
+      "password": "nurse@2021"
+    },
+    {
+      "key": "hdfc_card",
+      "name": "HDFC debit card",
+      "type": "card",
+      "card_number": "4160 2100 7788 1234",
+      "cvv": "412",
+      "starred": true
+    },
+    {
+      "key": "sbi_card",
+      "name": "SBI credit card",
+      "type": "card",
+      "card_number": "5241 8800 1010 4455",
+      "cvv": "093"
+    },
+    {
+      "key": "wifi",
+      "name": "Home wifi",
+      "type": "wifi",
+      "password": "mylapore-filter-kaapi"
+    },
+    {
+      "key": "locker_combo",
+      "name": "ICU locker code",
+      "type": "note",
+      "notes": "4412, locker 17 in the nurses' room"
+    },
+    {
+      "key": "aadhaar_id",
+      "name": "Aadhaar number",
+      "type": "identity",
+      "password": "4410 2291 7736"
+    },
+    {
+      "key": "upi_pin",
+      "name": "UPI PIN",
+      "type": "password",
+      "password": "7291",
+      "starred": true
+    },
+    {
+      "key": "pi_key",
+      "name": "Karthik's server SSH key",
+      "type": "ssh_key",
+      "notes": "for the home NAS",
+      "password": "ssh-ed25519 AAAAC3-nas-home"
+    },
+    {
+      "key": "maps_key",
+      "name": "Temple website API key",
+      "type": "api_credential",
+      "notes": "google maps embed",
+      "code": "AIzaSy-temple-99"
+    },
+    {
+      "key": "passport_item",
+      "name": "Passport",
+      "type": "passport",
+      "notes": "expires June 2026, renew early"
+    },
+    {
+      "key": "sbi_acct",
+      "name": "SBI savings account",
+      "type": "bank_account",
+      "notes": "IFSC SBIN0001234, salary account",
+      "starred": true
+    },
+    {
+      "key": "licence",
+      "name": "Driving licence",
+      "type": "driving_licence",
+      "notes": "two wheeler, valid to 2040"
+    },
+    {
+      "key": "office",
+      "name": "MS Office licence",
+      "type": "software_licence",
+      "code": "OFF-2Y7K-9QX",
+      "notes": "for the laptop"
+    },
+    {
+      "key": "wazirx",
+      "name": "Old WazirX wallet",
+      "type": "crypto_wallet",
+      "notes": "0.01 BTC from 2021, seed phrase in Appa's safe"
+    },
+    {
+      "key": "gym_card",
+      "name": "Cult gym membership",
+      "type": "membership",
+      "notes": "lapsed December"
+    },
+    {
+      "key": "library",
+      "name": "Connemara library card",
+      "type": "membership",
+      "notes": "member 22871"
+    },
+    {
+      "key": "pan_item",
+      "name": "PAN card",
+      "type": "document",
+      "notes": "ABCPR1234K"
+    },
+    {
+      "key": "netflix",
+      "name": "Netflix login",
+      "type": "login",
+      "url": "https://netflix.com",
+      "password": "cricket-gang-4",
+      "trashed": "2026-01-06T10:00"
+    }
+  ],
+  "links": [
+    {
+      "from": "volunteers",
+      "to": "gopal"
+    },
+    {
+      "from": "receipts",
+      "to": "revathi"
+    },
+    {
+      "from": "banner",
+      "to": "gopal"
+    },
+    {
+      "from": "donor_list",
+      "to": "revathi"
+    },
+    {
+      "from": "farhan_card",
+      "to": "farhan"
+    },
+    {
+      "from": "cne_hours",
+      "to": "sowmya"
+    },
+    {
+      "from": "projector",
+      "to": "vignesh"
+    },
+    {
+      "from": "jersey",
+      "to": "vignesh"
+    },
+    {
+      "from": "jersey",
+      "to": "suresh"
+    },
+    {
+      "from": "reports",
+      "to": "amma"
+    },
+    {
+      "from": "insurance_claim",
+      "to": "amma"
+    },
+    {
+      "from": "fasting",
+      "to": "amma"
+    },
+    {
+      "from": "ride",
+      "to": "ramesh_d"
+    },
+    {
+      "from": "dubai_visa",
+      "to": "karthik"
+    },
+    {
+      "from": "kavya_gift",
+      "to": "kavya"
+    },
+    {
+      "from": "recipe",
+      "to": "paati"
+    },
+    {
+      "from": "selvi_pay",
+      "to": "selvi"
+    },
+    {
+      "from": "leave",
+      "to": "nirmala"
+    },
+    {
+      "from": "poosam_plan",
+      "to": "gopal"
+    },
+    {
+      "from": "donors",
+      "to": "revathi"
+    },
+    {
+      "from": "vathal",
+      "to": "paati"
+    },
+    {
+      "from": "match_bets",
+      "to": "suresh"
+    },
+    {
+      "from": "surgery_n",
+      "to": "amma"
+    },
+    {
+      "from": "carpool_n",
+      "to": "ramesh_d"
+    },
+    {
+      "from": "dubai_n",
+      "to": "karthik"
+    }
+  ]
+}

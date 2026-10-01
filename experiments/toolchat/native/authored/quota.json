@@ -1,0 +1,273 @@
+{
+  "note": "Fill targets for the G3 authoring wave (GBRIEF.md). A cell counts uses on the verified train-world authored records; 'hard' is gapreport.analyse's flag. Recovery: a session with a rejected repeated call followed by the runtime hint and then a changed call or an answer. min_new_uses_per_world is what one world's ten sessions must reach (x25 worlds covers the shortfall with about 10% slack for sessions that fail verification); session_plan is a suggested skeleton that overshoots those minimums, each turn listing the cells it can hit at once.",
+  "cells": {
+    "limit:present": {
+      "tag": "limit:present",
+      "uses": 250
+    },
+    "typo:present": {
+      "tag": "typo:present",
+      "uses": 250
+    },
+    "value:min": {
+      "tag": "value:min",
+      "uses": 200,
+      "hard_share": 0.4
+    },
+    "value:max": {
+      "tag": "value:max",
+      "uses": 200,
+      "hard_share": 0.4
+    },
+    "value:sum": {
+      "tag": "value:sum",
+      "uses": 200,
+      "hard_share": 0.4
+    },
+    "decline:never_mind": {
+      "tag": "decline:never_mind",
+      "uses": 200,
+      "hard_share": 0.35
+    },
+    "decline:unbounded_destruction": {
+      "tag": "decline:unbounded_destruction",
+      "uses": 150,
+      "hard_share": 0.35
+    },
+    "recovery": {
+      "sessions": 40
+    }
+  },
+  "allocation": {
+    "g1": {
+      "T01": {
+        "sessions": 10,
+        "ids": "T01-131..T01-140",
+        "file": "authored/sessions/T01_g3.py"
+      },
+      "T02": {
+        "sessions": 10,
+        "ids": "T02-131..T02-140",
+        "file": "authored/sessions/T02_g3.py"
+      },
+      "T04": {
+        "sessions": 10,
+        "ids": "T04-131..T04-140",
+        "file": "authored/sessions/T04_g3.py"
+      },
+      "T05": {
+        "sessions": 10,
+        "ids": "T05-131..T05-140",
+        "file": "authored/sessions/T05_g3.py"
+      },
+      "T06": {
+        "sessions": 10,
+        "ids": "T06-131..T06-140",
+        "file": "authored/sessions/T06_g3.py"
+      }
+    },
+    "g2": {
+      "T07": {
+        "sessions": 10,
+        "ids": "T07-131..T07-140",
+        "file": "authored/sessions/T07_g3.py"
+      },
+      "T08": {
+        "sessions": 10,
+        "ids": "T08-131..T08-140",
+        "file": "authored/sessions/T08_g3.py"
+      },
+      "T09": {
+        "sessions": 10,
+        "ids": "T09-131..T09-140",
+        "file": "authored/sessions/T09_g3.py"
+      },
+      "T10": {
+        "sessions": 10,
+        "ids": "T10-131..T10-140",
+        "file": "authored/sessions/T10_g3.py"
+      },
+      "T11": {
+        "sessions": 10,
+        "ids": "T11-131..T11-140",
+        "file": "authored/sessions/T11_g3.py"
+      }
+    },
+    "g3": {
+      "T13": {
+        "sessions": 10,
+        "ids": "T13-131..T13-140",
+        "file": "authored/sessions/T13_g3.py"
+      },
+      "T14": {
+        "sessions": 10,
+        "ids": "T14-131..T14-140",
+        "file": "authored/sessions/T14_g3.py"
+      },
+      "T15": {
+        "sessions": 10,
+        "ids": "T15-131..T15-140",
+        "file": "authored/sessions/T15_g3.py"
+      },
+      "T16": {
+        "sessions": 10,
+        "ids": "T16-131..T16-140",
+        "file": "authored/sessions/T16_g3.py"
+      },
+      "T17": {
+        "sessions": 10,
+        "ids": "T17-131..T17-140",
+        "file": "authored/sessions/T17_g3.py"
+      }
+    },
+    "g4": {
+      "T18": {
+        "sessions": 10,
+        "ids": "T18-131..T18-140",
+        "file": "authored/sessions/T18_g3.py"
+      },
+      "T19": {
+        "sessions": 10,
+        "ids": "T19-131..T19-140",
+        "file": "authored/sessions/T19_g3.py"
+      },
+      "T20": {
+        "sessions": 10,
+        "ids": "T20-131..T20-140",
+        "file": "authored/sessions/T20_g3.py"
+      },
+      "T21": {
+        "sessions": 10,
+        "ids": "T21-131..T21-140",
+        "file": "authored/sessions/T21_g3.py"
+      },
+      "T22": {
+        "sessions": 10,
+        "ids": "T22-131..T22-140",
+        "file": "authored/sessions/T22_g3.py"
+      }
+    },
+    "g5": {
+      "T24": {
+        "sessions": 10,
+        "ids": "T24-131..T24-140",
+        "file": "authored/sessions/T24_g3.py"
+      },
+      "T25": {
+        "sessions": 10,
+        "ids": "T25-131..T25-140",
+        "file": "authored/sessions/T25_g3.py"
+      },
+      "T26": {
+        "sessions": 10,
+        "ids": "T26-131..T26-140",
+        "file": "authored/sessions/T26_g3.py"
+      },
+      "T27": {
+        "sessions": 10,
+        "ids": "T27-131..T27-140",
+        "file": "authored/sessions/T27_g3.py"
+      },
+      "T28": {
+        "sessions": 10,
+        "ids": "T28-131..T28-140",
+        "file": "authored/sessions/T28_g3.py"
+      }
+    }
+  },
+  "new_hard_share": {
+    "value:min": 0.55,
+    "value:max": 0.55,
+    "value:sum": 0.5,
+    "decline:never_mind": 0.6,
+    "decline:unbounded_destruction": 0.5
+  },
+  "groups": {
+    "g1": ["T01", "T02", "T04", "T05", "T06"],
+    "g2": ["T07", "T08", "T09", "T10", "T11"],
+    "g3": ["T13", "T14", "T15", "T16", "T17"],
+    "g4": ["T18", "T19", "T20", "T21", "T22"],
+    "g5": ["T24", "T25", "T26", "T27", "T28"]
+  },
+  "session_plan": [
+    {
+      "id": "131",
+      "shape": "recovery: find with order/limit, bad repeat, answer; then min+max; then sum",
+      "turns": [
+        ["L", "R"],
+        ["MN", "MX"],
+        ["SM", "T"]
+      ]
+    },
+    {
+      "id": "132",
+      "shape": "recovery twice (hint then nudge), changed call; then sum; then min+max",
+      "turns": [
+        ["L", "R2"],
+        ["SM", "T"],
+        ["MN", "MX"]
+      ]
+    },
+    {
+      "id": "133",
+      "shape": "min+max together, sum, never mind",
+      "turns": [["MN", "MX", "T"], ["SM"], ["NM"]]
+    },
+    {
+      "id": "134",
+      "shape": "min+max together, sum, limit",
+      "turns": [["MN", "MX"], ["SM", "T"], ["L"]]
+    },
+    {
+      "id": "135",
+      "shape": "sum, max, min+max, limit",
+      "turns": [["SM"], ["MX", "T"], ["MN", "MX"], ["L", "T"]]
+    },
+    {
+      "id": "136",
+      "shape": "never mind, limit, never mind",
+      "turns": [["NM"], ["L", "T"], ["NM", "T"]]
+    },
+    {
+      "id": "137",
+      "shape": "unbounded destruction, never mind, unbounded destruction",
+      "turns": [["UD", "T"], ["NM"], ["UD"]]
+    },
+    {
+      "id": "138",
+      "shape": "limit, unbounded destruction, min+max",
+      "turns": [["L", "T"], ["UD"], ["MN", "MX", "T"]]
+    },
+    {
+      "id": "139",
+      "shape": "limit, limit, sum+min, never mind",
+      "turns": [["L"], ["L", "T"], ["SM", "MN"], ["NM", "T"]]
+    },
+    {
+      "id": "140",
+      "shape": "limit, unbounded destruction, never mind, sum+max",
+      "turns": [["L", "T"], ["UD", "T"], ["NM"], ["SM", "MX", "T"]]
+    }
+  ],
+  "legend": {
+    "L": "limit:present (order and/or limit on a find/answer)",
+    "T": "typo:present (a misspelled word in the message; overlay on the turn)",
+    "MN": "value:min",
+    "MX": "value:max",
+    "SM": "value:sum",
+    "NM": "decline never_mind",
+    "UD": "decline unbounded_destruction",
+    "R": "recovery turn: find/search/open/compute, then bad(identical call) (hint), then a changed call or an answer",
+    "R2": "recovery turn with two bad repeats (hint, then nudge), then a changed call or an answer"
+  },
+  "min_new_uses_per_world": {
+    "limit:present": 8,
+    "typo:present": 9,
+    "value:min": 7,
+    "value:max": 7,
+    "value:sum": 6,
+    "decline:never_mind": 4,
+    "decline:unbounded_destruction": 4,
+    "recovery sessions": 2
+  }
+}

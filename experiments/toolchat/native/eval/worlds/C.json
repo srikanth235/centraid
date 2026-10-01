@@ -1,0 +1,1531 @@
+{
+  "me": "Hana Sato",
+  "currency": "USD",
+  "epoch": "2026-01-01T09:00",
+  "seed": "evalC",
+  "people": [
+    {
+      "key": "lukas",
+      "name": "Lukas Brandt",
+      "role": "partner",
+      "starred": true,
+      "last_contacted": "2027-01-31T22:00"
+    },
+    {
+      "key": "okaasan",
+      "name": "Yumiko Sato",
+      "role": "mother",
+      "nickname": "Okaasan",
+      "cadence": 7,
+      "last_contacted": "2027-01-25T06:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "kenta",
+      "name": "Kenta Sato",
+      "role": "brother",
+      "cadence": 30,
+      "last_contacted": "2026-12-31T23:50"
+    },
+    {
+      "key": "mia",
+      "name": "Mia Hoffmann",
+      "role": "Berlin flatmate",
+      "met": "Berlin 2023",
+      "cadence": 30,
+      "last_contacted": "2027-01-10T20:00"
+    },
+    {
+      "key": "jonas",
+      "name": "Jonas Keller",
+      "role": "Berlin flatmate",
+      "met": "Berlin 2023"
+    },
+    {
+      "key": "priya",
+      "name": "Priya Natarajan",
+      "role": "coworker",
+      "last_contacted": "2027-01-29T16:00"
+    },
+    { "key": "alex_c", "name": "Alex Chen", "role": "coworker" },
+    { "key": "alex_m", "name": "Alex Moreno", "role": "climbing gym" },
+    {
+      "key": "tom",
+      "name": "Tom Whitaker",
+      "role": "best friend from uni",
+      "met": "Edinburgh 2015",
+      "cadence": 30,
+      "last_contacted": "2026-11-20T21:00"
+    },
+    { "key": "emily", "name": "Emily Whitaker", "role": "Tom's wife" },
+    {
+      "key": "yuki",
+      "name": "Yuki Tanaka",
+      "role": "childhood friend",
+      "met": "Kyoto",
+      "cadence": 60,
+      "last_contacted": "2026-12-28T12:00"
+    },
+    { "key": "sensei", "name": "Hiroshi Mori", "role": "pottery teacher" },
+    { "key": "drlee", "name": "Grace Lee", "role": "doctor" },
+    { "key": "therapist", "name": "Nora Bishop", "role": "therapist" },
+    { "key": "landlady", "name": "Ruth Olsen", "role": "landlady" },
+    { "key": "vet", "name": "Sam Ferreira", "role": "vet" },
+    {
+      "key": "manager",
+      "name": "Diane Foster",
+      "role": "manager",
+      "last_contacted": "2027-01-28T11:00"
+    },
+    {
+      "key": "recruiter",
+      "name": "Kyle Brennan",
+      "role": "recruiter",
+      "trashed": "2026-12-01T09:00"
+    },
+    {
+      "key": "anna",
+      "name": "Anna Schmidt",
+      "role": "German tutor",
+      "cadence": 7,
+      "last_contacted": "2027-01-27T18:00"
+    },
+    {
+      "key": "oma",
+      "name": "Helga Brandt",
+      "role": "Lukas's grandmother",
+      "nickname": "Oma"
+    },
+    { "key": "lukas_mum", "name": "Petra Brandt", "role": "Lukas's mother" },
+    { "key": "marcus", "name": "Marcus Webb", "role": "neighbor" },
+    {
+      "key": "sophie",
+      "name": "Sophie Laurent",
+      "role": "friend",
+      "nickname": "Soph",
+      "starred": true,
+      "last_contacted": "2027-01-30T19:00"
+    },
+    {
+      "key": "dev",
+      "name": "Dev Malhotra",
+      "role": "climbing gym",
+      "last_contacted": "2027-01-26T20:00"
+    },
+    {
+      "key": "chris",
+      "name": "Chris Park",
+      "role": "bandmate",
+      "trashed": "2026-10-01T09:00"
+    }
+  ],
+  "groups": [
+    {
+      "key": "berlin",
+      "name": "Berlin Flat",
+      "currency": "EUR",
+      "members": ["mia", "jonas"]
+    },
+    {
+      "key": "kyoto",
+      "name": "Kyoto New Year",
+      "currency": "JPY",
+      "members": ["okaasan", "kenta", "lukas"]
+    },
+    {
+      "key": "wedding",
+      "name": "Tom & Emily's wedding",
+      "currency": "GBP",
+      "members": ["tom", "sophie", "lukas"]
+    },
+    { "key": "home", "name": "Home", "currency": "USD", "members": ["lukas"] },
+    {
+      "key": "climbing",
+      "name": "Climbing crew",
+      "currency": "USD",
+      "members": ["dev", "alex_m", "sophie"]
+    }
+  ],
+  "expenses": [
+    {
+      "group": "berlin",
+      "name": "Heating bill",
+      "amount": 240,
+      "paid_by": "mia",
+      "split": ["me", "mia", "jonas"],
+      "date": "2026-10-01"
+    },
+    {
+      "group": "berlin",
+      "name": "Internet Q4",
+      "amount": 90,
+      "paid_by": "me",
+      "split": ["me", "mia", "jonas"],
+      "date": "2026-10-05"
+    },
+    {
+      "group": "berlin",
+      "name": "Broken washing machine",
+      "amount": 360,
+      "paid_by": "jonas",
+      "split": ["me", "mia", "jonas"],
+      "date": "2026-11-02"
+    },
+    {
+      "group": "berlin",
+      "name": "Farewell dinner",
+      "amount": 150,
+      "paid_by": "me",
+      "split": ["me", "mia", "jonas"],
+      "date": "2026-11-28"
+    },
+    {
+      "group": "kyoto",
+      "name": "Ryokan in Arashiyama",
+      "amount": 96000,
+      "paid_by": "me",
+      "split": ["me", "okaasan", "kenta", "lukas"],
+      "date": "2026-12-29"
+    },
+    {
+      "group": "kyoto",
+      "name": "Osechi box",
+      "amount": 32000,
+      "paid_by": "okaasan",
+      "split": ["me", "okaasan", "kenta", "lukas"],
+      "date": "2026-12-31"
+    },
+    {
+      "group": "kyoto",
+      "name": "Shinkansen tickets",
+      "amount": 56000,
+      "paid_by": "kenta",
+      "split": ["me", "okaasan", "kenta", "lukas"],
+      "date": "2026-12-28"
+    },
+    {
+      "group": "kyoto",
+      "name": "Kaiseki dinner",
+      "amount": 48000,
+      "paid_by": "lukas",
+      "split": ["me", "okaasan", "kenta", "lukas"],
+      "date": "2027-01-02"
+    },
+    {
+      "group": "wedding",
+      "name": "Cottage in the Cotswolds",
+      "amount": 880,
+      "paid_by": "sophie",
+      "split": ["me", "tom", "sophie", "lukas"],
+      "date": "2026-08-20"
+    },
+    {
+      "group": "wedding",
+      "name": "Group gift",
+      "amount": 200,
+      "paid_by": "me",
+      "split": ["me", "tom", "sophie", "lukas"],
+      "date": "2026-08-22"
+    },
+    {
+      "group": "wedding",
+      "name": "Train to Oxford",
+      "amount": 96,
+      "paid_by": "lukas",
+      "split": ["me", "tom", "sophie", "lukas"],
+      "date": "2026-08-21"
+    },
+    {
+      "group": "home",
+      "name": "Rent January",
+      "amount": 3100,
+      "paid_by": "me",
+      "split": ["me", "lukas"],
+      "date": "2027-01-01"
+    },
+    {
+      "group": "home",
+      "name": "PCC groceries",
+      "amount": 164.5,
+      "paid_by": "lukas",
+      "split": ["me", "lukas"],
+      "date": "2027-01-09"
+    },
+    {
+      "group": "home",
+      "name": "Seattle City Light",
+      "amount": 88.4,
+      "paid_by": "me",
+      "split": ["me", "lukas"],
+      "date": "2027-01-15"
+    },
+    {
+      "group": "home",
+      "name": "PCC groceries",
+      "amount": 121.3,
+      "paid_by": "me",
+      "split": ["me", "lukas"],
+      "date": "2027-01-23"
+    },
+    {
+      "group": "home",
+      "name": "Couch",
+      "amount": 1400,
+      "paid_by": "lukas",
+      "split": ["me", "lukas"],
+      "date": "2027-01-12"
+    },
+    {
+      "group": "climbing",
+      "name": "Gym day passes",
+      "amount": 88,
+      "paid_by": "dev",
+      "split": ["me", "dev", "alex_m", "sophie"],
+      "date": "2027-01-19"
+    },
+    {
+      "group": "climbing",
+      "name": "Post-climb pho",
+      "amount": 64,
+      "paid_by": "me",
+      "split": ["me", "dev", "alex_m", "sophie"],
+      "date": "2027-01-19"
+    }
+  ],
+  "lists": [
+    { "key": "work", "name": "Work", "area": "research" },
+    { "key": "homel", "name": "Home" },
+    { "key": "german", "name": "German practice" }
+  ],
+  "events": [
+    {
+      "key": "wedding_ev",
+      "name": "Tom & Emily's wedding",
+      "start": "2026-08-22T14:00",
+      "attendees": ["tom", "emily", "sophie", "lukas"]
+    },
+    {
+      "key": "german0",
+      "name": "German lesson with Anna",
+      "start": "2026-11-02T18:00",
+      "end": "2026-11-02T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb0",
+      "name": "Climbing at Vertical World",
+      "start": "2026-11-04T19:30",
+      "end": "2026-11-04T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "german1",
+      "name": "German lesson with Anna",
+      "start": "2026-11-09T18:00",
+      "end": "2026-11-09T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb1",
+      "name": "Climbing at Vertical World",
+      "start": "2026-11-11T19:30",
+      "end": "2026-11-11T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "german2",
+      "name": "German lesson with Anna",
+      "start": "2026-11-16T18:00",
+      "end": "2026-11-16T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb2",
+      "name": "Climbing at Vertical World",
+      "start": "2026-11-18T19:30",
+      "end": "2026-11-18T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "german3",
+      "name": "German lesson with Anna",
+      "start": "2026-11-23T18:00",
+      "end": "2026-11-23T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb3",
+      "name": "Climbing at Vertical World",
+      "start": "2026-11-25T19:30",
+      "end": "2026-11-25T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "german4",
+      "name": "German lesson with Anna",
+      "start": "2026-11-30T18:00",
+      "end": "2026-11-30T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb4",
+      "name": "Climbing at Vertical World",
+      "start": "2026-12-02T19:30",
+      "end": "2026-12-02T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "therapy0",
+      "name": "Therapy",
+      "start": "2026-12-03T17:00",
+      "end": "2026-12-03T17:50",
+      "attendees": ["therapist"]
+    },
+    {
+      "key": "german5",
+      "name": "German lesson with Anna",
+      "start": "2026-12-07T18:00",
+      "end": "2026-12-07T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb5",
+      "name": "Climbing at Vertical World",
+      "start": "2026-12-09T19:30",
+      "end": "2026-12-09T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "therapy1",
+      "name": "Therapy",
+      "start": "2026-12-10T17:00",
+      "end": "2026-12-10T17:50",
+      "attendees": ["therapist"]
+    },
+    {
+      "key": "german6",
+      "name": "German lesson with Anna",
+      "start": "2026-12-14T18:00",
+      "end": "2026-12-14T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb6",
+      "name": "Climbing at Vertical World",
+      "start": "2026-12-16T19:30",
+      "end": "2026-12-16T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "therapy2",
+      "name": "Therapy",
+      "start": "2026-12-17T17:00",
+      "end": "2026-12-17T17:50",
+      "attendees": ["therapist"]
+    },
+    {
+      "key": "german7",
+      "name": "German lesson with Anna",
+      "start": "2026-12-21T18:00",
+      "end": "2026-12-21T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb7",
+      "name": "Climbing at Vertical World",
+      "start": "2026-12-23T19:30",
+      "end": "2026-12-23T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "therapy3",
+      "name": "Therapy",
+      "start": "2026-12-24T17:00",
+      "end": "2026-12-24T17:50",
+      "attendees": ["therapist"]
+    },
+    {
+      "key": "kyoto_ny",
+      "name": "New Year in Kyoto",
+      "start": "2026-12-28T10:00",
+      "end": "2027-01-04T10:00",
+      "attendees": ["okaasan", "kenta", "lukas"]
+    },
+    {
+      "key": "german9",
+      "name": "German lesson with Anna",
+      "start": "2027-01-04T18:00",
+      "end": "2027-01-04T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb9",
+      "name": "Climbing at Vertical World",
+      "start": "2027-01-06T19:30",
+      "end": "2027-01-06T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "therapy5",
+      "name": "Therapy",
+      "start": "2027-01-07T17:00",
+      "end": "2027-01-07T17:50",
+      "attendees": ["therapist"]
+    },
+    {
+      "key": "german10",
+      "name": "German lesson with Anna",
+      "start": "2027-01-11T18:00",
+      "end": "2027-01-11T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb10",
+      "name": "Climbing at Vertical World",
+      "start": "2027-01-13T19:30",
+      "end": "2027-01-13T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "therapy6",
+      "name": "Therapy",
+      "start": "2027-01-14T17:00",
+      "end": "2027-01-14T17:50",
+      "attendees": ["therapist"]
+    },
+    {
+      "key": "yoga",
+      "name": "Yoga retreat",
+      "start": "2027-01-16T09:00",
+      "cancelled": true
+    },
+    {
+      "key": "german11",
+      "name": "German lesson with Anna",
+      "start": "2027-01-18T18:00",
+      "end": "2027-01-18T19:00",
+      "attendees": ["anna"]
+    },
+    { "key": "dentist_c", "name": "Dentist", "start": "2027-01-20T09:00" },
+    {
+      "key": "climb11",
+      "name": "Climbing at Vertical World",
+      "start": "2027-01-20T19:30",
+      "end": "2027-01-20T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "therapy7",
+      "name": "Therapy",
+      "start": "2027-01-21T17:00",
+      "end": "2027-01-21T17:50",
+      "attendees": ["therapist"]
+    },
+    {
+      "key": "german12",
+      "name": "German lesson with Anna",
+      "start": "2027-01-25T18:00",
+      "end": "2027-01-25T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb12",
+      "name": "Climbing at Vertical World",
+      "start": "2027-01-27T19:30",
+      "end": "2027-01-27T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "therapy8",
+      "name": "Therapy",
+      "start": "2027-01-28T17:00",
+      "end": "2027-01-28T17:50",
+      "attendees": ["therapist"]
+    },
+    {
+      "key": "sophie_brunch",
+      "name": "Brunch with Sophie",
+      "start": "2027-01-31T11:00",
+      "attendees": ["sophie"]
+    },
+    {
+      "key": "okaasan_call",
+      "name": "Call Okaasan",
+      "start": "2027-02-01T18:00",
+      "attendees": ["okaasan"]
+    },
+    {
+      "key": "vet_ev",
+      "name": "Mochi vet appointment",
+      "start": "2027-02-02T12:00",
+      "attendees": ["vet"],
+      "description": "Mochi the cat, dental cleaning"
+    },
+    {
+      "key": "studyreadout",
+      "name": "Usability study readout",
+      "start": "2027-02-03T14:00",
+      "end": "2027-02-03T15:00",
+      "attendees": ["priya", "alex_c", "manager"]
+    },
+    {
+      "key": "climb13",
+      "name": "Climbing at Vertical World",
+      "start": "2027-02-03T19:30",
+      "end": "2027-02-03T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "interviews",
+      "name": "Participant interviews",
+      "start": "2027-02-04T09:00",
+      "end": "2027-02-04T16:00"
+    },
+    {
+      "key": "therapy9",
+      "name": "Therapy",
+      "start": "2027-02-04T17:00",
+      "end": "2027-02-04T17:50",
+      "attendees": ["therapist"]
+    },
+    { "key": "allhands", "name": "All-hands", "start": "2027-02-05T10:00" },
+    {
+      "key": "pottery",
+      "name": "Pottery with Mori-sensei",
+      "start": "2027-02-06T10:00",
+      "attendees": ["sensei"]
+    },
+    {
+      "key": "tom_call",
+      "name": "Call with Tom",
+      "start": "2027-02-07T11:00",
+      "attendees": ["tom"]
+    },
+    {
+      "key": "german14",
+      "name": "German lesson with Anna",
+      "start": "2027-02-08T18:00",
+      "end": "2027-02-08T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "perf",
+      "name": "Performance review with Diane",
+      "start": "2027-02-09T13:00",
+      "attendees": ["manager"]
+    },
+    {
+      "key": "doctor",
+      "name": "Annual physical with Dr. Lee",
+      "start": "2027-02-10T08:30",
+      "attendees": ["drlee"]
+    },
+    {
+      "key": "climb14",
+      "name": "Climbing at Vertical World",
+      "start": "2027-02-10T19:30",
+      "end": "2027-02-10T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "therapy10",
+      "name": "Therapy",
+      "start": "2027-02-11T17:00",
+      "end": "2027-02-11T17:50",
+      "attendees": ["therapist"]
+    },
+    {
+      "key": "valentines",
+      "name": "Valentine's dinner",
+      "start": "2027-02-14T19:30",
+      "attendees": ["lukas"]
+    },
+    {
+      "key": "lease_sign",
+      "name": "Lease renewal signing",
+      "start": "2027-02-15T10:00",
+      "attendees": ["landlady"]
+    },
+    {
+      "key": "german15",
+      "name": "German lesson with Anna",
+      "start": "2027-02-15T18:00",
+      "end": "2027-02-15T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb15",
+      "name": "Climbing at Vertical World",
+      "start": "2027-02-17T19:30",
+      "end": "2027-02-17T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "therapy11",
+      "name": "Therapy",
+      "start": "2027-02-18T17:00",
+      "end": "2027-02-18T17:50",
+      "attendees": ["therapist"]
+    },
+    {
+      "key": "concert",
+      "name": "Japanese Breakfast concert",
+      "start": "2027-02-20T20:00",
+      "attendees": ["sophie"]
+    },
+    {
+      "key": "german16",
+      "name": "German lesson with Anna",
+      "start": "2027-02-22T18:00",
+      "end": "2027-02-22T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb16",
+      "name": "Climbing at Vertical World",
+      "start": "2027-02-24T19:30",
+      "end": "2027-02-24T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "therapy12",
+      "name": "Therapy",
+      "start": "2027-02-25T17:00",
+      "end": "2027-02-25T17:50",
+      "attendees": ["therapist"]
+    },
+    {
+      "key": "german17",
+      "name": "German lesson with Anna",
+      "start": "2027-03-01T18:00",
+      "end": "2027-03-01T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb17",
+      "name": "Climbing at Vertical World",
+      "start": "2027-03-03T19:30",
+      "end": "2027-03-03T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "german18",
+      "name": "German lesson with Anna",
+      "start": "2027-03-08T18:00",
+      "end": "2027-03-08T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb18",
+      "name": "Climbing at Vertical World",
+      "start": "2027-03-10T19:30",
+      "end": "2027-03-10T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "berlin_trip",
+      "name": "Flight to Berlin",
+      "start": "2027-03-12T13:25",
+      "description": "LH 491 SEA-FRA"
+    },
+    {
+      "key": "oma_bday",
+      "name": "Oma's 90th birthday",
+      "start": "2027-03-14T15:00",
+      "attendees": ["oma", "lukas", "lukas_mum"]
+    },
+    {
+      "key": "german19",
+      "name": "German lesson with Anna",
+      "start": "2027-03-15T18:00",
+      "end": "2027-03-15T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb19",
+      "name": "Climbing at Vertical World",
+      "start": "2027-03-17T19:30",
+      "end": "2027-03-17T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "return_flight",
+      "name": "Flight back to Seattle",
+      "start": "2027-03-20T11:00"
+    },
+    {
+      "key": "german20",
+      "name": "German lesson with Anna",
+      "start": "2027-03-22T18:00",
+      "end": "2027-03-22T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb20",
+      "name": "Climbing at Vertical World",
+      "start": "2027-03-24T19:30",
+      "end": "2027-03-24T21:30",
+      "attendees": ["dev", "alex_m"]
+    },
+    {
+      "key": "german21",
+      "name": "German lesson with Anna",
+      "start": "2027-03-29T18:00",
+      "end": "2027-03-29T19:00",
+      "attendees": ["anna"]
+    },
+    {
+      "key": "climb21",
+      "name": "Climbing at Vertical World",
+      "start": "2027-03-31T19:30",
+      "end": "2027-03-31T21:30",
+      "attendees": ["dev", "alex_m"]
+    }
+  ],
+  "tasks": [
+    {
+      "key": "rent0",
+      "name": "Pay rent",
+      "due": "2026-02-01",
+      "list": "homel",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-02-01T09:00"
+    },
+    {
+      "key": "rent1",
+      "name": "Pay rent",
+      "due": "2026-03-01",
+      "list": "homel",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-03-01T09:00"
+    },
+    {
+      "key": "rent2",
+      "name": "Pay rent",
+      "due": "2026-04-01",
+      "list": "homel",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-04-01T09:00"
+    },
+    {
+      "key": "rent3",
+      "name": "Pay rent",
+      "due": "2026-05-01",
+      "list": "homel",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-05-01T09:00"
+    },
+    {
+      "key": "rent4",
+      "name": "Pay rent",
+      "due": "2026-06-01",
+      "list": "homel",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-06-01T09:00"
+    },
+    {
+      "key": "rent5",
+      "name": "Pay rent",
+      "due": "2026-07-01",
+      "list": "homel",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-07-01T09:00"
+    },
+    {
+      "key": "rent6",
+      "name": "Pay rent",
+      "due": "2026-08-01",
+      "list": "homel",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-08-01T09:00"
+    },
+    {
+      "key": "rent7",
+      "name": "Pay rent",
+      "due": "2026-09-01",
+      "list": "homel",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-09-01T09:00"
+    },
+    {
+      "key": "rent8",
+      "name": "Pay rent",
+      "due": "2026-10-01",
+      "list": "homel",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-10-01T09:00"
+    },
+    {
+      "key": "rent9",
+      "name": "Pay rent",
+      "due": "2026-11-01",
+      "list": "homel",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-11-01T09:00"
+    },
+    {
+      "key": "rent10",
+      "name": "Pay rent",
+      "due": "2026-12-01",
+      "list": "homel",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-12-01T09:00"
+    },
+    {
+      "key": "rent11",
+      "name": "Pay rent",
+      "due": "2027-01-01",
+      "list": "homel",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2027-01-01T09:00"
+    },
+    {
+      "key": "rent12",
+      "name": "Pay rent",
+      "due": "2027-02-01",
+      "list": "homel",
+      "priority": 1
+    },
+    {
+      "key": "rent13",
+      "name": "Pay rent",
+      "due": "2027-03-01",
+      "list": "homel",
+      "priority": 1
+    },
+    {
+      "key": "readout_deck",
+      "name": "Finish readout deck",
+      "due": "2027-02-02T17:00",
+      "list": "work",
+      "priority": 1,
+      "effort": 180,
+      "status": "in_progress"
+    },
+    {
+      "key": "recruit",
+      "name": "Recruit 6 participants",
+      "due": "2027-01-29",
+      "list": "work",
+      "status": "completed",
+      "completed": "2027-01-28T15:00"
+    },
+    {
+      "key": "consent",
+      "name": "Print consent forms",
+      "due": "2027-02-03",
+      "list": "work",
+      "effort": 15
+    },
+    {
+      "key": "synth",
+      "name": "Synthesize interview notes",
+      "due": "2027-02-08",
+      "list": "work",
+      "effort": 240
+    },
+    {
+      "key": "selfreview",
+      "name": "Write self-review",
+      "due": "2027-02-05",
+      "list": "work",
+      "effort": 90,
+      "priority": 2
+    },
+    {
+      "key": "expenses_c",
+      "name": "File travel expenses",
+      "due": "2027-01-20",
+      "list": "work",
+      "effort": 30
+    },
+    {
+      "key": "gift_oma",
+      "name": "Buy gift for Oma's 90th",
+      "due": "2027-03-01",
+      "priority": 2
+    },
+    {
+      "key": "visa",
+      "name": "Check ESTA/visa for Lukas",
+      "status": "cancelled"
+    },
+    {
+      "key": "mochi_food",
+      "name": "Order Mochi's food",
+      "due": "2027-02-02",
+      "list": "homel",
+      "effort": 10
+    },
+    {
+      "key": "taxes",
+      "name": "Gather tax documents",
+      "due": "2027-02-28",
+      "list": "homel",
+      "effort": 60
+    },
+    {
+      "key": "fbar",
+      "name": "File FBAR for German account",
+      "due": "2027-04-15",
+      "priority": 1
+    },
+    {
+      "key": "close_acct",
+      "name": "Close Berlin bank account",
+      "due": "2027-03-16"
+    },
+    {
+      "key": "anmeldung",
+      "name": "Deregister Berlin address",
+      "status": "completed",
+      "completed": "2026-12-02T10:00"
+    },
+    {
+      "key": "vocab",
+      "name": "Learn 50 new German words",
+      "list": "german",
+      "status": "in_progress",
+      "effort": 300
+    },
+    {
+      "key": "dativ",
+      "name": "Dativ exercises chapter 7",
+      "due": "2027-02-01",
+      "list": "german",
+      "effort": 45
+    },
+    {
+      "key": "podcast",
+      "name": "Listen to Easy German podcast",
+      "list": "german"
+    },
+    {
+      "key": "couch",
+      "name": "Sell the old couch",
+      "due": "2027-01-31",
+      "list": "homel",
+      "status": "completed",
+      "completed": "2027-01-30T16:00"
+    },
+    {
+      "key": "plants",
+      "name": "Repot the monstera",
+      "due": "2027-02-07",
+      "list": "homel",
+      "effort": 30
+    },
+    {
+      "key": "lease",
+      "name": "Review lease renewal terms",
+      "due": "2027-02-12",
+      "list": "homel",
+      "priority": 2
+    },
+    {
+      "key": "thank_tom",
+      "name": "Send Tom wedding photos",
+      "due": "2026-09-15",
+      "status": "completed",
+      "completed": "2026-09-10T20:00"
+    },
+    {
+      "key": "kyoto_photos",
+      "name": "Share Kyoto photos with Kenta",
+      "due": "2027-01-15"
+    },
+    {
+      "key": "pottery_glaze",
+      "name": "Pick up glazed bowls",
+      "due": "2027-02-06"
+    },
+    {
+      "key": "trashed_t",
+      "name": "Book yoga retreat",
+      "trashed": "2027-01-05T09:00"
+    },
+    {
+      "key": "oma_card",
+      "name": "Write card for Oma",
+      "parent": "gift_oma",
+      "due": "2027-03-01"
+    },
+    {
+      "key": "oma_frame",
+      "name": "Frame the family photo",
+      "parent": "gift_oma",
+      "due": "2027-02-25"
+    }
+  ],
+  "links": [
+    { "from": "thank_tom", "to": "tom" },
+    { "from": "kyoto_photos", "to": "kenta" },
+    { "from": "gift_oma", "to": "oma" },
+    { "from": "de2", "to": "oma" },
+    { "from": "gift_ideas", "to": "oma" },
+    { "from": "re1", "to": "okaasan" }
+  ],
+  "notebooks": [
+    { "key": "research", "name": "Research" },
+    { "key": "german_nb", "name": "Deutsch" },
+    { "key": "recipes", "name": "Recipes" },
+    { "key": "diary", "name": "Journal" }
+  ],
+  "notes": [
+    {
+      "key": "rs1",
+      "name": "Onboarding study plan",
+      "body": "6 participants, 45 min, think-aloud",
+      "notebook": "research",
+      "created": "2027-01-12T10:00"
+    },
+    {
+      "key": "rs2",
+      "name": "Interview guide",
+      "body": "warm-up, tasks, debrief",
+      "notebook": "research",
+      "created": "2027-01-18T10:00"
+    },
+    {
+      "key": "rs3",
+      "name": "Pilot session notes",
+      "body": "task 3 too long; rephrase",
+      "notebook": "research",
+      "created": "2027-01-26T16:00"
+    },
+    {
+      "key": "de1",
+      "name": "Dativ prepositions",
+      "body": "aus, bei, mit, nach, seit, von, zu",
+      "notebook": "german_nb",
+      "created": "2026-11-10T19:00",
+      "pinned": true
+    },
+    {
+      "key": "de2",
+      "name": "Useful phrases for Oma",
+      "body": "Herzlichen Glückwunsch zum Geburtstag",
+      "notebook": "german_nb",
+      "created": "2027-01-20T19:00"
+    },
+    {
+      "key": "re1",
+      "name": "Okaasan's nikujaga",
+      "body": "beef, potatoes, onion, dashi, mirin, soy",
+      "notebook": "recipes",
+      "created": "2026-12-30T20:00"
+    },
+    {
+      "key": "re2",
+      "name": "Lukas's Käsespätzle",
+      "body": "flour, eggs, Emmentaler, fried onions",
+      "notebook": "recipes",
+      "created": "2026-11-15T20:00"
+    },
+    {
+      "key": "re3",
+      "name": "Miso soup",
+      "body": "dashi, white miso, tofu, wakame",
+      "notebook": "recipes",
+      "created": "2026-10-01T20:00"
+    },
+    {
+      "key": "dy1",
+      "name": "Last night in Kyoto",
+      "body": "Temple bells at midnight, Okaasan cried a little",
+      "notebook": "diary",
+      "created": "2027-01-03T23:30"
+    },
+    {
+      "key": "dy2",
+      "name": "Moving out of Berlin",
+      "body": "Mia made a playlist; Jonas fixed nothing",
+      "notebook": "diary",
+      "created": "2026-11-29T23:00"
+    },
+    {
+      "key": "dy3",
+      "name": "January blues",
+      "body": "grey for 20 days straight",
+      "notebook": "diary",
+      "created": "2027-01-22T22:00"
+    },
+    {
+      "key": "packing",
+      "name": "Berlin packing list",
+      "body": "adapter, gift for Oma, warm boots",
+      "pinned": true,
+      "created": "2027-01-28T21:00"
+    },
+    {
+      "key": "gift_ideas",
+      "name": "Gift ideas for Oma",
+      "body": "photo book, Japanese tea set, cashmere scarf",
+      "created": "2027-01-15T21:00"
+    },
+    {
+      "key": "wifi_note",
+      "name": "Router setup",
+      "body": "mesh in hallway",
+      "created": "2026-06-01T10:00"
+    },
+    {
+      "key": "oldnote_c",
+      "name": "Moving boxes",
+      "body": "count: 23",
+      "trashed": "2026-12-10T09:00",
+      "created": "2026-11-20T09:00"
+    }
+  ],
+  "folders": [
+    { "key": "immigration", "name": "Immigration" },
+    { "key": "taxes_c", "name": "Taxes" },
+    { "key": "apartment", "name": "Apartment" }
+  ],
+  "documents": [
+    {
+      "key": "greencard",
+      "name": "Green card copy",
+      "text": "permanent resident card",
+      "folder": "immigration",
+      "starred": true,
+      "created": "2026-01-05T10:00"
+    },
+    {
+      "key": "anmeldung_doc",
+      "name": "Abmeldebestätigung",
+      "text": "Berlin deregistration",
+      "folder": "immigration",
+      "created": "2026-12-02T12:00"
+    },
+    {
+      "key": "w2_c",
+      "name": "W-2 2026",
+      "text": "wages",
+      "folder": "taxes_c",
+      "created": "2027-01-28T10:00"
+    },
+    {
+      "key": "german_tax",
+      "name": "German tax statement 2026",
+      "text": "Lohnsteuerbescheinigung",
+      "folder": "taxes_c",
+      "created": "2027-01-20T10:00"
+    },
+    {
+      "key": "lease_c",
+      "name": "Lease 2026",
+      "text": "Capitol Hill apt 4C",
+      "folder": "apartment",
+      "starred": true,
+      "created": "2026-02-01T10:00"
+    },
+    {
+      "key": "renewal",
+      "name": "Lease renewal offer",
+      "text": "rent +4%",
+      "folder": "apartment",
+      "created": "2027-01-14T10:00"
+    },
+    {
+      "key": "mochi_vax",
+      "name": "Mochi vaccination record",
+      "text": "FVRCP",
+      "created": "2026-06-12T10:00"
+    },
+    {
+      "key": "ryokan",
+      "name": "Ryokan booking confirmation",
+      "text": "Arashiyama, 2 nights",
+      "created": "2026-11-01T10:00"
+    },
+    {
+      "key": "berlin_flight",
+      "name": "Berlin flight booking",
+      "text": "LH 491",
+      "created": "2027-01-18T10:00"
+    },
+    {
+      "key": "old_c",
+      "name": "Old Berlin lease",
+      "text": "Neukölln",
+      "trashed": "2026-12-05T10:00",
+      "created": "2026-01-10T10:00"
+    }
+  ],
+  "albums": [
+    { "key": "kyoto_al", "name": "Kyoto 2026" },
+    { "key": "berlin_al", "name": "Berlin" },
+    { "key": "mochi_al", "name": "Mochi" },
+    { "key": "wedding_al", "name": "Tom & Emily" }
+  ],
+  "photos": [
+    {
+      "key": "ky0",
+      "name": "Fushimi Inari gates",
+      "taken": "2026-12-29T09:00",
+      "albums": ["kyoto_al"],
+      "people": ["lukas"],
+      "starred": false
+    },
+    {
+      "key": "ky1",
+      "name": "Arashiyama bamboo",
+      "taken": "2026-12-30T08:30",
+      "albums": ["kyoto_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "ky2",
+      "name": "Okaasan making mochi",
+      "taken": "2026-12-31T11:00",
+      "albums": ["kyoto_al"],
+      "people": ["okaasan"],
+      "starred": false
+    },
+    {
+      "key": "ky3",
+      "name": "Joya no kane",
+      "taken": "2026-12-31T23:55",
+      "albums": ["kyoto_al"],
+      "people": ["kenta"],
+      "starred": false
+    },
+    {
+      "key": "ky4",
+      "name": "Hatsumode at Yasaka",
+      "taken": "2027-01-01T10:00",
+      "albums": ["kyoto_al"],
+      "people": ["okaasan", "kenta", "lukas"],
+      "starred": true
+    },
+    {
+      "key": "ky5",
+      "name": "Kaiseki dinner",
+      "taken": "2027-01-02T19:00",
+      "albums": ["kyoto_al"],
+      "people": ["lukas"],
+      "starred": false
+    },
+    {
+      "key": "ky6",
+      "name": "Kamo river",
+      "taken": "2027-01-03T16:00",
+      "albums": ["kyoto_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "be0",
+      "name": "Tempelhofer Feld",
+      "taken": "2026-06-14T18:00",
+      "albums": ["berlin_al"],
+      "people": ["mia"]
+    },
+    {
+      "key": "be1",
+      "name": "Flat party",
+      "taken": "2026-09-19T23:00",
+      "albums": ["berlin_al"],
+      "people": ["mia", "jonas"]
+    },
+    {
+      "key": "be2",
+      "name": "Last Späti beer",
+      "taken": "2026-11-28T22:00",
+      "albums": ["berlin_al"],
+      "people": ["jonas"]
+    },
+    {
+      "key": "be3",
+      "name": "Christmas market",
+      "taken": "2025-12-10T19:00",
+      "albums": ["berlin_al"],
+      "people": ["lukas"]
+    },
+    {
+      "key": "mo0",
+      "name": "Mochi in the box",
+      "taken": "2026-02-10T20:00",
+      "albums": ["mochi_al"],
+      "people": [],
+      "starred": false
+    },
+    {
+      "key": "mo1",
+      "name": "Mochi at the window",
+      "taken": "2026-07-01T08:00",
+      "albums": ["mochi_al"],
+      "people": [],
+      "starred": true
+    },
+    {
+      "key": "mo2",
+      "name": "Mochi and Lukas",
+      "taken": "2027-01-24T21:00",
+      "albums": ["mochi_al"],
+      "people": ["lukas"],
+      "starred": false
+    },
+    {
+      "key": "we0",
+      "name": "First dance",
+      "taken": "2026-08-22T20:00",
+      "albums": ["wedding_al"],
+      "people": ["tom", "emily"]
+    },
+    {
+      "key": "we1",
+      "name": "Cotswolds cottage",
+      "taken": "2026-08-21T12:00",
+      "albums": ["wedding_al"],
+      "people": []
+    },
+    {
+      "key": "we2",
+      "name": "Us at the wedding",
+      "taken": "2026-08-22T18:00",
+      "albums": ["wedding_al"],
+      "people": ["lukas"]
+    },
+    {
+      "key": "whiteboard_c",
+      "name": "Affinity map",
+      "taken": "2027-01-27T15:00"
+    },
+    {
+      "key": "snow",
+      "name": "Snow on Capitol Hill",
+      "taken": "2027-01-13T08:00",
+      "starred": true
+    },
+    { "key": "bowl", "name": "Pottery bowl", "taken": "2027-01-23T12:00" },
+    {
+      "key": "trash_ph",
+      "name": "Accidental screenshot",
+      "taken": "2027-01-19T10:00",
+      "trashed": "2027-01-19T10:05"
+    }
+  ],
+  "debts": [
+    {
+      "key": "sophie_tix",
+      "person": "sophie",
+      "direction": "owes_me",
+      "amount": 75,
+      "name": "concert tickets",
+      "date": "2027-01-15"
+    },
+    {
+      "key": "dev_rope",
+      "person": "dev",
+      "direction": "i_owe",
+      "amount": 45,
+      "name": "half a rope",
+      "date": "2027-01-05"
+    },
+    {
+      "key": "priya_lunch",
+      "person": "priya",
+      "direction": "owes_me",
+      "amount": 16.75,
+      "name": "lunch",
+      "date": "2027-01-29"
+    },
+    {
+      "key": "kenta_loan",
+      "person": "kenta",
+      "direction": "owes_me",
+      "amount": 250,
+      "name": "flight top-up",
+      "date": "2026-12-20",
+      "settled": "2027-01-10T10:00"
+    },
+    {
+      "key": "alexm_shoes",
+      "person": "alex_m",
+      "direction": "owes_me",
+      "amount": 30,
+      "name": "used climbing shoes",
+      "date": "2027-01-19"
+    },
+    {
+      "key": "anna_lessons",
+      "person": "anna",
+      "direction": "i_owe",
+      "amount": 120,
+      "name": "four German lessons",
+      "date": "2027-01-26"
+    }
+  ],
+  "locker": [
+    {
+      "key": "wifi_c",
+      "name": "Home wifi",
+      "type": "wifi",
+      "password": "mochi-neko-42",
+      "starred": true
+    },
+    {
+      "key": "office_wifi",
+      "name": "Office wifi",
+      "type": "wifi",
+      "password": "ResearchOps!"
+    },
+    {
+      "key": "n26",
+      "name": "N26 Berlin account",
+      "type": "bank_account",
+      "notes": "closing in March"
+    },
+    {
+      "key": "chase_c",
+      "name": "Chase checking",
+      "type": "login",
+      "username": "hsato",
+      "url": "https://chase.com",
+      "password": "Kyoto#2026"
+    },
+    {
+      "key": "passport_jp",
+      "name": "Japanese passport",
+      "type": "passport",
+      "notes": "expires 2030"
+    },
+    { "key": "greencard_lk", "name": "Green card", "type": "identity" },
+    {
+      "key": "figma",
+      "name": "Figma",
+      "type": "login",
+      "username": "hana@work.example",
+      "password": "Prototype!7"
+    },
+    { "key": "visa_c", "name": "Visa card", "type": "card" },
+    {
+      "key": "miles",
+      "name": "Lufthansa Miles & More",
+      "type": "membership",
+      "notes": "number in notes app"
+    },
+    {
+      "key": "door",
+      "name": "Building door code",
+      "type": "note",
+      "notes": "front door 4C"
+    }
+  ],
+  "today": "2027-02-01T07:50"
+}

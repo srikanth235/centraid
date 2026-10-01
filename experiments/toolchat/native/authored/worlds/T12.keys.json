@@ -1,0 +1,1130 @@
+{
+  "abe": {
+    "id": "90a4bb76-5843-7557-827e-ec2ba2c75e28",
+    "kind": "person"
+  },
+  "accounts_nb": {
+    "id": "9d7f8b83-df0e-78dd-81a4-27d7c49cd74d",
+    "kind": "notebook"
+  },
+  "acct_aug": {
+    "id": "1e6e1622-f391-7d9c-841e-9322020037b5",
+    "kind": "event"
+  },
+  "acct_july": {
+    "id": "f218cfc3-7fb6-7fb7-8af4-d6a998bbb017",
+    "kind": "note"
+  },
+  "acct_may": {
+    "id": "c714c738-4fe2-7e6e-8fb9-91e53f9f0f26",
+    "kind": "event"
+  },
+  "acct_tax": {
+    "id": "7661150a-3d72-79aa-8895-daf2083bfbb0",
+    "kind": "note"
+  },
+  "aiko": {
+    "id": "cddf49bc-69bf-7b57-8d16-10e55ae0c31c",
+    "kind": "person"
+  },
+  "aircon": {
+    "id": "654d2dba-679b-7df3-8242-81a5c88394b4",
+    "kind": "task"
+  },
+  "alley": {
+    "id": "1b8ccdbe-8812-7c42-8f24-7ffe2f47dd80",
+    "kind": "group"
+  },
+  "aprons": {
+    "id": "19805535-774b-773b-828f-93a9712fa078",
+    "kind": "task"
+  },
+  "autumn_menu": {
+    "id": "cdefeac2-6a89-731a-8005-43b191279222",
+    "kind": "task"
+  },
+  "balcony_l": {
+    "id": "a847d86a-c27e-7ef0-8b60-8cf6b3c2bc29",
+    "kind": "list"
+  },
+  "bank": {
+    "id": "11d4ea9a-4b11-7eca-8c99-a7489799d9f9",
+    "kind": "locker item"
+  },
+  "bbq_p": {
+    "id": "49e21105-507a-7689-84cd-982f64ac4e8c",
+    "kind": "photo"
+  },
+  "beer_p": {
+    "id": "4a2a2043-1585-7311-8dc4-ff114faa221d",
+    "kind": "photo"
+  },
+  "beer_tasting": {
+    "id": "2193d049-2ec6-7185-8503-47e3d389d9dc",
+    "kind": "event"
+  },
+  "blog": {
+    "id": "77d1ba94-09fb-77e8-8514-66ba9f875006",
+    "kind": "task"
+  },
+  "blue_form": {
+    "id": "54884822-1e87-7bd2-8c3b-7ec866fce88b",
+    "kind": "document"
+  },
+  "blur_p": {
+    "id": "012374d6-0d68-7135-88ca-b3e4cc2ce417",
+    "kind": "photo"
+  },
+  "boiler": {
+    "id": "dc917368-82c2-7494-8a79-a8ff8fd6458e",
+    "kind": "task"
+  },
+  "boiler_fix": {
+    "id": "f8d5bb01-ab34-78e3-899d-db0351c30d81",
+    "kind": "event"
+  },
+  "boiler_p": {
+    "id": "f851a12d-739e-7396-8bff-f35ef6ab4771",
+    "kind": "photo"
+  },
+  "broth_nb": {
+    "id": "a70f9e0e-2532-71a6-86b7-deb6179d48c9",
+    "kind": "notebook"
+  },
+  "call_0705": {
+    "id": "fb34b086-0f7a-757f-80ee-7333ee124e95",
+    "kind": "event"
+  },
+  "call_0719": {
+    "id": "0ebb4f06-9446-70ae-80eb-674da9116951",
+    "kind": "event"
+  },
+  "call_0802": {
+    "id": "302fae67-cb23-7312-818a-7e5e2959c081",
+    "kind": "event"
+  },
+  "call_0823": {
+    "id": "1569482d-46a9-734d-8358-d8c0d225a633",
+    "kind": "event"
+  },
+  "call_0906": {
+    "id": "4ab55a78-6fc5-78e3-8ee6-411549ad9cbe",
+    "kind": "event"
+  },
+  "call_mom": {
+    "id": "b2b1b10d-7cc5-7474-818f-d5a273fc60f6",
+    "kind": "task"
+  },
+  "car_ins": {
+    "id": "751d5535-9e9f-7197-8ffa-b3c0bb4ad011",
+    "kind": "document"
+  },
+  "castle": {
+    "id": "5fe01d14-02a9-7819-8cc4-d200d34bce58",
+    "kind": "photo"
+  },
+  "chashu": {
+    "id": "768c71b9-ca6e-7db8-8e4d-b676703b2779",
+    "kind": "task"
+  },
+  "checkup": {
+    "id": "ce342737-56c4-7806-814f-78945c00507d",
+    "kind": "event"
+  },
+  "corn": {
+    "id": "511278a0-c84c-7d4a-8c7a-3053cd729251",
+    "kind": "task"
+  },
+  "corn_p": {
+    "id": "671428f9-9626-76e8-8d49-89aa8b3ca96e",
+    "kind": "photo"
+  },
+  "corn_sched": {
+    "id": "7e3fbad0-19a3-711b-8d3c-a229614e7bbc",
+    "kind": "note"
+  },
+  "costco": {
+    "id": "6764c936-beb7-7fe1-883a-8c2eaef51c09",
+    "kind": "locker item"
+  },
+  "crypto": {
+    "id": "99370dd9-9c4e-733d-84af-fe7a20945b2b",
+    "kind": "locker item"
+  },
+  "d_aiko": {
+    "id": "37949771-c0d1-7ffc-84ce-99275f05a162",
+    "kind": "debt"
+  },
+  "d_daisuke": {
+    "id": "6671224e-27a7-7c31-8a64-41afc4dc3928",
+    "kind": "debt"
+  },
+  "d_emi": {
+    "id": "8ce4242f-9656-7274-8036-0b9e31a977a9",
+    "kind": "debt"
+  },
+  "d_fujita": {
+    "id": "702185cf-9be7-7047-8ee9-6aba43b1a3a9",
+    "kind": "debt"
+  },
+  "d_haruto": {
+    "id": "0f7cfed4-25e0-73ca-8e14-fdb21aa1cb3e",
+    "kind": "debt"
+  },
+  "d_kenta": {
+    "id": "1eea7e5b-1b25-7cf4-8f37-d3fb29bee284",
+    "kind": "debt"
+  },
+  "d_koji": {
+    "id": "6c0dda31-202f-758f-8865-1fa60d4ec253",
+    "kind": "debt"
+  },
+  "d_mei": {
+    "id": "89ebc54c-8687-7893-8184-447590e93faf",
+    "kind": "debt"
+  },
+  "d_nishiyama": {
+    "id": "b2e64cce-5d36-7f8e-8358-dfb50d0e44c3",
+    "kind": "debt"
+  },
+  "d_ryo_i": {
+    "id": "9801337c-e3c1-788d-859c-aa129a72f1ee",
+    "kind": "debt"
+  },
+  "d_shun": {
+    "id": "763de1ef-0396-7f59-8034-95f79e387789",
+    "kind": "debt"
+  },
+  "d_takeshi": {
+    "id": "05093fcd-7521-7272-8605-241f307390c4",
+    "kind": "debt"
+  },
+  "daisuke": {
+    "id": "86891b8f-7f1e-70cb-82f3-58ccadbac05a",
+    "kind": "person"
+  },
+  "daisuke_p": {
+    "id": "b6f860fd-2824-70c1-84aa-9a0df8ce02ca",
+    "kind": "photo"
+  },
+  "delivery_api": {
+    "id": "2db0a8b6-c6dd-7d90-89bc-b424b83fe0fa",
+    "kind": "locker item"
+  },
+  "dentist_hana": {
+    "id": "154f380b-c13b-7edc-8f08-f3e1e50193b6",
+    "kind": "event"
+  },
+  "dentist_me": {
+    "id": "b35a804d-02fa-7348-8d4d-0ff3fa217ede",
+    "kind": "event"
+  },
+  "dotonbori": {
+    "id": "5d8ff59c-50f6-76c4-8e07-3ca106d9b6dc",
+    "kind": "photo"
+  },
+  "emi": {
+    "id": "7ce5958c-d540-7bfa-847c-f780f1f0e1b7",
+    "kind": "person"
+  },
+  "endo": {
+    "id": "00290932-fe9c-7dc8-887a-e09de7847200",
+    "kind": "person"
+  },
+  "expo": {
+    "id": "9433b73f-cd94-7efe-8168-6e13474b87da",
+    "kind": "event"
+  },
+  "farm": {
+    "id": "3091458e-f408-7a4d-8165-dccd0a5b139c",
+    "kind": "event"
+  },
+  "farm_p": {
+    "id": "d104c788-20f6-7b6b-8548-09cf97517be6",
+    "kind": "photo"
+  },
+  "fest": {
+    "id": "29203e48-1bb4-76a4-8884-91531d3c3774",
+    "kind": "event"
+  },
+  "fest25_crowd": {
+    "id": "c22e8fae-45d8-73c6-85b5-b6d0a64a2ff6",
+    "kind": "photo"
+  },
+  "fest25_stall": {
+    "id": "3337b09b-7740-7616-8cb0-d14d4d5584be",
+    "kind": "photo"
+  },
+  "fest_album": {
+    "id": "4b358d68-c25a-7ca4-892c-9726c9e624d0",
+    "kind": "album"
+  },
+  "fest_bowls": {
+    "id": "786d4e85-c2dd-7b4a-8b49-2f43a2957eaf",
+    "kind": "task"
+  },
+  "fest_gas": {
+    "id": "3876e9ea-96d2-7f8c-85b3-2e86c972912a",
+    "kind": "task"
+  },
+  "fest_permit": {
+    "id": "85b629bd-d93d-7594-8bdc-244a89a8515c",
+    "kind": "task"
+  },
+  "fest_setup": {
+    "id": "e05e17a8-93ca-7511-8aa5-72c0c4c0cebe",
+    "kind": "event"
+  },
+  "fest_task": {
+    "id": "29da4295-720f-7d95-87ce-972cc3aef53c",
+    "kind": "task"
+  },
+  "fire_cert": {
+    "id": "9153b339-db10-7e97-8b79-1a24fcfaff9f",
+    "kind": "document"
+  },
+  "fire_ext": {
+    "id": "16404298-546e-7aeb-8570-e8998d21a1e1",
+    "kind": "task"
+  },
+  "flu_shot": {
+    "id": "8b7c8ac1-3ac8-7d2d-8956-4f37dc2f4826",
+    "kind": "task"
+  },
+  "flyer_draft": {
+    "id": "ecd53234-0641-7d3d-89b3-ccde1f7b4889",
+    "kind": "note"
+  },
+  "freee": {
+    "id": "5406dea2-79f9-71ca-81cc-0cd464739671",
+    "kind": "locker item"
+  },
+  "fujita": {
+    "id": "b6d72f8f-93b2-7f75-8995-3e1b25ddf42e",
+    "kind": "person"
+  },
+  "fujita_inv": {
+    "id": "cbfce0b5-0d55-7724-8794-4cd814cf9ce5",
+    "kind": "document"
+  },
+  "fujita_prices": {
+    "id": "ee91256d-c1a6-7d8e-801f-14aa72fac1d3",
+    "kind": "note"
+  },
+  "fumiko": {
+    "id": "e74dd6cc-bbd1-77ce-8171-80c47a94adf0",
+    "kind": "person"
+  },
+  "gas_aug": {
+    "id": "82575e04-7ad7-7a7e-8feb-d5d4d87404a6",
+    "kind": "task"
+  },
+  "gas_jul": {
+    "id": "d66fdc90-1cb1-73c7-8134-817cca26292e",
+    "kind": "task"
+  },
+  "gift_note": {
+    "id": "511b3923-8b29-72f0-8329-6a66e95568e8",
+    "kind": "note"
+  },
+  "gift_yuki": {
+    "id": "6faeaee3-9720-7ad0-8bb2-cbbed91fc40f",
+    "kind": "task"
+  },
+  "gmail": {
+    "id": "a719faaf-0c6d-7633-89a9-67fd0a5eb4af",
+    "kind": "locker item"
+  },
+  "grave": {
+    "id": "75d04290-07f7-786d-818c-a2b435dc68b3",
+    "kind": "photo"
+  },
+  "gwangjang": {
+    "id": "6e63fe5b-2bc9-7e2a-8bdb-893aebe50351",
+    "kind": "photo"
+  },
+  "hana": {
+    "id": "4beb59d7-ec3b-788f-80cd-ea1d76ceb697",
+    "kind": "person"
+  },
+  "hana_album": {
+    "id": "e4736a09-d84c-72ee-83aa-a3cb0ea6608c",
+    "kind": "album"
+  },
+  "hana_allergy": {
+    "id": "8b4e93c0-a804-7774-8410-d64ce2991dae",
+    "kind": "note"
+  },
+  "hana_bday": {
+    "id": "eb4e649f-a159-7515-8e68-eec3d87708ec",
+    "kind": "task"
+  },
+  "hana_bday2": {
+    "id": "853badf5-2edc-7b89-85aa-243a5dd24f91",
+    "kind": "photo"
+  },
+  "hana_f": {
+    "id": "44e2d2b3-736f-7e3b-87ef-7139c261f3c1",
+    "kind": "folder"
+  },
+  "hana_grandma": {
+    "id": "3d2942cf-1de1-7458-8fbd-6c0f02f38d7b",
+    "kind": "photo"
+  },
+  "hana_ins": {
+    "id": "e134d1d4-ae33-70f2-8618-7fbc18f76f07",
+    "kind": "document"
+  },
+  "hana_l": {
+    "id": "704f10cb-0df0-73ec-8014-a83e380c8cf0",
+    "kind": "list"
+  },
+  "hana_nb": {
+    "id": "be51a95d-1cb5-711f-8a6c-e9be03db7c4b",
+    "kind": "notebook"
+  },
+  "hana_noodles": {
+    "id": "5434eeb8-04d6-75de-8cc6-1c1ff0089377",
+    "kind": "photo"
+  },
+  "hana_osaka": {
+    "id": "3d804483-5d32-7016-839b-c491f0ab2d0b",
+    "kind": "photo"
+  },
+  "hana_pool": {
+    "id": "7236da7a-5fa9-73d9-88c4-34b8998f85bf",
+    "kind": "photo"
+  },
+  "hana_snow": {
+    "id": "036153f0-415b-7b37-87d2-3f7f77f307eb",
+    "kind": "photo"
+  },
+  "hana_vax": {
+    "id": "793825ff-723d-7a78-8a66-178a90e5c300",
+    "kind": "document"
+  },
+  "hana_words": {
+    "id": "c8849a7c-41fc-722a-8667-0b9f371ebb72",
+    "kind": "note"
+  },
+  "haruto": {
+    "id": "a3776f99-2343-7645-8568-9dbc3c51d121",
+    "kind": "person"
+  },
+  "haruto_coffee": {
+    "id": "be55f986-8ce1-7931-8aa1-5c0a87494dee",
+    "kind": "event"
+  },
+  "hayashi_m": {
+    "id": "b571ba12-cdee-79b5-8552-24d71e8b8871",
+    "kind": "person"
+  },
+  "hayashi_t": {
+    "id": "fa0ab6c2-965d-7f5d-8a94-45f1df7eb435",
+    "kind": "person"
+  },
+  "hiyashi": {
+    "id": "d4cd5ff3-4d1f-752f-86b5-e50303ae6047",
+    "kind": "task"
+  },
+  "hiyashi_end": {
+    "id": "c6ba6310-65cc-7065-83d4-8616964d63d6",
+    "kind": "task"
+  },
+  "hiyashi_note": {
+    "id": "90080878-3596-7018-8af1-fb04b3f7c66a",
+    "kind": "note"
+  },
+  "hiyashi_p": {
+    "id": "301a6aea-135c-7fab-89f2-c78c73f110f3",
+    "kind": "photo"
+  },
+  "home_l": {
+    "id": "d90803bd-6067-7aa3-8636-142e901af252",
+    "kind": "list"
+  },
+  "hood": {
+    "id": "16c873e9-d8b7-79ec-89fe-2d04a6b93879",
+    "kind": "task"
+  },
+  "hygiene": {
+    "id": "80b5c43d-2b8d-7cab-80f2-9d39b90f6064",
+    "kind": "document"
+  },
+  "idea_corn": {
+    "id": "f3caff99-3f3d-7ce8-886b-9c5bf819674a",
+    "kind": "note"
+  },
+  "idea_fest": {
+    "id": "3ea7c5da-d665-70dc-8a0a-8148e778cbb7",
+    "kind": "note"
+  },
+  "idea_kids": {
+    "id": "88fa480f-13be-759e-84a0-074399057954",
+    "kind": "note"
+  },
+  "idea_tsuke": {
+    "id": "ec15f308-ab6d-7d60-8548-4ca5563d5f15",
+    "kind": "note"
+  },
+  "ideas_nb": {
+    "id": "9e968006-a36c-7c17-8a11-266f7751a7e9",
+    "kind": "notebook"
+  },
+  "insp_prep": {
+    "id": "4dffd586-f6c9-769a-8631-84003bd8b59b",
+    "kind": "task"
+  },
+  "inspection": {
+    "id": "3a86d248-d06e-7c2e-8bf9-08daba55171b",
+    "kind": "event"
+  },
+  "insurance_f": {
+    "id": "05ff4fa9-25e6-7cdb-88e5-8486717963e9",
+    "kind": "folder"
+  },
+  "invoices_f": {
+    "id": "91c7023f-2f15-7c05-8eb0-4ca10944e5ee",
+    "kind": "folder"
+  },
+  "ito": {
+    "id": "02510fe8-abec-7e91-8709-ee5781a1804c",
+    "kind": "person"
+  },
+  "ito_call": {
+    "id": "10cfb938-ced8-7d90-8b7e-85469b13557e",
+    "kind": "event"
+  },
+  "ito_inv": {
+    "id": "024081d6-1acb-7560-8dcd-4bd31400d5f2",
+    "kind": "document"
+  },
+  "jcb": {
+    "id": "a93ec2ef-e9bc-7160-86e3-9baa31dc626d",
+    "kind": "locker item"
+  },
+  "july_receipts": {
+    "id": "e3417faf-05b9-708f-87eb-d1e805fe0b30",
+    "kind": "document"
+  },
+  "kamukura": {
+    "id": "3fe5b038-445d-76d8-8ef1-594f685c248c",
+    "kind": "photo"
+  },
+  "kenta_s": {
+    "id": "864a74df-24c2-770f-8c2a-b8c7a43d7a59",
+    "kind": "person"
+  },
+  "kimura": {
+    "id": "42fe34da-5e0c-7af8-81cf-6017fad12956",
+    "kind": "person"
+  },
+  "koji": {
+    "id": "1d22a080-7622-721f-8ed9-16a9c8b4af96",
+    "kind": "person"
+  },
+  "koji_bbq": {
+    "id": "1979871d-67c5-74d2-84bf-4a31a7968b84",
+    "kind": "event"
+  },
+  "koji_lunch": {
+    "id": "39f7a9a3-2550-714a-8956-212095487645",
+    "kind": "event"
+  },
+  "kombu_aug": {
+    "id": "47444128-c5b0-7cc0-818a-49d5e66263b8",
+    "kind": "task"
+  },
+  "kombu_jul": {
+    "id": "010a057d-8574-75e3-837c-0248f289c4bb",
+    "kind": "task"
+  },
+  "kombu_order": {
+    "id": "0614b099-dd76-7edc-8488-ac1639397f20",
+    "kind": "note"
+  },
+  "kombu_tasting": {
+    "id": "49c13770-dfb3-742d-8689-bd6641dbea68",
+    "kind": "event"
+  },
+  "lanterns": {
+    "id": "deb2c9c7-e3e1-703a-8676-828a48e6d101",
+    "kind": "photo"
+  },
+  "lease_2024": {
+    "id": "13abb1fa-7819-7b05-857d-c3f5982eaeaf",
+    "kind": "document"
+  },
+  "lease_draft": {
+    "id": "07a8fdf1-db76-7715-8d3d-336e06caf234",
+    "kind": "document"
+  },
+  "lease_f": {
+    "id": "cbcc3c1c-859d-7eb4-8777-3693da308dc1",
+    "kind": "folder"
+  },
+  "lease_mtg": {
+    "id": "55db46c9-0fbd-7286-879a-f9100a692011",
+    "kind": "event"
+  },
+  "lease_note": {
+    "id": "f7ab4e28-74b9-7863-8e36-54704539e0c4",
+    "kind": "note"
+  },
+  "lease_t": {
+    "id": "7601effb-7778-7826-869e-5e99f9a003a1",
+    "kind": "task"
+  },
+  "licence": {
+    "id": "87baec7b-ba37-7027-8c95-9aaf682f01fa",
+    "kind": "locker item"
+  },
+  "machine": {
+    "id": "0c0597e3-cc24-76a6-811b-8bdac2a07f29",
+    "kind": "task"
+  },
+  "me": {
+    "id": "f629e024-4ee9-7f2c-84ab-c438612be93e",
+    "kind": "person"
+  },
+  "mei": {
+    "id": "a023734b-f86d-70f2-8ccc-fa82cbfdd919",
+    "kind": "person"
+  },
+  "menu_album": {
+    "id": "ebe256fe-1f8c-7962-8afc-c5550b072c84",
+    "kind": "album"
+  },
+  "menu_aug": {
+    "id": "3f3cf31d-2790-726c-8d79-b29830326429",
+    "kind": "document"
+  },
+  "menu_photos": {
+    "id": "7d857e48-5399-7230-806d-5833bb7e961b",
+    "kind": "task"
+  },
+  "menu_price": {
+    "id": "c8b27abb-04be-7a5e-8eee-839460643c9a",
+    "kind": "task"
+  },
+  "menu_print": {
+    "id": "ba73bc9d-efa9-7661-89f8-70cc2a4a6ba9",
+    "kind": "task"
+  },
+  "minjun": {
+    "id": "84056bc3-b499-7e2f-8a4a-2077b4b96cf2",
+    "kind": "person"
+  },
+  "miso_blend": {
+    "id": "9f44f041-a913-7c52-8592-7c48d2989137",
+    "kind": "note"
+  },
+  "miso_bowl": {
+    "id": "2cb6801d-9bb2-7a47-8d8c-2627af0c6d54",
+    "kind": "photo"
+  },
+  "mom_visit": {
+    "id": "cdd08bff-9761-7314-803c-3532766b131a",
+    "kind": "event"
+  },
+  "mynumber": {
+    "id": "eb94df00-8345-7e8d-8532-0aee096efbc4",
+    "kind": "locker item"
+  },
+  "nishi_inv": {
+    "id": "84d516bd-76ed-7c71-807c-0207a17c1a1f",
+    "kind": "document"
+  },
+  "nishiyama": {
+    "id": "bbc3ee34-53e0-7042-8748-fdd3727c07a7",
+    "kind": "person"
+  },
+  "nomura": {
+    "id": "ee8e5f57-2359-7d7f-852a-7b961a17ded5",
+    "kind": "person"
+  },
+  "noodle_class": {
+    "id": "0f160d5d-252c-7945-8778-150bbf2da357",
+    "kind": "photo"
+  },
+  "noodle_specs": {
+    "id": "0f65d42d-04af-7094-803b-199559235cdb",
+    "kind": "note"
+  },
+  "noodle_trial": {
+    "id": "45880731-d8bb-7cd6-8791-3cd498e433c5",
+    "kind": "event"
+  },
+  "noren": {
+    "id": "12de7ddd-5a04-7132-8d82-9e9fe4452983",
+    "kind": "task"
+  },
+  "nursery": {
+    "id": "f24c155e-fe0e-7297-8dc5-e0020a0490e2",
+    "kind": "task"
+  },
+  "nursery_cert": {
+    "id": "8fbb3393-2a78-737d-89b1-205edd3ff897",
+    "kind": "task"
+  },
+  "nursery_doc": {
+    "id": "6aa13bd5-af77-78a0-80f2-1a3534c46fa4",
+    "kind": "document"
+  },
+  "nursery_form": {
+    "id": "27b6a788-a518-7de1-8281-20b951d994d9",
+    "kind": "task"
+  },
+  "nursery_photo": {
+    "id": "8126d25d-213a-7a18-82f3-2f13070cabd9",
+    "kind": "task"
+  },
+  "nursery_q": {
+    "id": "3ca1fc3b-bffe-799b-8a1c-3f38059268b1",
+    "kind": "note"
+  },
+  "obon": {
+    "id": "01f55785-626a-7a9b-8373-5f01316493ff",
+    "kind": "event"
+  },
+  "office_pc": {
+    "id": "6ea82ee8-a5b4-72cf-8eb5-0367806f3ed4",
+    "kind": "locker item"
+  },
+  "ogawa": {
+    "id": "fe5b405d-adc0-76c6-8ecd-16bb6ed44edb",
+    "kind": "person"
+  },
+  "okada": {
+    "id": "4da994e4-3ceb-784a-8780-caf86923bc42",
+    "kind": "person"
+  },
+  "old_bike": {
+    "id": "df544938-a639-7033-8483-ebd32c22a140",
+    "kind": "task"
+  },
+  "old_board": {
+    "id": "aef6db3f-5053-73d2-8b43-ea3b9b7f2a6f",
+    "kind": "photo"
+  },
+  "old_lease": {
+    "id": "ccb8e7c7-9b17-7015-88b4-946af74e9749",
+    "kind": "document"
+  },
+  "old_prices": {
+    "id": "80f00a83-a6d9-78cf-8fb4-e23c4210ab3f",
+    "kind": "note"
+  },
+  "old_prices_doc": {
+    "id": "5fbd39b8-e212-7503-8691-b275a7dd7980",
+    "kind": "document"
+  },
+  "old_tabelog": {
+    "id": "6a398e3b-722f-79e9-8a1b-56eca1d17a4c",
+    "kind": "locker item"
+  },
+  "oldmenus_f": {
+    "id": "86d1f558-078e-7b20-8fb7-efef93e947a1",
+    "kind": "folder"
+  },
+  "open_day": {
+    "id": "c55e355c-1ec1-7a06-817f-c5c2142876b0",
+    "kind": "event"
+  },
+  "opening": {
+    "id": "bc3e4197-90bf-722a-8d9d-e22d984b26e2",
+    "kind": "photo"
+  },
+  "osaka": {
+    "id": "3b7b3ac8-526b-7ec9-88e9-676a76ab49e3",
+    "kind": "group"
+  },
+  "osaka_album": {
+    "id": "cedb7ef5-18a9-7a51-8bcd-6ad12ca5760f",
+    "kind": "album"
+  },
+  "osaka_note": {
+    "id": "c7201f5b-693c-70f9-8e3e-4d30c1bcd58c",
+    "kind": "note"
+  },
+  "paper_l": {
+    "id": "5c908bde-32e1-789a-8dc1-9a2fa622ab90",
+    "kind": "list"
+  },
+  "passport": {
+    "id": "8caa9e3e-01dc-7172-8ac5-56e0091d5c1a",
+    "kind": "locker item"
+  },
+  "permit_t": {
+    "id": "b2140cab-7811-721c-8165-894445d4d09a",
+    "kind": "task"
+  },
+  "permits_f": {
+    "id": "32075b5c-a3e1-7eb1-8ec6-91f640e6685e",
+    "kind": "folder"
+  },
+  "pork_0702": {
+    "id": "60f76daa-24b3-75f9-8b8e-8ff1bb397099",
+    "kind": "event"
+  },
+  "pork_0709": {
+    "id": "2f987ff4-0da3-72ea-8a40-860f5f67a1d4",
+    "kind": "event"
+  },
+  "pork_0716": {
+    "id": "59116159-abe6-78dc-894a-2581a6df41c9",
+    "kind": "event"
+  },
+  "pork_0723": {
+    "id": "3dcd2758-f297-746e-8c0e-13a5e38f4cad",
+    "kind": "event"
+  },
+  "pork_0730": {
+    "id": "16c9c410-8ff7-7b45-879e-fbf72c4f88d6",
+    "kind": "event"
+  },
+  "pork_0806": {
+    "id": "f4700ce3-ae96-7f81-8442-0970048f451a",
+    "kind": "event"
+  },
+  "pork_0820": {
+    "id": "6ee8a0b4-48a3-72ad-8e7d-a2ee84b4117f",
+    "kind": "event"
+  },
+  "pork_0827": {
+    "id": "a75264bf-89e5-7d3e-8535-8440b85a254c",
+    "kind": "event"
+  },
+  "pork_0903": {
+    "id": "99851ed5-6593-796d-818a-fd229ba30a65",
+    "kind": "event"
+  },
+  "pos": {
+    "id": "5c9be1c2-2395-7795-8282-be177e436305",
+    "kind": "locker item"
+  },
+  "pos_key": {
+    "id": "cf2e3df9-1a88-70da-8dd4-e6a977efcedd",
+    "kind": "locker item"
+  },
+  "queue_p": {
+    "id": "d5ffe269-0d26-7e1d-8ce7-297802dce66e",
+    "kind": "photo"
+  },
+  "ramen_assoc": {
+    "id": "2b7b4d25-ba12-7bc1-8938-b429538ebd99",
+    "kind": "locker item"
+  },
+  "receipt_p": {
+    "id": "f4b962fd-3b73-7365-8d4d-21bc8de5f749",
+    "kind": "photo"
+  },
+  "receipts": {
+    "id": "68d984b0-6a5e-7838-896f-deeed5771d83",
+    "kind": "task"
+  },
+  "reg_copy": {
+    "id": "3a365d5c-c305-7ecd-8776-0f2230d38348",
+    "kind": "locker item"
+  },
+  "reinspection": {
+    "id": "b48cfe83-394f-7fde-82f8-fa991ac0cad0",
+    "kind": "event"
+  },
+  "rent_01": {
+    "id": "5a29e977-6444-778e-8486-3ddfbde02440",
+    "kind": "task"
+  },
+  "rent_02": {
+    "id": "42f09f4f-4e29-774c-827e-0325f787d6a9",
+    "kind": "task"
+  },
+  "rent_03": {
+    "id": "3e7b871e-e3db-7f02-8eff-829f05a323a1",
+    "kind": "task"
+  },
+  "rent_04": {
+    "id": "9c7fc9ca-b971-707f-8184-f319918e0924",
+    "kind": "task"
+  },
+  "rent_05": {
+    "id": "4213b2ae-1425-7345-8f18-32e33c31da48",
+    "kind": "task"
+  },
+  "rent_06": {
+    "id": "192dc184-613b-7b7a-810a-0a7b6fb57a5c",
+    "kind": "task"
+  },
+  "rent_07": {
+    "id": "b636104f-92de-7645-8941-7b7bc8271e5e",
+    "kind": "task"
+  },
+  "rent_08": {
+    "id": "fa20ff1f-b58b-7f07-80c0-1f2b658623a5",
+    "kind": "task"
+  },
+  "rice_cooker": {
+    "id": "7801ab01-f61e-7197-8282-6180c0125fe6",
+    "kind": "task"
+  },
+  "ryo_i": {
+    "id": "a565cf29-3aa8-72be-8cdd-36c7250617ce",
+    "kind": "person"
+  },
+  "ryo_t": {
+    "id": "33510347-2724-7fc8-8494-55d269f3da55",
+    "kind": "person"
+  },
+  "safe": {
+    "id": "84877ab0-fe98-7e80-8ded-76b0dbca1245",
+    "kind": "locker item"
+  },
+  "seasonal_l": {
+    "id": "4d7d9f1c-0c24-78c1-8d81-1becbd4813d1",
+    "kind": "list"
+  },
+  "seoul": {
+    "id": "c3b7b7e7-5c07-726c-831c-15b61ca5f3f1",
+    "kind": "group"
+  },
+  "seoul_album": {
+    "id": "2a89862e-4212-7a97-88eb-5d1509d31872",
+    "kind": "album"
+  },
+  "seoul_night": {
+    "id": "ea3b7468-83f6-7b1d-83bc-f458ff02b368",
+    "kind": "photo"
+  },
+  "seoul_trip": {
+    "id": "8c526c97-4d13-7585-870f-3ef17b2405c4",
+    "kind": "event"
+  },
+  "shaken": {
+    "id": "2611c02f-d23b-7c7c-86ce-2029e2d89b4b",
+    "kind": "task"
+  },
+  "shift_plan": {
+    "id": "efbcfa05-2983-7aab-8075-e11537f43bee",
+    "kind": "event"
+  },
+  "shifts": {
+    "id": "8e1e053d-7b59-7ed9-8b5d-f4b7082720a9",
+    "kind": "task"
+  },
+  "shio_bowl": {
+    "id": "8a2d99d3-5c3f-7768-8683-ebedac7b079c",
+    "kind": "photo"
+  },
+  "shio_tare": {
+    "id": "3e0ce258-f50d-7c75-8f16-e4501ecc43d1",
+    "kind": "note"
+  },
+  "shoes": {
+    "id": "4103d2e5-9e00-75c1-86ac-ce932657ccb3",
+    "kind": "task"
+  },
+  "shop_album": {
+    "id": "46e85e4c-4627-7859-8e6f-99b5c3fbf70d",
+    "kind": "album"
+  },
+  "shop_front": {
+    "id": "598e2d9e-6760-7a42-8db2-c2893e6dab29",
+    "kind": "photo"
+  },
+  "shop_ins": {
+    "id": "ff7e7203-c733-70d4-8ea3-474de8605f4c",
+    "kind": "document"
+  },
+  "shop_ins_t": {
+    "id": "07ac2ec2-d241-7bbc-81b6-3ef071d87215",
+    "kind": "task"
+  },
+  "shop_l": {
+    "id": "a34471e4-03ab-7235-8db9-caffedfc46e6",
+    "kind": "list"
+  },
+  "shun": {
+    "id": "69618e53-e6ba-7ee1-83ac-9521d1462ca3",
+    "kind": "person"
+  },
+  "shun_coffee": {
+    "id": "d8f1ace8-0a36-755b-862e-235273e2f24a",
+    "kind": "event"
+  },
+  "snow_tires": {
+    "id": "7db35536-dd6e-7bc7-8d9d-9a6bae2e0b11",
+    "kind": "task"
+  },
+  "sora": {
+    "id": "b1e8fbfc-87d0-7bbc-89a8-d8aa0bb0e44d",
+    "kind": "person"
+  },
+  "souvenirs": {
+    "id": "f151ad0a-6808-799e-8bdc-4b24cd4a5ee6",
+    "kind": "task"
+  },
+  "staff": {
+    "id": "bf9f65bc-7881-7dd2-8d4f-8df86418ecb1",
+    "kind": "group"
+  },
+  "staff_0706": {
+    "id": "b252a8df-a22f-73bc-883a-392a3ef4eff8",
+    "kind": "event"
+  },
+  "staff_0713": {
+    "id": "09d68424-8b54-73a9-8d14-55dd80c0336b",
+    "kind": "event"
+  },
+  "staff_0720": {
+    "id": "3b15bfd4-79c3-72bd-844b-5e0797c88ba0",
+    "kind": "event"
+  },
+  "staff_0727": {
+    "id": "74cf408b-ee07-77f9-82e2-8ec622a5f8c8",
+    "kind": "event"
+  },
+  "staff_0803": {
+    "id": "c441be2a-9fc6-7894-85a3-80e2e97b79f1",
+    "kind": "event"
+  },
+  "staff_0810": {
+    "id": "766c9ca7-c1f1-7885-8325-791ece89c580",
+    "kind": "event"
+  },
+  "staff_0817": {
+    "id": "743258bc-20a0-7775-80df-8746fe8af1af",
+    "kind": "event"
+  },
+  "staff_0824": {
+    "id": "5988999d-2d63-7aaf-819a-fb0c887f3ae9",
+    "kind": "event"
+  },
+  "staff_0907": {
+    "id": "47eae203-061f-757d-852c-82abc4f6beaf",
+    "kind": "event"
+  },
+  "staff_bbq": {
+    "id": "bcfce22d-865c-703f-85da-b913f1c7ac5f",
+    "kind": "event"
+  },
+  "staff_note": {
+    "id": "32807987-4588-79db-82aa-17ffa8024d19",
+    "kind": "note"
+  },
+  "stall_permit": {
+    "id": "563a6467-ae10-73fe-82bc-983b65b0c8ad",
+    "kind": "document"
+  },
+  "stove_pickup": {
+    "id": "aa20860e-b378-799f-8547-cb3e3ea81491",
+    "kind": "event"
+  },
+  "supplier_nb": {
+    "id": "56965b93-4db3-7ce3-82b2-108d97e1fb35",
+    "kind": "notebook"
+  },
+  "suzuki": {
+    "id": "ca86b457-b17e-7b9d-87f7-32844fbc1d47",
+    "kind": "person"
+  },
+  "swim_0725": {
+    "id": "f32b8404-fb35-7607-8e57-1c12199f2223",
+    "kind": "event"
+  },
+  "swim_0801": {
+    "id": "9a679a16-d448-7d71-8b5c-41fbeef6b456",
+    "kind": "event"
+  },
+  "swim_0808": {
+    "id": "24ac87de-2c13-7b59-8835-5298c635322a",
+    "kind": "event"
+  },
+  "swim_0822": {
+    "id": "e4aefdad-7a33-7eea-8cf2-e29988ef1939",
+    "kind": "event"
+  },
+  "swim_0829": {
+    "id": "fc42b03f-e9f5-7d9c-84b1-1f4d0633670f",
+    "kind": "event"
+  },
+  "swim_0905": {
+    "id": "064c6550-9c9b-7324-81da-ef339b12abbb",
+    "kind": "event"
+  },
+  "tabelog": {
+    "id": "8053c36e-2516-70eb-8fce-39f79547d29b",
+    "kind": "locker item"
+  },
+  "takeshi": {
+    "id": "0c54514d-d2c9-7501-8d99-b4f7d4654455",
+    "kind": "person"
+  },
+  "tasting_night": {
+    "id": "f6909e4d-3c1c-74c6-8f9e-0d45520ae62d",
+    "kind": "event"
+  },
+  "tax": {
+    "id": "485e255e-4d40-7ad0-8e52-fe5e6785e874",
+    "kind": "task"
+  },
+  "tax_2025": {
+    "id": "7c7e7642-b838-742b-8dbf-452d79b94beb",
+    "kind": "document"
+  },
+  "tax_f": {
+    "id": "6848e6f3-dd48-77d5-8aa1-78b27d25147a",
+    "kind": "folder"
+  },
+  "temp_log": {
+    "id": "c9839791-bea5-7f3f-8e3a-93d68def266a",
+    "kind": "task"
+  },
+  "tetsuya": {
+    "id": "aff5d253-9f42-749a-8e25-0f0d552527c7",
+    "kind": "person"
+  },
+  "tonkotsu": {
+    "id": "559d10d4-0970-76ea-8188-190f49bdef6d",
+    "kind": "note"
+  },
+  "tsuke_p": {
+    "id": "2f070659-8a2b-7dc2-8d67-e06fe08f4789",
+    "kind": "photo"
+  },
+  "wedding": {
+    "id": "2f863208-090c-7cb5-83a7-ba9900bc03f9",
+    "kind": "photo"
+  },
+  "wifi_home": {
+    "id": "f94ce388-3e65-7846-86e6-661f501617fc",
+    "kind": "locker item"
+  },
+  "wifi_shop": {
+    "id": "f0df6b8d-0b2e-776f-836d-c93f9d1a32ad",
+    "kind": "locker item"
+  },
+  "winter_miso": {
+    "id": "a76a8cae-4a24-7478-8cee-9388c8d7297a",
+    "kind": "task"
+  },
+  "yamada": {
+    "id": "09bce7c9-3329-736f-8ab1-ea6b80b00dff",
+    "kind": "person"
+  },
+  "yearend": {
+    "id": "1a1e22ca-bf10-7cfe-81c6-48d35da3e866",
+    "kind": "group"
+  },
+  "yoshida": {
+    "id": "87dd8561-c676-717e-8e95-54cb2b10b9e3",
+    "kind": "person"
+  },
+  "yuki": {
+    "id": "4e455a8a-532c-7986-8235-04029ad2a83b",
+    "kind": "person"
+  },
+  "yuki_bday": {
+    "id": "d6339782-6e91-7fe7-880d-89edb6774521",
+    "kind": "event"
+  }
+}

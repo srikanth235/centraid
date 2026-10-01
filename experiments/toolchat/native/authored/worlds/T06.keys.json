@@ -1,0 +1,1122 @@
+{
+  "adminlist": {
+    "id": "85372432-ffee-76be-8294-dd222879c8bc",
+    "kind": "list"
+  },
+  "albrecht": {
+    "id": "7adcf71a-2bb0-720c-8a35-7199af208521",
+    "kind": "person"
+  },
+  "anke": {
+    "id": "d95217d7-efce-7486-8f00-249d0dc84993",
+    "kind": "person"
+  },
+  "backup": {
+    "id": "5bbe215e-7df6-702e-87b4-d1f61eddabd0",
+    "kind": "task"
+  },
+  "band": {
+    "id": "828a8a02-5e08-7b5a-8d3b-08047abdbe04",
+    "kind": "group"
+  },
+  "band_f": {
+    "id": "71b4f8c0-c66f-72f2-8adb-12ba4cff9478",
+    "kind": "folder"
+  },
+  "band_money": {
+    "id": "a182986f-e948-71b7-84e2-f6d36febabd6",
+    "kind": "note"
+  },
+  "band_nb": {
+    "id": "7ecda6a8-02b3-757a-8a38-594b85bc00e8",
+    "kind": "notebook"
+  },
+  "bandlist": {
+    "id": "785bcbe9-ae61-7631-8ca7-207bcfe9e644",
+    "kind": "list"
+  },
+  "bea": {
+    "id": "1a37a398-1a2a-7893-8973-90eb95f0f857",
+    "kind": "person"
+  },
+  "bike": {
+    "id": "f5e8bf84-119e-7035-8170-0068b6ada0e7",
+    "kind": "event"
+  },
+  "bike_light": {
+    "id": "56af8af7-4e4d-7058-8886-c8104ac05f3f",
+    "kind": "task"
+  },
+  "bin_bags": {
+    "id": "0deab1cd-746c-7c46-891a-d7504181a960",
+    "kind": "task"
+  },
+  "book_dentist": {
+    "id": "80fc2024-f652-7452-8b1d-bf29f5209f8a",
+    "kind": "task"
+  },
+  "brunch": {
+    "id": "7cc1ec64-55d1-74e9-8e73-ab864ab00f8d",
+    "kind": "event"
+  },
+  "call_sophie": {
+    "id": "9451ad10-ad4c-7d73-8182-43b1b1822c0e",
+    "kind": "task"
+  },
+  "clara": {
+    "id": "4669321f-c7af-7399-8a93-50b0ff784ed8",
+    "kind": "person"
+  },
+  "clara_coffee": {
+    "id": "3368f35e-45eb-7201-8f1a-ae0530997040",
+    "kind": "event"
+  },
+  "cleaning_rota": {
+    "id": "d811c043-a31b-72c2-8627-1ada631c3814",
+    "kind": "task"
+  },
+  "climb_shoes": {
+    "id": "a88c3eb7-a1cd-7368-800c-cc7bf1f031e0",
+    "kind": "task"
+  },
+  "climbing": {
+    "id": "ec12344e-a803-7c36-88b2-3de6cf689214",
+    "kind": "event"
+  },
+  "coffee_ines": {
+    "id": "ec421f07-4afe-7df8-8a8d-cb48f1dd0fb6",
+    "kind": "event"
+  },
+  "contracts_f": {
+    "id": "d96b5f60-13b0-74e4-8458-62bc2454c19a",
+    "kind": "folder"
+  },
+  "crew": {
+    "id": "c2288537-321f-76aa-8fc1-1263a4f37cf9",
+    "kind": "group"
+  },
+  "crew_call1": {
+    "id": "6c1973b0-fdb4-7921-87bf-7909e593dd6e",
+    "kind": "event"
+  },
+  "crew_call2": {
+    "id": "b450adb9-5231-70b9-8d98-817fceb90d0c",
+    "kind": "event"
+  },
+  "crew_dinner": {
+    "id": "f5dc6b20-38a0-7ccf-83c0-2942479caaa4",
+    "kind": "event"
+  },
+  "crew_rota": {
+    "id": "3c00912e-06d4-7691-8ac3-ecdbc3a0c52a",
+    "kind": "task"
+  },
+  "crew_shirts": {
+    "id": "6d8de1ad-7b2e-7de2-843e-34fbd6853ba6",
+    "kind": "task"
+  },
+  "curry": {
+    "id": "c6c15cbb-3324-746a-8e73-bd66a2cab450",
+    "kind": "note"
+  },
+  "czk": {
+    "id": "f82e30e4-df7f-7e74-88e9-efd3be879c03",
+    "kind": "task"
+  },
+  "d_greta_dinner": {
+    "id": "e7ee9211-1109-7e14-8027-3df2106cbf77",
+    "kind": "debt"
+  },
+  "d_hannah_b": {
+    "id": "b16c5180-5f49-7814-8976-99b8788bdea6",
+    "kind": "debt"
+  },
+  "d_ines_prints": {
+    "id": "00374594-7c4c-7437-81b1-2c0322b713c5",
+    "kind": "debt"
+  },
+  "d_jonask_bvg": {
+    "id": "0c0d3637-a86b-7e0e-8065-3aad6d09c63e",
+    "kind": "debt"
+  },
+  "d_kalle_beer": {
+    "id": "d76cedab-b15f-7ff8-8fe1-f6a890a70a68",
+    "kind": "debt"
+  },
+  "d_kalle_strings": {
+    "id": "cc0fca9c-a00e-754a-8761-0dcecd3b6a8a",
+    "kind": "debt"
+  },
+  "d_lena_cables": {
+    "id": "c9307eea-5d8a-7350-80f9-4666abbcf30a",
+    "kind": "debt"
+  },
+  "d_mira_pizza": {
+    "id": "f6a7c15d-01d5-7a5a-810d-41bc57909d90",
+    "kind": "debt"
+  },
+  "d_olli_mic": {
+    "id": "b1c63ebf-9101-740d-81b5-f6b19239e6e6",
+    "kind": "debt"
+  },
+  "d_paul_session": {
+    "id": "0ae87be4-9858-7dea-83d3-861d6e286549",
+    "kind": "debt"
+  },
+  "d_sophie_train": {
+    "id": "756be6c8-470d-7605-8501-c28e84146398",
+    "kind": "debt"
+  },
+  "d_tobi_van": {
+    "id": "0cca15c5-25b8-765a-8edc-2434b19eff27",
+    "kind": "debt"
+  },
+  "d_yusuf_parts": {
+    "id": "bbb13c01-bf7d-7f94-8e2e-18256e085d00",
+    "kind": "debt"
+  },
+  "dentist": {
+    "id": "6d226fe6-233d-75b6-8757-1c8e13ea109f",
+    "kind": "event"
+  },
+  "dieter": {
+    "id": "fe9c52de-678b-7925-887e-9be41c225f18",
+    "kind": "person"
+  },
+  "door_code": {
+    "id": "3a4a4a19-5c21-7922-8b86-408fb2a9d9ff",
+    "kind": "locker item"
+  },
+  "draft_mail": {
+    "id": "d505c9b4-5c36-7774-8867-c88639003940",
+    "kind": "note"
+  },
+  "drive_back": {
+    "id": "126e9cea-7220-7722-8d6c-dca1dcbe7fdc",
+    "kind": "event"
+  },
+  "drive_prague": {
+    "id": "4698f9b1-76c2-7aa6-8e6e-8b9a92a10938",
+    "kind": "event"
+  },
+  "dropbox_api": {
+    "id": "43381715-6b57-7f92-84b3-13316a221bd8",
+    "kind": "locker item"
+  },
+  "dticket": {
+    "id": "0d74ec13-2d85-718b-859a-1657646542a3",
+    "kind": "task"
+  },
+  "elster": {
+    "id": "5d73fc5c-8feb-7284-8258-0ae7d021c341",
+    "kind": "locker item"
+  },
+  "emre": {
+    "id": "61215415-fc66-74e3-8e6f-d1556393a8e6",
+    "kind": "person"
+  },
+  "epk": {
+    "id": "b6eede6d-440a-773e-8f93-771c2dd715db",
+    "kind": "task"
+  },
+  "epk_doc": {
+    "id": "d863213f-03e5-7953-848b-7bfb9739fe2d",
+    "kind": "document"
+  },
+  "felix": {
+    "id": "2ce56512-0690-7b1f-8660-07017d408dc9",
+    "kind": "person"
+  },
+  "fest_budget": {
+    "id": "162648a7-d911-7122-88a0-0e25962ac7d4",
+    "kind": "note"
+  },
+  "fest_contacts": {
+    "id": "b0fed625-2374-7b00-8dd1-6e52c35b45e6",
+    "kind": "note"
+  },
+  "fest_contract": {
+    "id": "19e72bd9-ee26-7674-8ad5-dc3fe0d35e16",
+    "kind": "document"
+  },
+  "fest_nb": {
+    "id": "ed8e18ad-c668-7825-851e-146c1468a651",
+    "kind": "notebook"
+  },
+  "fest_power": {
+    "id": "24982222-83fc-76e3-8254-7b750441bbf0",
+    "kind": "note"
+  },
+  "festival": {
+    "id": "b535428f-3934-7ea4-8f67-f3600abafb47",
+    "kind": "event"
+  },
+  "festlist": {
+    "id": "68e604f3-e403-7923-8ab4-11d089652629",
+    "kind": "list"
+  },
+  "flat_f": {
+    "id": "4aecccda-0ca0-7f63-880f-c3176f40d0cd",
+    "kind": "folder"
+  },
+  "flat_nb": {
+    "id": "053fb400-2788-7e9b-8b1c-f1f5b14ffaea",
+    "kind": "notebook"
+  },
+  "flatlist": {
+    "id": "5e86438a-f17a-7702-8122-7b64b4aa10fc",
+    "kind": "list"
+  },
+  "flea": {
+    "id": "fcf2bc03-6d92-7e05-856c-f64d09c42009",
+    "kind": "event"
+  },
+  "flyers": {
+    "id": "7e4a7a96-f508-77c8-8e05-08e0ae1c7f14",
+    "kind": "task"
+  },
+  "foh_blau": {
+    "id": "7c3ff1e2-27fd-703e-8ce7-a7f833901441",
+    "kind": "event"
+  },
+  "frank": {
+    "id": "a9599316-bc31-7c55-85e5-ecf32e650ab5",
+    "kind": "person"
+  },
+  "fridge": {
+    "id": "1bdc6563-ade8-777f-8b89-f187f2a1c92d",
+    "kind": "task"
+  },
+  "gear_list": {
+    "id": "d12202f5-3db6-799d-821b-4bfe84a13ac9",
+    "kind": "note"
+  },
+  "gear_swap": {
+    "id": "2f685e49-26ed-7996-8579-5db2528792f4",
+    "kind": "event"
+  },
+  "gearlist": {
+    "id": "d351c204-d085-7e11-8d70-9dd9b7ed5ac1",
+    "kind": "list"
+  },
+  "gema": {
+    "id": "295f7c0f-77bf-7226-89cb-56900304babc",
+    "kind": "locker item"
+  },
+  "gift_note": {
+    "id": "d0779359-c23e-72e7-86e5-5ef5fd18184f",
+    "kind": "note"
+  },
+  "gig_album": {
+    "id": "3f4bcc21-ad29-7d26-8fd8-d16f82aaba42",
+    "kind": "album"
+  },
+  "gig_lindenau": {
+    "id": "191ca3c8-d104-7720-8a7c-182d938ba764",
+    "kind": "event"
+  },
+  "gig_prague": {
+    "id": "83544752-6941-7257-8492-1f4ea0224a7f",
+    "kind": "event"
+  },
+  "gig_tonkeller": {
+    "id": "ff8458cd-86cb-7d15-8698-9f819addfaf5",
+    "kind": "event"
+  },
+  "gls": {
+    "id": "846e758d-d537-7e31-8048-168b1b47f409",
+    "kind": "locker item"
+  },
+  "gls_account": {
+    "id": "a13d3ec1-60ea-78c5-89e9-0e84283853b1",
+    "kind": "locker item"
+  },
+  "goals": {
+    "id": "a859ef00-740c-78ec-83f5-3b5e49957da6",
+    "kind": "note"
+  },
+  "greta": {
+    "id": "05b51a4d-6d8e-71e3-89c7-d9a8811a1312",
+    "kind": "person"
+  },
+  "gym": {
+    "id": "77bdab07-3fca-74b9-8e6d-02185d91a82a",
+    "kind": "task"
+  },
+  "hannah_b": {
+    "id": "24b44bf1-0ca9-7c10-8f32-47fdaeef8853",
+    "kind": "person"
+  },
+  "hannah_s": {
+    "id": "23185a55-eac0-734f-81fc-960a2d319d47",
+    "kind": "person"
+  },
+  "harz": {
+    "id": "5eb9ad3b-531a-7738-8765-75ae09ea1a31",
+    "kind": "group"
+  },
+  "harz_album": {
+    "id": "6c8757a3-8670-73b7-8572-02ec524aa4a2",
+    "kind": "album"
+  },
+  "harz_note": {
+    "id": "9f02ca11-5ec1-7a88-832c-eae6da67a556",
+    "kind": "note"
+  },
+  "harz_trip": {
+    "id": "d04d8926-947d-79e0-8067-714189261c94",
+    "kind": "event"
+  },
+  "heating": {
+    "id": "b87cfd4c-ca6a-721d-89b1-d9ef74d477dd",
+    "kind": "note"
+  },
+  "heating_letter": {
+    "id": "ce0f86bf-7393-7dfd-8806-1325ec0a8ab4",
+    "kind": "document"
+  },
+  "hostel": {
+    "id": "7cb88542-6a70-7c22-8746-2430b7d4f4e3",
+    "kind": "task"
+  },
+  "id_card": {
+    "id": "ea104ef2-9456-7516-81a0-04e2892ed119",
+    "kind": "locker item"
+  },
+  "ideas": {
+    "id": "4c175c2c-499b-7e96-813b-095c34f8adc5",
+    "kind": "note"
+  },
+  "in_ears": {
+    "id": "d59bc794-057d-7f1e-82fe-1d0ad1c7427d",
+    "kind": "task"
+  },
+  "ines": {
+    "id": "6ecdd0e2-0bc5-7e70-823c-0fa9d1a1a457",
+    "kind": "person"
+  },
+  "inv_2025_12": {
+    "id": "9517f714-8325-7bf5-878f-07a71041a93c",
+    "kind": "document"
+  },
+  "inv_2026_01": {
+    "id": "aa84b28d-77c7-792b-8ce0-5a8834441edf",
+    "kind": "document"
+  },
+  "inv_2026_02": {
+    "id": "3af6a1c2-3ed6-7eaf-8b57-38740c8ff4e7",
+    "kind": "document"
+  },
+  "inv_f": {
+    "id": "d8142c86-8b5a-759a-8aff-3225d257e265",
+    "kind": "folder"
+  },
+  "inv_feb": {
+    "id": "971a2e11-4de6-75f1-8f9f-cb050e4869b0",
+    "kind": "task"
+  },
+  "inv_greta": {
+    "id": "dd711394-601b-70b8-8db1-35b5ea7ccca3",
+    "kind": "task"
+  },
+  "inv_jan": {
+    "id": "a7b71dcd-10c4-7b76-8617-9d45b5485e82",
+    "kind": "task"
+  },
+  "jonas_k": {
+    "id": "cdd54c5b-7004-7eb7-829b-19c27ebd09d0",
+    "kind": "person"
+  },
+  "jonas_w": {
+    "id": "0f54bf41-c35f-7f00-8ba2-19477b9eb943",
+    "kind": "person"
+  },
+  "kalle": {
+    "id": "9f95dde9-9008-7543-8f75-86ea57370aff",
+    "kind": "person"
+  },
+  "kalle_bday": {
+    "id": "a5818c85-b0bb-7cb3-8c48-5e69d6a9f2aa",
+    "kind": "event"
+  },
+  "kettle": {
+    "id": "0f22e42f-b7e3-760e-8952-ab76bddb43ca",
+    "kind": "task"
+  },
+  "kick_eq": {
+    "id": "21ae01d7-63e7-73fd-86d5-dd464ca75691",
+    "kind": "note"
+  },
+  "kitty": {
+    "id": "d8c8bff4-fa1d-7307-8bc2-b970a2d2c32c",
+    "kind": "group"
+  },
+  "kitty_01": {
+    "id": "94a1fd93-82fe-7272-8758-c2af53cbf28b",
+    "kind": "task"
+  },
+  "kitty_02": {
+    "id": "87d51c01-6839-71d1-85cc-7cf0acd45a89",
+    "kind": "task"
+  },
+  "kitty_09": {
+    "id": "8353f8fc-8dbe-77b7-8e65-8b701c46a6b2",
+    "kind": "task"
+  },
+  "kitty_10": {
+    "id": "385e5ac3-8df7-704b-8002-242b7c3e69bc",
+    "kind": "task"
+  },
+  "kitty_11": {
+    "id": "08032777-88bd-7e22-8bca-6890d0f9b3b3",
+    "kind": "task"
+  },
+  "kitty_12": {
+    "id": "95d32552-e0ea-7013-8944-a7b9555d7844",
+    "kind": "task"
+  },
+  "ksk": {
+    "id": "c9957567-05cb-772b-826d-5ba5f8276ab1",
+    "kind": "task"
+  },
+  "ksk_letter": {
+    "id": "7d824bd2-8da6-7b14-898b-7cb8260d2230",
+    "kind": "document"
+  },
+  "ksk_member": {
+    "id": "da2e2b72-5a23-75bd-8ed6-69fc12c634ac",
+    "kind": "locker item"
+  },
+  "kuhn": {
+    "id": "2d4cf86c-6b35-7ed6-8b4a-27139c99145a",
+    "kind": "person"
+  },
+  "kuhn_heat": {
+    "id": "88afb813-a3bf-7ddf-89b4-cd7d65e8c7a4",
+    "kind": "task"
+  },
+  "lease": {
+    "id": "114f8a12-a532-7b57-8d52-b13bdcae8dcc",
+    "kind": "document"
+  },
+  "ledger_wallet": {
+    "id": "63047fb2-68fc-799b-8814-26776d5ba294",
+    "kind": "locker item"
+  },
+  "lena": {
+    "id": "46979b01-0595-7a49-8a72-03122300cf35",
+    "kind": "person"
+  },
+  "library": {
+    "id": "5ecbb463-3264-7b94-8bd8-a1caca6af2bc",
+    "kind": "task"
+  },
+  "licence": {
+    "id": "13e4fe3d-d2cc-7501-8338-d33fd6f6c23b",
+    "kind": "locker item"
+  },
+  "live_mix": {
+    "id": "05dda739-8bac-7f19-8b04-51be6bfc75b1",
+    "kind": "task"
+  },
+  "live_mix_import": {
+    "id": "10023689-ff1d-75b9-8de1-1e7840d4440d",
+    "kind": "task"
+  },
+  "live_mix_vox": {
+    "id": "a78bf34e-9612-78fc-86a3-bec38ff9f3b6",
+    "kind": "task"
+  },
+  "load_in": {
+    "id": "1b144c1a-3481-73b1-8a26-226407104d7f",
+    "kind": "event"
+  },
+  "lyrics_glas": {
+    "id": "2e3d1a2c-72b6-738b-8b1f-93601425155f",
+    "kind": "note"
+  },
+  "mackie": {
+    "id": "611dd86b-480b-79a7-885d-6c7816702544",
+    "kind": "task"
+  },
+  "mama60": {
+    "id": "f3b2fcc2-3877-7afa-8270-ccdeb1213d82",
+    "kind": "group"
+  },
+  "mama_dinner": {
+    "id": "7db4baf9-4d64-7537-8c06-23e8495f7d24",
+    "kind": "event"
+  },
+  "mama_gift": {
+    "id": "a7de04e9-e9dc-75d0-8143-d1390a97aa36",
+    "kind": "task"
+  },
+  "manual": {
+    "id": "2b6a72cc-5fbb-7e4f-867d-f49ac2d90d48",
+    "kind": "document"
+  },
+  "marek": {
+    "id": "c8cfe0f6-fd25-72da-8382-2e9bde159c86",
+    "kind": "person"
+  },
+  "me": {
+    "id": "78166aff-f245-7dd9-85bf-33aa98edad7e",
+    "kind": "person"
+  },
+  "merch": {
+    "id": "f662789c-e3cd-78f8-8316-00632394af29",
+    "kind": "task"
+  },
+  "mira": {
+    "id": "3cd1c908-cc97-7a27-8c4a-01857ae31d8d",
+    "kind": "person"
+  },
+  "mix_greta1": {
+    "id": "c69f6006-7691-7fa4-8f22-3241f22f2a42",
+    "kind": "event"
+  },
+  "mix_greta2": {
+    "id": "51d804c7-7d8a-7e9d-83b6-c62ea0963b73",
+    "kind": "event"
+  },
+  "mix_greta3": {
+    "id": "e3f5cc6c-00aa-795b-8d8a-c72639bfed33",
+    "kind": "event"
+  },
+  "mix_nb": {
+    "id": "faeae0d5-118a-764e-8ecb-99ccc7946775",
+    "kind": "notebook"
+  },
+  "nas_ssh": {
+    "id": "7ed0b5df-a65d-75f6-8481-fdc0ef507016",
+    "kind": "locker item"
+  },
+  "nele": {
+    "id": "a6930e8f-21bd-707d-8385-2364de7adae7",
+    "kind": "person"
+  },
+  "old_contacts": {
+    "id": "02fc5155-1871-7776-8b20-aba1753f93b8",
+    "kind": "note"
+  },
+  "old_cv": {
+    "id": "878893f1-6d64-7c66-89a0-1bc2635a7a93",
+    "kind": "document"
+  },
+  "old_f": {
+    "id": "13581557-f960-7f27-87b4-f4e4b8042359",
+    "kind": "folder"
+  },
+  "old_nb": {
+    "id": "b39fbdda-3da5-79c1-8c56-8d7f5dc97168",
+    "kind": "notebook"
+  },
+  "old_paypal": {
+    "id": "3e84f663-2084-7071-8e7f-cf729c160a1d",
+    "kind": "locker item"
+  },
+  "olli": {
+    "id": "5a24e1fc-50cf-799a-8562-833ba7aa8196",
+    "kind": "person"
+  },
+  "open_mic": {
+    "id": "e9c3bcaa-fabb-702f-8dd5-3d0fc3a09654",
+    "kind": "event"
+  },
+  "p_band": {
+    "id": "a95cdeed-5b3c-7304-8d6e-1dbab2aecc76",
+    "kind": "photo"
+  },
+  "p_bike": {
+    "id": "3760bebf-fa37-7e10-86f6-4ebfc2a9dfe6",
+    "kind": "photo"
+  },
+  "p_blurry": {
+    "id": "1ffea682-3bf0-7f95-8360-0b5dc8d24aa7",
+    "kind": "photo"
+  },
+  "p_brocken": {
+    "id": "29655fe9-a833-71e8-8b4f-25e73e3d6e77",
+    "kind": "photo"
+  },
+  "p_brunch": {
+    "id": "68ade25d-8462-7b95-82a1-7e80f923c72b",
+    "kind": "photo"
+  },
+  "p_cat": {
+    "id": "72231ebb-00b4-7cd9-8af8-834ba3ff7f45",
+    "kind": "photo"
+  },
+  "p_climb": {
+    "id": "194b2a98-5dc6-7a3c-8052-18e1c340a103",
+    "kind": "photo"
+  },
+  "p_crew": {
+    "id": "98ed71e6-eafc-7a38-8043-974f3be223c9",
+    "kind": "photo"
+  },
+  "p_crowd": {
+    "id": "dbcd7537-83e8-7cd9-8819-319bfe795051",
+    "kind": "photo"
+  },
+  "p_desk": {
+    "id": "2495cd47-da6c-789f-8154-e181f951bc00",
+    "kind": "photo"
+  },
+  "p_di_sale": {
+    "id": "8bc7d8c6-f3e3-720d-80ce-1dfd0f6d1334",
+    "kind": "photo"
+  },
+  "p_drums": {
+    "id": "79fd32e6-b3a3-79f0-8e36-babd56033669",
+    "kind": "photo"
+  },
+  "p_greta": {
+    "id": "d3f6854f-ffb0-74cb-8cec-50c316689ada",
+    "kind": "photo"
+  },
+  "p_hut": {
+    "id": "20775afb-0140-7c85-8a99-7d514d5e7797",
+    "kind": "photo"
+  },
+  "p_ines": {
+    "id": "a7891900-ce17-7441-8494-34dcbc1e571c",
+    "kind": "photo"
+  },
+  "p_kitchen": {
+    "id": "6f8e926c-0a7b-7da5-84f2-293739b7881c",
+    "kind": "photo"
+  },
+  "p_lena": {
+    "id": "5aa36995-2d3b-7e5c-8b3f-34d68453cfb1",
+    "kind": "photo"
+  },
+  "p_mama": {
+    "id": "16cdd32d-243e-7503-8d12-d2d029777d6b",
+    "kind": "photo"
+  },
+  "p_mics": {
+    "id": "6547b64d-7999-7e7c-838e-f68c4ee54473",
+    "kind": "photo"
+  },
+  "p_mira_plants": {
+    "id": "4964f872-ae3d-757b-87a6-c99a8722b2c0",
+    "kind": "photo"
+  },
+  "p_mixer_sale": {
+    "id": "ed970eb2-068b-7704-8512-df5f7f1f4918",
+    "kind": "photo"
+  },
+  "p_moon": {
+    "id": "ef533ac6-4258-77da-83ea-495083790d85",
+    "kind": "photo"
+  },
+  "p_old_van": {
+    "id": "54ec20b1-7885-7f95-864c-c8c72df0b869",
+    "kind": "photo"
+  },
+  "p_radiator": {
+    "id": "f32eaae0-4b61-7678-8b1f-1c6b76fb8132",
+    "kind": "photo"
+  },
+  "p_rf": {
+    "id": "fdfec3f5-9ce8-7495-8df6-f666b554fa64",
+    "kind": "photo"
+  },
+  "p_screenshot": {
+    "id": "738ab6a6-b207-7424-8615-9ee98f538505",
+    "kind": "photo"
+  },
+  "p_setlist": {
+    "id": "0f8aa9c0-3332-74cf-8d29-e2b505458609",
+    "kind": "photo"
+  },
+  "p_snow": {
+    "id": "9fff702d-2e54-7f0d-899c-d18cf3baca43",
+    "kind": "photo"
+  },
+  "p_sophie_sled": {
+    "id": "570b6166-0b7c-778d-8f1e-680ef4995bba",
+    "kind": "photo"
+  },
+  "p_soundcheck": {
+    "id": "aa9cc769-d4a4-776e-8246-bcbc0e3ae8bf",
+    "kind": "photo"
+  },
+  "p_stage": {
+    "id": "dc2887e1-c382-7be6-8768-da96a313a927",
+    "kind": "photo"
+  },
+  "p_stands_sale": {
+    "id": "6ac64762-30c6-7079-8552-ad0527bcd457",
+    "kind": "photo"
+  },
+  "p_studio_a": {
+    "id": "b99c5319-82f0-7d08-8a25-fc9b9eb2e11b",
+    "kind": "photo"
+  },
+  "p_train": {
+    "id": "b4a8863f-fcfe-7407-87aa-87fa0f0374a8",
+    "kind": "photo"
+  },
+  "p_wg_dinner": {
+    "id": "e4c72e75-5a21-7cde-86f1-1be8f8ee0359",
+    "kind": "photo"
+  },
+  "pa_quotes": {
+    "id": "d324993a-146f-7942-8b2d-f09fd916cfd9",
+    "kind": "task"
+  },
+  "passport": {
+    "id": "80aa13f2-a462-7b6e-81e6-1677e943bfa4",
+    "kind": "locker item"
+  },
+  "paul": {
+    "id": "c8c333d0-3154-7f32-830b-aa65c4b1d877",
+    "kind": "person"
+  },
+  "pavla": {
+    "id": "70689f90-0c99-7483-8045-2bfac5f7a886",
+    "kind": "person"
+  },
+  "podcast": {
+    "id": "f471909d-2fd0-7b9d-85b8-09fae700632c",
+    "kind": "event"
+  },
+  "podcast_chain": {
+    "id": "37299018-c790-7945-8962-96de840ec187",
+    "kind": "note"
+  },
+  "prague": {
+    "id": "9671efeb-9206-7721-84cf-89b0519a3975",
+    "kind": "group"
+  },
+  "prague_album": {
+    "id": "9de25e8b-1ff4-7249-87e2-b20a4b873b1b",
+    "kind": "album"
+  },
+  "prague_plan": {
+    "id": "d447f898-5a6f-70a6-83f0-564877fdea12",
+    "kind": "note"
+  },
+  "praguelist": {
+    "id": "12792621-d030-720c-856d-d7e4cf385d0b",
+    "kind": "list"
+  },
+  "premiere": {
+    "id": "bad2ebe8-08f6-797b-8241-d2d86ca8ff92",
+    "kind": "event"
+  },
+  "protools": {
+    "id": "516a044f-e9a0-76e6-81a2-1455ec28b901",
+    "kind": "locker item"
+  },
+  "pub_quiz": {
+    "id": "0dad6625-dd88-71f4-8e92-783427c20a88",
+    "kind": "event"
+  },
+  "radio": {
+    "id": "447b15d1-b5db-7aae-8d0f-bd82cd388d35",
+    "kind": "event"
+  },
+  "radios": {
+    "id": "0d56c5af-9a41-7679-8be7-d85958a25cf1",
+    "kind": "task"
+  },
+  "rates": {
+    "id": "91b88452-bd2e-7d59-8b48-c17120c1749e",
+    "kind": "task"
+  },
+  "receipts": {
+    "id": "7396cb2c-838b-72d4-8cb3-2e18ea65494d",
+    "kind": "task"
+  },
+  "receipts_doc": {
+    "id": "82f616b7-8a0d-73d9-8e9f-32fe08e2db51",
+    "kind": "document"
+  },
+  "recipe_nb": {
+    "id": "92920c9f-8bb3-77af-8480-6bd2613aeb87",
+    "kind": "notebook"
+  },
+  "reh_0106": {
+    "id": "60fd3aaa-cdce-758b-8774-98d8eeae31df",
+    "kind": "event"
+  },
+  "reh_0113": {
+    "id": "4c57c5bf-cc3d-7140-8fc0-b51b6d44bd37",
+    "kind": "event"
+  },
+  "reh_0120": {
+    "id": "550d9871-d148-751e-8ce6-5da59916c9fa",
+    "kind": "event"
+  },
+  "reh_0127": {
+    "id": "d0e1f0b7-a2cd-7064-894e-89894811776b",
+    "kind": "event"
+  },
+  "reh_0203": {
+    "id": "b4e2e593-7f0a-7e3e-8005-57fc4ed05ee6",
+    "kind": "event"
+  },
+  "reh_0210": {
+    "id": "322ed55d-e754-7e4d-810b-ddc350914149",
+    "kind": "event"
+  },
+  "reh_0217": {
+    "id": "20be6797-714c-73e8-86af-3dc5a60c02b6",
+    "kind": "event"
+  },
+  "reh_0224": {
+    "id": "6559a295-dd7b-7dff-875e-c68204598f6b",
+    "kind": "event"
+  },
+  "reh_0303": {
+    "id": "09a044a1-56ea-7c48-80ea-33aba8144496",
+    "kind": "event"
+  },
+  "reh_0310": {
+    "id": "1b59234b-3e86-7d30-8f4f-cba7d7c0dd9f",
+    "kind": "event"
+  },
+  "reh_0317": {
+    "id": "67760c7b-74e2-7638-83b7-14b0dbf1966d",
+    "kind": "event"
+  },
+  "reh_0324": {
+    "id": "65dab25b-451b-7836-8241-0748cd748b48",
+    "kind": "event"
+  },
+  "reh_0331": {
+    "id": "5da3a0d7-e9a7-7dbe-864d-d54ee230f64a",
+    "kind": "event"
+  },
+  "reh_room": {
+    "id": "2e6d3a6b-c343-79ba-833a-bb174959f868",
+    "kind": "task"
+  },
+  "rent_01": {
+    "id": "f31ae954-03e3-74a8-8a55-89f3fa46f32e",
+    "kind": "task"
+  },
+  "rent_02": {
+    "id": "1316a42a-1f8d-702c-8af2-a0ee25517ab4",
+    "kind": "task"
+  },
+  "rent_03": {
+    "id": "67ed7a77-c927-743c-8abd-9cca649f5447",
+    "kind": "task"
+  },
+  "rent_11": {
+    "id": "6b791b55-829a-7bd8-82a5-1f95917c15d7",
+    "kind": "task"
+  },
+  "rent_12": {
+    "id": "2d9a35a9-0d2b-7f8e-8035-1bea1d18aea5",
+    "kind": "task"
+  },
+  "rental_offer": {
+    "id": "e3fcf056-5f3e-7a40-8421-874fe1f4f8da",
+    "kind": "document"
+  },
+  "rico": {
+    "id": "f0c3b356-76c4-7304-8092-9e7f0aaee062",
+    "kind": "person"
+  },
+  "rider": {
+    "id": "7dab5694-3f33-7583-829a-512ffca4cd7d",
+    "kind": "task"
+  },
+  "rider_doc": {
+    "id": "211baa23-0868-737f-8aba-861d18169c5e",
+    "kind": "document"
+  },
+  "rota_note": {
+    "id": "3843e278-9d15-7a7b-87c7-648c42aced85",
+    "kind": "note"
+  },
+  "rybka_contract": {
+    "id": "0482e2f7-10e1-719a-8b87-5665cbf2e51e",
+    "kind": "document"
+  },
+  "sale_album": {
+    "id": "2202436e-b625-7cc3-8dfb-144032f70d89",
+    "kind": "album"
+  },
+  "sc_0213": {
+    "id": "b9b12fdd-8a82-738b-8346-1ba9c5042847",
+    "kind": "event"
+  },
+  "sc_0306": {
+    "id": "e5412683-4465-76a8-892c-880c0f1b31ad",
+    "kind": "event"
+  },
+  "sc_lindenau": {
+    "id": "f32e2781-b45e-7bee-83b7-5c79d0a620a2",
+    "kind": "event"
+  },
+  "sell_mixer": {
+    "id": "04c6254f-ffeb-76f6-8c8e-c6bcb6cf4eca",
+    "kind": "task"
+  },
+  "setlist_note": {
+    "id": "6deca329-471e-77df-8428-66c577c81be0",
+    "kind": "note"
+  },
+  "setlists": {
+    "id": "c981ec58-32ea-786d-8db5-64556f7244a7",
+    "kind": "task"
+  },
+  "site_visit": {
+    "id": "e9a3b079-cfbf-7b96-869c-18e64212acd4",
+    "kind": "event"
+  },
+  "snake": {
+    "id": "60bd8985-96c2-7978-8260-61dc141e88b8",
+    "kind": "task"
+  },
+  "soljanka": {
+    "id": "2932e358-773a-7be7-8ec8-c13441c939a7",
+    "kind": "note"
+  },
+  "sophie": {
+    "id": "bbbae9b3-aff0-7ff4-8dde-aaf2957aea90",
+    "kind": "person"
+  },
+  "stage_plot": {
+    "id": "c6fc8770-fc93-78ec-8fcf-5acc92586481",
+    "kind": "task"
+  },
+  "stage_plot_doc": {
+    "id": "fe1dc11a-467a-788f-8c21-8f961e45646d",
+    "kind": "document"
+  },
+  "steffi": {
+    "id": "f44c266f-70b1-7a06-822e-4844790fd735",
+    "kind": "person"
+  },
+  "studio_album": {
+    "id": "19173c03-c80e-7dab-87bc-0d13d7fc90bf",
+    "kind": "album"
+  },
+  "studio_feb": {
+    "id": "31ccfeff-f1c0-7eee-8ab5-50ac30d95f0f",
+    "kind": "event"
+  },
+  "studio_jan": {
+    "id": "0bfc3515-fda6-7d8e-8010-db062c55f761",
+    "kind": "event"
+  },
+  "studio_wifi": {
+    "id": "140266b5-2868-7580-8dcf-a30bef8bb600",
+    "kind": "locker item"
+  },
+  "tax_f": {
+    "id": "9a126393-5552-770e-88c5-9614a07d3e0a",
+    "kind": "folder"
+  },
+  "tax_meet": {
+    "id": "fc87367b-94bc-7c7f-86d8-83f97ac57b62",
+    "kind": "event"
+  },
+  "tax_return": {
+    "id": "feff5d6e-4fed-75b1-81ca-695ee40997a3",
+    "kind": "document"
+  },
+  "theatre_contract": {
+    "id": "41af4e01-e8be-7a99-8b9e-e15674484f28",
+    "kind": "document"
+  },
+  "theatre_rf": {
+    "id": "f6729099-3c8b-7f9c-8389-09ab8065a064",
+    "kind": "note"
+  },
+  "theatre_tech": {
+    "id": "1c5fb3fe-0d6c-7180-8141-02ec16240eb9",
+    "kind": "event"
+  },
+  "thomann": {
+    "id": "3621b7c2-6537-7db0-8460-ca8d80efe4e9",
+    "kind": "locker item"
+  },
+  "tobi": {
+    "id": "2fb2864a-01d1-7aba-83fc-fbdea912bcc3",
+    "kind": "person"
+  },
+  "tonkeller_room": {
+    "id": "80162256-29ea-7e2d-8017-c6da797bb1be",
+    "kind": "note"
+  },
+  "tour_2023": {
+    "id": "bcd980e8-3dbd-75e4-8551-d6038a2e21bd",
+    "kind": "note"
+  },
+  "ute": {
+    "id": "c2c7d789-1039-72bf-817e-5a2ca7bb258d",
+    "kind": "person"
+  },
+  "van_contract": {
+    "id": "ed0c043f-51f4-700e-8f18-53e777f8ef4d",
+    "kind": "document"
+  },
+  "van_ins": {
+    "id": "f6079004-1c75-7845-85df-dda9f431717f",
+    "kind": "task"
+  },
+  "van_pickup": {
+    "id": "acab0c12-76b9-7444-8678-b706f6201c0d",
+    "kind": "event"
+  },
+  "van_return": {
+    "id": "97999cbd-8e8e-7137-8dd2-6800e08fc815",
+    "kind": "event"
+  },
+  "vat": {
+    "id": "a59616dc-7644-7e9b-8bc2-5250a2c2371c",
+    "kind": "task"
+  },
+  "vdt": {
+    "id": "1f60a4f2-5c62-7e07-82b3-b45897359b92",
+    "kind": "locker item"
+  },
+  "visa": {
+    "id": "aab2f46c-4f0b-739b-8e0c-97875c30a4c9",
+    "kind": "locker item"
+  },
+  "vocal_chain": {
+    "id": "f10bf182-e841-71fa-87af-c49dcd0acb50",
+    "kind": "note"
+  },
+  "wg_album": {
+    "id": "6af5d0e6-46b8-7646-8b3f-fabae02e2c57",
+    "kind": "album"
+  },
+  "wg_feb": {
+    "id": "9f00d31c-9c66-78a3-831b-e77775d4c946",
+    "kind": "event"
+  },
+  "wg_jan": {
+    "id": "04bdf343-9dd7-714a-8f1d-4fbe4df6eeec",
+    "kind": "event"
+  },
+  "wifi": {
+    "id": "ac419803-c216-7559-8023-d97fb5c72e38",
+    "kind": "locker item"
+  },
+  "wifi_note": {
+    "id": "1053d490-ad14-791d-885d-3e620adcaab2",
+    "kind": "note"
+  },
+  "x32_pw": {
+    "id": "976e7625-24c2-7058-8094-7372167a90a7",
+    "kind": "locker item"
+  },
+  "xlr": {
+    "id": "929124b6-d6d5-733d-8d94-528ce763c443",
+    "kind": "task"
+  },
+  "yusuf": {
+    "id": "05d824c6-cdf3-7eea-84be-14d076b25295",
+    "kind": "person"
+  }
+}

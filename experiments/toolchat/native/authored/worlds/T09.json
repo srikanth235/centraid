@@ -1,0 +1,2228 @@
+{
+  "me": "Hanae Okafor",
+  "epoch": "2024-05-01T09:00",
+  "seed": "T09",
+  "currency": "CAD",
+  "people": [
+    {
+      "key": "dan",
+      "name": "Daniel Mensah",
+      "role": "fiance",
+      "nickname": "Dan",
+      "starred": true,
+      "cadence": 1,
+      "met": "Osgoode Hall Law School, 2019",
+      "last_contacted": "2026-05-12T22:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "mom",
+      "name": "Keiko Okafor",
+      "role": "mom",
+      "nickname": "Mom",
+      "cadence": 7,
+      "starred": true,
+      "met": "Mississauga",
+      "last_contacted": "2026-05-10T18:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "dad",
+      "name": "Chidi Okafor",
+      "role": "dad",
+      "cadence": 7,
+      "met": "Mississauga",
+      "last_contacted": "2026-05-03T17:30",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "ada",
+      "name": "Adaeze Okafor",
+      "role": "sister, maid of honour",
+      "nickname": "Ada",
+      "cadence": 3,
+      "starred": true,
+      "last_contacted": "2026-05-12T20:15",
+      "last_contacted_kind": "message"
+    },
+    {
+      "key": "nana",
+      "name": "Yoshiko Tanaka",
+      "role": "grandmother",
+      "nickname": "Obaachan",
+      "cadence": 14,
+      "last_contacted": "2026-04-26T19:00",
+      "last_contacted_kind": "visit",
+      "met": "Mississauga"
+    },
+    {
+      "key": "priya_r",
+      "name": "Priya Raman",
+      "role": "bridesmaid",
+      "cadence": 14,
+      "met": "Osgoode Hall Law School, 2019",
+      "last_contacted": "2026-05-08T12:30",
+      "last_contacted_kind": "coffee"
+    },
+    {
+      "key": "kemi",
+      "name": "Oluwakemi Adebayo",
+      "role": "bridesmaid",
+      "nickname": "Kemi",
+      "cadence": 14,
+      "met": "U of T residence, 2015",
+      "last_contacted": "2026-05-10T12:30",
+      "last_contacted_kind": "brunch"
+    },
+    {
+      "key": "siobhan",
+      "name": "Siobhan Kelly",
+      "role": "bridesmaid",
+      "cadence": 21,
+      "met": "U of T residence, 2015",
+      "last_contacted": "2026-04-19T15:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "marcus",
+      "name": "Marcus Bell",
+      "role": "best man",
+      "met": "Dan's rugby club",
+      "last_contacted": "2026-04-30T21:00",
+      "last_contacted_kind": "message"
+    },
+    {
+      "key": "jordan_l",
+      "name": "Jordan Lee",
+      "role": "groomsman",
+      "met": "Dan's rugby club"
+    },
+    {
+      "key": "priya_s",
+      "name": "Priya Sandhu",
+      "role": "condo board treasurer",
+      "met": "The Mercer condo board",
+      "cadence": 30,
+      "last_contacted": "2026-04-09T20:30",
+      "last_contacted_kind": "meeting"
+    },
+    {
+      "key": "gord",
+      "name": "Gord Whitfield",
+      "role": "condo board president",
+      "met": "The Mercer condo board",
+      "last_contacted": "2026-05-06T09:00",
+      "last_contacted_kind": "email"
+    },
+    {
+      "key": "linh",
+      "name": "Linh Tran",
+      "role": "condo board secretary",
+      "met": "The Mercer condo board"
+    },
+    {
+      "key": "ravi",
+      "name": "Ravi Mehta",
+      "role": "property manager, Crossbridge"
+    },
+    {
+      "key": "aiden",
+      "name": "Aiden Choi",
+      "role": "articling student, bar prep",
+      "met": "Whitlock Brennan articling cohort",
+      "cadence": 7,
+      "last_contacted": "2026-05-12T20:30",
+      "last_contacted_kind": "meeting"
+    },
+    {
+      "key": "fatou",
+      "name": "Fatou Diallo",
+      "role": "articling student, bar prep",
+      "met": "Whitlock Brennan articling cohort",
+      "cadence": 7,
+      "last_contacted": "2026-05-12T20:30",
+      "last_contacted_kind": "meeting"
+    },
+    {
+      "key": "mateo",
+      "name": "Mateo Rossi",
+      "role": "articling student, bar prep",
+      "met": "Whitlock Brennan articling cohort"
+    },
+    {
+      "key": "jordan_p",
+      "name": "Jordan Park",
+      "role": "articling student, bar prep",
+      "met": "Whitlock Brennan articling cohort",
+      "cadence": 14,
+      "last_contacted": "2026-05-05T20:30",
+      "last_contacted_kind": "meeting"
+    },
+    {
+      "key": "margaret",
+      "name": "Margaret Holt",
+      "role": "partner, litigation",
+      "starred": true,
+      "last_contacted": "2026-05-11T16:30",
+      "last_contacted_kind": "meeting"
+    },
+    {
+      "key": "ethan",
+      "name": "Ethan Wu",
+      "role": "associate, litigation",
+      "met": "Whitlock Brennan",
+      "last_contacted": "2026-05-12T13:00",
+      "last_contacted_kind": "lunch"
+    },
+    {
+      "key": "naomi",
+      "name": "Naomi Fischer",
+      "role": "law clerk",
+      "met": "Whitlock Brennan"
+    },
+    {
+      "key": "colette",
+      "name": "Colette Dubois",
+      "role": "wedding planner",
+      "cadence": 14,
+      "last_contacted": "2026-05-06T19:45",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "sam_o",
+      "name": "Sam Oduya",
+      "role": "wedding photographer"
+    },
+    {
+      "key": "anton",
+      "name": "Anton Petrov",
+      "role": "caterer, Petrov Kitchen"
+    },
+    {
+      "key": "rachel",
+      "name": "Rachel Kim",
+      "role": "florist, Fern and Stem"
+    },
+    {
+      "key": "tariq",
+      "name": "Tariq Nasser",
+      "role": "wedding DJ",
+      "nickname": "DJ T"
+    },
+    {
+      "key": "lisa",
+      "name": "Lisa Moreau",
+      "role": "dentist"
+    },
+    {
+      "key": "haddad",
+      "name": "Amir Haddad",
+      "role": "family doctor"
+    },
+    {
+      "key": "hugo",
+      "name": "Hugo Mensah",
+      "role": "Dan's brother",
+      "cadence": 30,
+      "last_contacted": "2026-03-29T14:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "greg",
+      "name": "Greg Tully",
+      "role": "old landlord",
+      "trashed": "2026-05-02T10:00"
+    },
+    {
+      "key": "bex",
+      "name": "Bex Thornton",
+      "role": "old roommate",
+      "met": "U of T residence, 2015",
+      "trashed": "2026-03-20T10:00"
+    }
+  ],
+  "groups": [
+    {
+      "key": "wparty",
+      "name": "Wedding party",
+      "members": [
+        "dan",
+        "ada",
+        "priya_r",
+        "kemi",
+        "siobhan",
+        "marcus",
+        "jordan_l"
+      ],
+      "created": "2026-01-20T20:00"
+    },
+    {
+      "key": "barprep",
+      "name": "Bar prep study group",
+      "members": ["aiden", "fatou", "mateo", "jordan_p"],
+      "created": "2026-03-30T18:00"
+    },
+    {
+      "key": "condo",
+      "name": "Condo board",
+      "members": ["priya_s", "gord", "linh"],
+      "created": "2025-11-02T10:00"
+    },
+    {
+      "key": "lisbon",
+      "name": "Lisbon honeymoon",
+      "currency": "EUR",
+      "members": ["dan"],
+      "created": "2026-02-14T21:00"
+    },
+    {
+      "key": "stag",
+      "name": "Stag and doe",
+      "members": ["marcus", "jordan_l"],
+      "created": "2026-05-04T21:00"
+    }
+  ],
+  "expenses": [
+    {
+      "group": "wparty",
+      "name": "Bridesmaid dress deposits",
+      "amount": 600,
+      "paid_by": "me",
+      "split": ["me", "ada", "priya_r", "kemi", "siobhan"],
+      "date": "2026-03-05"
+    },
+    {
+      "group": "wparty",
+      "name": "Bachelorette Airbnb",
+      "amount": 1400,
+      "paid_by": "ada",
+      "split": ["me", "ada", "priya_r", "kemi", "siobhan"],
+      "date": "2026-04-12"
+    },
+    {
+      "group": "wparty",
+      "name": "Engagement party drinks",
+      "amount": 420,
+      "paid_by": "marcus",
+      "split": ["me", "dan", "marcus", "jordan_l"],
+      "date": "2026-02-28"
+    },
+    {
+      "group": "wparty",
+      "name": "Welcome bags",
+      "amount": 180,
+      "paid_by": "kemi",
+      "split": ["me", "ada", "kemi"],
+      "date": "2026-05-02"
+    },
+    {
+      "group": "barprep",
+      "name": "Practice exam booklets",
+      "amount": 160,
+      "paid_by": "me",
+      "split": ["me", "aiden", "fatou", "mateo", "jordan_p"],
+      "date": "2026-04-07"
+    },
+    {
+      "group": "barprep",
+      "name": "Pizza night",
+      "amount": 75,
+      "paid_by": "aiden",
+      "split": ["me", "aiden", "fatou", "mateo", "jordan_p"],
+      "date": "2026-04-28"
+    },
+    {
+      "group": "barprep",
+      "name": "Highlighters and tabs",
+      "amount": 30,
+      "paid_by": "fatou",
+      "split": ["me", "fatou", "jordan_p"],
+      "date": "2026-05-05"
+    },
+    {
+      "group": "condo",
+      "name": "AGM room booking",
+      "amount": 90,
+      "paid_by": "priya_s",
+      "split": ["me", "priya_s", "gord", "linh"],
+      "date": "2026-04-09"
+    },
+    {
+      "group": "condo",
+      "name": "Lobby plant refresh",
+      "amount": 120,
+      "paid_by": "me",
+      "split": ["me", "priya_s", "gord", "linh"],
+      "date": "2026-04-22"
+    },
+    {
+      "group": "lisbon",
+      "name": "Alfama apartment",
+      "amount": 980,
+      "paid_by": "me",
+      "split": ["me", "dan"],
+      "date": "2026-02-20"
+    },
+    {
+      "group": "lisbon",
+      "name": "Sintra tour deposit",
+      "amount": 140,
+      "paid_by": "dan",
+      "split": ["me", "dan"],
+      "date": "2026-04-03"
+    }
+  ],
+  "lists": [
+    {
+      "key": "wed_list",
+      "name": "Wedding",
+      "area": "wedding"
+    },
+    {
+      "key": "home_list",
+      "name": "Home",
+      "area": "home"
+    },
+    {
+      "key": "work_list",
+      "name": "Work admin",
+      "area": "work"
+    },
+    {
+      "key": "condo_list",
+      "name": "Condo board",
+      "area": "condo"
+    },
+    {
+      "key": "bar_list",
+      "name": "Bar prep",
+      "area": "mentoring"
+    },
+    {
+      "key": "hm_list",
+      "name": "Honeymoon",
+      "area": "travel"
+    }
+  ],
+  "events": [
+    {
+      "key": "bp_0407",
+      "name": "Bar prep session",
+      "start": "2026-04-07T18:30",
+      "end": "2026-04-07T20:30",
+      "attendees": ["aiden", "fatou", "mateo", "jordan_p"],
+      "description": "Boardroom 14B"
+    },
+    {
+      "key": "bp_0414",
+      "name": "Bar prep session",
+      "start": "2026-04-14T18:30",
+      "end": "2026-04-14T20:30",
+      "attendees": ["aiden", "fatou", "mateo", "jordan_p"],
+      "description": "Boardroom 14B"
+    },
+    {
+      "key": "bp_0421",
+      "name": "Bar prep session",
+      "start": "2026-04-21T18:30",
+      "end": "2026-04-21T20:30",
+      "attendees": ["aiden", "fatou", "mateo", "jordan_p"],
+      "description": "Boardroom 14B",
+      "cancelled": "2026-04-20T09:00"
+    },
+    {
+      "key": "bp_0428",
+      "name": "Bar prep session",
+      "start": "2026-04-28T18:30",
+      "end": "2026-04-28T20:30",
+      "attendees": ["aiden", "fatou", "mateo", "jordan_p"],
+      "description": "Boardroom 14B"
+    },
+    {
+      "key": "bp_0505",
+      "name": "Bar prep session",
+      "start": "2026-05-05T18:30",
+      "end": "2026-05-05T20:30",
+      "attendees": ["aiden", "fatou", "mateo", "jordan_p"],
+      "description": "Boardroom 14B"
+    },
+    {
+      "key": "bp_0512",
+      "name": "Bar prep session",
+      "start": "2026-05-12T18:30",
+      "end": "2026-05-12T20:30",
+      "attendees": ["aiden", "fatou", "mateo", "jordan_p"],
+      "description": "Boardroom 14B"
+    },
+    {
+      "key": "bp_0519",
+      "name": "Bar prep session",
+      "start": "2026-05-19T18:30",
+      "end": "2026-05-19T20:30",
+      "attendees": ["aiden", "fatou", "mateo", "jordan_p"],
+      "description": "Boardroom 14B"
+    },
+    {
+      "key": "bp_0526",
+      "name": "Bar prep session",
+      "start": "2026-05-26T18:30",
+      "end": "2026-05-26T20:30",
+      "attendees": ["aiden", "fatou", "mateo", "jordan_p"],
+      "description": "Boardroom 14B"
+    },
+    {
+      "key": "bp_0602",
+      "name": "Bar prep session",
+      "start": "2026-06-02T18:30",
+      "end": "2026-06-02T20:30",
+      "attendees": ["aiden", "fatou", "mateo", "jordan_p"],
+      "description": "Boardroom 14B"
+    },
+    {
+      "key": "cb_0108",
+      "name": "Condo board meeting",
+      "start": "2026-01-08T19:00",
+      "end": "2026-01-08T20:30",
+      "attendees": ["priya_s", "gord", "linh"],
+      "description": "party room, 2nd floor"
+    },
+    {
+      "key": "cb_0212",
+      "name": "Condo board meeting",
+      "start": "2026-02-12T19:00",
+      "end": "2026-02-12T20:30",
+      "attendees": ["priya_s", "gord", "linh"],
+      "description": "party room, 2nd floor"
+    },
+    {
+      "key": "cb_0312",
+      "name": "Condo board meeting",
+      "start": "2026-03-12T19:00",
+      "end": "2026-03-12T20:30",
+      "attendees": ["priya_s", "gord", "linh"],
+      "description": "party room, 2nd floor"
+    },
+    {
+      "key": "cb_0409",
+      "name": "Condo board meeting",
+      "start": "2026-04-09T19:00",
+      "end": "2026-04-09T20:30",
+      "attendees": ["priya_s", "gord", "linh"],
+      "description": "party room, 2nd floor"
+    },
+    {
+      "key": "cb_0514",
+      "name": "Condo board meeting",
+      "start": "2026-05-14T19:00",
+      "end": "2026-05-14T20:30",
+      "attendees": ["priya_s", "gord", "linh"],
+      "description": "party room, 2nd floor"
+    },
+    {
+      "key": "cb_0611",
+      "name": "Condo board meeting",
+      "start": "2026-06-11T19:00",
+      "end": "2026-06-11T20:30",
+      "attendees": ["priya_s", "gord", "linh"],
+      "description": "party room, 2nd floor"
+    },
+    {
+      "key": "spin_0418",
+      "name": "Spin class",
+      "start": "2026-04-18T09:00",
+      "end": "2026-04-18T09:45",
+      "description": "Cyclebar Liberty Village"
+    },
+    {
+      "key": "spin_0425",
+      "name": "Spin class",
+      "start": "2026-04-25T09:00",
+      "end": "2026-04-25T09:45",
+      "description": "Cyclebar Liberty Village"
+    },
+    {
+      "key": "spin_0502",
+      "name": "Spin class",
+      "start": "2026-05-02T09:00",
+      "end": "2026-05-02T09:45",
+      "description": "Cyclebar Liberty Village"
+    },
+    {
+      "key": "spin_0509",
+      "name": "Spin class",
+      "start": "2026-05-09T09:00",
+      "end": "2026-05-09T09:45",
+      "description": "Cyclebar Liberty Village"
+    },
+    {
+      "key": "spin_0516",
+      "name": "Spin class",
+      "start": "2026-05-16T09:00",
+      "end": "2026-05-16T09:45",
+      "description": "Cyclebar Liberty Village"
+    },
+    {
+      "key": "spin_0523",
+      "name": "Spin class",
+      "start": "2026-05-23T09:00",
+      "end": "2026-05-23T09:45",
+      "description": "Cyclebar Liberty Village"
+    },
+    {
+      "key": "spin_0530",
+      "name": "Spin class",
+      "start": "2026-05-30T09:00",
+      "end": "2026-05-30T09:45",
+      "description": "Cyclebar Liberty Village"
+    },
+    {
+      "key": "dinner_0426",
+      "name": "Dinner at Mom and Dad's",
+      "start": "2026-04-26T17:00",
+      "end": "2026-04-26T20:00",
+      "attendees": ["mom", "dad", "nana"]
+    },
+    {
+      "key": "dinner_0524",
+      "name": "Dinner at Mom and Dad's",
+      "start": "2026-05-24T17:00",
+      "end": "2026-05-24T20:00",
+      "attendees": ["mom", "dad"]
+    },
+    {
+      "key": "fitting_1",
+      "name": "Dress fitting",
+      "start": "2026-05-16T11:00",
+      "end": "2026-05-16T12:30",
+      "attendees": ["ada"],
+      "description": "Atelier Rosa, Ossington"
+    },
+    {
+      "key": "fitting_2",
+      "name": "Dress fitting",
+      "start": "2026-06-20T11:00",
+      "end": "2026-06-20T12:30",
+      "attendees": ["ada", "mom"],
+      "description": "Atelier Rosa, Ossington"
+    },
+    {
+      "key": "cake",
+      "name": "Cake tasting",
+      "start": "2026-05-23T14:00",
+      "end": "2026-05-23T15:00",
+      "attendees": ["dan"]
+    },
+    {
+      "key": "walkthrough",
+      "name": "Venue walkthrough at the Arbor Room",
+      "start": "2026-05-30T10:00",
+      "end": "2026-05-30T11:30",
+      "attendees": ["dan", "colette"]
+    },
+    {
+      "key": "wcall_0506",
+      "name": "Wedding planning call",
+      "start": "2026-05-06T19:00",
+      "end": "2026-05-06T19:45",
+      "attendees": ["colette"]
+    },
+    {
+      "key": "wcall_0520",
+      "name": "Wedding planning call",
+      "start": "2026-05-20T19:00",
+      "end": "2026-05-20T19:45",
+      "attendees": ["colette"]
+    },
+    {
+      "key": "wcall_0603",
+      "name": "Wedding planning call",
+      "start": "2026-06-03T19:00",
+      "end": "2026-06-03T19:45",
+      "attendees": ["colette"]
+    },
+    {
+      "key": "menu",
+      "name": "Menu tasting at Petrov Kitchen",
+      "start": "2026-06-06T17:00",
+      "end": "2026-06-06T19:00",
+      "attendees": ["dan", "anton"]
+    },
+    {
+      "key": "rain_date",
+      "name": "Engagement shoot rain date",
+      "start": "2026-04-04T16:00",
+      "end": "2026-04-04T18:00",
+      "attendees": ["dan", "sam_o"],
+      "trashed": "2026-03-30T12:00"
+    },
+    {
+      "key": "bachelorette",
+      "name": "Bachelorette weekend in Montreal",
+      "start": "2026-07-10T18:00",
+      "end": "2026-07-12T16:00",
+      "attendees": ["ada", "priya_r", "kemi", "siobhan"]
+    },
+    {
+      "key": "rehearsal",
+      "name": "Rehearsal dinner",
+      "start": "2026-08-21T18:00",
+      "end": "2026-08-21T21:00",
+      "attendees": ["dan", "mom", "dad", "ada", "marcus"]
+    },
+    {
+      "key": "ceremony",
+      "name": "Wedding ceremony",
+      "start": "2026-08-22T15:00",
+      "end": "2026-08-22T16:00",
+      "attendees": ["dan"],
+      "description": "Arbor Room garden"
+    },
+    {
+      "key": "reception",
+      "name": "Reception",
+      "start": "2026-08-22T17:00",
+      "end": "2026-08-22T23:30",
+      "attendees": ["dan", "tariq", "anton"],
+      "description": "Arbor Room"
+    },
+    {
+      "key": "hair_trial",
+      "name": "Hair and makeup trial",
+      "start": "2026-06-13T10:00",
+      "end": "2026-06-13T12:00",
+      "attendees": ["ada"]
+    },
+    {
+      "key": "florist",
+      "name": "Florist consult",
+      "start": "2026-05-21T12:30",
+      "end": "2026-05-21T13:15",
+      "attendees": ["rachel"]
+    },
+    {
+      "key": "stag_night",
+      "name": "Stag and doe party",
+      "start": "2026-06-27T19:00",
+      "end": "2026-06-27T23:00",
+      "attendees": ["marcus", "jordan_l", "dan"]
+    },
+    {
+      "key": "hearing",
+      "name": "Motion hearing - Brightline v Castellan",
+      "start": "2026-05-19T10:00",
+      "end": "2026-05-19T12:00",
+      "attendees": ["margaret"],
+      "description": "Superior Court, 330 University, room 6-1"
+    },
+    {
+      "key": "discovery",
+      "name": "Examination for discovery",
+      "start": "2026-05-27T09:30",
+      "end": "2026-05-27T16:30",
+      "attendees": ["margaret", "naomi"],
+      "description": "Neesons, 1 Queen St E"
+    },
+    {
+      "key": "northvale",
+      "name": "Client call with Northvale",
+      "start": "2026-05-13T11:00",
+      "end": "2026-05-13T11:30",
+      "attendees": ["margaret"]
+    },
+    {
+      "key": "team_lunch",
+      "name": "Team lunch",
+      "start": "2026-05-15T12:00",
+      "end": "2026-05-15T13:00",
+      "attendees": ["ethan", "naomi"]
+    },
+    {
+      "key": "checkin_0514",
+      "name": "Check-in with Margaret",
+      "start": "2026-05-14T16:00",
+      "end": "2026-05-14T16:30",
+      "attendees": ["margaret"]
+    },
+    {
+      "key": "checkin_0528",
+      "name": "Check-in with Margaret",
+      "start": "2026-05-28T16:00",
+      "end": "2026-05-28T16:30",
+      "attendees": ["margaret"]
+    },
+    {
+      "key": "cle",
+      "name": "CLE webinar on e-discovery",
+      "start": "2026-05-22T12:00",
+      "end": "2026-05-22T13:30"
+    },
+    {
+      "key": "firm_party",
+      "name": "Firm summer party",
+      "start": "2026-06-18T18:00",
+      "end": "2026-06-18T22:00",
+      "attendees": ["ethan", "margaret"]
+    },
+    {
+      "key": "dentist",
+      "name": "Dentist cleaning",
+      "start": "2026-05-26T08:00",
+      "end": "2026-05-26T09:00",
+      "attendees": ["lisa"]
+    },
+    {
+      "key": "physical",
+      "name": "Physical with Dr Haddad",
+      "start": "2026-06-04T08:30",
+      "end": "2026-06-04T09:00",
+      "attendees": ["haddad"]
+    },
+    {
+      "key": "siobhan_coffee",
+      "name": "Coffee with Siobhan",
+      "start": "2026-05-17T10:30",
+      "end": "2026-05-17T11:30",
+      "attendees": ["siobhan"]
+    },
+    {
+      "key": "kemi_brunch",
+      "name": "Brunch with Kemi",
+      "start": "2026-05-10T11:00",
+      "end": "2026-05-10T12:30",
+      "attendees": ["kemi"]
+    },
+    {
+      "key": "nana_bday",
+      "name": "Obaachan's birthday lunch",
+      "start": "2026-05-31T12:00",
+      "end": "2026-05-31T14:00",
+      "attendees": ["nana", "mom", "dad", "ada"],
+      "description": "Kaiseki Yu-zen"
+    },
+    {
+      "key": "pottery",
+      "name": "Pottery class",
+      "start": "2026-05-07T19:00",
+      "end": "2026-05-07T21:00",
+      "trashed": "2026-05-05T09:00"
+    },
+    {
+      "key": "raptors",
+      "name": "Raptors watch party",
+      "start": "2026-04-30T19:30",
+      "end": "2026-04-30T22:30",
+      "attendees": ["marcus", "dan"],
+      "cancelled": "2026-04-29T12:00"
+    },
+    {
+      "key": "movie",
+      "name": "Movie night with Dan",
+      "start": "2026-05-15T20:00",
+      "end": "2026-05-15T22:30",
+      "attendees": ["dan"]
+    },
+    {
+      "key": "yoga",
+      "name": "Yoga in the park",
+      "start": "2026-05-17T09:00",
+      "end": "2026-05-17T10:00",
+      "cancelled": "2026-05-11T08:00"
+    },
+    {
+      "key": "agm",
+      "name": "Condo AGM",
+      "start": "2026-06-25T18:30",
+      "end": "2026-06-25T21:00",
+      "attendees": ["priya_s", "gord", "linh", "ravi"],
+      "description": "party room, 2nd floor"
+    },
+    {
+      "key": "elevator",
+      "name": "Elevator maintenance",
+      "start": "2026-05-19T13:00",
+      "end": "2026-05-19T17:00",
+      "description": "east elevator out, use the freight one"
+    },
+    {
+      "key": "ski",
+      "name": "Ski weekend at Blue Mountain",
+      "start": "2026-02-20T17:00",
+      "end": "2026-02-22T15:00",
+      "attendees": ["dan", "hugo"],
+      "trashed": "2026-02-10T12:00"
+    },
+    {
+      "key": "priya_lunch",
+      "name": "Lunch with Priya",
+      "start": "2026-05-20T12:00",
+      "end": "2026-05-20T13:00",
+      "attendees": ["priya_r"]
+    },
+    {
+      "key": "games",
+      "name": "Board game night",
+      "start": "2026-05-22T19:00",
+      "end": "2026-05-22T23:00",
+      "attendees": ["jordan_l", "marcus", "dan"]
+    }
+  ],
+  "tasks": [
+    {
+      "key": "guest_list",
+      "name": "Finalize guest list",
+      "due": "2026-05-15",
+      "status": "in_progress",
+      "priority": 1,
+      "effort": 120,
+      "list": "wed_list",
+      "description": "cap at 140, Dad still adding cousins"
+    },
+    {
+      "key": "gl_addr",
+      "name": "Get Dad's side addresses",
+      "parent": "guest_list",
+      "completed": "2026-05-09T21:00"
+    },
+    {
+      "key": "gl_plus",
+      "name": "Confirm plus-ones with bridesmaids",
+      "parent": "guest_list",
+      "due": "2026-05-14"
+    },
+    {
+      "key": "gl_rsvp",
+      "name": "Enter RSVPs in the spreadsheet",
+      "parent": "guest_list",
+      "due": "2026-05-20"
+    },
+    {
+      "key": "thanks_new",
+      "name": "Order thank-you cards",
+      "due": "2026-06-30",
+      "list": "wed_list",
+      "effort": 30
+    },
+    {
+      "key": "thanks_old",
+      "name": "Order thank-you cards",
+      "completed": "2026-02-18T20:00",
+      "list": "wed_list",
+      "description": "engagement party thank-yous"
+    },
+    {
+      "key": "hmu_book",
+      "name": "Book hair and makeup",
+      "completed": "2026-04-02T12:00",
+      "list": "wed_list"
+    },
+    {
+      "key": "invites",
+      "name": "Send invitations",
+      "due": "2026-05-22",
+      "priority": 2,
+      "effort": 180,
+      "list": "wed_list",
+      "description": "Minted order, 140 invites"
+    },
+    {
+      "key": "bm_gifts",
+      "name": "Pick bridesmaid gifts",
+      "due": "2026-07-01",
+      "effort": 60,
+      "list": "wed_list"
+    },
+    {
+      "key": "photo_dep",
+      "name": "Pay photographer deposit",
+      "completed": "2026-03-10T10:00",
+      "list": "wed_list"
+    },
+    {
+      "key": "florist_dep",
+      "name": "Pay florist deposit",
+      "due": "2026-05-21",
+      "priority": 2,
+      "list": "wed_list",
+      "effort": 10
+    },
+    {
+      "key": "vows",
+      "name": "Write vows",
+      "due": "2026-08-01",
+      "priority": 3,
+      "effort": 240,
+      "list": "wed_list"
+    },
+    {
+      "key": "first_dance",
+      "name": "Choose first dance song",
+      "effort": 20,
+      "list": "wed_list"
+    },
+    {
+      "key": "headcount",
+      "name": "Confirm Arbor Room headcount",
+      "due": "2026-06-15",
+      "list": "wed_list",
+      "priority": 2
+    },
+    {
+      "key": "marriage_lic",
+      "name": "Get marriage licence at City Hall",
+      "due": "2026-07-20",
+      "priority": 2,
+      "list": "wed_list"
+    },
+    {
+      "key": "playlist",
+      "name": "Send DJ T the do-not-play list",
+      "due": "2026-06-10",
+      "effort": 15,
+      "list": "wed_list"
+    },
+    {
+      "key": "mark_essays",
+      "name": "Mark practice exam essays",
+      "due": "2026-05-18",
+      "priority": 2,
+      "effort": 90,
+      "list": "bar_list"
+    },
+    {
+      "key": "boardroom",
+      "name": "Book boardroom for June sessions",
+      "due": "2026-05-15",
+      "effort": 10,
+      "list": "bar_list"
+    },
+    {
+      "key": "index_fatou",
+      "name": "Send Barrister index to Fatou",
+      "due": "2026-05-13",
+      "effort": 5,
+      "list": "bar_list"
+    },
+    {
+      "key": "ethics_hypo",
+      "name": "Prep ethics hypo set",
+      "due": "2026-05-19",
+      "effort": 60,
+      "list": "bar_list",
+      "priority": 3
+    },
+    {
+      "key": "mock_exam",
+      "name": "Run timed mock exam",
+      "due": "2026-05-26",
+      "effort": 210,
+      "list": "bar_list"
+    },
+    {
+      "key": "factum",
+      "name": "Draft factum for Brightline",
+      "due": "2026-05-16",
+      "priority": 1,
+      "effort": 480,
+      "status": "in_progress",
+      "list": "work_list",
+      "description": "Margaret wants it by Saturday noon"
+    },
+    {
+      "key": "f_research",
+      "name": "Case law research",
+      "parent": "factum",
+      "completed": "2026-05-08T18:00"
+    },
+    {
+      "key": "f_facts",
+      "name": "Draft statement of facts",
+      "parent": "factum",
+      "due": "2026-05-14"
+    },
+    {
+      "key": "f_cite",
+      "name": "Cite-check the factum",
+      "parent": "factum",
+      "due": "2026-05-15"
+    },
+    {
+      "key": "docket_apr",
+      "name": "Docket April hours",
+      "completed": "2026-05-01T09:00",
+      "list": "work_list"
+    },
+    {
+      "key": "docket_may",
+      "name": "Docket May hours",
+      "due": "2026-05-31",
+      "list": "work_list",
+      "effort": 45
+    },
+    {
+      "key": "disc_outline",
+      "name": "Prep discovery outline",
+      "due": "2026-05-25",
+      "priority": 2,
+      "effort": 240,
+      "list": "work_list"
+    },
+    {
+      "key": "nda",
+      "name": "Review Northvale NDA",
+      "due": "2026-05-13",
+      "priority": 3,
+      "effort": 45,
+      "list": "work_list"
+    },
+    {
+      "key": "cpd",
+      "name": "Complete CPD hours",
+      "due": "2026-12-31",
+      "effort": 300,
+      "list": "work_list",
+      "priority": 5
+    },
+    {
+      "key": "agm_notice",
+      "name": "Circulate AGM notice",
+      "due": "2026-05-26",
+      "priority": 2,
+      "list": "condo_list",
+      "effort": 30
+    },
+    {
+      "key": "reserve",
+      "name": "Review reserve fund study",
+      "due": "2026-06-05",
+      "effort": 120,
+      "list": "condo_list"
+    },
+    {
+      "key": "repaint",
+      "name": "Get quotes for lobby repaint",
+      "due": "2026-05-29",
+      "list": "condo_list",
+      "description": "three quotes, Ravi has two contacts"
+    },
+    {
+      "key": "minutes_apr",
+      "name": "Write up April minutes",
+      "completed": "2026-04-12T21:00",
+      "list": "condo_list"
+    },
+    {
+      "key": "bike_room",
+      "name": "Bike room sign-up sheet",
+      "status": "cancelled",
+      "list": "condo_list"
+    },
+    {
+      "key": "smoke",
+      "name": "Replace smoke detector battery",
+      "due": "2026-05-16",
+      "effort": 10,
+      "list": "home_list"
+    },
+    {
+      "key": "dryer",
+      "name": "Book dryer vent cleaning",
+      "due": "2026-06-10",
+      "list": "home_list",
+      "effort": 15
+    },
+    {
+      "key": "library",
+      "name": "Return Dan's library books",
+      "due": "2026-05-14",
+      "effort": 15,
+      "list": "home_list"
+    },
+    {
+      "key": "passport_name",
+      "name": "Update name on passport",
+      "due": "2026-09-30",
+      "list": "home_list",
+      "priority": 4
+    },
+    {
+      "key": "sintra",
+      "name": "Book Sintra day trip",
+      "due": "2026-07-15",
+      "list": "hm_list",
+      "effort": 20
+    },
+    {
+      "key": "adaptor",
+      "name": "Buy travel adaptor",
+      "effort": 15,
+      "list": "hm_list"
+    },
+    {
+      "key": "flights",
+      "name": "Book honeymoon flights",
+      "completed": "2026-03-01T22:00",
+      "list": "hm_list"
+    },
+    {
+      "key": "pastel",
+      "name": "List pastel de nata spots",
+      "list": "hm_list",
+      "effort": 20
+    },
+    {
+      "key": "call_nana",
+      "name": "Call Obaachan",
+      "due": "2026-05-15",
+      "effort": 30
+    },
+    {
+      "key": "nana_gift",
+      "name": "Buy birthday gift for Obaachan",
+      "due": "2026-05-29",
+      "priority": 2
+    },
+    {
+      "key": "gym_renew",
+      "name": "Renew gym membership",
+      "status": "cancelled"
+    },
+    {
+      "key": "pottery_signup",
+      "name": "Sign up for pottery",
+      "trashed": "2026-05-05T09:05"
+    },
+    {
+      "key": "rogers",
+      "name": "Cancel old Rogers plan",
+      "due": "2026-03-31",
+      "trashed": "2026-03-25T10:00"
+    },
+    {
+      "key": "taxes",
+      "name": "File 2025 taxes",
+      "completed": "2026-04-28T21:00",
+      "effort": 180
+    },
+    {
+      "key": "book_dentist",
+      "name": "Book dentist cleaning",
+      "completed": "2026-04-15T12:00"
+    },
+    {
+      "key": "stamps",
+      "name": "Buy stamps",
+      "due": "2026-05-18",
+      "effort": 10,
+      "description": "Canada Post on Queen, for the invitations"
+    },
+    {
+      "key": "blazer",
+      "name": "Pick up blazer from tailor",
+      "due": "2026-05-14",
+      "effort": 20
+    },
+    {
+      "key": "fees_01",
+      "name": "Pay condo fees",
+      "due": "2026-01-01",
+      "list": "home_list",
+      "completed": "2026-01-01T08:00"
+    },
+    {
+      "key": "fees_02",
+      "name": "Pay condo fees",
+      "due": "2026-02-01",
+      "list": "home_list",
+      "completed": "2026-02-01T08:00"
+    },
+    {
+      "key": "fees_03",
+      "name": "Pay condo fees",
+      "due": "2026-03-01",
+      "list": "home_list",
+      "completed": "2026-03-01T08:00"
+    },
+    {
+      "key": "fees_04",
+      "name": "Pay condo fees",
+      "due": "2026-04-01",
+      "list": "home_list",
+      "completed": "2026-04-01T08:00"
+    },
+    {
+      "key": "fees_05",
+      "name": "Pay condo fees",
+      "due": "2026-05-01",
+      "list": "home_list",
+      "completed": "2026-05-01T08:00"
+    },
+    {
+      "key": "fees_06",
+      "name": "Pay condo fees",
+      "due": "2026-06-01",
+      "list": "home_list",
+      "priority": 2
+    }
+  ],
+  "notebooks": [
+    {
+      "key": "wed_nb",
+      "name": "Wedding"
+    },
+    {
+      "key": "bar_nb",
+      "name": "Bar prep"
+    },
+    {
+      "key": "condo_nb",
+      "name": "Condo board"
+    },
+    {
+      "key": "work_nb",
+      "name": "Work"
+    },
+    {
+      "key": "rec_nb",
+      "name": "Recipes"
+    },
+    {
+      "key": "old_nb",
+      "name": "Law school"
+    }
+  ],
+  "notes": [
+    {
+      "key": "vow_ideas",
+      "name": "Vow ideas",
+      "body": "the snowstorm at Osgoode, his terrible jollof, promise to always split the last dumpling",
+      "notebook": "wed_nb",
+      "created": "2026-04-18T23:10",
+      "pinned": true
+    },
+    {
+      "key": "seating",
+      "name": "Seating chart thoughts",
+      "body": "keep Hugo away from the bar, Obaachan near the garden doors",
+      "notebook": "wed_nb",
+      "created": "2026-05-03T21:00"
+    },
+    {
+      "key": "arbor_notes",
+      "name": "Arbor Room notes",
+      "body": "no confetti, last call 12:30, rain plan is the conservatory",
+      "notebook": "wed_nb",
+      "created": "2026-03-21T14:00"
+    },
+    {
+      "key": "menu_notes",
+      "name": "Menu ideas",
+      "body": "jollof station, miso black cod, vegan option, no shellfish for Kemi",
+      "notebook": "wed_nb",
+      "created": "2026-04-05T20:30"
+    },
+    {
+      "key": "songs",
+      "name": "Song list",
+      "body": "first dance shortlist: At Last, Adorn, Lover; do-not-play: Macarena",
+      "notebook": "wed_nb",
+      "created": "2026-05-08T22:00"
+    },
+    {
+      "key": "ethics",
+      "name": "Ethics hypo bank",
+      "body": "conflicts, joint retainers, withdrawing for non-payment, undertakings",
+      "notebook": "bar_nb",
+      "created": "2026-04-06T20:00",
+      "pinned": true
+    },
+    {
+      "key": "civpro",
+      "name": "Civil procedure cheat sheet",
+      "body": "Rule 20 summary judgment, Rule 30 discovery, Rule 57 costs",
+      "notebook": "bar_nb",
+      "created": "2026-04-13T21:00"
+    },
+    {
+      "key": "fam_law",
+      "name": "Family law outline",
+      "body": "equalization, spousal support advisory guidelines, custody now parenting time",
+      "notebook": "bar_nb",
+      "created": "2026-04-27T21:30"
+    },
+    {
+      "key": "timing",
+      "name": "Exam timing tips",
+      "body": "tab the index, 1 min per question, flag and move on",
+      "notebook": "bar_nb",
+      "created": "2026-05-05T21:00"
+    },
+    {
+      "key": "reserve_notes",
+      "name": "Reserve fund questions",
+      "body": "why is the roof line item up 40 percent, ask Ravi about the engineer",
+      "notebook": "condo_nb",
+      "created": "2026-04-22T20:00"
+    },
+    {
+      "key": "agm_agenda",
+      "name": "AGM agenda draft",
+      "body": "auditor report, elect two directors, bike room, short-term rental rule",
+      "notebook": "condo_nb",
+      "created": "2026-05-06T21:00"
+    },
+    {
+      "key": "noise",
+      "name": "Noise complaint log",
+      "body": "unit 1804 bass after 11pm on 12 Apr, 19 Apr, 3 May",
+      "notebook": "condo_nb",
+      "created": "2026-04-13T08:00"
+    },
+    {
+      "key": "brightline",
+      "name": "Brightline theory of the case",
+      "body": "the indemnity clause survives termination; estoppel as backup",
+      "notebook": "work_nb",
+      "created": "2026-05-04T22:30"
+    },
+    {
+      "key": "margaret_fb",
+      "name": "Feedback from Margaret",
+      "body": "lead with the answer, shorter paragraphs, fewer adverbs",
+      "notebook": "work_nb",
+      "created": "2026-04-30T17:00"
+    },
+    {
+      "key": "billing",
+      "name": "Billing targets",
+      "body": "1800 hours, 150 a month, docket daily not weekly",
+      "notebook": "work_nb",
+      "created": "2026-01-12T09:00"
+    },
+    {
+      "key": "jollof",
+      "name": "Dad's jollof rice",
+      "body": "parboiled rice, scotch bonnet, bay leaf, let it burn a little at the bottom",
+      "notebook": "rec_nb",
+      "created": "2026-03-08T18:00"
+    },
+    {
+      "key": "miso",
+      "name": "Miso soup like Obaachan's",
+      "body": "awase dashi, white miso, silken tofu, wakame",
+      "notebook": "rec_nb",
+      "created": "2026-04-26T21:00"
+    },
+    {
+      "key": "granola",
+      "name": "Sheet pan granola",
+      "body": "oats, maple, pecans, 160C for 25 min",
+      "notebook": "rec_nb",
+      "created": "2026-02-01T10:00"
+    },
+    {
+      "key": "lisbon_ideas",
+      "name": "Lisbon ideas",
+      "body": "Time Out Market, tram 28 early, LX Factory, day in Cascais",
+      "created": "2026-02-15T22:00"
+    },
+    {
+      "key": "gift_nana",
+      "name": "Gift ideas for Obaachan",
+      "body": "silk furoshiki, a photo book of the engagement, orchid",
+      "created": "2026-05-09T20:00"
+    },
+    {
+      "key": "budget",
+      "name": "Wedding budget",
+      "body": "venue 18k, food 14k, photo 4.5k, flowers 3k, dress 2.8k",
+      "created": "2026-01-25T21:00",
+      "pinned": true
+    },
+    {
+      "key": "books",
+      "name": "Books to read",
+      "body": "Pachinko, The Nickel Boys, Americanah again",
+      "created": "2026-03-14T22:00"
+    },
+    {
+      "key": "run_log",
+      "name": "Running log",
+      "body": "5k in 29:40, knee fine, try the Don Valley loop",
+      "created": "2026-05-11T07:30"
+    },
+    {
+      "key": "old_torts",
+      "name": "Torts summary",
+      "body": "duty, breach, causation, remoteness",
+      "created": "2021-11-02T09:00",
+      "trashed": "2026-05-01T10:00"
+    },
+    {
+      "key": "old_moving",
+      "name": "Moving checklist",
+      "body": "hydro, internet, change of address",
+      "created": "2025-06-01T09:00",
+      "trashed": "2026-02-20T10:00"
+    }
+  ],
+  "folders": [
+    {
+      "key": "wed_f",
+      "name": "Wedding"
+    },
+    {
+      "key": "condo_f",
+      "name": "Condo"
+    },
+    {
+      "key": "work_f",
+      "name": "Work"
+    },
+    {
+      "key": "tax_f",
+      "name": "Taxes 2025"
+    },
+    {
+      "key": "hm_f",
+      "name": "Honeymoon"
+    },
+    {
+      "key": "old_f",
+      "name": "Old apartment"
+    }
+  ],
+  "documents": [
+    {
+      "key": "arbor_contract",
+      "name": "Arbor Room contract",
+      "folder": "wed_f",
+      "starred": true,
+      "created": "2026-01-22T12:00"
+    },
+    {
+      "key": "photo_contract",
+      "name": "Photographer contract",
+      "folder": "wed_f",
+      "created": "2026-03-10T10:30"
+    },
+    {
+      "key": "petrov_quote",
+      "name": "Petrov Kitchen quote",
+      "folder": "wed_f",
+      "created": "2026-04-20T15:00"
+    },
+    {
+      "key": "guest_sheet",
+      "name": "Guest list spreadsheet",
+      "folder": "wed_f",
+      "created": "2026-05-09T21:30"
+    },
+    {
+      "key": "invite_proof",
+      "name": "Invitation proof",
+      "folder": "wed_f",
+      "created": "2026-05-11T18:00"
+    },
+    {
+      "key": "bylaws",
+      "name": "Mercer condo bylaws",
+      "folder": "condo_f",
+      "created": "2025-11-02T10:30"
+    },
+    {
+      "key": "reserve_study",
+      "name": "Reserve fund study 2026",
+      "folder": "condo_f",
+      "starred": true,
+      "created": "2026-04-20T09:00"
+    },
+    {
+      "key": "agm_draft",
+      "name": "AGM notice draft",
+      "folder": "condo_f",
+      "created": "2026-05-12T21:40"
+    },
+    {
+      "key": "brightline_factum",
+      "name": "Brightline factum draft v3",
+      "folder": "work_f",
+      "created": "2026-05-12T19:10"
+    },
+    {
+      "key": "precedent",
+      "name": "Summary judgment precedent",
+      "folder": "work_f",
+      "created": "2026-04-14T11:00"
+    },
+    {
+      "key": "offer",
+      "name": "Associate offer letter",
+      "folder": "work_f",
+      "created": "2024-08-15T09:00"
+    },
+    {
+      "key": "t4",
+      "name": "T4 2025",
+      "folder": "tax_f",
+      "created": "2026-02-25T09:00"
+    },
+    {
+      "key": "noa",
+      "name": "Notice of assessment 2025",
+      "folder": "tax_f",
+      "created": "2026-05-06T09:00"
+    },
+    {
+      "key": "tap_booking",
+      "name": "TAP flight booking",
+      "folder": "hm_f",
+      "starred": true,
+      "created": "2026-03-01T22:10"
+    },
+    {
+      "key": "alfama",
+      "name": "Alfama apartment booking",
+      "folder": "hm_f",
+      "created": "2026-02-20T21:00"
+    },
+    {
+      "key": "mockup",
+      "name": "Wedding website mockup",
+      "created": "2026-05-10T22:00"
+    },
+    {
+      "key": "lso_card",
+      "name": "LSO licence certificate",
+      "created": "2025-06-20T09:00"
+    },
+    {
+      "key": "lease_old",
+      "name": "Old lease Dundas West",
+      "created": "2024-05-01T09:00",
+      "trashed": "2026-05-04T10:00"
+    }
+  ],
+  "albums": [
+    {
+      "key": "eng_album",
+      "name": "Engagement"
+    },
+    {
+      "key": "venue_album",
+      "name": "Venue scouting"
+    },
+    {
+      "key": "fam_album",
+      "name": "Family"
+    },
+    {
+      "key": "bar_album",
+      "name": "Bar prep crew"
+    },
+    {
+      "key": "spring_album",
+      "name": "Spring 2026"
+    },
+    {
+      "key": "dress_album",
+      "name": "Dress shopping"
+    }
+  ],
+  "photos": [
+    {
+      "key": "proposal",
+      "name": "Proposal at Scarborough Bluffs",
+      "taken": "2025-12-20T16:10",
+      "albums": ["eng_album"],
+      "people": ["dan"],
+      "starred": true
+    },
+    {
+      "key": "ring",
+      "name": "The ring",
+      "taken": "2025-12-20T16:30",
+      "albums": ["eng_album"],
+      "starred": true
+    },
+    {
+      "key": "eng_party",
+      "name": "Engagement party toast",
+      "taken": "2026-02-28T21:00",
+      "albums": ["eng_album"],
+      "people": ["dan", "marcus", "ada"]
+    },
+    {
+      "key": "eng_shoot1",
+      "name": "Engagement shoot at the Distillery",
+      "taken": "2026-03-28T17:00",
+      "albums": ["eng_album"],
+      "people": ["dan"]
+    },
+    {
+      "key": "eng_shoot2",
+      "name": "Engagement shoot by the lake",
+      "taken": "2026-03-28T18:10",
+      "albums": ["eng_album"],
+      "people": ["dan"],
+      "starred": true
+    },
+    {
+      "key": "arbor1",
+      "name": "Arbor Room garden",
+      "taken": "2026-01-17T13:00",
+      "albums": ["venue_album"],
+      "people": ["dan"]
+    },
+    {
+      "key": "arbor2",
+      "name": "Arbor Room conservatory",
+      "taken": "2026-01-17T13:20",
+      "albums": ["venue_album"]
+    },
+    {
+      "key": "casa",
+      "name": "Casa Loma stables",
+      "taken": "2026-01-10T11:00",
+      "albums": ["venue_album"]
+    },
+    {
+      "key": "evergreen",
+      "name": "Evergreen Brick Works",
+      "taken": "2026-01-10T15:00",
+      "albums": ["venue_album"],
+      "people": ["dan", "colette"]
+    },
+    {
+      "key": "fitting_ada",
+      "name": "Ada at the dress fitting",
+      "taken": "2026-04-11T12:00",
+      "albums": ["dress_album"],
+      "people": ["ada"]
+    },
+    {
+      "key": "fitting_mirror",
+      "name": "Mirror selfie at the dress fitting",
+      "taken": "2026-04-11T12:10",
+      "albums": ["dress_album"],
+      "starred": true
+    },
+    {
+      "key": "veil",
+      "name": "Veil options",
+      "taken": "2026-04-11T12:40",
+      "albums": ["dress_album"],
+      "people": ["ada", "mom"]
+    },
+    {
+      "key": "shoes",
+      "name": "Shoe shortlist",
+      "taken": "2026-04-25T15:00",
+      "albums": ["dress_album"]
+    },
+    {
+      "key": "nana_tea",
+      "name": "Tea with Obaachan",
+      "taken": "2026-04-26T15:30",
+      "albums": ["fam_album"],
+      "people": ["nana", "mom"]
+    },
+    {
+      "key": "fam_dinner",
+      "name": "Family dinner in April",
+      "taken": "2026-04-26T18:30",
+      "albums": ["fam_album"],
+      "people": ["mom", "dad", "nana", "dan"]
+    },
+    {
+      "key": "dad_grill",
+      "name": "Dad at the grill",
+      "taken": "2025-08-16T18:00",
+      "albums": ["fam_album"],
+      "people": ["dad"]
+    },
+    {
+      "key": "ada_grad",
+      "name": "Ada's convocation",
+      "taken": "2025-06-12T11:00",
+      "albums": ["fam_album"],
+      "people": ["ada", "mom", "dad"],
+      "starred": true
+    },
+    {
+      "key": "xmas",
+      "name": "Christmas morning",
+      "taken": "2025-12-25T09:30",
+      "albums": ["fam_album"],
+      "people": ["mom", "dad", "ada", "nana", "dan"]
+    },
+    {
+      "key": "bp_board",
+      "name": "Whiteboard after bar prep",
+      "taken": "2026-04-14T20:30",
+      "albums": ["bar_album"]
+    },
+    {
+      "key": "bp_pizza",
+      "name": "Pizza night with the bar prep crew",
+      "taken": "2026-04-28T20:00",
+      "albums": ["bar_album"],
+      "people": ["aiden", "fatou", "mateo", "jordan_p"]
+    },
+    {
+      "key": "bp_tabs",
+      "name": "Tabbed Barrister binder",
+      "taken": "2026-05-05T19:00",
+      "albums": ["bar_album"]
+    },
+    {
+      "key": "blossom_hp",
+      "name": "Cherry blossoms at High Park",
+      "taken": "2026-04-30T07:30",
+      "albums": ["spring_album"]
+    },
+    {
+      "key": "blossom_dan",
+      "name": "Cherry blossoms with Dan",
+      "taken": "2026-04-30T07:50",
+      "albums": ["spring_album"],
+      "people": ["dan"],
+      "starred": true
+    },
+    {
+      "key": "kemi_brunch_pic",
+      "name": "Brunch at Mildred's",
+      "taken": "2026-05-10T11:40",
+      "albums": ["spring_album"],
+      "people": ["kemi"]
+    },
+    {
+      "key": "run_pic",
+      "name": "Don Valley trail",
+      "taken": "2026-05-11T07:10",
+      "albums": ["spring_album"]
+    },
+    {
+      "key": "tulips",
+      "name": "Tulips on the balcony",
+      "taken": "2026-05-02T09:00",
+      "albums": ["spring_album"]
+    },
+    {
+      "key": "priya_coffee",
+      "name": "Coffee with Priya",
+      "taken": "2026-05-08T12:40",
+      "people": ["priya_r"]
+    },
+    {
+      "key": "condo_lobby",
+      "name": "Lobby paint samples",
+      "taken": "2026-05-06T18:00",
+      "people": ["gord"]
+    },
+    {
+      "key": "noise_meter",
+      "name": "Decibel reading 1804",
+      "taken": "2026-05-03T23:20"
+    },
+    {
+      "key": "court",
+      "name": "Osgoode Hall steps",
+      "taken": "2026-04-09T08:40",
+      "people": ["ethan"]
+    },
+    {
+      "key": "desk",
+      "name": "Desk at 2am",
+      "taken": "2026-05-12T02:05"
+    },
+    {
+      "key": "marcus_rugby",
+      "name": "Marcus and Jordan at rugby",
+      "taken": "2026-04-18T14:00",
+      "people": ["marcus", "jordan_l", "dan"]
+    },
+    {
+      "key": "blurry_toast",
+      "name": "Blurry toast photo",
+      "taken": "2026-02-28T21:05",
+      "albums": ["eng_album"],
+      "people": ["dan"],
+      "trashed": "2026-05-03T10:00"
+    },
+    {
+      "key": "screenshot",
+      "name": "Parking receipt screenshot",
+      "taken": "2026-03-02T10:00",
+      "trashed": "2026-03-05T10:00"
+    }
+  ],
+  "debts": [
+    {
+      "key": "d_ada",
+      "person": "ada",
+      "direction": "owes_me",
+      "amount": 85,
+      "name": "Dress alterations share",
+      "date": "2026-04-11"
+    },
+    {
+      "key": "d_ada2",
+      "person": "ada",
+      "direction": "owes_me",
+      "amount": 25,
+      "name": "Bachelorette decorations",
+      "date": "2026-05-02"
+    },
+    {
+      "key": "d_kemi",
+      "person": "kemi",
+      "direction": "owes_me",
+      "amount": 42.5,
+      "name": "Brunch at Mildred's",
+      "date": "2026-05-10"
+    },
+    {
+      "key": "d_marcus",
+      "person": "marcus",
+      "direction": "i_owe",
+      "amount": 60,
+      "name": "Raptors tickets",
+      "date": "2026-04-20"
+    },
+    {
+      "key": "d_priya_r",
+      "person": "priya_r",
+      "direction": "owes_me",
+      "amount": 18,
+      "name": "Coffee and pastries",
+      "date": "2026-05-08"
+    },
+    {
+      "key": "d_priya_s",
+      "person": "priya_s",
+      "direction": "i_owe",
+      "amount": 22.5,
+      "name": "AGM room share",
+      "date": "2026-04-09"
+    },
+    {
+      "key": "d_ethan",
+      "person": "ethan",
+      "direction": "i_owe",
+      "amount": 14,
+      "name": "Late night sushi",
+      "date": "2026-05-11"
+    },
+    {
+      "key": "d_dad",
+      "person": "dad",
+      "direction": "i_owe",
+      "amount": 2000,
+      "name": "Wedding deposit help",
+      "date": "2026-01-22"
+    },
+    {
+      "key": "d_siobhan",
+      "person": "siobhan",
+      "direction": "owes_me",
+      "amount": 120,
+      "name": "Concert tickets",
+      "date": "2026-03-15",
+      "settled": "2026-04-01T10:00"
+    },
+    {
+      "key": "d_aiden",
+      "person": "aiden",
+      "direction": "owes_me",
+      "amount": 32,
+      "name": "Barrister manual copy",
+      "date": "2026-04-07"
+    },
+    {
+      "key": "d_hugo",
+      "person": "hugo",
+      "direction": "i_owe",
+      "amount": 75,
+      "name": "Ski lift ticket",
+      "date": "2026-01-30",
+      "settled": "2026-02-15T10:00"
+    },
+    {
+      "key": "d_jordan_l",
+      "person": "jordan_l",
+      "direction": "owes_me",
+      "amount": 25,
+      "name": "Uber home",
+      "date": "2026-04-30"
+    },
+    {
+      "key": "d_mom",
+      "person": "mom",
+      "direction": "owes_me",
+      "amount": 300,
+      "name": "Veil deposit",
+      "date": "2026-04-11"
+    },
+    {
+      "key": "d_fatou",
+      "person": "fatou",
+      "direction": "i_owe",
+      "amount": 10,
+      "name": "Tabs for my binder",
+      "date": "2026-05-05"
+    }
+  ],
+  "locker": [
+    {
+      "key": "firm_login",
+      "name": "Whitlock Brennan VPN",
+      "type": "login",
+      "username": "hokafor",
+      "url": "https://vpn.whitlockbrennan.ca",
+      "password": "Factum-by-Friday-26",
+      "starred": true
+    },
+    {
+      "key": "lso_portal",
+      "name": "LSO portal login",
+      "type": "login",
+      "username": "hokafor",
+      "url": "https://portal.lso.ca",
+      "password": "Barrister2024!"
+    },
+    {
+      "key": "minted",
+      "name": "Minted account",
+      "type": "login",
+      "username": "hanae.okafor@gmail.com",
+      "url": "https://www.minted.com",
+      "password": "invites-in-may"
+    },
+    {
+      "key": "condo_portal",
+      "name": "Mercer resident portal",
+      "type": "login",
+      "username": "unit1207",
+      "url": "https://mercer.condoportal.ca",
+      "password": "lobbyplants22"
+    },
+    {
+      "key": "visa",
+      "name": "TD Visa",
+      "type": "card",
+      "card_number": "4520 8812 3371 0094",
+      "cvv": "318",
+      "starred": true
+    },
+    {
+      "key": "garage",
+      "name": "Garage door code",
+      "type": "note",
+      "notes": "P2 visitor door 4471#"
+    },
+    {
+      "key": "sin",
+      "name": "Social insurance number",
+      "type": "identity",
+      "password": "046 454 286"
+    },
+    {
+      "key": "wifi",
+      "name": "Home wifi",
+      "type": "wifi",
+      "password": "mercer-1207-sakura"
+    },
+    {
+      "key": "laptop_pw",
+      "name": "Laptop password",
+      "type": "password",
+      "password": "Osgoode!Snow19"
+    },
+    {
+      "key": "gh_key",
+      "name": "GitHub SSH key",
+      "type": "ssh_key",
+      "notes": "personal laptop, wedding website repo",
+      "password": "ssh-ed25519 AAAAC3Nz-hanae-wed"
+    },
+    {
+      "key": "rsvp_api",
+      "name": "RSVP site API key",
+      "type": "api_credential",
+      "notes": "wedding website RSVP form",
+      "code": "rsvp-7f3a9c"
+    },
+    {
+      "key": "passport",
+      "name": "Passport",
+      "type": "passport",
+      "notes": "expires June 2031, maiden name"
+    },
+    {
+      "key": "chequing",
+      "name": "TD chequing account",
+      "type": "bank_account",
+      "notes": "transit 04512, joint with Dan from June"
+    },
+    {
+      "key": "licence",
+      "name": "Ontario driver's licence",
+      "type": "driving_licence",
+      "notes": "G licence, expires 2029"
+    },
+    {
+      "key": "westlaw",
+      "name": "Adobe Acrobat licence",
+      "type": "software_licence",
+      "code": "ACRO-99QX-2026",
+      "notes": "renews in November"
+    },
+    {
+      "key": "wallet",
+      "name": "Old Ledger wallet",
+      "type": "crypto_wallet",
+      "notes": "0.1 BTC from 2020, seed phrase in the safe"
+    },
+    {
+      "key": "cyclebar",
+      "name": "Cyclebar membership",
+      "type": "membership",
+      "notes": "8 classes a month"
+    },
+    {
+      "key": "costco",
+      "name": "Costco membership",
+      "type": "membership",
+      "notes": "executive, shared with Dan"
+    },
+    {
+      "key": "lso_doc",
+      "name": "LSO member number",
+      "type": "document",
+      "notes": "member P77120"
+    },
+    {
+      "key": "old_bank",
+      "name": "Old Tangerine login",
+      "type": "login",
+      "username": "hanaeo",
+      "password": "tangerine15",
+      "url": "https://www.tangerine.ca",
+      "trashed": "2026-05-01T09:00"
+    }
+  ],
+  "links": [
+    {
+      "from": "guest_list",
+      "to": "dad"
+    },
+    {
+      "from": "gl_plus",
+      "to": "priya_r"
+    },
+    {
+      "from": "gl_plus",
+      "to": "kemi"
+    },
+    {
+      "from": "invites",
+      "to": "ada"
+    },
+    {
+      "from": "florist_dep",
+      "to": "rachel"
+    },
+    {
+      "from": "headcount",
+      "to": "colette"
+    },
+    {
+      "from": "playlist",
+      "to": "tariq"
+    },
+    {
+      "from": "index_fatou",
+      "to": "fatou"
+    },
+    {
+      "from": "mark_essays",
+      "to": "aiden"
+    },
+    {
+      "from": "mark_essays",
+      "to": "mateo"
+    },
+    {
+      "from": "factum",
+      "to": "margaret"
+    },
+    {
+      "from": "disc_outline",
+      "to": "naomi"
+    },
+    {
+      "from": "repaint",
+      "to": "ravi"
+    },
+    {
+      "from": "agm_notice",
+      "to": "linh"
+    },
+    {
+      "from": "reserve",
+      "to": "priya_s"
+    },
+    {
+      "from": "library",
+      "to": "dan"
+    },
+    {
+      "from": "call_nana",
+      "to": "nana"
+    },
+    {
+      "from": "nana_gift",
+      "to": "nana"
+    },
+    {
+      "from": "vow_ideas",
+      "to": "dan"
+    },
+    {
+      "from": "seating",
+      "to": "hugo"
+    },
+    {
+      "from": "seating",
+      "to": "nana"
+    },
+    {
+      "from": "menu_notes",
+      "to": "kemi"
+    },
+    {
+      "from": "margaret_fb",
+      "to": "margaret"
+    },
+    {
+      "from": "reserve_notes",
+      "to": "ravi"
+    },
+    {
+      "from": "jollof",
+      "to": "dad"
+    },
+    {
+      "from": "miso",
+      "to": "nana"
+    },
+    {
+      "from": "gift_nana",
+      "to": "nana"
+    },
+    {
+      "from": "agm_agenda",
+      "to": "gord"
+    }
+  ]
+}

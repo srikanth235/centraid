@@ -1,0 +1,622 @@
+"""World T14: Tomás Ferreira, Uber driver and part-time DJ in São Paulo (BRL vault).
+
+    python3 authored/worlds/T14_build.py      # writes authored/worlds/T14.json (deterministic)
+
+Today in the sessions is Saturday 2026-10-24 19:30, hours before Baile Torto #12.
+Lives in Vila Madalena with his girlfriend Larissa; shares one car with two other drivers
+(Rafa and Juninho) on a weekly rodízio; spins with the Coletivo Baile Torto; splits his mother's
+medical bills with his sister Patrícia and brother Diego. Built-in ambiguity: two Rafaels
+(Rafael Souza from the car pool, Rafael Mendes the sound guy), two Marcos (mechanic, DJ),
+nicknames (Rafa, Juninho, Nath, Guga, Dona Neide, Seu Jorge, Vó Lurdes), a misspelled-looking
+name (Jhonatan), two cardiology appointments for Mãe, two "Pharmacy list" notes, two "Send
+invoice to Kleber" tasks, two IPVA tasks, folders that share the word "car", cancelled gigs,
+completed tasks, trashed rows inside and past the 30-day restore window, an empty group, an
+empty folder, and a group in ARS for the Buenos Aires gig.
+"""
+from __future__ import annotations
+
+import json
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+
+
+def people():
+    return [
+        {"key": "larissa", "name": "Larissa Campos", "role": "girlfriend", "cadence": 1, "starred": True,
+         "met": "Vila Madalena", "last_contacted": "2026-10-24T18:00", "last_contacted_kind": "message"},
+        {"key": "mae", "name": "Célia Ferreira", "role": "mother", "nickname": "Mãe", "cadence": 3, "starred": True,
+         "last_contacted": "2026-10-22T19:00", "last_contacted_kind": "call"},
+        {"key": "patricia", "name": "Patrícia Ferreira", "role": "sister", "cadence": 7,
+         "last_contacted": "2026-10-20T20:30", "last_contacted_kind": "call"},
+        {"key": "diego", "name": "Diego Ferreira", "role": "brother, Campinas", "cadence": 14,
+         "last_contacted": "2026-10-04T12:00", "last_contacted_kind": "message"},
+        {"key": "lurdes", "name": "Lurdes Ferreira", "role": "grandmother", "nickname": "Vó Lurdes", "cadence": 14,
+         "last_contacted": "2026-09-27T15:00", "last_contacted_kind": "visit"},
+        {"key": "thiago", "name": "Thiago Ferreira", "role": "cousin", "met": "Guarulhos", "cadence": 30,
+         "last_contacted": "2026-10-22T22:00", "last_contacted_kind": "visit"},
+        {"key": "rafa_s", "name": "Rafael Souza", "role": "car pool driver", "nickname": "Rafa", "cadence": 7,
+         "met": "Uber hub Barra Funda", "last_contacted": "2026-10-19T06:10", "last_contacted_kind": "visit"},
+        {"key": "junior", "name": "Edson Lima Júnior", "role": "car pool driver", "nickname": "Juninho", "cadence": 7,
+         "met": "Uber hub Barra Funda", "last_contacted": "2026-10-23T21:00", "last_contacted_kind": "message"},
+        {"key": "rafa_m", "name": "Rafael Mendes", "role": "sound engineer, Baile Torto", "cadence": 14,
+         "met": "Casa Vermelha", "last_contacted": "2026-10-21T23:00", "last_contacted_kind": "visit"},
+        {"key": "nath", "name": "Nathalia Prado", "role": "DJ, Baile Torto", "nickname": "Nath", "cadence": 7,
+         "met": "Casa Vermelha", "last_contacted": "2026-10-21T23:00", "last_contacted_kind": "visit"},
+        {"key": "guga", "name": "Gustavo Reis", "role": "DJ, Baile Torto", "nickname": "Guga", "cadence": 7,
+         "met": "ECA USP", "last_contacted": "2026-10-23T16:00", "last_contacted_kind": "call"},
+        {"key": "marcos_o", "name": "Marcos Oliveira", "role": "DJ, Baile Torto", "cadence": 14,
+         "last_contacted": "2026-10-07T23:00", "last_contacted_kind": "visit"},
+        {"key": "ana_paula", "name": "Ana Paula Rocha", "role": "promoter, Baile Torto", "cadence": 14,
+         "met": "Casa Vermelha", "last_contacted": "2026-10-16T14:00", "last_contacted_kind": "call"},
+        {"key": "helena", "name": "Helena Vasconcelos", "role": "mom's cardiologist", "nickname": "Dra. Helena"},
+        {"key": "juliana", "name": "Juliana Costa", "role": "mom's physiotherapist"},
+        {"key": "marcos_t", "name": "Marcos Tavares", "role": "mechanic, Pinheiros", "cadence": 30,
+         "last_contacted": "2026-10-06T09:00", "last_contacted_kind": "visit"},
+        {"key": "jorge", "name": "Jorge Almeida", "role": "landlord", "nickname": "Seu Jorge", "cadence": 30,
+         "last_contacted": "2026-10-05T10:00", "last_contacted_kind": "message"},
+        {"key": "bianca", "name": "Bianca Lopes", "role": "Larissa's best friend", "met": "Vila Madalena"},
+        {"key": "regina", "name": "Regina Campos", "role": "Larissa's mother", "cadence": 30,
+         "last_contacted": "2026-09-13T14:00", "last_contacted_kind": "visit"},
+        {"key": "wesley", "name": "Wesley Santos", "role": "barber", "cadence": 14,
+         "last_contacted": "2026-10-23T11:00", "last_contacted_kind": "visit"},
+        {"key": "fernanda", "name": "Fernanda Dias", "role": "accountant, MEI", "cadence": 30,
+         "last_contacted": "2026-08-28T15:00", "last_contacted_kind": "call"},
+        {"key": "kleber", "name": "Kleber Moura", "role": "owner, Bar do Kleber", "cadence": 14,
+         "last_contacted": "2026-10-16T21:30", "last_contacted_kind": "visit"},
+        {"key": "priscila", "name": "Priscila Andrade", "role": "booker, Casa Vermelha", "cadence": 30,
+         "last_contacted": "2026-10-10T22:30", "last_contacted_kind": "visit"},
+        {"key": "neide", "name": "Neide Carvalho", "role": "neighbour", "nickname": "Dona Neide",
+         "last_contacted": "2026-10-18T10:00", "last_contacted_kind": "visit"},
+        {"key": "otavio", "name": "Otávio Ramos", "role": "regular passenger, airport runs",
+         "last_contacted": "2026-10-15T05:30", "last_contacted_kind": "message"},
+        {"key": "jhonatan", "name": "Jhonatan Silva", "role": "car wash, Rua Fradique"},
+        {"key": "felipe", "name": "Felipe Araújo", "role": "old DJ partner", "trashed": "2026-10-10T12:00"},
+        {"key": "renata", "name": "Renata Gomes", "role": "event planner, weddings", "trashed": "2026-10-18T09:00"},
+        {"key": "caio", "name": "Caio Martins", "role": "old roommate", "trashed": "2026-08-01T10:00"},
+    ]
+
+
+GROUPS = [
+    {"key": "carpool", "name": "Car pool rodízio", "members": ["rafa_s", "junior"], "created": "2026-03-01T08:00"},
+    {"key": "baile", "name": "Coletivo Baile Torto", "members": ["rafa_m", "nath", "guga", "marcos_o", "ana_paula"],
+     "created": "2026-02-10T20:00"},
+    {"key": "mae_g", "name": "Mãe's medical bills", "members": ["patricia", "diego"], "created": "2026-05-02T10:00"},
+    {"key": "ape", "name": "Apê Vila Madalena", "members": ["larissa"], "created": "2026-01-15T10:00"},
+    {"key": "bsas", "name": "Buenos Aires gig", "currency": "ARS", "members": ["guga", "larissa"],
+     "created": "2026-10-01T10:00"},
+    {"key": "futebol", "name": "Futebol de quinta", "members": ["thiago", "wesley"], "created": "2026-09-01T10:00"},
+]
+
+EXPENSES = [
+    {"group": "carpool", "name": "Fuel, week 42", "amount": 420, "paid_by": "me",
+     "split": ["me", "rafa_s", "junior"], "date": "2026-10-19"},
+    {"group": "carpool", "name": "Car insurance October", "amount": 390, "paid_by": "rafa_s",
+     "split": ["me", "rafa_s", "junior"], "date": "2026-10-05"},
+    {"group": "carpool", "name": "New tyres", "amount": 1200, "paid_by": "junior",
+     "split": ["me", "rafa_s", "junior"], "date": "2026-10-06"},
+    {"group": "carpool", "name": "Car wash", "amount": 60, "paid_by": "me",
+     "split": ["me", "rafa_s", "junior"], "date": "2026-10-17"},
+    {"group": "baile", "name": "Speaker rental", "amount": 800, "paid_by": "rafa_m",
+     "split": ["me", "rafa_m", "nath", "guga", "marcos_o"], "date": "2026-10-20"},
+    {"group": "baile", "name": "Flyers print", "amount": 150, "paid_by": "me",
+     "split": ["me", "nath", "guga"], "date": "2026-10-12"},
+    {"group": "baile", "name": "Smoke machine fluid", "amount": 90, "paid_by": "nath",
+     "split": ["me", "nath", "guga"], "date": "2026-10-21"},
+    {"group": "mae_g", "name": "Cardiology consult", "amount": 450, "paid_by": "me",
+     "split": ["me", "patricia", "diego"], "date": "2026-09-15"},
+    {"group": "mae_g", "name": "Echocardiogram", "amount": 600, "paid_by": "patricia",
+     "split": ["me", "patricia", "diego"], "date": "2026-09-22"},
+    {"group": "mae_g", "name": "Pharmacy October", "amount": 330, "paid_by": "diego",
+     "split": ["me", "patricia", "diego"], "date": "2026-10-09"},
+    {"group": "ape", "name": "Rent October", "amount": 2400, "paid_by": "me",
+     "split": ["me", "larissa"], "date": "2026-10-05"},
+    {"group": "ape", "name": "Internet", "amount": 120, "paid_by": "larissa",
+     "split": ["me", "larissa"], "date": "2026-10-10"},
+    {"group": "ape", "name": "Groceries Pão de Açúcar", "amount": 380, "paid_by": "larissa",
+     "split": ["me", "larissa"], "date": "2026-10-18"},
+    {"group": "bsas", "name": "Hostel deposit", "amount": 90000, "paid_by": "guga",
+     "split": ["me", "guga", "larissa"], "date": "2026-10-08"},
+]
+
+LISTS = [
+    {"key": "carro_l", "name": "Carro", "area": "work"},
+    {"key": "dj_l", "name": "DJ", "area": "music"},
+    {"key": "casa_l", "name": "Casa", "area": "home"},
+    {"key": "mae_l", "name": "Mãe", "area": "family"},
+    {"key": "admin_l", "name": "Papelada", "area": "admin"},
+    {"key": "compras_l", "name": "Compras"},
+]
+
+
+def events():
+    out = []
+    # car pool handover, Monday 06:00
+    d = date(2026, 9, 7)
+    while d <= date(2026, 11, 30):
+        ev = {"key": f"hand_{d.strftime('%m%d')}", "name": "Car pool handover", "start": f"{d}T06:00",
+              "end": f"{d}T06:30", "attendees": ["rafa_s", "junior"], "description": "Posto Shell Barra Funda"}
+        if d == date(2026, 10, 12):
+            ev["cancelled"] = "2026-10-09T10:00"
+        out.append(ev)
+        d += timedelta(weeks=1)
+    # collective rehearsal, Wednesday nights
+    d = date(2026, 9, 16)
+    while d <= date(2026, 11, 25):
+        out.append({"key": f"reh_{d.strftime('%m%d')}", "name": "Collective rehearsal", "start": f"{d}T20:00",
+                    "end": f"{d}T23:00", "attendees": ["nath", "guga"], "description": "Estúdio Porão, Rua Augusta"})
+        d += timedelta(weeks=1)
+    # mom's physio, Thursday mornings
+    for x in ["2026-10-08", "2026-10-15", "2026-10-22", "2026-10-29", "2026-11-05"]:
+        d = date.fromisoformat(x)
+        out.append({"key": f"physio_{d.strftime('%m%d')}", "name": "Mom's physiotherapy", "start": f"{d}T09:00",
+                    "end": f"{d}T10:00", "attendees": ["mae", "juliana"]})
+    # thursday football
+    for x in ["2026-10-15", "2026-10-22", "2026-10-29", "2026-11-05"]:
+        d = date.fromisoformat(x)
+        out.append({"key": f"fut_{d.strftime('%m%d')}", "name": "Thursday football", "start": f"{d}T20:00",
+                    "end": f"{d}T22:00", "attendees": ["thiago", "wesley"]})
+    # gigs at Bar do Kleber, Fridays
+    for x in ["2026-10-02", "2026-10-16", "2026-10-30", "2026-11-13"]:
+        d = date.fromisoformat(x)
+        out.append({"key": f"kleber_{d.strftime('%m%d')}", "name": "DJ set at Bar do Kleber",
+                    "start": f"{d}T22:00", "end": f"{d + timedelta(days=1)}T02:00", "attendees": ["kleber"]})
+    out += [
+        {"key": "cv_1010", "name": "DJ set at Casa Vermelha", "start": "2026-10-10T23:00", "end": "2026-10-11T03:00",
+         "attendees": ["priscila", "guga"]},
+        {"key": "cv_1107", "name": "DJ set at Casa Vermelha", "start": "2026-11-07T23:00", "end": "2026-11-08T03:00",
+         "attendees": ["priscila", "guga"]},
+        {"key": "baile_11", "name": "Baile Torto #11", "start": "2026-09-19T23:00", "end": "2026-09-20T04:00",
+         "attendees": ["nath", "guga", "marcos_o", "rafa_m", "ana_paula"]},
+        {"key": "baile_12", "name": "Baile Torto #12", "start": "2026-10-24T23:00", "end": "2026-10-25T04:00",
+         "attendees": ["nath", "guga", "marcos_o", "rafa_m", "ana_paula"], "description": "Galpão Barra Funda"},
+        {"key": "baile_13", "name": "Baile Torto #13", "start": "2026-11-21T23:00", "end": "2026-11-22T04:00",
+         "attendees": ["nath", "guga", "rafa_m"]},
+        {"key": "aurora", "name": "Gig at Estúdio Aurora", "start": "2026-10-17T22:00", "end": "2026-10-18T02:00",
+         "attendees": ["ana_paula"], "cancelled": "2026-10-13T12:00"},
+        # mom
+        {"key": "cardio_sep", "name": "Mom's cardiology appointment", "start": "2026-09-15T10:00",
+         "end": "2026-09-15T11:00", "attendees": ["mae", "helena"]},
+        {"key": "cardio_nov", "name": "Mom's cardiology appointment", "start": "2026-11-03T10:00",
+         "end": "2026-11-03T11:00", "attendees": ["mae", "helena"], "description": "bring the echo results"},
+        {"key": "pickup_mae", "name": "Pick up Mom from the clinic", "start": "2026-11-03T11:30",
+         "end": "2026-11-03T12:30", "attendees": ["mae"]},
+        {"key": "blood_work", "name": "Mom's blood work", "start": "2026-10-27T07:30", "end": "2026-10-27T08:30",
+         "attendees": ["mae"], "description": "fasting, Lab Fleury Pinheiros"},
+        {"key": "lunch_mae", "name": "Sunday lunch at Mom's", "start": "2026-11-01T12:00", "end": "2026-11-01T15:00",
+         "attendees": ["mae", "patricia", "diego"]},
+        {"key": "vo_80", "name": "Vó Lurdes' 80th birthday", "start": "2026-11-22T12:00", "end": "2026-11-22T17:00",
+         "attendees": ["lurdes", "mae", "patricia", "diego", "thiago"]},
+        # larissa
+        {"key": "regina_lunch", "name": "Lunch with Larissa's parents", "start": "2026-10-25T13:00",
+         "end": "2026-10-25T16:00", "attendees": ["larissa", "regina"]},
+        {"key": "lari_bday", "name": "Larissa's birthday dinner", "start": "2026-11-14T20:00", "end": "2026-11-14T23:00",
+         "attendees": ["larissa", "bianca"]},
+        {"key": "movie", "name": "Movie night with Larissa", "start": "2026-10-20T21:00", "end": "2026-10-20T23:00",
+         "attendees": ["larissa"]},
+        # car
+        {"key": "oil", "name": "Oil change at Marcos", "start": "2026-10-28T09:00", "end": "2026-10-28T10:00",
+         "attendees": ["marcos_t"]},
+        {"key": "tyres", "name": "Tyre fitting", "start": "2026-10-06T09:00", "end": "2026-10-06T10:30",
+         "attendees": ["marcos_t", "junior"]},
+        {"key": "vistoria", "name": "Car inspection", "start": "2026-11-10T08:00", "end": "2026-11-10T09:00"},
+        {"key": "carwash", "name": "Car wash at Jhonatan's", "start": "2026-10-17T15:00", "end": "2026-10-17T16:00",
+         "attendees": ["jhonatan"]},
+        # admin, misc
+        {"key": "accountant", "name": "Meeting with the accountant", "start": "2026-10-29T14:00",
+         "end": "2026-10-29T15:00", "attendees": ["fernanda"], "description": "MEI annual declaration"},
+        {"key": "haircut_1023", "name": "Haircut with Wesley", "start": "2026-10-23T11:00", "end": "2026-10-23T11:45",
+         "attendees": ["wesley"]},
+        {"key": "haircut_1106", "name": "Haircut with Wesley", "start": "2026-11-06T11:00", "end": "2026-11-06T11:45",
+         "attendees": ["wesley"]},
+        {"key": "landlord", "name": "Landlord visit", "start": "2026-10-31T10:00", "end": "2026-10-31T11:00",
+         "attendees": ["jorge"], "description": "check the bathroom leak"},
+        {"key": "otavio_coffee", "name": "Coffee with Otávio", "start": "2026-10-21T10:00", "end": "2026-10-21T11:00",
+         "attendees": ["otavio"], "cancelled": "2026-10-20T18:00"},
+        {"key": "airport_otavio", "name": "Airport run for Otávio", "start": "2026-10-27T04:30",
+         "end": "2026-10-27T06:00", "attendees": ["otavio"]},
+        {"key": "flight_bsas", "name": "Flight to Buenos Aires", "start": "2026-12-04T10:00", "end": "2026-12-04T13:00",
+         "attendees": ["larissa", "guga"]},
+        {"key": "gig_bsas", "name": "Buenos Aires gig", "start": "2026-12-05T23:00", "end": "2026-12-06T04:00",
+         "attendees": ["guga"], "description": "Club Niceto, Palermo"},
+        {"key": "felipe_studio", "name": "Studio session with Felipe", "start": "2026-10-14T14:00",
+         "end": "2026-10-14T17:00", "attendees": ["felipe"], "trashed": "2026-10-10T12:05"},
+        {"key": "jupiter", "name": "Gig at Clube Jupiter", "start": "2026-08-15T23:00", "end": "2026-08-16T03:00",
+         "trashed": "2026-08-20T10:00"},
+    ]
+    return out
+
+
+def tasks():
+    t = [
+        # car
+        {"key": "ipva_26", "name": "Pay IPVA", "due": "2026-11-16", "priority": 1, "list": "carro_l",
+         "description": "third instalment"},
+        {"key": "ipva_25", "name": "Pay IPVA", "due": "2025-11-16", "completed": "2025-11-14T10:00", "list": "carro_l"},
+        {"key": "cnh", "name": "Renew CNH", "due": "2026-12-15", "priority": 2, "list": "carro_l", "effort": 120,
+         "description": "needs medical exam first"},
+        {"key": "cnh_exam", "name": "Book CNH medical exam", "parent": "cnh", "due": "2026-11-20", "effort": 20},
+        {"key": "cnh_photo", "name": "Take CNH photo", "parent": "cnh", "due": "2026-11-27", "effort": 30},
+        {"key": "dashcam", "name": "Install dashcam", "due": "2026-10-30", "effort": 90, "list": "carro_l"},
+        {"key": "rating", "name": "Check Uber rating dispute", "due": "2026-10-22", "effort": 15, "list": "carro_l"},
+        {"key": "phone_mount", "name": "Buy phone mount", "due": "2026-10-26", "effort": 10, "list": "carro_l",
+         "status": "cancelled"},
+        {"key": "seat_covers", "name": "Clean the seat covers", "due": "2026-10-17", "completed": "2026-10-17T16:30",
+         "list": "carro_l", "effort": 60},
+        {"key": "fuel_log", "name": "Update fuel spreadsheet", "status": "in_progress", "list": "carro_l",
+         "effort": 30},
+        {"key": "tyre_pay", "name": "Pay Juninho for the tyres", "due": "2026-10-25", "effort": 5,
+         "description": "pix"},
+        # dj
+        {"key": "setlist12", "name": "Finish setlist for Baile #12", "due": "2026-10-24", "priority": 1, "effort": 120,
+         "list": "dj_l"},
+        {"key": "usb", "name": "Back up USB sticks", "due": "2026-10-24", "effort": 45, "list": "dj_l",
+         "description": "bring the spare 64GB"},
+        {"key": "mix", "name": "Record promo mix", "due": "2026-11-06", "effort": 180, "priority": 2, "list": "dj_l",
+         "status": "in_progress"},
+        {"key": "mix_cover", "name": "Design mix cover", "parent": "mix", "due": "2026-11-04", "effort": 60},
+        {"key": "mix_upload", "name": "Upload mix to SoundCloud", "parent": "mix", "due": "2026-11-06", "effort": 15},
+        {"key": "inv_kleber_oct", "name": "Send invoice to Kleber", "due": "2026-10-19", "list": "dj_l", "effort": 15,
+         "completed": "2026-10-18T11:00", "description": "gig 16 Oct"},
+        {"key": "inv_kleber_nov", "name": "Send invoice to Kleber", "due": "2026-11-02", "list": "dj_l", "effort": 15,
+         "description": "gig 30 Oct"},
+        {"key": "headphones", "name": "Fix headphone cable", "due": "2026-10-27", "effort": 30, "list": "dj_l"},
+        {"key": "controller", "name": "Sell old controller", "list": "dj_l", "status": "in_progress"},
+        {"key": "bsas_setlist", "name": "Prepare Buenos Aires set", "due": "2026-11-30", "effort": 240, "list": "dj_l"},
+        {"key": "flyer_art", "name": "Send flyer art to Ana Paula", "due": "2026-11-09", "effort": 30, "list": "dj_l"},
+        {"key": "vinyl", "name": "Pick up vinyl order", "due": "2026-10-21", "list": "dj_l",
+         "completed": "2026-10-21T16:00"},
+        # mae
+        {"key": "mae_meds", "name": "Buy Mom's heart meds", "due": "2026-10-26", "priority": 1, "list": "mae_l",
+         "effort": 30, "description": "losartana and AAS"},
+        {"key": "mae_exam", "name": "Get Mom's echo results", "due": "2026-10-30", "list": "mae_l", "effort": 20},
+        {"key": "mae_plan", "name": "Call the health plan about reimbursement", "due": "2026-10-28", "priority": 2,
+         "list": "mae_l", "effort": 45},
+        {"key": "mae_split", "name": "Split October bills with Patrícia and Diego", "due": "2026-10-31",
+         "list": "mae_l", "effort": 20},
+        {"key": "mae_rail", "name": "Install grab rail in Mom's bathroom", "due": "2026-11-08", "effort": 120,
+         "list": "mae_l"},
+        {"key": "mae_bag", "name": "Pack Mom's hospital bag", "status": "cancelled", "list": "mae_l"},
+        # casa
+        {"key": "rent_nov", "name": "Pay rent", "due": "2026-11-05", "list": "casa_l", "priority": 1},
+        {"key": "leak", "name": "Fix bathroom leak", "due": "2026-10-31", "list": "casa_l", "effort": 90,
+         "description": "Seu Jorge pays the parts"},
+        {"key": "gas", "name": "Order gas cylinder", "due": "2026-10-23", "list": "casa_l", "effort": 5},
+        {"key": "plants", "name": "Water Larissa's plants", "status": "in_progress", "list": "casa_l", "effort": 10},
+        {"key": "shelf", "name": "Put up the record shelf", "due": "2026-11-15", "effort": 120, "list": "casa_l"},
+        # admin
+        {"key": "das", "name": "Pay DAS MEI", "due": "2026-11-20", "list": "admin_l", "priority": 2, "effort": 10},
+        {"key": "mei_decl", "name": "Send MEI declaration papers", "due": "2026-10-29", "list": "admin_l",
+         "effort": 60},
+        {"key": "nf", "name": "Issue invoice for Casa Vermelha", "due": "2026-10-13", "list": "admin_l",
+         "completed": "2026-10-12T10:00", "effort": 15},
+        {"key": "passport", "name": "Renew passport", "due": "2026-11-12", "list": "admin_l", "effort": 90},
+        # compras
+        {"key": "cables", "name": "Buy RCA cables", "list": "compras_l", "effort": 20},
+        {"key": "gift_lari", "name": "Buy Larissa's birthday gift", "due": "2026-11-10", "priority": 1,
+         "list": "compras_l"},
+        {"key": "cake_vo", "name": "Order cake for Vó Lurdes", "due": "2026-11-18", "list": "compras_l", "effort": 15},
+        {"key": "coffee", "name": "Buy coffee beans", "list": "compras_l", "completed": "2026-10-20T09:00"},
+        # misc
+        {"key": "football_fee", "name": "Pay football pitch share", "due": "2026-10-29", "effort": 5},
+        {"key": "diego_call", "name": "Call Diego about Mom's appointment", "due": "2026-10-26", "effort": 15},
+        {"key": "otavio_receipt", "name": "Send Otávio his receipts", "due": "2026-10-24", "effort": 10},
+        {"key": "gym", "name": "Sign up for the gym", "trashed": "2026-10-12T09:00"},
+        {"key": "bike", "name": "Sell the bike", "trashed": "2026-07-30T09:00"},
+        {"key": "lari_trip", "name": "Plan beach weekend with Larissa", "due": "2026-10-10",
+         "trashed": "2026-10-20T09:00", "list": "compras_l"},
+    ]
+    # rent history
+    for m in range(6, 11):
+        t.append({"key": f"rent_{m:02d}", "name": "Pay rent", "due": f"2026-{m:02d}-05",
+                  "completed": f"2026-{m:02d}-04T20:00", "list": "casa_l"})
+    # health plan, monthly
+    for m in range(7, 11):
+        t.append({"key": f"plan_{m:02d}", "name": "Pay Mom's health plan", "due": f"2026-{m:02d}-15",
+                  "completed": f"2026-{m:02d}-14T10:00", "list": "mae_l"})
+    t.append({"key": "plan_11", "name": "Pay Mom's health plan", "due": "2026-11-15", "list": "mae_l"})
+    return t
+
+
+NOTEBOOKS = [
+    {"key": "sets_nb", "name": "Setlists"},
+    {"key": "mae_nb", "name": "Mom's health"},
+    {"key": "car_nb", "name": "Car pool"},
+    {"key": "ideas_nb", "name": "Track ideas"},
+    {"key": "uber_nb", "name": "Driving notes"},
+    {"key": "old_nb", "name": "Old stuff"},
+]
+
+NOTES = [
+    {"key": "set12", "name": "Setlist Baile #12", "body": "open with baile funk edits, 128 into amapiano, close with Tim Maia",
+     "notebook": "sets_nb", "created": "2026-10-20T01:00", "pinned": True},
+    {"key": "set11", "name": "Setlist Baile #11", "body": "too much techno in the middle, crowd left at 3",
+     "notebook": "sets_nb", "created": "2026-09-18T02:00"},
+    {"key": "set_kleber", "name": "Bar do Kleber warm-up", "body": "MPB and samba rock, nothing above 110 bpm",
+     "notebook": "sets_nb", "created": "2026-10-01T18:00"},
+    {"key": "set_cv", "name": "Casa Vermelha closing", "body": "Nath takes over at 2, leave the last hour to her",
+     "notebook": "sets_nb", "created": "2026-10-09T17:00"},
+    {"key": "mae_meds_n", "name": "Mom's medication", "body": "losartana 50mg morning, AAS 100mg lunch, sinvastatina night",
+     "notebook": "mae_nb", "created": "2026-09-16T09:00", "pinned": True},
+    {"key": "mae_bp", "name": "Mom's blood pressure", "body": "14 por 9 on the 15th, 13 por 8 on the 22nd",
+     "notebook": "mae_nb", "created": "2026-10-22T11:00"},
+    {"key": "pharm_1", "name": "Pharmacy list", "body": "losartana, AAS, gauze, test strips",
+     "notebook": "mae_nb", "created": "2026-10-09T10:00"},
+    {"key": "pharm_2", "name": "Pharmacy list", "body": "sunscreen, dipirona, band-aids", "created": "2026-10-19T19:00"},
+    {"key": "helena_qs", "name": "Questions for Dra. Helena", "body": "can she walk up stairs, swap the statin?",
+     "notebook": "mae_nb", "created": "2026-10-23T22:00"},
+    {"key": "rodizio", "name": "Rodízio rules", "body": "tank full at handover, Juninho nights, Rafa Sundays",
+     "notebook": "car_nb", "created": "2026-03-02T10:00", "pinned": True},
+    {"key": "car_km", "name": "Odometer log", "body": "handover 19 Oct: 84,210 km", "notebook": "car_nb",
+     "created": "2026-10-19T06:20"},
+    {"key": "ins_claim", "name": "Insurance claim notes", "body": "scratch on rear bumper, claim 55821, Rafa was driving",
+     "notebook": "car_nb", "created": "2026-09-30T14:00"},
+    {"key": "idea_sample", "name": "Sample idea", "body": "chop the Clara Nunes vocal over a 3-step beat",
+     "notebook": "ideas_nb", "created": "2026-10-11T03:00"},
+    {"key": "idea_edit", "name": "Edit idea", "body": "slow Jorge Ben edit to 118 for warm-ups",
+     "notebook": "ideas_nb", "created": "2026-10-18T02:30"},
+    {"key": "idea_collab", "name": "Collab with Guga", "body": "b2b set for Buenos Aires, trade tracks by the 20th",
+     "notebook": "ideas_nb", "created": "2026-10-07T23:30"},
+    {"key": "hotspots", "name": "Surge hotspots", "body": "Faria Lima 18h, Allianz Parque after games, GRU 5am",
+     "notebook": "uber_nb", "created": "2026-09-10T12:00", "pinned": True},
+    {"key": "airport_tips", "name": "Airport queue", "body": "wait at the Posto BR, not in the app queue",
+     "notebook": "uber_nb", "created": "2026-10-15T06:30"},
+    {"key": "old_contacts", "name": "Old numbers", "body": "Felipe, Caio, the old landlord", "notebook": "old_nb",
+     "created": "2025-12-01T10:00"},
+    {"key": "gift_ideas", "name": "Gift ideas for Larissa", "body": "vinyl of Gal Costa, ceramic class, the green bag",
+     "created": "2026-10-12T22:00"},
+    {"key": "vo_party", "name": "Vó's party", "body": "salão of the church, 40 people, Patrícia does the food",
+     "created": "2026-10-16T20:00"},
+    {"key": "wifi_note", "name": "Router", "body": "Vivo fibre, reboot box under the TV", "created": "2026-01-20T10:00"},
+    {"key": "lease_note", "name": "Lease renewal", "body": "Seu Jorge wants 8 percent more from February",
+     "created": "2026-10-05T11:00"},
+    {"key": "felipe_note", "name": "Split with Felipe", "body": "he keeps the controller money", "created": "2026-06-01T10:00",
+     "trashed": "2026-10-10T12:10"},
+    {"key": "old_rules", "name": "Old rodízio rules", "body": "three-way split by kilometre", "created": "2026-03-01T10:00",
+     "trashed": "2026-08-01T10:00"},
+]
+
+FOLDERS = [
+    {"key": "car_docs_f", "name": "Car documents"},
+    {"key": "car_pool_f", "name": "Car pool receipts"},
+    {"key": "mae_f", "name": "Mom medical"},
+    {"key": "mei_f", "name": "MEI taxes"},
+    {"key": "contracts_f", "name": "Gig contracts"},
+    {"key": "ape_f", "name": "Apartment"},
+    {"key": "empty_f", "name": "Scans to sort"},
+]
+
+DOCUMENTS = [
+    {"key": "crlv", "name": "CRLV 2026", "folder": "car_docs_f", "starred": True, "created": "2026-02-10T10:00"},
+    {"key": "cnh_doc", "name": "CNH scan", "folder": "car_docs_f", "created": "2025-12-15T10:00"},
+    {"key": "ins_policy", "name": "Car insurance policy", "folder": "car_docs_f", "created": "2026-09-05T10:00"},
+    {"key": "fuel_rcpt", "name": "Fuel receipts week 42", "folder": "car_pool_f", "created": "2026-10-19T20:00"},
+    {"key": "tyre_rcpt", "name": "Tyre invoice", "folder": "car_pool_f", "created": "2026-10-06T11:00"},
+    {"key": "echo_doc", "name": "Echocardiogram report", "folder": "mae_f", "starred": True, "created": "2026-09-22T16:00"},
+    {"key": "blood_doc", "name": "Blood test results August", "folder": "mae_f", "created": "2026-08-20T10:00"},
+    {"key": "plan_card", "name": "Health plan card scan", "folder": "mae_f", "created": "2026-05-02T10:00"},
+    {"key": "rx", "name": "Prescription Dra. Helena", "folder": "mae_f", "created": "2026-09-15T11:30"},
+    {"key": "das_sep", "name": "DAS September receipt", "folder": "mei_f", "created": "2026-09-20T10:00"},
+    {"key": "das_aug", "name": "DAS August receipt", "folder": "mei_f", "created": "2026-08-20T10:00"},
+    {"key": "mei_cert", "name": "MEI certificate", "folder": "mei_f", "starred": True, "created": "2025-03-01T10:00"},
+    {"key": "contract_cv", "name": "Casa Vermelha contract", "folder": "contracts_f", "created": "2026-09-28T15:00"},
+    {"key": "contract_bsas", "name": "Niceto Club booking", "folder": "contracts_f", "created": "2026-10-08T12:00"},
+    {"key": "contract_kleber", "name": "Bar do Kleber agreement", "folder": "contracts_f", "created": "2026-07-01T12:00"},
+    {"key": "lease", "name": "Lease agreement", "folder": "ape_f", "starred": True, "created": "2026-01-15T10:00"},
+    {"key": "rider", "name": "Technical rider", "created": "2026-10-14T18:00"},
+    {"key": "old_contract", "name": "Clube Jupiter contract", "folder": "contracts_f", "created": "2026-07-20T10:00",
+     "trashed": "2026-10-15T10:00"},
+    {"key": "old_lease", "name": "Old lease Pinheiros", "folder": "ape_f", "created": "2024-01-10T10:00",
+     "trashed": "2026-08-10T10:00"},
+]
+
+ALBUMS = [
+    {"key": "baile_album", "name": "Baile Torto parties"},
+    {"key": "lari_album", "name": "Larissa"},
+    {"key": "mae_album", "name": "Mãe"},
+    {"key": "car_album", "name": "Car"},
+    {"key": "gigs_album", "name": "Gigs 2026"},
+    {"key": "flyers_album", "name": "Flyers"},
+    {"key": "empty_album", "name": "Buenos Aires"},
+]
+
+PHOTOS = [
+    {"key": "b11_crowd", "name": "Crowd at Baile #11", "taken": "2026-09-20T01:30", "albums": ["baile_album", "gigs_album"],
+     "starred": True},
+    {"key": "b11_booth", "name": "Nath and Guga in the booth", "taken": "2026-09-20T02:10", "albums": ["baile_album"],
+     "people": ["nath", "guga"]},
+    {"key": "b11_sound", "name": "Rafael fixing the sub", "taken": "2026-09-19T22:40", "albums": ["baile_album"],
+     "people": ["rafa_m"]},
+    {"key": "b11_team", "name": "Collective group photo", "taken": "2026-09-20T04:10", "albums": ["baile_album"],
+     "people": ["nath", "guga", "marcos_o", "rafa_m", "ana_paula"]},
+    {"key": "p_kleber_1002", "name": "Bar do Kleber decks", "taken": "2026-10-02T23:15", "albums": ["gigs_album"],
+     "people": ["kleber"]},
+    {"key": "p_kleber_1016", "name": "Kleber's crowd", "taken": "2026-10-16T23:50", "albums": ["gigs_album"]},
+    {"key": "cv_selfie", "name": "Selfie at Casa Vermelha", "taken": "2026-10-11T00:30", "albums": ["gigs_album"],
+     "people": ["guga", "priscila"]},
+    {"key": "cv_lights", "name": "Casa Vermelha lights", "taken": "2026-10-11T01:45"},
+    {"key": "lari_beach", "name": "Larissa at Ubatuba", "taken": "2026-09-06T16:00", "albums": ["lari_album"],
+     "people": ["larissa"], "starred": True},
+    {"key": "lari_cafe", "name": "Larissa at the café", "taken": "2026-10-04T10:30", "albums": ["lari_album"],
+     "people": ["larissa"]},
+    {"key": "lari_plants", "name": "Our plants", "taken": "2026-10-13T09:00", "albums": ["lari_album"]},
+    {"key": "movie_night", "name": "Popcorn and movie", "taken": "2026-10-20T21:10", "people": ["larissa"]},
+    {"key": "lari_regina", "name": "Larissa and Regina", "taken": "2026-09-13T15:00", "albums": ["lari_album"],
+     "people": ["larissa", "regina"]},
+    {"key": "mae_garden", "name": "Mãe in her garden", "taken": "2026-09-27T11:00", "albums": ["mae_album"],
+     "people": ["mae"], "starred": True},
+    {"key": "mae_vo", "name": "Mãe and Vó Lurdes", "taken": "2026-09-27T13:00", "albums": ["mae_album"],
+     "people": ["mae", "lurdes"]},
+    {"key": "mae_clinic", "name": "Waiting room", "taken": "2026-09-15T09:40", "albums": ["mae_album"],
+     "people": ["mae"]},
+    {"key": "family_lunch", "name": "Family lunch August", "taken": "2026-08-30T14:00", "albums": ["mae_album"],
+     "people": ["mae", "patricia", "diego", "thiago"]},
+    {"key": "car_tyres", "name": "New tyres", "taken": "2026-10-06T10:20", "albums": ["car_album"]},
+    {"key": "car_scratch", "name": "Bumper scratch", "taken": "2026-09-30T13:00", "albums": ["car_album"]},
+    {"key": "car_odo", "name": "Odometer at handover", "taken": "2026-10-19T06:15", "albums": ["car_album"]},
+    {"key": "car_rafa", "name": "Rafa with the car", "taken": "2026-10-12T07:00", "people": ["rafa_s"]},
+    {"key": "flyer_12", "name": "Flyer Baile #12", "taken": "2026-10-12T15:00", "albums": ["flyers_album"],
+     "starred": True},
+    {"key": "flyer_11", "name": "Flyer Baile #11", "taken": "2026-09-05T15:00", "albums": ["flyers_album"]},
+    {"key": "flyer_bsas", "name": "Flyer Buenos Aires", "taken": "2026-10-09T12:00"},
+    {"key": "sunset_marg", "name": "Sunset on the Marginal", "taken": "2026-10-14T17:45", "starred": True},
+    {"key": "paulista", "name": "Paulista at night", "taken": "2026-10-03T02:30"},
+    {"key": "rain_car", "name": "Rain on the windshield", "taken": "2026-10-22T18:30"},
+    {"key": "vinyl_haul", "name": "Vinyl haul", "taken": "2026-10-21T16:10"},
+    {"key": "football", "name": "Thursday football team", "taken": "2026-10-22T22:00", "people": ["thiago", "wesley"]},
+    {"key": "haircut_p", "name": "Fresh cut", "taken": "2026-10-23T11:50", "people": ["wesley"]},
+    {"key": "felipe_p", "name": "Felipe and me at the old studio", "taken": "2025-11-02T20:00",
+     "trashed": "2026-10-10T12:15"},
+    {"key": "blurry_booth", "name": "Blurry booth shot", "taken": "2026-10-17T00:10", "albums": ["gigs_album"],
+     "trashed": "2026-10-19T09:00"},
+    {"key": "old_car", "name": "The old Gol", "taken": "2024-05-10T10:00", "trashed": "2026-07-15T10:00"},
+]
+
+DEBTS = [
+    {"key": "d_junior", "person": "junior", "direction": "i_owe", "amount": 400, "name": "Tyres share",
+     "date": "2026-10-06"},
+    {"key": "d_rafa_s", "person": "rafa_s", "direction": "owes_me", "amount": 85, "name": "Toll tags",
+     "date": "2026-10-16"},
+    {"key": "d_guga", "person": "guga", "direction": "owes_me", "amount": 150, "name": "Pioneer headphones",
+     "date": "2026-10-23"},
+    {"key": "d_nath", "person": "nath", "direction": "i_owe", "amount": 60, "name": "Uber to the gig",
+     "date": "2026-10-17"},
+    {"key": "d_diego", "person": "diego", "direction": "owes_me", "amount": 220, "name": "Mom's pharmacy",
+     "date": "2026-09-30"},
+    {"key": "d_patricia", "person": "patricia", "direction": "i_owe", "amount": 180, "name": "Echo share",
+     "date": "2026-09-22"},
+    {"key": "d_thiago", "person": "thiago", "direction": "owes_me", "amount": 50, "name": "Football shirt",
+     "date": "2026-10-02"},
+    {"key": "d_kleber", "person": "kleber", "direction": "owes_me", "amount": 600, "name": "Gig fee 16 Oct",
+     "date": "2026-10-16"},
+    {"key": "d_kleber_old", "person": "kleber", "direction": "owes_me", "amount": 500, "name": "Gig fee 2 Oct",
+     "date": "2026-10-02", "settled": "2026-10-09T12:00"},
+    {"key": "d_larissa", "person": "larissa", "direction": "i_owe", "amount": 95, "name": "Concert tickets",
+     "date": "2026-09-12", "settled": "2026-09-20T10:00"},
+    {"key": "d_bianca", "person": "bianca", "direction": "owes_me", "amount": 40, "name": "Pizza night",
+     "date": "2026-10-09"},
+    {"key": "d_wesley", "person": "wesley", "direction": "i_owe", "amount": 35, "name": "Haircut",
+     "date": "2026-10-23"},
+    {"key": "d_marcos_t", "person": "marcos_t", "direction": "i_owe", "amount": 250, "name": "Brake pads",
+     "date": "2026-08-25"},
+]
+
+LOCKER = [
+    {"key": "uber_login", "name": "Uber Driver account", "type": "login", "username": "tomas.ferreira.sp",
+     "url": "https://drivers.uber.com", "password": "Barra-Funda-84", "starred": True},
+    {"key": "soundcloud", "name": "SoundCloud", "type": "login", "username": "djtomasf", "url": "https://soundcloud.com",
+     "password": "baile-torto-12"},
+    {"key": "gmail", "name": "Gmail", "type": "login", "username": "tomas.ferreira.sp@gmail.com",
+     "url": "https://mail.google.com", "password": "Madalena#2026"},
+    {"key": "gov", "name": "gov.br", "type": "login", "username": "321.654.987-00", "url": "https://gov.br",
+     "password": "Sampa-Ipva-3"},
+    {"key": "rekordbox", "name": "Rekordbox licence", "type": "software_licence", "code": "RB-7Q2X-TOMAS",
+     "notes": "creative plan, renews March"},
+    {"key": "nubank", "name": "Nubank card", "type": "card", "card_number": "5162 3040 7788 1290", "cvv": "317",
+     "starred": True},
+    {"key": "gate", "name": "Building gate code", "type": "note", "notes": "4729#, garage remote in the drawer"},
+    {"key": "rg", "name": "RG", "type": "identity", "password": "38.555.901-2"},
+    {"key": "wifi", "name": "Casa wifi", "type": "wifi", "password": "plantas-da-lari"},
+    {"key": "laptop", "name": "MacBook password", "type": "password", "password": "vinil-azul-9"},
+    {"key": "ssh", "name": "Mix server key", "type": "ssh_key", "notes": "Hetzner box for the mixes",
+     "password": "ssh-ed25519 AAAAC3-baile"},
+    {"key": "spotify_api", "name": "Spotify API", "type": "api_credential", "notes": "playlist bot", "code": "spfy-8812"},
+    {"key": "passport_l", "name": "Passport", "type": "passport", "notes": "expires December 2026"},
+    {"key": "itau", "name": "Itaú account", "type": "bank_account", "notes": "agência 0412, conta 55120-3"},
+    {"key": "cnh_l", "name": "CNH", "type": "driving_licence", "notes": "category B, EAR"},
+    {"key": "btc", "name": "Crypto wallet", "type": "crypto_wallet", "notes": "gig tips in USDT, seed in the safe"},
+    {"key": "smart_fit", "name": "Smart Fit", "type": "membership", "notes": "black plan"},
+    {"key": "rider_l", "name": "Rider PDF", "type": "document", "notes": "current technical rider"},
+    {"key": "old_ifood", "name": "iFood courier login", "type": "login", "username": "tomasf_moto",
+     "password": "moto-2022", "trashed": "2026-08-15T10:00"},
+    {"key": "old_wifi", "name": "Pinheiros wifi", "type": "wifi", "password": "apto-23", "trashed": "2026-10-05T10:00"},
+]
+
+LINKS = [
+    {"from": "tyre_pay", "to": "junior"},
+    {"from": "inv_kleber_oct", "to": "kleber"},
+    {"from": "inv_kleber_nov", "to": "kleber"},
+    {"from": "flyer_art", "to": "ana_paula"},
+    {"from": "mae_meds", "to": "mae"},
+    {"from": "mae_exam", "to": "mae"},
+    {"from": "mae_exam", "to": "helena"},
+    {"from": "mae_split", "to": "patricia"},
+    {"from": "mae_split", "to": "diego"},
+    {"from": "mae_rail", "to": "mae"},
+    {"from": "leak", "to": "jorge"},
+    {"from": "plants", "to": "larissa"},
+    {"from": "gift_lari", "to": "larissa"},
+    {"from": "cake_vo", "to": "lurdes"},
+    {"from": "diego_call", "to": "diego"},
+    {"from": "otavio_receipt", "to": "otavio"},
+    {"from": "mei_decl", "to": "fernanda"},
+    {"from": "bsas_setlist", "to": "guga"},
+    {"from": "football_fee", "to": "thiago"},
+    {"from": "rating", "to": "rafa_s"},
+    {"from": "set12", "to": "nath"},
+    {"from": "set_cv", "to": "nath"},
+    {"from": "idea_collab", "to": "guga"},
+    {"from": "helena_qs", "to": "helena"},
+    {"from": "mae_meds_n", "to": "mae"},
+    {"from": "mae_bp", "to": "mae"},
+    {"from": "ins_claim", "to": "rafa_s"},
+    {"from": "rodizio", "to": "rafa_s"},
+    {"from": "rodizio", "to": "junior"},
+    {"from": "gift_ideas", "to": "larissa"},
+    {"from": "vo_party", "to": "lurdes"},
+    {"from": "vo_party", "to": "patricia"},
+    {"from": "lease_note", "to": "jorge"},
+]
+
+
+def world():
+    return {
+        "me": "Tomás Ferreira",
+        "epoch": "2025-01-05T09:00",
+        "seed": "T14",
+        "currency": "BRL",
+        "people": people(),
+        "groups": GROUPS,
+        "expenses": EXPENSES,
+        "lists": LISTS,
+        "events": events(),
+        "tasks": tasks(),
+        "notebooks": NOTEBOOKS,
+        "notes": NOTES,
+        "folders": FOLDERS,
+        "documents": DOCUMENTS,
+        "albums": ALBUMS,
+        "photos": PHOTOS,
+        "debts": DEBTS,
+        "locker": LOCKER,
+        "links": LINKS,
+    }
+
+
+def check_overlaps(evs):
+    spans = []
+    for e in evs:
+        if e.get("trashed"):
+            continue
+        s = datetime.fromisoformat(e["start"])
+        f = datetime.fromisoformat(e["end"])
+        spans.append((s, f, e["key"]))
+    spans.sort()
+    end, last = None, None
+    for s1, f1, k1 in spans:
+        assert end is None or end <= s1, f"overlap {last} / {k1}"
+        if end is None or f1 > end:
+            end, last = f1, k1
+    keys = [e["key"] for e in evs]
+    assert len(keys) == len(set(keys))
+
+
+if __name__ == "__main__":
+    w = world()
+    check_overlaps(w["events"])
+    allkeys = [r["key"] for sec in w.values() if isinstance(sec, list) for r in sec if isinstance(r, dict) and "key" in r]
+    assert len(allkeys) == len(set(allkeys)), [k for k in allkeys if allkeys.count(k) > 1]
+    out = HERE / "T14.json"
+    out.write_text(json.dumps(w, indent=1, ensure_ascii=False) + "\n")
+    print(f"wrote {out}: " + ", ".join(f"{k} {len(v)}" for k, v in w.items() if isinstance(v, list)))

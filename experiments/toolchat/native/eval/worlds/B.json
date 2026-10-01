@@ -1,0 +1,1795 @@
+{
+  "me": "Kwame Asante",
+  "currency": "USD",
+  "epoch": "2025-12-01T09:00",
+  "seed": "evalB",
+  "people": [
+    {
+      "key": "efua",
+      "name": "Efua Asante",
+      "role": "wife",
+      "starred": true,
+      "last_contacted": "2026-11-27T22:00"
+    },
+    {
+      "key": "ama",
+      "name": "Ama Asante",
+      "role": "daughter",
+      "nickname": "Ams"
+    },
+    { "key": "kofi", "name": "Kofi Asante", "role": "son" },
+    {
+      "key": "maame",
+      "name": "Grace Owusu",
+      "role": "mother-in-law",
+      "nickname": "Maame",
+      "cadence": 7,
+      "last_contacted": "2026-11-22T17:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "yaw",
+      "name": "Yaw Asante",
+      "role": "brother",
+      "cadence": 14,
+      "last_contacted": "2026-11-01T15:00",
+      "met": "Kumasi"
+    },
+    {
+      "key": "kojo",
+      "name": "Kojo Mensah",
+      "role": "best friend",
+      "starred": true,
+      "cadence": 14,
+      "last_contacted": "2026-11-20T21:00"
+    },
+    {
+      "key": "dan_o",
+      "name": "Dan O'Brien",
+      "role": "colleague, physics",
+      "last_contacted": "2026-11-25T15:30"
+    },
+    {
+      "key": "dan_k",
+      "name": "Dan Kowalski",
+      "role": "neighbor",
+      "nickname": "Big Dan",
+      "last_contacted": "2026-11-26T08:00"
+    },
+    {
+      "key": "principal",
+      "name": "Monica Reyes",
+      "role": "principal",
+      "last_contacted": "2026-11-18T14:00"
+    },
+    {
+      "key": "sarah_l",
+      "name": "Sarah Lindqvist",
+      "role": "colleague, biology"
+    },
+    {
+      "key": "sarah_n",
+      "name": "Sarah Nakamura",
+      "role": "Ama's piano teacher"
+    },
+    {
+      "key": "coach",
+      "name": "Terrence Bell",
+      "role": "Kofi's soccer coach",
+      "nickname": "Coach T"
+    },
+    { "key": "pastor", "name": "Pastor Emmanuel Boateng", "role": "pastor" },
+    {
+      "key": "adwoa",
+      "name": "Adwoa Boateng",
+      "role": "church choir",
+      "last_contacted": "2026-11-15T12:00"
+    },
+    { "key": "drpatel", "name": "Rakesh Patel", "role": "pediatrician" },
+    { "key": "mechanic", "name": "Luis Romero", "role": "mechanic" },
+    {
+      "key": "akosua",
+      "name": "Akosua Frimpong",
+      "role": "cousin in Toronto",
+      "cadence": 30,
+      "last_contacted": "2026-10-05T19:00"
+    },
+    {
+      "key": "kwabena",
+      "name": "Kwabena Frimpong",
+      "role": "cousin in Toronto"
+    },
+    {
+      "key": "nana",
+      "name": "Nana Yeboah",
+      "role": "old friend from Accra",
+      "cadence": 60,
+      "last_contacted": "2026-06-10T09:00"
+    },
+    {
+      "key": "mike",
+      "name": "Mike Sullivan",
+      "role": "fantasy football league"
+    },
+    { "key": "jen", "name": "Jen Sullivan", "role": "Mike's wife" },
+    { "key": "tutor", "name": "Priya Nair", "role": "Kofi's math tutor" },
+    { "key": "banker", "name": "Olivia Grant", "role": "mortgage officer" },
+    {
+      "key": "barber",
+      "name": "Andre Wallace",
+      "role": "barber",
+      "last_contacted": "2026-11-14T11:00"
+    },
+    { "key": "fiifi", "name": "Fiifi Ansah", "role": "choir director" },
+    {
+      "key": "ex_student",
+      "name": "Jaylen Brooks",
+      "role": "former student",
+      "trashed": "2026-08-01T09:00"
+    },
+    {
+      "key": "oldneighbor",
+      "name": "Frank Miller",
+      "role": "old neighbor",
+      "trashed": "2026-05-01T09:00"
+    },
+    { "key": "dentist", "name": "Hye-jin Park", "role": "dentist" },
+    {
+      "key": "efua_sis",
+      "name": "Esi Owusu",
+      "role": "Efua's sister",
+      "cadence": 21,
+      "last_contacted": "2026-11-09T16:00"
+    },
+    { "key": "kojo_wife", "name": "Abena Mensah", "role": "Kojo's wife" }
+  ],
+  "groups": [
+    {
+      "key": "house",
+      "name": "House Account",
+      "currency": "USD",
+      "members": ["efua"]
+    },
+    {
+      "key": "toronto",
+      "name": "Toronto Christmas",
+      "currency": "CAD",
+      "members": ["efua", "akosua", "kwabena", "yaw"]
+    },
+    {
+      "key": "fantasy",
+      "name": "Fantasy League",
+      "currency": "USD",
+      "members": ["mike", "dan_o", "kojo", "dan_k"]
+    },
+    {
+      "key": "choir",
+      "name": "Choir Fundraiser",
+      "currency": "USD",
+      "members": ["adwoa", "fiifi", "efua"]
+    },
+    {
+      "key": "carpool",
+      "name": "Soccer Carpool",
+      "currency": "USD",
+      "members": ["dan_k", "coach"]
+    }
+  ],
+  "expenses": [
+    {
+      "group": "house",
+      "name": "Mortgage November",
+      "amount": 2150,
+      "paid_by": "me",
+      "split": ["me", "efua"],
+      "date": "2026-11-01"
+    },
+    {
+      "group": "house",
+      "name": "Jewel-Osco groceries",
+      "amount": 187.42,
+      "paid_by": "efua",
+      "split": ["me", "efua"],
+      "date": "2026-11-07"
+    },
+    {
+      "group": "house",
+      "name": "ComEd electric",
+      "amount": 96.3,
+      "paid_by": "me",
+      "split": ["me", "efua"],
+      "date": "2026-11-12"
+    },
+    {
+      "group": "house",
+      "name": "Peoples Gas",
+      "amount": 132.75,
+      "paid_by": "efua",
+      "split": ["me", "efua"],
+      "date": "2026-11-14"
+    },
+    {
+      "group": "house",
+      "name": "Costco",
+      "amount": 264.18,
+      "paid_by": "me",
+      "split": ["me", "efua"],
+      "date": "2026-11-21"
+    },
+    {
+      "group": "house",
+      "name": "Kids' winter boots",
+      "amount": 118,
+      "paid_by": "efua",
+      "split": ["me", "efua"],
+      "date": "2026-11-22"
+    },
+    {
+      "group": "toronto",
+      "name": "Airbnb in Scarborough",
+      "amount": 1450,
+      "paid_by": "akosua",
+      "split": ["me", "efua", "akosua", "kwabena", "yaw"],
+      "date": "2026-11-10"
+    },
+    {
+      "group": "toronto",
+      "name": "Christmas dinner groceries",
+      "amount": 380,
+      "paid_by": "me",
+      "split": ["me", "efua", "akosua", "kwabena", "yaw"],
+      "date": "2026-11-20"
+    },
+    {
+      "group": "toronto",
+      "name": "Raptors tickets",
+      "amount": 425,
+      "paid_by": "kwabena",
+      "split": ["me", "efua", "akosua", "kwabena", "yaw"],
+      "date": "2026-11-18"
+    },
+    {
+      "group": "fantasy",
+      "name": "League dues",
+      "amount": 250,
+      "paid_by": "mike",
+      "split": ["me", "mike", "dan_o", "kojo", "dan_k"],
+      "date": "2026-09-01"
+    },
+    {
+      "group": "fantasy",
+      "name": "Draft night wings",
+      "amount": 95,
+      "paid_by": "me",
+      "split": ["me", "mike", "dan_o", "kojo", "dan_k"],
+      "date": "2026-09-03"
+    },
+    {
+      "group": "choir",
+      "name": "Bake sale supplies",
+      "amount": 72,
+      "paid_by": "me",
+      "split": ["me", "adwoa", "fiifi", "efua"],
+      "date": "2026-11-08"
+    },
+    {
+      "group": "choir",
+      "name": "Printing flyers",
+      "amount": 40,
+      "paid_by": "adwoa",
+      "split": ["me", "adwoa", "fiifi", "efua"],
+      "date": "2026-11-02"
+    },
+    {
+      "group": "carpool",
+      "name": "Gas for tournament",
+      "amount": 54,
+      "paid_by": "dan_k",
+      "split": ["me", "dan_k", "coach"],
+      "date": "2026-11-15"
+    }
+  ],
+  "lists": [
+    { "key": "school", "name": "School", "area": "teaching" },
+    { "key": "home", "name": "Home" },
+    { "key": "kids", "name": "Kids" },
+    { "key": "church", "name": "Church" }
+  ],
+  "events": [
+    {
+      "key": "piano0",
+      "name": "Ama piano lesson",
+      "start": "2026-09-01T16:30",
+      "end": "2026-09-01T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "fantasy_draft",
+      "name": "Fantasy draft night",
+      "start": "2026-09-03T19:00",
+      "attendees": ["mike", "dan_o", "kojo", "dan_k"]
+    },
+    {
+      "key": "soccer0",
+      "name": "Kofi soccer game",
+      "start": "2026-09-05T09:00",
+      "end": "2026-09-05T10:30",
+      "attendees": ["kofi", "coach"]
+    },
+    {
+      "key": "piano1",
+      "name": "Ama piano lesson",
+      "start": "2026-09-08T16:30",
+      "end": "2026-09-08T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac1",
+      "name": "Choir practice",
+      "start": "2026-09-10T19:00",
+      "end": "2026-09-10T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "soccer1",
+      "name": "Kofi soccer game",
+      "start": "2026-09-12T09:00",
+      "end": "2026-09-12T10:30",
+      "attendees": ["kofi", "coach"]
+    },
+    {
+      "key": "piano2",
+      "name": "Ama piano lesson",
+      "start": "2026-09-15T16:30",
+      "end": "2026-09-15T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac2",
+      "name": "Choir practice",
+      "start": "2026-09-17T19:00",
+      "end": "2026-09-17T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "soccer2",
+      "name": "Kofi soccer game",
+      "start": "2026-09-19T09:00",
+      "end": "2026-09-19T10:30",
+      "attendees": ["kofi", "coach"]
+    },
+    {
+      "key": "piano3",
+      "name": "Ama piano lesson",
+      "start": "2026-09-22T16:30",
+      "end": "2026-09-22T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac3",
+      "name": "Choir practice",
+      "start": "2026-09-24T19:00",
+      "end": "2026-09-24T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "soccer3",
+      "name": "Kofi soccer game",
+      "start": "2026-09-26T09:00",
+      "end": "2026-09-26T10:30",
+      "attendees": ["kofi", "coach"]
+    },
+    {
+      "key": "piano4",
+      "name": "Ama piano lesson",
+      "start": "2026-09-29T16:30",
+      "end": "2026-09-29T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac4",
+      "name": "Choir practice",
+      "start": "2026-10-01T19:00",
+      "end": "2026-10-01T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "soccer4",
+      "name": "Kofi soccer game",
+      "start": "2026-10-03T09:00",
+      "end": "2026-10-03T10:30",
+      "attendees": ["kofi", "coach"]
+    },
+    {
+      "key": "piano5",
+      "name": "Ama piano lesson",
+      "start": "2026-10-06T16:30",
+      "end": "2026-10-06T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac5",
+      "name": "Choir practice",
+      "start": "2026-10-08T19:00",
+      "end": "2026-10-08T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "soccer5",
+      "name": "Kofi soccer game",
+      "start": "2026-10-10T09:00",
+      "end": "2026-10-10T10:30",
+      "attendees": ["kofi", "coach"]
+    },
+    {
+      "key": "piano6",
+      "name": "Ama piano lesson",
+      "start": "2026-10-13T16:30",
+      "end": "2026-10-13T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac6",
+      "name": "Choir practice",
+      "start": "2026-10-15T19:00",
+      "end": "2026-10-15T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "soccer6",
+      "name": "Kofi soccer game",
+      "start": "2026-10-17T09:00",
+      "end": "2026-10-17T10:30",
+      "attendees": ["kofi", "coach"]
+    },
+    {
+      "key": "piano7",
+      "name": "Ama piano lesson",
+      "start": "2026-10-20T16:30",
+      "end": "2026-10-20T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac7",
+      "name": "Choir practice",
+      "start": "2026-10-22T19:00",
+      "end": "2026-10-22T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "soccer7",
+      "name": "Kofi soccer game",
+      "start": "2026-10-24T09:00",
+      "end": "2026-10-24T10:30",
+      "attendees": ["kofi", "coach"]
+    },
+    {
+      "key": "piano8",
+      "name": "Ama piano lesson",
+      "start": "2026-10-27T16:30",
+      "end": "2026-10-27T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac8",
+      "name": "Choir practice",
+      "start": "2026-10-29T19:00",
+      "end": "2026-10-29T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "soccer8",
+      "name": "Kofi soccer game",
+      "start": "2026-10-31T09:00",
+      "end": "2026-10-31T10:30",
+      "attendees": ["kofi", "coach"]
+    },
+    {
+      "key": "piano9",
+      "name": "Ama piano lesson",
+      "start": "2026-11-03T16:30",
+      "end": "2026-11-03T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac9",
+      "name": "Choir practice",
+      "start": "2026-11-05T19:00",
+      "end": "2026-11-05T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "soccer9",
+      "name": "Kofi soccer game",
+      "start": "2026-11-07T09:00",
+      "end": "2026-11-07T10:30",
+      "attendees": ["kofi", "coach"]
+    },
+    {
+      "key": "piano10",
+      "name": "Ama piano lesson",
+      "start": "2026-11-10T16:30",
+      "end": "2026-11-10T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac10",
+      "name": "Choir practice",
+      "start": "2026-11-12T19:00",
+      "end": "2026-11-12T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "soccer10",
+      "name": "Kofi soccer game",
+      "start": "2026-11-14T09:00",
+      "end": "2026-11-14T10:30",
+      "attendees": ["kofi", "coach"]
+    },
+    {
+      "key": "labsafety",
+      "name": "Lab safety training",
+      "start": "2026-11-17T15:30"
+    },
+    {
+      "key": "piano11",
+      "name": "Ama piano lesson",
+      "start": "2026-11-17T16:30",
+      "end": "2026-11-17T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac11",
+      "name": "Choir practice",
+      "start": "2026-11-19T19:00",
+      "end": "2026-11-19T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "soccer11",
+      "name": "Kofi soccer game",
+      "start": "2026-11-21T09:00",
+      "end": "2026-11-21T10:30",
+      "attendees": ["kofi", "coach"]
+    },
+    {
+      "key": "gala",
+      "name": "District teachers gala",
+      "start": "2026-11-21T18:00",
+      "cancelled": true
+    },
+    {
+      "key": "piano12",
+      "name": "Ama piano lesson",
+      "start": "2026-11-24T16:30",
+      "end": "2026-11-24T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "thanksgiving",
+      "name": "Thanksgiving at Kojo's",
+      "start": "2026-11-26T15:00",
+      "attendees": ["kojo", "kojo_wife"]
+    },
+    {
+      "key": "choirprac12",
+      "name": "Choir practice",
+      "start": "2026-11-26T19:00",
+      "end": "2026-11-26T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "haircut",
+      "name": "Haircut with Andre",
+      "start": "2026-11-28T13:00",
+      "attendees": ["barber"]
+    },
+    {
+      "key": "yaw_call",
+      "name": "Call with Yaw",
+      "start": "2026-11-29T15:00",
+      "attendees": ["yaw"]
+    },
+    {
+      "key": "oilchange",
+      "name": "Oil change",
+      "start": "2026-11-30T08:00",
+      "attendees": ["mechanic"]
+    },
+    {
+      "key": "staff",
+      "name": "Staff meeting",
+      "start": "2026-12-01T15:15",
+      "attendees": ["principal"]
+    },
+    {
+      "key": "tutoring1",
+      "name": "Kofi math tutoring",
+      "start": "2026-12-01T17:00",
+      "attendees": ["kofi", "tutor"]
+    },
+    {
+      "key": "pediatric",
+      "name": "Kofi checkup with Dr. Patel",
+      "start": "2026-12-02T08:30",
+      "end": "2026-12-02T09:00",
+      "attendees": ["kofi", "drpatel"]
+    },
+    {
+      "key": "ptc",
+      "name": "Parent-teacher conferences",
+      "start": "2026-12-03T15:00",
+      "end": "2026-12-03T19:00"
+    },
+    {
+      "key": "choirprac13",
+      "name": "Choir practice",
+      "start": "2026-12-03T19:00",
+      "end": "2026-12-03T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "mortgage_mtg",
+      "name": "Refinance call with Olivia",
+      "start": "2026-12-04T12:30",
+      "attendees": ["banker"]
+    },
+    {
+      "key": "science_fair",
+      "name": "Science fair judging",
+      "start": "2026-12-05T09:00",
+      "end": "2026-12-05T13:00",
+      "attendees": ["dan_o", "sarah_l"]
+    },
+    {
+      "key": "fundraiser",
+      "name": "Choir fundraiser bake sale",
+      "start": "2026-12-06T11:00",
+      "attendees": ["adwoa", "fiifi", "efua"]
+    },
+    {
+      "key": "bears",
+      "name": "Bears game with Mike",
+      "start": "2026-12-06T12:00",
+      "attendees": ["mike"]
+    },
+    {
+      "key": "tutoring2",
+      "name": "Kofi math tutoring",
+      "start": "2026-12-08T17:00",
+      "attendees": ["kofi", "tutor"]
+    },
+    {
+      "key": "dentist_ev",
+      "name": "Dentist",
+      "start": "2026-12-09T07:30",
+      "end": "2026-12-09T08:15",
+      "attendees": ["dentist"]
+    },
+    {
+      "key": "choirprac14",
+      "name": "Choir practice",
+      "start": "2026-12-10T19:00",
+      "end": "2026-12-10T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "anniv",
+      "name": "Anniversary dinner",
+      "start": "2026-12-12T19:00",
+      "attendees": ["efua"],
+      "description": "Alinea, 2 people"
+    },
+    {
+      "key": "recital",
+      "name": "Ama's winter piano recital",
+      "start": "2026-12-13T14:00",
+      "attendees": ["ama", "sarah_n", "efua"]
+    },
+    {
+      "key": "finals",
+      "name": "Finals proctoring",
+      "start": "2026-12-14T08:00",
+      "end": "2026-12-14T15:00"
+    },
+    {
+      "key": "piano15",
+      "name": "Ama piano lesson",
+      "start": "2026-12-15T16:30",
+      "end": "2026-12-15T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac15",
+      "name": "Choir practice",
+      "start": "2026-12-17T19:00",
+      "end": "2026-12-17T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "drive_tor",
+      "name": "Drive to Toronto",
+      "start": "2026-12-22T06:00",
+      "description": "8 hours; stop in Detroit"
+    },
+    {
+      "key": "piano16",
+      "name": "Ama piano lesson",
+      "start": "2026-12-22T16:30",
+      "end": "2026-12-22T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac16",
+      "name": "Choir practice",
+      "start": "2026-12-24T19:00",
+      "end": "2026-12-24T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "xmas_tor",
+      "name": "Christmas dinner in Toronto",
+      "start": "2026-12-25T17:00",
+      "attendees": ["akosua", "kwabena", "yaw"]
+    },
+    {
+      "key": "drive_home",
+      "name": "Drive back from Toronto",
+      "start": "2026-12-29T07:00"
+    },
+    {
+      "key": "piano17",
+      "name": "Ama piano lesson",
+      "start": "2026-12-29T16:30",
+      "end": "2026-12-29T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac17",
+      "name": "Choir practice",
+      "start": "2026-12-31T19:00",
+      "end": "2026-12-31T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "maame_visit",
+      "name": "Pick up Maame at O'Hare",
+      "start": "2027-01-05T12:00",
+      "attendees": ["maame"]
+    },
+    {
+      "key": "piano18",
+      "name": "Ama piano lesson",
+      "start": "2027-01-05T16:30",
+      "end": "2027-01-05T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac18",
+      "name": "Choir practice",
+      "start": "2027-01-07T19:00",
+      "end": "2027-01-07T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "piano19",
+      "name": "Ama piano lesson",
+      "start": "2027-01-12T16:30",
+      "end": "2027-01-12T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac19",
+      "name": "Choir practice",
+      "start": "2027-01-14T19:00",
+      "end": "2027-01-14T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "ama_bday",
+      "name": "Ama's 10th birthday party",
+      "start": "2027-01-16T13:00",
+      "attendees": ["ama"]
+    },
+    {
+      "key": "piano20",
+      "name": "Ama piano lesson",
+      "start": "2027-01-19T16:30",
+      "end": "2027-01-19T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac20",
+      "name": "Choir practice",
+      "start": "2027-01-21T19:00",
+      "end": "2027-01-21T20:30",
+      "attendees": ["efua", "fiifi"]
+    },
+    {
+      "key": "piano21",
+      "name": "Ama piano lesson",
+      "start": "2027-01-26T16:30",
+      "end": "2027-01-26T17:15",
+      "attendees": ["ama", "sarah_n"]
+    },
+    {
+      "key": "choirprac21",
+      "name": "Choir practice",
+      "start": "2027-01-28T19:00",
+      "end": "2027-01-28T20:30",
+      "attendees": ["efua", "fiifi"]
+    }
+  ],
+  "tasks": [
+    {
+      "key": "mortgage0",
+      "name": "Pay mortgage",
+      "due": "2026-01-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-01-01T07:30"
+    },
+    {
+      "key": "mortgage1",
+      "name": "Pay mortgage",
+      "due": "2026-02-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-02-01T07:30"
+    },
+    {
+      "key": "mortgage2",
+      "name": "Pay mortgage",
+      "due": "2026-03-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-03-01T07:30"
+    },
+    {
+      "key": "mortgage3",
+      "name": "Pay mortgage",
+      "due": "2026-04-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-04-01T07:30"
+    },
+    {
+      "key": "mortgage4",
+      "name": "Pay mortgage",
+      "due": "2026-05-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-05-01T07:30"
+    },
+    {
+      "key": "mortgage5",
+      "name": "Pay mortgage",
+      "due": "2026-06-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-06-01T07:30"
+    },
+    {
+      "key": "mortgage6",
+      "name": "Pay mortgage",
+      "due": "2026-07-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-07-01T07:30"
+    },
+    {
+      "key": "mortgage7",
+      "name": "Pay mortgage",
+      "due": "2026-08-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-08-01T07:30"
+    },
+    {
+      "key": "mortgage8",
+      "name": "Pay mortgage",
+      "due": "2026-09-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-09-01T07:30"
+    },
+    {
+      "key": "mortgage9",
+      "name": "Pay mortgage",
+      "due": "2026-10-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-10-01T07:30"
+    },
+    {
+      "key": "mortgage10",
+      "name": "Pay mortgage",
+      "due": "2026-11-01",
+      "list": "home",
+      "priority": 1,
+      "status": "completed",
+      "completed": "2026-11-01T07:30"
+    },
+    {
+      "key": "mortgage11",
+      "name": "Pay mortgage",
+      "due": "2026-12-01",
+      "list": "home",
+      "priority": 1
+    },
+    {
+      "key": "grade_lab",
+      "name": "Grade titration lab reports",
+      "due": "2026-11-30",
+      "list": "school",
+      "effort": 180,
+      "priority": 1,
+      "status": "in_progress"
+    },
+    {
+      "key": "unit_test",
+      "name": "Write stoichiometry unit test",
+      "due": "2026-12-02",
+      "list": "school",
+      "effort": 120
+    },
+    {
+      "key": "fair_rubric",
+      "name": "Print science fair rubrics",
+      "due": "2026-12-04",
+      "list": "school",
+      "effort": 20
+    },
+    {
+      "key": "lab_order",
+      "name": "Order lab supplies",
+      "due": "2026-11-20",
+      "list": "school",
+      "effort": 30
+    },
+    {
+      "key": "rec_letter",
+      "name": "Recommendation letter for Maya",
+      "due": "2026-12-01",
+      "list": "school",
+      "effort": 60,
+      "priority": 2
+    },
+    {
+      "key": "gradebook",
+      "name": "Update gradebook",
+      "due": "2026-11-25",
+      "list": "school",
+      "status": "completed",
+      "completed": "2026-11-25T21:00"
+    },
+    {
+      "key": "sub_plans",
+      "name": "Sub plans for Toronto trip",
+      "due": "2026-12-18",
+      "list": "school",
+      "effort": 90
+    },
+    {
+      "key": "gutters",
+      "name": "Clean the gutters",
+      "due": "2026-11-29",
+      "list": "home",
+      "effort": 120
+    },
+    {
+      "key": "snowblower",
+      "name": "Tune up snowblower",
+      "due": "2026-12-01",
+      "list": "home",
+      "effort": 45
+    },
+    {
+      "key": "furnace",
+      "name": "Replace furnace filter",
+      "due": "2026-11-15",
+      "list": "home",
+      "status": "completed",
+      "completed": "2026-11-15T10:00"
+    },
+    {
+      "key": "xmas_lights",
+      "name": "Put up Christmas lights",
+      "due": "2026-12-05",
+      "list": "home",
+      "effort": 90
+    },
+    {
+      "key": "refi_docs",
+      "name": "Send refinance documents to Olivia",
+      "due": "2026-12-03",
+      "list": "home",
+      "priority": 1
+    },
+    {
+      "key": "winter_tires",
+      "name": "Swap to winter tires",
+      "due": "2026-11-20",
+      "list": "home",
+      "status": "completed",
+      "completed": "2026-11-19T17:00"
+    },
+    {
+      "key": "passports",
+      "name": "Check kids' passports for Canada",
+      "due": "2026-12-01",
+      "list": "kids",
+      "priority": 1
+    },
+    {
+      "key": "recital_dress",
+      "name": "Buy Ama's recital dress",
+      "due": "2026-12-06",
+      "list": "kids"
+    },
+    {
+      "key": "soccer_fee",
+      "name": "Pay spring soccer registration",
+      "due": "2026-12-15",
+      "list": "kids"
+    },
+    {
+      "key": "field_trip",
+      "name": "Sign Kofi's field trip form",
+      "due": "2026-11-24",
+      "list": "kids",
+      "status": "completed",
+      "completed": "2026-11-23T20:00"
+    },
+    {
+      "key": "bday_party",
+      "name": "Plan Ama's birthday party",
+      "due": "2027-01-10",
+      "list": "kids"
+    },
+    {
+      "key": "bday_invites",
+      "name": "Send birthday invitations",
+      "parent": "bday_party",
+      "list": "kids",
+      "due": "2026-12-20"
+    },
+    {
+      "key": "bday_cake",
+      "name": "Order birthday cake",
+      "parent": "bday_party",
+      "list": "kids",
+      "due": "2027-01-09"
+    },
+    {
+      "key": "bday_venue",
+      "name": "Book the bounce house",
+      "parent": "bday_party",
+      "list": "kids",
+      "status": "completed",
+      "completed": "2026-11-10T20:00"
+    },
+    {
+      "key": "choir_music",
+      "name": "Photocopy choir music",
+      "due": "2026-12-03",
+      "list": "church"
+    },
+    {
+      "key": "bake",
+      "name": "Bake kelewele for the bake sale",
+      "due": "2026-12-06",
+      "list": "church",
+      "effort": 60
+    },
+    {
+      "key": "offering",
+      "name": "Count Sunday offering",
+      "due": "2026-11-22",
+      "list": "church",
+      "status": "completed",
+      "completed": "2026-11-22T13:00"
+    },
+    {
+      "key": "gifts",
+      "name": "Buy Christmas gifts",
+      "due": "2026-12-15",
+      "priority": 2
+    },
+    {
+      "key": "gift_efua",
+      "name": "Anniversary gift for Efua",
+      "due": "2026-12-11",
+      "priority": 1
+    },
+    {
+      "key": "call_maame",
+      "name": "Call Maame about January visit",
+      "due": "2026-11-30"
+    },
+    {
+      "key": "send_money",
+      "name": "Send money to Yaw for Mom's clinic",
+      "due": "2026-12-01",
+      "priority": 1
+    },
+    {
+      "key": "taxes_q4",
+      "name": "Estimated tax payment Q4",
+      "due": "2027-01-15"
+    },
+    { "key": "cancel_hulu", "name": "Cancel Hulu", "status": "cancelled" },
+    {
+      "key": "return_drill",
+      "name": "Return Big Dan's drill",
+      "due": "2026-11-29"
+    },
+    {
+      "key": "oldtask",
+      "name": "Fix garage door opener",
+      "trashed": "2026-10-20T09:00"
+    },
+    {
+      "key": "fantasy_lineup",
+      "name": "Set fantasy lineup",
+      "due": "2026-11-29T11:00"
+    },
+    { "key": "read_book", "name": "Finish Homegoing", "status": "in_progress" },
+    {
+      "key": "photobook",
+      "name": "Make family photo book",
+      "due": "2026-12-20",
+      "effort": 180
+    }
+  ],
+  "links": [
+    { "from": "rec_letter", "to": "principal" },
+    { "from": "refi_docs", "to": "banker" },
+    { "from": "call_maame", "to": "maame" },
+    { "from": "send_money", "to": "yaw" },
+    { "from": "return_drill", "to": "dan_k" },
+    { "from": "gift_efua", "to": "efua" },
+    { "from": "recital_dress", "to": "ama" },
+    { "from": "field_trip", "to": "kofi" },
+    { "from": "jr1", "to": "kofi" },
+    { "from": "refi", "to": "banker" }
+  ],
+  "notebooks": [
+    { "key": "lessons", "name": "Lesson ideas" },
+    { "key": "recipes", "name": "Recipes" },
+    { "key": "journal", "name": "Journal" }
+  ],
+  "notes": [
+    {
+      "key": "les1",
+      "name": "Elephant toothpaste demo",
+      "body": "hydrogen peroxide 30%, potassium iodide, dish soap",
+      "notebook": "lessons",
+      "created": "2026-10-02T20:00"
+    },
+    {
+      "key": "les2",
+      "name": "Titration lab tweaks",
+      "body": "use phenolphthalein, 0.1M NaOH",
+      "notebook": "lessons",
+      "created": "2026-11-03T21:00"
+    },
+    {
+      "key": "les3",
+      "name": "Mole day activities",
+      "body": "mole-themed baking, Avogadro trivia",
+      "notebook": "lessons",
+      "created": "2026-10-20T19:00"
+    },
+    {
+      "key": "les4",
+      "name": "Flame test colors",
+      "body": "lithium red, sodium orange, copper green",
+      "notebook": "lessons",
+      "created": "2026-09-15T20:00"
+    },
+    {
+      "key": "rec1",
+      "name": "Jollof rice",
+      "body": "long grain rice, tomato paste, scotch bonnet, thyme, bay leaf",
+      "notebook": "recipes",
+      "created": "2026-02-14T18:00",
+      "pinned": true
+    },
+    {
+      "key": "rec2",
+      "name": "Kelewele",
+      "body": "ripe plantain, ginger, cayenne, cloves",
+      "notebook": "recipes",
+      "created": "2026-03-01T18:00"
+    },
+    {
+      "key": "rec3",
+      "name": "Groundnut soup",
+      "body": "peanut butter, chicken, tomatoes, onion",
+      "notebook": "recipes",
+      "created": "2026-01-11T18:00"
+    },
+    {
+      "key": "rec4",
+      "name": "Efua's shito",
+      "body": "dried shrimp, herring, chili, ginger",
+      "notebook": "recipes",
+      "created": "2026-05-02T18:00"
+    },
+    {
+      "key": "jr1",
+      "name": "Kofi scored his first goal",
+      "body": "Nov 7th, left foot, he wouldn't stop grinning",
+      "notebook": "journal",
+      "created": "2026-11-07T21:00"
+    },
+    {
+      "key": "jr2",
+      "name": "Thanksgiving thoughts",
+      "body": "grateful for Kojo and Abena's table",
+      "notebook": "journal",
+      "created": "2026-11-26T23:00"
+    },
+    {
+      "key": "jr3",
+      "name": "Tough week",
+      "body": "grading pile, Maame's health worries",
+      "notebook": "journal",
+      "created": "2026-11-13T22:30"
+    },
+    {
+      "key": "jr4",
+      "name": "Anniversary memories",
+      "body": "12 years; Accra wedding, rain all day",
+      "notebook": "journal",
+      "created": "2026-11-01T22:00"
+    },
+    {
+      "key": "gift_list",
+      "name": "Christmas gift list",
+      "body": "Ama: keyboard stand; Kofi: cleats; Efua: kente scarf; Maame: shawl",
+      "pinned": true,
+      "created": "2026-11-10T21:00"
+    },
+    {
+      "key": "refi",
+      "name": "Refinance numbers",
+      "body": "current 6.4%, offer 5.6%, closing costs ~3,100",
+      "created": "2026-11-19T21:00"
+    },
+    {
+      "key": "wifi_guest",
+      "name": "Guest wifi instructions",
+      "body": "use the guest network on the fridge magnet",
+      "created": "2026-06-01T10:00"
+    },
+    {
+      "key": "car_notes",
+      "name": "Car maintenance log",
+      "body": "oil at 48k, tires rotated at 50k",
+      "created": "2026-08-11T10:00"
+    },
+    {
+      "key": "toronto_plan",
+      "name": "Toronto trip plan",
+      "body": "leave 22nd 6am, Airbnb in Scarborough, Raptors on 27th",
+      "created": "2026-11-11T21:00"
+    },
+    {
+      "key": "fantasy_notes",
+      "name": "Fantasy trade ideas",
+      "body": "trade Kelce for a WR2",
+      "created": "2026-10-28T22:00"
+    },
+    {
+      "key": "oldnote",
+      "name": "Summer camp options",
+      "body": "YMCA vs park district",
+      "trashed": "2026-08-20T09:00",
+      "created": "2026-04-01T09:00"
+    },
+    {
+      "key": "student_notes",
+      "name": "Students to check in with",
+      "body": "Maya (rec letter), DeShawn (missing labs)",
+      "created": "2026-11-16T20:00"
+    }
+  ],
+  "folders": [
+    { "key": "mortgage", "name": "Mortgage" },
+    { "key": "kidsdocs", "name": "Kids" },
+    { "key": "taxes", "name": "Taxes" },
+    { "key": "schooldocs", "name": "School" }
+  ],
+  "documents": [
+    {
+      "key": "deed",
+      "name": "House deed",
+      "text": "4417 N Keeler Ave",
+      "folder": "mortgage",
+      "starred": true,
+      "created": "2025-12-05T10:00"
+    },
+    {
+      "key": "mort_stmt",
+      "name": "Mortgage statement October",
+      "text": "balance 311,240",
+      "folder": "mortgage",
+      "created": "2026-10-15T10:00"
+    },
+    {
+      "key": "refi_offer",
+      "name": "Refinance offer letter",
+      "text": "5.6% 30-year",
+      "folder": "mortgage",
+      "created": "2026-11-19T12:00"
+    },
+    {
+      "key": "ama_birth",
+      "name": "Ama birth certificate",
+      "text": "Cook County",
+      "folder": "kidsdocs",
+      "starred": true,
+      "created": "2025-12-10T10:00"
+    },
+    {
+      "key": "kofi_birth",
+      "name": "Kofi birth certificate",
+      "text": "Cook County",
+      "folder": "kidsdocs",
+      "created": "2025-12-10T10:05"
+    },
+    {
+      "key": "kofi_iep",
+      "name": "Kofi report card Q1",
+      "text": "math B+, reading A",
+      "folder": "kidsdocs",
+      "created": "2026-11-06T10:00"
+    },
+    {
+      "key": "w2",
+      "name": "W-2 2025",
+      "text": "CPS wages",
+      "folder": "taxes",
+      "created": "2026-01-30T10:00"
+    },
+    {
+      "key": "return",
+      "name": "2025 tax return",
+      "text": "joint return",
+      "folder": "taxes",
+      "starred": true,
+      "created": "2026-04-12T10:00"
+    },
+    {
+      "key": "syllabus",
+      "name": "Chemistry syllabus 2026-27",
+      "text": "AP Chem",
+      "folder": "schooldocs",
+      "created": "2026-08-20T10:00"
+    },
+    {
+      "key": "contract",
+      "name": "Teaching contract",
+      "text": "CPS 2026-2027",
+      "folder": "schooldocs",
+      "created": "2026-08-15T10:00"
+    },
+    {
+      "key": "lab_msds",
+      "name": "Lab safety data sheets",
+      "text": "MSDS binder",
+      "folder": "schooldocs",
+      "created": "2026-09-02T10:00"
+    },
+    {
+      "key": "insurance",
+      "name": "Car insurance card",
+      "text": "State Farm",
+      "starred": true,
+      "created": "2026-07-01T10:00"
+    },
+    {
+      "key": "passport_ama",
+      "name": "Ama passport scan",
+      "text": "expires 2027",
+      "folder": "kidsdocs",
+      "created": "2026-11-20T10:00"
+    },
+    {
+      "key": "old_doc",
+      "name": "Old apartment lease",
+      "text": "Rogers Park",
+      "trashed": "2026-02-01T10:00",
+      "created": "2025-12-02T10:00"
+    },
+    {
+      "key": "warranty",
+      "name": "Furnace warranty",
+      "text": "Carrier, 10 years",
+      "created": "2026-03-03T10:00"
+    }
+  ],
+  "albums": [
+    { "key": "family", "name": "Family" },
+    { "key": "soccer_al", "name": "Kofi soccer" },
+    { "key": "recital_al", "name": "Recitals" },
+    { "key": "accra", "name": "Accra 2025" }
+  ],
+  "photos": [
+    {
+      "key": "fam0",
+      "name": "Thanksgiving table",
+      "taken": "2026-11-26T16:30",
+      "albums": ["family"],
+      "people": ["kojo", "kojo_wife", "efua"],
+      "starred": true
+    },
+    {
+      "key": "fam1",
+      "name": "Kids raking leaves",
+      "taken": "2026-11-08T11:00",
+      "albums": ["family"],
+      "people": ["ama", "kofi"],
+      "starred": false
+    },
+    {
+      "key": "fam2",
+      "name": "Halloween costumes",
+      "taken": "2026-10-31T18:00",
+      "albums": ["family"],
+      "people": ["ama", "kofi"],
+      "starred": false
+    },
+    {
+      "key": "fam3",
+      "name": "Efua at the lakefront",
+      "taken": "2026-09-20T17:00",
+      "albums": ["family"],
+      "people": ["efua"],
+      "starred": false
+    },
+    {
+      "key": "fam4",
+      "name": "First snow",
+      "taken": "2026-11-19T08:00",
+      "albums": ["family"],
+      "people": ["kofi"],
+      "starred": false
+    },
+    {
+      "key": "fam5",
+      "name": "Maame on video call",
+      "taken": "2026-11-22T17:10",
+      "albums": ["family"],
+      "people": ["maame"],
+      "starred": false
+    },
+    {
+      "key": "soc0",
+      "name": "Kofi soccer 09-05",
+      "taken": "2026-09-05T09:40",
+      "albums": ["soccer_al"],
+      "people": ["kofi"],
+      "starred": false
+    },
+    {
+      "key": "soc1",
+      "name": "Kofi soccer 09-12",
+      "taken": "2026-09-12T09:40",
+      "albums": ["soccer_al"],
+      "people": ["kofi"],
+      "starred": false
+    },
+    {
+      "key": "soc2",
+      "name": "Kofi soccer 09-19",
+      "taken": "2026-09-19T09:40",
+      "albums": ["soccer_al"],
+      "people": ["kofi"],
+      "starred": false
+    },
+    {
+      "key": "soc3",
+      "name": "Kofi soccer 09-26",
+      "taken": "2026-09-26T09:40",
+      "albums": ["soccer_al"],
+      "people": ["kofi"],
+      "starred": false
+    },
+    {
+      "key": "soc4",
+      "name": "Kofi soccer 10-03",
+      "taken": "2026-10-03T09:40",
+      "albums": ["soccer_al"],
+      "people": ["kofi"],
+      "starred": false
+    },
+    {
+      "key": "soc5",
+      "name": "Kofi soccer 10-10",
+      "taken": "2026-10-10T09:40",
+      "albums": ["soccer_al"],
+      "people": ["kofi"],
+      "starred": false
+    },
+    {
+      "key": "soc6",
+      "name": "Kofi soccer 10-17",
+      "taken": "2026-10-17T09:40",
+      "albums": ["soccer_al"],
+      "people": ["kofi"],
+      "starred": false
+    },
+    {
+      "key": "soc7",
+      "name": "Kofi soccer 10-24",
+      "taken": "2026-10-24T09:40",
+      "albums": ["soccer_al"],
+      "people": ["kofi"],
+      "starred": false
+    },
+    {
+      "key": "soc8",
+      "name": "Kofi soccer 10-31",
+      "taken": "2026-10-31T09:40",
+      "albums": ["soccer_al"],
+      "people": ["kofi"],
+      "starred": false
+    },
+    {
+      "key": "soc9",
+      "name": "Kofi soccer 11-07",
+      "taken": "2026-11-07T09:40",
+      "albums": ["soccer_al"],
+      "people": ["kofi"],
+      "starred": true
+    },
+    {
+      "key": "soc10",
+      "name": "Kofi soccer 11-14",
+      "taken": "2026-11-14T09:40",
+      "albums": ["soccer_al"],
+      "people": ["kofi"],
+      "starred": false
+    },
+    {
+      "key": "soc11",
+      "name": "Kofi soccer 11-21",
+      "taken": "2026-11-21T09:40",
+      "albums": ["soccer_al"],
+      "people": ["kofi"],
+      "starred": false
+    },
+    {
+      "key": "rcp0",
+      "name": "Spring recital bow",
+      "taken": "2026-05-17T15:00",
+      "albums": ["recital_al"],
+      "people": ["ama"]
+    },
+    {
+      "key": "rcp1",
+      "name": "Ama at the piano",
+      "taken": "2026-05-17T14:20",
+      "albums": ["recital_al"],
+      "people": ["ama"]
+    },
+    {
+      "key": "rcp2",
+      "name": "Recital flowers",
+      "taken": "2026-05-17T15:30",
+      "albums": ["recital_al"],
+      "people": ["ama"]
+    },
+    {
+      "key": "acc0",
+      "name": "Labadi Beach",
+      "taken": "2025-12-27T16:00",
+      "albums": ["accra"],
+      "people": []
+    },
+    {
+      "key": "acc1",
+      "name": "Grandma's house in Kumasi",
+      "taken": "2025-12-29T12:00",
+      "albums": ["accra"],
+      "people": ["maame"]
+    },
+    {
+      "key": "acc2",
+      "name": "Kente weavers",
+      "taken": "2025-12-30T10:00",
+      "albums": ["accra"],
+      "people": []
+    },
+    {
+      "key": "acc3",
+      "name": "Yaw and the kids",
+      "taken": "2025-12-31T20:00",
+      "albums": ["accra"],
+      "people": ["yaw", "ama", "kofi"]
+    },
+    {
+      "key": "acc4",
+      "name": "Independence Arch",
+      "taken": "2026-01-02T11:00",
+      "albums": ["accra"],
+      "people": []
+    },
+    {
+      "key": "lab_setup",
+      "name": "Titration lab setup",
+      "taken": "2026-11-03T08:00"
+    },
+    {
+      "key": "whiteboard",
+      "name": "Whiteboard stoichiometry",
+      "taken": "2026-11-12T14:00"
+    },
+    { "key": "receipt", "name": "Receipt Costco", "taken": "2026-11-21T12:00" },
+    {
+      "key": "blurry",
+      "name": "Blurry photo",
+      "taken": "2026-11-26T19:00",
+      "trashed": "2026-11-27T09:00"
+    },
+    { "key": "car_dent", "name": "Car dent", "taken": "2026-10-14T08:00" }
+  ],
+  "debts": [
+    {
+      "key": "kojo_tix",
+      "person": "kojo",
+      "direction": "owes_me",
+      "amount": 120,
+      "name": "Bulls tickets",
+      "date": "2026-11-05"
+    },
+    {
+      "key": "mike_dues",
+      "person": "mike",
+      "direction": "i_owe",
+      "amount": 50,
+      "name": "fantasy dues",
+      "date": "2026-09-01",
+      "settled": "2026-09-10T09:00"
+    },
+    {
+      "key": "dank_snow",
+      "person": "dan_k",
+      "direction": "i_owe",
+      "amount": 40,
+      "name": "snowblower repair share",
+      "date": "2026-11-18"
+    },
+    {
+      "key": "yaw_loan",
+      "person": "yaw",
+      "direction": "owes_me",
+      "amount": 300,
+      "name": "loan for Mom's clinic visit",
+      "date": "2026-10-01"
+    },
+    {
+      "key": "dano_lunch",
+      "person": "dan_o",
+      "direction": "owes_me",
+      "amount": 14.5,
+      "name": "lunch",
+      "date": "2026-11-19"
+    },
+    {
+      "key": "adwoa_flyers",
+      "person": "adwoa",
+      "direction": "i_owe",
+      "amount": 20,
+      "name": "flyer printing",
+      "date": "2026-11-02"
+    },
+    {
+      "key": "esi_gift",
+      "person": "efua_sis",
+      "direction": "owes_me",
+      "amount": 35,
+      "name": "Maame's birthday gift share",
+      "date": "2026-10-15",
+      "settled": "2026-10-30T12:00"
+    },
+    {
+      "key": "tutor_pay",
+      "person": "tutor",
+      "direction": "i_owe",
+      "amount": 90,
+      "name": "two tutoring sessions",
+      "date": "2026-11-24"
+    }
+  ],
+  "locker": [
+    {
+      "key": "wifi",
+      "name": "Home wifi",
+      "type": "wifi",
+      "password": "Jollof4Life!",
+      "starred": true
+    },
+    {
+      "key": "school_wifi",
+      "name": "School wifi",
+      "type": "wifi",
+      "password": "CPSstaff#2026"
+    },
+    {
+      "key": "guest_wifi",
+      "name": "Guest wifi",
+      "type": "wifi",
+      "password": "welcome-guest"
+    },
+    {
+      "key": "bank",
+      "name": "Chase checking",
+      "type": "login",
+      "username": "kasante",
+      "url": "https://chase.com",
+      "password": "K0fi&Ama!"
+    },
+    {
+      "key": "cps",
+      "name": "CPS staff portal",
+      "type": "login",
+      "username": "kasante2",
+      "url": "https://cps.edu",
+      "password": "Titrate!9"
+    },
+    { "key": "visa", "name": "Visa card", "type": "card" },
+    {
+      "key": "passport",
+      "name": "Kwame passport",
+      "type": "passport",
+      "notes": "Ghana passport, expires 2029"
+    },
+    {
+      "key": "netflix",
+      "name": "Netflix",
+      "type": "login",
+      "username": "asante.family@example.com",
+      "password": "kente-cloth"
+    },
+    {
+      "key": "espn",
+      "name": "ESPN fantasy",
+      "type": "login",
+      "username": "kwamechem",
+      "password": "TD-4-kwame"
+    },
+    {
+      "key": "alarm",
+      "name": "House alarm code",
+      "type": "note",
+      "notes": "disarm before 6am"
+    },
+    {
+      "key": "insurance_lk",
+      "name": "Health insurance",
+      "type": "membership",
+      "notes": "Blue Cross PPO"
+    },
+    {
+      "key": "ssh",
+      "name": "School server SSH key",
+      "type": "ssh_key",
+      "notes": "lab computers"
+    }
+  ],
+  "today": "2026-11-28T10:15"
+}

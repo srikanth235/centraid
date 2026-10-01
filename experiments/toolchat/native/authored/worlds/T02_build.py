@@ -1,0 +1,498 @@
+"""World T02: Mei-Lin Chau, freelance illustrator in Vancouver (CAD vault).
+
+    python3 authored/worlds/T02_build.py      # writes authored/worlds/T02.json (deterministic)
+
+Today in the sessions is Tuesday 2027-06-08 11:05. Built-in ambiguity: two Sophies (Sophie Tran,
+friend; Sophie Delacroix, client), look-alike events (dim sum with the parents vs with Grace,
+climbing at the gym vs Squamish), near-duplicate tasks (two Tidewater invoices, two dish-soap
+tasks), a nickname-only relative (Mama/Baba), a hard-to-spell name (Siobhan), cancelled events,
+completed tasks, and a few trashed rows.
+"""
+from __future__ import annotations
+
+import json
+from datetime import date, timedelta
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+
+
+def d(y, m, dd):
+    return date(y, m, dd)
+
+
+def people():
+    return [
+        {"key": "jess", "name": "Jess Okoro", "role": "roommate", "cadence": 7, "last_contacted": "2027-06-07T21:00",
+         "last_contacted_kind": "message"},
+        {"key": "arun", "name": "Arun Pillai", "role": "partner", "nickname": "Aru", "starred": True,
+         "last_contacted": "2027-06-07T22:30", "last_contacted_kind": "call", "met": "Squamish climbing trip 2024"},
+        {"key": "kai", "name": "Kai Chau", "role": "brother", "met": "UBC, 3rd year", "cadence": 14,
+         "last_contacted": "2027-05-30T18:00", "last_contacted_kind": "message"},
+        {"key": "mom", "name": "Linda Chau", "role": "mom", "nickname": "Mama", "cadence": 7, "starred": True,
+         "last_contacted": "2027-06-06T12:00", "last_contacted_kind": "visit"},
+        {"key": "dad", "name": "Henry Chau", "role": "dad", "nickname": "Baba", "cadence": 14,
+         "last_contacted": "2027-06-06T12:00", "last_contacted_kind": "visit"},
+        {"key": "grace", "name": "Grace Liu", "role": "cousin", "cadence": 30,
+         "last_contacted": "2027-04-18T13:00", "last_contacted_kind": "coffee"},
+        {"key": "ivy", "name": "Ivy Chen", "role": "aunt", "nickname": "Auntie Ivy"},
+        {"key": "sophie_t", "name": "Sophie Tran", "role": "friend", "met": "Emily Carr, 2019", "cadence": 21,
+         "last_contacted": "2027-06-03T19:00", "last_contacted_kind": "message"},
+        {"key": "sophie_d", "name": "Sophie Delacroix", "role": "art director, Maple & Fern", "met": "VanArt Book Fair 2026",
+         "last_contacted": "2027-06-01T10:00", "last_contacted_kind": "call"},
+        {"key": "priya", "name": "Priya Sandhu", "role": "friend", "cadence": 21,
+         "last_contacted": "2027-05-28T20:00", "last_contacted_kind": "message"},
+        {"key": "marcus", "name": "Marcus Webb", "role": "creative lead, Greenleaf Studio", "starred": True,
+         "last_contacted": "2027-06-04T15:00", "last_contacted_kind": "call"},
+        {"key": "dana", "name": "Dana Kowalski", "role": "editor, Tidewater Press",
+         "last_contacted": "2027-05-19T11:00", "last_contacted_kind": "message"},
+        {"key": "tom", "name": "Tom Nguyen", "role": "owner, Tomo Coffee", "nickname": "Tomo"},
+        {"key": "rachel", "name": "Rachel Kim", "role": "illustration agent", "cadence": 30,
+         "last_contacted": "2027-05-10T14:00", "last_contacted_kind": "coffee"},
+        {"key": "tessa", "name": "Tessa Moore", "role": "gallery curator"},
+        {"key": "diego", "name": "Diego Ramirez", "role": "climbing partner", "nickname": "Dee", "cadence": 7,
+         "last_contacted": "2027-06-07T20:00", "last_contacted_kind": "visit"},
+        {"key": "nadia", "name": "Nadia Petrov", "role": "climbing partner"},
+        {"key": "yuki", "name": "Yuki Tanaka", "role": "pottery instructor"},
+        {"key": "bea", "name": "Bea Lawson", "role": "pottery classmate", "met": "pottery class, spring 2027"},
+        {"key": "mina", "name": "Mina Park", "role": "friend", "met": "Emily Carr, 2018", "cadence": 30,
+         "last_contacted": "2027-03-02T18:00", "last_contacted_kind": "coffee"},
+        {"key": "siobhan", "name": "Siobhan Byrne", "role": "friend", "met": "life drawing group"},
+        {"key": "carlos", "name": "Carlos Mendes", "role": "friend"},
+        {"key": "ben", "name": "Ben Okafor", "role": "landlord"},
+        {"key": "anita", "name": "Anita Shah", "role": "dentist"},
+        {"key": "leo", "name": "Leo Fischer", "role": "accountant", "last_contacted": "2027-04-20T09:30",
+         "last_contacted_kind": "call"},
+        {"key": "farah", "name": "Farah Haddad", "role": "print shop, Hemlock Printers"},
+        {"key": "kenji", "name": "Kenji Watanabe", "role": "Airbnb host, Shibuya"},
+        {"key": "oliver", "name": "Oliver Grant", "role": "publisher", "met": "VanArt Book Fair 2026"},
+        {"key": "emma", "name": "Emma Wilson", "role": "friend"},
+        {"key": "brad", "name": "Brad Hollis", "role": "old client", "trashed": "2027-06-02T10:00"},
+    ]
+
+
+GROUPS = [
+    {"key": "tokyo", "name": "Tokyo Trip", "currency": "JPY", "members": ["sophie_t", "priya"], "created": "2027-03-10T20:00"},
+    {"key": "flat", "name": "Flat 302", "members": ["jess"], "created": "2026-09-01T10:00"},
+    {"key": "crew", "name": "Climbing Crew", "members": ["diego", "nadia", "arun"], "created": "2027-01-15T19:00"},
+    {"key": "fam", "name": "Chau Family", "members": ["kai", "mom", "dad"], "created": "2026-12-20T12:00"},
+    {"key": "hg", "name": "Haida Gwaii 2026", "members": ["arun", "mina"], "created": "2026-07-20T12:00"},
+    {"key": "bookclub", "name": "Book club", "members": ["emma", "siobhan", "mina"], "created": "2026-11-02T19:00"},
+]
+
+EXPENSES = [
+    {"group": "tokyo", "name": "Airbnb Shibuya", "amount": 186000, "paid_by": "me", "split": ["me", "sophie_t", "priya"], "date": "2027-03-12"},
+    {"group": "tokyo", "name": "teamLab tickets", "amount": 11400, "paid_by": "priya", "split": ["me", "sophie_t", "priya"], "date": "2027-04-02"},
+    {"group": "tokyo", "name": "Shinkansen to Kyoto", "amount": 42000, "paid_by": "sophie_t", "split": ["me", "sophie_t", "priya"], "date": "2027-05-15"},
+    {"group": "tokyo", "name": "Ghibli Museum", "amount": 3000, "paid_by": "me", "split": ["me", "sophie_t"], "date": "2027-05-20"},
+    {"group": "flat", "name": "Hydro bill April", "amount": 96.40, "paid_by": "me", "split": ["me", "jess"], "date": "2027-04-28"},
+    {"group": "flat", "name": "Internet May", "amount": 85, "paid_by": "jess", "split": ["me", "jess"], "date": "2027-05-03"},
+    {"group": "flat", "name": "Costco run", "amount": 142.30, "paid_by": "me", "split": ["me", "jess"], "date": "2027-05-22"},
+    {"group": "flat", "name": "Cleaning supplies", "amount": 23.50, "paid_by": "jess", "split": ["me", "jess"], "date": "2027-06-01"},
+    {"group": "crew", "name": "Gas to Squamish", "amount": 60, "paid_by": "diego", "split": ["me", "diego", "nadia", "arun"], "date": "2027-05-08"},
+    {"group": "crew", "name": "Day passes", "amount": 88, "paid_by": "me", "split": ["me", "diego", "nadia", "arun"], "date": "2027-05-29"},
+    {"group": "fam", "name": "Mom's birthday dinner", "amount": 240, "paid_by": "me", "split": ["me", "kai"], "date": "2027-05-23"},
+    {"group": "fam", "name": "Flowers for Mom", "amount": 45, "paid_by": "kai", "split": ["me", "kai"], "date": "2027-05-23"},
+    {"group": "hg", "name": "BC Ferries", "amount": 312, "paid_by": "arun", "split": ["me", "arun", "mina"], "date": "2026-08-10"},
+    {"group": "hg", "name": "Cabin in Tlell", "amount": 900, "paid_by": "me", "split": ["me", "arun", "mina"], "date": "2026-08-11"},
+    {"group": "hg", "name": "Groceries Masset", "amount": 126, "paid_by": "mina", "split": ["me", "arun", "mina"], "date": "2026-08-12"},
+]
+
+LISTS = [
+    {"key": "clientwork", "name": "Client work", "area": "work"},
+    {"key": "flatlist", "name": "Flat stuff", "area": "home"},
+    {"key": "tokyoprep", "name": "Tokyo prep", "area": "travel"},
+    {"key": "errands", "name": "Errands", "area": "personal"},
+]
+
+
+def events():
+    out = []
+    # pottery class, Thursdays 18:30-20:30, spring term (one cancelled for the kiln repair)
+    start = d(2027, 3, 4)
+    for i in range(18):
+        day = start + timedelta(weeks=i)
+        ev = {"key": f"pottery_{day.strftime('%m%d')}", "name": "Pottery class", "start": f"{day}T18:30",
+              "end": f"{day}T20:30", "attendees": ["yuki", "bea"], "description": "wheel throwing, Clay Studio on Main"}
+        if day == d(2027, 5, 13):
+            ev["cancelled"] = "2027-05-10T09:00"
+        out.append(ev)
+    # climbing at the gym, Mondays 19:00
+    start = d(2027, 3, 29)
+    for i in range(12):
+        day = start + timedelta(weeks=i)
+        out.append({"key": f"climb_{day.strftime('%m%d')}", "name": "Climbing at The Hive", "start": f"{day}T19:00",
+                    "end": f"{day}T21:00", "attendees": ["diego"]})
+    out += [
+        {"key": "squamish_may", "name": "Squamish climbing day", "start": "2027-05-08T08:00", "end": "2027-05-08T18:00",
+         "attendees": ["diego", "nadia", "arun"]},
+        {"key": "squamish_jun", "name": "Squamish climbing day", "start": "2027-06-19T08:00", "end": "2027-06-19T18:00",
+         "attendees": ["diego", "nadia", "arun"], "description": "Smoke Bluffs, bring the rope"},
+        # dim sum
+        {"key": "dimsum_apr", "name": "Dim sum with Mom and Dad", "start": "2027-04-11T11:00", "end": "2027-04-11T13:00",
+         "attendees": ["mom", "dad"]},
+        {"key": "dimsum_may", "name": "Dim sum with Mom and Dad", "start": "2027-05-09T11:00", "end": "2027-05-09T13:00",
+         "attendees": ["mom", "dad", "kai"], "description": "Mother's Day, Kirin Richmond"},
+        {"key": "dimsum_jun", "name": "Dim sum with Mom and Dad", "start": "2027-06-13T11:00", "end": "2027-06-13T13:00",
+         "attendees": ["mom", "dad"]},
+        {"key": "dimsum_grace", "name": "Dim sum with Grace", "start": "2027-06-20T11:30", "end": "2027-06-20T13:00",
+         "attendees": ["grace"]},
+        # clients
+        {"key": "call_marcus", "name": "Call with Marcus re Greenleaf mural", "start": "2027-06-09T10:00", "end": "2027-06-09T10:45",
+         "attendees": ["marcus"]},
+        {"key": "mf_kickoff", "name": "Maple & Fern kickoff", "start": "2027-06-10T14:00", "end": "2027-06-10T15:00",
+         "attendees": ["sophie_d"], "description": "spot illustrations for the autumn issue"},
+        {"key": "tide_review", "name": "Tidewater cover review", "start": "2027-06-15T11:00", "end": "2027-06-15T12:00",
+         "attendees": ["dana"]},
+        {"key": "portfolio_review", "name": "Portfolio review with Rachel", "start": "2027-06-11T15:00", "end": "2027-06-11T16:30",
+         "attendees": ["rachel"]},
+        {"key": "tomo_launch", "name": "Tomo Coffee launch party", "start": "2027-06-26T18:00", "end": "2027-06-26T21:00",
+         "attendees": ["tom"], "cancelled": "2027-06-05T09:00"},
+        {"key": "greenleaf_meet", "name": "Greenleaf site visit", "start": "2027-05-18T13:00", "end": "2027-05-18T14:30",
+         "attendees": ["marcus"]},
+        # personal
+        {"key": "dentist", "name": "Dentist cleaning", "start": "2027-06-17T09:30", "end": "2027-06-17T10:30",
+         "attendees": ["anita"]},
+        {"key": "arun_bday", "name": "Arun's birthday dinner", "start": "2027-06-25T19:30", "end": "2027-06-25T22:00",
+         "attendees": ["arun"], "description": "Published on Main, booked for 2"},
+        {"key": "gallery", "name": "Gallery opening at Hot Art Wet City", "start": "2027-06-12T19:00", "end": "2027-06-12T22:00",
+         "attendees": ["tessa", "mina"]},
+        {"key": "meetup", "name": "Illustrators meetup", "start": "2027-06-22T18:00", "end": "2027-06-22T20:00",
+         "attendees": ["siobhan", "mina"]},
+        {"key": "flight_out", "name": "Flight YVR to Tokyo", "start": "2027-07-14T13:05", "end": "2027-07-14T23:55",
+         "attendees": ["sophie_t", "priya"], "description": "AC3, seat 32A"},
+        {"key": "flight_back", "name": "Flight Tokyo to YVR", "start": "2027-07-28T17:40", "end": "2027-07-28T23:10",
+         "attendees": ["sophie_t", "priya"]},
+        {"key": "moms_bday", "name": "Mom's birthday", "start": "2027-05-23T18:00", "end": "2027-05-23T21:00",
+         "attendees": ["mom", "dad", "kai"]},
+        {"key": "kai_move", "name": "Help Kai move out of residence", "start": "2027-04-30T10:00", "end": "2027-04-30T14:00",
+         "attendees": ["kai"]},
+        {"key": "hg_trip", "name": "Haida Gwaii trip", "start": "2026-08-10", "end": "2026-08-17",
+         "attendees": ["arun", "mina"]},
+        {"key": "leo_meet", "name": "Taxes with Leo", "start": "2027-04-20T09:30", "end": "2027-04-20T10:30",
+         "attendees": ["leo"]},
+        {"key": "life_drawing", "name": "Life drawing session", "start": "2027-06-16T19:00", "end": "2027-06-16T21:00",
+         "attendees": ["siobhan"]},
+        {"key": "farmers", "name": "Farmers market with Jess", "start": "2027-06-12T10:00", "end": "2027-06-12T11:30",
+         "attendees": ["jess"]},
+        # binned plans: two inside the 30-day restore window, one long past it
+        {"key": "coffee_siobhan", "name": "Coffee with Siobhan", "start": "2027-06-18T10:00", "end": "2027-06-18T11:00",
+         "attendees": ["siobhan"], "trashed": "2027-06-04T08:00"},
+        {"key": "open_house", "name": "Clay Studio open house", "start": "2027-06-23T17:00", "end": "2027-06-23T19:00",
+         "attendees": ["yuki", "bea"], "trashed": "2027-06-06T12:00"},
+        {"key": "zine_fair", "name": "Zine fair table", "start": "2027-04-24T10:00", "end": "2027-04-24T16:00",
+         "trashed": "2027-04-25T09:00"},
+    ]
+    return out
+
+
+def tasks():
+    t = [
+        # client work
+        {"key": "gl_sketches", "name": "Greenleaf mural sketches", "due": "2027-06-11T17:00", "priority": 1, "effort": 240,
+         "list": "clientwork", "status": "in_progress", "description": "three options, 1:20 scale"},
+        {"key": "gl_thumbs", "name": "Thumbnail roughs", "parent": "gl_sketches", "completed": "2027-06-02T16:00"},
+        {"key": "gl_colour", "name": "Colour studies", "parent": "gl_sketches", "due": "2027-06-10"},
+        {"key": "gl_send", "name": "Send sketches to Marcus", "parent": "gl_sketches", "due": "2027-06-11T17:00"},
+        {"key": "inv_gl_dep", "name": "Invoice Greenleaf deposit", "due": "2027-05-20", "completed": "2027-05-19T10:00",
+         "list": "clientwork"},
+        {"key": "inv_gl_final", "name": "Invoice Greenleaf final", "due": "2027-06-30", "list": "clientwork", "priority": 3},
+        {"key": "inv_mf", "name": "Invoice Maple & Fern 0412", "due": "2027-06-14", "list": "clientwork", "priority": 2},
+        {"key": "inv_tide_cover", "name": "Invoice Tidewater cover", "due": "2027-06-21", "list": "clientwork"},
+        {"key": "inv_tide_spots", "name": "Invoice Tidewater spot illos", "due": "2027-05-15", "completed": "2027-05-14T09:00",
+         "list": "clientwork"},
+        {"key": "tide_final", "name": "Tidewater cover final art", "due": "2027-06-18T12:00", "priority": 1, "effort": 480,
+         "list": "clientwork"},
+        {"key": "mf_spots", "name": "Maple & Fern spot illustrations", "due": "2027-06-24", "status": "in_progress",
+         "effort": 600, "list": "clientwork", "description": "four spots, autumn issue"},
+        {"key": "tomo_logo", "name": "Tomo Coffee logo revisions", "due": "2027-06-09", "list": "clientwork", "effort": 90},
+        {"key": "gst_q2", "name": "File GST return Q2", "due": "2027-07-31", "priority": 2, "list": "clientwork"},
+        {"key": "gst_q1", "name": "File GST return Q1", "due": "2027-04-30", "completed": "2027-04-27T15:00", "list": "clientwork"},
+        {"key": "portfolio_site", "name": "Update portfolio site", "due": "2027-06-20", "effort": 180},
+        {"key": "ps_export", "name": "Export Haida Gwaii series", "parent": "portfolio_site"},
+        {"key": "ps_about", "name": "Rewrite about page", "parent": "portfolio_site"},
+        {"key": "adobe_renew", "name": "Renew Adobe subscription", "due": "2027-07-02"},
+        {"key": "scan_sketch", "name": "Scan sketchbook pages", "status": "in_progress", "effort": 60},
+        {"key": "tax_2026", "name": "Personal tax return 2026", "due": "2027-04-30", "completed": "2027-04-25T11:00"},
+        {"key": "rachel_followup", "name": "Send Rachel the new portfolio PDF", "due": "2027-06-10"},
+        # flat
+        {"key": "rent_jul", "name": "Pay rent", "due": "2027-07-01", "priority": 2, "list": "flatlist"},
+        {"key": "rent_jun", "name": "Pay rent", "due": "2027-06-01", "completed": "2027-05-31T20:00", "list": "flatlist"},
+        {"key": "hydro", "name": "Pay hydro bill", "due": "2027-06-15", "list": "flatlist"},
+        {"key": "soap_1", "name": "Buy dish soap", "due": "2027-06-09", "list": "flatlist"},
+        {"key": "soap_2", "name": "Buy dish soap", "completed": "2027-05-12T18:00", "list": "flatlist"},
+        {"key": "tap", "name": "Call Ben about the leaky tap", "due": "2027-06-10", "list": "flatlist"},
+        {"key": "fridge", "name": "Clean out the fridge", "completed": "2027-06-06T14:00", "list": "flatlist"},
+        {"key": "tenant_ins", "name": "Renew tenant insurance", "due": "2027-08-31", "list": "flatlist"},
+        # tokyo prep
+        {"key": "teamlab", "name": "Book teamLab tickets", "completed": "2027-04-02T20:00", "list": "tokyoprep"},
+        {"key": "jr_pass", "name": "Get JR pass", "due": "2027-06-30", "list": "tokyoprep"},
+        {"key": "insurance", "name": "Buy travel insurance", "due": "2027-06-20", "list": "tokyoprep", "priority": 2},
+        {"key": "yen", "name": "Exchange yen", "due": "2027-07-10", "list": "tokyoprep"},
+        {"key": "pocket_wifi", "name": "Reserve pocket wifi", "due": "2027-07-01", "list": "tokyoprep"},
+        {"key": "passport_renew", "name": "Renew passport", "completed": "2027-03-15T12:00", "list": "tokyoprep"},
+        {"key": "sekaido", "name": "Make Sekaido shopping list", "list": "tokyoprep"},
+        # errands / personal
+        {"key": "clay_tools", "name": "Pick up clay tools", "due": "2027-06-10", "list": "errands"},
+        {"key": "library", "name": "Return library books", "trashed": "2027-06-03T09:00", "list": "errands"},
+        {"key": "mom_gift", "name": "Mom's birthday gift", "due": "2027-05-22", "completed": "2027-05-20T17:00", "list": "errands"},
+        {"key": "arun_gift", "name": "Arun's birthday present", "due": "2027-06-20", "list": "errands", "priority": 2},
+        {"key": "chalk_bag", "name": "Order new chalk bag", "list": "errands"},
+        {"key": "dentist_book", "name": "Book dentist cleaning", "completed": "2027-05-02T10:00", "list": "errands"},
+        {"key": "kai_move_t", "name": "Help Kai move out", "due": "2027-04-30", "completed": "2027-04-30T15:00"},
+        {"key": "kai_money", "name": "Send Kai textbook money", "due": "2027-05-01", "status": "cancelled"},
+        {"key": "thankyou", "name": "Thank-you card for Auntie Ivy", "due": "2027-06-12"},
+        {"key": "glaze_order", "name": "Order celadon glaze", "due": "2027-06-15", "effort": 15},
+        {"key": "bike", "name": "Tune up bike", "trashed": "2027-06-06T09:00"},
+        {"key": "photos_print", "name": "Print Haida Gwaii photos", "due": "2027-06-18"},
+        {"key": "behance_t", "name": "Renew Behance Pro", "due": "2027-04-01", "trashed": "2027-04-02T09:00"},
+    ]
+    # monthly iPad backups: history plus the open one
+    for m, done in [(1, "2027-01-30T21:00"), (2, "2027-02-27T21:00"), (3, "2027-03-31T21:00"),
+                    (4, "2027-04-29T21:00"), (5, "2027-05-30T21:00")]:
+        t.append({"key": f"backup_{m:02d}", "name": "Back up iPad", "due": f"2027-{m:02d}-28", "completed": done})
+    t.append({"key": "backup_06", "name": "Back up iPad", "due": "2027-06-28", "effort": 20})
+    return t
+
+
+NOTEBOOKS = [
+    {"key": "sketchbook", "name": "Sketchbook notes"},
+    {"key": "pottery_nb", "name": "Pottery"},
+    {"key": "tokyo_nb", "name": "Tokyo"},
+    {"key": "clients_nb", "name": "Client ideas"},
+    {"key": "old_nb", "name": "Scratch"},
+]
+
+NOTES = [
+    {"key": "crows", "name": "Crow studies", "body": "crows on the Commercial Dr wires; loose ink, dry brush, keep the silhouettes chunky",
+     "notebook": "sketchbook", "created": "2027-05-02T09:10"},
+    {"key": "inkwash", "name": "Ink wash experiments", "body": "sumi ink 1:4 dilution, hot press paper buckles less",
+     "notebook": "sketchbook", "created": "2027-04-14T20:30"},
+    {"key": "palette_hg", "name": "Palette from Haida Gwaii", "body": "moss green, fog grey, cedar red, low-tide teal",
+     "notebook": "sketchbook", "created": "2026-08-18T10:00"},
+    {"key": "gesture", "name": "Gesture drawing tips", "body": "30 second poses, line of action first, from Siobhan's group",
+     "notebook": "sketchbook", "created": "2027-02-11T21:00"},
+    {"key": "brushes", "name": "Procreate brush settings", "body": "6B pencil at 40% streamline, gouache brush grain 120%",
+     "notebook": "sketchbook", "created": "2027-03-20T14:00"},
+    {"key": "fox", "name": "Character idea: fox courier", "body": "a fox who delivers letters by bike across the city; picture book pitch",
+     "notebook": "sketchbook", "created": "2027-06-05T23:10", "pinned": True},
+    {"key": "celadon", "name": "Celadon glaze notes", "body": "two dips, wipe the foot, cone 6; pools nicely in the carved lines",
+     "notebook": "pottery_nb", "created": "2027-04-22T21:00"},
+    {"key": "wheel_tips", "name": "Wheel tips from Yuki", "body": "brace elbows on knees, slow the wheel when opening, more water",
+     "notebook": "pottery_nb", "created": "2027-03-11T21:00"},
+    {"key": "kiln", "name": "Kiln schedule", "body": "bisque firing Tuesdays, glaze firing Fridays; pick up by Sunday",
+     "notebook": "pottery_nb", "created": "2027-03-04T21:00"},
+    {"key": "tokyo_food", "name": "Tokyo food list", "body": "Fuunji tsukemen, Afuri yuzu ramen, depachika at Isetan, tamagoyaki at Tsukiji",
+     "notebook": "tokyo_nb", "created": "2027-04-05T22:00"},
+    {"key": "kyoto", "name": "Kyoto day trip", "body": "Fushimi Inari early, Nishiki market lunch, shinkansen back by 8",
+     "notebook": "tokyo_nb", "created": "2027-05-16T21:00"},
+    {"key": "art_shops", "name": "Tokyo art supply shops", "body": "Sekaido Shinjuku, Itoya Ginza, Tokyu Hands for washi tape",
+     "notebook": "tokyo_nb", "created": "2027-05-01T11:00"},
+    {"key": "packing", "name": "Packing list for Tokyo", "body": "iPad, pencil tips, adapter, sketchbook, walking shoes, rain jacket",
+     "notebook": "tokyo_nb", "created": "2027-06-01T22:00"},
+    {"key": "gl_concept", "name": "Greenleaf mural concept", "body": "forest floor to canopy, salmon run along the bottom edge",
+     "notebook": "clients_nb", "created": "2027-05-19T08:00"},
+    {"key": "mf_brief", "name": "Maple & Fern brief", "body": "four spots, autumn foraging theme, muted palette, due June 24",
+     "notebook": "clients_nb", "created": "2027-06-01T10:30"},
+    {"key": "tide_ideas", "name": "Tidewater cover ideas", "body": "lighthouse keeper's daughter, stormy teal, big hand-lettered title",
+     "notebook": "clients_nb", "created": "2027-05-20T13:00"},
+    {"key": "rates", "name": "Rates 2027", "body": "day rate 650 CAD, editorial spot 350, cover 1500, rush +30%",
+     "created": "2027-01-04T09:00", "pinned": True},
+    {"key": "journal_jun1", "name": "Journal June 1", "body": "tired but the Greenleaf thumbnails finally clicked",
+     "created": "2027-06-01T23:30"},
+    {"key": "arun_gifts", "name": "Gift ideas for Arun", "body": "new belay device, Kinokuniya book voucher, a portrait of him climbing",
+     "created": "2027-05-27T22:00"},
+    {"key": "grades", "name": "Climbing log", "body": "sent my first V4 at the Hive, Squamish 5.10a on toprope",
+     "created": "2027-05-30T21:30"},
+    {"key": "old_rates", "name": "Old rate sheet", "body": "day rate 450", "created": "2026-01-10T09:00",
+     "trashed": "2027-06-04T10:00"},
+    {"key": "dimsum_order", "name": "Dim sum order for Dad", "body": "har gow, siu mai, chicken feet, no durian puffs",
+     "created": "2027-05-09T13:30"},
+    {"key": "crawl", "name": "Sketch crawl route", "body": "Granville Island, then the seawall to Olympic Village",
+     "created": "2027-05-21T19:00", "trashed": "2027-05-25T08:00"},
+    {"key": "old_grocery", "name": "Old grocery list", "body": "oat milk, tofu, gai lan", "created": "2027-02-20T18:00",
+     "trashed": "2027-03-01T08:00"},
+    {"key": "idea_fox", "name": "Quick idea", "body": "fox with a mail satchel", "created": "2027-06-06T23:40"},
+    {"key": "idea_crow", "name": "Another quick idea", "body": "crow postmaster", "created": "2027-06-07T00:10"},
+]
+
+FOLDERS = [
+    {"key": "portfolio_f", "name": "Portfolio"},
+    {"key": "contracts", "name": "Contracts"},
+    {"key": "taxes", "name": "Taxes & GST"},
+    {"key": "tokyo_docs", "name": "Tokyo docs"},
+    {"key": "flat_docs", "name": "Flat"},
+    {"key": "old_scans", "name": "Old scans"},
+]
+
+DOCUMENTS = [
+    {"key": "portfolio_pdf", "name": "Portfolio 2027", "folder": "portfolio_f", "starred": True, "created": "2027-05-28T16:00"},
+    {"key": "hg_series", "name": "Haida Gwaii series", "folder": "portfolio_f", "created": "2026-09-15T10:00"},
+    {"key": "editorial", "name": "Editorial samples", "folder": "portfolio_f", "created": "2027-02-02T12:00"},
+    {"key": "dummy", "name": "Fox courier picture book dummy", "folder": "portfolio_f", "created": "2027-06-06T20:00"},
+    {"key": "gl_contract", "name": "Greenleaf mural contract", "folder": "contracts", "starred": True, "created": "2027-05-12T09:00"},
+    {"key": "mf_contract", "name": "Maple & Fern contract", "folder": "contracts", "created": "2027-06-02T09:00"},
+    {"key": "tide_contract", "name": "Tidewater Press agreement", "folder": "contracts", "created": "2027-03-30T09:00"},
+    {"key": "tomo_nda", "name": "Tomo Coffee NDA", "folder": "contracts", "created": "2027-04-12T09:00"},
+    {"key": "gst_letter", "name": "GST registration letter", "folder": "taxes", "created": "2025-11-03T09:00"},
+    {"key": "t2125", "name": "T2125 business income 2026", "folder": "taxes", "created": "2027-04-24T09:00"},
+    {"key": "receipts", "name": "Business receipts 2026", "folder": "taxes", "created": "2027-01-15T09:00"},
+    {"key": "noa", "name": "Notice of assessment 2026", "folder": "taxes", "created": "2027-05-30T09:00"},
+    {"key": "itinerary", "name": "Tokyo itinerary", "folder": "tokyo_docs", "starred": True, "created": "2027-05-18T21:00"},
+    {"key": "airbnb_conf", "name": "Airbnb confirmation Shibuya", "folder": "tokyo_docs", "created": "2027-03-12T20:30"},
+    {"key": "ins_policy", "name": "Travel insurance quote", "folder": "tokyo_docs", "created": "2027-06-04T12:00"},
+    {"key": "lease", "name": "Lease 2026-2027", "folder": "flat_docs", "created": "2026-08-25T09:00"},
+    {"key": "tenant_doc", "name": "Tenant insurance policy", "folder": "flat_docs", "created": "2026-09-01T09:00"},
+    {"key": "cv", "name": "CV 2027", "created": "2027-01-20T09:00"},
+    {"key": "old_portfolio", "name": "Portfolio 2024", "created": "2024-03-01T09:00", "trashed": "2027-06-01T09:00"},
+]
+
+ALBUMS = [
+    {"key": "hg_album", "name": "Haida Gwaii 2026"},
+    {"key": "pottery_album", "name": "Pottery"},
+    {"key": "climb_album", "name": "Climbing"},
+    {"key": "fam_album", "name": "Family"},
+]
+
+PHOTOS = [
+    {"key": "balance_rock", "name": "Balance Rock", "taken": "2026-08-11T10:20", "albums": ["hg_album"], "people": ["arun"]},
+    {"key": "tow_hill", "name": "Tow Hill sunset", "taken": "2026-08-12T21:05", "albums": ["hg_album"], "starred": True},
+    {"key": "agate", "name": "Arun at Agate Beach", "taken": "2026-08-13T14:30", "albums": ["hg_album"], "people": ["arun"]},
+    {"key": "masset", "name": "Masset harbour", "taken": "2026-08-12T09:10", "albums": ["hg_album"]},
+    {"key": "totem", "name": "Skidegate totem pole", "taken": "2026-08-10T16:00", "albums": ["hg_album"]},
+    {"key": "ferry_pic", "name": "Ferry to Graham Island", "taken": "2026-08-10T07:40", "albums": ["hg_album"], "people": ["arun", "mina"]},
+    {"key": "rainforest", "name": "Rainforest trail", "taken": "2026-08-14T11:00", "albums": ["hg_album"]},
+    {"key": "cabin_porch", "name": "Cabin porch in Tlell", "taken": "2026-08-11T19:30", "albums": ["hg_album"], "people": ["mina"]},
+    {"key": "mina_sketch", "name": "Mina sketching on the beach", "taken": "2026-08-15T15:00", "albums": ["hg_album"], "people": ["mina"], "starred": True},
+    {"key": "eagle", "name": "Eagle over Naikoon", "taken": "2026-08-15T09:45", "albums": ["hg_album"]},
+    {"key": "carving", "name": "Carving shed in Old Massett", "taken": "2026-08-16T13:20", "albums": ["hg_album"]},
+    {"key": "tlell", "name": "Tlell river mouth", "taken": "2026-08-16T18:00", "albums": ["hg_album"], "people": ["arun", "mina"]},
+    {"key": "first_bowl", "name": "My first bowl", "taken": "2027-03-18T20:30", "albums": ["pottery_album"]},
+    {"key": "celadon_mug", "name": "Celadon mug", "taken": "2027-05-06T20:40", "albums": ["pottery_album"], "starred": True},
+    {"key": "test_tiles", "name": "Glaze test tiles", "taken": "2027-04-22T20:15", "albums": ["pottery_album"]},
+    {"key": "vase", "name": "Wobbly vase", "taken": "2027-04-08T20:20", "albums": ["pottery_album"], "people": ["bea"]},
+    {"key": "yuki_demo", "name": "Yuki's trimming demo", "taken": "2027-03-25T19:10", "albums": ["pottery_album"], "people": ["yuki"]},
+    {"key": "kiln_open", "name": "Kiln opening day", "taken": "2027-05-28T12:00", "albums": ["pottery_album"], "people": ["bea", "yuki"]},
+    {"key": "squamish_crag", "name": "Squamish crag", "taken": "2027-05-08T11:00", "albums": ["climb_album"], "people": ["diego", "nadia"]},
+    {"key": "diego_v5", "name": "Diego on the V5", "taken": "2027-04-19T20:10", "albums": ["climb_album"], "people": ["diego"]},
+    {"key": "chief_view", "name": "View from the Chief", "taken": "2027-05-08T15:30", "albums": ["climb_album"], "starred": True},
+    {"key": "nadia_belay", "name": "Nadia belaying", "taken": "2027-05-08T13:00", "albums": ["climb_album"], "people": ["nadia"]},
+    {"key": "hive_comp", "name": "Hive bouldering comp", "taken": "2027-05-24T20:00", "albums": ["climb_album"], "people": ["diego", "arun"]},
+    {"key": "mom_cake", "name": "Mom's birthday cake", "taken": "2027-05-23T20:00", "albums": ["fam_album"], "people": ["mom"]},
+    {"key": "kirin", "name": "Dim sum at Kirin", "taken": "2027-05-09T12:10", "albums": ["fam_album"], "people": ["mom", "dad", "kai"], "starred": True},
+    {"key": "kai_ubc", "name": "Kai at the UBC rose garden", "taken": "2027-04-30T13:00", "albums": ["fam_album"], "people": ["kai"]},
+    {"key": "dad_garden", "name": "Dad's garden", "taken": "2027-06-06T14:30", "albums": ["fam_album"], "people": ["dad"]},
+    {"key": "lny", "name": "Lunar New Year dinner", "taken": "2027-02-06T19:00", "albums": ["fam_album"], "people": ["mom", "dad", "kai", "ivy"]},
+    {"key": "desk", "name": "Studio desk", "taken": "2027-06-02T10:00"},
+    {"key": "jess_cat", "name": "Jess and Mochi", "taken": "2027-05-15T18:00", "people": ["jess"]},
+    {"key": "tomo_mock", "name": "Tomo Coffee cup mockup", "taken": "2027-05-30T16:00"},
+    {"key": "sunset_flat", "name": "Sunset from the balcony", "taken": "2027-06-04T21:10"},
+    {"key": "blurry", "name": "Blurry test shot", "taken": "2027-06-03T08:00", "trashed": "2027-06-03T08:05"},
+    {"key": "inv_shot", "name": "Invoice screenshot", "taken": "2027-06-05T11:00", "trashed": "2027-06-05T11:02"},
+    {"key": "shelves", "name": "Studio shelves", "taken": "2027-06-07T15:20"},
+]
+
+DEBTS = [
+    {"key": "d_mf", "person": "sophie_d", "direction": "owes_me", "amount": 850, "name": "Maple & Fern invoice 0412", "date": "2027-06-01"},
+    {"key": "d_tomo", "person": "tom", "direction": "owes_me", "amount": 300, "name": "Tomo logo kill fee", "date": "2027-06-05"},
+    {"key": "d_gl", "person": "marcus", "direction": "owes_me", "amount": 1200, "name": "Greenleaf deposit", "date": "2027-05-19",
+     "settled": "2027-05-27T10:00"},
+    {"key": "d_tide", "person": "dana", "direction": "owes_me", "amount": 1500, "name": "Tidewater cover advance", "date": "2027-04-01",
+     "settled": "2027-04-20T10:00"},
+    {"key": "d_jess_hydro", "person": "jess", "direction": "owes_me", "amount": 48.20, "name": "Hydro March", "date": "2027-03-30",
+     "settled": "2027-04-02T10:00"},
+    {"key": "d_arun_tix", "person": "arun", "direction": "i_owe", "amount": 95, "name": "Khruangbin tickets", "date": "2027-05-14"},
+    {"key": "d_sophie_taxi", "person": "sophie_t", "direction": "owes_me", "amount": 30, "name": "Airport taxi", "date": "2027-02-20"},
+    {"key": "d_diego_chalk", "person": "diego", "direction": "i_owe", "amount": 18.50, "name": "Chalk and tape", "date": "2027-05-29"},
+    {"key": "d_kai_books", "person": "kai", "direction": "owes_me", "amount": 120, "name": "Textbook loan", "date": "2027-01-08"},
+    {"key": "d_mina_ferry", "person": "mina", "direction": "i_owe", "amount": 64, "name": "Ferry snacks and parking", "date": "2026-08-17",
+     "settled": "2026-09-01T10:00"},
+    {"key": "d_priya_sushi", "person": "priya", "direction": "i_owe", "amount": 42, "name": "Sushi dinner", "date": "2027-05-28"},
+    {"key": "d_mom_phone", "person": "mom", "direction": "i_owe", "amount": 60, "name": "Phone bill", "date": "2027-05-01"},
+    {"key": "d_carlos", "person": "carlos", "direction": "owes_me", "amount": 75, "name": "Canucks tickets", "date": "2027-03-12"},
+]
+
+LOCKER = [
+    {"key": "adobe", "name": "Adobe login", "type": "login", "username": "meilin.chau@fastmail.com", "url": "https://account.adobe.com",
+     "password": "Inky-Crow-2027!", "starred": True},
+    {"key": "gmail", "name": "Fastmail login", "type": "login", "username": "meilin.chau@fastmail.com", "url": "https://fastmail.com",
+     "password": "tealfog88", "code": "JBSWY3DPEHPK3PXP"},
+    {"key": "etsy", "name": "Etsy shop login", "type": "login", "username": "meilindraws", "url": "https://etsy.com",
+     "password": "foxcourier22"},
+    {"key": "gst_no", "name": "GST number", "type": "document", "notes": "GST/HST 81234 5678 RT0001"},
+    {"key": "visa", "name": "Visa credit card", "type": "card", "card_number": "4520 1234 5678 9012", "cvv": "417", "starred": True},
+    {"key": "passport", "name": "Passport", "type": "passport", "notes": "renewed March 2027, expires 2037"},
+    {"key": "wifi", "name": "Flat wifi", "type": "wifi", "password": "mochi-the-cat-302"},
+    {"key": "procreate", "name": "Procreate licence", "type": "software_licence", "notes": "bought through the App Store, 2022"},
+    {"key": "clipstudio", "name": "Clip Studio licence", "type": "software_licence", "code": "CSP-4X9Q-77HT-PL2M",
+     "notes": "EX version, 2 devices"},
+    {"key": "rbc", "name": "RBC chequing", "type": "bank_account", "notes": "transit 01234, business account separate"},
+    {"key": "hive", "name": "The Hive membership", "type": "membership", "notes": "member 55821, renews September"},
+    {"key": "licence", "name": "Driver's licence", "type": "driving_licence", "notes": "BC, expires 2029"},
+    {"key": "door", "name": "Studio door code", "type": "note", "notes": "4471#"},
+    {"key": "dropbox", "name": "Dropbox login", "type": "login", "username": "meilin", "password": "oldpass1",
+     "trashed": "2027-06-02T09:00"},
+    {"key": "behance", "name": "Behance login", "type": "login", "username": "meilindraws", "url": "https://behance.net",
+     "password": "crowfeather9", "trashed": "2027-03-20T09:00"},
+    {"key": "sin", "name": "SIN card", "type": "identity"},
+    {"key": "studio_pw", "name": "Clay Studio booking password", "type": "password", "password": "wheel-throw-6"},
+    {"key": "ssh", "name": "Portfolio site SSH key", "type": "ssh_key", "notes": "deploy key for the portfolio host, ed25519"},
+    {"key": "shopify", "name": "Shopify API key", "type": "api_credential", "notes": "print shop storefront, read-only scope"},
+    {"key": "eth", "name": "Old ETH wallet", "type": "crypto_wallet", "notes": "from the 2021 NFT phase, seed phrase in the safe"},
+]
+
+LINKS = [
+    {"from": "gl_sketches", "to": "marcus"},
+    {"from": "gl_send", "to": "marcus"},
+    {"from": "inv_gl_final", "to": "marcus"},
+    {"from": "inv_mf", "to": "sophie_d"},
+    {"from": "mf_spots", "to": "sophie_d"},
+    {"from": "inv_tide_cover", "to": "dana"},
+    {"from": "tide_final", "to": "dana"},
+    {"from": "tomo_logo", "to": "tom"},
+    {"from": "tap", "to": "ben"},
+    {"from": "arun_gift", "to": "arun"},
+    {"from": "rachel_followup", "to": "rachel"},
+    {"from": "thankyou", "to": "ivy"},
+    {"from": "gst_q2", "to": "leo"},
+    {"from": "gl_concept", "to": "marcus"},
+    {"from": "mf_brief", "to": "sophie_d"},
+    {"from": "tide_ideas", "to": "dana"},
+    {"from": "wheel_tips", "to": "yuki"},
+    {"from": "arun_gifts", "to": "arun"},
+    {"from": "gesture", "to": "siobhan"},
+    {"from": "dimsum_order", "to": "dad"},
+    {"from": "kyoto", "to": "sophie_t"},
+    {"from": "kyoto", "to": "priya"},
+]
+
+
+def world():
+    return {
+        "me": "Mei-Lin Chau",
+        "epoch": "2026-07-01T09:00",
+        "seed": "T02",
+        "currency": "CAD",
+        "people": people(),
+        "groups": GROUPS,
+        "expenses": EXPENSES,
+        "lists": LISTS,
+        "events": events(),
+        "tasks": tasks(),
+        "notebooks": NOTEBOOKS,
+        "notes": NOTES,
+        "folders": FOLDERS,
+        "documents": DOCUMENTS,
+        "albums": ALBUMS,
+        "photos": PHOTOS,
+        "debts": DEBTS,
+        "locker": LOCKER,
+        "links": LINKS,
+    }
+
+
+if __name__ == "__main__":
+    out = HERE / "T02.json"
+    out.write_text(json.dumps(world(), indent=1, ensure_ascii=False) + "\n")
+    w = world()
+    print(f"wrote {out}: " + ", ".join(f"{k} {len(v)}" for k, v in w.items() if isinstance(v, list)))

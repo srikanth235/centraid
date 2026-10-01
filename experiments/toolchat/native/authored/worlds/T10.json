@@ -1,0 +1,2118 @@
+{
+  "me": "Bashir Haddad",
+  "epoch": "2025-01-05T09:00",
+  "seed": "T10",
+  "currency": "JOD",
+  "people": [
+    {
+      "key": "rami",
+      "name": "Rami Haddad",
+      "role": "son, Dubai",
+      "cadence": 7,
+      "starred": true,
+      "last_contacted": "2026-06-14T19:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "lina",
+      "name": "Lina Haddad",
+      "role": "daughter, London",
+      "cadence": 7,
+      "starred": true,
+      "last_contacted": "2026-06-17T20:30",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "omar",
+      "name": "Omar Haddad",
+      "role": "son, Toronto",
+      "cadence": 14,
+      "last_contacted": "2026-06-02T16:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "dana",
+      "name": "Dana Haddad",
+      "role": "daughter, Berlin",
+      "cadence": 14,
+      "starred": true,
+      "last_contacted": "2026-05-28T18:00",
+      "last_contacted_kind": "message"
+    },
+    {
+      "key": "maha",
+      "name": "Maha Haddad",
+      "role": "daughter-in-law, Rami's wife"
+    },
+    {
+      "key": "karim",
+      "name": "Karim Aziz",
+      "role": "son-in-law, Lina's husband",
+      "met": "London"
+    },
+    {
+      "key": "yousef",
+      "name": "Yousef Haddad",
+      "role": "grandson, Rami's son",
+      "cadence": 7,
+      "last_contacted": "2026-06-14T17:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "layla",
+      "name": "Layla Aziz",
+      "role": "granddaughter, Lina's daughter",
+      "cadence": 7,
+      "last_contacted": "2026-06-06T18:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "zaid",
+      "name": "Zaid Haddad",
+      "role": "grandson, Omar's son",
+      "cadence": 14,
+      "last_contacted": "2026-05-24T19:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "sami_h",
+      "name": "Sami Haddad",
+      "role": "grandson, Omar's son",
+      "cadence": 14,
+      "last_contacted": "2026-05-24T19:10",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "nabil",
+      "name": "Nabil Haddad",
+      "role": "brother",
+      "cadence": 7,
+      "met": "Amman",
+      "last_contacted": "2026-06-19T13:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "huda",
+      "name": "Huda Haddad",
+      "role": "sister",
+      "nickname": "Umm Tareq",
+      "cadence": 14,
+      "met": "Amman",
+      "last_contacted": "2026-06-05T11:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "abu_fadi",
+      "name": "Mahmoud Nasser",
+      "role": "old friend",
+      "nickname": "Abu Fadi",
+      "cadence": 30,
+      "met": "Kuwait",
+      "last_contacted": "2026-04-30T10:00",
+      "last_contacted_kind": "coffee"
+    },
+    {
+      "key": "jamal",
+      "name": "Jamal Rawashdeh",
+      "role": "former colleague",
+      "met": "Baghdad",
+      "cadence": 60,
+      "last_contacted": "2026-03-12T12:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "nizar",
+      "name": "Nizar Haddadin",
+      "role": "former colleague",
+      "met": "Cairo University",
+      "cadence": 90,
+      "last_contacted": "2026-01-20T12:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "khaled_o",
+      "name": "Khaled Omari",
+      "role": "former colleague",
+      "met": "Baghdad",
+      "last_contacted": "2025-11-02T12:00",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "khaled_s",
+      "name": "Khaled Sweidan",
+      "role": "pharmacist",
+      "met": "Amman"
+    },
+    {
+      "key": "hasan",
+      "name": "Hasan Qudah",
+      "role": "imam",
+      "nickname": "Sheikh Hasan",
+      "last_contacted": "2026-06-13T12:30",
+      "last_contacted_kind": "meeting"
+    },
+    {
+      "key": "ziad",
+      "name": "Ziad Obeidat",
+      "role": "mosque fund treasurer",
+      "cadence": 14,
+      "last_contacted": "2026-06-13T12:30",
+      "last_contacted_kind": "meeting"
+    },
+    {
+      "key": "khalil",
+      "name": "Khalil Masri",
+      "role": "mosque committee"
+    },
+    {
+      "key": "sami_k",
+      "name": "Sami Khoury",
+      "role": "chess club",
+      "cadence": 7,
+      "last_contacted": "2026-06-16T21:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "tariq",
+      "name": "Tariq Jaber",
+      "role": "chess club captain",
+      "cadence": 7,
+      "last_contacted": "2026-06-16T21:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "walid",
+      "name": "Walid Azzam",
+      "role": "chess club",
+      "cadence": 14,
+      "last_contacted": "2026-06-02T21:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "faris",
+      "name": "Faris Tamimi",
+      "role": "chess club"
+    },
+    {
+      "key": "mounir",
+      "name": "Mounir Hijazi",
+      "role": "chess club, arbiter"
+    },
+    {
+      "key": "rania",
+      "name": "Rania Saleh",
+      "role": "cardiologist",
+      "nickname": "Dr. Rania"
+    },
+    {
+      "key": "issa",
+      "name": "Issa Bakri",
+      "role": "dentist"
+    },
+    {
+      "key": "umm_khalil",
+      "name": "Samira Khalil",
+      "role": "neighbour",
+      "nickname": "Umm Khalil",
+      "cadence": 30,
+      "last_contacted": "2026-06-10T09:00",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "abu_ahmad",
+      "name": "Ahmad Shawabkeh",
+      "role": "driver",
+      "nickname": "Abu Ahmad"
+    },
+    {
+      "key": "hani",
+      "name": "Hani Suleiman",
+      "role": "plumber"
+    },
+    {
+      "key": "adel",
+      "name": "Adel Kurdi",
+      "role": "satellite installer"
+    },
+    {
+      "key": "basel",
+      "name": "Basel Odeh",
+      "role": "old tenant",
+      "trashed": "2026-06-08T10:00"
+    }
+  ],
+  "groups": [
+    {
+      "key": "mosque",
+      "name": "Mosque renovation fund",
+      "members": ["ziad", "khalil", "hasan", "nabil"],
+      "created": "2026-02-01T12:00"
+    },
+    {
+      "key": "chess",
+      "name": "Chess club kitty",
+      "members": ["sami_k", "tariq", "walid", "faris", "mounir"],
+      "created": "2025-09-01T19:00"
+    },
+    {
+      "key": "eid",
+      "name": "Eid family group",
+      "members": ["nabil", "huda", "rami", "lina"],
+      "created": "2026-03-01T10:00"
+    },
+    {
+      "key": "aqaba",
+      "name": "Aqaba trip",
+      "members": ["nabil", "jamal", "abu_fadi"],
+      "created": "2026-05-20T18:00"
+    },
+    {
+      "key": "building",
+      "name": "Old building committee",
+      "members": ["adel", "umm_khalil"],
+      "created": "2025-03-01T10:00"
+    }
+  ],
+  "expenses": [
+    {
+      "group": "mosque",
+      "name": "Ablution tiles deposit",
+      "amount": 400,
+      "paid_by": "me",
+      "split": ["me", "ziad", "khalil", "hasan", "nabil"],
+      "date": "2026-05-12"
+    },
+    {
+      "group": "mosque",
+      "name": "Carpet cleaning",
+      "amount": 150,
+      "paid_by": "ziad",
+      "split": ["me", "ziad", "khalil"],
+      "date": "2026-06-02"
+    },
+    {
+      "group": "mosque",
+      "name": "New loudspeaker",
+      "amount": 220,
+      "paid_by": "khalil",
+      "split": ["me", "ziad", "khalil", "nabil"],
+      "date": "2026-06-11"
+    },
+    {
+      "group": "chess",
+      "name": "Tournament hall rent",
+      "amount": 120,
+      "paid_by": "tariq",
+      "split": ["me", "sami_k", "tariq", "faris"],
+      "date": "2026-06-01"
+    },
+    {
+      "group": "chess",
+      "name": "Tea and ka'ak",
+      "amount": 18,
+      "paid_by": "me",
+      "split": ["me", "sami_k", "tariq"],
+      "date": "2026-06-16"
+    },
+    {
+      "group": "eid",
+      "name": "Eid lamb",
+      "amount": 280,
+      "paid_by": "me",
+      "split": ["me", "nabil", "huda", "rami", "lina"],
+      "date": "2026-05-26"
+    },
+    {
+      "group": "eid",
+      "name": "Sweets from Habibah",
+      "amount": 45,
+      "paid_by": "huda",
+      "split": ["me", "nabil", "huda"],
+      "date": "2026-05-27"
+    },
+    {
+      "group": "aqaba",
+      "name": "Chalet booking",
+      "amount": 360,
+      "paid_by": "nabil",
+      "split": ["me", "nabil", "jamal", "abu_fadi"],
+      "date": "2026-06-03"
+    }
+  ],
+  "lists": [
+    {
+      "key": "home_l",
+      "name": "Home",
+      "area": "home"
+    },
+    {
+      "key": "mosque_l",
+      "name": "Mosque",
+      "area": "community"
+    },
+    {
+      "key": "chess_l",
+      "name": "Chess",
+      "area": "hobby"
+    },
+    {
+      "key": "health_l",
+      "name": "Health",
+      "area": "health"
+    },
+    {
+      "key": "travel_l",
+      "name": "Travel"
+    },
+    {
+      "key": "garden_l",
+      "name": "Garden"
+    }
+  ],
+  "events": [
+    {
+      "key": "chess_0407",
+      "name": "Chess club night",
+      "start": "2026-04-07T18:30",
+      "end": "2026-04-07T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0414",
+      "name": "Chess club night",
+      "start": "2026-04-14T18:30",
+      "end": "2026-04-14T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0421",
+      "name": "Chess club night",
+      "start": "2026-04-21T18:30",
+      "end": "2026-04-21T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0428",
+      "name": "Chess club night",
+      "start": "2026-04-28T18:30",
+      "end": "2026-04-28T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0505",
+      "name": "Chess club night",
+      "start": "2026-05-05T18:30",
+      "end": "2026-05-05T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0512",
+      "name": "Chess club night",
+      "start": "2026-05-12T18:30",
+      "end": "2026-05-12T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0519",
+      "name": "Chess club night",
+      "start": "2026-05-19T18:30",
+      "end": "2026-05-19T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0526",
+      "name": "Chess club night",
+      "start": "2026-05-26T18:30",
+      "end": "2026-05-26T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house",
+      "cancelled": "2026-05-20T10:00"
+    },
+    {
+      "key": "chess_0602",
+      "name": "Chess club night",
+      "start": "2026-06-02T18:30",
+      "end": "2026-06-02T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0609",
+      "name": "Chess club night",
+      "start": "2026-06-09T18:30",
+      "end": "2026-06-09T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0616",
+      "name": "Chess club night",
+      "start": "2026-06-16T18:30",
+      "end": "2026-06-16T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0623",
+      "name": "Chess club night",
+      "start": "2026-06-23T18:30",
+      "end": "2026-06-23T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0630",
+      "name": "Chess club night",
+      "start": "2026-06-30T18:30",
+      "end": "2026-06-30T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0707",
+      "name": "Chess club night",
+      "start": "2026-07-07T18:30",
+      "end": "2026-07-07T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0714",
+      "name": "Chess club night",
+      "start": "2026-07-14T18:30",
+      "end": "2026-07-14T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0721",
+      "name": "Chess club night",
+      "start": "2026-07-21T18:30",
+      "end": "2026-07-21T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "chess_0728",
+      "name": "Chess club night",
+      "start": "2026-07-28T18:30",
+      "end": "2026-07-28T21:00",
+      "attendees": ["sami_k", "tariq"],
+      "description": "Shmeisani club house"
+    },
+    {
+      "key": "physio_0601",
+      "name": "Physiotherapy session",
+      "start": "2026-06-01T10:00",
+      "end": "2026-06-01T10:45",
+      "description": "left knee"
+    },
+    {
+      "key": "physio_0608",
+      "name": "Physiotherapy session",
+      "start": "2026-06-08T10:00",
+      "end": "2026-06-08T10:45",
+      "description": "left knee"
+    },
+    {
+      "key": "physio_0615",
+      "name": "Physiotherapy session",
+      "start": "2026-06-15T10:00",
+      "end": "2026-06-15T10:45",
+      "description": "left knee"
+    },
+    {
+      "key": "physio_0622",
+      "name": "Physiotherapy session",
+      "start": "2026-06-22T10:00",
+      "end": "2026-06-22T10:45",
+      "description": "left knee"
+    },
+    {
+      "key": "physio_0629",
+      "name": "Physiotherapy session",
+      "start": "2026-06-29T10:00",
+      "end": "2026-06-29T10:45",
+      "description": "left knee"
+    },
+    {
+      "key": "physio_0706",
+      "name": "Physiotherapy session",
+      "start": "2026-07-06T10:00",
+      "end": "2026-07-06T10:45",
+      "description": "left knee"
+    },
+    {
+      "key": "committee_0411",
+      "name": "Mosque committee meeting",
+      "start": "2026-04-11T11:00",
+      "end": "2026-04-11T12:30",
+      "attendees": ["ziad", "khalil", "hasan"]
+    },
+    {
+      "key": "committee_0509",
+      "name": "Mosque committee meeting",
+      "start": "2026-05-09T11:00",
+      "end": "2026-05-09T12:30",
+      "attendees": ["ziad", "khalil", "hasan"]
+    },
+    {
+      "key": "committee_0613",
+      "name": "Mosque committee meeting",
+      "start": "2026-06-13T11:00",
+      "end": "2026-06-13T12:30",
+      "attendees": ["ziad", "khalil", "hasan"]
+    },
+    {
+      "key": "committee_0711",
+      "name": "Mosque committee meeting",
+      "start": "2026-07-11T11:00",
+      "end": "2026-07-11T12:30",
+      "attendees": ["ziad", "khalil", "hasan"]
+    },
+    {
+      "key": "committee_0808",
+      "name": "Mosque committee meeting",
+      "start": "2026-08-08T11:00",
+      "end": "2026-08-08T12:30",
+      "attendees": ["ziad", "khalil", "hasan"]
+    },
+    {
+      "key": "call_yousef_0531",
+      "name": "Video call with Yousef",
+      "start": "2026-05-31T17:00",
+      "end": "2026-05-31T17:45",
+      "attendees": ["yousef", "rami"]
+    },
+    {
+      "key": "call_yousef_0614",
+      "name": "Video call with Yousef",
+      "start": "2026-06-14T17:00",
+      "end": "2026-06-14T17:45",
+      "attendees": ["yousef"]
+    },
+    {
+      "key": "call_yousef_0628",
+      "name": "Video call with Yousef",
+      "start": "2026-06-28T17:00",
+      "end": "2026-06-28T17:45",
+      "attendees": ["yousef"]
+    },
+    {
+      "key": "call_layla_0606",
+      "name": "Video call with Layla",
+      "start": "2026-06-06T18:00",
+      "end": "2026-06-06T18:30",
+      "attendees": ["layla"]
+    },
+    {
+      "key": "call_layla_0620",
+      "name": "Video call with Layla",
+      "start": "2026-06-20T18:00",
+      "end": "2026-06-20T18:30",
+      "attendees": ["layla", "lina"]
+    },
+    {
+      "key": "call_omar_kids",
+      "name": "Video call with Zaid and Sami",
+      "start": "2026-06-21T19:00",
+      "end": "2026-06-21T19:45",
+      "attendees": ["zaid", "sami_h", "omar"]
+    },
+    {
+      "key": "cardio_apr",
+      "name": "Cardiology check-up",
+      "start": "2026-04-22T10:00",
+      "end": "2026-04-22T11:00",
+      "attendees": ["rania"]
+    },
+    {
+      "key": "cardio_jul",
+      "name": "Cardiology check-up",
+      "start": "2026-07-15T10:00",
+      "end": "2026-07-15T11:00",
+      "attendees": ["rania"]
+    },
+    {
+      "key": "dentist",
+      "name": "Dentist appointment",
+      "start": "2026-06-24T09:30",
+      "end": "2026-06-24T10:15",
+      "attendees": ["issa"]
+    },
+    {
+      "key": "blood_test",
+      "name": "Blood test at Al-Borg lab",
+      "start": "2026-06-23T08:00",
+      "end": "2026-06-23T08:30"
+    },
+    {
+      "key": "fitr",
+      "name": "Eid al-Fitr family gathering",
+      "start": "2026-03-20T12:00",
+      "end": "2026-03-20T18:00",
+      "attendees": ["nabil", "huda"]
+    },
+    {
+      "key": "adha_lunch",
+      "name": "Eid al-Adha lunch at Nabil's",
+      "start": "2026-05-27T13:00",
+      "end": "2026-05-27T17:00",
+      "attendees": ["nabil", "huda", "abu_fadi"]
+    },
+    {
+      "key": "nabil_lunch_0619",
+      "name": "Friday lunch with Nabil",
+      "start": "2026-06-19T13:00",
+      "end": "2026-06-19T14:00",
+      "attendees": ["nabil"]
+    },
+    {
+      "key": "nabil_lunch_0626",
+      "name": "Friday lunch with Nabil",
+      "start": "2026-06-26T13:00",
+      "end": "2026-06-26T14:00",
+      "attendees": ["nabil"]
+    },
+    {
+      "key": "airport_lina",
+      "name": "Pick up Lina from the airport",
+      "start": "2026-07-03T22:00",
+      "end": "2026-07-03T23:30",
+      "attendees": ["lina", "abu_ahmad"],
+      "description": "Royal Jordanian RJ112, Queen Alia"
+    },
+    {
+      "key": "lina_dinner",
+      "name": "Dinner with Lina and Layla",
+      "start": "2026-07-04T19:00",
+      "end": "2026-07-04T21:30",
+      "attendees": ["lina", "layla", "karim"]
+    },
+    {
+      "key": "huda_visit",
+      "name": "Visit Huda",
+      "start": "2026-06-22T17:00",
+      "end": "2026-06-22T18:30",
+      "attendees": ["huda"]
+    },
+    {
+      "key": "rami_arrives",
+      "name": "Rami's family arrives",
+      "start": "2026-08-01T15:00",
+      "end": "2026-08-01T17:00",
+      "attendees": ["rami", "maha", "yousef"]
+    },
+    {
+      "key": "tournament",
+      "name": "Amman open chess tournament",
+      "start": "2026-06-27T09:00",
+      "end": "2026-06-27T18:00",
+      "attendees": ["tariq", "sami_k", "faris", "mounir"],
+      "description": "Hussein Youth City hall"
+    },
+    {
+      "key": "simul",
+      "name": "Chess simul at Shoman library",
+      "start": "2026-07-18T16:00",
+      "end": "2026-07-18T18:00",
+      "attendees": ["tariq"]
+    },
+    {
+      "key": "walid_coffee",
+      "name": "Coffee with Walid",
+      "start": "2026-06-17T10:00",
+      "end": "2026-06-17T11:00",
+      "attendees": ["walid"],
+      "cancelled": "2026-06-16T22:00"
+    },
+    {
+      "key": "iftar",
+      "name": "Fundraising iftar",
+      "start": "2026-03-10T19:00",
+      "end": "2026-03-10T22:00",
+      "attendees": ["ziad", "hasan", "khalil"]
+    },
+    {
+      "key": "site_visit",
+      "name": "Ablution area site visit",
+      "start": "2026-06-23T10:00",
+      "end": "2026-06-23T11:00",
+      "attendees": ["ziad", "hani"]
+    },
+    {
+      "key": "contractor",
+      "name": "Contractor meeting at the mosque",
+      "start": "2026-06-30T11:00",
+      "end": "2026-06-30T12:00",
+      "attendees": ["ziad", "khalil"]
+    },
+    {
+      "key": "lecture",
+      "name": "Engineers association lecture",
+      "start": "2026-06-22T19:00",
+      "end": "2026-06-22T20:30",
+      "description": "retrofitting old concrete buildings"
+    },
+    {
+      "key": "reunion",
+      "name": "Engineers reunion dinner",
+      "start": "2026-06-11T20:00",
+      "end": "2026-06-11T23:00",
+      "attendees": ["jamal", "nizar", "khaled_o"],
+      "cancelled": "2026-06-09T12:00"
+    },
+    {
+      "key": "abu_fadi_coffee",
+      "name": "Coffee with Abu Fadi",
+      "start": "2026-06-25T10:00",
+      "end": "2026-06-25T11:00",
+      "attendees": ["abu_fadi"]
+    },
+    {
+      "key": "jamal_lunch",
+      "name": "Lunch with Jamal",
+      "start": "2026-06-25T13:00",
+      "end": "2026-06-25T14:30",
+      "attendees": ["jamal"],
+      "trashed": "2026-06-12T09:00"
+    },
+    {
+      "key": "tank_clean",
+      "name": "Water tank cleaning",
+      "start": "2026-05-05T09:00",
+      "end": "2026-05-05T11:00",
+      "attendees": ["hani"],
+      "trashed": "2026-04-20T09:00"
+    },
+    {
+      "key": "ac_service",
+      "name": "AC technician visit",
+      "start": "2026-06-20T10:00",
+      "end": "2026-06-20T11:00"
+    },
+    {
+      "key": "aqaba_drive",
+      "name": "Drive to Aqaba",
+      "start": "2026-07-09T07:00",
+      "end": "2026-07-09T12:00",
+      "attendees": ["nabil", "jamal", "abu_fadi"]
+    },
+    {
+      "key": "aqaba_back",
+      "name": "Drive back from Aqaba",
+      "start": "2026-07-12T15:00",
+      "end": "2026-07-12T20:00",
+      "attendees": ["nabil", "jamal", "abu_fadi"]
+    },
+    {
+      "key": "satellite",
+      "name": "Satellite dish install",
+      "start": "2026-06-19T16:00",
+      "end": "2026-06-19T17:00",
+      "attendees": ["adel"]
+    }
+  ],
+  "tasks": [
+    {
+      "key": "license_26",
+      "name": "Renew car license",
+      "due": "2026-07-01",
+      "priority": 2,
+      "list": "home_l"
+    },
+    {
+      "key": "license_25",
+      "name": "Renew car license",
+      "due": "2025-07-01",
+      "completed": "2025-06-28T10:00",
+      "list": "home_l"
+    },
+    {
+      "key": "inspection",
+      "name": "Car inspection at Sahab",
+      "parent": "license_26",
+      "due": "2026-06-27",
+      "effort": 120
+    },
+    {
+      "key": "ac",
+      "name": "Service the air conditioner",
+      "due": "2026-06-20",
+      "effort": 60,
+      "list": "home_l"
+    },
+    {
+      "key": "prop_tax",
+      "name": "Pay property tax",
+      "due": "2026-06-30",
+      "priority": 2,
+      "list": "home_l"
+    },
+    {
+      "key": "leak",
+      "name": "Call Hani about the kitchen leak",
+      "due": "2026-06-19",
+      "effort": 10,
+      "priority": 1,
+      "list": "home_l"
+    },
+    {
+      "key": "tank",
+      "name": "Clean the water tank",
+      "completed": "2026-05-05T12:00",
+      "list": "home_l"
+    },
+    {
+      "key": "balcony",
+      "name": "Fix balcony door",
+      "trashed": "2026-06-05T09:00",
+      "list": "home_l"
+    },
+    {
+      "key": "mercedes",
+      "name": "Sell the old Mercedes",
+      "trashed": "2026-03-15T09:00"
+    },
+    {
+      "key": "umrah",
+      "name": "Book Umrah package",
+      "trashed": "2026-04-02T09:00",
+      "list": "travel_l"
+    },
+    {
+      "key": "gas",
+      "name": "Order gas cylinder",
+      "due": "2026-06-22",
+      "effort": 5,
+      "list": "home_l"
+    },
+    {
+      "key": "sat_task",
+      "name": "Pay Adel for the dish",
+      "due": "2026-06-19",
+      "effort": 5
+    },
+    {
+      "key": "pills",
+      "name": "Refill blood pressure pills",
+      "due": "2026-06-21",
+      "priority": 1,
+      "effort": 15,
+      "list": "health_l"
+    },
+    {
+      "key": "eye_test",
+      "name": "Book eye test",
+      "list": "health_l"
+    },
+    {
+      "key": "walk",
+      "name": "Walk 30 minutes after dinner",
+      "status": "in_progress",
+      "list": "health_l",
+      "effort": 30
+    },
+    {
+      "key": "knee_ex",
+      "name": "Knee exercises from physio",
+      "status": "in_progress",
+      "list": "health_l",
+      "effort": 20
+    },
+    {
+      "key": "bp_log",
+      "name": "Send BP readings to Dr. Rania",
+      "due": "2026-07-10",
+      "priority": 3,
+      "list": "health_l"
+    },
+    {
+      "key": "ablution",
+      "name": "Ablution area renovation",
+      "due": "2026-08-31",
+      "priority": 1,
+      "status": "in_progress",
+      "list": "mosque_l",
+      "description": "men's side first, then the women's section"
+    },
+    {
+      "key": "tiles",
+      "name": "Choose tiles",
+      "parent": "ablution",
+      "due": "2026-06-25",
+      "effort": 90
+    },
+    {
+      "key": "plumber",
+      "name": "Hire plumber",
+      "parent": "ablution",
+      "due": "2026-06-30"
+    },
+    {
+      "key": "taps",
+      "name": "Order taps",
+      "parent": "ablution",
+      "due": "2026-07-15",
+      "effort": 30
+    },
+    {
+      "key": "quotes",
+      "name": "Get three quotes for the tiles",
+      "due": "2026-06-24",
+      "priority": 1,
+      "effort": 120,
+      "list": "mosque_l"
+    },
+    {
+      "key": "pledges",
+      "name": "Collect pledges from the committee",
+      "due": "2026-06-27",
+      "priority": 2,
+      "list": "mosque_l",
+      "effort": 60
+    },
+    {
+      "key": "statement",
+      "name": "Prepare fund statement for June",
+      "due": "2026-06-30",
+      "effort": 90,
+      "list": "mosque_l",
+      "priority": 2
+    },
+    {
+      "key": "statement_may",
+      "name": "Prepare fund statement for May",
+      "due": "2026-05-31",
+      "completed": "2026-05-30T20:00",
+      "list": "mosque_l"
+    },
+    {
+      "key": "receipts",
+      "name": "Scan the carpet receipts",
+      "due": "2026-06-18",
+      "effort": 15,
+      "list": "mosque_l"
+    },
+    {
+      "key": "pairings",
+      "name": "Prepare tournament pairings",
+      "due": "2026-06-26",
+      "effort": 180,
+      "priority": 2,
+      "list": "chess_l"
+    },
+    {
+      "key": "pair_list",
+      "name": "Confirm player list",
+      "parent": "pairings",
+      "due": "2026-06-24"
+    },
+    {
+      "key": "pair_print",
+      "name": "Print score sheets",
+      "parent": "pairings",
+      "due": "2026-06-26",
+      "effort": 20
+    },
+    {
+      "key": "clocks",
+      "name": "Buy new chess clocks",
+      "due": "2026-06-25",
+      "effort": 30,
+      "list": "chess_l"
+    },
+    {
+      "key": "chess_fee",
+      "name": "Pay club membership fee",
+      "due": "2026-07-01",
+      "list": "chess_l"
+    },
+    {
+      "key": "yousef_chess",
+      "name": "Teach Yousef the Italian game",
+      "list": "chess_l",
+      "effort": 45
+    },
+    {
+      "key": "endgames",
+      "name": "Study rook endgames",
+      "list": "chess_l",
+      "effort": 60,
+      "status": "in_progress"
+    },
+    {
+      "key": "eid_money",
+      "name": "Send Eid money to the grandchildren",
+      "due": "2026-05-25",
+      "completed": "2026-05-24T21:00"
+    },
+    {
+      "key": "layla_gift",
+      "name": "Buy birthday gift for Layla",
+      "due": "2026-07-02",
+      "priority": 2
+    },
+    {
+      "key": "call_dana",
+      "name": "Call Dana about the Berlin visit",
+      "due": "2026-06-22",
+      "effort": 20
+    },
+    {
+      "key": "print_omar",
+      "name": "Print photos for Omar",
+      "due": "2026-06-29",
+      "effort": 30
+    },
+    {
+      "key": "bike",
+      "name": "Fix Yousef's bicycle",
+      "due": "2026-07-31",
+      "effort": 60
+    },
+    {
+      "key": "recipes_book",
+      "name": "Type up Umm Rami's recipes for Dana",
+      "status": "in_progress",
+      "effort": 240
+    },
+    {
+      "key": "wedding_gift",
+      "name": "Wedding gift for Walid's son",
+      "status": "cancelled",
+      "due": "2026-05-15"
+    },
+    {
+      "key": "flight",
+      "name": "Book flight to London",
+      "due": "2026-07-15",
+      "list": "travel_l",
+      "priority": 3
+    },
+    {
+      "key": "passport",
+      "name": "Renew passport",
+      "due": "2026-08-31",
+      "list": "travel_l"
+    },
+    {
+      "key": "visa",
+      "name": "Apply for UK visa",
+      "due": "2026-07-01",
+      "list": "travel_l",
+      "effort": 120,
+      "priority": 1
+    },
+    {
+      "key": "olives",
+      "name": "Prune the olive trees",
+      "list": "garden_l",
+      "due": "2026-11-15",
+      "effort": 180
+    },
+    {
+      "key": "jasmine",
+      "name": "Water the jasmine",
+      "list": "garden_l",
+      "status": "in_progress",
+      "effort": 10
+    },
+    {
+      "key": "fertilizer",
+      "name": "Buy fertilizer",
+      "list": "garden_l",
+      "due": "2026-06-23"
+    },
+    {
+      "key": "memoir",
+      "name": "Write chapter on the Baghdad bridge",
+      "effort": 300,
+      "status": "in_progress"
+    },
+    {
+      "key": "lecture_q",
+      "name": "Prepare questions for the lecture",
+      "due": "2026-06-22",
+      "effort": 30
+    },
+    {
+      "key": "elec_01",
+      "name": "Pay electricity bill",
+      "due": "2026-01-10",
+      "completed": "2026-01-09T11:00",
+      "list": "home_l"
+    },
+    {
+      "key": "elec_02",
+      "name": "Pay electricity bill",
+      "due": "2026-02-10",
+      "completed": "2026-02-09T11:00",
+      "list": "home_l"
+    },
+    {
+      "key": "elec_03",
+      "name": "Pay electricity bill",
+      "due": "2026-03-10",
+      "completed": "2026-03-09T11:00",
+      "list": "home_l"
+    },
+    {
+      "key": "elec_04",
+      "name": "Pay electricity bill",
+      "due": "2026-04-10",
+      "completed": "2026-04-09T11:00",
+      "list": "home_l"
+    },
+    {
+      "key": "elec_05",
+      "name": "Pay electricity bill",
+      "due": "2026-05-10",
+      "completed": "2026-05-09T11:00",
+      "list": "home_l"
+    },
+    {
+      "key": "elec_06",
+      "name": "Pay electricity bill",
+      "due": "2026-06-10",
+      "completed": "2026-06-09T11:00",
+      "list": "home_l"
+    },
+    {
+      "key": "elec_07",
+      "name": "Pay electricity bill",
+      "due": "2026-07-10",
+      "list": "home_l"
+    },
+    {
+      "key": "water_q1",
+      "name": "Pay water bill",
+      "due": "2026-04-05",
+      "completed": "2026-04-03T10:00",
+      "list": "home_l"
+    },
+    {
+      "key": "water_q2",
+      "name": "Pay water bill",
+      "due": "2026-07-05",
+      "list": "home_l"
+    }
+  ],
+  "notebooks": [
+    {
+      "key": "chess_nb",
+      "name": "Chess openings"
+    },
+    {
+      "key": "mosque_nb",
+      "name": "Mosque fund"
+    },
+    {
+      "key": "recipes_nb",
+      "name": "Umm Rami's recipes"
+    },
+    {
+      "key": "eng_nb",
+      "name": "Engineering memoirs"
+    },
+    {
+      "key": "health_nb",
+      "name": "Health log"
+    }
+  ],
+  "notes": [
+    {
+      "key": "italian",
+      "name": "Italian game",
+      "body": "1.e4 e5 2.Nf3 Nc6 3.Bc4 - good first opening for Yousef",
+      "notebook": "chess_nb",
+      "created": "2026-05-02T21:00",
+      "pinned": true
+    },
+    {
+      "key": "caro",
+      "name": "Caro-Kann ideas",
+      "body": "against e4, solid; Tariq plays the advance variation",
+      "notebook": "chess_nb",
+      "created": "2026-04-14T22:00"
+    },
+    {
+      "key": "rook_end",
+      "name": "Lucena position",
+      "body": "build a bridge with the rook on the fourth rank",
+      "notebook": "chess_nb",
+      "created": "2026-06-09T21:30"
+    },
+    {
+      "key": "tourney_notes",
+      "name": "Tournament rules",
+      "body": "90 minutes plus 30 seconds, 5 rounds, Mounir is arbiter",
+      "notebook": "chess_nb",
+      "created": "2026-06-16T22:10"
+    },
+    {
+      "key": "fund_may",
+      "name": "May fund summary",
+      "body": "collected 2350, spent 1810, carpet invoice still missing",
+      "notebook": "mosque_nb",
+      "created": "2026-05-30T20:00"
+    },
+    {
+      "key": "fund_donors",
+      "name": "Donor list",
+      "body": "Haj Suleiman 500, the Masri family 300, anonymous 1000",
+      "notebook": "mosque_nb",
+      "created": "2026-04-18T19:00",
+      "pinned": true
+    },
+    {
+      "key": "tile_specs",
+      "name": "Tile specs",
+      "body": "anti-slip porcelain, R11 rating, 30x60, light grey",
+      "notebook": "mosque_nb",
+      "created": "2026-06-12T18:00"
+    },
+    {
+      "key": "maqluba",
+      "name": "Maqluba",
+      "body": "fry the cauliflower and aubergine first, rice on top, flip with confidence",
+      "notebook": "recipes_nb",
+      "created": "2026-03-05T16:00"
+    },
+    {
+      "key": "mansaf",
+      "name": "Mansaf",
+      "body": "jameed from Karak, soak overnight, lamb shoulder, shrak bread",
+      "notebook": "recipes_nb",
+      "created": "2026-03-06T16:00",
+      "pinned": true
+    },
+    {
+      "key": "kaak",
+      "name": "Eid ka'ak",
+      "body": "semolina, dates, mahlab; Umm Rami used her mother's wooden moulds",
+      "notebook": "recipes_nb",
+      "created": "2026-03-15T17:30"
+    },
+    {
+      "key": "baghdad",
+      "name": "The Baghdad bridge",
+      "body": "1984, prestressed girders, Jamal ran the night shift",
+      "notebook": "eng_nb",
+      "created": "2026-02-10T10:00"
+    },
+    {
+      "key": "kuwait",
+      "name": "Kuwait years",
+      "body": "1979 to 1990, the ministry towers, met Mahmoud there",
+      "notebook": "eng_nb",
+      "created": "2026-02-20T10:00"
+    },
+    {
+      "key": "first_job",
+      "name": "First site job",
+      "body": "Zarqa water tower, 1976, the foreman taught me more than Cairo",
+      "notebook": "eng_nb",
+      "created": "2026-03-02T09:30"
+    },
+    {
+      "key": "bp_june",
+      "name": "Blood pressure June",
+      "body": "mornings 135/85 average, evenings 128/80",
+      "notebook": "health_nb",
+      "created": "2026-06-15T08:00"
+    },
+    {
+      "key": "knee",
+      "name": "Knee exercises",
+      "body": "straight leg raises 3x10, wall sits, no stairs for two weeks",
+      "notebook": "health_nb",
+      "created": "2026-06-01T11:00"
+    },
+    {
+      "key": "meds",
+      "name": "Medication list",
+      "body": "amlodipine 5mg morning, aspirin 81mg, atorvastatin at night",
+      "notebook": "health_nb",
+      "created": "2026-04-22T12:00",
+      "pinned": true
+    },
+    {
+      "key": "reminder",
+      "name": "Reminder",
+      "body": "ask Ziad for the receipts",
+      "created": "2026-06-13T13:00"
+    },
+    {
+      "key": "idea",
+      "name": "Idea",
+      "body": "chess class for kids at the mosque",
+      "created": "2026-06-16T22:30"
+    },
+    {
+      "key": "grandkids_sizes",
+      "name": "Grandchildren sizes",
+      "body": "Yousef 10 years, Layla shoe 31, Zaid and Sami medium",
+      "created": "2026-05-10T20:00"
+    },
+    {
+      "key": "gift_list",
+      "name": "Gift ideas",
+      "body": "Layla: a chess set with wooden pieces; Dana: Palestinian embroidery",
+      "created": "2026-06-05T21:00"
+    },
+    {
+      "key": "wifi_note",
+      "name": "Router notes",
+      "body": "Orange fibre, restart box behind the TV",
+      "created": "2026-01-15T10:00"
+    },
+    {
+      "key": "old_draft",
+      "name": "Old speech draft",
+      "body": "retirement speech 2019",
+      "created": "2019-06-01T10:00",
+      "trashed": "2026-06-10T10:00"
+    }
+  ],
+  "folders": [
+    {
+      "key": "pension_f",
+      "name": "Pension"
+    },
+    {
+      "key": "deeds_f",
+      "name": "Property deeds"
+    },
+    {
+      "key": "med_f",
+      "name": "Medical"
+    },
+    {
+      "key": "mosque_f",
+      "name": "Mosque fund"
+    },
+    {
+      "key": "car_f",
+      "name": "Car"
+    },
+    {
+      "key": "scans_f",
+      "name": "Old scans"
+    },
+    {
+      "key": "travel_f",
+      "name": "Travel"
+    },
+    {
+      "key": "misc_f",
+      "name": "Misc"
+    }
+  ],
+  "documents": [
+    {
+      "key": "pension_letter",
+      "name": "Social security pension letter",
+      "folder": "pension_f",
+      "starred": true,
+      "created": "2025-12-01T10:00"
+    },
+    {
+      "key": "pension_june",
+      "name": "Pension statement June",
+      "folder": "pension_f",
+      "created": "2026-06-10T09:00"
+    },
+    {
+      "key": "pension_may",
+      "name": "Pension statement May",
+      "folder": "pension_f",
+      "created": "2026-05-10T09:00"
+    },
+    {
+      "key": "deed_house",
+      "name": "House deed Jabal Amman",
+      "folder": "deeds_f",
+      "starred": true,
+      "created": "2024-01-15T10:00"
+    },
+    {
+      "key": "deed_land",
+      "name": "Land deed Madaba",
+      "folder": "deeds_f",
+      "created": "2024-01-15T10:30"
+    },
+    {
+      "key": "echo",
+      "name": "Echocardiogram report",
+      "folder": "med_f",
+      "created": "2026-04-22T12:00"
+    },
+    {
+      "key": "blood_may",
+      "name": "Blood test results May",
+      "folder": "med_f",
+      "created": "2026-05-18T11:00"
+    },
+    {
+      "key": "insurance",
+      "name": "Health insurance card scan",
+      "folder": "med_f",
+      "created": "2026-01-05T10:00"
+    },
+    {
+      "key": "tile_quote",
+      "name": "Tile quote from Al-Nour",
+      "folder": "mosque_f",
+      "created": "2026-06-15T17:00"
+    },
+    {
+      "key": "fund_ledger",
+      "name": "Fund ledger 2026",
+      "folder": "mosque_f",
+      "starred": true,
+      "created": "2026-02-01T12:00"
+    },
+    {
+      "key": "carpet_inv",
+      "name": "Carpet cleaning invoice",
+      "folder": "mosque_f",
+      "created": "2026-06-17T19:00"
+    },
+    {
+      "key": "car_reg",
+      "name": "Car registration",
+      "folder": "car_f",
+      "created": "2025-07-01T10:00"
+    },
+    {
+      "key": "car_ins",
+      "name": "Car insurance policy",
+      "folder": "car_f",
+      "created": "2026-01-20T10:00"
+    },
+    {
+      "key": "chess_rating",
+      "name": "FIDE rating certificate",
+      "created": "2026-06-18T20:00"
+    },
+    {
+      "key": "eng_cert",
+      "name": "Engineers association membership",
+      "folder": "pension_f",
+      "created": "2026-03-01T10:00"
+    },
+    {
+      "key": "school_certs",
+      "name": "Scanned school certificates",
+      "folder": "scans_f",
+      "created": "2024-03-10T10:00"
+    },
+    {
+      "key": "tourney_poster",
+      "name": "Tournament poster",
+      "created": "2026-06-03T21:00",
+      "trashed": "2026-06-04T09:00"
+    },
+    {
+      "key": "old_visa",
+      "name": "Old UK visa copy",
+      "folder": "travel_f",
+      "created": "2019-05-01T10:00",
+      "trashed": "2026-06-01T09:00"
+    }
+  ],
+  "albums": [
+    {
+      "key": "fitr_album",
+      "name": "Eid al-Fitr 2026"
+    },
+    {
+      "key": "adha_album",
+      "name": "Eid al-Adha 2026"
+    },
+    {
+      "key": "grand_album",
+      "name": "Grandchildren"
+    },
+    {
+      "key": "chess_album",
+      "name": "Chess club"
+    },
+    {
+      "key": "aqaba_album",
+      "name": "Aqaba 2025"
+    },
+    {
+      "key": "dump_album",
+      "name": "Phone dump"
+    },
+    {
+      "key": "blurry_album",
+      "name": "Blurry shots"
+    }
+  ],
+  "photos": [
+    {
+      "key": "fitr_table",
+      "name": "Eid table at Nabil's",
+      "taken": "2026-03-20T13:30",
+      "albums": ["fitr_album"],
+      "people": ["nabil", "huda"],
+      "starred": true
+    },
+    {
+      "key": "fitr_kaak",
+      "name": "Ka'ak trays",
+      "taken": "2026-03-19T21:00",
+      "albums": ["fitr_album"]
+    },
+    {
+      "key": "fitr_huda",
+      "name": "Huda with the sweets",
+      "taken": "2026-03-20T15:00",
+      "albums": ["fitr_album"],
+      "people": ["huda"]
+    },
+    {
+      "key": "adha_lamb",
+      "name": "The Eid lamb",
+      "taken": "2026-05-27T09:00",
+      "albums": ["adha_album"]
+    },
+    {
+      "key": "adha_family",
+      "name": "Family after Eid prayer",
+      "taken": "2026-05-27T07:30",
+      "albums": ["adha_album"],
+      "people": ["nabil", "huda", "abu_fadi"],
+      "starred": true
+    },
+    {
+      "key": "adha_lunch_p",
+      "name": "Mansaf at Nabil's",
+      "taken": "2026-05-27T14:00",
+      "albums": ["adha_album"],
+      "people": ["nabil"]
+    },
+    {
+      "key": "adha_call",
+      "name": "Eid video call screenshot",
+      "taken": "2026-05-27T18:00",
+      "albums": ["adha_album", "grand_album"],
+      "people": ["yousef", "layla", "zaid", "sami_h"]
+    },
+    {
+      "key": "yousef_bike",
+      "name": "Yousef on his bike",
+      "taken": "2025-08-10T18:00",
+      "albums": ["grand_album"],
+      "people": ["yousef"],
+      "starred": true
+    },
+    {
+      "key": "layla_chess",
+      "name": "Layla's first chess game",
+      "taken": "2025-12-28T16:00",
+      "albums": ["grand_album"],
+      "people": ["layla"]
+    },
+    {
+      "key": "zaid_sami_snow",
+      "name": "Zaid and Sami in the snow",
+      "taken": "2026-01-18T11:00",
+      "albums": ["grand_album"],
+      "people": ["zaid", "sami_h"]
+    },
+    {
+      "key": "layla_school",
+      "name": "Layla's school play",
+      "taken": "2026-06-12T15:00",
+      "albums": ["grand_album"],
+      "people": ["layla"]
+    },
+    {
+      "key": "yousef_grad",
+      "name": "Yousef's KG graduation",
+      "taken": "2026-06-04T11:00",
+      "albums": ["grand_album"],
+      "people": ["yousef", "rami", "maha"]
+    },
+    {
+      "key": "chess_trophy",
+      "name": "Club trophy 2025",
+      "taken": "2025-11-20T21:00",
+      "albums": ["chess_album"],
+      "people": ["tariq", "sami_k"],
+      "starred": true
+    },
+    {
+      "key": "chess_board",
+      "name": "Blitz night board",
+      "taken": "2026-06-02T20:00",
+      "albums": ["chess_album"]
+    },
+    {
+      "key": "chess_mounir",
+      "name": "Mounir arbiting",
+      "taken": "2026-05-19T20:30",
+      "albums": ["chess_album"],
+      "people": ["mounir"]
+    },
+    {
+      "key": "chess_sami",
+      "name": "Sami's queen sacrifice",
+      "taken": "2026-06-16T20:10",
+      "albums": ["chess_album"],
+      "people": ["sami_k"]
+    },
+    {
+      "key": "aqaba_sea",
+      "name": "Red Sea at sunset",
+      "taken": "2025-10-11T18:10",
+      "albums": ["aqaba_album"],
+      "starred": true
+    },
+    {
+      "key": "aqaba_boat",
+      "name": "Glass-bottom boat",
+      "taken": "2025-10-11T10:00",
+      "albums": ["aqaba_album"],
+      "people": ["nabil"]
+    },
+    {
+      "key": "aqaba_fish",
+      "name": "Sayadiyeh dinner",
+      "taken": "2025-10-12T20:00",
+      "albums": ["aqaba_album"],
+      "people": ["nabil", "jamal"]
+    },
+    {
+      "key": "dump_receipt",
+      "name": "Receipt photo",
+      "taken": "2026-06-02T12:00",
+      "albums": ["dump_album"]
+    },
+    {
+      "key": "dump_meter",
+      "name": "Electric meter reading",
+      "taken": "2026-06-09T09:00",
+      "albums": ["dump_album"]
+    },
+    {
+      "key": "blur_1",
+      "name": "Blurry mosque ceiling",
+      "taken": "2026-06-11T19:00",
+      "albums": ["blurry_album"]
+    },
+    {
+      "key": "blur_2",
+      "name": "Blurry chess clock",
+      "taken": "2026-06-16T20:40",
+      "albums": ["blurry_album"]
+    },
+    {
+      "key": "mosque_tiles",
+      "name": "Old ablution tiles",
+      "taken": "2026-06-13T12:45",
+      "people": ["ziad"]
+    },
+    {
+      "key": "mosque_dome",
+      "name": "Mosque dome from the roof",
+      "taken": "2026-06-13T13:00"
+    },
+    {
+      "key": "jasmine_p",
+      "name": "Jasmine in bloom",
+      "taken": "2026-06-17T07:30",
+      "starred": true
+    },
+    {
+      "key": "olive_p",
+      "name": "Olive trees in the garden",
+      "taken": "2026-06-18T08:00"
+    },
+    {
+      "key": "umm_rami",
+      "name": "Umm Rami in the kitchen",
+      "taken": "2019-04-02T12:00",
+      "starred": true
+    },
+    {
+      "key": "wedding_old",
+      "name": "Our wedding 1978",
+      "taken": "1978-07-15T19:00",
+      "starred": true
+    },
+    {
+      "key": "dana_berlin",
+      "name": "Dana in Berlin",
+      "taken": "2026-05-01T14:00",
+      "people": ["dana"]
+    },
+    {
+      "key": "lina_london",
+      "name": "Lina and Karim in Hyde Park",
+      "taken": "2026-04-12T13:00",
+      "people": ["lina", "karim"]
+    },
+    {
+      "key": "trash_selfie",
+      "name": "Selfie with Abu Fadi",
+      "taken": "2026-04-30T10:30",
+      "people": ["abu_fadi"],
+      "trashed": "2026-06-10T09:00"
+    },
+    {
+      "key": "trash_menu",
+      "name": "Cafe menu",
+      "taken": "2026-06-05T12:00",
+      "trashed": "2026-06-15T09:00"
+    },
+    {
+      "key": "trash_old",
+      "name": "Old garage door",
+      "taken": "2026-02-01T12:00",
+      "trashed": "2026-03-01T09:00"
+    }
+  ],
+  "debts": [
+    {
+      "key": "d_nabil",
+      "person": "nabil",
+      "direction": "i_owe",
+      "amount": 90,
+      "name": "Chalet share",
+      "date": "2026-06-03"
+    },
+    {
+      "key": "d_abu_fadi",
+      "person": "abu_fadi",
+      "direction": "owes_me",
+      "amount": 25,
+      "name": "Coffee beans from Kuwait",
+      "date": "2026-04-30"
+    },
+    {
+      "key": "d_walid",
+      "person": "walid",
+      "direction": "owes_me",
+      "amount": 40,
+      "name": "Chess book order",
+      "date": "2026-06-09"
+    },
+    {
+      "key": "d_tariq",
+      "person": "tariq",
+      "direction": "i_owe",
+      "amount": 15,
+      "name": "Tournament entry fee",
+      "date": "2026-06-16"
+    },
+    {
+      "key": "d_rami",
+      "person": "rami",
+      "direction": "owes_me",
+      "amount": 150,
+      "name": "Yousef's bike",
+      "date": "2025-08-10",
+      "settled": "2025-09-01T10:00"
+    },
+    {
+      "key": "d_hani",
+      "person": "hani",
+      "direction": "i_owe",
+      "amount": 35,
+      "name": "Leak repair callout",
+      "date": "2026-06-18"
+    },
+    {
+      "key": "d_huda",
+      "person": "huda",
+      "direction": "owes_me",
+      "amount": 60,
+      "name": "Eid clothes for her grandson",
+      "date": "2026-05-22"
+    },
+    {
+      "key": "d_jamal",
+      "person": "jamal",
+      "direction": "owes_me",
+      "amount": 120,
+      "name": "Engineering books",
+      "date": "2026-03-12"
+    },
+    {
+      "key": "d_ziad",
+      "person": "ziad",
+      "direction": "i_owe",
+      "amount": 20,
+      "name": "Taxi to the tile shop",
+      "date": "2026-06-15"
+    },
+    {
+      "key": "d_khaled_s",
+      "person": "khaled_s",
+      "direction": "i_owe",
+      "amount": 12.5,
+      "name": "Pharmacy tab",
+      "date": "2026-06-12",
+      "settled": "2026-06-14T10:00"
+    },
+    {
+      "key": "d_umm_khalil",
+      "person": "umm_khalil",
+      "direction": "owes_me",
+      "amount": 8,
+      "name": "Bread from the bakery",
+      "date": "2026-06-17"
+    },
+    {
+      "key": "d_mounir",
+      "person": "mounir",
+      "direction": "owes_me",
+      "amount": 30,
+      "name": "Arbiter badge",
+      "date": "2026-05-19",
+      "settled": "2026-06-02T21:00"
+    }
+  ],
+  "locker": [
+    {
+      "key": "gmail",
+      "name": "Gmail",
+      "type": "login",
+      "username": "bashir.haddad52@gmail.com",
+      "url": "https://mail.google.com",
+      "password": "Zarqa1976!",
+      "starred": true
+    },
+    {
+      "key": "sanad",
+      "name": "Sanad government app",
+      "type": "login",
+      "username": "9521012345",
+      "url": "https://sanad.gov.jo",
+      "password": "Jabal-Amman-44"
+    },
+    {
+      "key": "lichess",
+      "name": "Lichess account",
+      "type": "login",
+      "username": "abu_rami_52",
+      "url": "https://lichess.org",
+      "password": "rook-endgame-7"
+    },
+    {
+      "key": "arab_bank",
+      "name": "Arab Bank online",
+      "type": "login",
+      "username": "bhaddad",
+      "url": "https://online.arabbank.jo",
+      "password": "Madaba-Land-9"
+    },
+    {
+      "key": "visa_card",
+      "name": "Arab Bank Visa",
+      "type": "card",
+      "card_number": "4532 7788 1020 3344",
+      "cvv": "551",
+      "starred": true
+    },
+    {
+      "key": "safe",
+      "name": "Home safe combination",
+      "type": "note",
+      "notes": "18-40-7, behind the wardrobe"
+    },
+    {
+      "key": "national_id",
+      "name": "National ID",
+      "type": "identity",
+      "password": "2207"
+    },
+    {
+      "key": "wifi",
+      "name": "Home wifi",
+      "type": "wifi",
+      "password": "jasmine-balcony-2026"
+    },
+    {
+      "key": "laptop",
+      "name": "Laptop password",
+      "type": "password",
+      "password": "Lucena-Bridge-4"
+    },
+    {
+      "key": "github_key",
+      "name": "Old office server key",
+      "type": "ssh_key",
+      "notes": "engineering office NAS",
+      "password": "ssh-rsa AAAAB3-office-nas"
+    },
+    {
+      "key": "weather_api",
+      "name": "Weather station API",
+      "type": "api_credential",
+      "notes": "rooftop station",
+      "code": "wx-amman-5521"
+    },
+    {
+      "key": "passport_l",
+      "name": "Jordanian passport",
+      "type": "passport",
+      "notes": "expires September 2026"
+    },
+    {
+      "key": "cairo_amman",
+      "name": "Cairo Amman Bank account",
+      "type": "bank_account",
+      "notes": "pension deposits, IBAN JO71 CAAB"
+    },
+    {
+      "key": "driving",
+      "name": "Driving licence",
+      "type": "driving_licence",
+      "notes": "renewed 2024, class 3"
+    },
+    {
+      "key": "office_lic",
+      "name": "Office 365 licence",
+      "type": "software_licence",
+      "code": "O365-HADD-2026"
+    },
+    {
+      "key": "btc",
+      "name": "Rami's crypto gift wallet",
+      "type": "crypto_wallet",
+      "notes": "0.01 BTC from Rami, seed in the safe"
+    },
+    {
+      "key": "jea",
+      "name": "Jordan Engineers Association",
+      "type": "membership",
+      "notes": "member 11482",
+      "starred": true
+    },
+    {
+      "key": "deed_scan",
+      "name": "House deed copy",
+      "type": "document",
+      "notes": "certified copy, land department"
+    },
+    {
+      "key": "old_email",
+      "name": "Old Hotmail",
+      "type": "login",
+      "username": "bashir_eng",
+      "password": "baghdad84",
+      "trashed": "2026-06-06T09:00"
+    }
+  ],
+  "links": [
+    {
+      "from": "leak",
+      "to": "hani"
+    },
+    {
+      "from": "quotes",
+      "to": "ziad"
+    },
+    {
+      "from": "pledges",
+      "to": "khalil"
+    },
+    {
+      "from": "statement",
+      "to": "ziad"
+    },
+    {
+      "from": "pairings",
+      "to": "tariq"
+    },
+    {
+      "from": "pairings",
+      "to": "mounir"
+    },
+    {
+      "from": "yousef_chess",
+      "to": "yousef"
+    },
+    {
+      "from": "layla_gift",
+      "to": "layla"
+    },
+    {
+      "from": "call_dana",
+      "to": "dana"
+    },
+    {
+      "from": "print_omar",
+      "to": "omar"
+    },
+    {
+      "from": "bike",
+      "to": "yousef"
+    },
+    {
+      "from": "recipes_book",
+      "to": "dana"
+    },
+    {
+      "from": "bp_log",
+      "to": "rania"
+    },
+    {
+      "from": "sat_task",
+      "to": "adel"
+    },
+    {
+      "from": "memoir",
+      "to": "jamal"
+    },
+    {
+      "from": "italian",
+      "to": "yousef"
+    },
+    {
+      "from": "caro",
+      "to": "tariq"
+    },
+    {
+      "from": "tourney_notes",
+      "to": "mounir"
+    },
+    {
+      "from": "fund_may",
+      "to": "ziad"
+    },
+    {
+      "from": "baghdad",
+      "to": "jamal"
+    },
+    {
+      "from": "kuwait",
+      "to": "abu_fadi"
+    },
+    {
+      "from": "gift_list",
+      "to": "layla"
+    },
+    {
+      "from": "gift_list",
+      "to": "dana"
+    },
+    {
+      "from": "reminder",
+      "to": "ziad"
+    }
+  ]
+}
