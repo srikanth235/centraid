@@ -301,6 +301,7 @@ jobs:
             --rung 3 \
             --escape-workflow gate.yml \
             --runs 30 \
+            --exclude-lane lane-health \
             --out artifacts/lane-health/candidate-summary.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()

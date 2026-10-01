@@ -161,6 +161,14 @@ jobs:
             exit 1
           fi
           echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+      # On the Intel macOS runner `rustup default` succeeds and the next step
+      # dies with `rustc: command not found`: dtolnay only puts `~/.cargo/bin`
+      # on PATH when it has to install rustup itself, and the image already
+      # has one (#1075).
+      - name: Put the cargo proxies on PATH
+        if: runner.os == 'macOS'
+        shell: bash
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
         with:
           toolchain: ${{ steps.channel.outputs.channel }}
