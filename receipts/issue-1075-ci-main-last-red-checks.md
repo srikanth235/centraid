@@ -27,11 +27,13 @@ The cause of the aarch64-linux failure is read from the job log (run 36820524218
 ## Known limits
 
 - Renaming a red lane now drops its old name at once, and the new name needs three fresh reds (`PARK_AFTER_REDS`) before `park-required` fires. Before, the old name kept firing until it left the window. The `report` job's own red flag still fires on every red lane, so the gap is the three runs, not silence.
+- `lane-health` goes red again on 2026-10-05, for a reason this change does not touch: `tests/quarantine.json#lanes` parks `device-rung-android`, `device-rung-ios` and `device-rung-gateway-pi` ([#927](https://github.com/srikanth235/centraid/issues/927)) until 2026-10-04, and no workflow runs those lanes now. An expired park is red by rule (`park-expired`), and the rule reads the ledger, not the run window, so it is deliberately not filtered. The owner decides: delete the three parks (the lanes are gone) or renew them with a reason. Left alone here because whether the device rung comes back is not this change's call.
+- Excluding the scorer means a `lane-health` failure for its own reasons (API outage, a script bug) never escalates to `park-required`; it still shows as a red check on every run.
 - The `ios` job in `lane-prebuilt-core.yml` (release-only, `macos-latest`) has no PATH step; it runs on the image of the arm64 leg that was green.
 - The PATH step runs on the arm64 macOS leg as well, where it is harmless.
 
 ## Audit
 
-Verdict: PENDING
+Verdict: PASS
 
-Round 1: REFUTED. The audit found that `lane-health` stayed red under the first version of this change (it judged itself, finding fixed above by `--exclude-lane`), that a cancelled newest run switched the filter off (fixed: the newest run with jobs decides), that "skipped is live" was stated too broadly (comment and receipt narrowed), and that the receipt and CHANGELOG overclaimed (both reworded; the rename gap, the cache split and the iOS job are now listed). The cache key and the macOS PATH step were found sound. Round 2 is pending.
+Round 1: REFUTED. The audit found that `lane-health` stayed red under the first version of this change (it judged itself, finding fixed above by `--exclude-lane`), that a cancelled newest run switched the filter off (fixed: the newest run with jobs decides), that "skipped is live" was stated too broadly (comment and receipt narrowed), and that the receipt and CHANGELOG overclaimed (both reworded; the rename gap, the cache split and the iOS job are now listed). The cache key and the macOS PATH step were found sound. Round 2: PASS (replaying the window through the scripts' own functions on a hand-built 30-run array mirroring run 39 gives zero findings today and on 2026-10-04; the exclusion adds no way to hide a red live lane). It surfaced the 2026-10-05 park expiry and the scorer-crash point, both now under Known limits.
