@@ -135,7 +135,9 @@ FIELDS = {
     'original_amount_minor',
     'original_currency',
     'owed_to_me',
+    'owed_to_me_minor',
     'owed_to_them',
+    'owed_to_them_minor',
     'owner_party_id',
     'paid_by',
     'paid_on',
@@ -259,6 +261,16 @@ WINDOW_PHRASES = {
     'next month',
     'before now',
     'recently',
+}
+
+RELATIVE_DAYS = {
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+    'sunday',
 }
 
 DECLINE_REASONS = {

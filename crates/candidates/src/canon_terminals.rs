@@ -56,17 +56,18 @@ kind_concept_id label language last_contacted_at location_place_id
 member_party_ids met month_day name network next_occurrence nickname
 normalized_value note_id notebooks notes obligation_id opened_at
 organizer_party_id origin_device_id original_amount_minor
-original_currency owed_to_me owed_to_them owner_party_id paid_by paid_on
-parent_collection_id parent_place_id parent_task_id party_id
-password_set_at phone pinned place place_id posted_at priority profile_id
-project_id provenance_json purge_at rate_date rate_scale rate_scaled
-rate_source reason recurrence_anchor recurrence_semantics
-recurring_template_id remind_before_min reminder_on role row_version rrule
-rrule_support section_id sequence series_id settled_at settlement_currency
-settlement_id simplify_opt_in sort_name sort_order source_app_id
-source_asset_id spent_on split_method split_params_json starred start_tz
-started_at status summary task_id title to_party transfer_group_id txn_id
-type tz tz_offset_min updated_at url url_match_policy username value width
+original_currency owed_to_me owed_to_me_minor owed_to_them
+owed_to_them_minor owner_party_id paid_by paid_on parent_collection_id
+parent_place_id parent_task_id party_id password_set_at phone pinned place
+place_id posted_at priority profile_id project_id provenance_json purge_at
+rate_date rate_scale rate_scaled rate_source reason recurrence_anchor
+recurrence_semantics recurring_template_id remind_before_min reminder_on
+role row_version rrule rrule_support section_id sequence series_id
+settled_at settlement_currency settlement_id simplify_opt_in sort_name
+sort_order source_app_id source_asset_id spent_on split_method
+split_params_json starred start_tz started_at status summary task_id title
+to_party transfer_group_id txn_id type tz tz_offset_min updated_at url
+url_match_policy username value width
 ";
 
 #[must_use]
@@ -146,6 +147,16 @@ const WINDOW_PHRASES: [&str; 13] = [
     "next month",
     "before now",
     "recently",
+];
+
+const RELATIVE_DAYS: [&str; 7] = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
 ];
 
 const DECLINE_REASONS: [&str; 4] = [

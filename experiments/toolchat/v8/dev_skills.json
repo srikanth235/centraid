@@ -1,0 +1,1366 @@
+{
+  "_purpose": "MEASUREMENT ONLY. The skills each dev-90 turn (crates/evalsuite/suite.json restricted to experiments/toolchat/out/dev90.ids.json) needs, tagged by hand from its expectation and Sonnet's r8 calls. It exists so v8/skillscore.py can attribute pass/fail per skill. Never use these sessions, their requests or these tags as training data or as generation seeds \u2014 the dev set is evaluation text.",
+  "corpus": "suite",
+  "sessions_file": "experiments/toolchat/out/dev90.ids.json",
+  "skills_file": "experiments/toolchat/v8/skills.json",
+  "turns": [
+    {
+      "session": "s01",
+      "turn": 0,
+      "category": "narrowing_followup",
+      "expect": "ids",
+      "skills": ["route.schedule", "time.window"]
+    },
+    {
+      "session": "s01",
+      "turn": 1,
+      "category": "narrowing_followup",
+      "expect": "ids",
+      "skills": ["follow.narrow", "time.window", "handle.them"]
+    },
+    {
+      "session": "s02",
+      "turn": 0,
+      "category": "abstract_temporal",
+      "expect": "ids",
+      "skills": ["route.schedule", "filter.open"]
+    },
+    {
+      "session": "s02",
+      "turn": 1,
+      "category": "abstract_temporal",
+      "expect": "write",
+      "skills": ["write.reschedule", "copy.date", "handle.pick"]
+    },
+    {
+      "session": "s03",
+      "turn": 0,
+      "category": "ambiguity_clarify",
+      "expect": "no_action:clarify",
+      "skills": ["num.dtstart_of", "copy.anchor"]
+    },
+    {
+      "session": "s03",
+      "turn": 1,
+      "category": "ambiguity_clarify",
+      "expect": "ids",
+      "skills": ["route.schedule", "follow.switch_kind", "copy.anchor"]
+    },
+    {
+      "session": "s04",
+      "turn": 0,
+      "category": "locker_only",
+      "expect": "ids",
+      "skills": ["route.locker", "copy.anchor"]
+    },
+    {
+      "session": "s04",
+      "turn": 1,
+      "category": "locker_only",
+      "expect": "write",
+      "skills": ["write.reveal", "handle.pick"]
+    },
+    {
+      "session": "s05",
+      "turn": 0,
+      "category": "reference_into_result",
+      "expect": "ids",
+      "skills": [
+        "route.people",
+        "link.parties_of",
+        "time.window",
+        "judge.no_link"
+      ]
+    },
+    {
+      "session": "s05",
+      "turn": 1,
+      "category": "reference_into_result",
+      "expect": "no_action:clarify",
+      "skills": ["judge.ambiguous", "handle.pick"]
+    },
+    {
+      "session": "s06",
+      "turn": 0,
+      "category": "narrowing_followup",
+      "expect": "ids",
+      "skills": ["route.library", "copy.name"]
+    },
+    {
+      "session": "s06",
+      "turn": 1,
+      "category": "narrowing_followup",
+      "expect": "ids",
+      "skills": ["follow.swap_subject", "route.library", "copy.name"]
+    },
+    {
+      "session": "s06",
+      "turn": 2,
+      "category": "narrowing_followup",
+      "expect": "ids",
+      "skills": ["follow.switch_kind", "route.library", "judge.nothing_there"]
+    },
+    {
+      "session": "s07",
+      "turn": 0,
+      "category": "refusal",
+      "expect": "no_action:refuse",
+      "skills": ["judge.refuse_guard"]
+    },
+    {
+      "session": "s09",
+      "turn": 0,
+      "category": "abandonment",
+      "expect": "value",
+      "skills": ["num.sum", "route.money", "link.of_group", "copy.anchor"]
+    },
+    {
+      "session": "s09",
+      "turn": 1,
+      "category": "abandonment",
+      "expect": "no_action:none",
+      "skills": ["judge.never_mind"]
+    },
+    {
+      "session": "s11",
+      "turn": 0,
+      "category": "write_only",
+      "expect": "write",
+      "skills": ["write.add_task", "copy.title", "copy.date"]
+    },
+    {
+      "session": "s12",
+      "turn": 0,
+      "category": "single_read",
+      "expect": "ids",
+      "skills": ["route.schedule", "copy.name"]
+    },
+    {
+      "session": "s13",
+      "turn": 0,
+      "category": "ambiguity_clarify",
+      "expect": "ids",
+      "skills": ["route.money", "link.of_person", "copy.name"]
+    },
+    {
+      "session": "s13",
+      "turn": 1,
+      "category": "ambiguity_clarify",
+      "expect": "no_action:clarify",
+      "skills": ["judge.ambiguous", "write.settle"]
+    },
+    {
+      "session": "s14",
+      "turn": 0,
+      "category": "mixed_read_write",
+      "expect": "ids",
+      "skills": ["route.money", "link.of_person", "copy.name"]
+    },
+    {
+      "session": "s14",
+      "turn": 1,
+      "category": "mixed_read_write",
+      "expect": "write",
+      "skills": ["write.settle", "handle.pick"]
+    },
+    {
+      "session": "s15",
+      "turn": 0,
+      "category": "reference_into_result",
+      "expect": "ids",
+      "skills": ["route.media", "link.media", "copy.name"]
+    },
+    {
+      "session": "s15",
+      "turn": 1,
+      "category": "reference_into_result",
+      "expect": "ids",
+      "skills": ["link.media", "handle.pick"]
+    },
+    {
+      "session": "s15",
+      "turn": 2,
+      "category": "reference_into_result",
+      "expect": "ids",
+      "skills": ["follow.except", "link.media", "handle.far"]
+    },
+    {
+      "session": "s16",
+      "turn": 0,
+      "category": "locker_only",
+      "expect": "ids",
+      "skills": ["route.everything", "copy.name"]
+    },
+    {
+      "session": "s17",
+      "turn": 0,
+      "category": "locker_only",
+      "expect": "ids",
+      "skills": ["route.locker", "copy.anchor"]
+    },
+    {
+      "session": "s18",
+      "turn": 0,
+      "category": "deictic",
+      "expect": "ids",
+      "skills": ["route.schedule", "copy.anchor"]
+    },
+    {
+      "session": "s18",
+      "turn": 1,
+      "category": "deictic",
+      "expect": "write",
+      "skills": ["write.mark", "handle.ordinal"]
+    },
+    {
+      "session": "s20",
+      "turn": 0,
+      "category": "refusal",
+      "expect": "no_action:refuse",
+      "skills": ["judge.refuse_outside"]
+    },
+    {
+      "session": "s20",
+      "turn": 1,
+      "category": "refusal",
+      "expect": "write",
+      "skills": ["write.add_task", "copy.title", "copy.date"]
+    },
+    {
+      "session": "s21",
+      "turn": 0,
+      "category": "abstract_temporal",
+      "expect": "value",
+      "skills": [
+        "num.sum",
+        "route.money",
+        "time.window",
+        "time.field",
+        "judge.nothing_there"
+      ]
+    },
+    {
+      "session": "s21",
+      "turn": 1,
+      "category": "abstract_temporal",
+      "expect": "value",
+      "skills": ["follow.swap_subject", "num.sum", "time.window", "time.field"]
+    },
+    {
+      "session": "s22",
+      "turn": 0,
+      "category": "ambiguity_clarify",
+      "expect": "no_action:clarify",
+      "skills": ["judge.ambiguous", "num.sum", "route.money"]
+    },
+    {
+      "session": "s24",
+      "turn": 0,
+      "category": "single_read",
+      "expect": "ids",
+      "skills": ["route.people", "copy.name"]
+    },
+    {
+      "session": "s26",
+      "turn": 0,
+      "category": "mixed_read_write",
+      "expect": "ids",
+      "skills": ["route.day", "time.window"]
+    },
+    {
+      "session": "s26",
+      "turn": 1,
+      "category": "mixed_read_write",
+      "expect": "write",
+      "skills": ["write.reschedule", "time.shift", "handle.pick"]
+    },
+    {
+      "session": "s27",
+      "turn": 0,
+      "category": "abstract_temporal",
+      "expect": "ids",
+      "skills": ["link.subtasks", "filter.open", "copy.anchor"]
+    },
+    {
+      "session": "s29",
+      "turn": 0,
+      "category": "reference_into_result",
+      "expect": "ids",
+      "skills": ["route.media", "time.derived", "copy.anchor"]
+    },
+    {
+      "session": "s29",
+      "turn": 1,
+      "category": "reference_into_result",
+      "expect": "write",
+      "skills": [
+        "write.album_add",
+        "handle.pick",
+        "compose.lookup_write",
+        "copy.name"
+      ]
+    },
+    {
+      "session": "s30",
+      "turn": 0,
+      "category": "abandonment",
+      "expect": "ids",
+      "skills": ["route.everything", "copy.anchor"]
+    },
+    {
+      "session": "s30",
+      "turn": 1,
+      "category": "abandonment",
+      "expect": "ids",
+      "skills": ["route.schedule", "time.window", "copy.anchor"]
+    },
+    {
+      "session": "s30",
+      "turn": 2,
+      "category": "abandonment",
+      "expect": "no_action:none",
+      "skills": ["judge.never_mind"]
+    },
+    {
+      "session": "s31",
+      "turn": 0,
+      "category": "cross_app_hop",
+      "expect": "ids",
+      "skills": ["link.of_group", "filter.field", "route.people", "copy.name"]
+    },
+    {
+      "session": "s31",
+      "turn": 1,
+      "category": "cross_app_hop",
+      "expect": "no_action:clarify",
+      "skills": ["judge.no_link", "link.parties_of", "time.window"]
+    },
+    {
+      "session": "s32",
+      "turn": 0,
+      "category": "write_only",
+      "expect": "write",
+      "skills": [
+        "write.tally",
+        "copy.number",
+        "copy.title",
+        "compose.lookup_write"
+      ]
+    },
+    {
+      "session": "s33",
+      "turn": 0,
+      "category": "locker_only",
+      "expect": "write",
+      "skills": ["write.note", "route.locker", "copy.title"]
+    },
+    {
+      "session": "s36",
+      "turn": 0,
+      "category": "ambiguity_clarify",
+      "expect": "no_action:clarify",
+      "skills": [
+        "judge.ambiguous",
+        "compose.bulk",
+        "write.trash",
+        "copy.anchor"
+      ]
+    },
+    {
+      "session": "s37",
+      "turn": 0,
+      "category": "abandonment",
+      "expect": "no_action:none",
+      "skills": [
+        "judge.nothing_there",
+        "filter.trashed",
+        "route.library",
+        "copy.anchor"
+      ]
+    },
+    {
+      "session": "s38",
+      "turn": 0,
+      "category": "single_read",
+      "expect": "ids",
+      "skills": ["route.everything", "copy.anchor"]
+    },
+    {
+      "session": "s39",
+      "turn": 0,
+      "category": "single_read",
+      "expect": "ids",
+      "skills": ["route.people", "copy.name", "handle.pick"]
+    },
+    {
+      "session": "s40",
+      "turn": 0,
+      "category": "abstract_temporal",
+      "expect": "ids",
+      "skills": ["route.media", "filter.field"]
+    },
+    {
+      "session": "s41",
+      "turn": 0,
+      "category": "abstract_temporal",
+      "expect": "ids",
+      "skills": ["route.schedule", "filter.numeric", "copy.number"]
+    },
+    {
+      "session": "s42",
+      "turn": 0,
+      "category": "write_only",
+      "expect": "write",
+      "skills": ["write.event", "copy.title", "copy.date"]
+    },
+    {
+      "session": "s45",
+      "turn": 0,
+      "category": "abstract_temporal",
+      "expect": "ids",
+      "skills": ["route.day", "time.derived", "copy.anchor"]
+    },
+    {
+      "session": "s47",
+      "turn": 0,
+      "category": "refusal",
+      "expect": "no_action:refuse",
+      "skills": ["judge.refuse_guard"]
+    },
+    {
+      "session": "s48",
+      "turn": 0,
+      "category": "correction",
+      "expect": "write",
+      "skills": ["write.log_interaction", "copy.name", "compose.lookup_write"]
+    },
+    {
+      "session": "s48",
+      "turn": 1,
+      "category": "correction",
+      "expect": "write",
+      "skills": ["compose.correction", "write.log_interaction", "copy.name"]
+    },
+    {
+      "session": "s49",
+      "turn": 0,
+      "category": "deictic",
+      "expect": "ids",
+      "skills": ["route.schedule", "time.window", "time.field"]
+    },
+    {
+      "session": "s49",
+      "turn": 1,
+      "category": "deictic",
+      "expect": "write",
+      "skills": ["write.reschedule", "handle.ordinal", "copy.date"]
+    },
+    {
+      "session": "s50",
+      "turn": 0,
+      "category": "cross_app_hop",
+      "expect": "ids",
+      "skills": ["route.media", "link.media", "copy.name"]
+    },
+    {
+      "session": "s50",
+      "turn": 1,
+      "category": "cross_app_hop",
+      "expect": "ids",
+      "skills": ["follow.swap_subject", "link.media", "copy.anchor"]
+    },
+    {
+      "session": "s50",
+      "turn": 2,
+      "category": "cross_app_hop",
+      "expect": "no_action:clarify",
+      "skills": ["judge.no_link", "handle.pick"]
+    },
+    {
+      "session": "s52",
+      "turn": 0,
+      "category": "write_only",
+      "expect": "write",
+      "skills": ["write.trash", "compose.lookup_write", "copy.anchor"]
+    },
+    {
+      "session": "s53",
+      "turn": 0,
+      "category": "mixed_read_write",
+      "expect": "ids",
+      "skills": ["num.owed", "route.people"]
+    },
+    {
+      "session": "s53",
+      "turn": 1,
+      "category": "mixed_read_write",
+      "expect": "value",
+      "skills": ["num.owed", "handle.pick"]
+    },
+    {
+      "session": "s53",
+      "turn": 2,
+      "category": "mixed_read_write",
+      "expect": "write",
+      "skills": ["write.settle", "handle.pick"]
+    },
+    {
+      "session": "s54",
+      "turn": 0,
+      "category": "ambiguity_clarify",
+      "expect": "no_action:clarify",
+      "skills": ["judge.ambiguous", "write.tally", "copy.name"]
+    },
+    {
+      "session": "s55",
+      "turn": 0,
+      "category": "single_read",
+      "expect": "ids",
+      "skills": ["route.schedule", "copy.anchor"]
+    },
+    {
+      "session": "s56",
+      "turn": 0,
+      "category": "cross_app_hop",
+      "expect": "ids",
+      "skills": ["link.of_group", "route.money", "copy.name"]
+    },
+    {
+      "session": "s56",
+      "turn": 1,
+      "category": "cross_app_hop",
+      "expect": "ids",
+      "skills": ["route.library", "follow.switch_kind", "copy.anchor"]
+    },
+    {
+      "session": "s57",
+      "turn": 0,
+      "category": "refusal",
+      "expect": "no_action:refuse",
+      "skills": ["judge.refuse_outside"]
+    },
+    {
+      "session": "s59",
+      "turn": 0,
+      "category": "narrowing_followup",
+      "expect": "ids",
+      "skills": ["route.media", "link.media", "copy.name"]
+    },
+    {
+      "session": "s59",
+      "turn": 1,
+      "category": "narrowing_followup",
+      "expect": "ids",
+      "skills": [
+        "follow.narrow",
+        "time.window",
+        "time.field",
+        "judge.nothing_there"
+      ]
+    },
+    {
+      "session": "s61",
+      "turn": 0,
+      "category": "mixed_read_write",
+      "expect": "ids",
+      "skills": ["route.library", "copy.anchor"]
+    },
+    {
+      "session": "s61",
+      "turn": 1,
+      "category": "mixed_read_write",
+      "expect": "write",
+      "skills": ["write.add_task", "copy.title"]
+    },
+    {
+      "session": "s63",
+      "turn": 0,
+      "category": "single_read",
+      "expect": "ids",
+      "skills": ["route.schedule", "filter.field", "filter.open"]
+    },
+    {
+      "session": "s64",
+      "turn": 0,
+      "category": "abstract_temporal",
+      "expect": "ids",
+      "skills": ["route.schedule", "time.field", "time.window"]
+    },
+    {
+      "session": "s65",
+      "turn": 0,
+      "category": "value_read",
+      "expect": "ids",
+      "skills": ["route.money", "link.of_group", "copy.anchor"]
+    },
+    {
+      "session": "s65",
+      "turn": 1,
+      "category": "value_read",
+      "expect": "value",
+      "skills": ["num.sum", "handle.them"]
+    },
+    {
+      "session": "s66",
+      "turn": 0,
+      "category": "value_read",
+      "expect": "value",
+      "skills": ["num.sum", "link.of_group", "copy.name"]
+    },
+    {
+      "session": "s67",
+      "turn": 0,
+      "category": "value_read",
+      "expect": "value",
+      "skills": ["num.balance", "route.money", "copy.name"]
+    },
+    {
+      "session": "s68",
+      "turn": 0,
+      "category": "value_read",
+      "expect": "value",
+      "skills": ["num.count", "route.media", "time.derived"]
+    },
+    {
+      "session": "s69",
+      "turn": 0,
+      "category": "value_read",
+      "expect": "value",
+      "skills": ["num.count", "route.locker"]
+    },
+    {
+      "session": "s72",
+      "turn": 0,
+      "category": "write_set",
+      "expect": "ids",
+      "skills": ["route.schedule", "copy.anchor"]
+    },
+    {
+      "session": "s72",
+      "turn": 1,
+      "category": "write_set",
+      "expect": "write_set",
+      "skills": ["write.reschedule", "compose.bulk", "handle.them", "copy.date"]
+    },
+    {
+      "session": "s74",
+      "turn": 0,
+      "category": "write_set",
+      "expect": "write_set",
+      "skills": [
+        "write.settle",
+        "compose.bulk",
+        "link.of_group",
+        "filter.field",
+        "num.balance"
+      ]
+    },
+    {
+      "session": "s75",
+      "turn": 0,
+      "category": "write_set",
+      "expect": "write_set",
+      "skills": [
+        "write.reschedule",
+        "compose.bulk",
+        "compose.lookup_write",
+        "copy.date",
+        "copy.anchor"
+      ]
+    },
+    {
+      "session": "s77",
+      "turn": 0,
+      "category": "abandonment",
+      "expect": "ids",
+      "skills": ["route.schedule", "time.window"]
+    },
+    {
+      "session": "s77",
+      "turn": 1,
+      "category": "abandonment",
+      "expect": "no_action:none",
+      "skills": ["judge.never_mind"]
+    },
+    {
+      "session": "s79",
+      "turn": 0,
+      "category": "cross_app_hop",
+      "expect": "ids",
+      "skills": ["link.of_person", "filter.field", "copy.name"]
+    },
+    {
+      "session": "s80",
+      "turn": 0,
+      "category": "refusal",
+      "expect": "no_action:refuse",
+      "skills": ["judge.refuse_outside"]
+    },
+    {
+      "session": "s81",
+      "turn": 0,
+      "category": "single_read",
+      "expect": "ids",
+      "skills": ["route.library", "time.window"]
+    },
+    {
+      "session": "s82",
+      "turn": 0,
+      "category": "cross_app_hop",
+      "expect": "ids",
+      "skills": ["route.day", "time.window"]
+    },
+    {
+      "session": "s83",
+      "turn": 0,
+      "category": "value_read",
+      "expect": "value",
+      "skills": ["num.value_of", "route.money", "copy.anchor"]
+    },
+    {
+      "session": "s85",
+      "turn": 0,
+      "category": "narrowing_followup",
+      "expect": "ids",
+      "skills": ["route.schedule", "time.window"]
+    },
+    {
+      "session": "s85",
+      "turn": 1,
+      "category": "narrowing_followup",
+      "expect": "ids",
+      "skills": ["follow.narrow", "copy.anchor"]
+    },
+    {
+      "session": "s86",
+      "turn": 0,
+      "category": "undo",
+      "expect": "ids",
+      "skills": ["filter.trashed", "route.schedule", "copy.anchor"]
+    },
+    {
+      "session": "s86",
+      "turn": 1,
+      "category": "undo",
+      "expect": "write",
+      "skills": ["write.restore", "handle.pick"]
+    },
+    {
+      "session": "s88",
+      "turn": 0,
+      "category": "undo",
+      "expect": "ids",
+      "skills": ["filter.trashed", "route.media", "copy.anchor"]
+    },
+    {
+      "session": "s88",
+      "turn": 1,
+      "category": "undo",
+      "expect": "write",
+      "skills": ["write.restore", "handle.pick"]
+    },
+    {
+      "session": "s89",
+      "turn": 0,
+      "category": "undo",
+      "expect": "write",
+      "skills": ["write.trash", "compose.lookup_write", "copy.anchor"]
+    },
+    {
+      "session": "s89",
+      "turn": 1,
+      "category": "undo",
+      "expect": "write",
+      "skills": ["compose.undo", "write.restore", "handle.pick"]
+    },
+    {
+      "session": "s90",
+      "turn": 0,
+      "category": "undo",
+      "expect": "write",
+      "skills": ["write.trash", "compose.lookup_write", "copy.name"]
+    },
+    {
+      "session": "s90",
+      "turn": 1,
+      "category": "undo",
+      "expect": "write",
+      "skills": ["compose.undo", "write.restore", "handle.pick"]
+    },
+    {
+      "session": "s93",
+      "turn": 0,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["route.library", "filter.field"]
+    },
+    {
+      "session": "s93",
+      "turn": 1,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["follow.switch_kind", "route.library", "filter.field"]
+    },
+    {
+      "session": "s94",
+      "turn": 0,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["route.library", "filter.field"]
+    },
+    {
+      "session": "s95",
+      "turn": 0,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["link.media", "copy.name"]
+    },
+    {
+      "session": "s95",
+      "turn": 1,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["handle.pick", "link.of_person", "time.order"]
+    },
+    {
+      "session": "s96",
+      "turn": 0,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["route.library", "copy.anchor"]
+    },
+    {
+      "session": "s96",
+      "turn": 1,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["follow.switch_kind", "route.schedule", "handle.pick"]
+    },
+    {
+      "session": "s97",
+      "turn": 0,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["route.everything", "copy.anchor"]
+    },
+    {
+      "session": "s97",
+      "turn": 1,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["follow.switch_kind", "route.media", "link.media"]
+    },
+    {
+      "session": "s99",
+      "turn": 0,
+      "category": "cross_app",
+      "expect": "value",
+      "skills": ["num.value_of", "route.money", "copy.anchor"]
+    },
+    {
+      "session": "s99",
+      "turn": 1,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["follow.switch_kind", "route.library", "copy.anchor"]
+    },
+    {
+      "session": "s100",
+      "turn": 0,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["route.schedule", "copy.anchor", "handle.pick"]
+    },
+    {
+      "session": "s100",
+      "turn": 1,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["follow.switch_kind", "route.library", "filter.field"]
+    },
+    {
+      "session": "s102",
+      "turn": 0,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["route.schedule", "copy.anchor"]
+    },
+    {
+      "session": "s102",
+      "turn": 1,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["follow.switch_kind", "route.schedule"]
+    },
+    {
+      "session": "s103",
+      "turn": 0,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["route.people", "link.parties_of", "copy.anchor"]
+    },
+    {
+      "session": "s103",
+      "turn": 1,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["follow.switch_kind", "route.locker"]
+    },
+    {
+      "session": "s104",
+      "turn": 0,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["route.everything", "copy.anchor"]
+    },
+    {
+      "session": "s105",
+      "turn": 0,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["route.library", "filter.field"]
+    },
+    {
+      "session": "s105",
+      "turn": 1,
+      "category": "cross_app",
+      "expect": "ids",
+      "skills": ["route.library", "time.order"]
+    },
+    {
+      "session": "s106",
+      "turn": 0,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["num.owed", "route.people"]
+    },
+    {
+      "session": "s106",
+      "turn": 1,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.narrow", "filter.numeric", "copy.number"]
+    },
+    {
+      "session": "s106",
+      "turn": 2,
+      "category": "deep",
+      "expect": "value",
+      "skills": ["num.sum", "handle.them"]
+    },
+    {
+      "session": "s106",
+      "turn": 3,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["route.day", "time.window"]
+    },
+    {
+      "session": "s106",
+      "turn": 4,
+      "category": "deep",
+      "expect": "ids",
+      "skills": [
+        "follow.back_to",
+        "handle.far",
+        "link.parties_of",
+        "copy.anchor"
+      ]
+    },
+    {
+      "session": "s106",
+      "turn": 5,
+      "category": "deep",
+      "expect": "write",
+      "skills": ["write.log_interaction", "handle.pick"]
+    },
+    {
+      "session": "s107",
+      "turn": 0,
+      "category": "deep",
+      "expect": "ids",
+      "skills": [
+        "link.parties_of",
+        "filter.field",
+        "route.people",
+        "time.window",
+        "copy.anchor"
+      ]
+    },
+    {
+      "session": "s107",
+      "turn": 1,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.except", "route.day", "time.window"]
+    },
+    {
+      "session": "s107",
+      "turn": 2,
+      "category": "deep",
+      "expect": "write",
+      "skills": ["write.reschedule", "handle.ordinal", "copy.date"]
+    },
+    {
+      "session": "s107",
+      "turn": 3,
+      "category": "deep",
+      "expect": "write_set",
+      "skills": [
+        "compose.correction",
+        "compose.then",
+        "write.reschedule",
+        "handle.far",
+        "copy.date"
+      ]
+    },
+    {
+      "session": "s107",
+      "turn": 4,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["link.of_person", "filter.field", "handle.far"]
+    },
+    {
+      "session": "s107",
+      "turn": 5,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.back_to", "route.day", "time.window"]
+    },
+    {
+      "session": "s110",
+      "turn": 0,
+      "category": "deep",
+      "expect": "value",
+      "skills": ["num.value_of", "route.money", "copy.anchor"]
+    },
+    {
+      "session": "s110",
+      "turn": 1,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["link.parties_of", "handle.pick"]
+    },
+    {
+      "session": "s110",
+      "turn": 2,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["link.of_person", "filter.field", "handle.pick"]
+    },
+    {
+      "session": "s110",
+      "turn": 3,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["link.of_person", "route.schedule", "handle.far"]
+    },
+    {
+      "session": "s110",
+      "turn": 4,
+      "category": "deep",
+      "expect": "write",
+      "skills": ["write.settle", "handle.far"]
+    },
+    {
+      "session": "s111",
+      "turn": 0,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["route.schedule", "filter.open"]
+    },
+    {
+      "session": "s111",
+      "turn": 1,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.narrow", "time.field", "time.window"]
+    },
+    {
+      "session": "s111",
+      "turn": 2,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.narrow", "copy.anchor"]
+    },
+    {
+      "session": "s111",
+      "turn": 3,
+      "category": "deep",
+      "expect": "write",
+      "skills": ["write.mark", "handle.ordinal"]
+    },
+    {
+      "session": "s111",
+      "turn": 4,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.narrow", "filter.open", "handle.them"]
+    },
+    {
+      "session": "s112",
+      "turn": 0,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["route.media"]
+    },
+    {
+      "session": "s112",
+      "turn": 1,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.narrow", "filter.numeric", "copy.number"]
+    },
+    {
+      "session": "s112",
+      "turn": 2,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["link.media", "handle.pick"]
+    },
+    {
+      "session": "s112",
+      "turn": 3,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["link.media", "handle.them"]
+    },
+    {
+      "session": "s112",
+      "turn": 4,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.except", "link.media", "handle.far"]
+    },
+    {
+      "session": "s114",
+      "turn": 0,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["route.locker", "copy.anchor"]
+    },
+    {
+      "session": "s114",
+      "turn": 1,
+      "category": "deep",
+      "expect": "write",
+      "skills": ["write.reveal", "handle.pick"]
+    },
+    {
+      "session": "s114",
+      "turn": 2,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["route.schedule", "copy.anchor"]
+    },
+    {
+      "session": "s114",
+      "turn": 3,
+      "category": "deep",
+      "expect": "write",
+      "skills": ["follow.back_to", "write.reveal", "handle.far"]
+    },
+    {
+      "session": "s114",
+      "turn": 4,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.except", "route.locker", "handle.far"]
+    },
+    {
+      "session": "s115",
+      "turn": 0,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["route.library", "copy.anchor"]
+    },
+    {
+      "session": "s115",
+      "turn": 1,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.except", "filter.field", "handle.pick"]
+    },
+    {
+      "session": "s115",
+      "turn": 2,
+      "category": "deep",
+      "expect": "write",
+      "skills": ["write.mark", "handle.pick"]
+    },
+    {
+      "session": "s115",
+      "turn": 3,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["route.schedule", "copy.anchor"]
+    },
+    {
+      "session": "s115",
+      "turn": 4,
+      "category": "deep",
+      "expect": "write",
+      "skills": ["follow.back_to", "write.trash", "handle.far"]
+    },
+    {
+      "session": "s115",
+      "turn": 5,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["filter.field", "route.library"]
+    },
+    {
+      "session": "s116",
+      "turn": 0,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["link.media", "copy.name"]
+    },
+    {
+      "session": "s116",
+      "turn": 1,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["link.media", "handle.pick"]
+    },
+    {
+      "session": "s116",
+      "turn": 2,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.switch_kind", "route.library", "copy.anchor"]
+    },
+    {
+      "session": "s116",
+      "turn": 3,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["route.schedule", "copy.name"]
+    },
+    {
+      "session": "s116",
+      "turn": 4,
+      "category": "deep",
+      "expect": "write",
+      "skills": ["follow.back_to", "write.note", "copy.title"]
+    },
+    {
+      "session": "s117",
+      "turn": 0,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["link.of_person", "time.order", "copy.name"]
+    },
+    {
+      "session": "s117",
+      "turn": 1,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["link.of_person", "route.money", "handle.pick"]
+    },
+    {
+      "session": "s117",
+      "turn": 2,
+      "category": "deep",
+      "expect": "value",
+      "skills": ["num.value_of", "handle.pick"]
+    },
+    {
+      "session": "s117",
+      "turn": 3,
+      "category": "deep",
+      "expect": "value",
+      "skills": ["follow.swap_subject", "num.owed", "copy.name"]
+    },
+    {
+      "session": "s117",
+      "turn": 4,
+      "category": "deep",
+      "expect": "write",
+      "skills": ["write.log_interaction", "handle.pick"]
+    },
+    {
+      "session": "s118",
+      "turn": 0,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["link.parties_of", "route.people", "copy.anchor"]
+    },
+    {
+      "session": "s118",
+      "turn": 1,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["link.media", "handle.them"]
+    },
+    {
+      "session": "s118",
+      "turn": 2,
+      "category": "deep",
+      "expect": "write",
+      "skills": [
+        "write.album_add",
+        "handle.pick",
+        "compose.lookup_write",
+        "copy.name"
+      ]
+    },
+    {
+      "session": "s118",
+      "turn": 3,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["route.library", "copy.anchor"]
+    },
+    {
+      "session": "s118",
+      "turn": 4,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.switch_kind", "route.locker"]
+    },
+    {
+      "session": "s118",
+      "turn": 5,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.back_to", "link.media", "handle.far"]
+    },
+    {
+      "session": "s120",
+      "turn": 0,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["route.library", "copy.name"]
+    },
+    {
+      "session": "s120",
+      "turn": 1,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.switch_kind", "route.media", "link.media"]
+    },
+    {
+      "session": "s120",
+      "turn": 2,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["follow.switch_kind", "route.schedule"]
+    },
+    {
+      "session": "s120",
+      "turn": 3,
+      "category": "deep",
+      "expect": "ids",
+      "skills": ["link.parties_of", "filter.field", "handle.pick"]
+    },
+    {
+      "session": "s120",
+      "turn": 4,
+      "category": "deep",
+      "expect": "write",
+      "skills": ["write.add_task", "copy.title", "handle.far", "follow.back_to"]
+    }
+  ]
+}

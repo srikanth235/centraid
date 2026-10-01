@@ -136,8 +136,20 @@ pub struct Founded {
 }
 
 impl Vault {
-    /// Write the vault row and its owner party.
+    /// Write the vault row and its owner party, in US dollars.
     pub fn found(&self, display_name: &str, owner_name: &str) -> Result<Founded> {
+        self.found_in(display_name, owner_name, "USD")
+    }
+
+    /// Write the vault row and its owner party with `base_currency` (an ISO
+    /// 4217 code; the column's CHECK holds it to three characters). The base
+    /// currency is set once, at founding: no command changes it.
+    pub fn found_in(
+        &self,
+        display_name: &str,
+        owner_name: &str,
+        base_currency: &str,
+    ) -> Result<Founded> {
         let now = self.clock().now_text();
         let vault_id = self.ids().next();
         let owner_party_id = self.ids().next();
@@ -156,8 +168,8 @@ impl Vault {
                 "INSERT INTO core_vault
                    (vault_id, self_party_id, display_name, status, base_currency,
                     settings_json, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, 'active', 'USD', '{}', ?4, ?4)",
-                rusqlite::params![vault_id, owner_party_id, display_name, now],
+                 VALUES (?1, ?2, ?3, 'active', ?5, '{}', ?4, ?4)",
+                rusqlite::params![vault_id, owner_party_id, display_name, now, base_currency],
             )?;
             seed_relation_vocabulary(tx.connection(), self.ids(), &now)?;
             seed_default_calendar(tx.connection(), self.ids(), &owner_party_id, &now)?;

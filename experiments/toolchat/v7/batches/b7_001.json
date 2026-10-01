@@ -1,0 +1,264 @@
+[
+  {
+    "id": "w01-015",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      { "hint": "asks what photos they have from Coppice", "say": ["Coppice"] },
+      { "hint": "asks which albums those photos are in", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w01-016",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      { "hint": "asks for the School login entry", "say": ["School"] },
+      {
+        "hint": "asks the same about wifi instead ('what about wifi?')",
+        "say": ["wifi"]
+      },
+      {
+        "hint": "(new topic) asks for their photos about bike",
+        "say": ["bike"]
+      },
+      {
+        "hint": "(new topic) asks which to-dos are estimated at 45 minutes",
+        "say": ["45"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "polite"]
+  },
+  {
+    "id": "w01-017",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      { "hint": "asks to find the notes on club", "say": ["club"] },
+      {
+        "hint": "asks the same about list instead ('what about list?')",
+        "say": ["list"]
+      },
+      { "hint": "asks how many there are in total", "say": [] },
+      { "hint": "asks what else there is apart from the second one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "w01-018",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      { "hint": "asks to see the Pond album", "say": ["Pond"] },
+      { "hint": "asks for just the favourites among them", "say": [] },
+      {
+        "hint": "(new topic) asks who Mossley Electrics is",
+        "say": ["Mossley Electrics"]
+      },
+      {
+        "hint": "(new topic) asks for the photos in the Pond album",
+        "say": ["Pond"]
+      },
+      {
+        "hint": "(new topic) asks to see the Elderberry Hill album",
+        "say": ["Elderberry Hill"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "terse"]
+  },
+  {
+    "id": "w01-019",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      {
+        "hint": "asks which places they have exactly two photos from",
+        "say": ["two"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "spoken"]
+  },
+  {
+    "id": "w01-020",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      {
+        "hint": "asks to see the documents they marked with a star",
+        "say": []
+      },
+      { "hint": "(new topic) asks what they haven't done yet", "say": [] },
+      {
+        "hint": "asks for just the ones this week (this week)",
+        "say": ["week"]
+      },
+      { "hint": "asks for just the clean ones among those", "say": ["clean"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "spoken"]
+  },
+  {
+    "id": "w01-021",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      {
+        "hint": "asks to log a visit with Umber (several people are called Umber)",
+        "say": ["Umber"]
+      },
+      {
+        "hint": "says it was Umber Lettings (the Lettings one)",
+        "say": ["Lettings"]
+      },
+      {
+        "hint": "(new topic) asks to log that they had a call with Lark",
+        "say": ["Lark"]
+      },
+      {
+        "hint": "(new topic) asks what the login for Insurance account is (not the password)",
+        "say": ["Insurance account"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w01-022",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      { "hint": "asks what's left on their to-do list", "say": [] },
+      {
+        "hint": "asks for just the ones tomorrow (tomorrow)",
+        "say": ["tomorrow"]
+      },
+      { "hint": "asks to move the second one to monday", "say": ["monday"] },
+      {
+        "hint": "(new topic) asks what's in the Chess notebook",
+        "say": ["Chess"]
+      },
+      { "hint": "asks which of those are about draft", "say": ["draft"] },
+      {
+        "hint": "(new topic) asks what the login for Library is (not the password)",
+        "say": ["Library"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  },
+  {
+    "id": "w01-023",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      { "hint": "asks to star the Fridge document", "say": ["Fridge"] },
+      {
+        "hint": "(new topic) asks who'll be at the Football appointment",
+        "say": ["Football appointment"]
+      },
+      {
+        "hint": "(new topic) asks where the asleep photo was taken",
+        "say": ["asleep"]
+      },
+      {
+        "hint": "(new topic) asks what pictures are in the Best album",
+        "say": ["Best"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "spoken"]
+  },
+  {
+    "id": "w01-024",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      { "hint": "asks when they have the Pond", "say": ["Pond"] },
+      {
+        "hint": "(new topic) asks to see the Router login entry",
+        "say": ["Router"]
+      },
+      {
+        "hint": "(new topic) asks for their journal entries from this week",
+        "say": ["this week"]
+      },
+      {
+        "hint": "(new topic) asks what the Quiz night group's spending comes to",
+        "say": ["Quiz night"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "spoken"]
+  },
+  {
+    "id": "w01-025",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      {
+        "hint": "asks who Juno is (several people are called Juno)",
+        "say": ["Juno"]
+      },
+      {
+        "hint": "(new topic) asks to run through their day wednesday in time order",
+        "say": ["wednesday"]
+      },
+      { "hint": "(new topic) asks to find the photos on snow", "say": ["snow"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "terse"]
+  },
+  {
+    "id": "w01-026",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      { "hint": "asks what they're behind on", "say": [] },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      { "hint": "asks to move the second one to monday", "say": ["monday"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "w01-027",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      { "hint": "asks who is in the Bike group", "say": ["Bike"] },
+      {
+        "hint": "asks how much Florian owes them in that group",
+        "say": ["Florian"]
+      },
+      { "hint": "asks how many there are in total", "say": [] },
+      {
+        "hint": "(new topic) asks which expenses were over 150 (money)",
+        "say": ["150"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "spoken"]
+  },
+  {
+    "id": "w01-028",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      { "hint": "asks if they have any expenses about Choir", "say": ["Choir"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "terse"]
+  },
+  {
+    "id": "w01-029",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      {
+        "hint": "asks whose birthdays are coming up next week",
+        "say": ["next week"]
+      },
+      { "hint": "(new topic) asks who'll be at the Flight", "say": ["Flight"] },
+      {
+        "hint": "asks when their birthdays are (all of those people)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "question"]
+  }
+]

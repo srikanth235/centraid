@@ -1,0 +1,241 @@
+[
+  {
+    "id": "a0008",
+    "today": "Saturday 2026-05-16",
+    "turns": [
+      {
+        "canonical": "show (events)",
+        "move": "first",
+        "hint": "list everything in my calendar"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0421",
+    "today": "Monday 2025-12-22",
+    "turns": [
+      {
+        "canonical": "amount_minor of (expenses called \"Ski passes\")",
+        "move": "first",
+        "hint": "how much was the passes expense"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Ski passes\"", "turn": 1, "say": "loose: passes" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1063",
+    "today": "Friday 2027-07-30",
+    "turns": [
+      {
+        "canonical": "show (tasks of (tasks called \"Return the hired tent\") that (status != \"completed\"))",
+        "move": "first",
+        "hint": "which subtasks of tent are still open"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Return the hired tent\"",
+        "turn": 1,
+        "say": "exact: tent"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0461",
+    "today": "Friday 2025-12-12",
+    "turns": [
+      {
+        "canonical": "spent_on of (expenses called \"Dog grooming\")",
+        "move": "first",
+        "hint": "when did I pay for the grooming"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Dog grooming\"",
+        "turn": 1,
+        "say": "loose: grooming"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0840",
+    "today": "Friday 2026-03-20",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"watch\") that (party_id is not me))",
+        "move": "first",
+        "hint": "who else is in the watch group apart from me"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0118",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"login\", title: \"Pharmacy app\", content: \"Blue!Door9\" }",
+        "move": "first",
+        "hint": "save a login for Pharmacy app with password Blue!Door9"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0268",
+    "today": "Monday 2025-08-18",
+    "turns": [
+      {
+        "canonical": "count of (contact channels of (parties called \"Valeska Tennant\"))",
+        "move": "first",
+        "hint": "how many numbers/emails do I have for Valeska"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Valeska Tennant\"",
+        "turn": 1,
+        "say": "exact: Valeska"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0467",
+    "today": "Monday 2026-11-30",
+    "turns": [
+      {
+        "canonical": "spent_on of (expenses called \"Ski passes\")",
+        "move": "first",
+        "hint": "when did I pay for the passes"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Ski passes\"", "turn": 1, "say": "loose: passes" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0074",
+    "today": "Friday 2026-11-13",
+    "turns": [
+      {
+        "canonical": "show (places called \"Drover's Rest\")",
+        "move": "first",
+        "hint": "find the place rest in my photos' places"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Drover's Rest\"", "turn": 1, "say": "loose: rest" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0151",
+    "today": "Saturday 2025-03-29",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Tulips\") } on (photos during this week)",
+        "move": "first",
+        "hint": "put the photos from that window into the Tulips album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Tulips\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0201",
+    "today": "Sunday 2025-11-23",
+    "turns": [
+      {
+        "canonical": "schedule.cancel_event{} on (events called \"Kayak lesson\")",
+        "move": "first",
+        "hint": "cancel the lesson"
+      }
+    ],
+    "refer": [
+      { "row": "events \"Kayak lesson\"", "turn": 1, "say": "loose: lesson" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0137",
+    "today": "Thursday 2026-04-02",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"note\", title: \"PIN for the shed\", content: \"5524\" }",
+        "move": "first",
+        "hint": "save the PIN for the shed 5524 in my locker (title = the words the person uses for it, content = the code)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0720",
+    "today": "Saturday 2025-08-23",
+    "turns": [
+      {
+        "canonical": "show (photos that (deleted_at is not null))",
+        "move": "first",
+        "hint": "photos I deleted"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0793",
+    "today": "Friday 2026-12-25",
+    "turns": [
+      {
+        "canonical": "show (tasks that (priority = 1 and status != \"completed\"))",
+        "move": "first",
+        "hint": "open tasks with priority one"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1148",
+    "today": "Sunday 2026-08-09",
+    "turns": [
+      {
+        "canonical": "show (things during in 10 days)",
+        "move": "first",
+        "hint": "what's on in that window"
+      },
+      {
+        "canonical": "delete{} on (the 2nd one)",
+        "move": "act",
+        "hint": "get rid of one of them by position"
+      },
+      {
+        "canonical": "restore{} on (it)",
+        "move": "undo",
+        "hint": "oops, bring it back"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

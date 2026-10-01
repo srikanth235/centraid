@@ -1,0 +1,221 @@
+[
+  {
+    "id": "a0066",
+    "today": "Tuesday 2027-12-21",
+    "turns": [
+      {
+        "canonical": "show (journal notes called \"Call with Ursula\")",
+        "move": "first",
+        "hint": "find my journal entry about Ursula"
+      }
+    ],
+    "refer": [
+      {
+        "row": "journal notes \"Call with Ursula\"",
+        "turn": 1,
+        "say": "exact: Ursula"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1024",
+    "today": "Sunday 2026-01-25",
+    "turns": [
+      {
+        "canonical": "show (photos of (albums called \"Kayaking\"))",
+        "move": "first",
+        "hint": "show the photos in the Kayaking album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Kayaking\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0091",
+    "today": "Sunday 2026-03-08",
+    "turns": [
+      {
+        "canonical": "show (things called \"fine\")",
+        "move": "first",
+        "hint": "what do I have about fine (anything: diary, to-dos, notes...)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0962",
+    "today": "Thursday 2027-02-11",
+    "turns": [
+      {
+        "canonical": "show (events of (parties called \"Ismael\") during tomorrow)",
+        "move": "first",
+        "hint": "when am I seeing Ismael in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0660",
+    "today": "Monday 2026-11-30",
+    "turns": [
+      {
+        "canonical": "show (notes that (updated_at during this month))",
+        "move": "first",
+        "hint": "notes I edited in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0623",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "canonical": "show (locker items that (type = \"identity\"))",
+        "move": "first",
+        "hint": "which locker entries are of that type"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0139",
+    "today": "Thursday 2025-12-11",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"note\", title: \"Door code\", content: \"9046\" }",
+        "move": "first",
+        "hint": "save the door code 9046 in my locker (title = the words the person uses for it, content = the code)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0617",
+    "today": "Saturday 2025-04-26",
+    "turns": [
+      {
+        "canonical": "show (important dates that (next_occurrence during this week))",
+        "move": "first",
+        "hint": "which birthdays/anniversaries are coming up in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0779",
+    "today": "Tuesday 2026-03-17",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"roofer\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the roofer task"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0860",
+    "today": "Thursday 2025-12-11",
+    "turns": [
+      {
+        "canonical": "min due_at of (tasks that (status != \"completed\"))",
+        "move": "first",
+        "hint": "when is my next deadline (earliest due date of open tasks)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0150",
+    "today": "Thursday 2027-06-24",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Christmas 2026\") } on (photos called \"School uniform at night\")",
+        "move": "first",
+        "hint": "add the uniform photo to the album"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"Christmas 2026\"", "turn": 1, "say": "full" },
+      {
+        "row": "photos \"School uniform at night\"",
+        "turn": 1,
+        "say": "exact: uniform"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0242",
+    "today": "Tuesday 2027-02-09",
+    "turns": [
+      {
+        "canonical": "count of (activities that (started_at during last week))",
+        "move": "first",
+        "hint": "how many calls/visits/coffees did I log in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0047",
+    "today": "Monday 2026-04-27",
+    "turns": [
+      {
+        "canonical": "show (albums called \"Porto trip\")",
+        "move": "first",
+        "hint": "find the Porto trip album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Porto trip\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0055",
+    "today": "Sunday 2026-12-06",
+    "turns": [
+      {
+        "canonical": "show (journal notes called \"Call with Arvid\")",
+        "move": "first",
+        "hint": "find my journal entry about Arvid"
+      }
+    ],
+    "refer": [
+      {
+        "row": "journal notes \"Call with Arvid\"",
+        "turn": 1,
+        "say": "exact: Arvid"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0725",
+    "today": "Friday 2026-07-24",
+    "turns": [
+      {
+        "canonical": "show (photos that (favorite = true))",
+        "move": "first",
+        "hint": "my favourite photos"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

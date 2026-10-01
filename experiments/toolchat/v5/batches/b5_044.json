@@ -1,0 +1,243 @@
+[
+  {
+    "id": "a0239",
+    "today": "Wednesday 2028-04-05",
+    "turns": [
+      {
+        "canonical": "tally.settle_up{ group_id: (groups called \"Wine club\"), from_party: (parties called \"Clementine Oyelowo\"), amount_minor: 12000 }",
+        "move": "first",
+        "hint": "record that Clementine paid me that amount in the group"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Wine club\"", "turn": 1, "say": "exact: wine club" },
+      {
+        "row": "parties \"Clementine Oyelowo\"",
+        "turn": 1,
+        "say": "exact: Clementine"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0508",
+    "today": "Saturday 2026-01-17",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Valeska Oduya\") that (label = \"home\"))",
+        "move": "first",
+        "hint": "Valeska's number/email with that label (work/home/mobile)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Valeska Oduya\"", "turn": 1, "say": "exact: Valeska" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0936",
+    "today": "Monday 2025-12-15",
+    "turns": [
+      {
+        "canonical": "show (first 5 of (photos ordered by captured_at desc))",
+        "move": "first",
+        "hint": "my latest N photos"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0125",
+    "today": "Monday 2028-07-03",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"login\", title: \"Energy account\", content: \"0613\" }",
+        "move": "first",
+        "hint": "save a login for Energy account with password 0613"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0172",
+    "today": "Sunday 2026-08-30",
+    "turns": [
+      {
+        "canonical": "media.restore_asset{} on (photos called \"Lakeside cabin at dawn\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "restore the deleted lakeside cabin photo"
+      }
+    ],
+    "refer": [
+      {
+        "row": "photos \"Lakeside cabin at dawn\"",
+        "turn": 1,
+        "say": "exact: lakeside cabin"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0378",
+    "today": "Wednesday 2026-12-30",
+    "turns": [
+      {
+        "canonical": "count of (obligations that (settled_at is null))",
+        "move": "first",
+        "hint": "how many debts are still outstanding"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0934",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "canonical": "show (first 10 of (photos ordered by captured_at desc))",
+        "move": "first",
+        "hint": "my latest N photos"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0473",
+    "today": "Thursday 2025-07-17",
+    "turns": [
+      {
+        "canonical": "value of (contact channels of (parties called \"Ismael Maddox\") that (kind = \"email\"))",
+        "move": "first",
+        "hint": "what's Ismael's number/email (the value)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Ismael Maddox\"", "turn": 1, "say": "exact: Ismael" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1039",
+    "today": "Saturday 2026-07-18",
+    "turns": [
+      {
+        "canonical": "count of (photos of (places called \"Ottery Mill\"))",
+        "move": "first",
+        "hint": "how many photos did I take at Mill"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Ottery Mill\"", "turn": 1, "say": "loose: Mill" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0420",
+    "today": "Thursday 2026-01-01",
+    "turns": [
+      {
+        "canonical": "amount_minor of (expenses called \"Internet bill\")",
+        "move": "first",
+        "hint": "how much was the internet expense"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Internet bill\"",
+        "turn": 1,
+        "say": "loose: internet"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1123",
+    "today": "Tuesday 2025-03-11",
+    "turns": [
+      {
+        "canonical": "show (photos during last week)",
+        "move": "first",
+        "hint": "photos from that window"
+      },
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Baby's first year\") } on (them)",
+        "move": "act",
+        "hint": "add those to the year album"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Hollin Lane\"", "turn": 1, "say": "loose: hollin" },
+      { "row": "albums \"Baby's first year\"", "turn": 2, "say": "loose: year" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0459",
+    "today": "Saturday 2027-08-21",
+    "turns": [
+      {
+        "canonical": "spent_on of (expenses called \"Gas bill\")",
+        "move": "first",
+        "hint": "when did I pay for the gas bill"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Gas bill\"", "turn": 1, "say": "loose: gas bill" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0805",
+    "today": "Sunday 2028-11-12",
+    "turns": [
+      {
+        "canonical": "max amount_minor of (expenses that (spent_on during today))",
+        "move": "first",
+        "hint": "biggest single expense in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0685",
+    "today": "Wednesday 2028-09-06",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Honora Iwasaki\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete Honora from my contacts"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Honora Iwasaki\"", "turn": 1, "say": "exact: Honora" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0117",
+    "today": "Wednesday 2026-12-02",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"login\", title: \"School portal\", content: \"K3ttle-drum\" }",
+        "move": "first",
+        "hint": "save a login for School portal with password K3ttle-drum"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

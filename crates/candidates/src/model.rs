@@ -113,7 +113,7 @@ impl Candidate for ModelSession {
                 reason: "unhandled: the model emitted nothing for this turn".to_owned(),
             };
         };
-        match crate::canon::parse(canonical) {
+        match crate::canon::parse_for_execution(canonical, ctx.today()) {
             Ok(tree) => execute(&tree, &mut self.state, ctx),
             Err(complaint) => Plan::Declined {
                 reason: format!("unhandled: the model's canonical does not parse: {complaint}"),

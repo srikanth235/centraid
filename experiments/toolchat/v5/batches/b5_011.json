@@ -1,0 +1,230 @@
+[
+  {
+    "id": "a1106",
+    "today": "Saturday 2027-09-18",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Leocadia\")",
+        "move": "first",
+        "hint": "delete Leocadia from my contacts"
+      },
+      {
+        "canonical": "people.undo_person{} on (it)",
+        "move": "undo",
+        "hint": "wait, put them back / undo that"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0875",
+    "today": "Friday 2025-12-26",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (documents ordered by created_at desc))",
+        "move": "first",
+        "hint": "the newest N documents"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0728",
+    "today": "Monday 2025-11-17",
+    "turns": [
+      {
+        "canonical": "show (photos that (favorite = true) during last weekend)",
+        "move": "first",
+        "hint": "favourite photos from that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0989",
+    "today": "Monday 2027-08-02",
+    "turns": [
+      {
+        "canonical": "count of (parties of (events called \"bike\"))",
+        "move": "first",
+        "hint": "how many people are coming to the bike"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0327",
+    "today": "Tuesday 2028-08-15",
+    "turns": [
+      {
+        "canonical": "count of (important dates that (next_occurrence during next week))",
+        "move": "first",
+        "hint": "how many birthdays/anniversaries coming up in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0304",
+    "today": "Sunday 2028-02-20",
+    "turns": [
+      {
+        "canonical": "count of (expenses of (groups called \"Chess night\"))",
+        "move": "first",
+        "hint": "how many expenses in the night group"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Chess night\"", "turn": 1, "say": "exact: night" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0857",
+    "today": "Thursday 2025-09-04",
+    "turns": [
+      {
+        "canonical": "min amount_minor of (expenses of (groups called \"holiday\"))",
+        "move": "first",
+        "hint": "the cheapest expense in the holiday group"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0923",
+    "today": "Wednesday 2025-03-12",
+    "turns": [
+      {
+        "canonical": "show (obligations of (parties called \"Konrad Bellweather\") ordered by incurred_on desc)",
+        "move": "first",
+        "hint": "debts with Konrad, newest first"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Konrad Bellweather\"",
+        "turn": 1,
+        "say": "exact: Konrad"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0987",
+    "today": "Monday 2026-10-19",
+    "turns": [
+      {
+        "canonical": "count of (parties of (events called \"Choir practice\"))",
+        "move": "first",
+        "hint": "how many people are coming to the choir"
+      }
+    ],
+    "refer": [
+      { "row": "events \"Choir practice\"", "turn": 1, "say": "loose: choir" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0052",
+    "today": "Saturday 2025-09-06",
+    "turns": [
+      {
+        "canonical": "show (albums called \"Frosty mornings\")",
+        "move": "first",
+        "hint": "find the Frosty mornings album"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"Frosty mornings\"", "turn": 1, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0532",
+    "today": "Tuesday 2025-12-02",
+    "turns": [
+      {
+        "canonical": "show (documents that (updated_at during this week))",
+        "move": "first",
+        "hint": "docs changed in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1096",
+    "today": "Monday 2026-04-06",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Griffin Eklund\")",
+        "move": "first",
+        "hint": "delete Griffin from my contacts"
+      },
+      {
+        "canonical": "people.undo_person{} on (it)",
+        "move": "undo",
+        "hint": "wait, put them back / undo that"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Griffin Eklund\"",
+        "turn": 1,
+        "say": "exact: Griffin"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1029",
+    "today": "Wednesday 2027-06-30",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"Deli\"))",
+        "move": "first",
+        "hint": "photos from / taken at Deli"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1003",
+    "today": "Monday 2028-03-27",
+    "turns": [
+      {
+        "canonical": "show (parties of (obligations that (amount_minor > 2000)))",
+        "move": "first",
+        "hint": "who are the debts over that amount with"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0784",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      {
+        "canonical": "show (tasks that (priority <= 3))",
+        "move": "first",
+        "hint": "tasks with priority that number or higher-priority (lower number)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

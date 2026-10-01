@@ -1,0 +1,294 @@
+[
+  {
+    "id": "w34-0024",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks what debts there are between them and Quamara Kythino",
+        "say": ["Quamara Kythino"]
+      },
+      {
+        "hint": "(new topic) asks to invent a PIN for their new card",
+        "say": [],
+        "shown": "obligation \"Racquetball class deposit\""
+      },
+      {
+        "hint": "(new topic) asks to find the shots on Cosima",
+        "say": ["Cosima", "shots"],
+        "shown": "refuse"
+      },
+      {
+        "hint": "follow-up: asks the same about urn instead ('what about urn?')",
+        "say": ["urn"],
+        "shown": "photo \"Cosima at Minehead Arcade\" Fri 2026-08-28 12:00 · album_titles=Akureyri 2026 favorite=false"
+      },
+      {
+        "hint": "(detour) hang on — asks when the Noemie business is",
+        "say": ["Noemie"],
+        "shown": "photo \"Urn in the snow\" Sun 2026-12-06 13:14 · favorite=false"
+      },
+      {
+        "hint": "back to the urn photos — asks whether there's anything in their calendar about it too",
+        "say": ["calendar"],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w34-0025",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks to delete all their things notes",
+        "say": ["things", "note"]
+      },
+      {
+        "hint": "(new topic) asks to star the school document",
+        "say": ["school"],
+        "shown": "done: delete{} on (#1, #2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w34-0026",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks to reveal the password for the shibori club",
+        "say": ["shibori club", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w34-0027",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks how many events last week they have",
+        "say": ["last week", "how many"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w34-0028",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks which events last week they have",
+        "say": ["last week", "which"]
+      },
+      {
+        "hint": "(detour) hang on — asks for their photos from November",
+        "say": ["November"],
+        "shown": "event \"Galleon delivery\" Mon 2026-11-30 11:45\nevent \"Racquetball class at Minehead Arcade\" Wed 2026-12-02 14:30\nevent \"Book club (week 49)\" Thu 2026-12-03 07:45\nevent \"Orienteering club with Noemie\" Sun 2026-12-06 09:15\n(+1 more)"
+      },
+      {
+        "hint": "back to that — about the orienteering one, asks who else will be there",
+        "say": ["orienteering"],
+        "shown": "photo \"Akureyri Pool in the mist (03)\" Tue 2026-11-24 11:20 · album_titles=Lausanne Bakery 2026, Akureyri 2026 favorite=false\nphoto \"Akureyri Pool in the mist (02)\" Tue 2026-11-24 11:19 · album_titles=Akureyri 2026 favorite=false\nphoto \"Akureyri Pool in the mist (01)\" Tue 2026-11-24 11:18 · album_titles=Akureyri 2026, Harmonica favorite=false people=Vrovsais Mcallister, Tuomas Horvath\nphoto \"Kallum at Jelniness Lido\" Thu 2026-11-19 12:11 · album_titles=Avocado 2024, Akureyri 2026, Lausanne Ba… favorite=false people=Ruskine Boucher, Noemie Kusuma\n(+9 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w34-0029",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks to star the cookie renewal document",
+        "say": ["cookie renewal"]
+      },
+      {
+        "hint": "follow-up: corrects: wrong document, they meant the turret scan one",
+        "say": ["turret scan"],
+        "shown": "done: core.star_document{} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w34-0030",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks what's left to do on the turret plan",
+        "say": ["turret"]
+      },
+      {
+        "hint": "(new topic) asks what they have on while they're away in Komcombe",
+        "say": ["Komcombe"],
+        "shown": "task \"Photograph the citadel\" · status=in-process effort_min=30\ntask \"Renew the cartwheel\" · status=cancelled\ntask \"Wrap the gargoyle\" · status=needs-action"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w34-0031",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks where their shibori statement is",
+        "say": ["shibori statement"]
+      },
+      {
+        "hint": "follow-up: asks what sits alongside it in that folder",
+        "say": [],
+        "shown": "document \"Shibori statement\" Sun 2025-11-16 09:52 · folder=Energy"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w34-0032",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks if there's a calendar event at Minehead Arcade",
+        "say": ["Minehead Arcade"]
+      },
+      {
+        "hint": "(new topic) asks what paperwork is kept in Energy",
+        "say": ["Energy"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "(new topic) asks to export their whole locker to a plain file",
+        "say": [],
+        "shown": "document \"Water bill (02)\" Thu 2026-09-10 07:32 · folder=Energy\ndocument \"Cookie renewal\" Wed 2026-01-28 08:45 · folder=Energy\ndocument \"Kallum contract\" Sat 2025-12-13 10:46 · folder=Energy\ndocument \"Shibori statement\" Sun 2025-11-16 09:52 · folder=Energy"
+      },
+      {
+        "hint": "(new topic) asks who they're in debt to",
+        "say": [],
+        "shown": "refuse"
+      },
+      {
+        "hint": "(detour) hang on — asks what else is on during the Komcombe trip",
+        "say": ["Komcombe"],
+        "shown": "party \"Tuomas Horvath\" · owed_to_them_minor=15000 role=Friend\nparty \"Enou Prulino\" · owed_to_them_minor=15000 role=Old flatmate"
+      },
+      {
+        "hint": "back to the money — asks how much that is in all",
+        "say": [],
+        "shown": "task \"Research Tonu's quarry\" Sat 2027-01-09 09:00 · status=needs-action effort_min=45\nevent \"Komcombe holiday\" Sat 2027-01-09 07:00\nevent \"Quarry delivery\" Tue 2027-01-12 18:00\nevent \"Raft delivery\" Tue 2027-01-12 18:30\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w34-0033",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks how many photos they took on the Akureyri trip",
+        "say": ["Akureyri"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w34-0035",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks if there's a calendar event at Lausanne Yard",
+        "say": ["Lausanne Yard"]
+      },
+      {
+        "hint": "(new topic) asks what Libor Nistow's balance with them is in the harpoon share group",
+        "say": ["Libor Nistow", "harpoon share"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: asks the same for Noemie ('and Noemie?')",
+        "say": ["Noemie"],
+        "shown": "= -19500"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w34-0036",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks what else is going on while they're in Komcombe",
+        "say": ["Komcombe"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w34-0037",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks when their bookcase thing is (no kind given)",
+        "say": ["bookcase"]
+      },
+      {
+        "hint": "(new topic) asks if they have any calendar events about rhubarb",
+        "say": ["rhubarb", "events"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "(new topic) asks to add the shoswen jetty picture to the Akureyri 2026 album",
+        "say": ["shoswen jetty", "Akureyri 2026", "album"],
+        "shown": "no rows"
+      },
+      {
+        "hint": "(new topic) asks what they have on while they're away in Komcombe",
+        "say": ["Komcombe"],
+        "shown": "done: media.add_to_album{album_id: (#3)} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w34-0038",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      { "hint": "asks what bookcase things they have", "say": ["bookcase"] },
+      {
+        "hint": "(new topic) asks when they have the komcombe holiday",
+        "say": ["komcombe holiday"],
+        "shown": "document \"Bookcase quote\" Sat 2025-11-15 21:00 · folder=Visas\ntask \"Lend the bookcase this week\" Mon 2027-01-04 18:00 · status=needs-action\ntask \"Post the bookcase at Madeira Heath\" · status=needs-action effort_min=15\ntask \"Recycle the bookcase for Flendie\" Tue 2026-12-01 12:00 · status=completed"
+      },
+      {
+        "hint": "follow-up: asks what else is on that day",
+        "say": [],
+        "shown": "event \"Komcombe holiday\" Sat 2027-01-09 07:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w34-0039",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks to tick off the ask flendie task",
+        "say": ["ask flendie"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  }
+]

@@ -1,0 +1,244 @@
+[
+  {
+    "id": "w16-045",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks who Florian Whitlock is", "say": ["Florian Whitlock"] },
+      {
+        "hint": "asks when their birthday is (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks to log a coffee with Bastian (several people are called Bastian)",
+        "say": ["Bastian"]
+      },
+      {
+        "hint": "(new topic) asks what day the Pinecrest is on",
+        "say": ["Pinecrest"]
+      },
+      { "hint": "asks what else is on that day", "say": [] },
+      { "hint": "asks which of those are still to do", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "texting"]
+  },
+  {
+    "id": "w16-046",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks who'll be at the weekend", "say": ["weekend"] },
+      {
+        "hint": "(new topic) asks to bin the Graduation agreement document",
+        "say": ["Graduation agreement"]
+      },
+      {
+        "hint": "(new topic) asks whether Ismael's birthday is coming up",
+        "say": ["Ismael"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "terse"]
+  },
+  {
+    "id": "w16-047",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks when they last caught up with Pippa Winslow",
+        "say": ["Pippa Winslow"]
+      },
+      {
+        "hint": "(new topic) asks for the members of the Swimming group",
+        "say": ["Swimming"]
+      },
+      {
+        "hint": "asks how much Bastian owes them in that group",
+        "say": ["Bastian"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "w16-048",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks which photos they hearted", "say": [] },
+      { "hint": "(new topic) asks who still has to pay them back", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  },
+  {
+    "id": "w16-049",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks when they last spoke to Osric Zamora",
+        "say": ["Osric Zamora"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "texting"]
+  },
+  {
+    "id": "w16-050",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks what tasks have no due date", "say": [] },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      { "hint": "(new topic) says the comes task is done", "say": ["comes"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "polite"]
+  },
+  {
+    "id": "w16-051",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks for their documents about Water", "say": ["Water"] },
+      { "hint": "asks what else there is apart from the second one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "w16-052",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks which notes mention Shopping list",
+        "say": ["Shopping list"]
+      },
+      {
+        "hint": "(new topic) asks to wipe all their photos and notes at once",
+        "say": []
+      },
+      {
+        "hint": "asks to add a task for tuesday to deal with 'Shopping list (wk 52)'",
+        "say": ["tuesday"]
+      },
+      {
+        "hint": "asks to add a task for wednesday to deal with 'Reunion shopping list'",
+        "say": ["wednesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "question"]
+  },
+  {
+    "id": "w16-053",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks what tasks are due next week", "say": ["next week"] },
+      {
+        "hint": "asks for just the ones on monday (monday)",
+        "say": ["monday"]
+      },
+      {
+        "hint": "(new topic) asks to make a note called 'Gift ideas for the twins'",
+        "say": ["Gift ideas for the twins"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "polite"]
+  },
+  {
+    "id": "w16-054",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks to move the boiler task to monday",
+        "say": ["boiler", "monday"]
+      },
+      {
+        "hint": "(new topic) asks how many photos they have marked as favourites",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w16-055",
+    "today": "Wednesday 2027-01-06",
+    "turns": [{ "hint": "asks to order more printer ink online", "say": [] }],
+    "versions": 3,
+    "registers": ["polite", "question", "texting"]
+  },
+  {
+    "id": "w16-056",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks who they owe money to", "say": [] },
+      {
+        "hint": "asks for just the yardley ones among those",
+        "say": ["yardley"]
+      },
+      {
+        "hint": "asks about the debts with them (the one person just shown)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "polite"]
+  },
+  {
+    "id": "w16-057",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks for the Pension account entry", "say": ["Pension"] },
+      {
+        "hint": "(new topic) asks what's in the vault about Quillon",
+        "say": ["Quillon"]
+      },
+      {
+        "hint": "asks the same about Tolliver mobile instead ('what about Tolliver mobile?')",
+        "say": ["Tolliver mobile"]
+      },
+      {
+        "hint": "(new topic) asks to log a coffee with Bastian (several people are called Bastian)",
+        "say": ["Bastian"]
+      },
+      {
+        "hint": "says it was Bastian Moreau (the Moreau one)",
+        "say": ["Moreau"]
+      },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w16-058",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks what's in the vault about home", "say": ["home"] },
+      {
+        "hint": "asks which of those are about merriweather",
+        "say": ["merriweather"]
+      },
+      {
+        "hint": "(new topic) asks if anything is happening on the 15th",
+        "say": ["the 15th"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "texting"]
+  },
+  {
+    "id": "w16-059",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks for their to-dos about Print", "say": ["Print"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "question"]
+  }
+]

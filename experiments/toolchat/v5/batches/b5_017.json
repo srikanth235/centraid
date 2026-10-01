@@ -1,0 +1,238 @@
+[
+  {
+    "id": "a0646",
+    "today": "Wednesday 2028-06-28",
+    "turns": [
+      {
+        "canonical": "show (notes called \"Holiday ideas\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the ideas note"
+      }
+    ],
+    "refer": [
+      { "row": "notes \"Holiday ideas\"", "turn": 1, "say": "loose: ideas" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0352",
+    "today": "Monday 2026-06-22",
+    "turns": [
+      {
+        "canonical": "count of (members of (groups called \"Supper club\"))",
+        "move": "first",
+        "hint": "how many people are in the club group"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Supper club\"", "turn": 1, "say": "exact: club" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0738",
+    "today": "Wednesday 2026-01-21",
+    "turns": [
+      {
+        "canonical": "show (photos that (favorite = true) during last week)",
+        "move": "first",
+        "hint": "favourite photos from that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0087",
+    "today": "Tuesday 2026-02-17",
+    "turns": [
+      {
+        "canonical": "show (things called \"session\")",
+        "move": "first",
+        "hint": "what do I have about session (anything: diary, to-dos, notes...)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0077",
+    "today": "Friday 2026-11-27",
+    "turns": [
+      {
+        "canonical": "show (places called \"elmstead\")",
+        "move": "first",
+        "hint": "find the place elmstead in my photos' places"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0902",
+    "today": "Monday 2028-03-06",
+    "turns": [
+      {
+        "canonical": "show (expenses that (spent_on during last week) ordered by amount_minor desc)",
+        "move": "first",
+        "hint": "expenses in that window, biggest first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0373",
+    "today": "Wednesday 2027-06-30",
+    "turns": [
+      {
+        "canonical": "count of (notes that (notebooks contains \"Garden log\"))",
+        "move": "first",
+        "hint": "how many notes in the Garden log notebook"
+      }
+    ],
+    "refer": [{ "row": "notebooks \"Garden log\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0801",
+    "today": "Friday 2027-08-20",
+    "turns": [
+      {
+        "canonical": "max amount_minor of (expenses of (groups called \"Optician fund\"))",
+        "move": "first",
+        "hint": "the biggest expense in the optician group"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Optician fund\"", "turn": 1, "say": "exact: optician" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0221",
+    "today": "Friday 2028-09-01",
+    "turns": [
+      {
+        "canonical": "schedule.restore_task{} on (tasks called \"Collect the repaired watch\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "bring back the deleted repaired task"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Collect the repaired watch\"",
+        "turn": 1,
+        "say": "exact: repaired"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0882",
+    "today": "Monday 2027-04-19",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (events of (parties called \"Henrike Yamamoto\") ordered by dtstart desc))",
+        "move": "first",
+        "hint": "the latest event with Henrike"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Henrike Yamamoto\"",
+        "turn": 1,
+        "say": "exact: Henrike"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0546",
+    "today": "Wednesday 2028-01-26",
+    "turns": [
+      {
+        "canonical": "show (events called \"Team offsite\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the offsite event"
+      }
+    ],
+    "refer": [
+      { "row": "events \"Team offsite\"", "turn": 1, "say": "exact: offsite" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0454",
+    "today": "Wednesday 2026-10-07",
+    "turns": [
+      {
+        "canonical": "next_occurrence of (important dates of (parties called \"Rosalia Kerrigan\") that (label contains \"Birthday\"))",
+        "move": "first",
+        "hint": "when is Rosalia's next birthday (date)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Rosalia Kerrigan\"",
+        "turn": 1,
+        "say": "exact: Rosalia"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0123",
+    "today": "Saturday 2027-12-25",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"login\", title: \"Photo backup\", content: \"Maple#2031\" }",
+        "move": "first",
+        "hint": "save a login for Photo backup with password Maple#2031"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0511",
+    "today": "Monday 2025-08-11",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Yolanda Farrant\") that (label = \"mobile\"))",
+        "move": "first",
+        "hint": "Yolanda's number/email with that label (work/home/mobile)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Yolanda Farrant\"",
+        "turn": 1,
+        "say": "exact: Yolanda"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0792",
+    "today": "Monday 2025-04-07",
+    "turns": [
+      {
+        "canonical": "show (tasks that (priority <= 3))",
+        "move": "first",
+        "hint": "tasks with priority that number or higher-priority (lower number)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

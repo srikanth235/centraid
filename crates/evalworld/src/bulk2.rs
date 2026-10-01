@@ -503,9 +503,10 @@ fn notes(seeder: &mut Seeder, dice: &mut Dice, words: &Vocabulary) {
     for index in 0..NOTES {
         let subject = *dice.pick(words.note_subjects);
         let shape = *dice.pick(words.note_shapes);
-        let title = shape
-            .replacen("{}", subject, 1)
-            .replacen("{}", &format!("{:03}", index % 400), 1);
+        let title =
+            shape
+                .replacen("{}", subject, 1)
+                .replacen("{}", &format!("{:03}", index % 400), 1);
         let body = format!(
             "{subject}. Came back to this and put down what I still remembered.\n\n\
              - the part that keeps slipping\n- the next move\n- who would know\n\nLeaf {index}."

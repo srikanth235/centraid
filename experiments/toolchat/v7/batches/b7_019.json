@@ -1,0 +1,258 @@
+[
+  {
+    "id": "w04-051",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks for their to-dos about Replace", "say": ["Replace"] },
+      {
+        "hint": "(new topic) asks to add 18 (money) for snacks to the Caravan group, paid by them",
+        "say": ["Caravan", "snacks"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "texting"]
+  },
+  {
+    "id": "w04-052",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks to wipe all their photos and notes at once", "say": [] },
+      {
+        "hint": "(new topic) asks which tasks take about 15 minutes",
+        "say": ["15"]
+      },
+      {
+        "hint": "(new topic) asks what the Caravan group's spending comes to",
+        "say": ["Caravan"]
+      },
+      {
+        "hint": "(new topic) asks what pictures are in the Festival album",
+        "say": ["Festival"]
+      },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w04-053",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks who Orla Kowalczyk is", "say": ["Orla Kowalczyk"] },
+      {
+        "hint": "(new topic) asks when they need to remember Theodosia's birthday",
+        "say": ["Theodosia"]
+      },
+      {
+        "hint": "(new topic) asks to pull up Pebble Roofing",
+        "say": ["Pebble Roofing"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "w04-054",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks to find the photos on Market", "say": ["Market"] },
+      {
+        "hint": "(new topic) asks which expenses mention Oven",
+        "say": ["Oven"]
+      },
+      {
+        "hint": "(new topic) asks how much has been spent in the Boat group",
+        "say": ["Boat"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "question"]
+  },
+  {
+    "id": "w04-055",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks what's in the vault about inspection",
+        "say": ["inspection"]
+      },
+      {
+        "hint": "(new topic) asks to delete the Cabin document",
+        "say": ["Cabin"]
+      },
+      {
+        "hint": "(new topic) asks to email their bank password to a friend",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "polite"]
+  },
+  {
+    "id": "w04-056",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks when the Quiz is", "say": ["Quiz"] },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "asks the same about Pilates instead ('what about Pilates?')",
+        "say": ["Pilates"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w04-057",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks what is overdue", "say": [] },
+      {
+        "hint": "asks for just the ones this week (this week)",
+        "say": ["week"]
+      },
+      {
+        "hint": "asks which of those are about graduation",
+        "say": ["graduation"]
+      },
+      {
+        "hint": "(new topic) asks which to-dos are due friday",
+        "say": ["friday"]
+      },
+      {
+        "hint": "(new topic) asks for their to-dos about bulbs",
+        "say": ["bulbs"]
+      },
+      {
+        "hint": "(new topic) asks to log that they had a call with Percival",
+        "say": ["Percival"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "spoken"]
+  },
+  {
+    "id": "w04-058",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks what Teodora Northcott's mobile number is",
+        "say": ["Teodora Northcott"]
+      },
+      {
+        "hint": "(new topic) asks to move the Mortgage meeting appointment to sunday",
+        "say": ["Mortgage meeting", "sunday"]
+      },
+      { "hint": "asks who else will be there", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "spoken"]
+  },
+  {
+    "id": "w04-059",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks to bin the certificate document", "say": ["certificate"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "polite"]
+  },
+  {
+    "id": "w04-060",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks to move the Landlord appointment to tuesday",
+        "say": ["Landlord", "tuesday"]
+      },
+      { "hint": "asks who's coming to it", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "terse"]
+  },
+  {
+    "id": "w04-061",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks what the login for Cabin is (not the password)",
+        "say": ["Cabin"]
+      },
+      {
+        "hint": "asks the same about code instead ('what about code?')",
+        "say": ["code"]
+      },
+      {
+        "hint": "(new topic) asks to star the Chimney document",
+        "say": ["Chimney"]
+      },
+      {
+        "hint": "asks to add a task for thursday to deal with 'Chimney sweep invoice'",
+        "say": ["thursday"]
+      },
+      {
+        "hint": "(new topic) asks if they have any to-dos about optician",
+        "say": ["optician"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "w04-062",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks for their documents about Water", "say": ["Water"] },
+      { "hint": "asks which of those are starred", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  },
+  {
+    "id": "w04-063",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks for everything mentioning Cabin", "say": ["Cabin"] },
+      {
+        "hint": "asks for just the ones this week (this week)",
+        "say": ["week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "question"]
+  },
+  {
+    "id": "w04-064",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks to find anything to do with close-up",
+        "say": ["close-up"]
+      },
+      {
+        "hint": "(new topic) asks which places their photos were taken at",
+        "say": []
+      },
+      { "hint": "asks to see the photos from the first one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "spoken"]
+  },
+  {
+    "id": "w04-065",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks what they haven't done yet", "say": [] },
+      {
+        "hint": "(new topic) asks who is in the Optician group",
+        "say": ["Optician"]
+      },
+      {
+        "hint": "asks how much Rufus owes them in that group",
+        "say": ["Rufus"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "spoken"]
+  }
+]

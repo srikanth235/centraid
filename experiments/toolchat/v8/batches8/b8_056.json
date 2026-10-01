@@ -1,0 +1,305 @@
+[
+  {
+    "id": "w17-0001",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      { "hint": "asks which tasks are still open", "say": [] },
+      {
+        "hint": "(new topic) asks to put the Etienne photo in the Portree 2026 album",
+        "say": ["Etienne", "Portree 2026", "album"],
+        "shown": "task \"Ask Etienne about the starfish\" Tue 2026-11-24 09:00 · status=needs-action\ntask \"Recycle the totem for Dragan\" Tue 2026-12-08 18:00 · status=needs-action effort_min=45\ntask \"Clean the dahlia\" · status=needs-action\ntask \"Measure the meringue\" · status=cancelled effort_min=20\n(+9 more)"
+      },
+      {
+        "hint": "(new topic) says the ask vroswyn task is done",
+        "say": ["ask vroswyn"],
+        "shown": "done: media.add_to_album{album_id: (#25)} on (#24)"
+      },
+      {
+        "hint": "follow-up: corrects: wrong task, they meant the unpack one",
+        "say": ["unpack"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#20)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w17-0002",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      { "hint": "asks to delete all their tips notes", "say": ["tips", "note"] }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w17-0003",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      {
+        "hint": "asks to delete the timeline note",
+        "say": ["timeline", "note"]
+      },
+      {
+        "hint": "(new topic) asks which expenses were over forty pounds",
+        "say": ["forty pounds"],
+        "shown": "done: delete{} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks to delete the cafe one",
+        "say": ["cafe"],
+        "shown": "expense \"Dinner at Cafe Paphos\" Mon 2026-12-21 · amount_minor=6000 paid_by=Owner\nexpense \"Catapult top-up\" Mon 2026-12-21 · amount_minor=22548 paid_by=Owner\nexpense \"Courgette\" Thu 2026-12-17 · amount_minor=4200 paid_by=Owner\nexpense \"Raven\" Tue 2026-12-15 · amount_minor=19557 paid_by=Owner\n(+9 more)"
+      },
+      {
+        "hint": "follow-up: takes it back: scratch that, put it back",
+        "say": [],
+        "shown": "done: tally.delete_expense{} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w17-0004",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      { "hint": "asks to delete the cushion note", "say": ["cushion", "note"] },
+      {
+        "hint": "(new topic) asks if they have photos of Flanis",
+        "say": ["Flanis"],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: asks which album it's in",
+        "say": [],
+        "shown": "photo \"Pillar at night (02)\" Wed 2026-12-23 16:29 · album_titles=Starfish favorite=false people=Flanis Lisholt"
+      },
+      {
+        "hint": "(detour) hang on — asks to find the expenses on Paphos",
+        "say": ["Paphos", "expenses"],
+        "shown": "album \"Starfish\""
+      },
+      {
+        "hint": "back to the photos of Flanis — asks to see the photos in it",
+        "say": [],
+        "shown": "expense \"Dinner at Paphos Common\" Wed 2026-12-09 · amount_minor=3999 paid_by=Omar Driskino\nexpense \"Dinner at Cafe Paphos\" Mon 2026-12-21 · amount_minor=6000 paid_by=Owner\nexpense \"Dinner at Paphos Yard\" Fri 2026-11-27 · amount_minor=18923 paid_by=Owner"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w17-0005",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      {
+        "hint": "asks to open the Starfish album",
+        "say": ["Starfish", "album"]
+      },
+      {
+        "hint": "follow-up: asks how many there are in total",
+        "say": [],
+        "shown": "photo \"Pillar at night (02)\" Wed 2026-12-23 16:29 · album_titles=Starfish favorite=false people=Flanis Lisholt\nphoto \"Lukas at Bodmin Food Hall\" Sat 2026-11-14 17:13 · album_titles=Bodmin Food Hall 2026, Starfish favorite=false\nphoto \"Telc Gorge in winter\" Fri 2026-10-30 14:35 · album_titles=Starfish, Blanka's pigeon favorite=false\nphoto \"Lukas at Café Corbridge\" Wed 2026-09-09 09:06 · album_titles=Portree 2026, Starfish favorite=false\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w17-0007",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      {
+        "hint": "asks to move the courgette fitting back a day",
+        "say": ["courgette fitting", "back a day"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w17-0010",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      {
+        "hint": "asks for the Corbridge entry in the locker (the row, not the password)",
+        "say": ["Corbridge"]
+      },
+      {
+        "hint": "(detour) hang on — asks to look up Blanka",
+        "say": ["Blanka"],
+        "shown": "locker item \"Café Corbridge wifi\" · type=wifi"
+      },
+      {
+        "hint": "(new topic) asks to put back the giraffe task they deleted",
+        "say": ["giraffe", "task"],
+        "shown": "party \"Blanka Thorsen\" · role=Aunt"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w17-0011",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the Corbridge is",
+        "say": ["Corbridge", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w17-0015",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      {
+        "hint": "says the alarm code is 42358 — keep it in the locker",
+        "say": ["alarm code", "42358"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w17-0016",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      {
+        "hint": "asks to move the tapestry task to saturday and the totem fitting to sunday",
+        "say": ["tapestry", "saturday", "totem fitting", "sunday"]
+      },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "done: reschedule{to: 2026-12-26} on (#1) then reschedule{to: 2026-12-27} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks for a task to email Dragan tomorrow",
+        "say": ["email Dragan", "tomorrow"],
+        "shown": "party \"Dragan Brouwer\" · role=Friend from the market"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w17-0017",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      { "hint": "asks who is coming to the lastet", "say": ["lastet"] },
+      {
+        "hint": "follow-up: asks for their number",
+        "say": [],
+        "shown": "party \"Anselmo Hazeldine\" · role=Supplier"
+      },
+      {
+        "hint": "(new topic) asks to add the umbrella picture to the Rummy meetup album",
+        "say": ["umbrella", "Rummy meetup", "album"],
+        "shown": "contact channel \"Anselmo Hazeldine — mobile\" · kind=phone value=+44 7700 900096"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w17-0018",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      {
+        "hint": "asks if there's a calendar event at Paphos Yard",
+        "say": ["Paphos Yard"]
+      },
+      {
+        "hint": "(new topic) asks for the notes in their Bagpipes notebook",
+        "say": ["Bagpipes", "notebook"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "(new topic) asks what pictures they have from this month",
+        "say": ["this month"],
+        "shown": "note \"Shopping list (wk 50)\" Thu 2026-12-10 08:15 · notebooks=Bagpipes\nnote \"Things to ask Magnus\" Tue 2026-12-08 07:05 · notebooks=Bagpipes\nnote \"Shopping list (wk 49)\" Thu 2026-12-03 08:51 · notebooks=Bagpipes\nnote \"Umbrella draft\" Thu 2026-10-15 08:36 · notebooks=Bagpipes\n(+3 more)"
+      },
+      {
+        "hint": "(new topic) asks to find Ylva Lamont in their contacts",
+        "say": ["Ylva Lamont"],
+        "shown": "photo \"Pillar at night (03)\" Wed 2026-12-23 16:30 · album_titles=Portree 2026 favorite=false\nphoto \"Pillar at night (02)\" Wed 2026-12-23 16:29 · album_titles=Starfish favorite=false people=Flanis Lisholt\nphoto \"Pillar at night (01)\" Wed 2026-12-23 16:28 · album_titles=Portree 2026 favorite=false\nphoto \"The pickleball at dusk\" Tue 2026-12-22 13:11 · album_titles=Rummy meetup favorite=false\n(+6 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w17-0019",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      {
+        "hint": "asks for their spending entries about totem",
+        "say": ["totem", "entries"]
+      },
+      {
+        "hint": "(detour) hang on — asks what is in their Garden folder",
+        "say": ["Garden"],
+        "shown": "expense \"Totem\" Wed 2026-12-16 · amount_minor=3950 paid_by=Owner"
+      },
+      {
+        "hint": "back to the totem entries — asks how much",
+        "say": [],
+        "shown": "document \"Energy bill (02)\" Sat 2026-10-10 16:21 · folder=Garden\ndocument \"Bouldering contract\" Sun 2026-09-27 11:34 · folder=Garden\ndocument \"Pillar voucher\" Sat 2026-08-29 19:22 · folder=Garden\ndocument \"Catapult booking\" Thu 2026-06-25 21:54 · folder=Garden\n(+3 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w17-0020",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      {
+        "hint": "asks who is coming to the starfish fair",
+        "say": ["starfish fair", "who"]
+      },
+      {
+        "hint": "(detour) hang on — asks which tasks mention Blanka",
+        "say": ["Blanka", "tasks"],
+        "shown": "party \"Brelleth Thorsen\" · role=Son\nparty \"Gwyneth Thorsen\" · role=Uncle"
+      },
+      {
+        "hint": "back to that — about the Brelleth one, asks for their contact details",
+        "say": ["Brelleth"],
+        "shown": "task \"Ask Blanka about the funnel\" · status=completed effort_min=180"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w17-0021",
+    "today": "Thursday 2026-12-24",
+    "turns": [
+      {
+        "hint": "asks when the starfish fair is",
+        "say": ["starfish fair", "when"]
+      },
+      {
+        "hint": "(new topic) asks what they have filed under Bank",
+        "say": ["Bank"],
+        "shown": "event \"Starfish fair\" Wed 2026-12-23 09:30"
+      },
+      {
+        "hint": "follow-up: asks to bin the energy one",
+        "say": ["energy"],
+        "shown": "document \"Energy bill (03)\" Wed 2026-08-12 12:27 · folder=Bank\ndocument \"Lastet policy\" Wed 2026-08-12 11:59 · folder=Bank\ndocument \"Canopy scan\" Tue 2026-09-08 08:30 · folder=Bank\ndocument \"Tapestry invoice\" Mon 2026-08-31 21:43 · folder=Bank"
+      },
+      {
+        "hint": "follow-up: corrects: wrong one, they meant the third one",
+        "say": ["third"],
+        "shown": "done: core.trash_document{} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  }
+]

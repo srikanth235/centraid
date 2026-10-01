@@ -1,0 +1,312 @@
+[
+  {
+    "id": "w40-0001",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in salmon collective",
+        "say": ["salmon collective", "how much"]
+      },
+      {
+        "hint": "follow-up: about the first one, asks for its expenses",
+        "say": ["first"],
+        "shown": "= 91259"
+      },
+      {
+        "hint": "follow-up: asks how many that is",
+        "say": [],
+        "shown": "expense \"Petrol (wk 31)\" Sat 2027-08-07 · amount_minor=18769 paid_by=Benedetta Draivosen\nexpense \"Windmill refund\" Fri 2027-08-06 · amount_minor=2750 paid_by=Raffaella Ramsay\nexpense \"Dennery repair\" Tue 2027-08-03 · amount_minor=465 paid_by=Owner\nexpense \"Windmill\" Mon 2027-08-02 · amount_minor=3499 paid_by=Benedetta Draivosen\n(+7 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w40-0002",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in salmon collective (the expenses)",
+        "say": ["salmon collective"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w40-0003",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to remove the booking receipt file",
+        "say": ["booking receipt"]
+      },
+      {
+        "hint": "(new topic) asks to log 25 pounds of coffee in Damdale, paid by them",
+        "say": ["25 pounds", "coffee", "Damdale"],
+        "shown": "done: core.trash_document{} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks to delete everything in the vault",
+        "say": [],
+        "shown": "done: tally.add_expense{description: \"Coffee\", amount_minor: 2500, paid_by: me, group_id: (#4)}"
+      },
+      {
+        "hint": "follow-up: about the third one, asks who's in it",
+        "say": ["third"],
+        "shown": "refuse"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w40-0004",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      { "hint": "asks to see the shots from April", "say": ["April"] },
+      {
+        "hint": "follow-up: asks to put it in the Abseiling 2027 album",
+        "say": ["Abseiling 2027", "album"],
+        "shown": "photo \"Benedikt at The Old Pigeon\" Wed 2027-04-07 13:42 · album_titles=The Old Pigeon 2027, Lacrosse lesson hig… favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w40-0005",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks who's invited to the pretzel sale",
+        "say": ["pretzel sale"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w40-0006",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to be reminded to ask Thavmoara about the butterscotch thursday at quarter past eleven",
+        "say": [
+          "ask Thavmoara about the butterscotch",
+          "thursday",
+          "at quarter past eleven"
+        ]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w40-0007",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks how many notes are in the Drynnoe house notebook",
+        "say": ["Drynnoe house", "notebook"]
+      },
+      {
+        "hint": "(new topic) asks what's on at Jathoe Meadows",
+        "say": ["Jathoe Meadows"],
+        "shown": "= 10"
+      },
+      {
+        "hint": "(new topic) asks for the documents that go with the butterscotch expense",
+        "say": ["butterscotch", "expense"],
+        "shown": "event \"Pretzel sale at Jathoe Meadows\" Wed 2027-07-21 19:45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w40-0008",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to see the kintsugi club password itself",
+        "say": ["kintsugi club", "password"]
+      },
+      {
+        "hint": "(new topic) says they messaged Ysolde and asks to log it (two contacts are called Ysolde; the message doesn't say which)",
+        "say": ["Ysolde", "messaged"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      },
+      {
+        "hint": "follow-up: says it was Ysolde Banwick",
+        "say": ["Banwick"],
+        "shown": "asked: Which Ysolde — Leby or Banwick?"
+      },
+      {
+        "hint": "follow-up: asks when their birthday is",
+        "say": [],
+        "shown": "done: people.log_interaction{kind: \"message\"} on (#4)"
+      },
+      {
+        "hint": "(new topic) asks what the most recent picture they took is",
+        "say": [],
+        "shown": "important date \"Moving day — Ysolde Banwick\" Fri 2027-04-09"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w40-0009",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to delete the Damdale photo",
+        "say": ["Damdale", "photo"]
+      },
+      {
+        "hint": "(new topic) asks what places they have in their photos",
+        "say": [],
+        "shown": "done: media.delete_asset{} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks for the first one on that list",
+        "say": ["first"],
+        "shown": "place \"Drynnoe Fields\"\nplace \"Kinsale Tearooms\"\nplace \"Jathoe Lido\"\nplace \"Damdale Arcade\"\n(+6 more)"
+      },
+      {
+        "hint": "follow-up: asks to see the photos from there",
+        "say": [],
+        "shown": "place \"Drynnoe Fields\""
+      },
+      {
+        "hint": "follow-up: says scrap that, they'll check later themselves",
+        "say": [],
+        "shown": "photo \"Mothball at dusk\" Fri 2027-08-06 15:15 · favorite=false people=Lucasta Draivosen\nphoto \"Armoire at Drynnoe Fields\" Mon 2027-07-26 07:58 · favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w40-0010",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      { "hint": "asks to delete the funnel photo", "say": ["funnel", "photo"] },
+      {
+        "hint": "(new topic) asks how much they owe Dorie",
+        "say": ["Dorie"],
+        "shown": "none"
+      },
+      {
+        "hint": "(new topic) asks to add forty pounds for ferry to the Pecs trip group, they paid",
+        "say": ["forty pounds", "ferry", "Pecs trip"],
+        "shown": "= 4800"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w40-0011",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to move both Crevir things (the task and the calendar entry) to tomorrow",
+        "say": ["Crevir", "tomorrow"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w40-0012",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to save the studio door code 30473 in the locker",
+        "say": ["studio door code", "30473"]
+      },
+      {
+        "hint": "(new topic) asks for the thirty minute jobs on their list",
+        "say": ["thirty minute"],
+        "shown": "done: locker.add_item{type: \"note\", title: \"Studio door code\", content: \"30473\"}"
+      },
+      {
+        "hint": "follow-up: asks to delete both of them",
+        "say": [],
+        "shown": "task \"Empty the cradle\" · status=needs-action effort_min=30\ntask \"Move the linen this week\" · status=needs-action effort_min=30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w40-0013",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks when they were last in touch with Fermin Lousen",
+        "say": ["Fermin Lousen"]
+      },
+      {
+        "hint": "follow-up: says nah, leave it",
+        "say": [],
+        "shown": "activity \"interaction — Fermin Lousen\" Wed 2027-07-28 21:45\nactivity \"interaction — Fermin Lousen\" Sat 2027-07-10 09:15\nactivity \"interaction — Fermin Lousen\" Fri 2027-08-06 15:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w40-0014",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      { "hint": "asks how much the woodpecker cost", "say": ["woodpecker"] },
+      {
+        "hint": "follow-up: asks what it came to",
+        "say": [],
+        "shown": "= 23872"
+      },
+      {
+        "hint": "(new topic) asks for their pictures from Damdale Arcade",
+        "say": ["Damdale Arcade"],
+        "shown": "= 23872"
+      },
+      {
+        "hint": "follow-up: asks which album it's in",
+        "say": [],
+        "shown": "photo \"Ginger at Damdale Arcade\" Wed 2027-07-14 12:11 · album_titles=Lacrosse lesson highlights favorite=false"
+      },
+      {
+        "hint": "follow-up: asks to see the photos in it",
+        "say": [],
+        "shown": "album \"Lacrosse lesson highlights\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w40-0015",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to settle up with Prestou in Pecs trip",
+        "say": ["Prestou", "Pecs trip", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks to save the bike lock combination 68941 in the locker",
+        "say": ["bike lock combination", "68941"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#2), amount_minor: balance of (#4) in (#2)} on (#4)"
+      },
+      {
+        "hint": "(new topic) asks to pull up the jalhaven booking thing",
+        "say": ["jalhaven booking"],
+        "shown": "done: locker.add_item{type: \"note\", title: \"Bike lock combination\", content: \"68941\"}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  }
+]

@@ -1,0 +1,325 @@
+[
+  {
+    "id": "w23-0058",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks to put the Fleur photo in the Ferret album",
+        "say": ["Fleur", "Ferret", "album"]
+      },
+      {
+        "hint": "follow-up: corrects: wrong photo, they meant the goldfinch one",
+        "say": ["goldfinch"],
+        "shown": "done: media.add_to_album{album_id: (#14)} on (#6)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w23-0059",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks how many documents are in the Invoices folder",
+        "say": ["Invoices"]
+      },
+      {
+        "hint": "(new topic) asks who is coming to the walk",
+        "say": ["walk"],
+        "shown": "= 3"
+      },
+      {
+        "hint": "follow-up: asks for a task to call Choi sunday",
+        "say": ["call Choi", "sunday"],
+        "shown": "party \"Hugo Choi\" · role=Supplier"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w24-0001",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      { "hint": "asks for Carran's contact card", "say": ["Carran"] },
+      {
+        "hint": "follow-up: asks what events they're coming to",
+        "say": [],
+        "shown": "party \"Carran Inglewood\" · owed_to_them_minor=7500 role=Sister"
+      },
+      {
+        "hint": "follow-up: asks for just the ones on saturday",
+        "say": ["saturday"],
+        "shown": "event \"Postcard sale at Nyvoe Allotments\" Thu 2025-06-26 16:30\nevent \"Woodturning workshop with Yetunde\" Sat 2025-07-26 16:30"
+      },
+      {
+        "hint": "follow-up: asks the same about Jiwoo Amino ('and Jiwoo Amino?')",
+        "say": ["Jiwoo Amino"],
+        "shown": "event \"Woodturning workshop with Yetunde\" Sat 2025-07-26 16:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w24-0005",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks when Nanami's birthday is",
+        "say": ["Nanami", "birthday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w24-0006",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks when their coffee with Nanami is",
+        "say": ["Nanami", "coffee"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w24-0008",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      { "hint": "asks what they have got the 26th", "say": ["the 26th"] },
+      {
+        "hint": "follow-up: about the quilting one, asks who's coming to it",
+        "say": ["quilting"],
+        "shown": "important date \"Birthday — Piotr Lindemann\" Sat 2025-07-26\nevent \"Seojun's parasol party\" Sat 2025-07-26 10:30\nevent \"Quilting session\" Sat 2025-07-26 14:30\nevent \"Woodturning workshop with Yetunde\" Sat 2025-07-26 16:30\n(+1 more)"
+      },
+      {
+        "hint": "follow-up: asks the same for next friday ('and next friday?')",
+        "say": ["next friday"],
+        "shown": "party \"Antoine Farahani\" · role=Best friend\nparty \"Odile Crabtree\" · role=Book club friend"
+      },
+      {
+        "hint": "(new topic) asks to be reminded to call Alasdair back monday at ten",
+        "say": ["call Alasdair back", "monday", "at ten"],
+        "shown": "important date \"Birthday — Xiomara Paredes\" Fri 2025-08-01\ntask \"Collect the meringue at Siargao Tearooms\" Fri 2025-08-01 09:00 · status=needs-action\nevent \"Pick up the thuvum\" Fri 2025-08-01 07:00"
+      },
+      {
+        "hint": "follow-up: about the pick one, asks who's coming to it",
+        "say": ["pick"],
+        "shown": "done: schedule.add_task{title: \"Call Alasdair back\", due_at: 2025-07-28T10:00}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w24-0009",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      { "hint": "asks if anything is happening tuesday", "say": ["tuesday"] },
+      {
+        "hint": "follow-up: asks the same for next friday ('and next friday?')",
+        "say": ["next friday"],
+        "shown": "task \"Measure the swallow at Kirkwall Yard\" Tue 2025-07-29 12:00 · status=needs-action effort_min=30\nevent \"Kabaddi lesson at Siargao Tearooms\" Tue 2025-07-29 08:30"
+      },
+      {
+        "hint": "(new topic) asks for their files about thuvum",
+        "say": ["thuvum", "files"],
+        "shown": "important date \"Birthday — Xiomara Paredes\" Fri 2025-08-01\ntask \"Collect the meringue at Siargao Tearooms\" Fri 2025-08-01 09:00 · status=needs-action\nevent \"Pick up the thuvum\" Fri 2025-08-01 07:00"
+      },
+      {
+        "hint": "follow-up: asks what about in their pictures",
+        "say": ["pictures"],
+        "shown": "document \"Thuvum report\" Sat 2024-12-21 23:04 · folder=Thuvum"
+      },
+      {
+        "hint": "follow-up: asks the same about Nyvoe instead ('what about Nyvoe?')",
+        "say": ["Nyvoe"],
+        "shown": "photo \"The thuvum at dusk\" Mon 2025-06-09 10:55 · album_titles=Fomocombe Library, Best of 2025 favorite=false people=Sunen Lindemann\nphoto \"The thuvum at dusk (01)\" Mon 2025-07-07 10:14 · album_titles=Flemness 2025 favorite=false\nphoto \"The thuvum at dusk (03)\" Mon 2025-07-07 10:16 · album_titles=Fomocombe Library favorite=false people=Xiomara Paredes\nphoto \"The thuvum at dusk (02)\" Mon 2025-07-07 10:15 · favorite=false people=Arnel Lindemann"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w24-0010",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      { "hint": "asks who they still have to pay back", "say": [] },
+      {
+        "hint": "(detour) hang on — asks which people share thuvum gang with them",
+        "say": ["thuvum gang"],
+        "shown": "party \"Arnel Lindemann\" · owed_to_them_minor=1200 role=Grandmother\nparty \"Kourosh Vungoholt\" · owed_to_them_minor=2000 role=Colleague\nparty \"Margarethe Sinclair\" · owed_to_them_minor=3500 role=University friend\nparty \"Carran Inglewood\" · owed_to_them_minor=7500 role=Sister"
+      },
+      {
+        "hint": "back to the money — asks for just the ones over fifty dollars",
+        "say": ["fifty dollars"],
+        "shown": "member \"Vrovsais Lindemann\"\nmember \"Ysolde Flillez\""
+      },
+      {
+        "hint": "(new topic) asks to see photos of Margarethe Sinclair",
+        "say": ["Margarethe Sinclair"],
+        "shown": "party \"Carran Inglewood\" · owed_to_them_minor=7500 role=Sister"
+      },
+      {
+        "hint": "follow-up: asks to put it in the Best of 2025 album",
+        "say": ["Best of 2025", "album"],
+        "shown": "photo \"Tapestry in the garden\" Sat 2025-06-14 15:04 · album_titles=Woodturning workshop highlights, Meringu… favorite=false people=Margarethe Sinclair, Jiwoo Amino"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w24-0011",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks for the total they spent last week",
+        "say": ["last week"]
+      },
+      {
+        "hint": "(new topic) asks for the friend from yoga's contact",
+        "say": ["friend from yoga"],
+        "shown": "= 25127"
+      },
+      {
+        "hint": "follow-up: asks what events they're coming to",
+        "say": [],
+        "shown": "party \"Kairel Lavby\" · role=Friend from yoga"
+      },
+      {
+        "hint": "follow-up: asks how many of them there are",
+        "say": [],
+        "shown": "event \"Croquet class at Nyvoe Steps\" Sun 2025-07-20 15:00\nevent \"Lacrosse lesson\" Sun 2025-07-27 12:15\nevent \"Dinner with Ruairi\" Sun 2025-07-27 16:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w24-0012",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks how many notes they have in Money",
+        "say": ["Money", "notebook"]
+      },
+      {
+        "hint": "(new topic) asks to delete all their allotments appointments",
+        "say": ["allotments", "appointment"],
+        "shown": "= 3"
+      },
+      {
+        "hint": "follow-up: says they didn't mean that, bring it back",
+        "say": [],
+        "shown": "done: delete{} on (#1, #2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w24-0013",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks to settle up with Vrovsais in thuvum gang",
+        "say": ["Vrovsais", "thuvum gang", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks to tick off the nyvoe steps task",
+        "say": ["nyvoe steps"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#3) in (#1)} on (#3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w24-0014",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks to add nine dollars for Vrovsais's petrol to thuvum gang, they paid",
+        "say": ["nine dollars", "Vrovsais's petrol", "thuvum gang"]
+      },
+      {
+        "hint": "(new topic) asks what the cuckoo club login details are",
+        "say": ["cuckoo club", "login"],
+        "shown": "done: tally.add_expense{description: \"Vrovsais's petrol\", amount_minor: 900, paid_by: me, group_id: (#1)}"
+      },
+      {
+        "hint": "(detour) hang on — asks how the 27th looks",
+        "say": ["the 27th"],
+        "shown": "locker item \"Cuckoo club login\" · type=login"
+      },
+      {
+        "hint": "back to the cuckoo club login — asks for the actual password",
+        "say": ["password"],
+        "shown": "task \"Collect the pickling at Nyvoe Steps\" Sun 2025-07-27 09:00 · status=needs-action\nevent \"Antoine's pinwheel party\" Sun 2025-07-27 08:45\nevent \"Brunch at Siargao Tearooms\" Sun 2025-07-27 10:15\nevent \"Lacrosse lesson\" Sun 2025-07-27 12:15\n(+3 more)"
+      },
+      {
+        "hint": "(new topic) asks where they stand with Arnel in Flemness",
+        "say": ["Arnel", "Flemness"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#3)"
+      },
+      {
+        "hint": "follow-up: asks the same for Seojun ('and Seojun?')",
+        "say": ["Seojun"],
+        "shown": "= 5677"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w24-0015",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks to put back the shelf photo they deleted",
+        "say": ["shelf", "photo"]
+      },
+      {
+        "hint": "(new topic) asks when the chickpea business is",
+        "say": ["chickpea"],
+        "shown": "done: media.restore_asset{} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w24-0016",
+    "today": "Thursday 2025-07-24",
+    "turns": [{ "hint": "asks what time the Ruairi is", "say": ["Ruairi"] }],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w24-0017",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks what's in the Lacrosse notebook",
+        "say": ["Lacrosse", "notebook"]
+      },
+      {
+        "hint": "follow-up: asks to see just the first one",
+        "say": ["first"],
+        "shown": "note \"Scullery shopping list\" Tue 2025-06-10 18:06 · notebooks=Lacrosse\nnote \"Ruairi's pickle ideas\" Wed 2025-06-04 21:23 · notebooks=Lacrosse\nnote \"Lacrosse list\" Wed 2025-04-30 10:56 · notebooks=Lacrosse"
+      },
+      {
+        "hint": "follow-up: asks what else there is besides that one",
+        "say": [],
+        "shown": "note \"Scullery shopping list\" Tue 2025-06-10 18:06 · notebooks=Lacrosse"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  }
+]

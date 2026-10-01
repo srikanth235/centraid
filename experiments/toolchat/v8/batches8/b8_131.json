@@ -1,0 +1,306 @@
+[
+  {
+    "id": "w38-0001",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      { "hint": "asks to list the albums", "say": [] },
+      {
+        "hint": "(new topic) asks which to-dos are due next week",
+        "say": ["next week"],
+        "shown": "album \"Barge progress\"\nalbum \"Walks round Josford Garden Centre\"\nalbum \"Hurling\"\nalbum \"Summer 2026\"\n(+5 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w38-0002",
+    "today": "Thursday 2026-07-23",
+    "turns": [{ "hint": "asks when they have the walk", "say": ["walk"] }],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w38-0003",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks which group the hastings fee expense is in",
+        "say": ["hastings fee"]
+      },
+      {
+        "hint": "follow-up: says actually, don't bother",
+        "say": [],
+        "shown": "group \"Hastings trip\""
+      },
+      {
+        "hint": "(new topic) asks which to-dos are due tuesday",
+        "say": ["tuesday"],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w38-0004",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks for the Gryshaven entry in the locker (the row, not the password)",
+        "say": ["Gryshaven"]
+      },
+      {
+        "hint": "(new topic) asks who is in the capoeira syndicate group",
+        "say": ["capoeira syndicate"],
+        "shown": "locker item \"Gryshaven Climbing Wall wifi\" · type=wifi"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w38-0005",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the Gryshaven is",
+        "say": ["Gryshaven", "password"]
+      },
+      {
+        "hint": "(new topic) asks for the photos they took this month",
+        "say": ["this month"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      },
+      {
+        "hint": "follow-up: says nah, leave it",
+        "say": [],
+        "shown": "photo \"Flask and flask\" Wed 2026-07-22 10:17 · favorite=false\nphoto \"Philately meetup 2025\" Mon 2026-07-20 20:54 · favorite=true\nphoto \"Lagoon at night (03)\" Thu 2026-07-16 17:12 · album_titles=Summer 2026 favorite=false\nphoto \"Lagoon at night (02)\" Thu 2026-07-16 17:11 · album_titles=Barge progress favorite=true\n(+9 more)"
+      },
+      {
+        "hint": "(new topic) asks who's invited to the Silvio",
+        "say": ["Silvio"],
+        "shown": "none"
+      },
+      {
+        "hint": "(new topic) asks what is overdue",
+        "say": [],
+        "shown": "party \"Tealine Vryby\" · role=Sister"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w38-0006",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      { "hint": "asks what they have got tomorrow", "say": ["tomorrow"] },
+      {
+        "hint": "follow-up: asks to shift the philately one to wednesday",
+        "say": ["philately", "wednesday"],
+        "shown": "event \"Estate agent appointment\" Fri 2026-07-24 07:15\nevent \"Coffee with Shira\" Fri 2026-07-24 08:30\nevent \"Philately meetup\" Fri 2026-07-24 11:45"
+      },
+      {
+        "hint": "(new topic) says they've paid Callum Tran back, mark it settled",
+        "say": ["Callum Tran"],
+        "shown": "done: reschedule{to: 2026-07-29} on (#3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w38-0007",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      { "hint": "asks what's in their calendar saturday", "say": ["saturday"] },
+      {
+        "hint": "(new topic) asks who's in the hawes cove picture",
+        "say": ["hawes cove"],
+        "shown": "event \"Poncho repair\" Sat 2026-07-25 08:30\nevent \"Walk with Emiliano\" Sat 2026-07-25 10:15\nevent \"Aqua aerobics (week 30)\" Sat 2026-07-25 12:15\nevent \"Spruce viewing\" Sat 2026-07-25 18:00"
+      },
+      {
+        "hint": "follow-up: asks how many of them there are",
+        "say": [],
+        "shown": "party \"Thierry Garside\" · role=Old school friend\nparty \"Sorir Lavby\" · owed_to_me_minor=2500 role=Old school friend"
+      },
+      {
+        "hint": "follow-up: says they phoned the Sorir one, log it",
+        "say": ["Sorir"],
+        "shown": "= 2"
+      },
+      {
+        "hint": "follow-up: asks when they last spoke",
+        "say": [],
+        "shown": "done: people.log_interaction{kind: \"call\"} on (#9)"
+      },
+      {
+        "hint": "(new topic) asks to invent a PIN for their new card",
+        "say": [],
+        "shown": "activity \"interaction — Sorir Lavby\" Thu 2026-07-23 16:40"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w38-0008",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks to log that they had a call with Grindeth Postett today",
+        "say": ["Grindeth Postett", "call"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w38-0009",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      { "hint": "asks which contact is their mechanic", "say": ["mechanic"] },
+      {
+        "hint": "(detour) hang on — asks who's in the euphonium picture",
+        "say": ["euphonium"],
+        "shown": "party \"Levix Motors\" · role=Mechanic"
+      },
+      {
+        "hint": "back to their mechanic — asks for their contact details",
+        "say": [],
+        "shown": "party \"Drondel Greenhalgh\" · role=Sister-in-law"
+      },
+      {
+        "hint": "(new topic) asks to move both Cobohaven things (the task and the calendar entry) to sunday",
+        "say": ["Cobohaven", "sunday"],
+        "shown": "contact channel \"Levix Motors — work\" · kind=email value=hello@levixmotors.example\ncontact channel \"Levix Motors — office\" · kind=phone value=+1 613 555 0386"
+      },
+      {
+        "hint": "(new topic) asks to put Sorir in the group (they have several shared-expense groups)",
+        "say": ["Sorir", "group"],
+        "shown": "done: reschedule{to: 2026-07-26} on (#11, #17)"
+      },
+      {
+        "hint": "follow-up: about the capoeira one, asks for its expenses",
+        "say": ["capoeira"],
+        "shown": "asked: Which group — Capoeira syndicate or Hastings trip?"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w38-0010",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in Hastings trip",
+        "say": ["Hastings trip", "how much"]
+      },
+      { "hint": "follow-up: says never mind", "say": [], "shown": "= 97873" }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w38-0011",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in Hastings trip (the expenses)",
+        "say": ["Hastings trip"]
+      },
+      {
+        "hint": "follow-up: asks what those add up to",
+        "say": [],
+        "shown": "expense \"Hastings repair\" Sat 2026-05-09 · amount_minor=5050 paid_by=Owner\nexpense \"Dinner on the last night\" Sat 2026-05-09 · amount_minor=1199 paid_by=Dythine Girma\nexpense \"Hastings delivery\" Sat 2026-05-09 · amount_minor=4099 paid_by=Mayumi Ibarra\nexpense \"Hastings supplies\" Sat 2026-05-09 · amount_minor=13731 paid_by=Owner\n(+9 more)"
+      },
+      {
+        "hint": "(detour) hang on — asks what day the viola class is on",
+        "say": ["viola class"],
+        "shown": "= 97873"
+      },
+      {
+        "hint": "back to that — asks to delete the repair one",
+        "say": ["repair"],
+        "shown": "event \"Viola class\" Wed 2026-06-24 12:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w38-0012",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks to delete all their budget notes",
+        "say": ["budget", "note"]
+      },
+      {
+        "hint": "(new topic) asks when they're next at Pitlochry Lido",
+        "say": ["Pitlochry Lido"],
+        "shown": "done: delete{} on (#1, #2, #3, #4)"
+      },
+      {
+        "hint": "(new topic) asks when the Shira business is",
+        "say": ["Shira"],
+        "shown": "event \"Lagoon sale at Pitlochry Lido\" Sat 2026-08-01 09:00\nevent \"Hurling meetup at Pitlochry Lido\" Tue 2026-07-21 10:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w38-0013",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks what time the chamomile thing is (no kind said)",
+        "say": ["chamomile"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w38-0014",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks what events they have at Gryshaven Climbing Wall",
+        "say": ["Gryshaven Climbing Wall"]
+      },
+      {
+        "hint": "follow-up: asks to call off the hurling one",
+        "say": ["hurling"],
+        "shown": "event \"Brunch at Gryshaven Climbing Wall\" Wed 2026-07-22 11:30\nevent \"Hurling meetup at Gryshaven Climbing Wall\" Wed 2026-08-19 20:45"
+      },
+      {
+        "hint": "(new topic) asks to move both Cobohaven things (the task and the calendar entry) to sunday",
+        "say": ["Cobohaven", "sunday"],
+        "shown": "done: cancel{} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w38-0015",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks which to-dos take about three hour",
+        "say": ["three hour"]
+      },
+      {
+        "hint": "follow-up: asks to move the last one to tuesday",
+        "say": ["last", "tuesday"],
+        "shown": "task \"Lend the buckle\" Sat 2026-08-15 18:00 · status=needs-action effort_min=180\ntask \"Buy the poncho this week\" Fri 2026-08-14 17:00 · status=in-process effort_min=180"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  }
+]

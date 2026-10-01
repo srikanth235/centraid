@@ -192,6 +192,7 @@ def build():
         "commands": sorted(registry),
         "refs": terminals["refs"],
         "windowPhrases": terminals["windowPhrases"],
+        "relativeDays": terminals["relativeDays"],
         "declineReasons": terminals["declineReasons"],
     }
 
@@ -232,6 +233,7 @@ def render_python(tables) -> str:
     lines.append("}")
     lines.append("")
     for name, key in (("REFS", "refs"), ("WINDOW_PHRASES", "windowPhrases"),
+                      ("RELATIVE_DAYS", "relativeDays"),
                       ("DECLINE_REASONS", "declineReasons"),
                       ("EGRESS_VERBS", "egressVerbs"),
                       ("COMMANDS", "commands")):
@@ -297,6 +299,7 @@ def render_rust(tables) -> str:
     lines += ["    ]", "    .into_iter()", "    .collect()", "}", ""]
 
     for const, key in (("REFS", "refs"), ("WINDOW_PHRASES", "windowPhrases"),
+                       ("RELATIVE_DAYS", "relativeDays"),
                        ("DECLINE_REASONS", "declineReasons"),
                        ("EGRESS_VERBS", "egressVerbs")):
         values = tables[key]

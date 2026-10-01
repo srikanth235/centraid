@@ -1,0 +1,210 @@
+[
+  {
+    "id": "a0180",
+    "today": "Friday 2026-11-13",
+    "turns": [
+      {
+        "canonical": "media.restore_asset{} on (photos called \"street mural\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "restore the deleted street mural photo"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0491",
+    "today": "Tuesday 2026-10-20",
+    "turns": [
+      {
+        "canonical": "show (activities that (started_at during this week))",
+        "move": "first",
+        "hint": "who did I call/see/have coffee with in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0016",
+    "today": "Thursday 2025-04-03",
+    "turns": [
+      {
+        "canonical": "show (groups)",
+        "move": "first",
+        "hint": "which shared-expense groups am I in"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0054",
+    "today": "Monday 2028-04-24",
+    "turns": [
+      {
+        "canonical": "show (journal notes called \"flat\")",
+        "move": "first",
+        "hint": "find my journal entry about flat"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0299",
+    "today": "Thursday 2026-07-30",
+    "turns": [
+      {
+        "canonical": "count of (events during this week)",
+        "move": "first",
+        "hint": "how many things in the calendar in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0985",
+    "today": "Tuesday 2026-07-21",
+    "turns": [
+      {
+        "canonical": "show (groups of (expenses called \"Car hire\"))",
+        "move": "first",
+        "hint": "which group was the hire expense in"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Car hire\"", "turn": 1, "say": "exact: hire" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0127",
+    "today": "Monday 2025-07-14",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"login\", title: \"Kayak club\", content: \"K3ttle-drum\" }",
+        "move": "first",
+        "hint": "save a login for Kayak club with password K3ttle-drum"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0001",
+    "today": "Wednesday 2028-04-26",
+    "turns": [
+      {
+        "canonical": "show (albums)",
+        "move": "first",
+        "hint": "what photo albums do I have"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0850",
+    "today": "Wednesday 2025-12-17",
+    "turns": [
+      {
+        "canonical": "min amount_minor of (expenses that (spent_on during last weekend))",
+        "move": "first",
+        "hint": "smallest expense in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0722",
+    "today": "Saturday 2026-04-18",
+    "turns": [
+      {
+        "canonical": "show (photos that (favorite = true))",
+        "move": "first",
+        "hint": "my favourite photos"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0994",
+    "today": "Wednesday 2026-07-15",
+    "turns": [
+      {
+        "canonical": "count of (parties of (events called \"Football at Pinecrest Lodge\"))",
+        "move": "first",
+        "hint": "how many people are coming to the football"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Football at Pinecrest Lodge\"",
+        "turn": 1,
+        "say": "loose: football"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0035",
+    "today": "Sunday 2026-11-01",
+    "turns": [
+      {
+        "canonical": "show (obligations)",
+        "move": "first",
+        "hint": "list all the debts between me and people (IOUs)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0188",
+    "today": "Tuesday 2026-02-03",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Esme Ibarra\")",
+        "move": "first",
+        "hint": "delete Esme from my contacts"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Esme Ibarra\"", "turn": 1, "say": "exact: Esme" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0610",
+    "today": "Saturday 2025-09-06",
+    "turns": [
+      {
+        "canonical": "show (important dates that (next_occurrence during next week))",
+        "move": "first",
+        "hint": "which birthdays/anniversaries are coming up in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0301",
+    "today": "Monday 2025-04-07",
+    "turns": [
+      {
+        "canonical": "count of (expenses of (groups called \"vet\"))",
+        "move": "first",
+        "hint": "how many expenses in the vet group"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

@@ -1,0 +1,304 @@
+[
+  {
+    "id": "w22-0057",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks to find the notes on sundial",
+        "say": ["sundial", "notes"]
+      },
+      {
+        "hint": "follow-up: asks whether there's anything in their tasks about it too",
+        "say": ["tasks"],
+        "shown": "note \"Aylin's sundial timeline\" Wed 2025-05-07 22:09 · notebooks=Recipes"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w22-0058",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks which appointments they have next week",
+        "say": ["next week"]
+      },
+      {
+        "hint": "follow-up: asks the same for today ('and today?')",
+        "say": ["today"],
+        "shown": "event \"Hurling meetup at Growen Bakery\" Tue 2025-05-20 15:45\nevent \"Cresvaet viewing\" Wed 2025-05-21 07:00\nevent \"Flagstone viewing\" Wed 2025-05-21 12:15\nevent \"Meet Budi at Growen Bakery\" Fri 2025-05-23 15:00\n(+4 more)"
+      },
+      {
+        "hint": "follow-up: asks for a task to reply to the oar booking sunday",
+        "say": ["reply to the oar booking", "sunday"],
+        "shown": "event \"Oar delivery\" Tue 2025-05-13 13:45"
+      },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "done: schedule.add_task{title: \"Reply to the oar booking\", due_at: 2025-05-18}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w22-0059",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks to note down: measure the flagstone",
+        "say": ["measure the flagstone"]
+      },
+      {
+        "hint": "(new topic) asks to open the Malvern 2025 album",
+        "say": ["Malvern 2025", "album"],
+        "shown": "done: knowledge.create_note{title: \"Measure the flagstone\"}"
+      },
+      {
+        "hint": "follow-up: asks to put the fifth one in the Snowshoeing meetup album",
+        "say": ["fifth", "Snowshoeing meetup", "album"],
+        "shown": "photo \"Homdewick Terrace at low tide (04)\" Thu 2025-05-08 11:18 · album_titles=Malvern 2025, Summer 2024 favorite=true\nphoto \"Homdewick Terrace at low tide (03)\" Thu 2025-05-08 11:17 · album_titles=Malvern 2025, Kite favorite=false\nphoto \"Homdewick Terrace at low tide (02)\" Thu 2025-05-08 11:16 · album_titles=Summer 2024, Malvern 2025 favorite=false people=Conceicao Northcott\nphoto \"Homdewick Terrace at low tide (01)\" Thu 2025-05-08 11:15 · album_titles=Snowshoeing meetup, Malvern 2025 favorite=false\n(+9 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w22-0060",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks for Kousan's number (two contacts are called Kousan, the message doesn't say which)",
+        "say": ["Kousan"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w22-0061",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      { "hint": "asks for their photo albums", "say": [] },
+      {
+        "hint": "(detour) hang on — asks to pull up Kousan (two contacts share the name)",
+        "say": ["Kousan"],
+        "shown": "album \"Summer 2024\"\nalbum \"Benoe house\"\nalbum \"Malvern 2025\"\nalbum \"Best of 2027\"\n(+6 more)"
+      },
+      {
+        "hint": "back to the albums — about the best one, asks to see the photos in it",
+        "say": ["best"],
+        "shown": "party \"Kousan Lopes\" · owed_to_me_minor=1200 role=Godparent\nparty \"Kousan Khumalo\" · role=Client"
+      },
+      {
+        "hint": "(new topic) asks what's on at Stonehaven Climbing Wall",
+        "say": ["Stonehaven Climbing Wall"],
+        "shown": "photo \"Mango with Aisling\" Wed 2025-04-30 10:16 · album_titles=The Old Pancake 2025, Best of 2027, Malv… favorite=false\nphoto \"Cushion close-up\" Mon 2025-04-14 18:46 · album_titles=Best of 2027 favorite=false\nphoto \"Linen on the table\" Mon 2025-04-14 09:30 · album_titles=Best of 2027 favorite=false\nphoto \"Cushion after the rain\" Fri 2025-04-11 12:09 · album_titles=Best of 2027 favorite=false people=Henrik Rivas, Anastasios Jorrak\n(+4 more)"
+      },
+      {
+        "hint": "(new topic) asks for their starred files",
+        "say": [],
+        "shown": "event \"Mandolin lesson at Stonehaven Climbing Wall\" Fri 2025-05-16 19:45"
+      },
+      {
+        "hint": "follow-up: asks to star all of them",
+        "say": [],
+        "shown": "document \"Amulet report\" Mon 2024-10-14 08:42 · folder=Car\ndocument \"Embroidery quote\" Sat 2024-08-31 20:52 · folder=Car\ndocument \"Amulet invoice 2025\" Fri 2024-06-07 19:15 · folder=University\ndocument \"Pancake form\" Sun 2024-04-21 10:14"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w22-0062",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in cresvaet gang",
+        "say": ["cresvaet gang", "how much"]
+      },
+      {
+        "hint": "(detour) hang on — asks whose birthdays are coming up this week",
+        "say": ["this week", "week"],
+        "shown": "= 42087"
+      },
+      {
+        "hint": "(new topic) asks to undelete the snowshoeing note",
+        "say": ["snowshoeing", "note"],
+        "shown": "important date \"Birthday — Gosou Soderberg\" Thu 2025-05-15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w22-0063",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in cresvaet gang (the expenses)",
+        "say": ["cresvaet gang"]
+      },
+      {
+        "hint": "follow-up: about the gazebo one, asks which group it's in",
+        "say": ["gazebo"],
+        "shown": "expense \"Flagstone refund\" Sun 2025-05-11 · amount_minor=10304 paid_by=Keoni Rivas\nexpense \"Xiangqi parts\" Mon 2025-04-28 · amount_minor=1250 paid_by=Niamh Valdivia\nexpense \"Hurling meetup fee\" Wed 2025-04-16 · amount_minor=699 paid_by=Owner\nexpense \"Gazebo\" Fri 2025-04-11 · amount_minor=16686 paid_by=Niamh Valdivia\n(+1 more)"
+      },
+      {
+        "hint": "(new topic) asks to restore the pumpkin task",
+        "say": ["pumpkin", "task"],
+        "shown": "group \"Cresvaet gang\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w23-0001",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks which appointments they have today", "say": ["today"] },
+      {
+        "hint": "follow-up: asks to call off the turnstone one",
+        "say": ["turnstone"],
+        "shown": "event \"Pick up the boskice\" Wed 2027-04-07 07:00\nevent \"Agnetha's turnstone party\" Wed 2027-04-07 20:00"
+      },
+      {
+        "hint": "(new topic) asks for the total they spent this month",
+        "say": ["this month"],
+        "shown": "done: cancel{} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w23-0002",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks to restore the lintel photo", "say": ["lintel", "photo"] }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w23-0003",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks whether Ravi owes them anything", "say": ["Ravi"] },
+      {
+        "hint": "(new topic) asks what pictures they have from recently",
+        "say": ["recently"],
+        "shown": "obligation \"Banjo lesson lessons\""
+      },
+      {
+        "hint": "follow-up: asks to delete the fermenting one",
+        "say": ["fermenting"],
+        "shown": "photo \"The Old Tractor in winter\" Tue 2027-04-06 11:34 · album_titles=The Old Tractor favorite=false\nphoto \"Canary at sunrise\" Mon 2027-04-05 16:45 · favorite=false people=Mekdes Gustafsson\nphoto \"Tractor at sunrise\" Sat 2027-04-03 18:56 · album_titles=The Old Tractor favorite=false\nphoto \"Cauldron at Inverness Heath\" Fri 2027-04-02 11:28 · album_titles=The Old Tractor favorite=false\n(+1 more)"
+      },
+      {
+        "hint": "(new topic) asks if anything is happening wednesday",
+        "say": ["wednesday"],
+        "shown": "done: media.delete_asset{} on (#7)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w23-0004",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks what's on wednesday", "say": ["wednesday"] },
+      {
+        "hint": "follow-up: about the meet one, asks who's coming to it",
+        "say": ["meet"],
+        "shown": "important date \"Birthday — Alvaro Thyby\" Wed 2027-04-14\nevent \"Meet Fonlean at Wengen Garden Centre\" Wed 2027-04-14 10:00"
+      },
+      {
+        "hint": "follow-up: asks what events they're coming to",
+        "say": [],
+        "shown": "party \"Agnetha Vravridge\" · role=Neighbour"
+      },
+      {
+        "hint": "follow-up: asks the same for the 8th ('and the 8th?')",
+        "say": ["the 8th"],
+        "shown": "event \"Mahjong class\" Wed 2027-03-10 14:00\nevent \"Call Wamie about the mothball\" Fri 2027-04-02 08:00\nevent \"Marimba class with Agnetha\" Sat 2027-04-10 15:15\nevent \"Dinner with Luuk\" Sat 2027-04-10 19:30\n(+1 more)"
+      },
+      {
+        "hint": "follow-up: asks to call off the darts one",
+        "say": ["darts"],
+        "shown": "important date \"Birthday — Fleur Bekele\" Thu 2027-04-08\nevent \"Darts club\" Thu 2027-04-08 09:00\nevent \"Treacle fitting\" Thu 2027-04-08 12:45"
+      },
+      {
+        "hint": "(new topic) asks how many documents are in the Work folder",
+        "say": ["Work"],
+        "shown": "done: cancel{} on (#9)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w23-0005",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks how many events last month they have",
+        "say": ["last month", "how many"]
+      },
+      {
+        "hint": "(new topic) asks to open the Ferret album",
+        "say": ["Ferret", "album"],
+        "shown": "= 7"
+      },
+      {
+        "hint": "follow-up: asks which of those are about Tripiholm",
+        "say": ["Tripiholm"],
+        "shown": "photo \"IMG_5951\" Mon 2027-03-22 10:05 · album_titles=Ferret favorite=false\nphoto \"Vearie at Tripiholm Viewpoint\" Thu 2027-02-18 07:35 · album_titles=Ferret, Lamow 2027 favorite=false\nphoto \"Bucket at night\" Sat 2024-11-02 10:11 · album_titles=Ferret favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w23-0006",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks which events last month they have",
+        "say": ["last month", "which"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w23-0007",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks for the photos they took last week",
+        "say": ["last week"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w23-0008",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks what's in the vault about boskice", "say": ["boskice"] },
+      {
+        "hint": "follow-up: asks for just the expenses",
+        "say": ["boskice", "expenses"],
+        "shown": "event \"Pick up the boskice\" Wed 2027-04-07 07:00\ndocument \"Boskice bill\" Sat 2026-08-15 09:22 · folder=Locarno trip\nnote \"Boskice tips\" Thu 2026-12-31 10:51 · notebooks=Felting\nphoto \"Boskice on the table\" Wed 2027-03-17 11:27 · favorite=true\n(+4 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  }
+]

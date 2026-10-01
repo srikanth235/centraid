@@ -1,0 +1,297 @@
+[
+  {
+    "id": "w09-0044",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks where they stand with Jirina in Vyrness trip",
+        "say": ["Jirina", "Vyrness trip"]
+      },
+      {
+        "hint": "(new topic) asks which Vyrness trip expenses were over eighteen rand",
+        "say": ["Vyrness trip", "eighteen rand"],
+        "shown": "= 13727"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w09-0046",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks how much Jirina owes them in Vyrness trip",
+        "say": ["Jirina", "Vyrness trip"]
+      },
+      {
+        "hint": "(new topic) says they texted Hiwot and asks to log it (two contacts are called Hiwot; the message doesn't say which)",
+        "say": ["Hiwot", "texted"],
+        "shown": "= 13727"
+      },
+      {
+        "hint": "follow-up: says it was the Hiwot one (intern)",
+        "say": ["intern"],
+        "shown": "asked: Which Hiwot — Ferrani or Nanbiova?"
+      },
+      {
+        "hint": "(new topic) asks what's left to do on the service plan",
+        "say": ["service"],
+        "shown": "done: people.log_interaction{kind: \"message\"} on (#6)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w09-0047",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks to square their kabaddi fund balance with Abebe Thartuak",
+        "say": ["Abebe Thartuak", "kabaddi fund"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w09-0048",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in kabaddi fund",
+        "say": ["kabaddi fund", "how much"]
+      },
+      { "hint": "follow-up: asks who's in it", "say": [], "shown": "= 41675" },
+      {
+        "hint": "follow-up: asks for pictures with any of those people in",
+        "say": [],
+        "shown": "member \"Hilda Kovacs\"\nmember \"You\"\nmember \"Abebe Thartuak\"\nmember \"Otieno Thartuak\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w09-0049",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in kabaddi fund (the expenses)",
+        "say": ["kabaddi fund"]
+      },
+      {
+        "hint": "follow-up: asks to delete the third one",
+        "say": ["third"],
+        "shown": "expense \"Urn supplies\" Mon 2026-03-23 · amount_minor=4823 paid_by=Hilda Kovacs\nexpense \"Kiln repair\" Wed 2026-03-18 · amount_minor=5199 paid_by=Hilda Kovacs\nexpense \"Mothball hire\" Wed 2026-03-18 · amount_minor=350 paid_by=Hilda Kovacs\nexpense \"Pizza night (wk 12)\" Tue 2026-03-17 · amount_minor=2599 paid_by=Hilda Kovacs\n(+7 more)"
+      },
+      {
+        "hint": "(new topic) asks to find the notes on lacquer",
+        "say": ["lacquer", "notes"],
+        "shown": "done: tally.delete_expense{} on (#4)"
+      },
+      {
+        "hint": "follow-up: asks the same about mandolin instead ('what about mandolin?')",
+        "say": ["mandolin"],
+        "shown": "note \"Lacquer budget\" Tue 2026-01-06 16:48 · notebooks=Travel\nnote \"Lacquer packing list\" Sun 2026-02-15 11:57"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w09-0050",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      { "hint": "asks when the coffee is", "say": ["coffee"] },
+      {
+        "hint": "follow-up: asks what else is on that day",
+        "say": [],
+        "shown": "event \"Coffee with Harriet\" Thu 2026-03-12 14:15"
+      },
+      {
+        "hint": "follow-up: asks to call off the dormer one",
+        "say": ["dormer"],
+        "shown": "event \"Coffee with Harriet\" Thu 2026-03-12 14:15\nevent \"Dormer fitting\" Thu 2026-03-12 15:00"
+      },
+      {
+        "hint": "follow-up: asks if it's in their calendar as well",
+        "say": ["calendar"],
+        "shown": "done: cancel{} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w09-0051",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks how many photos taken this week they have",
+        "say": ["this week", "how many"]
+      },
+      {
+        "hint": "(new topic) asks to jot down a note that says things to pack for the Vyrness trip",
+        "say": ["things to pack for the Vyrness trip"],
+        "shown": "= 3"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w09-0052",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks which photos taken this week they have",
+        "say": ["this week", "which"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w09-0054",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks for the photos from the Vyrness trip",
+        "say": ["Vyrness"]
+      },
+      {
+        "hint": "(new topic) asks when they're next at Bylford Food Hall",
+        "say": ["Bylford Food Hall"],
+        "shown": "photo \"Nightcap at Vyrness Steps\" Fri 2025-12-26 18:57 · album_titles=Vyrness 2025 favorite=false\nphoto \"Aurelio at Horwen Island\" Fri 2025-12-26 15:17 · album_titles=Vyrness 2025 favorite=false\nphoto \"Vyrness Lido from the boat\" Tue 2025-12-23 17:31 · album_titles=Vyrness 2025 favorite=false\nphoto \"Horwen Island at sunrise\" Tue 2025-12-23 09:23 · album_titles=Vyrness 2025, Fudge favorite=false\n(+1 more)"
+      },
+      {
+        "hint": "(detour) hang on — asks to find their osteopath in contacts",
+        "say": ["osteopath"],
+        "shown": "event \"Brunch at Bylford Food Hall\" Sun 2026-04-05 15:45"
+      },
+      {
+        "hint": "back to the Bylford Food Hall events — asks whether there's anything in their to-do list about it too",
+        "say": ["to-do list"],
+        "shown": "party \"Wanjiru Dang\" · role=Osteopath"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w09-0055",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks what's left to do about the sharpen",
+        "say": ["sharpen"]
+      },
+      {
+        "hint": "follow-up: asks how many that is",
+        "say": [],
+        "shown": "task \"Sharpen the kiln\" Sat 2026-03-28 09:00 · status=needs-action\ntask \"Sharpen the lacquer\" · status=in-process"
+      },
+      {
+        "hint": "follow-up: asks to bin the first one",
+        "say": ["first"],
+        "shown": "= 2"
+      },
+      {
+        "hint": "(new topic) asks to send Yara a message saying happy birthday",
+        "say": ["Yara"],
+        "shown": "done: delete{} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w09-0056",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      { "hint": "asks what time the ladle repair is", "say": ["ladle repair"] },
+      {
+        "hint": "follow-up: asks for a task to read the repair booking next friday",
+        "say": ["read the repair booking", "next friday"],
+        "shown": "event \"Ladle repair\" Sat 2026-04-18 12:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w09-0057",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks which people share Vyrness trip with them",
+        "say": ["Vyrness trip"]
+      },
+      {
+        "hint": "(new topic) asks for the photos from the Vyrness trip",
+        "say": ["Vyrness"],
+        "shown": "member \"Jirina Thartuak\"\nmember \"Fundir Lothez\""
+      },
+      {
+        "hint": "follow-up: asks to put the second one in the Fudge album",
+        "say": ["second", "Fudge", "album"],
+        "shown": "photo \"Nightcap at Vyrness Steps\" Fri 2025-12-26 18:57 · album_titles=Vyrness 2025 favorite=false\nphoto \"Aurelio at Horwen Island\" Fri 2025-12-26 15:17 · album_titles=Vyrness 2025 favorite=false\nphoto \"Vyrness Lido from the boat\" Tue 2025-12-23 17:31 · album_titles=Vyrness 2025 favorite=false\nphoto \"Horwen Island at sunrise\" Tue 2025-12-23 09:23 · album_titles=Vyrness 2025, Fudge favorite=false\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w09-0058",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks what the kabaddi fund group's spending comes to",
+        "say": ["kabaddi fund"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w09-0059",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks who is coming to the decanter party",
+        "say": ["decanter party", "who"]
+      },
+      {
+        "hint": "follow-up: says they phoned the Hilda one, log it",
+        "say": ["Hilda"],
+        "shown": "party \"Hilda Kovacs\" · role=Caretaker\nparty \"Mikkel Amstutz\" · role=Neighbour next door\nparty \"Ryota Papadopoulos\" · role=Landlord"
+      },
+      {
+        "hint": "follow-up: asks for their contact details",
+        "say": [],
+        "shown": "done: people.log_interaction{kind: \"call\"} on (#2)"
+      },
+      {
+        "hint": "(new topic) asks for the Konnup savings card details entry",
+        "say": ["Konnup savings", "card"],
+        "shown": "contact channel \"Hilda Kovacs — work\" · kind=phone value=+27 82 555 0335"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w09-0060",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks when the decanter party is",
+        "say": ["decanter party", "when"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  }
+]

@@ -1,0 +1,254 @@
+[
+  {
+    "id": "c0113",
+    "today": "Monday 2025-10-06",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Honora Crowther\")",
+        "move": "first",
+        "hint": "look up Honora"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (it) that (settled_at is null))",
+        "move": "act",
+        "hint": "how much is outstanding with them / what do they still owe (pronoun, no name)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (it))",
+        "move": "act",
+        "hint": "pay it off / settle up with them (pronoun)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Honora Crowther\"",
+        "turn": 1,
+        "say": "exact: Honora"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0261",
+    "today": "Sunday 2026-04-19",
+    "turns": [
+      {
+        "canonical": "show (locker items called \"gym\" that (type = \"login\"))",
+        "move": "first",
+        "hint": "have I got a login for gym"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0005",
+    "today": "Wednesday 2026-06-03",
+    "turns": [
+      {
+        "canonical": "show (notes called \"measurements\")",
+        "move": "first",
+        "hint": "find my notes about measurements / what did I write down about measurements (any note whose title mentions it; NOT a notebook)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0231",
+    "today": "Thursday 2026-12-03",
+    "turns": [
+      {
+        "canonical": "show (events called \"Driving lesson (week 2)\" during next week)",
+        "move": "first",
+        "hint": "is the lesson week on in that window"
+      },
+      {
+        "canonical": "show (parties of (it))",
+        "move": "act",
+        "hint": "who is that with / which person is that (pronoun)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Driving lesson (week 2)\"",
+        "turn": 1,
+        "say": "exact: lesson week"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0040",
+    "today": "Monday 2025-09-01",
+    "turns": [
+      {
+        "canonical": "show (things called \"solar panel\")",
+        "move": "first",
+        "hint": "what do I have about solar panel (anything at all, no app named)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0101",
+    "today": "Friday 2028-06-16",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses called \"Roof repair\")",
+        "move": "first",
+        "hint": "what did the roof come to / cost"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Roof repair\"", "turn": 1, "say": "exact: roof" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0052",
+    "today": "Monday 2026-04-13",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"landlord\")",
+        "move": "first",
+        "hint": "what landlord tasks / to-dos do I have (the landlord is a word in the task titles, not a person)"
+      }
+    ],
+    "refer": [
+      { "row": "role \"Landlord\"", "turn": 1, "say": "exact: landlord" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0014",
+    "today": "Thursday 2026-08-13",
+    "turns": [
+      {
+        "canonical": "show (notes called \"reading\")",
+        "move": "first",
+        "hint": "find my notes about reading / what did I write down about reading (any note whose title mentions it; NOT a notebook)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0163",
+    "today": "Wednesday 2027-05-12",
+    "turns": [
+      {
+        "canonical": "tally.add_expense{ description: \"Parking\", amount_minor: 15000, paid_by: me, group_id: (groups called \"Physio weekend\") }",
+        "move": "first",
+        "hint": "add a hundred and fifty (SAY THE AMOUNT IN WORDS: 'a hundred and fifty' dollars/pounds/quid) of parking to the Physio weekend group, I paid (description = that word)"
+      }
+    ],
+    "refer": [{ "row": "groups \"Physio weekend\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0232",
+    "today": "Tuesday 2025-04-22",
+    "turns": [
+      {
+        "canonical": "show (events called \"boiler\")",
+        "move": "first",
+        "hint": "when's the boiler"
+      },
+      {
+        "canonical": "show (parties of (it))",
+        "move": "act",
+        "hint": "who is that with / which person is that (pronoun)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0141",
+    "today": "Thursday 2025-05-22",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\"))",
+        "move": "first",
+        "hint": "anything overdue / what's late"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0279",
+    "today": "Wednesday 2028-07-05",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Jessamy Tolliver\") that (settled_at is null))",
+        "move": "first",
+        "hint": "how much does Jessamy Tolliver owe me / do I owe Jessamy Tolliver"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Vivienne Dunstable\") that (settled_at is null))",
+        "move": "act",
+        "hint": "and Vivienne? / what about Vivienne? (just the new name)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Jessamy Tolliver\"", "turn": 1, "say": "full" },
+      {
+        "row": "parties \"Vivienne Dunstable\"",
+        "turn": 2,
+        "say": "exact: Vivienne"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0031",
+    "today": "Thursday 2028-11-02",
+    "turns": [
+      {
+        "canonical": "show (events called \"meeting\")",
+        "move": "first",
+        "hint": "have I got anything in my calendar for/about meeting"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0077",
+    "today": "Friday 2028-04-21",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties that (role = \"Babysitter\")) that (kind = \"phone\"))",
+        "move": "first",
+        "hint": "what's my babysitter's number"
+      }
+    ],
+    "refer": [
+      { "row": "role \"Babysitter\"", "turn": 1, "say": "exact: babysitter" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0140",
+    "today": "Thursday 2027-07-01",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status != \"completed\"))",
+        "move": "first",
+        "hint": "what's still on my list / what's left to do / what haven't I done yet"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

@@ -1,0 +1,244 @@
+[
+  {
+    "id": "w16-000",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks what Bastian Yardley's email is",
+        "say": ["Bastian Yardley"]
+      },
+      {
+        "hint": "(new topic) asks who they're seeing at the Garden",
+        "say": ["Garden"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w16-001",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks to find anything to do with Football catch-up",
+        "say": ["Football catch-up"]
+      },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "(new topic) asks for the someday tasks with no deadline",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "polite"]
+  },
+  {
+    "id": "w16-002",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks what album has the Greenhouse picture",
+        "say": ["Greenhouse"]
+      },
+      { "hint": "asks what else is in that album", "say": [] },
+      { "hint": "asks which albums those photos are in", "say": [] },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks for the notes in their Caravan notebook",
+        "say": ["Caravan"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "polite"]
+  },
+  {
+    "id": "w16-003",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks what debts there are between them and Magnus Whitlock",
+        "say": ["Magnus Whitlock"]
+      },
+      { "hint": "(new topic) asks what they got done today", "say": ["today"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "texting"]
+  },
+  {
+    "id": "w16-004",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks what they have about Oriane", "say": ["Oriane"] },
+      {
+        "hint": "asks the same about Joaquim Crowther instead ('what about Joaquim Crowther?')",
+        "say": ["Joaquim Crowther"]
+      },
+      {
+        "hint": "(new topic) asks which album the Street photo is in",
+        "say": ["Street"]
+      },
+      {
+        "hint": "(new topic) asks to see the diary entries they made recently",
+        "say": ["recently"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "terse"]
+  },
+  {
+    "id": "w16-005",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks for their documents about Dental", "say": ["Dental"] },
+      { "hint": "asks what else is in the same folder", "say": [] },
+      {
+        "hint": "asks to add a task for friday to deal with 'Driving licence scan'",
+        "say": ["friday"]
+      },
+      {
+        "hint": "(new topic) asks what album has the Card picture",
+        "say": ["Card"]
+      },
+      { "hint": "asks what else is in that album", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w16-006",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks which tasks take about 15 minutes", "say": ["15"] },
+      {
+        "hint": "(new topic) asks to find the photos on Pebble",
+        "say": ["Pebble"]
+      },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      { "hint": "asks what else there is apart from the third one", "say": [] },
+      {
+        "hint": "(new topic) asks for Faustina's contact card",
+        "say": ["Faustina"]
+      },
+      {
+        "hint": "(new topic) asks when Florian Whitlock's birthday is",
+        "say": ["Florian Whitlock"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "spoken"]
+  },
+  {
+    "id": "w16-007",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks to put 'Piano lesson' in the calendar friday at 16:30",
+        "say": ["Piano lesson", "friday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w16-008",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks to log a call with Bastian (several people are called Bastian)",
+        "say": ["Bastian"]
+      },
+      {
+        "hint": "says it was Bastian Yardley (the Yardley one)",
+        "say": ["Yardley"]
+      },
+      { "hint": "takes it back: never mind", "say": [] },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "(new topic) asks to pull up Jessamy Sandoval",
+        "say": ["Jessamy Sandoval"]
+      },
+      {
+        "hint": "asks what events they're coming to (the one person just shown)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w16-009",
+    "today": "Wednesday 2027-01-06",
+    "turns": [{ "hint": "asks to delete the plan note", "say": ["plan"] }],
+    "versions": 3,
+    "registers": ["question", "polite", "spoken"]
+  },
+  {
+    "id": "w16-010",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks who they still have to pay back", "say": [] },
+      {
+        "hint": "asks about the debts with them (all of those people)",
+        "say": []
+      },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      { "hint": "asks how many that is", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "polite"]
+  },
+  {
+    "id": "w16-011",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks to find anything to do with Garage", "say": ["Garage"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "texting"]
+  },
+  {
+    "id": "w16-012",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks whether Mauricio's birthday is coming up",
+        "say": ["Mauricio"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "question"]
+  },
+  {
+    "id": "w16-013",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks for everything mentioning Kitchen", "say": ["Kitchen"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "texting"]
+  },
+  {
+    "id": "w16-014",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks which documents they starred", "say": [] },
+      {
+        "hint": "(new topic) asks if they have any expenses about Coffee",
+        "say": ["Coffee"]
+      },
+      { "hint": "asks for just the ones over 50 (money)", "say": ["50"] },
+      {
+        "hint": "(new topic) asks which to-dos are due tuesday",
+        "say": ["tuesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "polite"]
+  }
+]

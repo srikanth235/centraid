@@ -855,6 +855,8 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-evalsuite",
  "centraid-evalworld",
+ "indexmap",
+ "regex",
  "serde",
  "serde_json",
 ]
@@ -1050,6 +1052,23 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "zstd",
+]
+
+[[package]]
+name = "centraid-nativetools"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "base64 0.22.1",
+ "centraid-apps-kit",
+ "centraid-apps-tally",
+ "centraid-ontology",
+ "centraid-search",
+ "centraid-vault",
+ "jiff",
+ "proptest",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

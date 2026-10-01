@@ -22,6 +22,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use centraid_evalsuite::names::labelled;
 use centraid_evalsuite::reference::calendar;
 use centraid_evalsuite::{App, Context, Plan, VaultRow};
 use serde_json::{Value as Json, json};
@@ -37,19 +38,26 @@ use crate::canon::{ArgVal, Cmd, KindNode, Lit, Operand, Pred, Ref, Set, Turn, Va
 /// and it is never dressed up as a polite question.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stop {
-    Clarify,
+    /// A question back to the person, with what the executor knows better
+    /// than "ambiguous" when it does — a link the ontology does not hold, a
+    /// walk that reached nothing, a name several people share.
+    Clarify(Option<String>),
     Refuse,
     Nothing,
+    /// Nothing to do because the only rows the target names are in the
+    /// trash; they ride along so a tool result can number them.
+    Trashed(Vec<VaultRow>),
     Unhandled(String),
 }
 
 impl Stop {
-    fn plan(&self) -> Plan {
+    #[must_use]
+    pub fn plan(&self) -> Plan {
         Plan::Declined {
             reason: match self {
-                Self::Clarify => "clarify".to_owned(),
+                Self::Clarify(_) => "clarify".to_owned(),
                 Self::Refuse => "refuse".to_owned(),
-                Self::Nothing => "none".to_owned(),
+                Self::Nothing | Self::Trashed(_) => "none".to_owned(),
                 Self::Unhandled(why) => format!("unhandled: {why}"),
             },
         }
@@ -78,6 +86,12 @@ pub struct State {
     pub ordered: bool,
     /// The last write, for `the last thing I added` and for an undo.
     pub last_write: Option<LastWrite>,
+    /// Rows a tool result numbered, for `#n` (`crate::tools`).
+    pub handles: BTreeMap<u32, VaultRow>,
+    /// The `called` names each row was reached through, by row id — so a
+    /// write aimed at a debt the person found by a first name several people
+    /// share still knows the name it came by (`ambiguous_party`).
+    pub named: BTreeMap<String, BTreeSet<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -428,8 +442,15 @@ impl Eval<'_, '_> {
                 let span = self.span(window)?;
                 let mut kept = Vec::new();
                 for row in rows {
-                    let stamp = row.date.clone();
-                    if stamp.as_deref().is_some_and(|stamp| span.holds(stamp)) {
+                    // A row with an END (an event's `dtend`) is on during the
+                    // window when the two OVERLAP: a trip Monday to Friday is
+                    // on Wednesday. Anything else is its one instant.
+                    let end = row.extra.get("dtend").map(String::as_str);
+                    let on = row
+                        .date
+                        .as_deref()
+                        .is_some_and(|start| span.overlaps(start, end));
+                    if on {
                         kept.push(row);
                     }
                 }
@@ -518,124 +539,89 @@ impl Eval<'_, '_> {
         })
     }
 
+    /// One edge of [`EDGES`] taken from one row.
+    fn follow(&mut self, link: &Edge, kind: &KindNode, row: &VaultRow) -> Result<Rows, Stop> {
+        let field = link.field;
+        Ok(match link.how {
+            How::Same => vec![row.clone()],
+            How::Obligations => {
+                let ids = self.obligations_of(row);
+                self.obligation_rows(&ids)
+            }
+            How::Counterparty => {
+                let mut wanted = Vec::new();
+                for column in ["to_party", "from_party"] {
+                    if let Some(found) = self.field(row, column)
+                        && found != self.ctx.me()
+                    {
+                        wanted.push(found);
+                    }
+                }
+                let all = self.kind_rows(kind)?;
+                all.into_iter()
+                    .filter(|found| wanted.contains(&found.id))
+                    .collect()
+            }
+            How::Back => {
+                let all = self.kind_rows(kind)?;
+                all.into_iter()
+                    .filter(|found| found.extra.get(field) == Some(&row.id))
+                    .collect()
+            }
+            How::Out => {
+                let target = row.extra.get(field).cloned();
+                let all = self.kind_rows(kind)?;
+                all.into_iter()
+                    .filter(|found| Some(&found.id) == target.as_ref())
+                    .collect()
+            }
+            How::ListOut => {
+                let ids = joined(row.extra.get(field));
+                let all = self.kind_rows(kind)?;
+                all.into_iter()
+                    .filter(|found| ids.contains(&found.id))
+                    .collect()
+            }
+            How::ListBack => {
+                let all = self.kind_rows(kind)?;
+                all.into_iter()
+                    .filter(|found| joined(found.extra.get(field)).contains(&row.id))
+                    .collect()
+            }
+            How::TitlesOut => {
+                let titles = joined(row.extra.get(field));
+                let all = self.kind_rows(kind)?;
+                all.into_iter()
+                    .filter(|found| titles.contains(&found.label))
+                    .collect()
+            }
+            How::TitlesBack => {
+                let all = self.kind_rows(kind)?;
+                all.into_iter()
+                    .filter(|found| joined(found.extra.get(field)).contains(&row.label))
+                    .collect()
+            }
+        })
+    }
+
     /// `Kind of Set` — the link walk (§2.3). **R-C4**: an edge the ontology
     /// does not hold is a clarify, never an inferred join.
     fn walk(&mut self, kind: &KindNode, source: &[VaultRow]) -> Result<Rows, Stop> {
         let mut out: Rows = Vec::new();
         let mut seen = BTreeSet::new();
         let mut unrelated = false;
+        let mut why = None;
         for row in source {
-            let step = match (kind.kind.as_str(), row.entity.as_str()) {
-                // Tally: the group's ledger, and the ledger's group.
-                ("expenses", "tally.group") => {
-                    let all = self.kind_rows(kind)?;
-                    all.into_iter()
-                        .filter(|found| found.extra.get("group_id") == Some(&row.id))
-                        .collect()
-                }
-                ("groups", "tally.expense") => {
-                    let group = row.extra.get("group_id").cloned();
-                    let all = self.kind_rows(kind)?;
-                    all.into_iter()
-                        .filter(|found| Some(&found.id) == group.as_ref())
-                        .collect()
-                }
-                ("settlements", "tally.group") => {
-                    let all = self.kind_rows(kind)?;
-                    all.into_iter()
-                        .filter(|found| found.extra.get("group_id") == Some(&row.id))
-                        .collect()
-                }
-                ("members", "tally.group") => {
-                    let members = joined(row.extra.get("member_party_ids"));
-                    let all = self.kind_rows(kind)?;
-                    all.into_iter()
-                        .filter(|found| members.contains(&found.id))
-                        .collect()
-                }
-                // People: the sub-rows a party carries.
-                ("obligations", "core.party") => {
-                    let ids = self.obligations_of(row);
-                    self.obligation_rows(&ids)
-                }
-                ("parties" | "profiles", "core.party") => vec![row.clone()],
-                ("important dates" | "contact channels" | "activities", "core.party") => {
-                    let all = self.kind_rows(kind)?;
-                    all.into_iter()
-                        .filter(|found| found.extra.get("party_id") == Some(&row.id))
-                        .collect()
-                }
-                ("parties", "tally.obligation") => {
-                    let mut wanted = Vec::new();
-                    for column in ["to_party", "from_party"] {
-                        if let Some(found) = self.field(row, column)
-                            && found != self.ctx.me()
-                        {
-                            wanted.push(found);
-                        }
-                    }
-                    let all = self.kind_rows(kind)?;
-                    all.into_iter()
-                        .filter(|found| wanted.contains(&found.id))
-                        .collect()
-                }
-                // Agenda: who an event names, and what names a person.
-                ("parties", "core.event") => {
-                    let attendees = joined(row.extra.get("attendee_party_ids"));
-                    let all = self.kind_rows(kind)?;
-                    all.into_iter()
-                        .filter(|found| attendees.contains(&found.id))
-                        .collect()
-                }
-                ("events", "core.party") => {
-                    let all = self.kind_rows(kind)?;
-                    all.into_iter()
-                        .filter(|found| {
-                            joined(found.extra.get("attendee_party_ids")).contains(&row.id)
-                        })
-                        .collect()
-                }
-                // Photos: the place a frame was taken, and the album it is in.
-                ("photos", "core.place") => {
-                    let all = self.kind_rows(kind)?;
-                    all.into_iter()
-                        .filter(|found| found.extra.get("place_id") == Some(&row.id))
-                        .collect()
-                }
-                ("places", "core.content_item") => {
-                    let place = row.extra.get("place_id").cloned();
-                    let all = self.kind_rows(kind)?;
-                    all.into_iter()
-                        .filter(|found| Some(&found.id) == place.as_ref())
-                        .collect()
-                }
-                ("photos", "media.album") => {
-                    let title = row.label.clone();
-                    let all = self.kind_rows(kind)?;
-                    all.into_iter()
-                        .filter(|found| joined(found.extra.get("album_titles")).contains(&title))
-                        .collect()
-                }
-                ("albums", "core.content_item") => {
-                    let titles = joined(row.extra.get("album_titles"));
-                    let all = self.kind_rows(kind)?;
-                    all.into_iter()
-                        .filter(|found| titles.contains(&found.label))
-                        .collect()
-                }
-                // Tasks: the self-referential edge.
-                ("tasks", "schedule.task") => {
-                    let all = self.kind_rows(kind)?;
-                    all.into_iter()
-                        .filter(|found| found.extra.get("parent_task_id") == Some(&row.id))
-                        .collect()
-                }
+            let from_entity = row.entity.clone();
+            let step = match edge(&from_entity, &kind.kind) {
+                Some(link) => self.follow(link, kind, row)?,
                 // A walk onto the kind the row already is, reached through a
                 // `Ref` — `photos of (them)` over a held photo set — is the
                 // identity, not a missing edge.
-                (_, _) if same_kind(kind, &row.entity) => vec![row.clone()],
-                _ => {
+                None if same_kind(kind, &row.entity) => vec![row.clone()],
+                None => {
                     unrelated = true;
+                    why = Some(format!("no link from {from_entity} to {}", kind.kind));
                     Vec::new()
                 }
             };
@@ -681,7 +667,10 @@ impl Eval<'_, '_> {
         // unable to tell, exactly as in §1.1 — answering "none" would assert
         // the one fact the question asked for.
         if out.is_empty() && !source.is_empty() {
-            return Err(Stop::Clarify);
+            if !unrelated {
+                why = Some(format!("no {} linked to those rows", kind.kind));
+            }
+            return Err(Stop::Clarify(why));
         }
         Ok(out)
     }
@@ -705,24 +694,34 @@ impl Eval<'_, '_> {
                 _ => held,
             },
             Ref::It | Ref::Them => held,
+            Ref::Handles(ns) => {
+                let mut rows = Vec::new();
+                for n in ns {
+                    match self.state.handles.get(n) {
+                        Some(row) => rows.push(row.clone()),
+                        None => return Err(unhandled(format!("no row was shown as #{n}"))),
+                    }
+                }
+                rows
+            }
             Ref::ThatOne => {
                 if held.len() == 1 {
                     held
                 } else {
-                    return Err(Stop::Clarify);
+                    return Err(Stop::Clarify(None));
                 }
             }
             Ref::TheOtherOne => {
                 if held.len() == 2 {
                     vec![held[1].clone()]
                 } else {
-                    return Err(Stop::Clarify);
+                    return Err(Stop::Clarify(None));
                 }
             }
             Ref::TheEarlierOne => self.state.held_at(self.back + 1).to_vec(),
             Ref::LastAdded => match &self.state.last_write {
                 Some(write) => write.rows.clone(),
-                None => return Err(Stop::Clarify),
+                None => return Err(Stop::Clarify(None)),
             },
             Ref::Ordinal(n) => {
                 // §3 says an ordinal into an unordered answer clarifies. Every
@@ -733,12 +732,12 @@ impl Eval<'_, '_> {
                 // was given. See the report's grammar-clarification list.
                 match held.get((*n as usize).saturating_sub(1)) {
                     Some(row) => vec![row.clone()],
-                    None => return Err(Stop::Clarify),
+                    None => return Err(Stop::Clarify(None)),
                 }
             }
         };
         if rows.is_empty() {
-            return Err(Stop::Clarify);
+            return Err(Stop::Clarify(None));
         }
         Ok(self.refreshed(rows))
     }
@@ -905,6 +904,11 @@ impl Eval<'_, '_> {
                 "daterange" => Span::Days(value[..10].to_owned(), value[12..22].to_owned()),
                 _ => return Err(unhandled("unknown window stamp")),
             },
+            // `resolve_relative` rewrites every relative day before a tree
+            // reaches the executor; one here is a call site that skipped it.
+            Window::RelDate(phrase) => {
+                return Err(unhandled(format!("unresolved relative day `{phrase}`")));
+            }
             Window::Rolling { n, unit } => {
                 let today = self.ctx.today().to_owned();
                 let end = match unit.as_str() {
@@ -919,7 +923,7 @@ impl Eval<'_, '_> {
                 let start = self.one_value(from)?;
                 let end = self.one_value(to)?;
                 if start.len() < 10 || end.len() < 10 {
-                    return Err(Stop::Clarify);
+                    return Err(Stop::Clarify(None));
                 }
                 Span::Days(start[..10].to_owned(), end[..10].to_owned())
             }
@@ -953,7 +957,7 @@ impl Eval<'_, '_> {
                 } else {
                     found.last()
                 };
-                picked.cloned().ok_or(Stop::Clarify)
+                picked.cloned().ok_or(Stop::Clarify(None))
             }
             _ => {
                 let number = self.number(value)?;
@@ -974,7 +978,7 @@ impl Eval<'_, '_> {
         values.sort();
         values.dedup();
         match values.len() {
-            0 => Err(Stop::Clarify),
+            0 => Err(Stop::Clarify(None)),
             1 => Ok(values.remove(0)),
             // Several rows that DISAGREE: the answer is the best-matching
             // row's, because `called` is a ranked retrieval and the door's own
@@ -983,7 +987,7 @@ impl Eval<'_, '_> {
             _ => rows
                 .first()
                 .and_then(|row| self.field(row, field))
-                .ok_or(Stop::Clarify),
+                .ok_or(Stop::Clarify(None)),
         }
     }
 
@@ -996,7 +1000,7 @@ impl Eval<'_, '_> {
                 // R-C2 — a `Value` over `things` that spans Kinds is a
                 // clarify, not an arithmetic over apples and diaries.
                 if base_kind(set) == Some("things") && spans_kinds(&rows) {
-                    return Err(Stop::Clarify);
+                    return Err(Stop::Clarify(None));
                 }
                 if agg == "count" {
                     #[expect(clippy::cast_precision_loss, reason = "a row count")]
@@ -1020,17 +1024,17 @@ impl Eval<'_, '_> {
             Value::Project { field, set } => {
                 let rows = self.set(set)?;
                 if base_kind(set) == Some("things") && spans_kinds(&rows) {
-                    return Err(Stop::Clarify);
+                    return Err(Stop::Clarify(None));
                 }
                 self.agreed(&rows, field)?
                     .parse::<f64>()
-                    .map_err(|_| Stop::Clarify)
+                    .map_err(|_| Stop::Clarify(None))
             }
             Value::Balance { of, within } => {
                 let who = self.set(of)?;
                 let group = self.set(within)?;
                 if group.len() != 1 {
-                    return Err(Stop::Clarify);
+                    return Err(Stop::Clarify(None));
                 }
                 // A balance IN a group is a balance of one of its members, so
                 // the roster is what narrows an anchor that matched several —
@@ -1044,7 +1048,7 @@ impl Eval<'_, '_> {
                     who
                 };
                 if who.len() != 1 {
-                    return Err(Stop::Clarify);
+                    return Err(Stop::Clarify(None));
                 }
                 self.balance(&who[0].id, &group[0].id)
             }
@@ -1061,7 +1065,7 @@ impl Eval<'_, '_> {
             && matches!(**from, Set::Kind(_))
             && self.set(from)?.len() > 1
         {
-            return Err(Stop::Clarify);
+            return Err(Stop::Clarify(None));
         }
         match set {
             Set::Called { set, .. }
@@ -1079,44 +1083,50 @@ impl Eval<'_, '_> {
     /// for the trip") and the direction `tally.settle_up` is written in.
     fn balance(&mut self, party: &str, group: &str) -> Result<f64, Stop> {
         let rows = self.board(App::Tally);
-        let mut net = 0.0f64;
-        for row in &rows {
-            match row.entity.as_str() {
-                "tally.expense" if row.extra.get("group_id").map(String::as_str) == Some(group) => {
-                    if !row.live || row.extra.contains_key("deleted") {
-                        continue;
-                    }
-                    if row.extra.get("paid_by").map(String::as_str) == Some(party) {
-                        net -= row
-                            .extra
-                            .get("amount_minor")
-                            .and_then(|found| as_number(found))
-                            .unwrap_or(0.0);
-                    }
-                    if let Some(share) = row.extra.get(&format!("split:{party}")) {
-                        net += as_number(share).unwrap_or(0.0);
-                    }
+        Ok(group_balance(&rows, party, group))
+    }
+}
+
+/// What `party` owes into `group`, from the Tally board's rows: the shares
+/// it was split minus what it paid, less settlements it made, plus those it
+/// received. Positive owes; `balance of (x) in (g)` reads exactly this.
+#[must_use]
+pub fn group_balance(rows: &[VaultRow], party: &str, group: &str) -> f64 {
+    let mut net = 0.0f64;
+    for row in rows {
+        match row.entity.as_str() {
+            "tally.expense" if row.extra.get("group_id").map(String::as_str) == Some(group) => {
+                if !row.live || row.extra.contains_key("deleted") {
+                    continue;
                 }
-                "tally.settlement"
-                    if row.extra.get("group_id").map(String::as_str) == Some(group) =>
-                {
-                    let amount = row
+                if row.extra.get("paid_by").map(String::as_str) == Some(party) {
+                    net -= row
                         .extra
                         .get("amount_minor")
                         .and_then(|found| as_number(found))
                         .unwrap_or(0.0);
-                    if row.extra.get("from_party").map(String::as_str) == Some(party) {
-                        net -= amount;
-                    }
-                    if row.extra.get("to_party").map(String::as_str) == Some(party) {
-                        net += amount;
-                    }
                 }
-                _ => {}
+                if let Some(share) = row.extra.get(&format!("split:{party}")) {
+                    net += as_number(share).unwrap_or(0.0);
+                }
             }
+            "tally.settlement" if row.extra.get("group_id").map(String::as_str) == Some(group) => {
+                let amount = row
+                    .extra
+                    .get("amount_minor")
+                    .and_then(|found| as_number(found))
+                    .unwrap_or(0.0);
+                if row.extra.get("from_party").map(String::as_str) == Some(party) {
+                    net -= amount;
+                }
+                if row.extra.get("to_party").map(String::as_str) == Some(party) {
+                    net += amount;
+                }
+            }
+            _ => {}
         }
-        Ok(net)
     }
+    net
 }
 
 /// An inclusive day window, or the overdue comparison.
@@ -1134,22 +1144,186 @@ impl Span {
             Self::BeforeNow(now) => stamp < now.as_str(),
         }
     }
+
+    /// Does `[start, end)` meet the window? `end` is EXCLUSIVE, as `dtend`
+    /// is (an all-day event ending at the next midnight is not on that next
+    /// day). Without an end after its start the row is the instant `start`,
+    /// and [`Span::holds`] answers. The overdue comparison reads the start.
+    fn overlaps(&self, start: &str, end: Option<&str>) -> bool {
+        match (self, end) {
+            (Self::Days(from, to), Some(end)) if start.len() >= 10 && end > start => {
+                // Starts no later than the window's last day, and ends after
+                // the window's first midnight. A date-only `end` compares as
+                // that midnight, since it sorts before every time on its day.
+                &start[..10] <= to.as_str() && end > format!("{from}T00:00:00.000Z").as_str()
+            }
+            _ => self.holds(start),
+        }
+    }
 }
 
-/// Does this label answer to `called Lit`?
-///
-/// The literal as a substring, or — because a member says "my dentist
-/// cleaning" and the calendar says "Dentist — cleaning" — every word of it
-/// present in the label. The second is what the FTS plane would answer for the
-/// same phrase, said in the board's own terms so a row's facts come with it.
-fn labelled(label: &str, lit: &str) -> bool {
-    let label = label.to_lowercase();
-    let needle = lit.to_lowercase();
-    if label.contains(&needle) {
-        return true;
+// ---------------------------------------------------------------------------
+// The link table
+// ---------------------------------------------------------------------------
+
+/// How one edge is read off the rows the readers hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum How {
+    /// The target's `field` holds the source's id (a foreign key pointing back).
+    Back,
+    /// The source's `field` holds the target's id.
+    Out,
+    /// The source's `field` lists target ids.
+    ListOut,
+    /// The target's `field` lists the source's id.
+    ListBack,
+    /// The source's `field` lists target labels (album titles).
+    TitlesOut,
+    /// The target's `field` lists the source's label.
+    TitlesBack,
+    /// The row itself (a party read as a party).
+    Same,
+    /// The open debts People hangs off a party (`owed_to_me` / `owed_to_them`).
+    Obligations,
+    /// A debt's other side: `to_party` / `from_party`, never me.
+    Counterparty,
+}
+
+/// One link the ontology holds: from a row of `from` (an entity) to rows of
+/// the kind `to`.
+#[derive(Debug, Clone, Copy)]
+pub struct Edge {
+    pub from: &'static str,
+    pub to: &'static str,
+    pub field: &'static str,
+    pub how: How,
+}
+
+const fn e(from: &'static str, to: &'static str, field: &'static str, how: How) -> Edge {
+    Edge {
+        from,
+        to,
+        field,
+        how,
     }
-    let words: Vec<&str> = needle.split_whitespace().collect();
-    !words.is_empty() && words.iter().all(|word| label.contains(word))
+}
+
+/// **EVERY LINK A WALK MAY TAKE (R-C4).** `walk` reads this table and nothing
+/// else, and the links paragraph of `experiments/toolchat/TOOLS.md` is
+/// printed from it ([`links_paragraph`]; a test holds the two together), so
+/// the prompt and the runtime cannot name different edges.
+pub const EDGES: &[Edge] = &[
+    // Tally: the group's ledger, and the ledger's group.
+    e("tally.group", "expenses", "group_id", How::Back),
+    e("tally.expense", "groups", "group_id", How::Out),
+    e("tally.group", "settlements", "group_id", How::Back),
+    e("tally.group", "members", "member_party_ids", How::ListOut),
+    // People: the sub-rows a party carries.
+    e("core.party", "obligations", "owed_to_me", How::Obligations),
+    e("core.party", "parties", "", How::Same),
+    e("core.party", "profiles", "", How::Same),
+    e("core.party", "important dates", "party_id", How::Back),
+    e("core.party", "contact channels", "party_id", How::Back),
+    e("core.party", "activities", "party_id", How::Back),
+    e("tally.obligation", "parties", "to_party", How::Counterparty),
+    // Agenda: who an event names, and what names a person.
+    e("core.event", "parties", "attendee_party_ids", How::ListOut),
+    e("core.party", "events", "attendee_party_ids", How::ListBack),
+    // Photos: the place a frame was taken, and the album it is in.
+    e("core.place", "photos", "place_id", How::Back),
+    e("core.content_item", "places", "place_id", How::Out),
+    e("media.album", "photos", "album_titles", How::TitlesBack),
+    e(
+        "core.content_item",
+        "albums",
+        "album_titles",
+        How::TitlesOut,
+    ),
+    // Photos: who is in the frame — a confirmed face region.
+    e("core.party", "photos", "people_party_ids", How::ListBack),
+    e(
+        "core.content_item",
+        "parties",
+        "people_party_ids",
+        How::ListOut,
+    ),
+    e(
+        "core.content_item",
+        "profiles",
+        "people_party_ids",
+        How::ListOut,
+    ),
+    // Tasks: the self-referential edge.
+    e("schedule.task", "tasks", "parent_task_id", How::Back),
+];
+
+/// `text` with its links block (between the `<!-- links` markers, or a bare
+/// `LINKS` line) replaced by `block`; `None` when it carries neither.
+#[must_use]
+pub fn splice_links(text: &str, block: &str) -> Option<String> {
+    if let Some(start) = text.find("<!-- links:") {
+        let end_marker = "<!-- /links -->\n";
+        let end = text[start..].find(end_marker)? + start + end_marker.len();
+        return Some(format!("{}{block}{}", &text[..start], &text[end..]));
+    }
+    let at = text.find("\nLINKS\n")?;
+    Some(format!(
+        "{}\n{block}{}",
+        &text[..at],
+        &text[at + "\nLINKS\n".len()..]
+    ))
+}
+
+/// The edge from a row of `entity` to the kind `kind`, if the ontology holds one.
+fn edge(entity: &str, kind: &str) -> Option<&'static Edge> {
+    EDGES
+        .iter()
+        .find(|link| link.from == entity && link.to == kind)
+}
+
+/// The links paragraph of `TOOLS.md`, printed from [`EDGES`]: one line per
+/// target kind, naming the kinds of row it can be reached from.
+#[must_use]
+pub fn links_paragraph() -> String {
+    let kinds = crate::canon::kinds();
+    let word = |entity: &str| -> String {
+        let kind = kinds
+            .iter()
+            .find(|(_, (found, door))| *found == entity && *door != "tally")
+            .or_else(|| kinds.iter().find(|(_, (found, _))| *found == entity))
+            .map_or(entity, |(kind, _)| *kind);
+        match kind {
+            "parties" => "party".to_owned(),
+            "activities" => "activity".to_owned(),
+            other => other.strip_suffix('s').unwrap_or(other).to_owned(),
+        }
+    };
+    let mut targets: Vec<&str> = Vec::new();
+    for link in EDGES {
+        if link.how != How::Same && !targets.contains(&link.to) {
+            targets.push(link.to);
+        }
+    }
+    let mut out =
+        String::from("<!-- links: printed from EDGES in crates/candidates/src/exec.rs -->\n");
+    for to in targets {
+        let froms: Vec<String> = EDGES
+            .iter()
+            .filter(|link| link.to == to && link.how != How::Same)
+            .map(|link| {
+                let noun = word(link.from);
+                let article = if noun.starts_with(['a', 'e', 'i', 'o', 'u']) {
+                    "an"
+                } else {
+                    "a"
+                };
+                format!("{article} {noun}")
+            })
+            .collect();
+        out.push_str(&format!("  - `{to} of (…)` from {}\n", froms.join(", ")));
+    }
+    out.push_str("<!-- /links -->\n");
+    out
 }
 
 fn joined(found: Option<&String>) -> Vec<String> {
@@ -1321,18 +1495,32 @@ fn date_field(entity: &str, field: &str) -> bool {
 /// `Context` (so the boards can be cached and shared), and only a `Cmd`'s
 /// commands take it mutably.
 pub fn execute(tree: &Turn, state: &mut State, ctx: &mut Context<'_>) -> Plan {
+    execute_or_stop(tree, state, ctx).unwrap_or_else(|stop| stop.plan())
+}
+
+/// [`execute`], with a decline kept as the [`Stop`] that caused it — so a
+/// caller that explains itself (the tools) reads the reason from the result
+/// and not from a side channel.
+///
+/// # Errors
+/// The turn declined: a clarify (and why, when known), a refusal, nothing.
+pub fn execute_or_stop(
+    tree: &Turn,
+    state: &mut State,
+    ctx: &mut Context<'_>,
+) -> Result<Plan, Stop> {
     let plan = run(tree, state, ctx);
     state.last_canonical = Some(tree.clone());
     plan
 }
 
-fn run(tree: &Turn, state: &mut State, ctx: &mut Context<'_>) -> Plan {
+fn run(tree: &Turn, state: &mut State, ctx: &mut Context<'_>) -> Result<Plan, Stop> {
     let trashed = mentions_trash(tree);
     let mut caches = Caches::default();
     match tree {
-        Turn::Nothing => Stop::Nothing.plan(),
-        Turn::Refuse(_) => Stop::Refuse.plan(),
-        Turn::Clarify(_) => Stop::Clarify.plan(),
+        Turn::Nothing => Err(Stop::Nothing),
+        Turn::Refuse(_) => Err(Stop::Refuse),
+        Turn::Clarify(_) => Err(Stop::Clarify(None)),
         Turn::Show(set) => {
             // **THE TOPIC BACKTRACK.** "Hang on — what's on tomorrow?" and
             // then "back to the money — which of those two…": `them` is not
@@ -1340,7 +1528,7 @@ fn run(tree: &Turn, state: &mut State, ctx: &mut Context<'_>) -> Plan {
             // An empty answer over a `Ref` is the signal, because a member who
             // says "those two" is not asking about nothing. §3 has no move for
             // this and the corpus needs one — see the report.
-            let mut answer = Err(Stop::Clarify);
+            let mut answer = Err(Stop::Clarify(None));
             for back in 0..3 {
                 let mut eval = evaluator(ctx, &mut caches, state, trashed);
                 eval.back = back;
@@ -1355,18 +1543,28 @@ fn run(tree: &Turn, state: &mut State, ctx: &mut Context<'_>) -> Plan {
             }
             match answer {
                 Ok(rows) => {
+                    let names = names_in(set, state);
+                    if !names.is_empty() {
+                        for row in &rows {
+                            state
+                                .named
+                                .entry(row.id.clone())
+                                .or_default()
+                                .extend(names.clone());
+                        }
+                    }
                     let ids = rows.iter().map(|row| row.id.clone()).collect();
                     let ordered = is_ordered(set);
                     state.remember(rows, ordered);
-                    Plan::Ids(ids)
+                    Ok(Plan::Ids(ids))
                 }
-                Err(stop) => stop.plan(),
+                Err(stop) => Err(stop),
             }
         }
         Turn::Same(left, right) => {
             let mut eval = evaluator(ctx, &mut caches, state, trashed);
             let (Ok(left), Ok(right)) = (eval.set(left), eval.set(right)) else {
-                return Stop::Clarify.plan();
+                return Err(Stop::Clarify(None));
             };
             // §1.1 — an intersection over sets of UNRELATED KINDS is a
             // clarify, never a `no`: the vault cannot tell, and `no` would
@@ -1383,9 +1581,9 @@ fn run(tree: &Turn, state: &mut State, ctx: &mut Context<'_>) -> Plan {
                 .map(|row| row.id.clone())
                 .collect();
             if shared.is_empty() && kinds.len() > 1 {
-                return Stop::Clarify.plan();
+                return Err(Stop::Clarify(None));
             }
-            Plan::Ids(shared)
+            Ok(Plan::Ids(shared))
         }
         Turn::Value(value) => {
             let mut eval = evaluator(ctx, &mut caches, state, trashed);
@@ -1407,8 +1605,8 @@ fn run(tree: &Turn, state: &mut State, ctx: &mut Context<'_>) -> Plan {
                 }
             }
             match answer {
-                Ok(number) => Plan::Value(number),
-                Err(stop) => stop.plan(),
+                Ok(number) => Ok(Plan::Value(number)),
+                Err(stop) => Err(stop),
             }
         }
         Turn::Cmd(cmd) => command(cmd, state, ctx, &mut caches, trashed),
@@ -1417,14 +1615,10 @@ fn run(tree: &Turn, state: &mut State, ctx: &mut Context<'_>) -> Plan {
         // it finished (R-W1, one layer up). The first step that declines is
         // the turn's outcome.
         Turn::Seq(steps) => {
-            let mut last = Plan::Wrote;
             for step in steps {
-                last = command(step, state, ctx, &mut caches, trashed);
-                if !matches!(last, Plan::Wrote) {
-                    return last;
-                }
+                command(step, state, ctx, &mut caches, trashed)?;
             }
-            last
+            Ok(Plan::Wrote)
         }
     }
 }
@@ -1490,11 +1684,11 @@ fn command(
     ctx: &mut Context<'_>,
     caches: &mut Caches,
     trashed: bool,
-) -> Plan {
+) -> Result<Plan, Stop> {
     // R-R1/R-R2 — a verb whose effect is outside the vault, or moves sealed
     // material out of custody.
     if egress(&cmd.verb) {
-        return Stop::Refuse.plan();
+        return Err(Stop::Refuse);
     }
     let mut anchors: Rows = Vec::new();
     if let Some(on) = &cmd.on {
@@ -1502,46 +1696,66 @@ fn command(
         // "the cabin booking" is a task AND an event and the member must say
         // which (R-C3 for a destructive verb, R-C1 for the rest).
         if base_kind(on) == Some("things") {
-            return Stop::Clarify.plan();
+            return Err(Stop::Clarify(None));
         }
         // R-R4 — a destructive verb over an UNBOUNDED set. There is nothing to
         // ask about "delete every note in the vault"; the answer is no.
         if destructive(&cmd.verb) && !bounded(on) {
-            return Stop::Refuse.plan();
+            return Err(Stop::Refuse);
         }
         let mut eval = evaluator(ctx, caches, state, trashed);
-        anchors = match eval.set(on) {
-            Ok(rows) => rows,
-            Err(stop) => return stop.plan(),
-        };
+        anchors = eval.set(on)?;
         // R-C1, sharpened: a verb whose subject is ONE named person.
         if PARTY_SUBJECT.contains(&cmd.verb.as_str()) {
             let subject = subject_set(on);
             let mut eval = evaluator(ctx, caches, state, trashed);
             let people = match subject.map(|set| eval.set(set)) {
                 Some(Ok(rows)) => rows.len(),
-                Some(Err(stop)) => return stop.plan(),
+                Some(Err(stop)) => return Err(stop),
                 None => anchors.len(),
             };
             if people != 1 {
-                return Stop::Clarify.plan();
+                return Err(Stop::Clarify(None));
             }
         }
         if anchors.is_empty() {
             // R-N1 — the anchor is in the trash: there is nothing to do and
             // nothing to ask.
             let mut eval = evaluator(ctx, caches, state, true);
-            let trashed_match = eval.set(on).map(|rows| !rows.is_empty()).unwrap_or(false);
-            return if trashed_match {
-                Stop::Nothing.plan()
+            let in_trash: Rows = eval
+                .set(on)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|row| !row.live)
+                .collect();
+            return Err(if in_trash.is_empty() {
+                Stop::Clarify(Some(
+                    "ambiguous: no live or trashed rows match that; \
+                     say nothing, or find the rows another way"
+                        .to_owned(),
+                ))
             } else {
-                Stop::Clarify.plan()
-            };
+                Stop::Trashed(in_trash)
+            });
         }
         // R-C3 — a destructive verb class over an anchor that spans Kinds.
         if destructive(&cmd.verb) && spans_kinds(&anchors) {
-            return Stop::Clarify.plan();
+            return Err(Stop::Clarify(None));
         }
+    }
+    // **A WRITE NAMES ITS PERSON.** A party the write lands on, reached by a
+    // name several live people share, is a question back — even where the
+    // data narrowed it (only one Neha carries a debt): a payment must name
+    // the party, and the narrowing was the vault's, not the person's.
+    let mut targets: Rows = anchors.clone();
+    for (_, value) in &cmd.args {
+        if let ArgVal::SetArg(set) = value {
+            let mut eval = evaluator(ctx, caches, state, trashed);
+            targets.extend(eval.set(set).unwrap_or_default());
+        }
+    }
+    if let Some(why) = ambiguous_party(cmd, &targets, state, ctx, caches) {
+        return Err(Stop::Clarify(Some(why)));
     }
     // The bodies are built with the doors still readable, and only then
     // executed: R-W2 binds `it` inside `Args` to the anchor row being written.
@@ -1550,22 +1764,35 @@ fn command(
         let mut eval = evaluator(ctx, caches, state, trashed);
         match body(cmd, None, &mut eval, state) {
             Ok(built) => bodies.push(built),
-            Err(stop) => return stop.plan(),
+            Err(stop) => return Err(stop),
         }
     } else {
         for anchor in &anchors {
             let mut eval = evaluator(ctx, caches, state, trashed);
             match body(cmd, Some(anchor), &mut eval, state) {
                 Ok(built) => bodies.push(built),
-                Err(stop) => return stop.plan(),
+                Err(stop) => return Err(stop),
             }
         }
     }
     let restoring = cmd.verb.contains("restore") || cmd.verb.contains("undo_");
     let mut revision = None;
+    let mut created: Vec<(String, String)> = Vec::new();
     for (name, body) in bodies {
+        let sent = ids_in(&body);
         match ctx.write(&name, body) {
             Ok(answer) => {
+                // A write with no anchor MADE a row: its id comes back in the
+                // answer (and was not one the body already named, as a group
+                // an expense was filed into is).
+                if cmd.on.is_none() {
+                    created.extend(
+                        ids_in(&answer)
+                            .into_iter()
+                            .filter(|id| !sent.contains(id))
+                            .map(|id| (name.clone(), id)),
+                    );
+                }
                 if revision.is_none() {
                     revision = answer
                         .get("revision_id")
@@ -1577,9 +1804,9 @@ fn command(
             // grace window has run out and saying it was done would be worse.
             Err(why) => {
                 return if restoring {
-                    Stop::Refuse.plan()
+                    Err(Stop::Refuse)
                 } else {
-                    unhandled(format!("{name}: {why}")).plan()
+                    Err(unhandled(format!("{name}: {why}")))
                 };
             }
         }
@@ -1590,12 +1817,243 @@ fn command(
     if !anchors.is_empty() && state.answers.is_empty() {
         state.remember(anchors.clone(), false);
     }
+    // **THE ECHO IS THE ROW AS THE WRITE LEFT IT.** Every board read before
+    // the write is stale now; the rows it touched are read again, so a
+    // rescheduled event shows its new date and a created row is there at all.
+    caches.boards.clear();
+    caches.fields.clear();
+    let rows = if anchors.is_empty() {
+        created_rows(&created, ctx)
+    } else {
+        reread(anchors, destructive(&cmd.verb) && !restoring, ctx)
+    };
     state.last_write = Some(LastWrite {
         command: cmd.verb.clone(),
-        rows: anchors,
+        rows,
         revision_id: revision,
     });
-    Plan::Wrote
+    Ok(Plan::Wrote)
+}
+
+/// Every string an `…_id` key of `json` names, top level first.
+fn ids_in(json: &Json) -> Vec<String> {
+    let Some(object) = json.as_object() else {
+        return Vec::new();
+    };
+    object
+        .iter()
+        .filter(|(key, _)| key.ends_with("_id"))
+        .filter_map(|(_, value)| value.as_str().map(str::to_owned))
+        .collect()
+}
+
+/// The doors a command's schema writes through, for finding what it made.
+fn doors_of(command: &str) -> &'static [App] {
+    match command.split('.').next().unwrap_or_default() {
+        "schedule" => &[App::Agenda, App::Tasks],
+        "knowledge" => &[App::Notes],
+        "core" => &[App::Docs],
+        "people" | "social" => &[App::People],
+        "media" => &[App::Photos],
+        "tally" => &[App::Tally],
+        "locker" => &[App::Locker],
+        _ => &[],
+    }
+}
+
+/// The rows a creating write made, read from their own doors.
+fn created_rows(created: &[(String, String)], ctx: &Context<'_>) -> Rows {
+    let mut boards: BTreeMap<&str, Rows> = BTreeMap::new();
+    let mut out = Vec::new();
+    for (command, id) in created {
+        for app in doors_of(command) {
+            let board = boards
+                .entry(app.id())
+                .or_insert_with(|| ctx.open(*app).unwrap_or_default());
+            if let Some(row) = board.iter().find(|row| &row.id == id) {
+                out.push(row.clone());
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// The anchors re-read after the write. A row its door no longer hands back
+/// was binned by it (`binned`) and is shown so.
+fn reread(anchors: Rows, binned: bool, ctx: &Context<'_>) -> Rows {
+    let mut boards: BTreeMap<String, Rows> = BTreeMap::new();
+    anchors
+        .into_iter()
+        .map(|row| {
+            let Some(app) = app_of(&row.app) else {
+                return row;
+            };
+            let board = boards
+                .entry(row.app.clone())
+                .or_insert_with(|| ctx.open(app).unwrap_or_default());
+            match board
+                .iter()
+                .find(|found| found.id == row.id && found.entity == row.entity)
+            {
+                Some(fresh) => fresh.clone(),
+                None => VaultRow {
+                    live: row.live && !binned,
+                    ..row
+                },
+            }
+        })
+        .collect()
+}
+
+/// The `called` names a set reaches its rows through: its own literals (bar a
+/// name the set itself narrows with `except`) and the names the rows it
+/// refers to were reached through.
+fn names_in(set: &Set, state: &State) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    collect_names(set, state, &mut out, true);
+    out
+}
+
+fn collect_names(set: &Set, state: &State, out: &mut BTreeSet<String>, direct: bool) {
+    match set {
+        Set::Kind(_) => {}
+        Set::Called { set, lit } => {
+            if direct {
+                // The scope the name was said in: "Marco" among the trip's
+                // MEMBERS is one person even where the address book has three.
+                let scope = if base_kind(set) == Some("members") {
+                    "members"
+                } else {
+                    "people"
+                };
+                out.insert(format!("{scope}\u{1f}{lit}"));
+            }
+            collect_names(set, state, out, direct);
+        }
+        Set::Walk { from, .. } => collect_names(from, state, out, direct),
+        Set::Filter { set, .. }
+        | Set::During { set, .. }
+        | Set::Order { set, .. }
+        | Set::First { set, .. } => collect_names(set, state, out, direct),
+        Set::Union(left, right) => {
+            collect_names(left, state, out, direct);
+            collect_names(right, state, out, direct);
+        }
+        // "The OTHER Neha": the person's own words narrowed the name, so the
+        // name on the left is not the ambiguity.
+        Set::Except(left, right) => {
+            collect_names(left, state, out, false);
+            collect_names(right, state, out, direct);
+        }
+        Set::Ref(found) => {
+            let rows: Vec<&VaultRow> = match found {
+                Ref::Handles(ns) => ns.iter().filter_map(|n| state.handles.get(n)).collect(),
+                _ => state.held_at(0).iter().collect(),
+            };
+            for row in rows {
+                // A PARTY shown by number is a choice already made; a row that
+                // merely mentions a person carries the name it came by.
+                if row.entity == "core.party" {
+                    continue;
+                }
+                if let Some(names) = state.named.get(&row.id) {
+                    out.extend(names.iter().cloned());
+                }
+            }
+        }
+    }
+}
+
+/// The people a write lands on: a party anchor itself, a debt's other side.
+fn write_parties(row: &VaultRow, ctx: &Context<'_>) -> Vec<String> {
+    match row.entity.as_str() {
+        "core.party" => vec![row.id.clone()],
+        "tally.obligation" => ["to_party", "from_party"]
+            .iter()
+            .filter_map(|column| {
+                row.extra
+                    .get(*column)
+                    .cloned()
+                    .or_else(|| ctx.field(&row.entity, &row.id, column).ok().flatten())
+            })
+            .filter(|id| *id != ctx.me())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// `Some(why)` when a party this write lands on was reached through a name
+/// several live people share.
+fn ambiguous_party(
+    cmd: &Cmd,
+    targets: &[VaultRow],
+    state: &State,
+    ctx: &Context<'_>,
+    caches: &mut Caches,
+) -> Option<String> {
+    let mut names = BTreeSet::new();
+    if let Some(on) = &cmd.on {
+        names.extend(names_in(on, state));
+    }
+    for (_, value) in &cmd.args {
+        if let ArgVal::SetArg(set) = value {
+            names.extend(names_in(set, state));
+        }
+    }
+    if names.is_empty() {
+        return None;
+    }
+    let parties: BTreeSet<String> = targets
+        .iter()
+        .flat_map(|row| write_parties(row, ctx))
+        .collect();
+    if parties.is_empty() {
+        return None;
+    }
+    let mut eval = evaluator(ctx, caches, state, false);
+    let people: Rows = eval
+        .board(App::People)
+        .into_iter()
+        .filter(|row| row.entity == "core.party" && row.live)
+        .collect();
+    let members: Rows = eval
+        .board(App::Tally)
+        .into_iter()
+        .filter(|row| row.entity == "core.party" && row.live)
+        .collect();
+    for scoped in &names {
+        let (scope, name) = scoped.split_once('\u{1f}').unwrap_or(("people", scoped));
+        let pool = if scope == "members" {
+            &members
+        } else {
+            &people
+        };
+        let mut sharing: Vec<&VaultRow> = pool
+            .iter()
+            .filter(|row| labelled(&row.label, name))
+            .collect();
+        let mut ids = BTreeSet::new();
+        sharing.retain(|row| ids.insert(row.id.clone()));
+        // A name that IS one person's whole name ("Marco", the trip friend
+        // known by nothing else) names that person, however many others
+        // carry it as a first name.
+        if sharing
+            .iter()
+            .any(|row| row.label.eq_ignore_ascii_case(name.trim()) && parties.contains(&row.id))
+        {
+            continue;
+        }
+        if sharing.len() >= 2 && sharing.iter().any(|row| parties.contains(&row.id)) {
+            let who: Vec<&str> = sharing.iter().map(|row| row.label.as_str()).collect();
+            return Some(format!(
+                "ambiguous: \"{name}\" names several people ({}); the write must name \
+                 the person — say done to ask, unless the message says which one",
+                who.join(", ")
+            ));
+        }
+    }
+    None
 }
 
 /// Is the anchor SCOPED? R-R4 asks this of a destructive verb.
@@ -1659,14 +2117,24 @@ fn body(
             let end = anchor
                 .and_then(|row| row.extra.get("dtend").cloned())
                 .unwrap_or_else(|| start.clone());
+            // THE EVENT KEEPS ITS LENGTH. A move that changes the clock time
+            // as well as the day ("friday at two") carries the end by the
+            // same instant, not the same day count; an end that is not after
+            // the start is read as an hour.
+            let length = match minutes_between(&start, &end) {
+                Some(minutes) if minutes > 0 => minutes,
+                _ => 60,
+            };
             let (start, end) = match (arg("to"), arg("by")) {
                 (Some(value), _) => {
                     let moved = stamp_arg(value, eval, &start[11..16.min(start.len())])?;
-                    let shift = day_shift(&start, &moved);
-                    (moved, shift_stamp(&end, &shift))
+                    let end = add_minutes(&moved, length);
+                    (moved, end)
                 }
                 (None, Some(ArgVal::Lit(lit))) => {
-                    (shift_by(&start, &lit.value), shift_by(&end, &lit.value))
+                    let moved = shift_by(&start, &lit.value);
+                    let end = add_minutes(&moved, length);
+                    (moved, end)
                 }
                 _ => return Err(unhandled("a reschedule with neither `to` nor `by`")),
             };
@@ -1684,7 +2152,7 @@ fn body(
             }
         }
         "schedule.set_task_status" => {
-            let status = text("status").unwrap_or_else(|| "completed".to_owned());
+            let status = one_of("status", text("status"), "completed", TASK_STATUSES)?;
             json!({ "task_id": id, "status": status })
         }
         "schedule.propose_event" => {
@@ -1708,6 +2176,13 @@ fn body(
         "schedule.cancel_event" => json!({ "event_id": id }),
         "schedule.delete_task" => json!({ "task_id": id }),
         "schedule.restore_task" => json!({ "task_id": id }),
+        // The `restore` class reaches these too; each command's own input
+        // schema is just the row's id.
+        "schedule.restore_event" => json!({ "event_id": id }),
+        "knowledge.restore_note" => json!({ "note_id": id }),
+        "tally.restore_expense" => json!({ "expense_id": id }),
+        "locker.restore_item" => json!({ "item_id": id }),
+        "people.restore_person" => json!({ "party_id": id }),
         "schedule.delete_event" => json!({ "event_id": id }),
         "knowledge.create_note" => {
             let title = text("title").ok_or_else(|| unhandled("a note with no title"))?;
@@ -1722,7 +2197,7 @@ fn body(
         "locker.add_item" => {
             let item_id = eval.ctx.mint();
             let key_id = eval.ctx.locker_key_id().map_err(unhandled)?;
-            let kind = text("type").unwrap_or_else(|| "note".to_owned());
+            let kind = one_of("type", text("type"), "note", LOCKER_TYPES)?;
             let title = text("title").unwrap_or_default();
             let mut built = json!({
                 "item_id": item_id, "type": kind, "title": title, "key_id": key_id,
@@ -1753,7 +2228,7 @@ fn body(
                 Some(ArgVal::SetArg(set)) => {
                     let rows = eval.set(set)?;
                     if rows.len() != 1 {
-                        return Err(Stop::Clarify);
+                        return Err(Stop::Clarify(None));
                     }
                     rows[0].id.clone()
                 }
@@ -1765,7 +2240,7 @@ fn body(
         "media.restore_asset" => json!({ "asset_id": id }),
         "media.delete_asset" => json!({ "asset_id": id }),
         "people.log_interaction" => {
-            let kind = text("kind").unwrap_or_else(|| "call".to_owned());
+            let kind = one_of("kind", text("kind"), "call", INTERACTION_KINDS)?;
             json!({ "party_id": id, "kind": kind })
         }
         "people.settle_debt" => json!({ "debt_id": id }),
@@ -1775,7 +2250,7 @@ fn body(
                 .last_write
                 .as_ref()
                 .and_then(|write| write.revision_id.clone())
-                .ok_or(Stop::Clarify)?;
+                .ok_or(Stop::Clarify(None))?;
             json!({ "party_id": id, "revision_id": revision })
         }
         "tally.add_expense" => {
@@ -1783,7 +2258,7 @@ fn body(
                 Some(ArgVal::SetArg(set)) => {
                     let rows = eval.set(set)?;
                     if rows.len() != 1 {
-                        return Err(Stop::Clarify);
+                        return Err(Stop::Clarify(None));
                     }
                     Some(rows[0].id.clone())
                 }
@@ -1800,7 +2275,7 @@ fn body(
                 Some(ArgVal::SetArg(set)) => {
                     let rows = eval.set(set)?;
                     if rows.len() != 1 {
-                        return Err(Stop::Clarify);
+                        return Err(Stop::Clarify(None));
                     }
                     rows[0].id.clone()
                 }
@@ -1825,7 +2300,7 @@ fn body(
                 .last_write
                 .as_ref()
                 .and_then(|write| write.revision_id.clone())
-                .ok_or(Stop::Clarify)?;
+                .ok_or(Stop::Clarify(None))?;
             json!({ "expense_id": id, "revision_id": revision })
         }
         "tally.settle_up" => {
@@ -1833,7 +2308,7 @@ fn body(
                 Some(ArgVal::SetArg(set)) => {
                     let rows = eval.set(set)?;
                     if rows.len() != 1 {
-                        return Err(Stop::Clarify);
+                        return Err(Stop::Clarify(None));
                     }
                     rows[0].id.clone()
                 }
@@ -1859,7 +2334,7 @@ fn body(
                         rows.retain(|row| members.contains(&row.id));
                     }
                     if rows.len() != 1 {
-                        return Err(Stop::Clarify);
+                        return Err(Stop::Clarify(None));
                     }
                     rows[0].id.clone()
                 }
@@ -1884,7 +2359,7 @@ fn body(
                 Some(ArgVal::SetArg(set)) => {
                     let rows = eval.set(set)?;
                     if rows.len() != 1 {
-                        return Err(Stop::Clarify);
+                        return Err(Stop::Clarify(None));
                     }
                     rows[0].id.clone()
                 }
@@ -1898,6 +2373,55 @@ fn body(
     Ok((verb, body))
 }
 
+/// **AN ENUM-VALUED WRITE ARGUMENT IS CHECKED BEFORE THE WRITE.** A value the
+/// vault would refuse (or, for an interaction kind, file under a concept no
+/// one logs) is a mistake the model can correct: the call comes back
+/// `error: kind must be one of call, message, visit, coffee` and the turn
+/// stays open, instead of a failed dispatch or a stray `messaged` kind.
+fn one_of(
+    name: &str,
+    given: Option<String>,
+    default: &str,
+    allowed: &[&str],
+) -> Result<String, Stop> {
+    let value = given.unwrap_or_else(|| default.to_owned());
+    if allowed.contains(&value.as_str()) {
+        Ok(value)
+    } else {
+        Err(unhandled(format!(
+            "{name} must be one of {}",
+            allowed.join(", ")
+        )))
+    }
+}
+
+/// The interaction kinds People logs. The vault's `urn:duaility:activity-kinds`
+/// scheme is open (a new kind mints a concept), so the closed set is the one
+/// the People worlds, the suite references and every logged activity use.
+const INTERACTION_KINDS: &[&str] = &["call", "message", "visit", "coffee"];
+
+/// `schedule.set_task_status`'s input schema enum.
+const TASK_STATUSES: &[&str] = &["needs-action", "in-process", "completed", "cancelled"];
+
+/// `locker.add_item`'s `type` enum (the vault's `type_enum!`).
+const LOCKER_TYPES: &[&str] = &[
+    "login",
+    "card",
+    "note",
+    "identity",
+    "wifi",
+    "password",
+    "ssh_key",
+    "api_credential",
+    "passport",
+    "bank_account",
+    "driving_licence",
+    "software_licence",
+    "crypto_wallet",
+    "membership",
+    "document",
+];
+
 /// A verb CLASS resolves once the anchor's Kind is known (§2.7).
 fn resolve_verb(verb: &str, anchor: Option<&VaultRow>) -> Result<String, Stop> {
     let classes = crate::canon::verb_classes();
@@ -1905,12 +2429,12 @@ fn resolve_verb(verb: &str, anchor: Option<&VaultRow>) -> Result<String, Stop> {
         return Ok(verb.to_owned());
     };
     let Some(anchor) = anchor else {
-        return Err(Stop::Clarify);
+        return Err(Stop::Clarify(None));
     };
     table
         .get(anchor.entity.as_str())
         .map(|found| (*found).to_owned())
-        .ok_or(Stop::Clarify)
+        .ok_or(Stop::Clarify(None))
 }
 
 /// A `Value` argument bound to THIS anchor row: `balance of (it) in (…)`.
@@ -1929,7 +2453,7 @@ fn bind_anchor(
         ) => {
             let group = eval.set(within)?;
             if group.len() != 1 {
-                return Err(Stop::Clarify);
+                return Err(Stop::Clarify(None));
             }
             let group = group[0].id.clone();
             eval.balance(&anchor.id, &group)
@@ -1992,18 +2516,111 @@ fn shift_by(stamp: &str, duration: &str) -> String {
     let unit = duration.chars().last().unwrap_or('h');
     match unit {
         'd' => shift_stamp(stamp, &(sign * amount)),
-        'm' => {
-            let minutes: i64 = stamp[14..16].parse().unwrap_or(0) + sign * amount;
-            format!(
-                "{}{:02}{}",
-                &stamp[..14],
-                minutes.rem_euclid(60),
-                &stamp[16..]
-            )
-        }
-        _ => {
-            let hours: i64 = stamp[11..13].parse().unwrap_or(0) + sign * amount;
-            format!("{}{:02}{}", &stamp[..11], hours, &stamp[13..])
+        'm' => add_minutes(stamp, sign * amount),
+        _ => add_minutes(stamp, sign * amount * 60),
+    }
+}
+
+/// `stamp` moved by `minutes`, carrying across midnight (and back).
+fn add_minutes(stamp: &str, minutes: i64) -> String {
+    if stamp.len() < 16 {
+        return stamp.to_owned();
+    }
+    let hours: i64 = stamp[11..13].parse().unwrap_or(0);
+    let mins: i64 = stamp[14..16].parse().unwrap_or(0);
+    let total = hours * 60 + mins + minutes;
+    let date = calendar::shift(&stamp[..10], total.div_euclid(1440));
+    let within = total.rem_euclid(1440);
+    format!(
+        "{date}T{:02}:{:02}{}",
+        within / 60,
+        within % 60,
+        &stamp[16..]
+    )
+}
+
+/// How many minutes `to` is after `from`, when both carry a clock time.
+fn minutes_between(from: &str, to: &str) -> Option<i64> {
+    if from.len() < 16 || to.len() < 16 {
+        return None;
+    }
+    let clock = |stamp: &str| -> Option<i64> {
+        Some(stamp[11..13].parse::<i64>().ok()? * 60 + stamp[14..16].parse::<i64>().ok()?)
+    };
+    Some(day_shift(from, to) * 1440 + clock(to)? - clock(from)?)
+}
+
+#[cfg(test)]
+mod labelled_tests {
+    use super::labelled;
+
+    #[test]
+    fn possessive_is_dropped() {
+        assert!(labelled("Ana Ferreira", "Ana Ferreira's"));
+        assert!(labelled("Ana Ferreira", "Ana Ferreira\u{2019}s"));
+    }
+
+    #[test]
+    fn function_words_are_dropped() {
+        assert!(labelled("Cabin wifi", "wifi at the cabin"));
+        assert!(labelled("Old clinic, Elm St", "the old clinic"));
+    }
+
+    #[test]
+    fn simple_inflection_matches_by_stem() {
+        assert!(labelled("Book the Tahoe cabin", "cabin booking"));
+    }
+
+    #[test]
+    fn stems_match_whole_words_not_prefixes() {
+        // The word rule compares whole stems: "cabin" is not "cabinet".
+        assert!(!labelled("Cabinet wifi", "cabin wifi"));
+        assert!(!labelled("Kitchen cabinet", "cabin booking"));
+        // The raw test respects word boundaries too.
+        assert!(!labelled("Cabinet", "cabin"));
+        assert!(labelled("Cabinet", "cabinet"));
+        assert!(labelled("Cabin check-in", "check-in"));
+        assert!(labelled("The cabin's gate", "cabin"));
+    }
+
+    #[test]
+    fn a_missing_content_word_does_not_match() {
+        assert!(!labelled("Cabin wifi", "wifi at the lake house"));
+    }
+
+    #[test]
+    fn an_all_stopword_literal_matches_nothing_new() {
+        assert!(!labelled("Cabin wifi", "the"));
+        assert!(!labelled("Cabin wifi", "at the"));
+        // The raw substring test still applies.
+        assert!(labelled("At the cabin", "at the"));
+    }
+}
+
+#[cfg(test)]
+mod enum_arg_tests {
+    use super::{INTERACTION_KINDS, Stop, one_of};
+
+    #[test]
+    fn an_unknown_interaction_kind_is_an_error_naming_the_kinds() {
+        assert_eq!(
+            one_of("kind", Some("coffee".to_owned()), "call", INTERACTION_KINDS).ok(),
+            Some("coffee".to_owned())
+        );
+        assert_eq!(
+            one_of("kind", None, "call", INTERACTION_KINDS).ok(),
+            Some("call".to_owned())
+        );
+        match one_of(
+            "kind",
+            Some("messaged".to_owned()),
+            "call",
+            INTERACTION_KINDS,
+        ) {
+            Err(Stop::Unhandled(why)) => {
+                assert_eq!(why, "kind must be one of call, message, visit, coffee");
+            }
+            _ => panic!("an unknown kind must be refused"),
         }
     }
 }

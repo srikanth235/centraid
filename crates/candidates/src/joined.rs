@@ -179,7 +179,7 @@ impl Candidate for JoinedSession {
             },
             // (3) THE JOIN. The rules lane renders; `canon` reads. A string one
             // can write and the other cannot read is a defect of the seam.
-            Some(text) => match crate::canon::parse(text) {
+            Some(text) => match crate::canon::parse_for_execution(text, ctx.today()) {
                 // (4) The executor, unchanged from the oracle's.
                 Ok(tree) => execute(&tree, &mut self.exec_state, ctx),
                 Err(complaint) => Plan::Declined {

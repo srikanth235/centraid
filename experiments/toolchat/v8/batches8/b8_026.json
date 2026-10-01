@@ -1,0 +1,250 @@
+[
+  {
+    "id": "w08-0038",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      {
+        "hint": "asks for their pictures about tambourine",
+        "say": ["tambourine", "pictures"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w08-0039",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      {
+        "hint": "asks to jot down a note that says things to pack for the Vipuhaven trip",
+        "say": ["things to pack for the Vipuhaven trip"]
+      },
+      {
+        "hint": "(new topic) asks what day the gamelan viewing is on",
+        "say": ["gamelan viewing"],
+        "shown": "done: knowledge.create_note{title: \"Things to pack for the Vipuhaven trip\"}"
+      },
+      {
+        "hint": "follow-up: asks what else they have that day",
+        "say": [],
+        "shown": "event \"Gamelan viewing\" Sat 2025-03-22 15:45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w08-0040",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      { "hint": "asks to star the gamelan document", "say": ["gamelan"] },
+      {
+        "hint": "(new topic) asks what the most recent picture they took is",
+        "say": [],
+        "shown": "done: core.star_document{} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w08-0041",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      {
+        "hint": "asks to settle up with Chidi in gamelan syndicate",
+        "say": ["Chidi", "gamelan syndicate"]
+      },
+      {
+        "hint": "(new topic) asks to book Cafe Alnmouth on their website for tonight",
+        "say": ["Cafe Alnmouth", "tonight"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#4) in (#1)} on (#4)"
+      },
+      {
+        "hint": "(new topic) asks which events are at Cafe Alnmouth (by the place itself)",
+        "say": ["Cafe Alnmouth"],
+        "shown": "refuse"
+      },
+      {
+        "hint": "(new topic) asks for Visten's birthday (two contacts are called Visten, the message doesn't say which)",
+        "say": ["Visten"],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w08-0042",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      {
+        "hint": "asks to put 'collect the dry cleaning' on the list for thursday",
+        "say": ["collect the dry cleaning", "thursday"]
+      },
+      {
+        "hint": "(new topic) asks to see the water password itself",
+        "say": ["water", "password"],
+        "shown": "done: schedule.add_task{title: \"Collect the dry cleaning\", due_at: 2025-03-20}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w08-0043",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      {
+        "hint": "asks who is in the vipuhaven brook photo",
+        "say": ["vipuhaven brook"]
+      },
+      {
+        "hint": "follow-up: about the Soledad one, asks for their contact details",
+        "say": ["Soledad"],
+        "shown": "party \"Kavitha Aguilar\" · role=Brother-in-law\nparty \"Soledad Mcallister\" · role=Dad"
+      },
+      {
+        "hint": "(new topic) asks to clear out the Hihaven to-dos",
+        "say": ["Hihaven", "to-do"],
+        "shown": "contact channel \"Soledad Mcallister — mobile\" · kind=phone value=+33 6 12 34 5362"
+      },
+      {
+        "hint": "follow-up: takes it back: scratch that, put it back",
+        "say": [],
+        "shown": "done: delete{} on (#7, #8, #9)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w08-0044",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      {
+        "hint": "asks to settle up with Omkar in number 37 house",
+        "say": ["Omkar", "number 37 house", "settle up"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w08-0045",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      {
+        "hint": "asks to add forty euros for Omkar's tickets to number 37 house, they paid",
+        "say": ["forty euros", "Omkar's tickets", "number 37 house"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w08-0046",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      {
+        "hint": "asks what the steps for the weigh flaisis's melon are",
+        "say": ["weigh flaisis's melon"]
+      },
+      {
+        "hint": "(new topic) asks to add a task to email Lucasta about the sheanock",
+        "say": ["email Lucasta about the sheanock"],
+        "shown": "task \"Quote for the apron\" Thu 2025-04-03 09:00 · status=needs-action\ntask \"Mend the hourglass\" · status=in-process effort_min=90"
+      },
+      {
+        "hint": "(new topic) asks what they have on while they're away in Keswick",
+        "say": ["Keswick"],
+        "shown": "done: schedule.add_task{title: \"Email Lucasta about the sheanock\"}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w08-0048",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      { "hint": "asks what Lucasta still owes them", "say": ["Lucasta"] },
+      {
+        "hint": "follow-up: asks the same about Struan Lambert ('and Struan Lambert?')",
+        "say": ["Struan Lambert"],
+        "shown": "= 1200"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w08-0049",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      {
+        "hint": "asks to see the diary entries they made recently",
+        "say": ["recently", "diary"]
+      },
+      {
+        "hint": "follow-up: asks how many there are in total",
+        "say": [],
+        "shown": "journal note \"People journal · content\" Mon 2025-03-17 12:00\njournal note \"People journal · low\" Thu 2025-03-13 12:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w08-0051",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      {
+        "hint": "says the boat shed PIN is 35361 — keep it in the locker",
+        "say": ["boat shed PIN", "35361"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w08-0052",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      {
+        "hint": "asks when their pagoda thing is (no kind given)",
+        "say": ["pagoda"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w08-0053",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      { "hint": "asks what pagoda things they have", "say": ["pagoda"] },
+      {
+        "hint": "follow-up: asks to put the second one in the Canyoning album",
+        "say": ["second", "Canyoning", "album"],
+        "shown": "event \"Collect the pagoda\" Sat 2025-03-22 07:00\nphoto \"Pagoda on the table\" Thu 2023-05-18 18:27 · favorite=false\ntask \"Renew the pagoda at Cafe Alnmouth\" · status=needs-action"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w08-0054",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      { "hint": "asks what they ticked off yesterday", "say": ["yesterday"] },
+      {
+        "hint": "(new topic) asks to clear what's owed between them and Lucasta",
+        "say": ["Lucasta"],
+        "shown": "task \"Quote for the tambourine\" · status=completed"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  }
+]

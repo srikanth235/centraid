@@ -1,0 +1,278 @@
+[
+  {
+    "id": "g0266",
+    "today": "Wednesday 2026-02-11",
+    "turns": [
+      {
+        "canonical": "show (documents that (folder = \"Warranty\"))",
+        "gloss": "List documents where the folder is \"Warranty\".",
+        "move": "first",
+        "hint": "what's in my Warranty folder/notebook"
+      },
+      {
+        "canonical": "core.star_document{} on (the 2nd one)",
+        "gloss": "Star [the 2nd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "star one by position"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Bastian\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Bastian\"], sorted by start time descending (highest/latest first)].",
+        "move": "switch",
+        "hint": "when did I last see/speak to Bastian"
+      },
+      {
+        "canonical": "show (documents that (folder = \"Warranty\"))",
+        "gloss": "List documents where the folder is \"Warranty\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0337",
+    "today": "Thursday 2027-06-03",
+    "turns": [
+      {
+        "canonical": "social.send_message{ body: \"Got the tickets\" } on (contact channels of (parties called \"Yolanda Abernathy\") that (kind = \"phone\"))",
+        "gloss": "",
+        "move": "first",
+        "hint": "text Yolanda Abernathy: Got the tickets"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0496",
+    "today": "Monday 2027-02-01",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\"))",
+        "gloss": "List tasks where the due date falls before now (already past \u2014 overdue) and the status is not \"completed\".",
+        "move": "first",
+        "hint": "overdue (past due, not done) tasks"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 2nd one)",
+        "gloss": "Set the status of [the 2nd one (by position in the previous answer)] to \"completed\".",
+        "move": "act",
+        "hint": "mark the 2nd one done"
+      },
+      {
+        "canonical": "reschedule{ to: monday } on (the 3rd one)",
+        "gloss": "Move [the 3rd one (by position in the previous answer)] to monday.",
+        "move": "act",
+        "hint": "move another one by position"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "h031",
+    "today": "Friday 2026-03-06",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Sprint planning\", dtstart: monday at 17:45, dtend: monday at 18:45 }",
+        "gloss": "Put an event titled \"Sprint planning\" in the calendar starting monday at 17:45 and ending monday at 18:45.",
+        "move": "first",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      },
+      {
+        "canonical": "balance of (members called \"Winifred\") in (groups called \"hen do\")",
+        "gloss": "What is the balance of [members named \"Winifred\"] within [groups named \"hen do\"]?",
+        "move": "new",
+        "hint": "what does Winifred owe me for hen do"
+      },
+      {
+        "canonical": "show (expenses of (groups called \"hen do\"))",
+        "gloss": "List the expenses linked to [groups named \"hen do\"].",
+        "move": "new",
+        "hint": "show me the hen do expenses"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0520",
+    "today": "Friday 2027-05-07",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Clementine\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Clementine\"], sorted by start time descending (highest/latest first)].",
+        "move": "first",
+        "hint": "when did I last see/speak to Clementine"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Benedikt\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Benedikt\"], sorted by start time descending (highest/latest first)].",
+        "move": "substitute",
+        "hint": "and Benedikt?"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "h070",
+    "today": "Thursday 2028-02-10",
+    "turns": [
+      {
+        "canonical": "schedule.delete_event{} on (events called \"housewarming\")",
+        "gloss": "Delete (move to trash) [events named \"housewarming\"].",
+        "move": "first",
+        "hint": "delete/trash the housewarming events"
+      },
+      {
+        "canonical": "people.log_interaction{ kind: \"message\", since: today } on (parties called \"Nadia\")",
+        "gloss": "Log that I had a message with [parties named \"Nadia\"].",
+        "move": "new",
+        "hint": "log a message with Nadia (today)"
+      },
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\"))",
+        "gloss": "List tasks where the due date falls before now (already past \u2014 overdue) and the status is not \"completed\".",
+        "move": "new",
+        "hint": "overdue (past due, not done) tasks"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0071",
+    "today": "Tuesday 2027-07-06",
+    "turns": [
+      {
+        "canonical": "dtstart of (events called \"mortgage\")",
+        "gloss": "What is the start time of [events named \"mortgage\"]?",
+        "move": "first",
+        "hint": "when is my mortgage"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0285",
+    "today": "Tuesday 2028-05-16",
+    "turns": [
+      {
+        "canonical": "show (notes that (notebooks contains \"Travel\"))",
+        "gloss": "List notes where the notebooks it is in contains \"Travel\".",
+        "move": "first",
+        "hint": "what's in my Travel folder/notebook"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      },
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during tuesday) ordered by due_at asc)",
+        "gloss": "",
+        "move": "new",
+        "hint": "what's due tuesday (open tasks)"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many is that"
+      },
+      {
+        "canonical": "show (things during the 26th)",
+        "gloss": "",
+        "move": "switch",
+        "hint": "what's on the 26th"
+      },
+      {
+        "canonical": "show (notes that (notebooks contains \"Travel\"))",
+        "gloss": "List notes where the notebooks it is in contains \"Travel\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0548",
+    "today": "Tuesday 2026-06-16",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Clean the gutters\" }",
+        "gloss": "Add a task titled \"Clean the gutters\".",
+        "move": "first",
+        "hint": "add a task"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0222",
+    "today": "Wednesday 2025-07-16",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Niamh\") that (settled_at is null))",
+        "gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Niamh\"] where there is no date settled]?",
+        "move": "first",
+        "hint": "how much do I owe Niamh"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0257",
+    "today": "Saturday 2027-12-18",
+    "turns": [
+      {
+        "canonical": "show (expenses that (spent_on during last month))",
+        "gloss": "List expenses where the date spent falls last month.",
+        "move": "first",
+        "hint": "what did I spend last month"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "gloss": "What is the total amount (in pence) of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "total of those"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0178",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_me is not null))",
+        "gloss": "List parties where the amount they owe me is set.",
+        "move": "first",
+        "hint": "who owes me money"
+      },
+      {
+        "canonical": "sum owed_to_me of (them)",
+        "gloss": "What is the total amount they owe me of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how much in total"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Folasade\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Folasade\"], sorted by start time descending (highest/latest first)].",
+        "move": "switch",
+        "hint": "when did I last see/speak to Folasade"
+      },
+      {
+        "canonical": "show (parties that (owed_to_me is not null))",
+        "gloss": "List parties where the amount they owe me is set.",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      },
+      {
+        "canonical": "show (contact channels of (the 2nd one) that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [the 2nd one (by position in the previous answer)] where the kind is \"phone\".",
+        "move": "act",
+        "hint": "the Nth one's number"
+      }
+    ],
+    "registers": ["question", "terse"]
+  }
+]

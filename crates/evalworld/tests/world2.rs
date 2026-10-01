@@ -244,7 +244,10 @@ fn the_second_world_s_ambiguities_are_planted() {
         .iter()
         .filter(|row| row.entity == "core.place" && row.label == "Pygmy forest ridge")
         .count();
-    assert_eq!(ridge, 1, "the two coast frames did not collapse into one place");
+    assert_eq!(
+        ridge, 1,
+        "the two coast frames did not collapse into one place"
+    );
 
     // FIVE OBLIGATIONS ACROSS AT LEAST THREE PEOPLE, AND BOTH DIRECTIONS.
     let obligations: Vec<_> = inventory

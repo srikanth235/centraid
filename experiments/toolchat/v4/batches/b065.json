@@ -1,0 +1,296 @@
+[
+  {
+    "id": "g0589",
+    "today": "Saturday 2028-01-29",
+    "turns": [
+      {
+        "canonical": "people.log_interaction{ kind: \"message\", since: today } on (parties called \"Imogen\")",
+        "gloss": "Log that I had a message with [parties named \"Imogen\"].",
+        "move": "first",
+        "hint": "log a message with Imogen (today)"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0484",
+    "today": "Monday 2026-03-02",
+    "turns": [
+      {
+        "canonical": "show (expenses of (groups called \"book swap\"))",
+        "gloss": "List the expenses linked to [groups named \"book swap\"].",
+        "move": "first",
+        "hint": "what did we spend on the book swap"
+      },
+      {
+        "canonical": "show (them that (amount_minor > 10000))",
+        "gloss": "List them (the rows the previous turn answered) where the amount (in pence) is more than / after 10000.",
+        "move": "refine",
+        "hint": "just the ones over some amount"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0268",
+    "today": "Wednesday 2025-06-25",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Bastian Achebe\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Bastian Achebe\"], sorted by start time descending (highest/latest first)].",
+        "move": "first",
+        "hint": "when did I last see/speak to Bastian Achebe"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Tove\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Tove\"], sorted by start time descending (highest/latest first)].",
+        "move": "substitute",
+        "hint": "and Tove?"
+      },
+      {
+        "canonical": "people.log_interaction{ kind: \"visit\", since: yesterday } on (parties called \"Tove\")",
+        "gloss": "Log that I had a visit with [parties named \"Tove\"].",
+        "move": "act",
+        "hint": "log a visit with him/her (yesterday) - pronoun resolved to the name (C14)"
+      },
+      {
+        "canonical": "show (contact channels of (parties called \"Esme Jablonski\") that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [parties named \"Esme Jablonski\"] where the kind is \"phone\".",
+        "move": "switch",
+        "hint": "what's Esme Jablonski's number"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Bastian Achebe\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Bastian Achebe\"], sorted by start time descending (highest/latest first)].",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      },
+      {
+        "canonical": "show (documents that (folder = \"Kids\"))",
+        "gloss": "List documents where the folder is \"Kids\".",
+        "move": "new",
+        "hint": "what's in my Kids folder/notebook"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0475",
+    "today": "Saturday 2027-01-23",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during this week))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls this week.",
+        "move": "first",
+        "hint": "tasks ticked off / done this week"
+      },
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during last month))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls last month.",
+        "move": "substitute",
+        "hint": "and last month?"
+      },
+      {
+        "canonical": "nothing",
+        "gloss": "Do nothing: the member withdraws the request.",
+        "move": "undo",
+        "hint": "actually never mind, forget it"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0314",
+    "today": "Monday 2027-01-25",
+    "turns": [
+      {
+        "canonical": "show (things that (folder = \"Taxes\" or notebooks contains \"Taxes\"))",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) where (the folder is \"Taxes\" or the notebooks it is in contains \"Taxes\").",
+        "move": "first",
+        "hint": "what's in my Taxes folder/notebook"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      },
+      {
+        "canonical": "schedule.propose_event{ summary: \"Team offsite\", dtstart: sunday at 12:00, dtend: sunday at 13:00 }",
+        "gloss": "Put an event titled \"Team offsite\" in the calendar starting sunday at 12:00 and ending sunday at 13:00.",
+        "move": "new",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      },
+      {
+        "canonical": "reschedule{ by: +1h } on (it)",
+        "gloss": "Shift [it (the one row the previous turn is about)] 1 hour later.",
+        "move": "act",
+        "hint": "make it an hour later"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0470",
+    "today": "Saturday 2026-01-03",
+    "turns": [
+      {
+        "canonical": "reschedule{ to: saturday at 17:00 } on (tasks called \"landlord\")",
+        "gloss": "Move [tasks named \"landlord\"] to saturday at 17:00.",
+        "move": "first",
+        "hint": "push/move the named task"
+      },
+      {
+        "canonical": "nothing",
+        "gloss": "Do nothing: the member withdraws the request.",
+        "move": "undo",
+        "hint": "actually never mind / leave it"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0601",
+    "today": "Saturday 2026-03-14",
+    "turns": [
+      {
+        "canonical": "show (photos that (album_titles contains \"best\"))",
+        "gloss": "List photos where the albums it is in contains \"best\".",
+        "move": "first",
+        "hint": "photos in the best album"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0422",
+    "today": "Monday 2026-01-26",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "first",
+        "hint": "open tasks with no due date"
+      },
+      {
+        "canonical": "show (things during next week)",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) dated next week.",
+        "move": "switch",
+        "hint": "what's on next week"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic: act on those rows (C10 ref)"
+      },
+      {
+        "canonical": "sum amount_minor of (expenses of (groups called \"lunch\"))",
+        "gloss": "What is the total amount (in pence) of [the expenses linked to [groups named \"lunch\"]]?",
+        "move": "new",
+        "hint": "how much did we spend on the lunch"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0446",
+    "today": "Thursday 2025-09-04",
+    "turns": [
+      {
+        "canonical": "show (places of (photos called \"hut\"))",
+        "gloss": "List the places linked to [photos named \"hut\"].",
+        "move": "first",
+        "hint": "where was the hut photo taken"
+      },
+      {
+        "canonical": "show ((photos of (it)) except (photos called \"hut\"))",
+        "gloss": "List [the photos linked to [it (the one row the previous turn is about)]] leaving out [photos named \"hut\"].",
+        "move": "act",
+        "hint": "what else did I take there (the excluded photo is the one the SENTENCE named: C13 names it)"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      },
+      {
+        "canonical": "show (locker items called \"bank\")",
+        "gloss": "List locker items named \"bank\".",
+        "move": "new",
+        "hint": "what's the login for bank"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "h057",
+    "today": "Sunday 2025-03-02",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (journal notes ordered by created_at desc))",
+        "gloss": "List the first 1 of [journal notes, sorted by date created descending (highest/latest first)].",
+        "move": "first",
+        "hint": "my last journal entry"
+      },
+      {
+        "canonical": "knowledge.delete_note{} on (it)",
+        "gloss": "Delete (move to trash) [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "delete it"
+      },
+      {
+        "canonical": "sum amount_minor of (expenses of (groups called \"uni\"))",
+        "gloss": "What is the total amount (in pence) of [the expenses linked to [groups named \"uni\"]]?",
+        "move": "new",
+        "hint": "how much did we spend on the uni"
+      },
+      {
+        "canonical": "show (them)",
+        "gloss": "List them (the rows the previous turn answered).",
+        "move": "act",
+        "hint": "show me them / list those"
+      },
+      {
+        "canonical": "show (them that (amount_minor > 3000))",
+        "gloss": "List them (the rows the previous turn answered) where the amount (in pence) is more than / after 3000.",
+        "move": "refine",
+        "hint": "only the ones over thirty"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "gloss": "What is the total amount (in pence) of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "total of those"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0343",
+    "today": "Friday 2026-02-27",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"books\" that (deleted_at is not null))",
+        "gloss": "List tasks named \"books\" where the date deleted (trash) is set.",
+        "move": "first",
+        "hint": "did I delete / bin the books task"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0593",
+    "today": "Monday 2028-03-20",
+    "turns": [
+      {
+        "canonical": "show (things during in 6 days)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's on in 6 days"
+      }
+    ],
+    "registers": ["terse", "question"]
+  }
+]

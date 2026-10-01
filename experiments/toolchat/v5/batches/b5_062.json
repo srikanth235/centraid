@@ -1,0 +1,246 @@
+[
+  {
+    "id": "a0164",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Best of the dog\") } on (photos called \"Picnic by the lake\")",
+        "move": "first",
+        "hint": "add the lake photo to the album"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"Best of the dog\"", "turn": 1, "say": "exact: best" },
+      {
+        "row": "photos \"Picnic by the lake\"",
+        "turn": 1,
+        "say": "exact: lake"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0813",
+    "today": "Friday 2025-06-06",
+    "turns": [
+      {
+        "canonical": "max dtstart of (events called \"Opticians check-up\")",
+        "move": "first",
+        "hint": "when is the last opticians (latest date)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Opticians check-up\"",
+        "turn": 1,
+        "say": "exact: opticians"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1059",
+    "today": "Saturday 2027-11-13",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (settlements of (groups called \"Festival tickets\"))",
+        "move": "first",
+        "hint": "how much has been settled up in the festival group in total"
+      }
+    ],
+    "refer": [
+      {
+        "row": "groups \"Festival tickets\"",
+        "turn": 1,
+        "say": "exact: festival"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0130",
+    "today": "Sunday 2027-12-26",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"note\", title: \"Alarm code\", content: \"4417\" }",
+        "move": "first",
+        "hint": "save the alarm code 4417 in my locker (title = the words the person uses for it, content = the code)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0842",
+    "today": "Tuesday 2027-09-07",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"Climbing gang\") that (party_id is not me))",
+        "move": "first",
+        "hint": "who else is in the gang group apart from me"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Climbing gang\"", "turn": 1, "say": "exact: gang" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0708",
+    "today": "Sunday 2026-10-25",
+    "turns": [
+      {
+        "canonical": "show (parties that (kind = \"person\"))",
+        "move": "first",
+        "hint": "contacts that are organisations/companies (org), pets (animal) or people"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0654",
+    "today": "Wednesday 2027-01-20",
+    "turns": [
+      {
+        "canonical": "show (notes that (updated_at during this month))",
+        "move": "first",
+        "hint": "notes I edited in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0122",
+    "today": "Monday 2025-04-14",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"login\", title: \"Broadband\", content: \"0613\" }",
+        "move": "first",
+        "hint": "save a login for Broadband with password 0613"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0600",
+    "today": "Monday 2025-04-07",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses that (category = \"transport\" and spent_on during last weekend))",
+        "move": "first",
+        "hint": "how much did I spend on that category in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0737",
+    "today": "Tuesday 2028-09-05",
+    "turns": [
+      {
+        "canonical": "show (photos that (favorite = true) during this week)",
+        "move": "first",
+        "hint": "favourite photos from that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0876",
+    "today": "Wednesday 2026-06-10",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (events of (parties called \"Ignatius Fernihough\") ordered by dtstart desc))",
+        "move": "first",
+        "hint": "the latest event with Ignatius"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Ignatius Fernihough\"",
+        "turn": 1,
+        "say": "exact: Ignatius"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0022",
+    "today": "Sunday 2027-05-23",
+    "turns": [
+      {
+        "canonical": "show (important dates)",
+        "move": "first",
+        "hint": "list all the important dates (birthdays, anniversaries) I've saved"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0540",
+    "today": "Tuesday 2026-08-25",
+    "turns": [
+      {
+        "canonical": "show (events called \"Pension review call\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the pension event"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Pension review call\"",
+        "turn": 1,
+        "say": "loose: pension"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1140",
+    "today": "Saturday 2027-07-24",
+    "turns": [
+      {
+        "canonical": "show (things during next week)",
+        "move": "first",
+        "hint": "what's on in that window"
+      },
+      {
+        "canonical": "delete{} on (the 2nd one)",
+        "move": "act",
+        "hint": "get rid of one of them by position"
+      },
+      {
+        "canonical": "restore{} on (it)",
+        "move": "undo",
+        "hint": "oops, bring it back"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0593",
+    "today": "Thursday 2028-06-08",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses that (category = \"transport\" and spent_on during today))",
+        "move": "first",
+        "hint": "how much did I spend on that category in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

@@ -1,0 +1,286 @@
+[
+  {
+    "id": "w25-0005",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in Jimhaven (the expenses)",
+        "say": ["Jimhaven"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w25-0006",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to tick off the gondola task",
+        "say": ["gondola", "task"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w25-0008",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to move the falcon fitting appointment to tuesday at 10am",
+        "say": ["falcon fitting", "tuesday", "at 10am"]
+      },
+      {
+        "hint": "(new topic) asks to delete all their gift notes",
+        "say": ["gift", "note"],
+        "shown": "done: reschedule{to: 2026-06-16T10:00} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w25-0009",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks to see their favourited pics", "say": [] },
+      {
+        "hint": "(detour) hang on — asks how much they spent on Cosmere in total",
+        "say": ["Cosmere"],
+        "shown": "photo \"Nuwan with the osprey (04)\" Thu 2026-06-04 16:10 · album_titles=Best of 2026 favorite=true people=Silvio Salridge, Nuwan Holloway, Dagny Holloway\nphoto \"IMG_9575\" Tue 2026-05-12 08:12 · album_titles=Kelloe Deli favorite=true\nphoto \"Dythine with the sugarloaf\" Tue 2026-05-05 20:27 · album_titles=Jimhaven 2026 favorite=true\nphoto \"Nuwan with the osprey\" Wed 2026-04-29 20:52 · album_titles=Barometer 2026 favorite=true\n(+2 more)"
+      },
+      {
+        "hint": "back to the favourite photos — asks to put the sixth one in the Sugarloaf progress album",
+        "say": ["sixth", "Sugarloaf progress", "album"],
+        "shown": "= 14748"
+      },
+      {
+        "hint": "follow-up: corrects: wrong photo, they meant the low tide one",
+        "say": ["low tide"],
+        "shown": "done: media.add_to_album{album_id: (#7)} on (#6)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w25-0011",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks when the bridge is", "say": ["bridge"] },
+      {
+        "hint": "follow-up: asks what else they have that day",
+        "say": [],
+        "shown": "event \"Bridge workshop with Varir\" Tue 2026-06-02 12:00"
+      },
+      {
+        "hint": "follow-up: asks the same about the dormouse delivery ('and the dormouse delivery?')",
+        "say": ["dormouse delivery"],
+        "shown": "event \"Bridge workshop with Varir\" Tue 2026-06-02 12:00\nevent \"Cellar viewing\" Tue 2026-06-02 16:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w25-0012",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to send Rania a message saying happy birthday",
+        "say": ["Rania"]
+      },
+      {
+        "hint": "(new topic) asks what pictures they have from last week",
+        "say": ["last week"],
+        "shown": "refuse"
+      },
+      {
+        "hint": "(new topic) asks for their most recent journal entry",
+        "say": [],
+        "shown": "photo \"Nuwan with the osprey (04)\" Thu 2026-06-04 16:10 · album_titles=Best of 2026 favorite=true people=Silvio Salridge, Nuwan Holloway, Dagny Holloway\nphoto \"Nuwan with the osprey (03)\" Thu 2026-06-04 16:09 · album_titles=Barometer 2026 favorite=false\nphoto \"Nuwan with the osprey (02)\" Thu 2026-06-04 16:08 · album_titles=Jimhaven 2026, Best of 2026, Barometer 2… favorite=false\nphoto \"Nuwan with the osprey (01)\" Thu 2026-06-04 16:07 · album_titles=Best of 2026 favorite=false"
+      },
+      {
+        "hint": "(new topic) asks what paperwork is kept in House",
+        "say": ["House"],
+        "shown": "journal note \"People journal · anxious\" Wed 2026-06-10 12:00"
+      },
+      {
+        "hint": "(new topic) asks what they haven't done yet",
+        "say": [],
+        "shown": "document \"Squirrel form\" Sat 2026-05-30 12:03 · folder=House\ndocument \"Council tax bill (01)\" Tue 2026-05-26 13:37 · folder=House\ndocument \"Cobweb letter\" Tue 2026-03-24 21:19 · folder=House\ndocument \"Ronock report\" Sun 2025-11-02 08:04 · folder=House"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w25-0013",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks for their starred files", "say": [] },
+      {
+        "hint": "follow-up: asks to star all of them",
+        "say": [],
+        "shown": "document \"Sugarloaf report\" Fri 2026-02-13 23:32 · folder=Receipts\ndocument \"Mevup airline report\" Fri 2025-10-31 22:02 · folder=Arisaig flat\ndocument \"Ronock report\" Sun 2025-11-02 08:04 · folder=House\ndocument \"Council tax bill (03)\" Thu 2025-07-10 07:51 · folder=Receipts"
+      },
+      {
+        "hint": "(new topic) asks for their journal entries from recently",
+        "say": ["recently", "diary"],
+        "shown": "done: core.star_document{} on (#1, #2, #3, #4)"
+      },
+      {
+        "hint": "follow-up: asks for just the ones from last weekend",
+        "say": ["last weekend"],
+        "shown": "journal note \"People journal · anxious\" Wed 2026-06-10 12:00\njournal note \"People journal · good\" Tue 2026-06-09 12:00\njournal note \"People journal · anxious\" Mon 2026-06-08 12:00\njournal note \"People journal · busy\" Sun 2026-06-07 12:00\n(+1 more)"
+      },
+      {
+        "hint": "(new topic) asks how next monday looks",
+        "say": ["next monday"],
+        "shown": "journal note \"People journal · busy\" Sun 2026-06-07 12:00\njournal note \"People journal · flat\" Sat 2026-06-06 12:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w25-0014",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to email Anneliese the router password",
+        "say": ["Anneliese", "router password"]
+      },
+      {
+        "hint": "(new topic) asks what they wrote in their journal last weekend",
+        "say": ["last weekend", "journal"],
+        "shown": "refuse"
+      },
+      {
+        "hint": "(new topic) asks to clear what's owed between them and Varir",
+        "say": ["Varir"],
+        "shown": "journal note \"People journal · busy\" Sun 2026-06-07 12:00\njournal note \"People journal · flat\" Sat 2026-06-06 12:00"
+      },
+      {
+        "hint": "(new topic) asks what pictures they have from recently",
+        "say": ["recently"],
+        "shown": "done: people.settle_debt{} on (#4)"
+      },
+      {
+        "hint": "(new topic) says the studio door code is 74793 — keep it in the locker",
+        "say": ["studio door code", "74793"],
+        "shown": "photo \"Dragonfly in the snow\" Mon 2026-06-08 07:30 · album_titles=Best of 2026, Kelloe Deli favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w25-0015",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks to see the shots from May", "say": ["May"] },
+      {
+        "hint": "follow-up: asks to delete the fifth one",
+        "say": ["fifth"],
+        "shown": "photo \"New ronock\" Sun 2026-05-31 17:34 · album_titles=Kelloe Deli favorite=false people=Chiara Crairino\nphoto \"IMG_8899\" Sun 2026-05-31 12:19 · album_titles=Khalil's larch, Kelloe Deli favorite=false\nphoto \"Quilt by the window\" Sun 2026-05-31 09:31 · favorite=false people=Desmond Nyberg\nphoto \"Kaleidoscope at night\" Fri 2026-05-29 20:36 · favorite=false\n(+5 more)"
+      },
+      {
+        "hint": "follow-up: says oops, undo that",
+        "say": [],
+        "shown": "done: media.delete_asset{} on (#5)"
+      },
+      {
+        "hint": "(new topic) asks how many notes they have in Stargazing",
+        "say": ["Stargazing", "notebook"],
+        "shown": "done: media.restore_asset{} on (#5)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w25-0016",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in number 48 flat",
+        "say": ["number 48 flat", "how much"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w25-0017",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in number 48 flat (the expenses)",
+        "say": ["number 48 flat"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w25-0019",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks what they have about ronock", "say": ["ronock"] },
+      {
+        "hint": "(new topic) asks to pull up Varir",
+        "say": ["Varir"],
+        "shown": "event \"Pick up the ronock\" Mon 2026-06-15 07:30\ndocument \"Ronock report\" Sun 2025-11-02 08:04 · folder=House\nnotebook \"Ronock\"\nnote \"Ronock ideas\" Wed 2026-06-10 08:17 · notebooks=Ronock\n(+3 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w25-0020",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks to find the tasks on Eero", "say": ["Eero", "tasks"] }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w25-0021",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks if they have photos of Wathie Thevsen",
+        "say": ["Wathie Thevsen"]
+      },
+      {
+        "hint": "(new topic) asks for the photos they took last month",
+        "say": ["last month"],
+        "shown": "photo \"Wathie's bungalow\" Fri 2024-02-23 13:05 · album_titles=Barometer 2026 favorite=true people=Wathie Thevsen, Anneliese Holloway"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w25-0023",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks for the subtasks of the cancel task", "say": ["cancel"] },
+      {
+        "hint": "(new topic) asks to see the shots from May",
+        "say": ["May"],
+        "shown": "task \"Print the quilt\" Wed 2026-05-13 17:00 · status=completed effort_min=10\ntask \"Unpack the dragonfly\" · status=needs-action\ntask \"Replace the oven\" · status=in-process"
+      },
+      {
+        "hint": "follow-up: asks to put the third one in the Khalil's larch album",
+        "say": ["third", "Khalil's larch", "album"],
+        "shown": "photo \"New ronock\" Sun 2026-05-31 17:34 · album_titles=Kelloe Deli favorite=false people=Chiara Crairino\nphoto \"IMG_8899\" Sun 2026-05-31 12:19 · album_titles=Khalil's larch, Kelloe Deli favorite=false\nphoto \"Quilt by the window\" Sun 2026-05-31 09:31 · favorite=false people=Desmond Nyberg\nphoto \"Kaleidoscope at night\" Fri 2026-05-29 20:36 · favorite=false\n(+5 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  }
+]

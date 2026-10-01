@@ -139,19 +139,23 @@ fn normalised(request: &str) -> Vec<String> {
 
 fn three_grams(request: &str) -> BTreeSet<String> {
     let tokens = normalised(request);
-    tokens
-        .windows(3)
-        .map(|window| window.join(" "))
-        .collect()
+    tokens.windows(3).map(|window| window.join(" ")).collect()
 }
 
 /// What share of `rows` share a three-gram with anything in `reference`.
 fn overlap(rows: &[String], reference: &BTreeSet<String>) -> (usize, usize, f64) {
     let hit = rows
         .iter()
-        .filter(|request| three_grams(request).iter().any(|gram| reference.contains(gram)))
+        .filter(|request| {
+            three_grams(request)
+                .iter()
+                .any(|gram| reference.contains(gram))
+        })
         .count();
-    #[expect(clippy::cast_precision_loss, reason = "a share of a hundred-odd requests")]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "a share of a hundred-odd requests"
+    )]
     let rate = if rows.is_empty() {
         0.0
     } else {
@@ -161,7 +165,9 @@ fn overlap(rows: &[String], reference: &BTreeSet<String>) -> (usize, usize, f64)
 }
 
 fn grams_of(rows: &[String]) -> BTreeSet<String> {
-    rows.iter().flat_map(|request| three_grams(request)).collect()
+    rows.iter()
+        .flat_map(|request| three_grams(request))
+        .collect()
 }
 
 #[test]

@@ -1,0 +1,237 @@
+[
+  {
+    "id": "a0874",
+    "today": "Saturday 2026-12-26",
+    "turns": [
+      {
+        "canonical": "show (first 5 of (documents ordered by created_at desc))",
+        "move": "first",
+        "hint": "the newest N documents"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0641",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "canonical": "show (notes called \"openings\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the openings note"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1097",
+    "today": "Sunday 2027-04-11",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Sebastiano Winslow\")",
+        "move": "first",
+        "hint": "delete Sebastiano from my contacts"
+      },
+      {
+        "canonical": "people.undo_person{} on (it)",
+        "move": "undo",
+        "hint": "wait, put them back / undo that"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Sebastiano Winslow\"",
+        "turn": 1,
+        "say": "exact: Sebastiano"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0163",
+    "today": "Monday 2027-08-09",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"lakeside cabin\") } on (photos during yesterday)",
+        "move": "first",
+        "hint": "put the photos from that window into the lakeside cabin album"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0013",
+    "today": "Friday 2026-07-24",
+    "turns": [
+      {
+        "canonical": "show (expenses)",
+        "move": "first",
+        "hint": "list all my expenses"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0003",
+    "today": "Sunday 2027-03-07",
+    "turns": [
+      {
+        "canonical": "show (albums)",
+        "move": "first",
+        "hint": "what photo albums do I have"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1068",
+    "today": "Thursday 2026-02-19",
+    "turns": [
+      {
+        "canonical": "show (tasks of (tasks called \"Return library books\"))",
+        "move": "first",
+        "hint": "the subtasks of the books task"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Return library books\"",
+        "turn": 1,
+        "say": "exact: books"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0153",
+    "today": "Wednesday 2026-03-11",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Gideon\") } on (photos of (places called \"Northgate Pool\"))",
+        "move": "first",
+        "hint": "add the photos from northgate to the album"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"Gideon\"", "turn": 1, "say": "full" },
+      {
+        "row": "places \"Northgate Pool\"",
+        "turn": 1,
+        "say": "loose: northgate"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0714",
+    "today": "Saturday 2026-01-03",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "move": "first",
+        "hint": "who do I owe money to"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0513",
+    "today": "Thursday 2025-10-30",
+    "turns": [
+      {
+        "canonical": "show (documents that (deleted_at is not null))",
+        "move": "first",
+        "hint": "documents I binned"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0831",
+    "today": "Tuesday 2025-11-04",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"weekend\") that (party_id is not me))",
+        "move": "first",
+        "hint": "who else is in the weekend group apart from me"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0469",
+    "today": "Wednesday 2027-06-09",
+    "turns": [
+      {
+        "canonical": "spent_on of (expenses called \"Train tickets\")",
+        "move": "first",
+        "hint": "when did I pay for the tickets"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Train tickets\"",
+        "turn": 1,
+        "say": "loose: tickets"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1046",
+    "today": "Saturday 2028-07-22",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"Wickham Arcade\"))",
+        "move": "first",
+        "hint": "photos from / taken at Arcade"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Wickham Arcade\"", "turn": 1, "say": "loose: Arcade" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1012",
+    "today": "Monday 2027-01-11",
+    "turns": [
+      {
+        "canonical": "show (parties of (obligations that (amount_minor > 2000)))",
+        "move": "first",
+        "hint": "who are the debts over that amount with"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0482",
+    "today": "Tuesday 2027-08-10",
+    "turns": [
+      {
+        "canonical": "value of (contact channels of (parties called \"Uriel Ormsby\") that (kind = \"phone\"))",
+        "move": "first",
+        "hint": "what's Uriel's number/email (the value)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Uriel Ormsby\"", "turn": 1, "say": "exact: Uriel" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

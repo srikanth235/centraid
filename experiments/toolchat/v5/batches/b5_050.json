@@ -1,0 +1,218 @@
+[
+  {
+    "id": "a0820",
+    "today": "Thursday 2028-11-16",
+    "turns": [
+      {
+        "canonical": "max dtstart of (events called \"class\")",
+        "move": "first",
+        "hint": "when is the last class (latest date)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0783",
+    "today": "Wednesday 2025-10-01",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"Collect dry cleaning\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the cleaning task"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Collect dry cleaning\"",
+        "turn": 1,
+        "say": "exact: cleaning"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0358",
+    "today": "Sunday 2026-10-11",
+    "turns": [
+      {
+        "canonical": "count of (members of (groups called \"Birthday present fund\"))",
+        "move": "first",
+        "hint": "how many people are in the present group"
+      }
+    ],
+    "refer": [
+      {
+        "row": "groups \"Birthday present fund\"",
+        "turn": 1,
+        "say": "loose: present"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0894",
+    "today": "Sunday 2027-07-25",
+    "turns": [
+      {
+        "canonical": "show (expenses that (spent_on during today) ordered by amount_minor desc)",
+        "move": "first",
+        "hint": "expenses in that window, biggest first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0612",
+    "today": "Saturday 2028-10-07",
+    "turns": [
+      {
+        "canonical": "show (important dates that (next_occurrence during next month))",
+        "move": "first",
+        "hint": "which birthdays/anniversaries are coming up in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0272",
+    "today": "Saturday 2028-07-22",
+    "turns": [
+      {
+        "canonical": "count of (documents that (folder = \"Insurance\"))",
+        "move": "first",
+        "hint": "how many docs in the Insurance folder"
+      }
+    ],
+    "refer": [{ "row": "folder \"Insurance\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0672",
+    "today": "Friday 2027-08-20",
+    "turns": [
+      {
+        "canonical": "show (obligations that (from_party = me and settled_at is null))",
+        "move": "first",
+        "hint": "the debts I still owe"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0382",
+    "today": "Tuesday 2025-05-20",
+    "turns": [
+      {
+        "canonical": "count of (parties)",
+        "move": "first",
+        "hint": "how many contacts do I have"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0833",
+    "today": "Tuesday 2025-11-04",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"Wine club\") that (party_id is not me))",
+        "move": "first",
+        "hint": "who else is in the club group apart from me"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Wine club\"", "turn": 1, "say": "exact: club" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0777",
+    "today": "Saturday 2025-07-05",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"insurance\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the insurance task"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0897",
+    "today": "Wednesday 2025-08-13",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (expenses ordered by amount_minor desc))",
+        "move": "first",
+        "hint": "my biggest expense ever"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0590",
+    "today": "Friday 2027-10-08",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses that (category = \"food\" and spent_on during this month))",
+        "move": "first",
+        "hint": "how much did I spend on that category in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0020",
+    "today": "Saturday 2025-11-29",
+    "turns": [
+      {
+        "canonical": "show (important dates)",
+        "move": "first",
+        "hint": "list all the important dates (birthdays, anniversaries) I've saved"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0862",
+    "today": "Friday 2025-10-03",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (documents ordered by created_at desc))",
+        "move": "first",
+        "hint": "the newest N documents"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0696",
+    "today": "Monday 2028-08-07",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Nadia Radley\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete Nadia from my contacts"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Nadia Radley\"", "turn": 1, "say": "exact: Nadia" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

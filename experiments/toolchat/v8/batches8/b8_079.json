@@ -1,0 +1,279 @@
+[
+  {
+    "id": "w23-0025",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks to see photos of Thavmoara Hayashi",
+        "say": ["Thavmoara Hayashi"]
+      },
+      {
+        "hint": "follow-up: asks for a task to call the sunrise photo friday",
+        "say": ["call the sunrise photo", "friday"],
+        "shown": "photo \"Bunting at sunrise\" Sun 2026-05-17 13:10 · favorite=false people=Samir Navbusen, Thavmoara Hayashi"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w23-0026",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks who is coming to the toadstool fitting",
+        "say": ["toadstool fitting"]
+      },
+      {
+        "hint": "follow-up: about the Bolaji one, asks when their birthday is",
+        "say": ["Bolaji"],
+        "shown": "party \"Przemek Halow\" · owed_to_me_minor=1200 role=Dad\nparty \"Bolaji Halow\" · role=Nephew\nparty \"Nerys Fourow\" · role=Best friend\nparty \"Drondel Nair\" · role=Old school friend"
+      },
+      {
+        "hint": "(new topic) asks to reveal the password for the password",
+        "say": ["password", "password"],
+        "shown": "important date \"Birthday — Bolaji Halow\" Fri 2027-05-28"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w23-0027",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks to make a note: books to read this summer",
+        "say": ["books to read this summer"]
+      },
+      {
+        "hint": "(new topic) asks to delete the mobile document",
+        "say": ["mobile"],
+        "shown": "done: knowledge.create_note{title: \"Books to read this summer\"}"
+      },
+      {
+        "hint": "follow-up: says no wait, undo that",
+        "say": [],
+        "shown": "done: core.trash_document{} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks what day the toadstool fitting is on",
+        "say": ["toadstool fitting"],
+        "shown": "done: core.restore_document{} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks for their newest photo",
+        "say": [],
+        "shown": "event \"Toadstool fitting\" Mon 2027-04-05 11:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w23-0028",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks how many events friday they have",
+        "say": ["friday", "how many"]
+      },
+      {
+        "hint": "(new topic) asks which contact is their acupuncturist",
+        "say": ["acupuncturist"],
+        "shown": "= 2"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w23-0029",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks which events friday they have",
+        "say": ["friday", "which"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w23-0030",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks to make a note: books to read this summer",
+        "say": ["books to read this summer"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w23-0031",
+    "today": "Wednesday 2027-04-07",
+    "turns": [{ "hint": "asks when the walk is", "say": ["walk"] }],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w23-0032",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks which group the workshop fee expense is in",
+        "say": ["workshop fee"]
+      },
+      {
+        "hint": "(new topic) asks how much the ferry was",
+        "say": ["ferry"],
+        "shown": "group \"Temmere house share\""
+      },
+      {
+        "hint": "follow-up: says the pay one is done",
+        "say": ["pay"],
+        "shown": "= 4599"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w23-0033",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks what's planned for the 17th", "say": ["the 17th"] },
+      {
+        "hint": "follow-up: asks to move the first one to tuesday and cancel the second one",
+        "say": ["first", "tuesday", "second"],
+        "shown": "event \"Ferret club\" Sat 2027-04-17 08:00\nevent \"Cauldron delivery\" Sat 2027-04-17 17:00"
+      },
+      {
+        "hint": "(new topic) asks to book in call with the bank tomorrow at half seven in the evening",
+        "say": [
+          "call with the bank",
+          "tomorrow",
+          "at half seven in the evening"
+        ],
+        "shown": "done: reschedule{to: 2027-04-13} on (#1) then cancel{} on (#2)"
+      },
+      {
+        "hint": "(new topic) asks for the last photo they took",
+        "say": [],
+        "shown": "done: schedule.propose_event{summary: \"Call with the bank\", dtstart: 2027-04-08T19:30}"
+      },
+      {
+        "hint": "(new topic) asks to email Mirela the address of the party",
+        "say": ["Mirela"],
+        "shown": "photo \"The Old Tractor in winter\" Tue 2027-04-06 11:34 · album_titles=The Old Tractor favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w23-0034",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks to bin the ask nicanor note", "say": ["ask nicanor"] },
+      {
+        "hint": "follow-up: takes it back: scratch that, put it back",
+        "say": [],
+        "shown": "done: delete{} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks to pull up the booking voucher thing",
+        "say": ["booking voucher"],
+        "shown": "done: restore{} on (#1)"
+      },
+      {
+        "hint": "(detour) hang on — asks which expenses mention dustpan",
+        "say": ["dustpan", "expenses"],
+        "shown": "document \"Locarno booking voucher\" Sat 2026-08-15 09:11 · folder=Locarno trip"
+      },
+      {
+        "hint": "back to the booking voucher — asks for a task to read the voucher document tuesday",
+        "say": ["read the voucher document", "tuesday"],
+        "shown": "expense \"Dustpan delivery\" Tue 2027-02-16 · amount_minor=3100 paid_by=Owner"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w23-0035",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in Temmere house share",
+        "say": ["Temmere house share", "how much"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w23-0036",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in Temmere house share (the expenses)",
+        "say": ["Temmere house share"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w23-0037",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks what time the ferret club is", "say": ["ferret club"] }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w23-0038",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks what they have filed under Locarno trip",
+        "say": ["Locarno trip"]
+      },
+      {
+        "hint": "(new topic) asks who they had dinner with last tuesday",
+        "say": ["dinner", "last tuesday"],
+        "shown": "document \"Bank statement (02)\" Wed 2027-03-17 10:35 · folder=Locarno trip\ndocument \"Bank statement (01)\" Mon 2027-01-25 07:32 · folder=Locarno trip\ndocument \"Boskice bill\" Sat 2026-08-15 09:22 · folder=Locarno trip\ndocument \"Locarno booking voucher\" Sat 2026-08-15 09:11 · folder=Locarno trip\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w23-0039",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks what the wifi is at the home", "say": ["home", "wifi"] },
+      {
+        "hint": "follow-up: asks for the actual password",
+        "say": ["password"],
+        "shown": "locker item \"Home wifi\" · type=wifi"
+      },
+      {
+        "hint": "(new topic) asks when they last spoke to Libor Halow",
+        "say": ["Libor Halow"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks what's due monday",
+        "say": ["monday"],
+        "shown": "activity \"interaction — Libor Halow\" Fri 2027-04-02 12:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  }
+]

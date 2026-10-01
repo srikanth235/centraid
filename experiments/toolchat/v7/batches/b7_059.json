@@ -1,0 +1,245 @@
+[
+  {
+    "id": "w12-027",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      {
+        "hint": "asks when the maintenance class is",
+        "say": ["maintenance class"]
+      },
+      {
+        "hint": "asks the same about Running instead ('what about Running?')",
+        "say": ["Running"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "polite"]
+  },
+  {
+    "id": "w12-028",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      {
+        "hint": "asks to add a task 'Collect the boiler check' for wednesday",
+        "say": ["Collect the boiler check", "wednesday"]
+      },
+      {
+        "hint": "(new topic) asks to move the Bike appointment to next friday",
+        "say": ["Bike", "next friday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "polite"]
+  },
+  {
+    "id": "w12-029",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      { "hint": "asks where they took the cake picture", "say": ["cake"] },
+      { "hint": "asks to see the photos from that place", "say": [] },
+      { "hint": "asks which albums those photos are in", "say": [] },
+      {
+        "hint": "(new topic) asks for Ilse Salazar's contact card",
+        "say": ["Ilse Salazar"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  },
+  {
+    "id": "w12-030",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      { "hint": "asks which to-dos mention Research", "say": ["Research"] },
+      { "hint": "asks for just the ones due next week", "say": ["next week"] },
+      {
+        "hint": "(new topic) asks which to-dos are due monday",
+        "say": ["monday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "texting"]
+  },
+  {
+    "id": "w12-031",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      {
+        "hint": "asks which steps of 'Bleed the radiators' are still open",
+        "say": ["Bleed the radiators"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  },
+  {
+    "id": "w12-032",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      {
+        "hint": "asks what photos they have from Glenfarrow",
+        "say": ["Glenfarrow"]
+      },
+      {
+        "hint": "(new topic) asks where the Pension password details are",
+        "say": ["Pension"]
+      },
+      {
+        "hint": "(new topic) asks for everything mentioning personal",
+        "say": ["personal"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "question"]
+  },
+  {
+    "id": "w12-033",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      { "hint": "asks what's in the vault about Gutter", "say": ["Gutter"] },
+      {
+        "hint": "(new topic) asks how many photos they have marked as favourites",
+        "say": []
+      },
+      { "hint": "asks for just the task ones", "say": [] },
+      { "hint": "(new topic) asks to delete the Kayak note", "say": ["Kayak"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "spoken"]
+  },
+  {
+    "id": "w12-034",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      { "hint": "asks what day the meetup is on", "say": ["meetup"] },
+      {
+        "hint": "(new topic) asks to tick off the dripping task",
+        "say": ["dripping"]
+      },
+      { "hint": "(new topic) asks who Keziah is", "say": ["Keziah"] },
+      {
+        "hint": "(new topic) asks to log a visit with Nerys (several people are called Nerys)",
+        "say": ["Nerys"]
+      },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks when they need to remember Elio's birthday",
+        "say": ["Elio"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "texting"]
+  },
+  {
+    "id": "w12-035",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      {
+        "hint": "asks if they have any notes about Spanish",
+        "say": ["Spanish"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  },
+  {
+    "id": "w12-036",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      {
+        "hint": "asks who Zacharias Brackenholt is",
+        "say": ["Zacharias Brackenholt"]
+      },
+      {
+        "hint": "(new topic) asks to find anything to do with Swimming",
+        "say": ["Swimming"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      { "hint": "asks if it's in their expenses as well", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "question"]
+  },
+  {
+    "id": "w12-037",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      { "hint": "asks what appointments they have today", "say": ["today"] },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks how many events they have this week",
+        "say": ["this week"]
+      },
+      {
+        "hint": "asks to move the second one to wednesday",
+        "say": ["wednesday"]
+      },
+      { "hint": "asks who else will be there", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "polite"]
+  },
+  {
+    "id": "w12-038",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      { "hint": "asks which to-dos mention helmet", "say": ["helmet"] },
+      {
+        "hint": "(new topic) asks which documents mention Kayak",
+        "say": ["Kayak"]
+      },
+      {
+        "hint": "asks the same about Payslip instead ('what about Payslip?')",
+        "say": ["Payslip"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "polite"]
+  },
+  {
+    "id": "w12-039",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      { "hint": "asks to text the alarm code to the neighbour", "say": [] },
+      {
+        "hint": "(new topic) asks to tick off the tulip bulbs task",
+        "say": ["tulip bulbs"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "polite"]
+  },
+  {
+    "id": "w12-040",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      { "hint": "asks what places they have in their photos", "say": [] },
+      {
+        "hint": "(new topic) asks what date Quincy Pendry's birthday falls on",
+        "say": ["Quincy Pendry"]
+      },
+      {
+        "hint": "(new topic) asks who they're seeing at the Look",
+        "say": ["Look"]
+      },
+      { "hint": "asks what else there is apart from the second one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "w12-041",
+    "today": "Saturday 2026-12-12",
+    "turns": [
+      {
+        "hint": "asks to log a call with Nerys (several people are called Nerys)",
+        "say": ["Nerys"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "spoken"]
+  }
+]

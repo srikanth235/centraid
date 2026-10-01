@@ -1,0 +1,252 @@
+[
+  {
+    "id": "a0823",
+    "today": "Wednesday 2026-08-12",
+    "turns": [
+      {
+        "canonical": "max dtstart of (events called \"dog\")",
+        "move": "first",
+        "hint": "when is the last dog (latest date)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1141",
+    "today": "Wednesday 2028-08-16",
+    "turns": [
+      {
+        "canonical": "show (things during saturday)",
+        "move": "first",
+        "hint": "what's on in that window"
+      },
+      {
+        "canonical": "delete{} on (the 1st one)",
+        "move": "act",
+        "hint": "get rid of one of them by position"
+      },
+      {
+        "canonical": "restore{} on (it)",
+        "move": "undo",
+        "hint": "oops, bring it back"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0183",
+    "today": "Saturday 2026-08-15",
+    "turns": [
+      {
+        "canonical": "media.restore_asset{} on (photos called \"Street mural\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "restore the deleted street photo"
+      }
+    ],
+    "refer": [
+      { "row": "photos \"Street mural\"", "turn": 1, "say": "loose: street" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0168",
+    "today": "Tuesday 2026-07-07",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Best of the dog\") } on (photos during this week)",
+        "move": "first",
+        "hint": "put the photos from that window into the best album"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"Best of the dog\"", "turn": 1, "say": "exact: best" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0986",
+    "today": "Monday 2026-05-04",
+    "turns": [
+      {
+        "canonical": "show (parties of (events called \"Wedding rehearsal\"))",
+        "move": "first",
+        "hint": "who's coming to / invited to the rehearsal"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Wedding rehearsal\"",
+        "turn": 1,
+        "say": "exact: rehearsal"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0939",
+    "today": "Saturday 2026-07-25",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"Hawthorn Lane\") ordered by captured_at asc)",
+        "move": "first",
+        "hint": "photos from Lane oldest first"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Hawthorn Lane\"", "turn": 1, "say": "exact: Lane" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1133",
+    "today": "Wednesday 2027-01-13",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Faustina Holloway\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete Faustina Holloway from my contacts"
+      },
+      {
+        "canonical": "nothing",
+        "move": "undo",
+        "hint": "actually forget it / never mind (takes the request back)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Faustina Holloway\"", "turn": 1, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0893",
+    "today": "Monday 2027-06-28",
+    "turns": [
+      {
+        "canonical": "show (expenses that (spent_on during this month) ordered by amount_minor desc)",
+        "move": "first",
+        "hint": "expenses in that window, biggest first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1149",
+    "today": "Tuesday 2028-03-14",
+    "turns": [
+      {
+        "canonical": "show (things during today)",
+        "move": "first",
+        "hint": "what's on in that window"
+      },
+      {
+        "canonical": "delete{} on (the 3rd one)",
+        "move": "act",
+        "hint": "get rid of one of them by position"
+      },
+      {
+        "canonical": "restore{} on (it)",
+        "move": "undo",
+        "hint": "oops, bring it back"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0236",
+    "today": "Friday 2027-08-20",
+    "turns": [
+      {
+        "canonical": "tally.settle_up{ group_id: (groups called \"Farewell dinner\"), from_party: me, amount_minor: 800 }",
+        "move": "first",
+        "hint": "record that I paid/settled that amount in the group farewell"
+      }
+    ],
+    "refer": [
+      {
+        "row": "groups \"Farewell dinner\"",
+        "turn": 1,
+        "say": "exact: farewell"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0530",
+    "today": "Sunday 2027-07-25",
+    "turns": [
+      {
+        "canonical": "show (documents that (updated_at during today))",
+        "move": "first",
+        "hint": "docs changed in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0371",
+    "today": "Sunday 2025-07-27",
+    "turns": [
+      {
+        "canonical": "count of (notes that (notebooks contains \"Reading\"))",
+        "move": "first",
+        "hint": "how many notes in the Reading notebook"
+      }
+    ],
+    "refer": [{ "row": "notebooks \"Reading\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0726",
+    "today": "Thursday 2028-11-09",
+    "turns": [
+      {
+        "canonical": "show (photos that (favorite = true))",
+        "move": "first",
+        "hint": "my favourite photos"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0991",
+    "today": "Monday 2025-04-07",
+    "turns": [
+      {
+        "canonical": "show (parties of (events called \"Swimming gala\"))",
+        "move": "first",
+        "hint": "who's coming to / invited to the swimming"
+      }
+    ],
+    "refer": [
+      { "row": "events \"Swimming gala\"", "turn": 1, "say": "loose: swimming" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0760",
+    "today": "Sunday 2028-07-09",
+    "turns": [
+      {
+        "canonical": "show (places that (kind = \"venue\"))",
+        "move": "first",
+        "hint": "places of that kind"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

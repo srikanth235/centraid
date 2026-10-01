@@ -29,6 +29,10 @@ pub mod model;
 // Lane P: the tier-D, no-model paraphrase parser (text -> canonical STRING).
 pub mod oracle;
 pub mod parse;
+// The ranked search the tool loop's `search` answers from (a port of the
+// `ranker.py` prototype; its ontology tables are derived by `build.rs`).
+pub mod rank;
+pub mod tools;
 
 #[cfg(test)]
 mod tests;

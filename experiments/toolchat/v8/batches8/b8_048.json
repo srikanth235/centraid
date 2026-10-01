@@ -1,0 +1,235 @@
+[
+  {
+    "id": "w14-0044",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks what they have on while they're away in Norhaven",
+        "say": ["Norhaven"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w14-0045",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks what documents they have linked to Antibes Common",
+        "say": ["Antibes Common"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w14-0046",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks to push the tugboat task to wednesday",
+        "say": ["tugboat", "wednesday"]
+      },
+      {
+        "hint": "(new topic) asks to star the clipboard document",
+        "say": ["clipboard", "document"],
+        "shown": "done: reschedule{to: 2027-06-02} on (#2)"
+      },
+      {
+        "hint": "(new topic) asks to put call with the bank in the calendar friday at half four",
+        "say": ["call with the bank", "friday", "at half four"],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w14-0047",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks if there's a calendar event at Antibes Common",
+        "say": ["Antibes Common"]
+      },
+      {
+        "hint": "follow-up: asks to see the photos from there",
+        "say": [],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: asks to put it in the Best of 2027 album",
+        "say": ["Best of 2027", "album"],
+        "shown": "photo \"Senthil at Antibes Common\" Mon 2027-02-08 11:00 · album_titles=Antibes 2027, Winter 2024 favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w14-0048",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      { "hint": "asks who they owe money to", "say": [] },
+      {
+        "hint": "follow-up: asks if they have a photo of any of them",
+        "say": [],
+        "shown": "party \"Dagmar Danak\" · owed_to_them_minor=15000 role=Friend from the gym\nparty \"Belnoan Jousova\" · owed_to_them_minor=4800 role=Best friend\nparty \"Wolfgang Tawfik\" · owed_to_them_minor=4800 role=Old school friend"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w14-0049",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      { "hint": "asks if anything is happening friday", "say": ["friday"] },
+      {
+        "hint": "follow-up: about the collect one, asks who's coming to it",
+        "say": ["collect"],
+        "shown": "event \"Tango class\" Fri 2027-06-04 08:00\nevent \"Collect the rake\" Fri 2027-06-04 19:45"
+      },
+      {
+        "hint": "follow-up: asks the same for next friday ('and next friday?')",
+        "say": ["next friday"],
+        "shown": "party \"Dagmar Danak\" · owed_to_them_minor=15000 role=Friend from the gym"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w14-0050",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks to jot down a note that says things to pack for the Norhaven trip",
+        "say": ["things to pack for the Norhaven trip"]
+      },
+      {
+        "hint": "(new topic) asks which contact is their friend from antenatal",
+        "say": ["friend from antenatal"],
+        "shown": "done: knowledge.create_note{title: \"Things to pack for the Norhaven trip\"}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w14-0051",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks to settle up with Dagmar in Antibes trip",
+        "say": ["Dagmar", "Antibes trip", "settle up"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w14-0052",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks to add five dollars for Dagmar's tickets to Antibes trip, they paid",
+        "say": ["five dollars", "Dagmar's tickets", "Antibes trip"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w14-0053",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks to move the replace task to tomorrow and the fermenting to next monday",
+        "say": ["replace", "tomorrow", "fermenting", "next monday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w14-0054",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "says they texted Priel and asks to log it",
+        "say": ["Priel", "texted"]
+      },
+      {
+        "hint": "follow-up: corrects: sorry, it was Eamon, not them",
+        "say": ["Eamon"],
+        "shown": "done: people.log_interaction{kind: \"message\"} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w14-0055",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks what's left to do on the clean the fish tank (wk 23) plan",
+        "say": ["clean the fish tank (wk 23)"]
+      },
+      {
+        "hint": "follow-up: asks which of those have no due date",
+        "say": [],
+        "shown": "task \"Insure the buttercup\" Mon 2027-06-14 12:00 · status=needs-action effort_min=120\ntask \"Lend the shortbread\" · status=needs-action effort_min=90"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w14-0056",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      { "hint": "asks which open tasks are undated", "say": [] },
+      {
+        "hint": "follow-up: asks which of those are about label",
+        "say": ["label"],
+        "shown": "task \"Photograph the pancake\" · status=needs-action effort_min=15\ntask \"Lend the shortbread\" · status=needs-action effort_min=90\ntask \"Check the tugboat\" · status=needs-action\ntask \"Sand the oyster\" · status=needs-action effort_min=120\n(+4 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w14-0057",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      { "hint": "asks if anything is happening tomorrow", "say": ["tomorrow"] },
+      {
+        "hint": "follow-up: asks the same for the 9th ('and the 9th?')",
+        "say": ["the 9th"],
+        "shown": "task \"Clean the fish tank (wk 22)\" Tue 2027-06-01 09:00 · status=needs-action\nevent \"Dinner with Uchenna\" Tue 2027-06-01 10:00\nevent \"Riddle club\" Tue 2027-06-01 12:15\nevent \"Surveyor call\" Tue 2027-06-01 13:45\n(+2 more)"
+      },
+      {
+        "hint": "(new topic) asks to put back the jetty note they deleted",
+        "say": ["jetty", "note"],
+        "shown": "important date \"Birthday — Themba Pillai\" Wed 2027-06-09"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w14-0058",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks to settle up with Dagmar in Antibes",
+        "say": ["Dagmar", "Antibes"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  }
+]

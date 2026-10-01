@@ -1,0 +1,240 @@
+[
+  {
+    "id": "a1137",
+    "today": "Monday 2028-10-30",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"Square\") ordered by captured_at asc)",
+        "move": "first",
+        "hint": "photos from Square oldest first"
+      },
+      {
+        "canonical": "nothing",
+        "move": "undo",
+        "hint": "actually forget it / never mind (takes the request back)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0501",
+    "today": "Monday 2026-09-21",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Benedikt Jennings\") that (label = \"work\"))",
+        "move": "first",
+        "hint": "Benedikt's number/email with that label (work/home/mobile)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Benedikt Jennings\"",
+        "turn": 1,
+        "say": "exact: Benedikt"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0484",
+    "today": "Sunday 2025-03-30",
+    "turns": [
+      {
+        "canonical": "show (activities that (started_at during today))",
+        "move": "first",
+        "hint": "who did I call/see/have coffee with in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0364",
+    "today": "Saturday 2028-08-05",
+    "turns": [
+      {
+        "canonical": "count of (notes that (notebooks contains \"Home admin\"))",
+        "move": "first",
+        "hint": "how many notes in the Home admin notebook"
+      }
+    ],
+    "refer": [{ "row": "notebooks \"Home admin\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0905",
+    "today": "Wednesday 2027-03-03",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (notes ordered by created_at desc))",
+        "move": "first",
+        "hint": "my newest note"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0450",
+    "today": "Saturday 2025-04-19",
+    "turns": [
+      {
+        "canonical": "next_occurrence of (important dates of (parties called \"Emrys Cavendish\") that (label contains \"Birthday\"))",
+        "move": "first",
+        "hint": "when is Emrys's next birthday (date)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Emrys Cavendish\"", "turn": 1, "say": "exact: Emrys" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0703",
+    "today": "Friday 2027-05-14",
+    "turns": [
+      {
+        "canonical": "show (parties that (kind = \"org\"))",
+        "move": "first",
+        "hint": "contacts that are organisations/companies (org), pets (animal) or people"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0104",
+    "today": "Wednesday 2025-12-03",
+    "turns": [
+      {
+        "canonical": "core.restore_document{} on (documents called \"Tax return 2026\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "restore the binned tax document"
+      }
+    ],
+    "refer": [
+      { "row": "documents \"Tax return 2026\"", "turn": 1, "say": "exact: tax" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1120",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "canonical": "show (photos during yesterday)",
+        "move": "first",
+        "hint": "photos from that window"
+      },
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Best of the dog\") } on (them)",
+        "move": "act",
+        "hint": "add those to the best album"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Ottery Mill\"", "turn": 1, "say": "exact: ottery" },
+      { "row": "albums \"Best of the dog\"", "turn": 2, "say": "exact: best" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0707",
+    "today": "Thursday 2027-05-27",
+    "turns": [
+      {
+        "canonical": "show (parties that (kind = \"person\"))",
+        "move": "first",
+        "hint": "contacts that are organisations/companies (org), pets (animal) or people"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0432",
+    "today": "Monday 2028-08-21",
+    "turns": [
+      {
+        "canonical": "due_at of (tasks called \"roofer\")",
+        "move": "first",
+        "hint": "when is the roofer task due"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0631",
+    "today": "Wednesday 2027-06-02",
+    "turns": [
+      {
+        "canonical": "show (locker items that (type = \"login\"))",
+        "move": "first",
+        "hint": "which locker entries are of that type"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0979",
+    "today": "Saturday 2028-11-04",
+    "turns": [
+      {
+        "canonical": "show (groups of (expenses called \"Train tickets\"))",
+        "move": "first",
+        "hint": "which group was the train tickets expense in"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Train tickets\"",
+        "turn": 1,
+        "say": "exact: train tickets"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1129",
+    "today": "Monday 2027-01-04",
+    "turns": [
+      {
+        "canonical": "show (obligations that (from_party = me and settled_at is null))",
+        "move": "first",
+        "hint": "the debts I still owe"
+      },
+      {
+        "canonical": "nothing",
+        "move": "undo",
+        "hint": "actually forget it / never mind (takes the request back)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0442",
+    "today": "Saturday 2028-01-29",
+    "turns": [
+      {
+        "canonical": "next_occurrence of (important dates of (parties called \"Pippa Rookwood\") that (label contains \"Birthday\"))",
+        "move": "first",
+        "hint": "when is Pippa's next birthday (date)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Pippa Rookwood\"", "turn": 1, "say": "exact: Pippa" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

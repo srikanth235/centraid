@@ -1,0 +1,229 @@
+[
+  {
+    "id": "a0399",
+    "today": "Wednesday 2028-08-02",
+    "turns": [
+      {
+        "canonical": "count of (photos during last weekend)",
+        "move": "first",
+        "hint": "how many photos did I take in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0197",
+    "today": "Monday 2025-04-28",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Theodosia Everly\")",
+        "move": "first",
+        "hint": "delete Theodosia from my contacts"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Theodosia Everly\"",
+        "turn": 1,
+        "say": "exact: Theodosia"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0175",
+    "today": "Saturday 2026-03-28",
+    "turns": [
+      {
+        "canonical": "media.restore_asset{} on (photos called \"above\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "restore the deleted above photo"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0435",
+    "today": "Monday 2025-03-10",
+    "turns": [
+      {
+        "canonical": "due_at of (tasks called \"Book flu jabs\")",
+        "move": "first",
+        "hint": "when is the flu task due"
+      }
+    ],
+    "refer": [
+      { "row": "tasks \"Book flu jabs\"", "turn": 1, "say": "loose: flu" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0451",
+    "today": "Wednesday 2026-09-23",
+    "turns": [
+      {
+        "canonical": "next_occurrence of (important dates of (parties called \"Rufus\") that (label contains \"Birthday\"))",
+        "move": "first",
+        "hint": "when is Rufus's next birthday (date)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0062",
+    "today": "Thursday 2028-05-25",
+    "turns": [
+      {
+        "canonical": "show (journal notes called \"job\")",
+        "move": "first",
+        "hint": "find my journal entry about job"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0243",
+    "today": "Friday 2027-12-24",
+    "turns": [
+      {
+        "canonical": "count of (activities of (parties called \"Benedikt Stannard\"))",
+        "move": "first",
+        "hint": "how many times have I logged seeing/talking to Benedikt"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Benedikt Stannard\"",
+        "turn": 1,
+        "say": "exact: Benedikt"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0256",
+    "today": "Thursday 2025-09-25",
+    "turns": [
+      {
+        "canonical": "count of (albums)",
+        "move": "first",
+        "hint": "how many photo albums have I got"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0254",
+    "today": "Wednesday 2027-12-01",
+    "turns": [
+      {
+        "canonical": "count of (albums)",
+        "move": "first",
+        "hint": "how many photo albums have I got"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0798",
+    "today": "Tuesday 2028-03-14",
+    "turns": [
+      {
+        "canonical": "max amount_minor of (expenses of (groups called \"Office lunch fund\"))",
+        "move": "first",
+        "hint": "the biggest expense in the office group"
+      }
+    ],
+    "refer": [
+      {
+        "row": "groups \"Office lunch fund\"",
+        "turn": 1,
+        "say": "loose: office"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0657",
+    "today": "Tuesday 2027-08-03",
+    "turns": [
+      {
+        "canonical": "show (notes that (updated_at during yesterday))",
+        "move": "first",
+        "hint": "notes I edited in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0727",
+    "today": "Sunday 2026-04-12",
+    "turns": [
+      {
+        "canonical": "count of (photos that (favorite = true))",
+        "move": "first",
+        "hint": "how many favourites have I got"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0043",
+    "today": "Thursday 2026-08-20",
+    "turns": [
+      {
+        "canonical": "show (albums called \"Food\")",
+        "move": "first",
+        "hint": "find the Food album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Food\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0692",
+    "today": "Wednesday 2025-12-17",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Evander Lachance\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete Evander from my contacts"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Evander Lachance\"",
+        "turn": 1,
+        "say": "exact: Evander"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0142",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"note\", title: \"Garage code\", content: \"4417\" }",
+        "move": "first",
+        "hint": "save the garage code 4417 in my locker (title = the words the person uses for it, content = the code)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

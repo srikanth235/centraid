@@ -1,0 +1,266 @@
+[
+  {
+    "id": "g0423",
+    "today": "Wednesday 2028-02-16",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"fence\" that (deleted_at is not null))",
+        "gloss": "List tasks named \"fence\" where the date deleted (trash) is set.",
+        "move": "first",
+        "hint": "did I delete / bin the fence task"
+      },
+      {
+        "canonical": "show (things during this week)",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) dated this week.",
+        "move": "switch",
+        "hint": "what's on this week"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic: act on those rows (C10 ref)"
+      },
+      {
+        "canonical": "show (expenses of (groups called \"football\"))",
+        "gloss": "List the expenses linked to [groups named \"football\"].",
+        "move": "new",
+        "hint": "what did we spend on the football"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0031",
+    "today": "Monday 2028-05-01",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (journal notes ordered by created_at desc))",
+        "gloss": "List the first 1 of [journal notes, sorted by date created descending (highest/latest first)].",
+        "move": "first",
+        "hint": "my last journal entry"
+      },
+      {
+        "canonical": "knowledge.delete_note{} on (it)",
+        "gloss": "Delete (move to trash) [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "delete it"
+      },
+      {
+        "canonical": "show (tasks that (status != \"completed\") ordered by due_at asc)",
+        "gloss": "List tasks where the status is not \"completed\", sorted by due date ascending (lowest/earliest first).",
+        "move": "new",
+        "hint": "what's left on the to-do list / open tasks"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "act",
+        "hint": "tick one off by position"
+      },
+      {
+        "canonical": "reschedule{ to: thursday } on (the 3rd one)",
+        "gloss": "Move [the 3rd one (by position in the previous answer)] to thursday.",
+        "move": "act",
+        "hint": "push another to a day"
+      },
+      {
+        "canonical": "show (contact channels of (parties called \"Sol\") that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [parties named \"Sol\"] where the kind is \"phone\".",
+        "move": "new",
+        "hint": "what's Sol's number"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0230",
+    "today": "Thursday 2026-01-15",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during this week))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls this week.",
+        "move": "first",
+        "hint": "tasks ticked off / done this week"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Imogen\") that (settled_at is null))",
+        "gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Imogen\"] where there is no date settled]?",
+        "move": "new",
+        "hint": "how much do I owe Imogen"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0001",
+    "today": "Monday 2025-05-05",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\") ordered by due_at asc)",
+        "gloss": "List tasks where the due date falls before now (already past \u2014 overdue) and the status is not \"completed\", sorted by due date ascending (lowest/earliest first).",
+        "move": "first",
+        "hint": "overdue (past due, not done) tasks"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0682",
+    "today": "Wednesday 2026-12-09",
+    "turns": [
+      {
+        "canonical": "people.log_interaction{ kind: \"coffee\", since: last tuesday } on (parties called \"Umberto\")",
+        "gloss": "Log that I had a coffee with [parties named \"Umberto\"].",
+        "move": "first",
+        "hint": "log a coffee with Umberto (last tuesday)"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0289",
+    "today": "Monday 2028-05-22",
+    "turns": [
+      {
+        "canonical": "show (notes that (notebooks contains \"Garden\"))",
+        "gloss": "List notes where the notebooks it is in contains \"Garden\".",
+        "move": "first",
+        "hint": "what's in my Garden folder/notebook"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0599",
+    "today": "Friday 2028-07-07",
+    "turns": [
+      {
+        "canonical": "social.send_message{ body: \"Is the spare room free next weekend\" } on (contact channels of (parties called \"Xavier\") that (kind = \"phone\"))",
+        "gloss": "",
+        "move": "first",
+        "hint": "text Xavier: Is the spare room free next weekend"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "h054",
+    "today": "Friday 2028-11-24",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status != \"completed\") ordered by due_at asc)",
+        "gloss": "List tasks where the status is not \"completed\", sorted by due date ascending (lowest/earliest first).",
+        "move": "first",
+        "hint": "what's left on the to-do list / open tasks"
+      },
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "new",
+        "hint": "which open ones have no deadline"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "act",
+        "hint": "mark the first done"
+      },
+      {
+        "canonical": "show (parties that (owed_to_me is not null))",
+        "gloss": "List parties where the amount they owe me is set.",
+        "move": "new",
+        "hint": "who owes me money"
+      },
+      {
+        "canonical": "sum owed_to_me of (them)",
+        "gloss": "What is the total amount they owe me of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how much in total"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "h055",
+    "today": "Monday 2026-03-30",
+    "turns": [
+      {
+        "canonical": "show (things during the 9th)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's on the 9th"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many things is that"
+      },
+      {
+        "canonical": "show (photos that (album_titles contains \"kitchen\"))",
+        "gloss": "List photos where the albums it is in contains \"kitchen\".",
+        "move": "new",
+        "hint": "photos in the kitchen album"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0602",
+    "today": "Tuesday 2025-10-28",
+    "turns": [
+      {
+        "canonical": "reschedule{ to: saturday } on (events called \"planning\")",
+        "gloss": "Move [events named \"planning\"] to saturday.",
+        "move": "first",
+        "hint": "push/move the named event"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0354",
+    "today": "Saturday 2027-09-11",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Orthodontist visit\", dtstart: sunday at 19:00, dtend: sunday at 20:00 }",
+        "gloss": "Put an event titled \"Orthodontist visit\" in the calendar starting sunday at 19:00 and ending sunday at 20:00.",
+        "move": "first",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      },
+      {
+        "canonical": "reschedule{ by: +1h } on (it)",
+        "gloss": "Shift [it (the one row the previous turn is about)] 1 hour later.",
+        "move": "act",
+        "hint": "make it an hour later"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0490",
+    "today": "Tuesday 2028-09-12",
+    "turns": [
+      {
+        "canonical": "reschedule{ to: next saturday at 15:00 } on (events called \"recital\")",
+        "gloss": "Move [events named \"recital\"] to next saturday at 15:00.",
+        "move": "first",
+        "hint": "push/move the named event"
+      },
+      {
+        "canonical": "show (photos that (album_titles contains \"garden\"))",
+        "gloss": "List photos where the albums it is in contains \"garden\".",
+        "move": "new",
+        "hint": "photos in the garden album"
+      },
+      {
+        "canonical": "show (them during last weekend)",
+        "gloss": "List them (the rows the previous turn answered) dated last weekend.",
+        "move": "refine",
+        "hint": "just the ones from over the weekend / last month"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  }
+]

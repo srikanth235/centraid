@@ -1,0 +1,270 @@
+[
+  {
+    "id": "w19-0048",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks when they were last in touch with Thanis Hezaino",
+        "say": ["Thanis Hezaino"]
+      },
+      {
+        "hint": "(new topic) asks which task is roughly a an hour job",
+        "say": ["an hour"],
+        "shown": "activity \"interaction — Thanis Hezaino\" Fri 2027-03-19 14:15"
+      },
+      {
+        "hint": "(new topic) asks to pull up Flennir (two contacts share the name)",
+        "say": ["Flennir"],
+        "shown": "task \"Wrap the mitten this week\" Fri 2027-03-19 09:00 · status=needs-action effort_min=60"
+      },
+      {
+        "hint": "(detour) hang on — asks where they stand with Camille Oliveira in petanque crew",
+        "say": ["Camille Oliveira", "petanque crew"],
+        "shown": "party \"Flennir Kenduwick\" · role=Osteopath\nparty \"Flennir Bomkimere\" · role=Director"
+      },
+      {
+        "hint": "back to Flennir — says they phoned the Kenduwick one, log it",
+        "say": ["Kenduwick"],
+        "shown": "= -7052"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w19-0049",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks to tick off their jasmine task",
+        "say": ["jasmine", "task"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w19-0051",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      { "hint": "asks to get rid of the tugboat event", "say": ["tugboat"] },
+      {
+        "hint": "follow-up: corrects: wrong event, they meant the Ramona one",
+        "say": ["Ramona"],
+        "shown": "done: delete{} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks what documents they have linked to Byblos Fields",
+        "say": ["Byblos Fields"],
+        "shown": "done: delete{} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w19-0052",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks to add the lampshade picture to the Walks round Café Zoby album",
+        "say": ["lampshade", "Walks round Café Zoby", "album"]
+      },
+      {
+        "hint": "(new topic) asks to send Luca a message saying happy birthday",
+        "say": ["Luca"],
+        "shown": "done: media.add_to_album{album_id: (#2)} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w19-0053",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "says they grabbed a coffee with Luca Crennard and asks to log it",
+        "say": ["Luca Crennard", "coffee"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w19-0055",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks to delete the climbing wall note",
+        "say": ["climbing wall", "note"]
+      },
+      {
+        "hint": "(new topic) asks what documents they have linked to Lymere Rise",
+        "say": ["Lymere Rise"],
+        "shown": "done: delete{} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w19-0056",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      { "hint": "asks to delete the crumpet note", "say": ["crumpet", "note"] },
+      {
+        "hint": "(new topic) asks which locker items mention wifi",
+        "say": ["wifi", "locker"],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w19-0057",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks to jot down a note that says the plumber prefers texts",
+        "say": ["the plumber prefers texts"]
+      },
+      {
+        "hint": "(new topic) asks to add the Zoby picture to the Coral progress album",
+        "say": ["Zoby", "Coral progress", "album"],
+        "shown": "done: knowledge.create_note{title: \"The plumber prefers texts\"}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w19-0058",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks which task is roughly a twenty minute job",
+        "say": ["twenty minute"]
+      },
+      {
+        "hint": "(new topic) asks to be reminded to buy a new artichoke monday",
+        "say": ["buy a new artichoke", "monday"],
+        "shown": "task \"Lend the colander\" Thu 2027-04-15 17:00 · status=needs-action effort_min=20"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w19-0059",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks to move both crystal things (the task and the calendar entry) to next monday",
+        "say": ["crystal", "next monday"]
+      },
+      {
+        "hint": "(new topic) asks which colander tasks they haven't done yet",
+        "say": ["colander"],
+        "shown": "done: reschedule{to: 2027-03-22} on (#1, #3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w19-0060",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks for the documents in the Taxes folder",
+        "say": ["Taxes"]
+      },
+      {
+        "hint": "follow-up: asks the same for the Petanque folder ('and Petanque?')",
+        "say": ["Petanque"],
+        "shown": "document \"Granite receipt\" Fri 2027-02-26 10:17 · folder=Taxes\ndocument \"Water bill (03)\" Tue 2027-02-02 10:33 · folder=Taxes\ndocument \"Heather quote\" Thu 2026-12-03 11:24 · folder=Taxes\ndocument \"Zomora parking bill\" Mon 2026-09-07 11:48 · folder=Taxes\n(+3 more)"
+      },
+      {
+        "hint": "(new topic) asks who they're seeing at the crystal",
+        "say": ["crystal"],
+        "shown": "document \"Brethup pension booking\" Wed 2026-10-21 10:12 · folder=Petanque\ndocument \"Petanque scan\" Mon 2026-11-02 21:40 · folder=Petanque"
+      },
+      {
+        "hint": "(new topic) asks for their calendar events on balcony",
+        "say": ["balcony", "events"],
+        "shown": "party \"Rhona Famsen\" · owed_to_them_minor=7500 role=Friend from the market"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w20-0001",
+    "today": "Sunday 2027-08-08",
+    "turns": [
+      { "hint": "asks for anything to do with Gaspard", "say": ["Gaspard"] },
+      {
+        "hint": "(new topic) asks who's invited to the Oren",
+        "say": ["Oren"],
+        "shown": "note \"Gaspard's barrel measurements\" Fri 2027-06-04 00:02 · notebooks=Mallet\nparty \"Gaspard Jankauskas\" · role=Partner\nimportant date \"Anniversary — Gaspard Jankauskas\" Fri 2027-08-06\nimportant date \"Birthday — Gaspard Jankauskas\" Wed 2027-05-12\n(+4 more)"
+      },
+      {
+        "hint": "follow-up: says they phoned the Taras one, log it",
+        "say": ["Taras"],
+        "shown": "party \"Trarris Fonseca\" · role=Neighbour across the road\nparty \"Selin Asante\" · role=Caretaker\nparty \"Taras Adeyemi\" · role=Neighbour upstairs"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w20-0003",
+    "today": "Sunday 2027-08-08",
+    "turns": [
+      { "hint": "asks what they have got saturday", "say": ["saturday"] },
+      {
+        "hint": "follow-up: asks the same for the 18th ('and the 18th?')",
+        "say": ["the 18th"],
+        "shown": "event \"Crochet class with Griffin\" Sat 2027-08-14 12:45\nevent \"Mallet lesson\" Sat 2027-08-14 14:45\nevent \"Canyoning workshop at Discombe Leisure Centre\" Sat 2027-08-14 15:30"
+      },
+      {
+        "hint": "(new topic) asks to find the hermit form",
+        "say": ["hermit form"],
+        "shown": "task \"Sharpen the ramekin for Oren\" Wed 2027-08-18 09:00 · status=needs-action effort_min=90"
+      },
+      {
+        "hint": "(new topic) asks if they're late on any tasks",
+        "say": [],
+        "shown": "document \"Hermit form 2027\" Mon 2027-03-08 17:59 · folder=Warranty"
+      },
+      {
+        "hint": "follow-up: asks for just the ones this month",
+        "say": ["this month"],
+        "shown": "task \"Move Vruvie's hermit\" Sun 2027-07-11 18:00 · status=in-process effort_min=180\ntask \"Empty the sunflower this week\" Fri 2027-07-16 18:00 · status=in-process effort_min=15\ntask \"Weekly shop (wk 29)\" Mon 2027-07-19 09:00 · status=needs-action\ntask \"Book the granary\" Fri 2027-07-30 09:00 · status=in-process effort_min=120\n(+7 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w20-0004",
+    "today": "Sunday 2027-08-08",
+    "turns": [{ "hint": "asks for their favourite photos", "say": [] }],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w20-0005",
+    "today": "Sunday 2027-08-08",
+    "turns": [
+      {
+        "hint": "asks to delete the bacalar pool task",
+        "say": ["bacalar pool", "task"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  }
+]

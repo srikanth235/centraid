@@ -1,0 +1,310 @@
+[
+  {
+    "id": "w03-0039",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in number 90 kitty (the expenses)",
+        "say": ["number 90 kitty"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w03-0041",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      { "hint": "asks to delete the brick note", "say": ["brick", "note"] }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w03-0042",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      { "hint": "asks to delete the Deepika note", "say": ["Deepika", "note"] },
+      {
+        "hint": "(new topic) asks to log thirty five euros of wine in Olomouc trip, paid by them",
+        "say": ["thirty five euros", "wine", "Olomouc trip"],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: about the first one, asks who's coming to it",
+        "say": ["first"],
+        "shown": "done: tally.add_expense{description: \"Wine\", amount_minor: 3500, paid_by: me, group_id: (#3)}"
+      },
+      {
+        "hint": "follow-up: asks if they have a photo of any of them",
+        "say": [],
+        "shown": "party \"Gresten Tran\" · role=Old flatmate\nparty \"Sipho Yilmaz\" · role=Climbing partner"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w03-0043",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks how much Gresten Tran owes them in Olomouc",
+        "say": ["Gresten Tran", "Olomouc"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w03-0044",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks who's invited to the call malgorzata",
+        "say": ["call malgorzata"]
+      },
+      {
+        "hint": "(new topic) asks what's left to do on the yew plan",
+        "say": ["yew"],
+        "shown": "party \"Zennir Zamora\" · owed_to_them_minor=3500 role=Son\nparty \"Vroswyn Halvorsen\" · role=Director"
+      },
+      {
+        "hint": "(new topic) asks how much they spent back in July",
+        "say": ["July"],
+        "shown": "task \"Sand the cellar\" · status=needs-action\ntask \"Quote for the pasty\" · status=needs-action"
+      },
+      {
+        "hint": "(new topic) asks where their sothix router is",
+        "say": ["sothix router"],
+        "shown": "= 0"
+      },
+      {
+        "hint": "(new topic) asks who they owe money to",
+        "say": [],
+        "shown": "locker item \"Sothix router password\" · type=password"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w03-0045",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      { "hint": "asks to find the wondery club", "say": ["wondery club"] },
+      {
+        "hint": "(new topic) asks what Cathine's balance with them is in the number 90 kitty group",
+        "say": ["Cathine", "number 90 kitty"],
+        "shown": "locker item \"Wondery club portal\" · type=login"
+      },
+      {
+        "hint": "(new topic) asks what time the marigold sale is",
+        "say": ["marigold sale"],
+        "shown": "= 4947"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w03-0046",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks who they had dinner with last monday",
+        "say": ["dinner", "last monday"]
+      },
+      {
+        "hint": "(new topic) asks to save the locker combination 89735 in the locker",
+        "say": ["locker combination", "89735"],
+        "shown": "event \"Dinner with Ishaan\" Mon 2026-01-26 10:45"
+      },
+      {
+        "hint": "(new topic) asks which shots mention Vadim",
+        "say": ["Vadim", "shots"],
+        "shown": "done: locker.add_item{type: \"note\", title: \"Locker combination\", content: \"89735\"}"
+      },
+      {
+        "hint": "follow-up: asks the same about Holan instead ('what about Holan?')",
+        "say": ["Holan"],
+        "shown": "photo \"Vadim at Triraby Wharf\" Mon 2025-11-24 19:12 · favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w03-0047",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks to delete all their pasty tasks",
+        "say": ["pasty", "task"]
+      },
+      {
+        "hint": "follow-up: says oops, undo that",
+        "say": [],
+        "shown": "done: delete{} on (#1, #2, #3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w03-0048",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks to put Penfuan in the group (they have several shared-expense groups)",
+        "say": ["Penfuan", "group"]
+      },
+      {
+        "hint": "follow-up: about the number one, asks who's in it",
+        "say": ["number"],
+        "shown": "asked: Which group — Number 90 kitty, Olomouc trip or Brick gang?"
+      },
+      {
+        "hint": "(detour) hang on — asks which expenses were over forty euros",
+        "say": ["forty euros"],
+        "shown": "member \"You\"\nmember \"Vadim Costa\"\nmember \"Cathine Bhattacharya\""
+      },
+      {
+        "hint": "back to that — asks for pictures with any of those people in",
+        "say": [],
+        "shown": "expense \"Marquetry club supplies\" Mon 2026-01-26 · amount_minor=12723 paid_by=Cathine Bhattacharya\nexpense \"Wondery top-up\" Mon 2026-01-26 · amount_minor=4100 paid_by=Vadim Costa\nexpense \"Parasol subscription\" Fri 2026-01-23 · amount_minor=16906 paid_by=Owner\nexpense \"Brick deposit\" Tue 2026-01-20 · amount_minor=4863 paid_by=Owner\n(+9 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w03-0049",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks what their most recent contact with Ishaan was",
+        "say": ["Ishaan"]
+      },
+      {
+        "hint": "(new topic) asks when they have the parasol viewing",
+        "say": ["parasol viewing"],
+        "shown": "activity \"interaction — Ishaan Thyby\" Sat 2026-01-24 13:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w03-0050",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks to pull up the backup codes thing",
+        "say": ["backup codes"]
+      },
+      {
+        "hint": "(new topic) asks to bin the Meskia task",
+        "say": ["Meskia"],
+        "shown": "locker item \"Shed backup codes\" · type=note"
+      },
+      {
+        "hint": "follow-up: says no wait, undo that",
+        "say": [],
+        "shown": "done: delete{} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w03-0051",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks to delete the Sothix document",
+        "say": ["Sothix", "document"]
+      },
+      {
+        "hint": "(new topic) says the alarm code is 90088 — keep it in the locker",
+        "say": ["alarm code", "90088"],
+        "shown": "done: core.trash_document{} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks to put the nectarine photo in the Winter 2027 album",
+        "say": ["nectarine", "Winter 2027", "album"],
+        "shown": "done: locker.add_item{type: \"note\", title: \"Alarm code\", content: \"90088\"}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w03-0052",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks to delete the telescope document",
+        "say": ["telescope", "document"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w03-0053",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      { "hint": "asks for anything to do with silo", "say": ["silo"] },
+      {
+        "hint": "(detour) hang on — asks for the subtasks of the fix the cellar at nuncombe lido task",
+        "say": ["fix the cellar at nuncombe lido"],
+        "shown": "event \"Silo delivery\" Fri 2026-01-30 19:30\nphoto \"Silo after the rain\" Wed 2026-01-07 10:47 · album_titles=Olomouc 2025, Winter 2027 favorite=false\nphoto \"Silo at Nuncombe Dunes\" Tue 2026-01-06 13:50 · album_titles=Olomouc 2025 favorite=false"
+      },
+      {
+        "hint": "back to the silo stuff — about the Nuncombe one, asks which album it's in",
+        "say": ["Nuncombe"],
+        "shown": "task \"Photograph the espresso\" Thu 2026-01-29 09:00 · status=needs-action\ntask \"Lend the blackbird\" · status=needs-action\ntask \"Sort out the toboggan\" · status=needs-action"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w03-0054",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "says they phoned Meskia today, log it (two contacts are called Meskia)",
+        "say": ["Meskia", "phoned"]
+      },
+      {
+        "hint": "(new topic) asks where the vinegar form went",
+        "say": ["vinegar form"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "(new topic) asks to delete all their ideas notes",
+        "say": ["ideas", "note"],
+        "shown": "document \"Vinegar form\" Fri 2025-12-12 17:58 · folder=Receipts"
+      },
+      {
+        "hint": "follow-up: says no wait, undo that",
+        "say": [],
+        "shown": "done: delete{} on (#2, #3)"
+      },
+      {
+        "hint": "(new topic) asks whether they binned the flamingo task",
+        "say": ["flamingo", "task"],
+        "shown": "done: restore{} on (#2, #3)"
+      },
+      {
+        "hint": "(new topic) asks to move both Ulehaven things (the task and the calendar entry) to wednesday",
+        "say": ["Ulehaven", "wednesday"],
+        "shown": "task \"Label the flamingo\" Fri 2026-01-16 09:00 · status=completed · trashed"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  }
+]

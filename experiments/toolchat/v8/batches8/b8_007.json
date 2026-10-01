@@ -1,0 +1,274 @@
+[
+  {
+    "id": "w03-0021",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks when they're next seeing Tiskou Vrestova",
+        "say": ["Tiskou Vrestova"]
+      },
+      {
+        "hint": "follow-up: says forget it",
+        "say": [],
+        "shown": "event \"Coffee with Meskia\" Sun 2026-01-04 18:30\nevent \"Yoga teacher appointment\" Mon 2026-02-02 07:30"
+      },
+      {
+        "hint": "follow-up: about the yoga one, asks who's coming to it",
+        "say": ["yoga"],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: asks when they last spoke",
+        "say": [],
+        "shown": "party \"Tiskou Vrestova\" · role=Yoga teacher"
+      },
+      {
+        "hint": "(new topic) asks which paperwork mention brick",
+        "say": ["brick", "paperwork"],
+        "shown": "activity \"interaction — Tiskou Vrestova\" Fri 2026-01-02 20:30"
+      },
+      {
+        "hint": "follow-up: asks what their expenses have on it",
+        "say": ["expenses"],
+        "shown": "document \"Brick voucher\" Tue 2025-06-24 21:32 · folder=Brick"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w03-0022",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks to settle up with Gresten in Olomouc trip",
+        "say": ["Gresten", "Olomouc trip", "settle up"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w03-0023",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks to add twelve euros for Gresten's tickets to Olomouc trip, they paid",
+        "say": ["twelve euros", "Gresten's tickets", "Olomouc trip"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w03-0024",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      { "hint": "asks what's in their calendar friday", "say": ["friday"] },
+      {
+        "hint": "(detour) hang on — asks what the Olomouc expenses add up to",
+        "say": ["Olomouc"],
+        "shown": "event \"Brick meetup\" Fri 2026-01-30 08:30\nevent \"Sculling lesson with Roisin\" Fri 2026-01-30 16:30\nevent \"Silo delivery\" Fri 2026-01-30 19:30"
+      },
+      {
+        "hint": "back to the friday calendar — about the sculling one, asks who else will be there",
+        "say": ["sculling"],
+        "shown": "= 41092"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w03-0025",
+    "today": "Thursday 2026-01-29",
+    "turns": [{ "hint": "asks who they owe money to", "say": [] }],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w03-0026",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks to be reminded to collect the dry cleaning friday at 4:30pm",
+        "say": ["collect the dry cleaning", "friday", "at 4:30pm"]
+      },
+      {
+        "hint": "(new topic) asks what is in their Receipts folder",
+        "say": ["Receipts"],
+        "shown": "done: schedule.add_task{title: \"Collect the dry cleaning\", due_at: 2026-01-30T16:30}"
+      },
+      {
+        "hint": "(new topic) asks to message Malgorzata the alarm login",
+        "say": ["Malgorzata", "alarm login"],
+        "shown": "document \"Council tax bill (01)\" Fri 2026-01-23 17:44 · folder=Receipts\ndocument \"Parasol contract\" Fri 2026-01-09 10:56 · folder=Receipts\ndocument \"Vinegar form\" Fri 2025-12-12 17:58 · folder=Receipts\ndocument \"Sothix cloud report\" Thu 2025-07-10 19:48 · folder=Receipts\n(+2 more)"
+      },
+      {
+        "hint": "(new topic) asks for their newest photo",
+        "say": [],
+        "shown": "refuse"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w03-0028",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks what's in the vault about espresso",
+        "say": ["espresso"]
+      },
+      {
+        "hint": "follow-up: asks what their calendar have on it",
+        "say": ["calendar"],
+        "shown": "event \"Roisin's espresso party\" Thu 2026-01-29 12:45\nphoto \"Espresso close-up\" Mon 2026-01-12 11:45 · favorite=false\ntask \"Photograph the espresso\" Thu 2026-01-29 09:00 · status=needs-action\ntask \"Label the espresso\" · status=needs-action effort_min=10"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w03-0030",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks what they wrote in their journal this month",
+        "say": ["this month", "diary"]
+      },
+      {
+        "hint": "(new topic) asks to order more printer ink online",
+        "say": [],
+        "shown": "journal note \"People journal · low\" Wed 2026-01-28 12:00\njournal note \"People journal · restless\" Tue 2026-01-27 12:00\njournal note \"People journal · tired\" Fri 2026-01-23 12:00\njournal note \"People journal · tired\" Thu 2026-01-22 12:00\n(+6 more)"
+      },
+      {
+        "hint": "(new topic) asks which events are at Aarhus Dunes (by the place itself)",
+        "say": ["Aarhus Dunes"],
+        "shown": "refuse"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w03-0031",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "says they messaged Vadim today, log it (two contacts are called Vadim)",
+        "say": ["Vadim", "messaged"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w03-0032",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "says they messaged Vadim (the neighbour one) today, log it",
+        "say": ["Vadim", "neighbour", "messaged"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w03-0033",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks what documents they have linked to Shalmere Arcade",
+        "say": ["Shalmere Arcade"]
+      },
+      {
+        "hint": "(new topic) asks how much Cathine owes them in number 90 kitty",
+        "say": ["Cathine", "number 90 kitty"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: asks the same for Vadim ('and Vadim?')",
+        "say": ["Vadim"],
+        "shown": "= 4947"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w03-0034",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks to find the pictures on crystal",
+        "say": ["crystal", "pictures"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w03-0035",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "says they texted Sipho Yilmaz and asks to log it",
+        "say": ["Sipho Yilmaz", "texted"]
+      },
+      {
+        "hint": "follow-up: corrects: sorry, it was Nuncombe, not them",
+        "say": ["Nuncombe"],
+        "shown": "done: people.log_interaction{kind: \"message\"} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w03-0037",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks for their paperwork about Triraby",
+        "say": ["Triraby", "paperwork"]
+      },
+      {
+        "hint": "(new topic) asks what documents they have linked to Nuncombe Lido",
+        "say": ["Nuncombe Lido"],
+        "shown": "document \"Triraby Wharf receipt\" Sat 2025-07-26 07:30 · folder=Receipts"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w03-0038",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in number 90 kitty",
+        "say": ["number 90 kitty", "how much"]
+      },
+      {
+        "hint": "follow-up: asks for its expenses",
+        "say": [],
+        "shown": "= 67803"
+      },
+      {
+        "hint": "follow-up: asks how much the hire one was",
+        "say": ["hire"],
+        "shown": "expense \"Marquetry club supplies\" Mon 2026-01-26 · amount_minor=12723 paid_by=Cathine Bhattacharya\nexpense \"Dinner at Triraby Wharf\" Mon 2026-01-26 · amount_minor=2999 paid_by=Vadim Costa\nexpense \"Wondery top-up\" Mon 2026-01-26 · amount_minor=4100 paid_by=Vadim Costa\nexpense \"Parasol subscription\" Fri 2026-01-23 · amount_minor=16906 paid_by=Owner\n(+4 more)"
+      },
+      {
+        "hint": "follow-up: about the marquetry one, asks which group it's in",
+        "say": ["marquetry"],
+        "shown": "= 1699"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  }
+]

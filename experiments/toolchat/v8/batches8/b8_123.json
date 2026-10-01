@@ -1,0 +1,290 @@
+[
+  {
+    "id": "w35-0053",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      { "hint": "asks who they're in debt to", "say": [] },
+      {
+        "hint": "follow-up: says they phoned the Theodosia one, log it",
+        "say": ["Theodosia"],
+        "shown": "party \"Widad Jousova\" · owed_to_them_minor=2000 role=Former colleague\nparty \"Theodosia Rautio\" · owed_to_them_minor=2500 role=Son"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w35-0056",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      { "hint": "asks what they paid for the puffin", "say": ["puffin"] },
+      {
+        "hint": "(new topic) says note to self: prices for the kettledrum",
+        "say": ["prices for the kettledrum"],
+        "shown": "= 22654"
+      },
+      {
+        "hint": "(new topic) asks to remove the Oksana Lundgren contact",
+        "say": ["Oksana Lundgren"],
+        "shown": "done: knowledge.create_note{title: \"Prices for the kettledrum\"}"
+      },
+      {
+        "hint": "follow-up: says they didn't mean that, bring it back",
+        "say": [],
+        "shown": "done: people.trash_person{} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks which task is roughly a twenty minute job",
+        "say": ["twenty minute"],
+        "shown": "done: restore{} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks to move the top one to monday",
+        "say": ["top", "monday"],
+        "shown": "task \"Fix the paddle\" · status=needs-action effort_min=20\ntask \"Top up the lunch account (wk 47)\" Tue 2027-11-23 09:00 · status=needs-action effort_min=20"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w35-0057",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      {
+        "hint": "asks for the Konnup vet entry in the locker (the row, not the password)",
+        "say": ["Konnup vet"]
+      },
+      {
+        "hint": "follow-up: asks to see the password",
+        "say": ["password"],
+        "shown": "locker item \"Konnup vet portal\" · type=login"
+      },
+      {
+        "hint": "(new topic) asks what's on in 2 days",
+        "say": ["2", "days"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w35-0058",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the Konnup vet is",
+        "say": ["Konnup vet", "password"]
+      },
+      {
+        "hint": "(new topic) says note to self: prices for the plover",
+        "say": ["prices for the plover"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks to settle up with everyone who owes them in Besness trip",
+        "say": ["Besness trip"],
+        "shown": "done: knowledge.create_note{title: \"Prices for the plover\"}"
+      },
+      {
+        "hint": "(new topic) asks who Klaus Basridge is",
+        "say": ["Klaus Basridge"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#3), amount_minor: balance of (it) in (#3)} on (#5, #6)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w36-0001",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks to settle up with Raimine in paragliding syndicate",
+        "say": ["Raimine", "paragliding syndicate", "settle up"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w36-0002",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks to add forty euros for Raimine's petrol to paragliding syndicate, they paid",
+        "say": ["forty euros", "Raimine's petrol", "paragliding syndicate"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w36-0003",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks if the muffin document is in the trash",
+        "say": ["muffin", "document"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w36-0004",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      { "hint": "asks for the photos they took recently", "say": ["recently"] }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w36-0005",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks what pictures they have from recently",
+        "say": ["recently"]
+      },
+      {
+        "hint": "follow-up: says never mind",
+        "say": [],
+        "shown": "photo \"Yardarm at sunrise\" Sun 2026-11-01 16:07 · favorite=false\nphoto \"Orchard close-up\" Fri 2026-10-30 10:38 · album_titles=Kaito's burrow, Cribbage meetup favorite=false people=Caoimhe Costa, Enine Lombardi\nphoto \"Kaito with the fuskin\" Wed 2026-10-28 14:37 · album_titles=Cribbage meetup favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w36-0006",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      { "hint": "asks who they're in debt to", "say": [] },
+      {
+        "hint": "follow-up: says they phoned the first one, log it",
+        "say": ["first"],
+        "shown": "party \"Enine Lombardi\" · owed_to_them_minor=2500 role=Sister-in-law\nparty \"Tiziana Barrios\" · owed_to_them_minor=4800 role=Old school friend\nparty \"Arvid Prastett\" · owed_to_them_minor=4800 role=Grandmother"
+      },
+      {
+        "hint": "follow-up: corrects: wrong one, they meant the third one",
+        "say": ["third"],
+        "shown": "done: people.log_interaction{kind: \"call\"} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks about the debts with them",
+        "say": [],
+        "shown": "done: people.log_interaction{kind: \"call\"} on (#3)"
+      },
+      {
+        "hint": "(new topic) asks for the photos they took last week",
+        "say": ["last week"],
+        "shown": "obligation \"Cormorant deposit\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w36-0007",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks for their to-dos about Tiziana",
+        "say": ["Tiziana", "to-dos"]
+      },
+      {
+        "hint": "follow-up: asks the same about alcove instead ('what about alcove?')",
+        "say": ["alcove"],
+        "shown": "task \"Repair Tiziana's cormorant\" Tue 2026-10-20 18:00 · status=in-process effort_min=20"
+      },
+      {
+        "hint": "(new topic) asks what's planned for saturday",
+        "say": ["saturday"],
+        "shown": "task \"Unpack the alcove\" Thu 2026-11-05 09:00 · status=needs-action effort_min=30"
+      },
+      {
+        "hint": "follow-up: asks to move all of them to next monday",
+        "say": ["next monday"],
+        "shown": "event \"Freediving workshop at Jermawen Downs\" Sat 2026-11-07 08:00\nevent \"Cobbler viewing\" Sat 2026-11-07 11:00\nevent \"Call Tiziana about the crate\" Sat 2026-11-07 14:45\nevent \"Paragliding workshop at Togastead Deli\" Sat 2026-11-07 19:45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w36-0008",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "says they had coffee with Flavia today, log it (two contacts are called Flavia)",
+        "say": ["Flavia", "coffee"]
+      },
+      {
+        "hint": "follow-up: about the Clough one, asks when they last spoke",
+        "say": ["Clough"],
+        "shown": "asked: Which Flavia — Geazaby or Clough?"
+      },
+      {
+        "hint": "follow-up: says it was the Flavia one (caretaker)",
+        "say": ["caretaker"],
+        "shown": "activity \"interaction — Flavia Clough\" Tue 2026-09-29 18:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w36-0009",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "says they had coffee with Flavia Geazaby today, log it",
+        "say": ["Flavia Geazaby", "coffee"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w36-0010",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks what day the lighthouse fitting is on",
+        "say": ["lighthouse fitting"]
+      },
+      {
+        "hint": "follow-up: asks what else is on that day",
+        "say": [],
+        "shown": "event \"Lighthouse fitting\" Mon 2026-11-02 15:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w36-0012",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks to see photos of Kaito Scrivener",
+        "say": ["Kaito Scrivener"]
+      },
+      {
+        "hint": "(detour) hang on — asks to see the shots from Montreux Bridge",
+        "say": ["Montreux Bridge"],
+        "shown": "photo \"Honora with the ventriloquism\" Fri 2026-10-02 19:31 · album_titles=Cribbage meetup, Ventriloquism progress favorite=true people=Tiskou Somacre, Honora Huang, Kaito Scrivener"
+      },
+      {
+        "hint": "back to the photos of Kaito Scrivener — asks who is in it",
+        "say": [],
+        "shown": "photo \"Montreux Bridge at dusk\" Sun 2026-10-18 11:58 · album_titles=Ventriloquism progress, The Chestnut and… favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  }
+]

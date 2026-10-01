@@ -1,0 +1,290 @@
+[
+  {
+    "id": "w34-0008",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      { "hint": "asks which to-dos are due tuesday", "say": ["tuesday"] }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w34-0009",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks to settle up with everyone who owes them in harpoon share",
+        "say": ["harpoon share"]
+      },
+      {
+        "hint": "(new topic) asks for the two-hour jobs on their list",
+        "say": ["two-hour"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (it) in (#1)} on (#3, #4)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w34-0010",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks how many photos they took on the Akureyri trip",
+        "say": ["Akureyri"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w34-0011",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks for the documents in the Tbilisi flat folder",
+        "say": ["Tbilisi flat"]
+      },
+      {
+        "hint": "(detour) hang on — asks how today looks",
+        "say": ["today"],
+        "shown": "document \"Water bill (03)\" Fri 2026-11-06 14:26 · folder=Tbilisi flat\ndocument \"Lausanne Bakery permit\" Wed 2025-11-12 07:17 · folder=Tbilisi flat"
+      },
+      {
+        "hint": "back to the Tbilisi flat folder — asks to star both of them",
+        "say": [],
+        "shown": "event \"Turret viewing\" Sun 2026-12-13 08:45\nevent \"Call Alasdair about the cupboard\" Sun 2026-12-13 13:15\nevent \"Cupboard repair\" Sun 2026-12-13 15:00\nevent \"Batik meetup with Vrovsais\" Sun 2026-12-13 19:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w34-0012",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      { "hint": "asks to export their whole locker to a plain file", "say": [] }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w34-0013",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks what else is on during the Komcombe trip",
+        "say": ["Komcombe"]
+      },
+      {
+        "hint": "follow-up: says the research one is done",
+        "say": ["research"],
+        "shown": "task \"Research Tonu's quarry\" Sat 2027-01-09 09:00 · status=needs-action effort_min=45\nevent \"Komcombe holiday\" Sat 2027-01-09 07:00\nevent \"Quarry delivery\" Tue 2027-01-12 18:00\nevent \"Raft delivery\" Tue 2027-01-12 18:30\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w34-0014",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      { "hint": "asks what paperwork is kept in Letters", "say": ["Letters"] },
+      {
+        "hint": "(detour) hang on — asks what pictures are in the Avocado album",
+        "say": ["Avocado", "album"],
+        "shown": "document \"Vrollora school scan\" Wed 2026-11-04 17:34 · folder=Letters\ndocument \"Citadel policy\" Wed 2026-10-14 09:14 · folder=Letters\ndocument \"Shora gym policy\" Fri 2026-08-14 09:26 · folder=Letters\ndocument \"Turret receipt 2026\" Wed 2026-05-13 14:36 · folder=Letters\n(+1 more)"
+      },
+      {
+        "hint": "back to the Letters folder — asks to bin the turret one",
+        "say": ["turret"],
+        "shown": "photo \"Quarry and cartwheel\" Mon 2026-12-07 20:35 · album_titles=Avocado 2024 favorite=false\nphoto \"IMG_9235\" Tue 2026-12-01 14:03 · album_titles=Akureyri 2026, Avocado 2024 favorite=false\nphoto \"Kallum at Jelniness Lido\" Thu 2026-11-19 12:11 · album_titles=Avocado 2024, Akureyri 2026, Lausanne Ba… favorite=false people=Ruskine Boucher, Noemie Kusuma\nphoto \"IMG_3977\" Fri 2026-11-13 08:43 · album_titles=Lausanne Bakery 2026, Avocado 2024 favorite=false\n(+4 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w34-0015",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks what else is on during the Komcombe trip",
+        "say": ["Komcombe"]
+      },
+      {
+        "hint": "follow-up: asks to move the first one to friday and cancel the third one",
+        "say": ["first", "friday", "third"],
+        "shown": "task \"Research Tonu's quarry\" Sat 2027-01-09 09:00 · status=needs-action effort_min=45\nevent \"Komcombe holiday\" Sat 2027-01-09 07:00\nevent \"Quarry delivery\" Tue 2027-01-12 18:00\nevent \"Raft delivery\" Tue 2027-01-12 18:30\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w34-0016",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks to settle up with Noemie in harpoon share",
+        "say": ["Noemie", "harpoon share", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks which people share Madeira house share with them",
+        "say": ["Madeira house share"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#3) in (#1)} on (#3)"
+      },
+      {
+        "hint": "(new topic) asks for their newest photo",
+        "say": [],
+        "shown": "member \"Panagiota Figueroa\"\nmember \"Lirdoel Adamczyk\"\nmember \"Umar Kythino\"\nmember \"Cosima Famsen\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w34-0017",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks to add forty dollars for Noemie's tickets to harpoon share, they paid",
+        "say": ["forty dollars", "Noemie's tickets", "harpoon share"]
+      },
+      {
+        "hint": "(new topic) asks what debts there are between them and Umar Kythino",
+        "say": ["Umar Kythino"],
+        "shown": "done: tally.add_expense{description: \"Noemie's tickets\", amount_minor: 4000, paid_by: me, group_id: (#1)}"
+      },
+      {
+        "hint": "follow-up: says they've paid it, mark it settled",
+        "say": [],
+        "shown": "obligation \"Chess lesson parts\""
+      },
+      {
+        "hint": "follow-up: asks the same about Vrilie Lebedev ('and Vrilie Lebedev?')",
+        "say": ["Vrilie Lebedev"],
+        "shown": "done: people.settle_debt{} on (#3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w34-0019",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks whether they deleted the damson task",
+        "say": ["damson", "task"]
+      },
+      {
+        "hint": "follow-up: asks to put it back",
+        "say": [],
+        "shown": "task \"Insure the damson\" · status=needs-action · trashed"
+      },
+      {
+        "hint": "(new topic) asks what group the chalk went into",
+        "say": ["chalk"],
+        "shown": "done: restore{} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks for the other expenses in that group",
+        "say": [],
+        "shown": "group \"Harpoon share\""
+      },
+      {
+        "hint": "follow-up: about the market one, asks which group it's in",
+        "say": ["market"],
+        "shown": "expense \"Canasta night subscription\" Thu 2026-12-10 · amount_minor=9981 paid_by=Owner\nexpense \"Market shop (wk 49)\" Thu 2026-12-03 · amount_minor=6099 paid_by=Tuomas Horvath\nexpense \"Cookie parts\" Sun 2026-11-29 · amount_minor=24508 paid_by=Tonu Jorrak\nexpense \"Dinner at Lausanne Yard\" Sat 2026-11-14 · amount_minor=14732 paid_by=Libor Nistow\n(+2 more)"
+      },
+      {
+        "hint": "(new topic) asks for the photos they took this month",
+        "say": ["this month"],
+        "shown": "group \"Harpoon share\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w34-0020",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      { "hint": "asks for anything to do with fern", "say": ["fern"] },
+      {
+        "hint": "(new topic) asks if anyone owes them cash",
+        "say": [],
+        "shown": "event \"Call Kanya about the fern\" Tue 2026-12-15 16:00\nphoto \"Fern at Jelniness Lido\" Sun 2026-07-26 14:14 · favorite=false\nexpense \"Fern\" Fri 2026-12-11 · amount_minor=23123 paid_by=Cosima Famsen\nexpense \"Fern fee\" Sun 2026-11-08 · amount_minor=9635 paid_by=Noemie Kusuma\n(+2 more)"
+      },
+      {
+        "hint": "follow-up: about the Umar one, asks about the debts with them",
+        "say": ["Umar"],
+        "shown": "party \"Umar Kythino\" · owed_to_me_minor=4800 role=Uncle\nparty \"Quamara Kythino\" · owed_to_me_minor=500 role=Daughter\nparty \"Vrilie Lebedev\" · owed_to_me_minor=15000 role=Former colleague"
+      },
+      {
+        "hint": "follow-up: asks to clear it",
+        "say": [],
+        "shown": "obligation \"Chess lesson parts\""
+      },
+      {
+        "hint": "(new topic) asks to bring the insure task back from the bin",
+        "say": ["insure", "task"],
+        "shown": "done: people.settle_debt{} on (#10)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w34-0021",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks how many tasks due next week they have",
+        "say": ["next week", "how many"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w34-0022",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks which tasks due next week they have",
+        "say": ["next week", "which"]
+      },
+      {
+        "hint": "follow-up: says all of them are done, tick them off",
+        "say": [],
+        "shown": "task \"Check the post (wk 51)\" Tue 2026-12-15 09:00 · status=needs-action\ntask \"Tidy the chandelier at Lausanne Bakery\" Wed 2026-12-16 17:00 · status=needs-action\ntask \"Sharpen the olive\" Sun 2026-12-20 18:00 · status=needs-action effort_min=30\ntask \"Varnish the avocado\" Tue 2026-12-15 09:00 · status=completed"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w34-0023",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "says note to self: books to read this summer",
+        "say": ["books to read this summer"]
+      },
+      {
+        "hint": "(new topic) asks what time the snowshoeing night is",
+        "say": ["snowshoeing night"],
+        "shown": "done: knowledge.create_note{title: \"Books to read this summer\"}"
+      },
+      {
+        "hint": "follow-up: asks the same about the locksmith appointment ('and the locksmith appointment?')",
+        "say": ["locksmith appointment"],
+        "shown": "event \"Snowshoeing night at Lausanne Yard\" Thu 2026-12-24 12:45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  }
+]

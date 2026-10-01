@@ -1,0 +1,208 @@
+[
+  {
+    "id": "w09-006",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks who they're seeing at the Chess club",
+        "say": ["Chess club"]
+      },
+      { "hint": "(new topic) asks what they still have to do", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "texting"]
+  },
+  {
+    "id": "w09-007",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks to save the bike lock code 31302 in the locker",
+        "say": ["bike lock code", "31302"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "polite"]
+  },
+  {
+    "id": "w09-008",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks if they have any expenses about bill", "say": ["bill"] },
+      {
+        "hint": "(new topic) asks what's in the vault about Stellan",
+        "say": ["Stellan"]
+      },
+      { "hint": "asks what else there is apart from the third one", "say": [] },
+      {
+        "hint": "asks the same about subscription instead ('what about subscription?')",
+        "say": ["subscription"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "polite"]
+  },
+  {
+    "id": "w09-009",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks for the documents in the Pet records folder",
+        "say": ["Pet records"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "spoken"]
+  },
+  {
+    "id": "w09-010",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks for photos taken at Oakhurst", "say": ["Oakhurst"] },
+      {
+        "hint": "(new topic) asks which locker entries mention Dentist",
+        "say": ["Dentist"]
+      },
+      {
+        "hint": "asks the same about Mastercard card instead ('what about Mastercard card?')",
+        "say": ["Mastercard card"]
+      },
+      {
+        "hint": "(new topic) asks which tasks they finished today",
+        "say": ["today"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "spoken"]
+  },
+  {
+    "id": "w09-011",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks to add a task 'Return the ferry tickets' for tuesday",
+        "say": ["Return the ferry tickets", "tuesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w09-012",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks what's in the vault about Orla Treverrow",
+        "say": ["Orla Treverrow"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "texting"]
+  },
+  {
+    "id": "w09-013",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks which expenses were over 100 (money)", "say": ["100"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "question"]
+  },
+  {
+    "id": "w09-014",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks to add 12 (money) for groceries to the football group, paid by them",
+        "say": ["football", "groceries"]
+      },
+      {
+        "hint": "(new topic) asks whether Otto Thackeray owes them anything",
+        "say": ["Otto Thackeray"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "polite"]
+  },
+  {
+    "id": "w09-015",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks which expenses mention hire", "say": ["hire"] },
+      {
+        "hint": "(new topic) asks where the mural photo was taken",
+        "say": ["mural"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "w09-016",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks what day the centre trip is on", "say": ["centre trip"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "spoken"]
+  },
+  {
+    "id": "w09-017",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks which photos mention dusk", "say": ["dusk"] },
+      { "hint": "asks what else there is apart from the third one", "say": [] },
+      { "hint": "asks which albums those photos are in", "say": [] },
+      {
+        "hint": "(new topic) asks to log a visit with Orla (several people are called Orla)",
+        "say": ["Orla"]
+      },
+      { "hint": "says it was Orla Valdes (the Valdes one)", "say": ["Valdes"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "terse"]
+  },
+  {
+    "id": "w09-018",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks to tick off the dripping task", "say": ["dripping"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "terse"]
+  },
+  {
+    "id": "w09-019",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks what's in the vault about cleaner", "say": ["cleaner"] },
+      {
+        "hint": "(new topic) asks when they have the meetup",
+        "say": ["meetup"]
+      },
+      { "hint": "asks what else they have that day", "say": [] },
+      {
+        "hint": "(new topic) asks for the members of the Stag group",
+        "say": ["Stag"]
+      },
+      { "hint": "asks how much Wren owes them in that group", "say": ["Wren"] },
+      { "hint": "asks what else there is apart from the first one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "w09-020",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks to find anything to do with Orla", "say": ["Orla"] },
+      { "hint": "asks what else there is apart from the third one", "say": [] },
+      {
+        "hint": "asks the same about Birthday instead ('what about Birthday?')",
+        "say": ["Birthday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  }
+]

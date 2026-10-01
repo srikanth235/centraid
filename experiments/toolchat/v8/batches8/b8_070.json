@@ -1,0 +1,315 @@
+[
+  {
+    "id": "w20-0057",
+    "today": "Sunday 2027-08-08",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in netball collective",
+        "say": ["netball collective", "how much"]
+      },
+      {
+        "hint": "(new topic) asks to star the magnet document",
+        "say": ["magnet"],
+        "shown": "= 45883"
+      },
+      {
+        "hint": "(new topic) asks to put Trarris in Bourton house share",
+        "say": ["Trarris", "Bourton house share"],
+        "shown": "done: core.star_document{} on (#3)"
+      },
+      {
+        "hint": "(new topic) asks to see the parking password itself",
+        "say": ["parking", "password"],
+        "shown": "done: tally.add_group_member{group_id: (#4)} on (#6)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w20-0058",
+    "today": "Sunday 2027-08-08",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in netball collective (the expenses)",
+        "say": ["netball collective"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w20-0059",
+    "today": "Sunday 2027-08-08",
+    "turns": [
+      {
+        "hint": "asks which appointments they have thursday",
+        "say": ["thursday"]
+      },
+      {
+        "hint": "(new topic) asks whether Yasmin Kainino's birthday is coming up",
+        "say": ["Yasmin Kainino", "birthday"],
+        "shown": "event \"Canyoning workshop\" Thu 2027-08-12 10:45"
+      },
+      {
+        "hint": "follow-up: asks the same about Sakura Rosenthal ('and Sakura Rosenthal's?')",
+        "say": ["Sakura Rosenthal"],
+        "shown": "important date \"Birthday — Yasmin Kainino\" Mon 2027-05-24"
+      },
+      {
+        "hint": "(new topic) asks what pictures are in the Selin's hermit album",
+        "say": ["Selin's hermit", "album"],
+        "shown": "important date \"Birthday — Sakura Rosenthal\" Sat 2027-04-10"
+      },
+      {
+        "hint": "follow-up: asks for just the ones from last month",
+        "say": ["last month"],
+        "shown": "photo \"Zdenka at Discombe Reservoir (04)\" Fri 2027-07-30 10:29 · album_titles=Selin's hermit, Shutter progress favorite=false\nphoto \"Zdenka at Discombe Reservoir (03)\" Fri 2027-07-30 10:28 · album_titles=Selin's hermit favorite=false\nphoto \"Zdenka at Discombe Reservoir (01)\" Fri 2027-07-30 10:26 · album_titles=Summer 2026, Bovmawen 2027, Selin's herm… favorite=false\nphoto \"Gaspard's crayon\" Fri 2027-07-16 12:07 · album_titles=Summer 2026, Selin's hermit favorite=false\n(+4 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w20-0060",
+    "today": "Sunday 2027-08-08",
+    "turns": [
+      {
+        "hint": "asks when their Cairngorm thing is (no kind given)",
+        "say": ["Cairngorm"]
+      },
+      {
+        "hint": "(new topic) asks for the documents that go with the shutter expense",
+        "say": ["shutter", "expense"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: asks what about in their notes",
+        "say": ["notes"],
+        "shown": "document \"Shutter letter\" Thu 2027-03-25 20:03 · folder=Tenancy"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w20-0061",
+    "today": "Sunday 2027-08-08",
+    "turns": [
+      { "hint": "asks what Cairngorm things they have", "say": ["Cairngorm"] }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w21-0002",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      { "hint": "asks what's in the vault about Bethan", "say": ["Bethan"] },
+      {
+        "hint": "follow-up: asks for just the weekend ones",
+        "say": ["weekend"],
+        "shown": "event \"Coffee with Bethan\" Thu 2026-12-31 19:45\nnote \"Gift ideas for Bethan\" Mon 2026-08-17 12:53 · notebooks=Garden log\nparty \"Bethan Zaki\" · owed_to_me_minor=500 role=Daughter\nimportant date \"Birthday — Bethan Zaki\" Thu 2026-07-16\n(+2 more)"
+      },
+      {
+        "hint": "follow-up: asks if it's in their notes as well",
+        "say": ["notes"],
+        "shown": "task \"Find a longboarding for Bethan\" Sat 2026-12-26 09:00 · status=needs-action effort_min=15"
+      },
+      {
+        "hint": "(new topic) asks for pictures with Owyn in them",
+        "say": ["Owyn"],
+        "shown": "note \"Gift ideas for Bethan\" Mon 2026-08-17 12:53 · notebooks=Garden log"
+      },
+      {
+        "hint": "(detour) hang on — asks what pictures they took in November",
+        "say": ["November"],
+        "shown": "photo \"Drawbridge at Yealmpton Fields\" Sat 2026-07-11 16:35 · album_titles=Cello club, Enow 2026 favorite=false people=Orsolya Goodenough, Owyn Brarett"
+      },
+      {
+        "hint": "back to the photos of Owyn — asks which album it's in",
+        "say": [],
+        "shown": "photo \"Bonfire by the window\" Mon 2026-11-30 09:28 · album_titles=Clocktower 2026, Enow 2026 favorite=false\nphoto \"Lilac at dusk\" Fri 2026-11-27 20:29 · favorite=true\nphoto \"IMG_2147\" Fri 2026-11-27 13:17 · album_titles=Naxos Garden Centre 2026 favorite=false\nphoto \"Kjell with the daskery\" Thu 2026-11-26 16:58 · album_titles=Kimel's doorbell favorite=false\n(+9 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w21-0003",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks who's invited to the midwife call",
+        "say": ["midwife call"]
+      },
+      {
+        "hint": "(new topic) asks which files mention rockpool",
+        "say": ["rockpool", "files"],
+        "shown": "party \"Malak Kymham\" · role=Midwife"
+      },
+      {
+        "hint": "follow-up: asks the same about moorhen instead ('what about moorhen?')",
+        "say": ["moorhen"],
+        "shown": "document \"Rockpool permit 2027\" Sun 2026-10-25 11:31 · folder=Visas"
+      },
+      {
+        "hint": "follow-up: asks the same about woodpecker instead ('what about woodpecker?')",
+        "say": ["woodpecker"],
+        "shown": "document \"Moorhen policy\" Sat 2026-08-15 16:47 · folder=Kazbegi trip"
+      },
+      {
+        "hint": "follow-up: asks for a task to check the letter document",
+        "say": ["check the letter document"],
+        "shown": "document \"Woodpecker letter\" Fri 2026-04-24 19:37 · folder=Visas"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w21-0004",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks for the airline account entry in the locker (the row, not the password)",
+        "say": ["airline account"]
+      },
+      {
+        "hint": "(new topic) asks what they're behind on",
+        "say": [],
+        "shown": "locker item \"Grestup airline account\" · type=login"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w21-0005",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the airline account is",
+        "say": ["airline account", "password"]
+      },
+      {
+        "hint": "(new topic) asks to make a note: Efe likes the woodpecker",
+        "say": ["Efe likes the woodpecker"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w21-0006",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "says they paid nine kroner for bike hire — put it in moorhen circle",
+        "say": ["nine kroner", "bike hire", "moorhen circle"]
+      },
+      {
+        "hint": "follow-up: asks who's in it",
+        "say": [],
+        "shown": "done: tally.add_expense{description: \"Bike hire\", amount_minor: 900, paid_by: me, group_id: (#1)}"
+      },
+      {
+        "hint": "follow-up: says nah, leave it",
+        "say": [],
+        "shown": "member \"Meenakshi Oldroyd\"\nmember \"Kiri Zaki\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w21-0007",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks for the number 88 flat expenses above eleven",
+        "say": ["number 88 flat", "eleven"]
+      },
+      {
+        "hint": "(new topic) says haircut next friday at 6pm — add it",
+        "say": ["haircut", "next friday", "at 6pm"],
+        "shown": "expense \"Telescope refund\" Wed 2026-12-09 · amount_minor=23292 paid_by=Owner\nexpense \"Dinner at Naxos Garden Centre\" Fri 2026-12-04 · amount_minor=4699 paid_by=Efe Galli\nexpense \"Astrophotography meetup repair\" Wed 2026-12-02 · amount_minor=1750 paid_by=Owner\nexpense \"Shovel tickets\" Wed 2026-11-25 · amount_minor=2950 paid_by=Tonu Zaki"
+      },
+      {
+        "hint": "(new topic) asks to clear out the plan notes",
+        "say": ["plan", "note"],
+        "shown": "done: schedule.propose_event{summary: \"Haircut\", dtstart: 2027-01-01T18:00}"
+      },
+      {
+        "hint": "follow-up: takes it back: scratch that, put it back",
+        "say": [],
+        "shown": "done: delete{} on (#7, #8)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w21-0008",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      { "hint": "asks which documents they starred", "say": [] },
+      {
+        "hint": "follow-up: asks for just the ones in the Kazbegi trip folder",
+        "say": ["Kazbegi trip"],
+        "shown": "document \"Rockpool permit 2027\" Sun 2026-10-25 11:31 · folder=Visas\ndocument \"Slipper certificate\" Sat 2026-10-03 21:34 · folder=Kazbegi trip\ndocument \"Sheepdog warranty\" Tue 2026-06-23 09:12"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w21-0010",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks when Bethan's birthday is",
+        "say": ["Bethan", "birthday"]
+      },
+      {
+        "hint": "(new topic) asks to restore the footbridge note",
+        "say": ["footbridge", "note"],
+        "shown": "important date \"Birthday — Bethan Zaki\" Thu 2026-07-16"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w21-0011",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks when their coffee with Bethan is",
+        "say": ["Bethan", "coffee"]
+      },
+      {
+        "hint": "follow-up: asks for a task to check the Bethan booking",
+        "say": ["check the Bethan booking"],
+        "shown": "event \"Coffee with Bethan\" Thu 2026-12-31 19:45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w21-0012",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      { "hint": "asks for pictures with Tonu in them", "say": ["Tonu"] },
+      {
+        "hint": "follow-up: asks to put it in the Kimel's doorbell album",
+        "say": ["Kimel's doorbell", "album"],
+        "shown": "photo \"Naxos Garden Centre from the path\" Wed 2026-11-04 20:20 · album_titles=Naxos Garden Centre 2026 favorite=false people=Aurora Lorwick, Tonu Zaki"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  }
+]

@@ -1,0 +1,254 @@
+[
+  {
+    "id": "g0439",
+    "today": "Sunday 2027-02-21",
+    "turns": [
+      {
+        "canonical": "show (places of (photos called \"night\"))",
+        "gloss": "List the places linked to [photos named \"night\"].",
+        "move": "first",
+        "hint": "where was the night photo taken"
+      },
+      {
+        "canonical": "show ((photos of (it)) except (photos called \"night\"))",
+        "gloss": "List [the photos linked to [it (the one row the previous turn is about)]] leaving out [photos named \"night\"].",
+        "move": "act",
+        "hint": "what else did I take there (the excluded photo is the one the SENTENCE named: C13 names it)"
+      },
+      {
+        "canonical": "tally.add_expense{ amount_minor: 2400, description: \"Birthday present\", group_id: (groups called \"doubles\"), paid_by: me }",
+        "gloss": "Add an expense \"Birthday present\" of 24.00 (2400 pence), in the group [groups named \"doubles\"], paid by me (the member).",
+        "move": "new",
+        "hint": "log an expense of 24.00"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0431",
+    "today": "Sunday 2026-02-08",
+    "turns": [
+      {
+        "canonical": "show (things during the 13th)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's on the 13th"
+      },
+      {
+        "canonical": "delete{} on (the 2nd one)",
+        "gloss": "Delete (move to trash) [the 2nd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      },
+      {
+        "canonical": "reschedule{ to: friday } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to friday.",
+        "move": "act",
+        "hint": "and push it to a day (C12: it = the row just written)"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0164",
+    "today": "Friday 2026-06-26",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_me is not null))",
+        "gloss": "List parties where the amount they owe me is set.",
+        "move": "first",
+        "hint": "who owes me money"
+      },
+      {
+        "canonical": "sum owed_to_me of (them)",
+        "gloss": "What is the total amount they owe me of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how much in total"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (parties called \"Jasper\") that (settled_at is null))",
+        "gloss": "Mark [the obligations linked to [parties named \"Jasper\"] where there is no date settled] as settled / paid off.",
+        "move": "new",
+        "hint": "pay off / settle what I owe Jasper"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0258",
+    "today": "Wednesday 2026-10-07",
+    "turns": [
+      {
+        "canonical": "show (expenses that (spent_on during last month))",
+        "gloss": "List expenses where the date spent falls last month.",
+        "move": "first",
+        "hint": "what did I spend last month"
+      },
+      {
+        "canonical": "show (expenses that (spent_on during this month))",
+        "gloss": "List expenses where the date spent falls this month.",
+        "move": "substitute",
+        "hint": "and this month?"
+      },
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during last weekend))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls last weekend]?",
+        "move": "switch",
+        "hint": "what did I spend last weekend"
+      },
+      {
+        "canonical": "show (expenses that (spent_on during last month))",
+        "gloss": "List expenses where the date spent falls last month.",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      },
+      {
+        "canonical": "tally.add_expense{ amount_minor: 3500, description: \"Car hire\", group_id: (groups called \"weekend\"), paid_by: me }",
+        "gloss": "Add an expense \"Car hire\" of 35.00 (3500 pence), in the group [groups named \"weekend\"], paid by me (the member).",
+        "move": "new",
+        "hint": "log an expense of 35.00"
+      },
+      {
+        "canonical": "tally.delete_expense{} on (it)",
+        "gloss": "Delete (move to trash) [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "actually delete that"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0309",
+    "today": "Wednesday 2026-09-23",
+    "turns": [
+      {
+        "canonical": "people.log_interaction{ kind: \"message\", since: last thursday } on (parties called \"Horatio\")",
+        "gloss": "Log that I had a message with [parties named \"Horatio\"].",
+        "move": "first",
+        "hint": "log a message with Horatio (last thursday)"
+      },
+      {
+        "canonical": "show (things that (folder = \"Work\" or notebooks contains \"Work\"))",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) where (the folder is \"Work\" or the notebooks it is in contains \"Work\").",
+        "move": "new",
+        "hint": "what's in my Work folder/notebook"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0709",
+    "today": "Friday 2025-09-05",
+    "turns": [
+      {
+        "canonical": "people.log_interaction{ kind: \"message\", since: yesterday } on (parties called \"Mabel\")",
+        "gloss": "Log that I had a message with [parties named \"Mabel\"].",
+        "move": "first",
+        "hint": "log a message with Mabel (yesterday)"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0706",
+    "today": "Wednesday 2026-09-09",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses of (groups called \"fund\"))",
+        "gloss": "What is the total amount (in pence) of [the expenses linked to [groups named \"fund\"]]?",
+        "move": "first",
+        "hint": "how much did we spend on the fund"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0566",
+    "today": "Friday 2028-09-08",
+    "turns": [
+      {
+        "canonical": "show (things during next tuesday)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's on next tuesday"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0339",
+    "today": "Thursday 2026-03-12",
+    "turns": [
+      {
+        "canonical": "show (documents called \"contract\" that (deleted_at is not null))",
+        "gloss": "List documents named \"contract\" where the date deleted (trash) is set.",
+        "move": "first",
+        "hint": "did I delete / bin the contract document"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0149",
+    "today": "Thursday 2026-11-05",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Umberto\" that (role contains \"colleague\"))",
+        "gloss": "List parties named \"Umberto\" where the role contains \"colleague\".",
+        "move": "first",
+        "hint": "the Umberto I used to work with"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0032",
+    "today": "Sunday 2026-02-22",
+    "turns": [
+      {
+        "canonical": "people.settle_debt{} on (obligations of (parties called \"Leopold\") that (settled_at is null))",
+        "gloss": "Mark [the obligations linked to [parties named \"Leopold\"] where there is no date settled] as settled / paid off.",
+        "move": "first",
+        "hint": "pay off / settle what I owe Leopold"
+      },
+      {
+        "canonical": "show (members of (groups called \"present fund\"))",
+        "gloss": "List the members linked to [groups named \"present fund\"].",
+        "move": "new",
+        "hint": "who's in the present fund group"
+      },
+      {
+        "canonical": "same? (members called \"Horatio\") (parties called \"Horatio Tennant\")",
+        "gloss": "Are [members named \"Horatio\"] and [parties named \"Horatio Tennant\"] the same (do they share a row)?",
+        "move": "new",
+        "hint": "is that Horatio the same Horatio as in my contacts (full name said)"
+      },
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during next week))",
+        "gloss": "List tasks where the status is not \"completed\" and the due date falls next week.",
+        "move": "new",
+        "hint": "which tasks are still due next week"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0575",
+    "today": "Saturday 2025-09-06",
+    "turns": [
+      {
+        "canonical": "show (important dates of (parties called \"Nadia\"))",
+        "gloss": "List the important dates linked to [parties named \"Nadia\"].",
+        "move": "first",
+        "hint": ""
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  }
+]

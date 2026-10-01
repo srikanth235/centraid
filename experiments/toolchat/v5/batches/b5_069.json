@@ -1,0 +1,213 @@
+[
+  {
+    "id": "a0387",
+    "today": "Monday 2028-05-01",
+    "turns": [
+      {
+        "canonical": "count of (parties)",
+        "move": "first",
+        "hint": "how many contacts do I have"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0929",
+    "today": "Friday 2028-05-19",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_me is not null) ordered by owed_to_me desc)",
+        "move": "first",
+        "hint": "who owes me, biggest first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0589",
+    "today": "Wednesday 2027-10-20",
+    "turns": [
+      {
+        "canonical": "show (expenses that (amount_minor < 500 and spent_on during last week))",
+        "move": "first",
+        "hint": "small expenses under that amount in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0565",
+    "today": "Wednesday 2025-09-10",
+    "turns": [
+      {
+        "canonical": "show (events that (status = \"cancelled\") during tomorrow)",
+        "move": "first",
+        "hint": "cancelled events in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0604",
+    "today": "Sunday 2028-10-29",
+    "turns": [
+      {
+        "canonical": "show (important dates that (next_occurrence during this month))",
+        "move": "first",
+        "hint": "which birthdays/anniversaries are coming up in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0849",
+    "today": "Tuesday 2025-06-24",
+    "turns": [
+      {
+        "canonical": "min amount_minor of (expenses that (spent_on during today))",
+        "move": "first",
+        "hint": "smallest expense in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1081",
+    "today": "Friday 2028-09-22",
+    "turns": [
+      {
+        "canonical": "tally.delete_expense{} on (expenses called \"grooming\")",
+        "move": "first",
+        "hint": "delete the grooming expense"
+      },
+      {
+        "canonical": "tally.undo_expense{} on (it)",
+        "move": "undo",
+        "hint": "oh no, put it back / undo that"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1060",
+    "today": "Saturday 2025-04-26",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (settlements of (groups called \"share\"))",
+        "move": "first",
+        "hint": "how much has been settled up in the share group in total"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0548",
+    "today": "Tuesday 2027-11-02",
+    "turns": [
+      {
+        "canonical": "show (events that (dtstart > next saturday) ordered by dtstart asc)",
+        "move": "first",
+        "hint": "events after that day, soonest first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1037",
+    "today": "Sunday 2025-11-16",
+    "turns": [
+      {
+        "canonical": "count of (photos of (places called \"Juniper Bakery\"))",
+        "move": "first",
+        "hint": "how many photos did I take at Bakery"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Juniper Bakery\"", "turn": 1, "say": "exact: Bakery" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1002",
+    "today": "Friday 2028-11-17",
+    "turns": [
+      {
+        "canonical": "show (parties of (obligations that (settled_at is null and from_party = me)))",
+        "move": "first",
+        "hint": "who are the people I still owe money to (via the debts)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0854",
+    "today": "Tuesday 2026-08-25",
+    "turns": [
+      {
+        "canonical": "min amount_minor of (expenses that (spent_on during last week))",
+        "move": "first",
+        "hint": "smallest expense in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0776",
+    "today": "Saturday 2028-07-22",
+    "turns": [
+      {
+        "canonical": "show (tasks that (deleted_at is not null))",
+        "move": "first",
+        "hint": "which tasks have I deleted / are in the bin"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1027",
+    "today": "Thursday 2025-12-25",
+    "turns": [
+      {
+        "canonical": "show (photos of (albums called \"Hiking\"))",
+        "move": "first",
+        "hint": "show the photos in the Hiking album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Hiking\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0477",
+    "today": "Monday 2026-07-27",
+    "turns": [
+      {
+        "canonical": "value of (contact channels of (parties called \"Yannick Pendry\") that (kind = \"phone\"))",
+        "move": "first",
+        "hint": "what's Yannick's number/email (the value)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Yannick Pendry\"",
+        "turn": 1,
+        "say": "exact: Yannick"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

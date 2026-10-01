@@ -32,7 +32,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lexicon import (  # noqa: E402
     COMMANDS, DECLINE_REASONS, FIELDS, KINDS, REFS, VERB_CLASSES,
-    WINDOW_PHRASES,
+    RELATIVE_DAYS, WINDOW_PHRASES,
 )
 
 ORDINAL_REF = re.compile(r"^the (\d+)(?:st|nd|rd|th) one$")
@@ -64,6 +64,7 @@ TOKEN = re.compile(r"""
   | (?P<datetime>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z?)
   | (?P<date>\d{4}-\d{2}-\d{2})
   | (?P<month>\d{4}-\d{2})
+  | (?P<time>\d{2}:\d{2}(?![\d:]))
   | (?P<duration>[+-]\d+[hdm])
   | (?P<ordinal>\d+(?:st|nd|rd|th))
   | (?P<number>-?\d+(?:\.\d+)?)
@@ -265,7 +266,43 @@ class Parser:
         if kind == "ident" and raw in ("null", "true", "false", "me"):
             self.take()
             return {"node": "lit", "type": "keyword", "value": raw}
+        rel = self.reldate()
+        if rel is not None:
+            return {"node": "lit", "type": "reldate", "value": rel}
         raise ParseError("bad argument value %r" % raw)
+
+    def reldate(self, in_window=False):
+        """`RelDate := RelDay [at Time]` (GRAMMAR.md 1.3), as its canonical
+        spelling, or None.  Inside a window there is no `at Time`, and
+        today/tomorrow/yesterday stay window PHRASES.  The executor resolves
+        it against the session's today; the parser only recognises it."""
+        raw = self.word()
+        if raw in RELATIVE_DAYS:
+            length = 1
+        elif raw in ("next", "last") and self.word(1) in RELATIVE_DAYS:
+            length = 2
+        elif raw in ("today", "tomorrow", "yesterday") and not in_window:
+            length = 1
+        elif (raw == "the" and self.peek(1)[0] == "ordinal"
+                and self.word(2) != "one"):
+            day = int(re.match(r"\d+", self.peek(1)[1]).group())
+            if not 1 <= day <= 31 or self.peek(1)[1].startswith("0"):
+                raise ParseError("no day %r in a month" % self.peek(1)[1])
+            length = 2
+        elif (raw == "in" and self.peek(1)[0] == "number"
+                and self.peek(1)[1].isdigit() and self.word(2) == "days"):
+            length = 3
+        else:
+            return None
+        parts = [self.peek(index)[1] for index in range(length)]
+        self.at += length
+        if not in_window and self.word() == "at" and self.peek(1)[0] == "time":
+            hour, minute = (int(x) for x in self.peek(1)[1].split(":"))
+            if hour > 23 or minute > 59:
+                raise ParseError("bad time %r" % self.peek(1)[1])
+            parts += ["at", self.peek(1)[1]]
+            self.at += 2
+        return " ".join(parts)
 
     # -- set ----------------------------------------------------------------
     def set_expr(self):
@@ -468,6 +505,9 @@ class Parser:
         if kind == "ident" and raw in ("true", "false", "null", "me"):
             self.take()
             return {"node": "lit", "type": "keyword", "value": raw}
+        rel = self.reldate()
+        if rel is not None:
+            return {"node": "lit", "type": "reldate", "value": rel}
         if kind == "ident":
             return {"node": "fieldref", "field": self.field()}
         raise ParseError("bad operand %r" % raw)
@@ -509,6 +549,9 @@ class Parser:
             count = int(self.take()[1])
             unit = self.expect_word("months", "days", "weeks")
             return {"node": "window", "how": "rolling", "n": count, "unit": unit}
+        rel = self.reldate(in_window=True)
+        if rel is not None:
+            return {"node": "window", "how": "reldate", "value": rel}
         for length in (2, 1):
             words = []
             for index in range(length):
@@ -597,6 +640,64 @@ def counts(node):
 # MAIN
 # ---------------------------------------------------------------------------
 
+# Relative-date forms (GRAMMAR.md 1.3): no gold canonical uses them yet, so
+# the parse of each form is pinned here -- (canonical, node path, expected).
+RELDATE_SAMPLES = [
+    ("reschedule{to: friday} on (it)", ("args", "to"),
+     {"node": "lit", "type": "reldate", "value": "friday"}),
+    ("reschedule{to: friday at 14:00}", ("args", "to"),
+     {"node": "lit", "type": "reldate", "value": "friday at 14:00"}),
+    ("reschedule{to: next monday}", ("args", "to"),
+     {"node": "lit", "type": "reldate", "value": "next monday"}),
+    ("reschedule{to: last friday}", ("args", "to"),
+     {"node": "lit", "type": "reldate", "value": "last friday"}),
+    ("reschedule{to: tomorrow at 09:30}", ("args", "to"),
+     {"node": "lit", "type": "reldate", "value": "tomorrow at 09:30"}),
+    ("reschedule{to: the 21st}", ("args", "to"),
+     {"node": "lit", "type": "reldate", "value": "the 21st"}),
+    ("reschedule{to: in 3 days}", ("args", "to"),
+     {"node": "lit", "type": "reldate", "value": "in 3 days"}),
+    ("show (tasks that (due_at < friday))", ("set", "pred", "rhs"),
+     {"node": "lit", "type": "reldate", "value": "friday"}),
+    ("show (tasks that (due_at >= today at 08:00))", ("set", "pred", "rhs"),
+     {"node": "lit", "type": "reldate", "value": "today at 08:00"}),
+    ("show (tasks during next friday)", ("set", "window"),
+     {"node": "window", "how": "reldate", "value": "next friday"}),
+    ("show (tasks during the 3rd)", ("set", "window"),
+     {"node": "window", "how": "reldate", "value": "the 3rd"}),
+    ("show (tasks during in 3 days)", ("set", "window"),
+     {"node": "window", "how": "reldate", "value": "in 3 days"}),
+    ("show (tasks during today)", ("set", "window"),
+     {"node": "window", "how": "phrase", "value": "today"}),
+]
+RELDATE_REJECTS = [
+    "show (tasks during friday at 14:00)",   # no `at Time` in a window
+    "reschedule{to: the 32nd}",
+    "reschedule{to: friday at 25:00}",
+]
+
+
+def reldate_self_check():
+    failures = []
+    for text, path, want in RELDATE_SAMPLES:
+        try:
+            got = parse(text)
+            for key in path:
+                got = got[key]
+        except (ParseError, KeyError, TypeError) as error:
+            failures.append("reldate sample %r: %s" % (text, error))
+            continue
+        if got != want:
+            failures.append("reldate sample %r parsed as %r" % (text, got))
+    for text in RELDATE_REJECTS:
+        try:
+            parse(text)
+            failures.append("reldate reject %r parsed" % text)
+        except ParseError:
+            pass
+    return failures
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     path = os.path.join(here, "map.json")
@@ -618,6 +719,8 @@ def main():
             failures.append("%s: stored tree disagrees with the parse" % label)
             continue
         parsed += 1
+
+    failures += reldate_self_check()
 
     stale = terminals_are_current()
     if stale:

@@ -1,0 +1,177 @@
+[
+  {
+    "id": "r2_0000",
+    "prev": "NONE",
+    "target": "show tasks that (due_at during before now and status != \"completed\")"
+  },
+  {
+    "id": "r2_0006",
+    "prev": "NONE",
+    "target": "show tasks that (due_at during this week and status != \"completed\")"
+  },
+  {
+    "id": "r2_0007",
+    "prev": "NONE",
+    "target": "show tasks that (due_at during today and status != \"completed\")"
+  },
+  {
+    "id": "r2_0008",
+    "prev": "NONE",
+    "target": "show tasks that (due_at during tomorrow and status != \"completed\")"
+  },
+  {
+    "id": "r2_0009",
+    "prev": "NONE",
+    "target": "show tasks that (due_at during next week and status != \"completed\")"
+  },
+  {
+    "id": "r2_0010",
+    "prev": "NONE",
+    "target": "show tasks that (due_at during this weekend and status != \"completed\")"
+  },
+  {
+    "id": "r2_0011",
+    "prev": "NONE",
+    "target": "show tasks that (due_at during this month and status != \"completed\")"
+  },
+  {
+    "id": "r2_0012",
+    "prev": "NONE",
+    "target": "count of tasks that (due_at during before now and status != \"completed\")"
+  },
+  {
+    "id": "r2_0016",
+    "prev": "show expenses of (groups called \"Workshop sublet\")",
+    "target": "sum amount_minor of them"
+  },
+  {
+    "id": "r2_0017",
+    "prev": "show expenses of (groups called \"Kestrel Hollow walking trip\")",
+    "target": "sum amount_minor of them"
+  },
+  {
+    "id": "r2_0019",
+    "prev": "show expenses of (groups called \"Gardening rota\")",
+    "target": "sum amount_minor of them"
+  },
+  {
+    "id": "r2_0020",
+    "prev": "show expenses of (groups called \"Marlbrook road trip\")",
+    "target": "sum amount_minor of them"
+  },
+  {
+    "id": "r2_0021",
+    "prev": "show expenses of (groups called \"Ceilidh band fund\")",
+    "target": "sum amount_minor of them"
+  },
+  {
+    "id": "r2_0023",
+    "prev": "show expenses of (groups called \"Cinderbeck cottage break\")",
+    "target": "sum amount_minor of them"
+  },
+  {
+    "id": "r2_0026",
+    "prev": "show obligations of (parties called \"Lina\") that (settled_at is null)",
+    "target": "sum amount_minor of it"
+  },
+  {
+    "id": "r2_0027",
+    "prev": "show obligations of (parties called \"Leila Karimi\") that (settled_at is null)",
+    "target": "sum amount_minor of it"
+  },
+  {
+    "id": "r2_0028",
+    "prev": "show obligations of (parties called \"Linnea Lindqvist\") that (settled_at is null)",
+    "target": "sum amount_minor of it"
+  },
+  {
+    "id": "r2_0029",
+    "prev": "show obligations of (parties called \"Lina Haddad\") that (settled_at is null)",
+    "target": "sum amount_minor of it"
+  },
+  {
+    "id": "r2_0030",
+    "prev": "show obligations of (parties called \"Temperance Sedgemoor\") that (settled_at is null)",
+    "target": "sum amount_minor of it"
+  },
+  {
+    "id": "r2_0031",
+    "prev": "show obligations of (parties called \"Chloe Dubois\") that (settled_at is null)",
+    "target": "sum amount_minor of it"
+  },
+  {
+    "id": "r2_0032",
+    "prev": "show expenses of (groups called \"Ceilidh band fund\")",
+    "target": "count of them"
+  },
+  {
+    "id": "r2_0034",
+    "prev": "show expenses of (groups called \"Gardening rota\")",
+    "target": "count of them"
+  },
+  {
+    "id": "r2_0035",
+    "prev": "show expenses of (groups called \"Beach hut share\")",
+    "target": "count of them"
+  },
+  {
+    "id": "r2_0036",
+    "prev": "show expenses of (groups called \"Unit 14C\")",
+    "target": "count of them"
+  },
+  {
+    "id": "r2_0037",
+    "prev": "NONE",
+    "target": "show obligations of (parties called \"Sunniva Lindholm\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0038",
+    "prev": "NONE",
+    "target": "show obligations of (parties called \"Fatima Haddad\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0039",
+    "prev": "NONE",
+    "target": "show obligations of (parties called \"Leila\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0040",
+    "prev": "NONE",
+    "target": "show obligations of (parties called \"Hannah Fischer\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0041",
+    "prev": "NONE",
+    "target": "show obligations of (parties called \"Nkechi Onyekwere\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0042",
+    "prev": "NONE",
+    "target": "show obligations of (parties called \"Dagfinn Ostrowska\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0043",
+    "prev": "NONE",
+    "target": "show obligations of (parties called \"Grace Mwangi\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0044",
+    "prev": "NONE",
+    "target": "show obligations of (parties called \"Mireille Beauchamp\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0045",
+    "prev": "NONE",
+    "target": "show obligations of (parties called \"Ingrid Berg\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0046",
+    "prev": "NONE",
+    "target": "show obligations of (parties called \"Anika\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0047",
+    "prev": "NONE",
+    "target": "show obligations of (parties called \"Matthias Steinhauer\") that (settled_at is null)"
+  }
+]

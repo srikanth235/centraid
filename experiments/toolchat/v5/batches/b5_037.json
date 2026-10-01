@@ -1,0 +1,231 @@
+[
+  {
+    "id": "a1127",
+    "today": "Wednesday 2026-06-17",
+    "turns": [
+      {
+        "canonical": "show (events that (dtstart < tuesday))",
+        "move": "first",
+        "hint": "events before that day"
+      },
+      {
+        "canonical": "nothing",
+        "move": "undo",
+        "hint": "actually forget it / never mind (takes the request back)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0131",
+    "today": "Saturday 2026-11-14",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"note\", title: \"Wifi password for the cabin\", content: \"1203\" }",
+        "move": "first",
+        "hint": "save the wifi password for the cabin 1203 in my locker (title = the words the person uses for it, content = the code)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0825",
+    "today": "Saturday 2028-08-26",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"Rugby crew\") that (party_id is not me))",
+        "move": "first",
+        "hint": "who else is in the rugby group apart from me"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Rugby crew\"", "turn": 1, "say": "exact: rugby" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0978",
+    "today": "Wednesday 2026-07-01",
+    "turns": [
+      {
+        "canonical": "show (groups of (expenses called \"Ferry crossing\"))",
+        "move": "first",
+        "hint": "which group was the ferry expense in"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Ferry crossing\"", "turn": 1, "say": "loose: ferry" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0278",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "canonical": "count of (documents)",
+        "move": "first",
+        "hint": "how many documents do I have"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1107",
+    "today": "Sunday 2027-11-14",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Wystan Dyer\")",
+        "move": "first",
+        "hint": "delete Wystan from my contacts"
+      },
+      {
+        "canonical": "people.undo_person{} on (it)",
+        "move": "undo",
+        "hint": "wait, put them back / undo that"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Wystan Dyer\"", "turn": 1, "say": "exact: Wystan" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0252",
+    "today": "Friday 2027-05-28",
+    "turns": [
+      {
+        "canonical": "count of (activities of (parties called \"Wilhelmina Dyer\"))",
+        "move": "first",
+        "hint": "how many times have I logged seeing/talking to Wilhelmina"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Wilhelmina Dyer\"",
+        "turn": 1,
+        "say": "exact: Wilhelmina"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0476",
+    "today": "Saturday 2027-12-04",
+    "turns": [
+      {
+        "canonical": "value of (contact channels of (parties called \"Horatio Everly\") that (kind = \"phone\"))",
+        "move": "first",
+        "hint": "what's Horatio's number/email (the value)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Horatio Everly\"",
+        "turn": 1,
+        "say": "exact: Horatio"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1026",
+    "today": "Thursday 2027-06-03",
+    "turns": [
+      {
+        "canonical": "show (photos of (albums called \"Tulips\"))",
+        "move": "first",
+        "hint": "show the photos in the Tulips album"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1047",
+    "today": "Tuesday 2025-09-09",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"vetch\"))",
+        "move": "first",
+        "hint": "photos from / taken at vetch"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0832",
+    "today": "Monday 2028-08-28",
+    "turns": [
+      {
+        "canonical": "count of (members of (groups called \"Book swap\") that (party_id is not me))",
+        "move": "first",
+        "hint": "how many other people besides me are in the Book swap group"
+      }
+    ],
+    "refer": [{ "row": "groups \"Book swap\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0717",
+    "today": "Friday 2028-06-09",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "move": "first",
+        "hint": "who do I owe money to"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1041",
+    "today": "Thursday 2026-04-16",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"Park\"))",
+        "move": "first",
+        "hint": "photos from / taken at Park"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0924",
+    "today": "Sunday 2025-08-24",
+    "turns": [
+      {
+        "canonical": "show (obligations of (parties called \"Brigid\") ordered by incurred_on desc)",
+        "move": "first",
+        "hint": "debts with Brigid, newest first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0132",
+    "today": "Monday 2025-06-09",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"note\", title: \"Key safe code\", content: \"7730\" }",
+        "move": "first",
+        "hint": "save the key safe code 7730 in my locker (title = the words the person uses for it, content = the code)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

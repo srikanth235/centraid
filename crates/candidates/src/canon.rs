@@ -15,6 +15,7 @@
 //! parser — same precedence, same postfix loop, same lookahead — so the two can
 //! be diffed by eye.
 
+use centraid_evalsuite::reference::calendar;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
@@ -87,7 +88,9 @@ pub enum ArgVal {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Lit {
     /// `string`, `number`, `date`, `datetime`, `month`, `daterange`,
-    /// `duration`, `keyword`.
+    /// `duration`, `keyword`, or `reldate` — a relative date such as
+    /// `friday at 14:00` (§1.3), which [`resolve_relative`] rewrites to a
+    /// `date` or `datetime` before the tree is executed.
     pub ty: String,
     pub value: String,
 }
@@ -142,6 +145,10 @@ pub enum Ref {
     TheEarlierOne,
     LastAdded,
     Ordinal(u32),
+    /// `#3` or `#3, #5` — rows a TOOL RESULT numbered earlier in the
+    /// conversation (`crate::tools`). Not a pronoun: nothing is inferred, the
+    /// number names exactly the rows that were shown under it.
+    Handles(Vec<u32>),
 }
 
 impl Ref {
@@ -155,6 +162,11 @@ impl Ref {
             Self::TheEarlierOne => "the earlier one".to_owned(),
             Self::LastAdded => "the last thing I added".to_owned(),
             Self::Ordinal(n) => format!("the {n}{} one", ordinal_suffix(*n)),
+            Self::Handles(ns) => ns
+                .iter()
+                .map(|n| format!("#{n}"))
+                .collect::<Vec<_>>()
+                .join(", "),
         }
     }
 }
@@ -227,6 +239,10 @@ pub enum Window {
         value: String,
     },
     Phrase(String),
+    /// A relative day with no time (`friday`, `next friday`, `the 21st`,
+    /// `in 3 days`) — §1.3. [`resolve_relative`] rewrites it to a
+    /// [`Window::Stamp`] `date` before the tree is executed.
+    RelDate(String),
     Rolling {
         n: i64,
         unit: String,
@@ -329,6 +345,18 @@ fn lex(text: &str) -> Result<Vec<Token>, String> {
             } else {
                 return Err(format!("bad character at {at}"));
             }
+            continue;
+        }
+        if here == '#' && bytes.get(at + 1).is_some_and(char::is_ascii_digit) {
+            let mut end = at + 1;
+            while end < bytes.len() && bytes[end].is_ascii_digit() {
+                end += 1;
+            }
+            tokens.push(Token {
+                kind: "handle",
+                raw: bytes[at + 1..end].iter().collect(),
+            });
+            at = end;
             continue;
         }
         if matches!(here, '(' | ')' | '{' | '}' | ':' | ',') {
@@ -434,6 +462,20 @@ fn numeric(bytes: &[char], at: usize) -> Option<(Token, usize)> {
                 raw: bytes[at..at + 7].iter().collect(),
             },
             7,
+        ));
+    }
+    // time: HH:MM, not followed by a digit or another colon
+    if digits(at, 2)
+        && bytes.get(at + 2) == Some(&':')
+        && digits(at + 3, 2)
+        && !matches!(bytes.get(at + 5), Some(c) if c.is_ascii_digit() || *c == ':')
+    {
+        return Some((
+            Token {
+                kind: "time",
+                raw: bytes[at..at + 5].iter().collect(),
+            },
+            5,
         ));
     }
     // duration: [+-]N[hdm]
@@ -771,7 +813,57 @@ impl Parser {
                 value: token.raw,
             }));
         }
+        if let Some(value) = self.reldate(false)? {
+            return Ok(ArgVal::Lit(Lit {
+                ty: "reldate".to_owned(),
+                value,
+            }));
+        }
         Err(format!("bad argument value {:?}", token.raw))
+    }
+
+    /// `RelDate := RelDay [at Time]` (§1.3), as its canonical spelling, or
+    /// `None`. Inside a window there is no `at Time`, and
+    /// `today`/`tomorrow`/`yesterday` stay window PHRASES. Kept identical to
+    /// `grammar/check.py`'s `reldate`.
+    fn reldate(&mut self, in_window: bool) -> Result<Option<String>, String> {
+        let raw = self.word(0).map(str::to_owned);
+        let is_day = |word: Option<&str>| word.is_some_and(|w| RELATIVE_DAYS.contains(&w));
+        let length = match raw.as_deref() {
+            Some(word) if RELATIVE_DAYS.contains(&word) => 1,
+            Some("next" | "last") if is_day(self.word(1)) => 2,
+            Some("today" | "tomorrow" | "yesterday") if !in_window => 1,
+            Some("the") if self.peek(1).kind == "ordinal" && self.word(2) != Some("one") => {
+                let ordinal = &self.peek(1).raw;
+                let day: u32 = ordinal[..ordinal.len() - 2].parse().unwrap_or(0);
+                if !(1..=31).contains(&day) || ordinal.starts_with('0') {
+                    return Err(format!("no day {ordinal:?} in a month"));
+                }
+                2
+            }
+            Some("in")
+                if self.peek(1).kind == "number"
+                    && self.peek(1).raw.chars().all(|c| c.is_ascii_digit())
+                    && self.word(2) == Some("days") =>
+            {
+                3
+            }
+            _ => return Ok(None),
+        };
+        let mut parts: Vec<String> = (0..length).map(|i| self.peek(i).raw.clone()).collect();
+        self.at += length;
+        if !in_window && self.word(0) == Some("at") && self.peek(1).kind == "time" {
+            let time = self.peek(1).raw.clone();
+            let hour: u32 = time[..2].parse().unwrap_or(99);
+            let minute: u32 = time[3..].parse().unwrap_or(99);
+            if hour > 23 || minute > 59 {
+                return Err(format!("bad time {time:?}"));
+            }
+            parts.push("at".to_owned());
+            parts.push(time);
+            self.at += 2;
+        }
+        Ok(Some(parts.join(" ")))
     }
 
     /// `and` / `except` bind LOOSER than the postfix operators (`called`,
@@ -892,6 +984,23 @@ impl Parser {
     }
 
     fn reference(&mut self) -> Option<Ref> {
+        if self.peek(0).kind == "handle" {
+            let mut ns = Vec::new();
+            loop {
+                ns.push(self.take().raw.parse().ok()?);
+                // A comma continues the list only when a handle follows it:
+                // `{group_id: #3, amount_minor: 4200}` keeps its comma.
+                if self.peek(0).kind == "punct"
+                    && self.peek(0).raw == ","
+                    && self.peek(1).kind == "handle"
+                {
+                    self.take();
+                    continue;
+                }
+                break;
+            }
+            return Some(Ref::Handles(ns));
+        }
         if self.word(0) == Some("the")
             && self.peek(1).kind == "ordinal"
             && self.word(2) == Some("one")
@@ -1101,6 +1210,12 @@ impl Parser {
                 value: token.raw,
             }));
         }
+        if let Some(value) = self.reldate(false)? {
+            return Ok(Operand::Lit(Lit {
+                ty: "reldate".to_owned(),
+                value,
+            }));
+        }
         if token.kind == "ident" {
             return Ok(Operand::FieldRef(self.field()?));
         }
@@ -1129,6 +1244,18 @@ impl Parser {
     }
 
     fn window(&mut self) -> Result<Window, String> {
+        // `during (2026-06-04..2026-06-06)` — the parentheses every set
+        // operand takes, around a window, change nothing.
+        if self.peek(0).raw == "(" && self.peek(0).kind != "string" {
+            let at = self.at;
+            self.take();
+            if let Ok(inner) = self.window()
+                && self.expect_punct(')').is_ok()
+            {
+                return Ok(inner);
+            }
+            self.at = at;
+        }
         let token = self.peek(0).clone();
         if matches!(token.kind, "date" | "datetime" | "month" | "daterange") {
             self.take();
@@ -1160,6 +1287,9 @@ impl Parser {
                 .map_err(|_| "bad count in a rolling window".to_owned())?;
             let unit = self.expect_word(&["months", "days", "weeks"])?;
             return Ok(Window::Rolling { n: count, unit });
+        }
+        if let Some(value) = self.reldate(true)? {
+            return Ok(Window::RelDate(value));
         }
         for length in [2usize, 1] {
             let mut words = Vec::new();
@@ -1375,11 +1505,231 @@ impl Window {
     pub fn to_canonical(&self) -> String {
         match self {
             Self::Stamp { value, .. } => value.clone(),
-            Self::Phrase(phrase) => phrase.clone(),
+            Self::Phrase(phrase) | Self::RelDate(phrase) => phrase.clone(),
             Self::Rolling { n, unit } => format!("next {n} {unit}"),
             Self::Anchored { from, to } => {
                 format!("from ({}) to ({})", from.to_canonical(), to.to_canonical())
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Relative dates (§1.3) — resolved against the session's today, never by the
+// model
+// ---------------------------------------------------------------------------
+
+/// Parse a canonical for EXECUTION: the parse, then [`resolve_relative`]
+/// against the session's `today`. Every call site that hands a parsed
+/// canonical to the executor goes through here, so a relative date never
+/// reaches `exec.rs`.
+///
+/// # Errors
+///
+/// The text does not parse, or a relative date names no calendar day.
+pub fn parse_for_execution(text: &str, today: &str) -> Result<Turn, String> {
+    let mut tree = parse(text)?;
+    resolve_relative(&mut tree, today)?;
+    Ok(tree)
+}
+
+/// The calendar day a `RelDay` names, as `YYYY-MM-DD`. The rules are
+/// GRAMMAR.md §1.3's:
+///
+/// - `Weekday` — the next occurrence strictly after today (today's own
+///   weekday is a week ahead);
+/// - `next Weekday` — that weekday of the Monday-start week after this one;
+/// - `last Weekday` — the most recent occurrence strictly before today;
+/// - `today` / `tomorrow` / `yesterday` — today, +1, -1;
+/// - `the Nth` — day N of this month if N is at least today's day, else of
+///   next month;
+/// - `in N days` — today + N.
+///
+/// # Errors
+///
+/// Not a relative day, or `the Nth` names a day its month does not have.
+pub fn relative_day(phrase: &str, today: &str) -> Result<String, String> {
+    let words: Vec<&str> = phrase.split(' ').collect();
+    let weekday_index = |word: &str| {
+        RELATIVE_DAYS
+            .iter()
+            .position(|day| *day == word)
+            .and_then(|at| i64::try_from(at).ok())
+    };
+    let now = calendar::weekday(today);
+    let bad = || format!("not a relative day: {phrase:?}");
+    match words.as_slice() {
+        ["today"] => Ok(today.to_owned()),
+        ["tomorrow"] => Ok(calendar::shift(today, 1)),
+        ["yesterday"] => Ok(calendar::shift(today, -1)),
+        [day] if weekday_index(day).is_some() => {
+            let target = weekday_index(day).ok_or_else(bad)?;
+            let ahead = (target - now).rem_euclid(7);
+            Ok(calendar::shift(today, if ahead == 0 { 7 } else { ahead }))
+        }
+        ["next", day] => {
+            let target = weekday_index(day).ok_or_else(bad)?;
+            Ok(calendar::shift(&calendar::monday_of(today), 7 + target))
+        }
+        ["last", day] => {
+            let target = weekday_index(day).ok_or_else(bad)?;
+            let back = (now - target).rem_euclid(7);
+            Ok(calendar::shift(today, -(if back == 0 { 7 } else { back })))
+        }
+        ["in", count, "days"] => {
+            let count: i64 = count.parse().map_err(|_| bad())?;
+            Ok(calendar::shift(today, count))
+        }
+        ["the", ordinal] if ordinal.len() > 2 => {
+            let day: u32 = ordinal[..ordinal.len() - 2].parse().map_err(|_| bad())?;
+            let this_day: u32 = today[8..10].parse().map_err(|_| bad())?;
+            let first = format!("{}-01", &today[..7]);
+            let month = if day >= this_day {
+                first
+            } else {
+                calendar::months_ahead(&first, 1)
+            };
+            let candidate = format!("{}-{day:02}", &month[..7]);
+            // A day the month does not have (the 31st of June) is not a date;
+            // the calendar would roll it into the next month silently.
+            if calendar::shift(&candidate, 0) == candidate {
+                Ok(candidate)
+            } else {
+                Err(format!("{phrase:?} names no day of {}", &month[..7]))
+            }
+        }
+        _ => Err(bad()),
+    }
+}
+
+/// A `RelDate` literal's value: a `date`, or with `at HH:MM` a `datetime`.
+fn resolve_lit(lit: &mut Lit, today: &str) -> Result<(), String> {
+    if lit.ty != "reldate" {
+        return Ok(());
+    }
+    let (day, time) = match lit.value.split_once(" at ") {
+        Some((day, time)) => (day, Some(time)),
+        None => (lit.value.as_str(), None),
+    };
+    let date = relative_day(day, today)?;
+    *lit = match time {
+        Some(time) => Lit {
+            ty: "datetime".to_owned(),
+            value: format!("{date}T{time}"),
+        },
+        None => Lit {
+            ty: "date".to_owned(),
+            value: date,
+        },
+    };
+    Ok(())
+}
+
+fn resolve_window(window: &mut Window, today: &str) -> Result<(), String> {
+    match window {
+        Window::RelDate(phrase) => {
+            let date = relative_day(phrase, today)?;
+            *window = Window::Stamp {
+                how: "date".to_owned(),
+                value: date,
+            };
+            Ok(())
+        }
+        Window::Anchored { from, to } => {
+            resolve_value(from, today)?;
+            resolve_value(to, today)
+        }
+        Window::Stamp { .. } | Window::Phrase(_) | Window::Rolling { .. } => Ok(()),
+    }
+}
+
+fn resolve_value(value: &mut Value, today: &str) -> Result<(), String> {
+    match value {
+        Value::Agg { set, .. } | Value::Project { set, .. } => resolve_set(set, today),
+        Value::Balance { of, within } => {
+            resolve_set(of, today)?;
+            resolve_set(within, today)
+        }
+    }
+}
+
+fn resolve_cmd(cmd: &mut Cmd, today: &str) -> Result<(), String> {
+    for (_, arg) in &mut cmd.args {
+        match arg {
+            ArgVal::SetArg(set) => resolve_set(set, today)?,
+            ArgVal::Value(value) => resolve_value(value, today)?,
+            ArgVal::Lit(lit) => resolve_lit(lit, today)?,
+        }
+    }
+    match &mut cmd.on {
+        Some(on) => resolve_set(on, today),
+        None => Ok(()),
+    }
+}
+
+fn resolve_set(set: &mut Set, today: &str) -> Result<(), String> {
+    match set {
+        Set::Kind(_) | Set::Ref(_) => Ok(()),
+        Set::Walk { from: inner, .. }
+        | Set::Called { set: inner, .. }
+        | Set::Order { set: inner, .. }
+        | Set::First { set: inner, .. } => resolve_set(inner, today),
+        Set::Filter { set: inner, pred } => {
+            resolve_set(inner, today)?;
+            resolve_pred(pred, today)
+        }
+        Set::During { set: inner, window } => {
+            resolve_set(inner, today)?;
+            resolve_window(window, today)
+        }
+        Set::Union(left, right) | Set::Except(left, right) => {
+            resolve_set(left, today)?;
+            resolve_set(right, today)
+        }
+    }
+}
+
+fn resolve_pred(pred: &mut Pred, today: &str) -> Result<(), String> {
+    match pred {
+        Pred::And(left, right) | Pred::Or(left, right) => {
+            resolve_pred(left, today)?;
+            resolve_pred(right, today)
+        }
+        Pred::Not(inner) => resolve_pred(inner, today),
+        Pred::Member(set) => resolve_set(set, today),
+        Pred::During { window, .. } => resolve_window(window, today),
+        Pred::Cmp { rhs, .. } => match rhs {
+            Operand::SetArg(set) => resolve_set(set, today),
+            Operand::Lit(lit) => resolve_lit(lit, today),
+            Operand::FieldRef(_) => Ok(()),
+        },
+        Pred::CountWalk { .. }
+        | Pred::Is { .. }
+        | Pred::Band { .. }
+        | Pred::Contains { .. }
+        | Pred::OneOf { .. } => Ok(()),
+    }
+}
+
+/// Rewrite every relative date in `turn` to the absolute date it names on
+/// `today` — a `reldate` literal to a `date` or `datetime` literal, a
+/// [`Window::RelDate`] to a `date` [`Window::Stamp`] — so the executor only
+/// ever sees absolute dates. §1.3: resolution is the executor's, against the
+/// session's today, never the model's.
+///
+/// # Errors
+///
+/// A relative date names no calendar day (`the 31st` in a 30-day month).
+pub fn resolve_relative(turn: &mut Turn, today: &str) -> Result<(), String> {
+    match turn {
+        Turn::Show(set) => resolve_set(set, today),
+        Turn::Same(left, right) => {
+            resolve_set(left, today)?;
+            resolve_set(right, today)
+        }
+        Turn::Value(value) => resolve_value(value, today),
+        Turn::Cmd(cmd) => resolve_cmd(cmd, today),
+        Turn::Seq(steps) => steps.iter_mut().try_for_each(|cmd| resolve_cmd(cmd, today)),
+        Turn::Nothing | Turn::Refuse(_) | Turn::Clarify(_) => Ok(()),
     }
 }

@@ -1,0 +1,212 @@
+[
+  {
+    "id": "w06-075",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks to move the Elderberry appointment to monday",
+        "say": ["Elderberry", "monday"]
+      },
+      { "hint": "corrects: no, make it saturday", "say": ["saturday"] },
+      { "hint": "asks who else will be there", "say": [] },
+      { "hint": "asks what else there is apart from the third one", "say": [] },
+      {
+        "hint": "(new topic) asks to delete the Greenhouse document",
+        "say": ["Greenhouse"]
+      },
+      {
+        "hint": "(new topic) asks for Wilhelmina Sandoval's email address",
+        "say": ["Wilhelmina Sandoval"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "texting"]
+  },
+  {
+    "id": "w06-076",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks to find the to-dos on Repaint", "say": ["Repaint"] },
+      {
+        "hint": "(new topic) asks if the Attic note is in the trash",
+        "say": ["Attic"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "texting"]
+  },
+  {
+    "id": "w06-077",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks what they have about clean", "say": ["clean"] },
+      {
+        "hint": "(new topic) asks what the fitting share group's spending comes to",
+        "say": ["fitting share"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "w07-000",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      { "hint": "asks for the 60-minute jobs on their list", "say": ["60"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "spoken"]
+  },
+  {
+    "id": "w07-001",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      { "hint": "asks for everything mentioning Stannard", "say": ["Stannard"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "question"]
+  },
+  {
+    "id": "w07-002",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      {
+        "hint": "asks who is in the Community garden group",
+        "say": ["Community garden"]
+      },
+      { "hint": "asks how much Yara owes them in that group", "say": ["Yara"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "polite"]
+  },
+  {
+    "id": "w07-003",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      { "hint": "asks which to-dos are due next week", "say": ["next week"] },
+      { "hint": "asks what else there is apart from the third one", "say": [] },
+      {
+        "hint": "(new topic) asks which documents mention certificate",
+        "say": ["certificate"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "asks to add a task for tuesday to deal with 'Doorbell certificate'",
+        "say": ["tuesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "polite"]
+  },
+  {
+    "id": "w07-004",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      {
+        "hint": "asks when they last heard from Kit Crowther",
+        "say": ["Kit Crowther"]
+      },
+      {
+        "hint": "(new topic) asks what they ticked off today",
+        "say": ["today"]
+      },
+      { "hint": "asks which of those are still to do", "say": [] },
+      {
+        "hint": "(new topic) asks which to-dos are past their due date and not done",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks what birthdays or anniversaries there are next month",
+        "say": ["next month"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "texting"]
+  },
+  {
+    "id": "w07-005",
+    "today": "Monday 2027-10-11",
+    "turns": [{ "hint": "asks for the latest football scores", "say": [] }],
+    "versions": 3,
+    "registers": ["polite", "texting", "terse"]
+  },
+  {
+    "id": "w07-006",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      { "hint": "asks what's in the vault about Quigley", "say": ["Quigley"] },
+      {
+        "hint": "(new topic) asks for everything mentioning Wine",
+        "say": ["Wine"]
+      },
+      {
+        "hint": "(new topic) asks what they last talked about with Kalinda Rasmussen",
+        "say": ["Kalinda Rasmussen"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "texting"]
+  },
+  {
+    "id": "w07-007",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      {
+        "hint": "asks to put 'Eye test' in the calendar saturday at 09:00",
+        "say": ["Eye test", "saturday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "spoken"]
+  },
+  {
+    "id": "w07-008",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      { "hint": "asks for the Cloud wifi details", "say": ["Cloud"] },
+      {
+        "hint": "asks the same about Joint Visa instead ('what about Joint Visa?')",
+        "say": ["Joint Visa"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  },
+  {
+    "id": "w07-009",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      {
+        "hint": "asks to find anything to do with Sedgefield",
+        "say": ["Sedgefield"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w07-010",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      {
+        "hint": "asks what pictures are in the Elmstead album",
+        "say": ["Elmstead"]
+      },
+      { "hint": "asks which albums those photos are in", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w07-011",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      {
+        "hint": "asks what's left to do on the 'Return library books' task",
+        "say": ["Return library books"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "question"]
+  }
+]

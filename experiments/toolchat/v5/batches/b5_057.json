@@ -1,0 +1,247 @@
+[
+  {
+    "id": "a1080",
+    "today": "Monday 2025-05-26",
+    "turns": [
+      {
+        "canonical": "tally.delete_expense{} on (expenses called \"Car hire\")",
+        "move": "first",
+        "hint": "delete the hire expense"
+      },
+      {
+        "canonical": "tally.undo_expense{} on (it)",
+        "move": "undo",
+        "hint": "oh no, put it back / undo that"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Car hire\"", "turn": 1, "say": "loose: hire" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1150",
+    "today": "Saturday 2025-10-04",
+    "turns": [
+      {
+        "canonical": "show (things during tomorrow)",
+        "move": "first",
+        "hint": "what's on in that window"
+      },
+      {
+        "canonical": "delete{} on (the 3rd one)",
+        "move": "act",
+        "hint": "get rid of one of them by position"
+      },
+      {
+        "canonical": "restore{} on (it)",
+        "move": "undo",
+        "hint": "oops, bring it back"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0480",
+    "today": "Wednesday 2026-06-17",
+    "turns": [
+      {
+        "canonical": "value of (contact channels of (parties called \"Jolene Crowther\") that (kind = \"phone\"))",
+        "move": "first",
+        "hint": "what's Jolene's number/email (the value)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Jolene Crowther\"",
+        "turn": 1,
+        "say": "exact: Jolene"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0332",
+    "today": "Tuesday 2025-08-05",
+    "turns": [
+      {
+        "canonical": "count of (locker items that (type = \"passport\"))",
+        "move": "first",
+        "hint": "how many of that type are in my locker"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1054",
+    "today": "Thursday 2025-10-02",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (settlements of (groups called \"Hen do\"))",
+        "move": "first",
+        "hint": "how much has been settled up in the hen group in total"
+      }
+    ],
+    "refer": [{ "row": "groups \"Hen do\"", "turn": 1, "say": "exact: hen" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0911",
+    "today": "Sunday 2025-10-19",
+    "turns": [
+      {
+        "canonical": "show (notes ordered by updated_at desc)",
+        "move": "first",
+        "hint": "notes, most recently edited first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1094",
+    "today": "Thursday 2025-07-03",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Otto Hargreaves\")",
+        "move": "first",
+        "hint": "delete Otto from my contacts"
+      },
+      {
+        "canonical": "people.undo_person{} on (it)",
+        "move": "undo",
+        "hint": "wait, put them back / undo that"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Otto Hargreaves\"", "turn": 1, "say": "exact: Otto" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0581",
+    "today": "Thursday 2028-07-20",
+    "turns": [
+      {
+        "canonical": "show (expenses that (amount_minor < 2000 and spent_on during this week))",
+        "move": "first",
+        "hint": "small expenses under that amount in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0554",
+    "today": "Wednesday 2026-02-11",
+    "turns": [
+      {
+        "canonical": "show (events that (dtstart < monday))",
+        "move": "first",
+        "hint": "events before that day"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0208",
+    "today": "Saturday 2027-03-27",
+    "turns": [
+      {
+        "canonical": "schedule.cancel_event{} on (events called \"Wine tasting\")",
+        "move": "first",
+        "hint": "cancel the tasting"
+      }
+    ],
+    "refer": [
+      { "row": "events \"Wine tasting\"", "turn": 1, "say": "exact: tasting" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0493",
+    "today": "Wednesday 2027-08-18",
+    "turns": [
+      {
+        "canonical": "show (activities that (started_at during last weekend))",
+        "move": "first",
+        "hint": "who did I call/see/have coffee with in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0755",
+    "today": "Sunday 2028-04-23",
+    "turns": [
+      {
+        "canonical": "show (photos that (place = \"Oakhurst Clinic\"))",
+        "move": "first",
+        "hint": "photos whose place is oakhurst"
+      }
+    ],
+    "refer": [
+      {
+        "row": "places \"Oakhurst Clinic\"",
+        "turn": 1,
+        "say": "exact: oakhurst"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0182",
+    "today": "Wednesday 2027-05-12",
+    "turns": [
+      {
+        "canonical": "media.restore_asset{} on (photos called \"Wedding toast\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "restore the deleted toast photo"
+      }
+    ],
+    "refer": [
+      { "row": "photos \"Wedding toast\"", "turn": 1, "say": "loose: toast" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1031",
+    "today": "Monday 2028-03-13",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"Hawthorn Lane\"))",
+        "move": "first",
+        "hint": "photos from / taken at Lane"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Hawthorn Lane\"", "turn": 1, "say": "exact: Lane" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0731",
+    "today": "Saturday 2025-03-22",
+    "turns": [
+      {
+        "canonical": "count of (photos that (favorite = true))",
+        "move": "first",
+        "hint": "how many favourites have I got"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

@@ -1,0 +1,299 @@
+[
+  {
+    "id": "w21-0013",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks where their clocktower voucher is",
+        "say": ["clocktower voucher"]
+      },
+      {
+        "hint": "follow-up: asks what else is in the same folder",
+        "say": [],
+        "shown": "document \"Clocktower voucher\" Sun 2026-04-05 15:29 · folder=Side business"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w21-0015",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks to log thirty five kroner of groceries in Enow, paid by them",
+        "say": ["thirty five kroner", "groceries", "Enow"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w21-0016",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks what pictures they have from this month",
+        "say": ["this month"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w21-0017",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "says they had coffee with Faustina today, log it (two contacts are called Faustina)",
+        "say": ["Faustina", "coffee"]
+      },
+      {
+        "hint": "(new topic) asks what's left to do on the cancel plan",
+        "say": ["cancel"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: says the clean one is done",
+        "say": ["clean"],
+        "shown": "task \"Clean the drawbridge\" · status=needs-action\ntask \"Order the totem\" · status=needs-action effort_min=90"
+      },
+      {
+        "hint": "(new topic) asks whether they binned the magnolia document",
+        "say": ["magnolia", "document"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w21-0018",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "says they had coffee with Faustina Alcott today, log it",
+        "say": ["Faustina Alcott", "coffee"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w21-0019",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks where they stand with Tonu in number 88 flat",
+        "say": ["Tonu", "number 88 flat"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w21-0020",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks who Faustina is (several people are called Faustina)",
+        "say": ["Faustina"]
+      },
+      {
+        "hint": "follow-up: about the Pickersgill one, asks when their birthday is",
+        "say": ["Pickersgill"],
+        "shown": "party \"Faustina Alcott\" · role=Doctor\nparty \"Faustina Pickersgill\" · role=Neighbour next door"
+      },
+      {
+        "hint": "(new topic) asks what they wrote in their journal this month",
+        "say": ["this month", "journal"],
+        "shown": "important date \"Christening — Faustina Pickersgill\" Thu 2026-05-21"
+      },
+      {
+        "hint": "(new topic) asks for Bethan's contact card",
+        "say": ["Bethan"],
+        "shown": "journal note \"People journal · good\" Sat 2026-12-19 12:00\njournal note \"People journal · restless\" Mon 2026-12-14 12:00\njournal note \"People journal · content\" Sun 2026-12-13 12:00\njournal note \"People journal · content\" Sun 2026-12-06 12:00\n(+2 more)"
+      },
+      {
+        "hint": "follow-up: asks what events they're coming to",
+        "say": [],
+        "shown": "party \"Bethan Zaki\" · owed_to_me_minor=500 role=Daughter"
+      },
+      {
+        "hint": "follow-up: says nah, leave it",
+        "say": [],
+        "shown": "event \"Bassoon meetup\" Tue 2026-12-22 10:45\nevent \"Astrophotography meetup with Widad\" Wed 2027-01-13 20:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w21-0021",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks to see the diary entries they made last week",
+        "say": ["last week", "diary"]
+      },
+      {
+        "hint": "(new topic) asks if anyone owes them cash",
+        "say": [],
+        "shown": "journal note \"People journal · good\" Sat 2026-12-19 12:00\njournal note \"People journal · restless\" Mon 2026-12-14 12:00"
+      },
+      {
+        "hint": "follow-up: about the Sathette one, asks for their contact details",
+        "say": ["Sathette"],
+        "shown": "party \"Sathette Crastino\" · owed_to_me_minor=7500 role=University friend\nparty \"Yufei Jovanovic\" · owed_to_me_minor=500 role=Client\nparty \"Bethan Zaki\" · owed_to_me_minor=500 role=Daughter"
+      },
+      {
+        "hint": "(new topic) asks for their pictures from Mill",
+        "say": ["Mill"],
+        "shown": "contact channel \"Sathette Crastino — mobile\" · kind=phone value=+45 20 12 3662\ncontact channel \"Sathette Crastino — work\" · kind=email value=sathette.crastino@example.net"
+      },
+      {
+        "hint": "follow-up: asks how many that is",
+        "say": [],
+        "shown": "photo \"Faustina at Enow Mill\" Sun 2026-09-13 17:43 · album_titles=Kimel's doorbell, Enow 2026 favorite=false\nphoto \"Rockpool at Enow Mill\" Sun 2026-09-13 10:57 · album_titles=Naxos Garden Centre 2026, Enow 2026 favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w21-0022",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks to list the people in the Enow trip group",
+        "say": ["Enow trip"]
+      },
+      {
+        "hint": "follow-up: says actually, don't bother",
+        "say": [],
+        "shown": "member \"Gristine Zunnett\"\nmember \"Orsolya Goodenough\"\nmember \"Goran Zaki\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w21-0023",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks where the funnel close-up went",
+        "say": ["funnel close-up"]
+      },
+      {
+        "hint": "follow-up: asks which album it's in",
+        "say": [],
+        "shown": "photo \"Funnel close-up\" Tue 2026-11-24 13:35 · album_titles=Enow 2026, Cello club favorite=false"
+      },
+      {
+        "hint": "(new topic) asks what Gristine's balance with them is in the Enow group",
+        "say": ["Gristine", "Enow"],
+        "shown": "album \"Cello club\"\nalbum \"Enow 2026\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w21-0024",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks if the renew task can go to friday instead",
+        "say": ["renew", "friday"]
+      },
+      {
+        "hint": "(new topic) asks whether they deleted the giraffe document",
+        "say": ["giraffe", "document"],
+        "shown": "done: reschedule{to: 2026-12-25} on (#1)"
+      },
+      {
+        "hint": "(detour) hang on — asks what they have filed under Travel",
+        "say": ["Travel"],
+        "shown": "document \"Giraffe quote\" Sat 2025-12-20 08:22 · folder=Visas · trashed"
+      },
+      {
+        "hint": "(detour) hang on — asks what's left to do on the cancel plan",
+        "say": ["cancel"],
+        "shown": "document \"Hondora insurance certificate\" Sat 2026-05-16 16:17 · folder=Travel\ndocument \"Mustard permit\" Sun 2026-04-05 21:45 · folder=Travel\ndocument \"Bank statement (02)\" Wed 2026-04-01 07:08 · folder=Travel"
+      },
+      {
+        "hint": "back to the giraffe document — asks for a task to check the giraffe document monday",
+        "say": ["check the giraffe document", "monday"],
+        "shown": "task \"Clean the drawbridge\" · status=needs-action\ntask \"Order the totem\" · status=needs-action effort_min=90"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w21-0025",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks to delete the ladle policy document",
+        "say": ["ladle policy", "document"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w21-0026",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks to delete the giraffe document",
+        "say": ["giraffe", "document"]
+      },
+      {
+        "hint": "(new topic) asks what the steps for the replace the woodpecker this week are",
+        "say": ["replace the woodpecker this week"],
+        "shown": "none"
+      },
+      {
+        "hint": "(new topic) asks how much the naxos garden cost",
+        "say": ["naxos garden"],
+        "shown": "task \"Label the doorbell\" Mon 2026-12-07 17:00 · status=in-process\ntask \"Paint the lilac\" Tue 2026-12-22 17:00 · status=needs-action effort_min=90"
+      },
+      {
+        "hint": "follow-up: asks to make the bassoon one an hour later",
+        "say": ["bassoon"],
+        "shown": "= 4699"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w21-0027",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks for their to-dos about photograph",
+        "say": ["photograph", "to-dos"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w21-0028",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      { "hint": "asks who they're in debt to", "say": [] },
+      {
+        "hint": "(new topic) asks to delete everything in the vault",
+        "say": [],
+        "shown": "party \"Orsolya Goodenough\" · owed_to_them_minor=7500 role=Old school friend\nparty \"Efe Galli\" · owed_to_them_minor=1200 role=Intern\nparty \"Esme Zaki\" · owed_to_them_minor=15000 role=Son\nparty \"Goran Zaki\" · owed_to_them_minor=2000 role=Son"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  }
+]

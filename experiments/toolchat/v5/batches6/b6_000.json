@@ -1,0 +1,287 @@
+[
+  {
+    "id": "c0192",
+    "today": "Wednesday 2027-02-10",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Book the MOT\" }",
+        "move": "first",
+        "hint": "add a task / remind me to book the MOT (NO date given)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0116",
+    "today": "Wednesday 2027-04-14",
+    "turns": [
+      {
+        "canonical": "show (obligations of (parties called \"Idris Illingworth\") that (settled_at is null))",
+        "move": "first",
+        "hint": "do I owe Idris anything / does Idris owe me anything"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "how much? (one or two words)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (them)",
+        "move": "act",
+        "hint": "ok settle that / pay it off"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Idris Illingworth\"",
+        "turn": 1,
+        "say": "exact: Idris"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0200",
+    "today": "Sunday 2026-03-15",
+    "turns": [
+      {
+        "canonical": "refuse: out_of_ontology",
+        "move": "first",
+        "hint": "book a hire car on their website / online for me (the app cannot browse or book)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0045",
+    "today": "Monday 2026-03-09",
+    "turns": [
+      {
+        "canonical": "show (things called \"fence\")",
+        "move": "first",
+        "hint": "what do I have about fence (anything at all, no app named)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0124",
+    "today": "Monday 2026-07-20",
+    "turns": [
+      {
+        "canonical": "show (obligations of (parties called \"Jolene Merriweather\") that (settled_at is null))",
+        "move": "first",
+        "hint": "do I owe Jolene anything / does Jolene owe me anything"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "how much? (one or two words)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (them)",
+        "move": "act",
+        "hint": "ok settle that / pay it off"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Jolene Merriweather\"",
+        "turn": 1,
+        "say": "exact: Jolene"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0243",
+    "today": "Friday 2028-11-03",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"Chess night\") that (party_id is not me))",
+        "move": "first",
+        "hint": "who's in the Chess night group (plain question)"
+      }
+    ],
+    "refer": [{ "row": "groups \"Chess night\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0044",
+    "today": "Saturday 2025-09-20",
+    "turns": [
+      {
+        "canonical": "show (things called \"session\")",
+        "move": "first",
+        "hint": "what do I have about session (anything at all, no app named)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0026",
+    "today": "Tuesday 2025-07-08",
+    "turns": [
+      {
+        "canonical": "show (documents called \"tax\")",
+        "move": "first",
+        "hint": "have I got anything in my paperwork / documents / files for/about tax"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0207",
+    "today": "Friday 2026-07-03",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Book the ferry\" }",
+        "move": "first",
+        "hint": "add a task to book the ferry (a reminder for me)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0063",
+    "today": "Thursday 2026-02-12",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"cleaner\")",
+        "move": "first",
+        "hint": "what cleaner tasks / to-dos do I have (the cleaner is a word in the task titles, not a person)"
+      }
+    ],
+    "refer": [
+      { "row": "role \"Cleaner\"", "turn": 1, "say": "exact: cleaner" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0112",
+    "today": "Thursday 2027-05-20",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Umberto Salazar\")",
+        "move": "first",
+        "hint": "look up Umberto"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (it) that (settled_at is null))",
+        "move": "act",
+        "hint": "how much is outstanding with them / what do they still owe (pronoun, no name)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (it))",
+        "move": "act",
+        "hint": "pay it off / settle up with them (pronoun)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Umberto Salazar\"",
+        "turn": 1,
+        "say": "exact: Umberto"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0219",
+    "today": "Tuesday 2028-07-25",
+    "turns": [
+      {
+        "canonical": "show (places called \"Gullstone Bay\")",
+        "move": "first",
+        "hint": "find the Bay place"
+      },
+      {
+        "canonical": "show (photos of (them))",
+        "move": "act",
+        "hint": "show me those photos / the pictures in it"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Gullstone Bay\"", "turn": 1, "say": "loose: Bay" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0084",
+    "today": "Saturday 2027-05-22",
+    "turns": [
+      {
+        "canonical": "show (expenses of (groups called \"weekend\"))",
+        "move": "first",
+        "hint": "list the expenses in the weekend group"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "what's that come to / how much is that altogether / total? (short follow-up, no names)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0157",
+    "today": "Monday 2027-08-23",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during this month))",
+        "move": "first",
+        "hint": "what tasks are due in that window"
+      },
+      {
+        "canonical": "show (them that (title contains \"old\"))",
+        "move": "refine",
+        "hint": "just the old ones (narrow those by a word)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0106",
+    "today": "Monday 2026-01-12",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Ignatius Birkett\")",
+        "move": "first",
+        "hint": "look up Ignatius"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (it) that (settled_at is null))",
+        "move": "act",
+        "hint": "how much is outstanding with them / what do they still owe (pronoun, no name)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (it))",
+        "move": "act",
+        "hint": "pay it off / settle up with them (pronoun)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Ignatius Birkett\"",
+        "turn": 1,
+        "say": "exact: Ignatius"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

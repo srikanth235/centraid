@@ -1,0 +1,284 @@
+[
+  {
+    "id": "g0227",
+    "today": "Thursday 2025-04-24",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Benedikt\") that (settled_at is null))",
+        "gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Benedikt\"] where there is no date settled]?",
+        "move": "first",
+        "hint": "how much do I owe Benedikt"
+      },
+      {
+        "canonical": "people.settle_debt{} on (it)",
+        "gloss": "Mark [it (the one row the previous turn is about)] as settled / paid off.",
+        "move": "act",
+        "hint": "settle it (R-X2: the rows the sum folded)"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0156",
+    "today": "Sunday 2028-07-09",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Pippa\" that (role contains \"colleague\"))",
+        "gloss": "List parties named \"Pippa\" where the role contains \"colleague\".",
+        "move": "first",
+        "hint": "the Pippa I used to work with"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (it) ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [it (the one row the previous turn is about)], sorted by start time descending (highest/latest first)].",
+        "move": "act",
+        "hint": "when did I last speak to them"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0169",
+    "today": "Friday 2027-02-19",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during this weekend) ordered by due_at asc)",
+        "gloss": "List tasks where the status is not \"completed\" and the due date falls this weekend, sorted by due date ascending (lowest/earliest first).",
+        "move": "first",
+        "hint": "what's due this weekend (open tasks)"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many is that"
+      },
+      {
+        "canonical": "show (parties that (owed_to_me is not null))",
+        "gloss": "List parties where the amount they owe me is set.",
+        "move": "new",
+        "hint": "who owes me money"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0008",
+    "today": "Sunday 2025-11-23",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\"))",
+        "gloss": "List tasks where the due date falls before now (already past \u2014 overdue) and the status is not \"completed\".",
+        "move": "first",
+        "hint": "overdue (past due, not done) tasks"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "act",
+        "hint": "mark the 1st one done"
+      },
+      {
+        "canonical": "reschedule{ to: next wednesday } on (the 2nd one)",
+        "gloss": "Move [the 2nd one (by position in the previous answer)] to next wednesday.",
+        "move": "act",
+        "hint": "move another one by position"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0498",
+    "today": "Wednesday 2026-09-09",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\"))",
+        "gloss": "List tasks where the due date falls before now (already past \u2014 overdue) and the status is not \"completed\".",
+        "move": "first",
+        "hint": "overdue (past due, not done) tasks"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "act",
+        "hint": "mark the 1st one done"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0033",
+    "today": "Tuesday 2026-04-14",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during tomorrow))",
+        "gloss": "List tasks where the status is not \"completed\" and the due date falls tomorrow.",
+        "move": "first",
+        "hint": "which tasks are still due tomorrow"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many is that"
+      },
+      {
+        "canonical": "show (events called \"team\")",
+        "gloss": "List events named \"team\".",
+        "move": "new",
+        "hint": "when is my team"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0618",
+    "today": "Monday 2026-02-16",
+    "turns": [
+      {
+        "canonical": "show (things during next tuesday)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's on next tuesday"
+      },
+      {
+        "canonical": "delete{} on (the 1st one)",
+        "gloss": "Delete (move to trash) [the 1st one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0062",
+    "today": "Saturday 2026-09-26",
+    "turns": [
+      {
+        "canonical": "show (events called \"visit\")",
+        "gloss": "List events named \"visit\".",
+        "move": "first",
+        "hint": "when is my visit"
+      },
+      {
+        "canonical": "reschedule{ to: saturday at 16:00 } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to saturday at 16:00.",
+        "move": "act",
+        "hint": "move it to another day"
+      },
+      {
+        "canonical": "show (expenses that (spent_on during this month))",
+        "gloss": "List expenses where the date spent falls this month.",
+        "move": "new",
+        "hint": "what did I spend this month"
+      },
+      {
+        "canonical": "sum amount_minor of (expenses of (groups called \"Foxglove\"))",
+        "gloss": "What is the total amount (in pence) of [the expenses linked to [groups named \"Foxglove\"]]?",
+        "move": "new",
+        "hint": "how much did we spend on the Foxglove"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0393",
+    "today": "Sunday 2028-07-30",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"hen do\"))",
+        "gloss": "List the members linked to [groups named \"hen do\"].",
+        "move": "first",
+        "hint": "who's in the hen do group"
+      },
+      {
+        "canonical": "same? (members called \"Niamh\") (parties called \"Niamh Zamora\")",
+        "gloss": "Are [members named \"Niamh\"] and [parties named \"Niamh Zamora\"] the same (do they share a row)?",
+        "move": "new",
+        "hint": "is that Niamh the same Niamh as in my contacts (full name said)"
+      },
+      {
+        "canonical": "dtstart of (events called \"physio\")",
+        "gloss": "What is the start time of [events named \"physio\"]?",
+        "move": "switch",
+        "hint": "when is my physio"
+      },
+      {
+        "canonical": "show (members of (groups called \"hen do\"))",
+        "gloss": "List the members linked to [groups named \"hen do\"].",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      },
+      {
+        "canonical": "show (expenses of (groups called \"lunch fund\"))",
+        "gloss": "List the expenses linked to [groups named \"lunch fund\"].",
+        "move": "new",
+        "hint": "what did we spend on the lunch fund"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0247",
+    "today": "Tuesday 2028-10-31",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses of (groups called \"easter\"))",
+        "gloss": "What is the total amount (in pence) of [the expenses linked to [groups named \"easter\"]]?",
+        "move": "first",
+        "hint": "how much did we spend on the easter"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0506",
+    "today": "Saturday 2025-03-15",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during last weekend))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls last weekend]?",
+        "move": "first",
+        "hint": "what did I spend last weekend"
+      },
+      {
+        "canonical": "show (them)",
+        "gloss": "List them (the rows the previous turn answered).",
+        "move": "act",
+        "hint": "which ones (C11: the rows the sum folded)"
+      },
+      {
+        "canonical": "tally.delete_expense{} on (the 1st one)",
+        "gloss": "Delete (move to trash) [the 1st one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "delete one by position"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0225",
+    "today": "Tuesday 2026-12-22",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Chase the insurance claim\", due_at: 2027-04-03 }",
+        "gloss": "Add a task titled \"Chase the insurance claim\" due Saturday 2027-04-03.",
+        "move": "first",
+        "hint": "add a task"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Hedda\") that (settled_at is null))",
+        "gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Hedda\"] where there is no date settled]?",
+        "move": "new",
+        "hint": "how much do I owe Hedda"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  }
+]

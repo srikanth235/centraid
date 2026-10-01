@@ -1,0 +1,270 @@
+[
+  {
+    "id": "c0212",
+    "today": "Monday 2025-04-21",
+    "turns": [
+      {
+        "canonical": "show (photos that (favorite = true))",
+        "move": "first",
+        "hint": "my favourite photos"
+      },
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Dentist\") } on (them that (label contains \"Yara\"))",
+        "move": "act",
+        "hint": "put the one with Yara in it into the Dentist album"
+      }
+    ],
+    "refer": [
+      {
+        "row": "places \"Farthing Wood\"",
+        "turn": 1,
+        "say": "loose: farthing wood"
+      },
+      { "row": "albums \"Dentist\"", "turn": 2, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0254",
+    "today": "Monday 2027-08-30",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Osric\" that (role contains \"colleague\"))",
+        "move": "first",
+        "hint": "the Osric I work with / from work / used to work with \u2014 what's their full name"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0056",
+    "today": "Saturday 2026-11-28",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"babysitter\" that (status != \"completed\"))",
+        "move": "first",
+        "hint": "which babysitter to-dos are still open (the babysitter is a word in the task titles, not a person)"
+      }
+    ],
+    "refer": [
+      { "row": "role \"Babysitter\"", "turn": 1, "say": "exact: babysitter" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0083",
+    "today": "Wednesday 2028-04-26",
+    "turns": [
+      {
+        "canonical": "show (expenses that (spent_on during last week))",
+        "move": "first",
+        "hint": "what did I spend on in that window"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "what's that come to / how much is that altogether / total? (short follow-up, no names)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0079",
+    "today": "Wednesday 2025-07-30",
+    "turns": [
+      {
+        "canonical": "show (expenses called \"Train tickets\")",
+        "move": "first",
+        "hint": "show the train expenses"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "what's that come to / how much is that altogether / total? (short follow-up, no names)"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Train tickets\"", "turn": 1, "say": "loose: train" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0006",
+    "today": "Friday 2028-02-25",
+    "turns": [
+      {
+        "canonical": "show (notes called \"routes\")",
+        "move": "first",
+        "hint": "find my notes about routes / what did I write down about routes (any note whose title mentions it; NOT a notebook)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0148",
+    "today": "Sunday 2026-04-05",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during this weekend))",
+        "move": "first",
+        "hint": "what tasks are due in that window"
+      },
+      {
+        "canonical": "show (them that (title contains \"alarm\"))",
+        "move": "refine",
+        "hint": "just the alarm ones (narrow those by a word)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0054",
+    "today": "Friday 2025-04-04",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"mechanic\")",
+        "move": "first",
+        "hint": "what mechanic tasks / to-dos do I have (the mechanic is a word in the task titles, not a person)"
+      }
+    ],
+    "refer": [
+      { "row": "role \"Mechanic\"", "turn": 1, "say": "exact: mechanic" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0022",
+    "today": "Thursday 2026-03-26",
+    "turns": [
+      {
+        "canonical": "show (notes called \"drizzle\")",
+        "move": "first",
+        "hint": "what notes have I got about drizzle"
+      },
+      {
+        "canonical": "show (notes that (notebooks contains \"Health\"))",
+        "move": "act",
+        "hint": "correction: no, I meant the Health NOTEBOOK (the person says the word notebook)"
+      }
+    ],
+    "refer": [{ "row": "notebooks \"Health\"", "turn": 2, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0239",
+    "today": "Wednesday 2026-06-03",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"Stag weekend\") that (party_id is not me))",
+        "move": "first",
+        "hint": "who's in the stag group (plain question)"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Stag weekend\"", "turn": 1, "say": "exact: stag" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0187",
+    "today": "Thursday 2027-12-16",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Lunch with Rufus\", dtstart: tomorrow at 13:00, dtend: tomorrow at 14:00 }",
+        "move": "first",
+        "hint": "put a Lunch with Rufus in the diary/calendar tomorrow at one (a one-hour appointment; say the time like 'one')"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0061",
+    "today": "Monday 2025-08-18",
+    "turns": [
+      {
+        "canonical": "count of (tasks called \"mechanic\")",
+        "move": "first",
+        "hint": "how many mechanic tasks have I got (the mechanic is a word in the task titles, not a person)"
+      }
+    ],
+    "refer": [
+      { "row": "role \"Mechanic\"", "turn": 1, "say": "exact: mechanic" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0123",
+    "today": "Sunday 2028-07-30",
+    "turns": [
+      {
+        "canonical": "show (obligations of (parties called \"Nadia Radley\") that (settled_at is null))",
+        "move": "first",
+        "hint": "do I owe Nadia Radley anything / does Nadia Radley owe me anything"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "how much? (one or two words)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (them)",
+        "move": "act",
+        "hint": "ok settle that / pay it off"
+      }
+    ],
+    "refer": [{ "row": "parties \"Nadia Radley\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0109",
+    "today": "Monday 2027-04-26",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Winifred Kerrigan\")",
+        "move": "first",
+        "hint": "look up Winifred Kerrigan"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (it) that (settled_at is null))",
+        "move": "act",
+        "hint": "how much is outstanding with them / what do they still owe (pronoun, no name)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (it))",
+        "move": "act",
+        "hint": "pay it off / settle up with them (pronoun)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Winifred Kerrigan\"", "turn": 1, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0201",
+    "today": "Saturday 2025-07-19",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Book the ferry\" }",
+        "move": "first",
+        "hint": "add a task to book the ferry (a reminder for me)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

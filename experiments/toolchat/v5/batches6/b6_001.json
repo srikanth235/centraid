@@ -1,0 +1,245 @@
+[
+  {
+    "id": "c0025",
+    "today": "Thursday 2025-04-24",
+    "turns": [
+      {
+        "canonical": "show (notes called \"vocab\")",
+        "move": "first",
+        "hint": "what notes have I got about vocab"
+      },
+      {
+        "canonical": "show (notes that (notebooks contains \"Film\"))",
+        "move": "act",
+        "hint": "correction: no, I meant the Film NOTEBOOK (the person says the word notebook)"
+      }
+    ],
+    "refer": [{ "row": "notebooks \"Film\"", "turn": 2, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0087",
+    "today": "Thursday 2026-10-22",
+    "turns": [
+      {
+        "canonical": "show (expenses of (groups called \"Wedding party\"))",
+        "move": "first",
+        "hint": "list the expenses in the wedding group"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "what's that come to / how much is that altogether / total? (short follow-up, no names)"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Wedding party\"", "turn": 1, "say": "exact: wedding" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0189",
+    "today": "Thursday 2027-11-11",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Send Vivienne the forms\", due_at: tuesday }",
+        "move": "first",
+        "hint": "add a to-do to send Vivienne the forms by tuesday"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0255",
+    "today": "Thursday 2027-09-09",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Otto\" that (role contains \"colleague\"))",
+        "move": "first",
+        "hint": "the Otto I work with / from work / used to work with \u2014 what's their full name"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0191",
+    "today": "Saturday 2026-02-07",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Order a new filter\", due_at: wednesday }",
+        "move": "first",
+        "hint": "add a to-do to order a new filter by wednesday"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0114",
+    "today": "Friday 2028-09-08",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Leopold Grieve\")",
+        "move": "first",
+        "hint": "look up Leopold"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (it) that (settled_at is null))",
+        "move": "act",
+        "hint": "how much is outstanding with them / what do they still owe (pronoun, no name)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (it))",
+        "move": "act",
+        "hint": "pay it off / settle up with them (pronoun)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Leopold Grieve\"",
+        "turn": 1,
+        "say": "exact: Leopold"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0170",
+    "today": "Monday 2025-08-18",
+    "turns": [
+      {
+        "canonical": "tally.add_expense{ description: \"Parking\", amount_minor: 6000, paid_by: me, group_id: (groups called \"Quiz team\") }",
+        "move": "first",
+        "hint": "add sixty (SAY THE AMOUNT IN WORDS: 'sixty' dollars/pounds/quid) of parking to the Quiz team group, I paid (description = that word)"
+      }
+    ],
+    "refer": [{ "row": "groups \"Quiz team\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0259",
+    "today": "Friday 2026-10-23",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Teodora\" that (role contains \"colleague\"))",
+        "move": "first",
+        "hint": "the Teodora I work with / from work / used to work with \u2014 what's their full name"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0010",
+    "today": "Thursday 2026-03-19",
+    "turns": [
+      {
+        "canonical": "show (notes called \"card\")",
+        "move": "first",
+        "hint": "find my notes about card / what did I write down about card (any note whose title mentions it; NOT a notebook)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0126",
+    "today": "Tuesday 2025-08-19",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_me is not null))",
+        "move": "first",
+        "hint": "who owes me money / who do I owe money to"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (them) that (settled_at is null))",
+        "move": "act",
+        "hint": "what's that altogether / how much in total (no names)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0229",
+    "today": "Monday 2028-08-07",
+    "turns": [
+      {
+        "canonical": "show (events called \"Dog grooming\" during this month)",
+        "move": "first",
+        "hint": "is the grooming on in that window"
+      },
+      {
+        "canonical": "show (parties of (it))",
+        "move": "act",
+        "hint": "who is that with / which person is that (pronoun)"
+      }
+    ],
+    "refer": [
+      { "row": "events \"Dog grooming\"", "turn": 1, "say": "exact: grooming" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0247",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "canonical": "delete{} on (things called \"checklist\")",
+        "move": "first",
+        "hint": "delete / get rid of all my checklist stuff"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0197",
+    "today": "Sunday 2027-06-06",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Check the smoke alarms\" }",
+        "move": "first",
+        "hint": "add a task / remind me to check the smoke alarms (NO date given)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0050",
+    "today": "Saturday 2026-05-30",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"electrician\")",
+        "move": "first",
+        "hint": "what electrician tasks / to-dos do I have (the electrician is a word in the task titles, not a person)"
+      }
+    ],
+    "refer": [
+      { "row": "role \"Electrician\"", "turn": 1, "say": "exact: electrician" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0011",
+    "today": "Wednesday 2027-04-14",
+    "turns": [
+      {
+        "canonical": "show (notes called \"menu\")",
+        "move": "first",
+        "hint": "find my notes about menu / what did I write down about menu (any note whose title mentions it; NOT a notebook)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

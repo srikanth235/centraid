@@ -1,0 +1,240 @@
+[
+  {
+    "id": "c0138",
+    "today": "Sunday 2026-07-26",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\"))",
+        "move": "first",
+        "hint": "anything overdue / what's late"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0206",
+    "today": "Tuesday 2026-06-16",
+    "turns": [
+      {
+        "canonical": "refuse: out_of_ontology",
+        "move": "first",
+        "hint": "book the cabin on their website / online for me (the app cannot browse or book)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0080",
+    "today": "Sunday 2027-08-22",
+    "turns": [
+      {
+        "canonical": "show (expenses called \"Gas bill\")",
+        "move": "first",
+        "hint": "show the gas bill expenses"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "what's that come to / how much is that altogether / total? (short follow-up, no names)"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Gas bill\"", "turn": 1, "say": "loose: gas bill" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0265",
+    "today": "Tuesday 2027-01-05",
+    "turns": [
+      {
+        "canonical": "show (locker items called \"PIN\" that (type = \"login\"))",
+        "move": "first",
+        "hint": "have I got a login for PIN"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0203",
+    "today": "Monday 2025-07-07",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Book the museum tickets\" }",
+        "move": "first",
+        "hint": "add a task to book the museum tickets (a reminder for me)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0147",
+    "today": "Saturday 2027-04-24",
+    "turns": [
+      {
+        "canonical": "count of (tasks that (due_at during before now and status != \"completed\"))",
+        "move": "first",
+        "hint": "how many things are overdue"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0001",
+    "today": "Wednesday 2026-01-28",
+    "turns": [
+      {
+        "canonical": "show (notes called \"birthday party\")",
+        "move": "first",
+        "hint": "find my notes about birthday party / what did I write down about birthday party (any note whose title mentions it; NOT a notebook)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0033",
+    "today": "Wednesday 2028-09-06",
+    "turns": [
+      {
+        "canonical": "show (documents called \"March\")",
+        "move": "first",
+        "hint": "have I got anything in my paperwork / documents / files for/about March"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0242",
+    "today": "Friday 2025-09-05",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"Ski chalet 2027\") that (party_id is not me))",
+        "move": "first",
+        "hint": "who's in the ski group (plain question)"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Ski chalet 2027\"", "turn": 1, "say": "exact: ski" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0173",
+    "today": "Sunday 2026-08-16",
+    "turns": [
+      {
+        "canonical": "tally.add_expense{ description: \"Parking\", amount_minor: 15000, paid_by: me, group_id: (groups called \"Flat 3B\") }",
+        "move": "first",
+        "hint": "add a hundred and fifty (SAY THE AMOUNT IN WORDS: 'a hundred and fifty' dollars/pounds/quid) of parking to the flat 3b group, I paid (description = that word)"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Flat 3B\"", "turn": 1, "say": "exact: flat 3b" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0048",
+    "today": "Saturday 2026-03-28",
+    "turns": [
+      {
+        "canonical": "show (things called \"glaze\")",
+        "move": "first",
+        "hint": "what do I have about glaze (anything at all, no app named)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0104",
+    "today": "Friday 2028-07-14",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Soraya Pellegrini\")",
+        "move": "first",
+        "hint": "look up Soraya"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (it) that (settled_at is null))",
+        "move": "act",
+        "hint": "how much is outstanding with them / what do they still owe (pronoun, no name)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (it))",
+        "move": "act",
+        "hint": "pay it off / settle up with them (pronoun)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Soraya Pellegrini\"",
+        "turn": 1,
+        "say": "exact: Soraya"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0260",
+    "today": "Thursday 2027-07-01",
+    "turns": [
+      {
+        "canonical": "show (locker items called \"energy\" that (type = \"login\"))",
+        "move": "first",
+        "hint": "have I got a login for energy"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0235",
+    "today": "Friday 2026-06-05",
+    "turns": [
+      {
+        "canonical": "show (events called \"Orthodontist visit\" during next month)",
+        "move": "first",
+        "hint": "is the orthodontist visit on in that window"
+      },
+      {
+        "canonical": "show (parties of (it))",
+        "move": "act",
+        "hint": "who is that with / which person is that (pronoun)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Orthodontist visit\"",
+        "turn": 1,
+        "say": "exact: orthodontist visit"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0202",
+    "today": "Saturday 2027-01-23",
+    "turns": [
+      {
+        "canonical": "refuse: out_of_ontology",
+        "move": "first",
+        "hint": "book the cabin on their website / online for me (the app cannot browse or book)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

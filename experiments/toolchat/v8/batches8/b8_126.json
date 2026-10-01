@@ -1,0 +1,316 @@
+[
+  {
+    "id": "w36-0044",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      { "hint": "asks when Owyn's birthday is", "say": ["Owyn", "birthday"] },
+      {
+        "hint": "(detour) hang on — asks how much they spent back in January",
+        "say": ["January"],
+        "shown": "important date \"Birthday — Owyn Zaimere\" Sun 2026-02-22"
+      },
+      {
+        "hint": "(new topic) asks if there's a calendar event at The Chestnut and Chestnut",
+        "say": ["The Chestnut and Chestnut"],
+        "shown": "= 0"
+      },
+      {
+        "hint": "(new topic) asks the assistant to make up a new router password",
+        "say": [],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w36-0045",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      { "hint": "asks when their walk with Owyn is", "say": ["Owyn", "walk"] },
+      {
+        "hint": "(detour) hang on — asks if they have any notes about ventriloquism",
+        "say": ["ventriloquism", "notes"],
+        "shown": "event \"Walk with Owyn\" Tue 2026-10-27 18:15"
+      },
+      {
+        "hint": "back to that — asks who else will be there",
+        "say": [],
+        "shown": "note \"Ventriloquism contacts\" Tue 2026-09-08 09:04"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w36-0046",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks who is coming to the call tiziana",
+        "say": ["call tiziana", "who"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w36-0047",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks when the call tiziana is",
+        "say": ["call tiziana", "when"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w36-0049",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks to delete their piccolo note",
+        "say": ["piccolo", "note"]
+      },
+      {
+        "hint": "(new topic) asks whether they binned the caddy document",
+        "say": ["caddy", "document"],
+        "shown": "none"
+      },
+      {
+        "hint": "(new topic) asks how much Luca owes them",
+        "say": ["Luca"],
+        "shown": "document \"Caddy statement 2025\" Wed 2026-07-08 14:43 · trashed"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w36-0050",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks to settle up with Kaito in Shalmere",
+        "say": ["Kaito", "Shalmere", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks for the spending above 12 euros",
+        "say": ["12 euros"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#7), amount_minor: balance of (#12) in (#7)} on (#12)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w36-0051",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks to add sixteen euros for Kaito's tickets to Shalmere, they paid",
+        "say": ["sixteen euros", "Kaito's tickets", "Shalmere"]
+      },
+      {
+        "hint": "(new topic) asks what photos they have from Montreux",
+        "say": ["Montreux"],
+        "shown": "done: tally.add_expense{description: \"Kaito's tickets\", amount_minor: 1600, paid_by: me, group_id: (#7)}"
+      },
+      {
+        "hint": "(detour) hang on — asks who their coffee today is with",
+        "say": ["coffee", "today"],
+        "shown": "photo \"Montreux Bridge at dusk\" Sun 2026-10-18 11:58 · album_titles=Ventriloquism progress, The Chestnut and… favorite=false"
+      },
+      {
+        "hint": "back to the Montreux photos — asks which album it's in",
+        "say": [],
+        "shown": "event \"Coffee with Carys\" Tue 2026-11-03 09:45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w36-0052",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks who they're having coffee with today",
+        "say": ["coffee", "today"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w36-0053",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks how much they spent back in February",
+        "say": ["February"]
+      },
+      {
+        "hint": "follow-up: says scrap that, they'll check later themselves",
+        "say": [],
+        "shown": "= 0"
+      },
+      {
+        "hint": "(new topic) asks to show the pitchfork tasks, tick off the first and delete the second",
+        "say": ["pitchfork"],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w36-0054",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "says they've paid Tiziana back, mark it settled",
+        "say": ["Tiziana"]
+      },
+      {
+        "hint": "(new topic) asks what they have on while they're away in Monemvasia",
+        "say": ["Monemvasia"],
+        "shown": "done: people.settle_debt{} on (#2)"
+      },
+      {
+        "hint": "(new topic) asks what's on next friday",
+        "say": ["next friday"],
+        "shown": "task \"Chase the igloo at Togastead Deli\" Thu 2026-11-26 12:00 · status=needs-action effort_min=10\nevent \"Monemvasia holiday\" Mon 2026-11-23 10:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w36-0055",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      { "hint": "asks who'll be at the meet", "say": ["meet"] },
+      {
+        "hint": "(detour) hang on — asks what's in the vault about cobbler",
+        "say": ["cobbler"],
+        "shown": "party \"Vrelou Peretz\" · role=Climbing partner\nparty \"Arvid Prastett\" · owed_to_them_minor=4800 role=Grandmother\nparty \"Kadri Distow\" · role=Daughter\nparty \"Shatho Namova\" · role=Dog-walking friend"
+      },
+      {
+        "hint": "back to the meet — asks for Kadri's number",
+        "say": ["Kadri"],
+        "shown": "event \"Cobbler viewing\" Sat 2026-11-07 11:00\nnote \"Cobbler timeline\" Fri 2026-10-16 23:31 · notebooks=Lemongrass\nphoto \"Cobbler and burrow\" Tue 2026-10-20 14:59 · favorite=false\nphoto \"Cobbler in the garden\" Tue 2026-10-06 11:29 · album_titles=Kaito's burrow, Cribbage meetup favorite=false\n(+2 more)"
+      },
+      {
+        "hint": "(new topic) asks what debts there are between them and Luca Distow",
+        "say": ["Luca Distow"],
+        "shown": "contact channel \"Kadri Distow — mobile\" · kind=phone value=+33 6 12 34 5005"
+      },
+      {
+        "hint": "(new topic) asks to erase every contact they have",
+        "say": [],
+        "shown": "obligation \"Freediving workshop repair\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w36-0056",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks when Tiskou's birthday is",
+        "say": ["Tiskou", "birthday"]
+      },
+      {
+        "hint": "(new topic) asks when the Togastead business is",
+        "say": ["Togastead"],
+        "shown": "important date \"Birthday — Tiskou Somacre\" Thu 2026-11-12"
+      },
+      {
+        "hint": "(new topic) asks if they have any paperwork for the Jermawen expense",
+        "say": ["Jermawen", "expense"],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w36-0057",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks when their coffee with Tiskou is",
+        "say": ["Tiskou", "coffee"]
+      },
+      {
+        "hint": "(detour) hang on — asks which Shalmere trip expenses were over one hundred and thirty euros",
+        "say": ["Shalmere trip", "one hundred and thirty euros"],
+        "shown": "event \"Coffee with Tiskou\" Sat 2026-11-14 18:15"
+      },
+      {
+        "hint": "back to that — asks for a task to sign the Tiskou booking sunday",
+        "say": ["sign the Tiskou booking", "sunday"],
+        "shown": "expense \"Dinner on the last night\" Wed 2026-08-26 · amount_minor=20478 paid_by=Farnaz Pillai"
+      },
+      {
+        "hint": "(new topic) asks what time the burrow thing is (no kind said)",
+        "say": ["burrow"],
+        "shown": "done: schedule.add_task{title: \"Sign the Tiskou booking\", due_at: 2026-11-08}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w36-0058",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      { "hint": "asks which to-dos have no deadline", "say": [] },
+      {
+        "hint": "follow-up: asks to tick off the Honora one",
+        "say": ["Honora"],
+        "shown": "task \"Chase the pitchfork\" · status=needs-action effort_min=15\ntask \"Ask Groskie about the pulley\" · status=needs-action\ntask \"Ask Chinonso about the pitchfork\" · status=needs-action effort_min=90\ntask \"Book the burrow\" · status=needs-action effort_min=45\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w36-0059",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks to look up opening hours on the web for the weekend",
+        "say": ["the weekend"]
+      },
+      {
+        "hint": "(new topic) asks what's left on their to-do list",
+        "say": [],
+        "shown": "refuse"
+      },
+      {
+        "hint": "(new topic) asks how many photos they took on the Shalmere trip",
+        "say": ["Shalmere"],
+        "shown": "task \"Repair the hollyhock at Montreux Bridge\" Thu 2026-10-15 17:00 · status=needs-action\ntask \"Repair Tiziana's cormorant\" Tue 2026-10-20 18:00 · status=in-process effort_min=20\ntask \"Service the fuskin again\" Thu 2026-10-29 12:00 · status=needs-action\ntask \"Top up the lunch account (wk 45)\" Tue 2026-11-03 09:00 · status=needs-action effort_min=10\n(+9 more)"
+      },
+      { "hint": "follow-up: says never mind", "say": [], "shown": "= 5" },
+      {
+        "hint": "follow-up: about the first one, asks who else will be there",
+        "say": ["first"],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: says they phoned the Farnaz one, log it",
+        "say": ["Farnaz"],
+        "shown": "party \"Farnaz Pillai\" · role=Choir friend\nparty \"Tiskou Somacre\" · role=Dog-walking friend\nparty \"Kaito Scrivener\" · role=Choir friend"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  }
+]

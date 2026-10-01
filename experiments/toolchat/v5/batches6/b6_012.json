@@ -1,0 +1,297 @@
+[
+  {
+    "id": "c0268",
+    "today": "Thursday 2028-03-02",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Quentin Glanville\") that (settled_at is null))",
+        "move": "first",
+        "hint": "how much does Quentin Glanville owe me / do I owe Quentin Glanville"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Wendell Lovelock\") that (settled_at is null))",
+        "move": "act",
+        "hint": "and Wendell? / what about Wendell? (just the new name)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Quentin Glanville\"", "turn": 1, "say": "full" },
+      {
+        "row": "parties \"Wendell Lovelock\"",
+        "turn": 2,
+        "say": "exact: Wendell"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0278",
+    "today": "Thursday 2028-03-23",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Tove Larkin\") that (settled_at is null))",
+        "move": "first",
+        "hint": "how much does Tove Larkin owe me / do I owe Tove Larkin"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Keziah Jennings\") that (settled_at is null))",
+        "move": "act",
+        "hint": "and Keziah Jennings? / what about Keziah Jennings? (just the new name)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Tove Larkin\"", "turn": 1, "say": "full" },
+      { "row": "parties \"Keziah Jennings\"", "turn": 2, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0032",
+    "today": "Monday 2028-04-10",
+    "turns": [
+      {
+        "canonical": "show (documents called \"home\")",
+        "move": "first",
+        "hint": "have I got anything in my paperwork / documents / files for/about home"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0225",
+    "today": "Thursday 2028-10-19",
+    "turns": [
+      {
+        "canonical": "show (places called \"Sandholme Camp\")",
+        "move": "first",
+        "hint": "find the Camp place"
+      },
+      {
+        "canonical": "show (photos of (them))",
+        "move": "act",
+        "hint": "show me those photos / the pictures in it"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Sandholme Camp\"", "turn": 1, "say": "loose: Camp" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0100",
+    "today": "Monday 2028-01-31",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses called \"Coffee and cake\")",
+        "move": "first",
+        "hint": "what did the cake come to / cost"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Coffee and cake\"", "turn": 1, "say": "loose: cake" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0130",
+    "today": "Thursday 2028-01-20",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_me is not null))",
+        "move": "first",
+        "hint": "who owes me money / who do I owe money to"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (them) that (settled_at is null))",
+        "move": "act",
+        "hint": "what's that altogether / how much in total (no names)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0119",
+    "today": "Sunday 2025-03-16",
+    "turns": [
+      {
+        "canonical": "show (obligations of (parties called \"Leocadia Yeomans\") that (settled_at is null))",
+        "move": "first",
+        "hint": "do I owe Leocadia anything / does Leocadia owe me anything"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "how much? (one or two words)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (them)",
+        "move": "act",
+        "hint": "ok settle that / pay it off"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Leocadia Yeomans\"",
+        "turn": 1,
+        "say": "exact: Leocadia"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0269",
+    "today": "Friday 2025-06-13",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Dorian Stannard\") ordered by started_at desc))",
+        "move": "first",
+        "hint": "when did I last speak to Dorian Stannard"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Henrike Ulrich\") ordered by started_at desc))",
+        "move": "act",
+        "hint": "and Henrike? / what about Henrike? (just the new name)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Dorian Stannard\"", "turn": 1, "say": "full" },
+      {
+        "row": "parties \"Henrike Ulrich\"",
+        "turn": 2,
+        "say": "exact: Henrike"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0115",
+    "today": "Tuesday 2027-02-02",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Thibault Dunstable\")",
+        "move": "first",
+        "hint": "look up Thibault"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (it) that (settled_at is null))",
+        "move": "act",
+        "hint": "how much is outstanding with them / what do they still owe (pronoun, no name)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (it))",
+        "move": "act",
+        "hint": "pay it off / settle up with them (pronoun)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Thibault Dunstable\"",
+        "turn": 1,
+        "say": "exact: Thibault"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0220",
+    "today": "Tuesday 2025-12-02",
+    "turns": [
+      {
+        "canonical": "show (places called \"Pebble Cafe\")",
+        "move": "first",
+        "hint": "find the Cafe place"
+      },
+      {
+        "canonical": "show (photos of (them))",
+        "move": "act",
+        "hint": "show me those photos / the pictures in it"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"Garden progress\"", "turn": 1, "say": "full" },
+      { "row": "places \"Pebble Cafe\"", "turn": 1, "say": "loose: Cafe" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0076",
+    "today": "Tuesday 2028-05-23",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties that (role = \"Gardener\")) that (kind = \"phone\"))",
+        "move": "first",
+        "hint": "what's my gardener's number"
+      }
+    ],
+    "refer": [
+      { "row": "role \"Gardener\"", "turn": 1, "say": "exact: gardener" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0251",
+    "today": "Friday 2026-05-08",
+    "turns": [
+      {
+        "canonical": "delete{} on (things called \"opticians\")",
+        "move": "first",
+        "hint": "delete / get rid of all my opticians stuff"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0034",
+    "today": "Wednesday 2027-06-30",
+    "turns": [
+      {
+        "canonical": "show (photos called \"shore\")",
+        "move": "first",
+        "hint": "have I got anything in my photos for/about shore"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0237",
+    "today": "Sunday 2026-01-25",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"Community garden\") that (party_id is not me))",
+        "move": "first",
+        "hint": "who's in the Community garden group (plain question)"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Community garden\"", "turn": 1, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0263",
+    "today": "Monday 2026-10-05",
+    "turns": [
+      {
+        "canonical": "show (locker items called \"portal\" that (type = \"login\"))",
+        "move": "first",
+        "hint": "have I got a login for portal"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

@@ -1,0 +1,226 @@
+[
+  {
+    "id": "a0410",
+    "today": "Wednesday 2025-10-15",
+    "turns": [
+      {
+        "canonical": "count of (places)",
+        "move": "first",
+        "hint": "how many places are saved in my photos"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0547",
+    "today": "Thursday 2028-07-13",
+    "turns": [
+      {
+        "canonical": "show (events called \"sprint\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the sprint event"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0516",
+    "today": "Wednesday 2027-01-27",
+    "turns": [
+      {
+        "canonical": "show (documents that (starred = true))",
+        "move": "first",
+        "hint": "my starred documents"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0403",
+    "today": "Saturday 2025-09-20",
+    "turns": [
+      {
+        "canonical": "count of (photos during today)",
+        "move": "first",
+        "hint": "how many photos did I take in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0537",
+    "today": "Saturday 2026-01-03",
+    "turns": [
+      {
+        "canonical": "show (events that (deleted_at is not null))",
+        "move": "first",
+        "hint": "which events have I deleted"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0671",
+    "today": "Thursday 2025-05-29",
+    "turns": [
+      {
+        "canonical": "show (obligations that (from_party = me and settled_at is null))",
+        "move": "first",
+        "hint": "the debts I still owe"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1062",
+    "today": "Sunday 2025-08-10",
+    "turns": [
+      {
+        "canonical": "show (tasks of (tasks called \"Oil the garden bench\"))",
+        "move": "first",
+        "hint": "the subtasks of the garden bench task"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Oil the garden bench\"",
+        "turn": 1,
+        "say": "exact: garden bench"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1010",
+    "today": "Wednesday 2025-09-03",
+    "turns": [
+      {
+        "canonical": "show (parties of (obligations that (amount_minor > 10000)))",
+        "move": "first",
+        "hint": "who are the debts over that amount with"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0767",
+    "today": "Thursday 2028-03-16",
+    "turns": [
+      {
+        "canonical": "show (places that (kind = \"work\"))",
+        "move": "first",
+        "hint": "places of that kind"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0489",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      {
+        "canonical": "show (activities that (started_at during this week))",
+        "move": "first",
+        "hint": "who did I call/see/have coffee with in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0697",
+    "today": "Wednesday 2027-04-14",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Rosalia Everly\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete Rosalia from my contacts"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Rosalia Everly\"",
+        "turn": 1,
+        "say": "exact: Rosalia"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0742",
+    "today": "Sunday 2028-01-09",
+    "turns": [
+      {
+        "canonical": "show (photos that (place = \"Ashgrove Bay\"))",
+        "move": "first",
+        "hint": "photos whose place is ashgrove bay"
+      }
+    ],
+    "refer": [
+      {
+        "row": "places \"Ashgrove Bay\"",
+        "turn": 1,
+        "say": "exact: ashgrove bay"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0772",
+    "today": "Monday 2026-04-06",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"Renew the fishing licence\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the licence task"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Renew the fishing licence\"",
+        "turn": 1,
+        "say": "exact: licence"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0377",
+    "today": "Thursday 2028-11-09",
+    "turns": [
+      {
+        "canonical": "count of (notes that (notebooks contains \"Pottery\"))",
+        "move": "first",
+        "hint": "how many notes in the Pottery notebook"
+      }
+    ],
+    "refer": [{ "row": "notebooks \"Pottery\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0287",
+    "today": "Thursday 2028-10-05",
+    "turns": [
+      {
+        "canonical": "count of (events during tomorrow)",
+        "move": "first",
+        "hint": "how many things in the calendar in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

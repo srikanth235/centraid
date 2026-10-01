@@ -68,9 +68,9 @@
 
 #![forbid(unsafe_code)]
 
-pub mod inventory;
 mod bulk;
 mod bulk2;
+pub mod inventory;
 mod scenario;
 mod scenario2;
 
@@ -525,8 +525,9 @@ pub fn build_scenario(dir: &Path, scenario: Scenario) -> Result<World, BuildErro
     // log beside a 4 KB database and filled the disk; with it the peak is a few
     // megabytes. It is a connection setting rather than a write, which is why
     // the read path will carry it.
-    vault
-        .read(|connection| Ok(connection.pragma_update(None, "wal_autocheckpoint", 1_000_i64)?))?;
+    vault.read(|connection| {
+        Ok(connection.pragma_update(None, "wal_autocheckpoint", 1_000_i64)?)
+    })?;
 
     let founded = vault.found("Evaluation vault", scenario.owner())?;
     let registry = Registry::with_system_commands()?;

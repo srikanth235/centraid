@@ -650,11 +650,11 @@ impl Candidate for ReferenceSession {
             // reader that forgets `deleted_at` answers with a row the member
             // deleted.
             ("s06", 0) => {
-                let rows = like(ctx, App::Notes, Some("knowledge.note"),"tahoe");
+                let rows = like(ctx, App::Notes, Some("knowledge.note"), "tahoe");
                 self.answer(rows)
             }
             ("s06", 1) => {
-                let rows = like(ctx, App::Notes, Some("knowledge.note"),"emerald bay");
+                let rows = like(ctx, App::Notes, Some("knowledge.note"), "emerald bay");
                 self.answer(rows)
             }
             ("s06", 2) => {
@@ -952,7 +952,7 @@ impl Candidate for ReferenceSession {
             }
 
             ("s25", 0) => {
-                let rows = like(ctx, App::Notes, Some("knowledge.note"),"what dr. rao said");
+                let rows = like(ctx, App::Notes, Some("knowledge.note"), "what dr. rao said");
                 self.answer(rows)
             }
 
@@ -1210,7 +1210,7 @@ impl Candidate for ReferenceSession {
             // that deleted the live dentist note instead would be doing the
             // thing this case exists to catch.
             ("s37", 0) => {
-                let live = like(ctx, App::Notes, Some("knowledge.note"),"old clinic");
+                let live = like(ctx, App::Notes, Some("knowledge.note"), "old clinic");
                 if !live.is_empty() {
                     return unhandled();
                 }
@@ -1220,7 +1220,7 @@ impl Candidate for ReferenceSession {
             }
 
             ("s38", 0) => {
-                let rows = like(ctx, App::Notes, Some("knowledge.note"),"chili");
+                let rows = like(ctx, App::Notes, Some("knowledge.note"), "chili");
                 self.answer(rows)
             }
             // s39 — "the Priya I used to work with". Several parties are
@@ -1331,7 +1331,7 @@ impl Candidate for ReferenceSession {
                     // the row's creation. An item with no password at all has
                     // no stamp and is not an answer.
                     .filter(|row| {
-                        row.extra.get("password_set_at").is_some()
+                        row.extra.contains_key("password_set_at")
                             && row.extra.get("password_set_at") == row.extra.get("created_at")
                     })
                     .collect();
@@ -1396,7 +1396,7 @@ impl Candidate for ReferenceSession {
                 self.answer(rows)
             }
             ("s51", 1) | ("s38", 1) => {
-                let rows = like(ctx, App::Notes, Some("knowledge.note"),"chili");
+                let rows = like(ctx, App::Notes, Some("knowledge.note"), "chili");
                 self.answer(rows)
             }
 
@@ -1536,7 +1536,7 @@ impl Candidate for ReferenceSession {
             }
 
             ("s61", 0) => {
-                let rows = like(ctx, App::Notes, Some("knowledge.note"),"shortlist");
+                let rows = like(ctx, App::Notes, Some("knowledge.note"), "shortlist");
                 self.answer(rows)
             }
             ("s61", 1) => {
@@ -2067,7 +2067,7 @@ impl Candidate for ReferenceSession {
                 };
                 let rows: Vec<VaultRow> = board(ctx, App::Agenda)
                     .into_iter()
-                    .filter(|row| row.live && attendees(row).iter().any(|id| *id == ana.id))
+                    .filter(|row| row.live && attendees(row).contains(&ana.id))
                     .collect();
                 self.held = vec![ana];
                 Plan::Ids(ids(&by_date(rows)))
@@ -3102,7 +3102,7 @@ fn parties_by_id(ctx: &Context<'_>, wanted: &[String]) -> Vec<VaultRow> {
     board(ctx, App::People)
         .into_iter()
         .filter(|row| row.entity == "core.party" && row.live)
-        .filter(|row| wanted.iter().any(|id| *id == row.id))
+        .filter(|row| wanted.contains(&row.id))
         .collect()
 }
 

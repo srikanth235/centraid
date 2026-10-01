@@ -1,0 +1,330 @@
+[
+  {
+    "id": "w40-0016",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to add seventeen pounds for Prestou's lunch to Pecs trip, they paid",
+        "say": ["seventeen pounds", "Prestou's lunch", "Pecs trip"]
+      },
+      {
+        "hint": "(new topic) asks to find the dormer contract",
+        "say": ["dormer contract"],
+        "shown": "done: tally.add_expense{description: \"Prestou's lunch\", amount_minor: 1700, paid_by: me, group_id: (#2)}"
+      },
+      {
+        "hint": "(new topic) asks who is in the Gosou photo",
+        "say": ["Gosou"],
+        "shown": "document \"Dormer contract 2024\" Tue 2027-04-13 09:30 · folder=Utilities"
+      },
+      {
+        "hint": "follow-up: asks for their email",
+        "say": [],
+        "shown": "party \"Gosou Draivosen\" · role=Partner"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w40-0017",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks who is in the carrom meetup photo",
+        "say": ["carrom meetup"]
+      },
+      {
+        "hint": "follow-up: asks when their birthday is",
+        "say": [],
+        "shown": "party \"Gosou Draivosen\" · role=Partner"
+      },
+      {
+        "hint": "follow-up: asks how many there are in total",
+        "say": [],
+        "shown": "important date \"Birthday — Gosou Draivosen\" Thu 2027-09-02\nimportant date \"Anniversary — Gosou Draivosen\" Fri 2027-08-27"
+      },
+      {
+        "hint": "(detour) hang on — asks what's in the vault about lacrosse",
+        "say": ["lacrosse"],
+        "shown": "= 2"
+      },
+      {
+        "hint": "back to the carrom meetup photo — asks for just the ones this month",
+        "say": ["this month"],
+        "shown": "event \"Lacrosse lesson with Guadalupe\" Mon 2027-08-09 13:15\nnotebook \"Lacrosse lesson highlights\"\nalbum \"Lacrosse lesson highlights\""
+      },
+      {
+        "hint": "(new topic) asks who owes them money",
+        "say": [],
+        "shown": "important date \"Anniversary — Gosou Draivosen\" Fri 2027-08-27"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w40-0018",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks when Hugo Draivosen's birthday is",
+        "say": ["Hugo Draivosen", "birthday"]
+      },
+      {
+        "hint": "follow-up: asks the same about Iara Dvorak ('and Iara Dvorak's?')",
+        "say": ["Iara Dvorak"],
+        "shown": "important date \"Birthday — Hugo Draivosen\" Mon 2027-08-09"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w40-0019",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks for Lucasta Draivosen's contact card",
+        "say": ["Lucasta Draivosen"]
+      },
+      {
+        "hint": "follow-up: says they texted them today, log it",
+        "say": ["texted"],
+        "shown": "party \"Lucasta Draivosen\" · role=Dad"
+      },
+      {
+        "hint": "(new topic) asks whose birthdays are coming up next month",
+        "say": ["next month", "month"],
+        "shown": "done: people.log_interaction{kind: \"message\"} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks what Fesou's number is",
+        "say": ["Fesou"],
+        "shown": "important date \"Birthday — Rosalina Draivosen\" Sat 2027-09-04\nimportant date \"Birthday — Gosou Draivosen\" Thu 2027-09-02\nimportant date \"Christening — Harshita Kasino\" Fri 2027-09-17\nimportant date \"Birthday — Iara Dvorak\" Wed 2027-09-22"
+      },
+      {
+        "hint": "(new topic) asks what Maricel's balance with them is in the Pecs trip group",
+        "say": ["Maricel", "Pecs trip"],
+        "shown": "contact channel \"Fesou Larsen — mobile\" · kind=phone value=+44 7700 900254"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w40-0020",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks when their milkjug thing is (no kind given)",
+        "say": ["milkjug"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w40-0021",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      { "hint": "asks what milkjug things they have", "say": ["milkjug"] },
+      {
+        "hint": "(new topic) asks for the home wifi details",
+        "say": ["home", "wifi"],
+        "shown": "document \"Milkjug voucher\" Thu 2027-05-13 08:24 · folder=House\nnote \"Milkjug questions\" Sat 2027-06-19 09:34 · notebooks=Recipes\nphoto \"The milkjug at dusk\" Tue 2027-07-06 07:19 · favorite=false\nexpense \"Milkjug tickets\" Thu 2027-07-15 · amount_minor=16050 paid_by=Benedetta Draivosen\n(+1 more)"
+      },
+      {
+        "hint": "follow-up: asks for the actual password",
+        "say": ["password"],
+        "shown": "locker item \"Home wifi\" · type=wifi"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w40-0022",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      { "hint": "asks who they still have to pay back", "say": [] },
+      {
+        "hint": "follow-up: about the Mahala one, asks when they last spoke",
+        "say": ["Mahala"],
+        "shown": "party \"Mahala Dietrich\" · owed_to_them_minor=2000 role=Supplier\nparty \"Rohit Horak\" · owed_to_them_minor=1200 role=University friend\nparty \"Dorie Vrestova\" · owed_to_them_minor=4800 role=Old school friend\nparty \"Antoine Czarnecki\" · owed_to_them_minor=4800 role=Old flatmate"
+      },
+      {
+        "hint": "(new topic) asks to jot down a note that says ideas for the shutter",
+        "say": ["ideas for the shutter"],
+        "shown": "activity \"interaction — Mahala Dietrich\" Fri 2027-07-30 14:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w40-0023",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks for their calendar events on parasol",
+        "say": ["parasol", "events"]
+      },
+      {
+        "hint": "(new topic) says they texted Kofi and asks to log it (two contacts are called Kofi; the message doesn't say which)",
+        "say": ["Kofi", "texted"],
+        "shown": "no rows"
+      },
+      {
+        "hint": "follow-up: says it was Kofi Fenwick",
+        "say": ["Fenwick"],
+        "shown": "asked: Which Kofi — Iyer or Fenwick?"
+      },
+      {
+        "hint": "follow-up: asks what events they're coming to",
+        "say": [],
+        "shown": "done: people.log_interaction{kind: \"message\"} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "event \"Walk with Benedetta\" Fri 2027-08-13 17:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w40-0024",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks which steps of the lido job are still open",
+        "say": ["lido"]
+      },
+      {
+        "hint": "follow-up: asks how many that is",
+        "say": [],
+        "shown": "task \"Photograph the ginger\" · status=needs-action\ntask \"Sort out the butterscotch\" · status=needs-action"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w40-0025",
+    "today": "Saturday 2027-08-07",
+    "turns": [{ "hint": "asks who'll be at the pick", "say": ["pick"] }],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w40-0026",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      { "hint": "asks what tasks have no due date", "say": [] },
+      {
+        "hint": "follow-up: asks to delete the sort one",
+        "say": ["sort"],
+        "shown": "task \"Empty the cradle\" · status=needs-action effort_min=30\ntask \"Repair the prism\" · status=needs-action\ntask \"Pay for the orchard for Crevir\" · status=needs-action\ntask \"Photograph the ginger\" · status=needs-action\n(+5 more)"
+      },
+      {
+        "hint": "(new topic) asks to move the kintsugi task to saturday and the Jalhaven to next monday",
+        "say": ["kintsugi", "saturday", "Jalhaven", "next monday"],
+        "shown": "done: delete{} on (#5)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w40-0027",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to find the list items on prism",
+        "say": ["prism", "items"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w40-0028",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to settle up with Maricel in Damdale house share",
+        "say": ["Maricel", "Damdale house share", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks to clear out the things notes",
+        "say": ["things", "note"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#3) in (#1)} on (#3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w40-0029",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to add eleven pounds for Maricel's petrol to Damdale house share, they paid",
+        "say": ["eleven pounds", "Maricel's petrol", "Damdale house share"]
+      },
+      {
+        "hint": "(new topic) says they grabbed a coffee with Ysolde Leby and asks to log it",
+        "say": ["Ysolde Leby", "coffee"],
+        "shown": "done: tally.add_expense{description: \"Maricel's petrol\", amount_minor: 1100, paid_by: me, group_id: (#1)}"
+      },
+      {
+        "hint": "(new topic) asks how much Raffaella Ramsay owes them in salmon collective",
+        "say": ["Raffaella Ramsay", "salmon collective"],
+        "shown": "done: people.log_interaction{kind: \"coffee\"} on (#3)"
+      },
+      {
+        "hint": "(detour) hang on — asks for the photos they took recently",
+        "say": ["recently"],
+        "shown": "= 19262"
+      },
+      {
+        "hint": "(new topic) asks who's invited to the chiropodist",
+        "say": ["chiropodist"],
+        "shown": "photo \"Mothball at dusk\" Fri 2027-08-06 15:15 · favorite=false people=Lucasta Draivosen\nphoto \"Hugo's mothball\" Mon 2027-08-02 17:15 · favorite=false\nphoto \"Cantaloupe at sunrise\" Mon 2027-08-02 11:25 · album_titles=The Old Pigeon 2027, Abseiling 2027 favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w40-0030",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      { "hint": "asks what they haven't done yet", "say": [] },
+      {
+        "hint": "follow-up: asks which of those have no due date",
+        "say": [],
+        "shown": "task \"Renew Mehmet's starfish\" Thu 2027-07-15 09:00 · status=needs-action effort_min=10\ntask \"Empty the cradle\" · status=needs-action effort_min=30\ntask \"Repair the prism\" · status=needs-action\ntask \"Check the Jalhaven ferry\" Thu 2027-07-22 17:00 · status=needs-action\n(+9 more)"
+      },
+      {
+        "hint": "(new topic) asks who is in the carrom photo",
+        "say": ["carrom"],
+        "shown": "task \"Empty the cradle\" · status=needs-action effort_min=30\ntask \"Repair the prism\" · status=needs-action\ntask \"Pay for the orchard for Crevir\" · status=needs-action\ntask \"Photograph the ginger\" · status=needs-action\n(+5 more)"
+      },
+      {
+        "hint": "follow-up: says they messaged them today, log it",
+        "say": ["messaged"],
+        "shown": "party \"Gosou Draivosen\" · role=Partner"
+      },
+      {
+        "hint": "(new topic) asks whether they owe Rohit Horak anything",
+        "say": ["Rohit Horak"],
+        "shown": "done: people.log_interaction{kind: \"message\"} on (#28)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  }
+]

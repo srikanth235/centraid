@@ -1,0 +1,284 @@
+[
+  {
+    "id": "h029",
+    "today": "Tuesday 2026-01-13",
+    "turns": [
+      {
+        "canonical": "show (locker items called \"work\")",
+        "gloss": "List locker items named \"work\".",
+        "move": "first",
+        "hint": "what's the login for work"
+      },
+      {
+        "canonical": "locker.reveal_receipt{ columns: \"password\" } on (it)",
+        "gloss": "Reveal the \"password\" of [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "show me the password"
+      },
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during last week))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls last week.",
+        "move": "new",
+        "hint": "tasks ticked off / done last week"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      },
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during this week))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls this week.",
+        "move": "substitute",
+        "hint": "and this week?"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0340",
+    "today": "Sunday 2028-04-16",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"fix\" that (deleted_at is not null))",
+        "gloss": "List tasks named \"fix\" where the date deleted (trash) is set.",
+        "move": "first",
+        "hint": "did I delete / bin the fix task"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0028",
+    "today": "Friday 2026-02-06",
+    "turns": [
+      {
+        "canonical": "show (photos called \"toast\" that (deleted_at is not null))",
+        "gloss": "List photos named \"toast\" where the date deleted (trash) is set.",
+        "move": "first",
+        "hint": "did I delete / bin the toast photo"
+      },
+      {
+        "canonical": "media.restore_asset{} on (it)",
+        "gloss": "Restore [it (the one row the previous turn is about)] from the trash.",
+        "move": "act",
+        "hint": "put it back"
+      },
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during next wednesday) ordered by due_at asc)",
+        "gloss": "",
+        "move": "new",
+        "hint": "what's due next wednesday (open tasks)"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "act",
+        "hint": "tick one off by position"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0663",
+    "today": "Wednesday 2026-05-20",
+    "turns": [
+      {
+        "canonical": "show (expenses of (groups called \"quiz\"))",
+        "gloss": "List the expenses linked to [groups named \"quiz\"].",
+        "move": "first",
+        "hint": "what did we spend on the quiz"
+      },
+      {
+        "canonical": "show (expenses of (groups called \"book\"))",
+        "gloss": "List the expenses linked to [groups named \"book\"].",
+        "move": "substitute",
+        "hint": "and the book?"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0467",
+    "today": "Friday 2028-10-06",
+    "turns": [
+      {
+        "canonical": "balance of (members called \"Coral\") in (groups called \"Valley\")",
+        "gloss": "What is the balance of [members named \"Coral\"] within [groups named \"Valley\"]?",
+        "move": "first",
+        "hint": "what does Coral owe me for Valley"
+      },
+      {
+        "canonical": "balance of (members called \"Yara\") in (groups called \"Valley\")",
+        "gloss": "What is the balance of [members named \"Yara\"] within [groups named \"Valley\"]?",
+        "move": "substitute",
+        "hint": "and Yara?"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Niamh\") that (settled_at is null))",
+        "gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Niamh\"] where there is no date settled]?",
+        "move": "new",
+        "hint": "how much do I owe Niamh"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0392",
+    "today": "Saturday 2025-09-20",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"van\"))",
+        "gloss": "List the members linked to [groups named \"van\"].",
+        "move": "first",
+        "hint": "who's in the van group"
+      },
+      {
+        "canonical": "same? (members called \"Otto\") (parties called \"Otto Valdes\")",
+        "gloss": "Are [members named \"Otto\"] and [parties named \"Otto Valdes\"] the same (do they share a row)?",
+        "move": "new",
+        "hint": "is that Otto the same Otto as in my contacts (full name said)"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0170",
+    "today": "Sunday 2027-04-04",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_me is not null))",
+        "gloss": "List parties where the amount they owe me is set.",
+        "move": "first",
+        "hint": "who owes me money"
+      },
+      {
+        "canonical": "sum owed_to_me of (them)",
+        "gloss": "What is the total amount they owe me of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how much in total"
+      },
+      {
+        "canonical": "people.log_interaction{ kind: \"coffee\", since: last tuesday } on (parties called \"Dalia\")",
+        "gloss": "Log that I had a coffee with [parties named \"Dalia\"].",
+        "move": "new",
+        "hint": "log a coffee with Dalia (last tuesday)"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0100",
+    "today": "Friday 2027-09-17",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Niamh\") that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [parties named \"Niamh\"] where the kind is \"phone\".",
+        "move": "first",
+        "hint": "what's Niamh's number"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0421",
+    "today": "Monday 2026-08-24",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during last week))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls last week.",
+        "move": "first",
+        "hint": "tasks ticked off / done last week"
+      },
+      {
+        "canonical": "show (events called \"quarterly\")",
+        "gloss": "List events named \"quarterly\".",
+        "move": "switch",
+        "hint": "when is my quarterly"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic: act on those rows (C10 ref)"
+      },
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during last weekend))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls last weekend.",
+        "move": "new",
+        "hint": "what did I do/take/spend over the weekend (past tense)"
+      },
+      {
+        "canonical": "show (places of (photos called \"ruins\"))",
+        "gloss": "List the places linked to [photos named \"ruins\"].",
+        "move": "new",
+        "hint": "where was the ruins photo taken"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0358",
+    "today": "Thursday 2025-08-07",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during last weekend))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls last weekend.",
+        "move": "first",
+        "hint": "tasks ticked off / done last weekend"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      },
+      {
+        "canonical": "schedule.propose_event{ summary: \"Quarterly review\", dtstart: in 7 days at 20:15, dtend: in 7 days at 21:15 }",
+        "gloss": "Put an event titled \"Quarterly review\" in the calendar starting in 7 days at 20:15 and ending in 7 days at 21:15.",
+        "move": "new",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0444",
+    "today": "Monday 2025-04-21",
+    "turns": [
+      {
+        "canonical": "show (places of (photos called \"sunset\"))",
+        "gloss": "List the places linked to [photos named \"sunset\"].",
+        "move": "first",
+        "hint": "where was the sunset photo taken"
+      },
+      {
+        "canonical": "show ((photos of (it)) except (photos called \"sunset\"))",
+        "gloss": "List [the photos linked to [it (the one row the previous turn is about)]] leaving out [photos named \"sunset\"].",
+        "move": "act",
+        "hint": "what else did I take there (the excluded photo is the one the SENTENCE named: C13 names it)"
+      },
+      {
+        "canonical": "show (parties that (member of (events called \"Haircut\")))",
+        "gloss": "List parties where they belong to [events named \"Haircut\"].",
+        "move": "new",
+        "hint": ""
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0252",
+    "today": "Monday 2026-11-09",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses of (groups called \"north\"))",
+        "gloss": "What is the total amount (in pence) of [the expenses linked to [groups named \"north\"]]?",
+        "move": "first",
+        "hint": "how much did we spend on the north"
+      }
+    ],
+    "registers": ["terse", "question"]
+  }
+]

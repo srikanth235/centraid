@@ -1,0 +1,253 @@
+[
+  {
+    "id": "a0759",
+    "today": "Thursday 2026-01-29",
+    "turns": [
+      {
+        "canonical": "show (places that (kind = \"venue\"))",
+        "move": "first",
+        "hint": "places of that kind"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0425",
+    "today": "Thursday 2025-10-16",
+    "turns": [
+      {
+        "canonical": "amount_minor of (expenses called \"Invoice subscription\")",
+        "move": "first",
+        "hint": "how much was the invoice expense"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Invoice subscription\"",
+        "turn": 1,
+        "say": "exact: invoice"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1072",
+    "today": "Saturday 2026-12-05",
+    "turns": [
+      {
+        "canonical": "show (tasks of (tasks called \"Call the boiler engineer\"))",
+        "move": "first",
+        "hint": "the subtasks of the engineer task"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Call the boiler engineer\"",
+        "turn": 1,
+        "say": "exact: engineer"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0868",
+    "today": "Thursday 2027-09-16",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (documents ordered by created_at desc))",
+        "move": "first",
+        "hint": "the newest N documents"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0064",
+    "today": "Friday 2027-06-11",
+    "turns": [
+      {
+        "canonical": "show (journal notes called \"Dinner with Rosamund\")",
+        "move": "first",
+        "hint": "find my journal entry about dinner"
+      }
+    ],
+    "refer": [
+      {
+        "row": "journal notes \"Dinner with Rosamund\"",
+        "turn": 1,
+        "say": "loose: dinner"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0068",
+    "today": "Monday 2025-03-03",
+    "turns": [
+      {
+        "canonical": "show (places called \"Heatherfield Common\")",
+        "move": "first",
+        "hint": "find the place heatherfield in my photos' places"
+      }
+    ],
+    "refer": [
+      {
+        "row": "places \"Heatherfield Common\"",
+        "turn": 1,
+        "say": "exact: heatherfield"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0141",
+    "today": "Monday 2025-11-10",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"note\", title: \"Door code\", content: \"1203\" }",
+        "move": "first",
+        "hint": "save the door code 1203 in my locker (title = the words the person uses for it, content = the code)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0463",
+    "today": "Monday 2027-05-24",
+    "turns": [
+      {
+        "canonical": "spent_on of (expenses called \"Internet bill\")",
+        "move": "first",
+        "hint": "when did I pay for the internet bill"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Internet bill\"",
+        "turn": 1,
+        "say": "loose: internet bill"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0810",
+    "today": "Thursday 2026-04-23",
+    "turns": [
+      {
+        "canonical": "max dtstart of (events called \"Kayak lesson\")",
+        "move": "first",
+        "hint": "when is the last kayak (latest date)"
+      }
+    ],
+    "refer": [
+      { "row": "events \"Kayak lesson\"", "turn": 1, "say": "exact: kayak" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0745",
+    "today": "Thursday 2026-03-19",
+    "turns": [
+      {
+        "canonical": "show (photos that (place = \"Wickham Arcade\"))",
+        "move": "first",
+        "hint": "photos whose place is Wickham Arcade"
+      }
+    ],
+    "refer": [{ "row": "places \"Wickham Arcade\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1117",
+    "today": "Saturday 2027-11-20",
+    "turns": [
+      {
+        "canonical": "show (photos during last weekend)",
+        "move": "first",
+        "hint": "photos from that window"
+      },
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Boat trip\") } on (them)",
+        "move": "act",
+        "hint": "add those to the Boat trip album"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Rookery Fields\"", "turn": 1, "say": "exact: rookery" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0977",
+    "today": "Tuesday 2026-09-29",
+    "turns": [
+      {
+        "canonical": "show (groups of (expenses called \"Kayak hire\"))",
+        "move": "first",
+        "hint": "which group was the kayak expense in"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Kayak hire\"", "turn": 1, "say": "exact: kayak" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0366",
+    "today": "Saturday 2028-06-03",
+    "turns": [
+      {
+        "canonical": "count of (notes that (notebooks contains \"Boat licence\"))",
+        "move": "first",
+        "hint": "how many notes in the Boat licence notebook"
+      }
+    ],
+    "refer": [
+      { "row": "notebooks \"Boat licence\"", "turn": 1, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0157",
+    "today": "Saturday 2026-05-16",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Garden progress\") } on (photos during this month)",
+        "move": "first",
+        "hint": "put the photos from that window into the Garden progress album"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"Garden progress\"", "turn": 1, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0097",
+    "today": "Thursday 2028-08-24",
+    "turns": [
+      {
+        "canonical": "show (things called \"comparison\")",
+        "move": "first",
+        "hint": "what do I have about comparison (anything: diary, to-dos, notes...)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

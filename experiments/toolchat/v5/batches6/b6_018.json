@@ -1,0 +1,245 @@
+[
+  {
+    "id": "c0089",
+    "today": "Monday 2026-08-17",
+    "turns": [
+      {
+        "canonical": "show (obligations that (settled_at is null and from_party = me))",
+        "move": "first",
+        "hint": "what debts do I still owe"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "what's that come to / how much is that altogether / total? (short follow-up, no names)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0120",
+    "today": "Saturday 2027-06-19",
+    "turns": [
+      {
+        "canonical": "show (obligations of (parties called \"Ximena Kerrigan\") that (settled_at is null))",
+        "move": "first",
+        "hint": "do I owe Ximena anything / does Ximena owe me anything"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "how much? (one or two words)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (them)",
+        "move": "act",
+        "hint": "ok settle that / pay it off"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Ximena Kerrigan\"",
+        "turn": 1,
+        "say": "exact: Ximena"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0004",
+    "today": "Monday 2026-12-28",
+    "turns": [
+      {
+        "canonical": "show (notes called \"chess\")",
+        "move": "first",
+        "hint": "find my notes about chess / what did I write down about chess (any note whose title mentions it; NOT a notebook)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0193",
+    "today": "Thursday 2026-06-18",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Print the tickets\", due_at: wednesday }",
+        "move": "first",
+        "hint": "add a to-do to print the tickets by wednesday"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0241",
+    "today": "Wednesday 2027-07-14",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"Lakeside holiday\") that (party_id is not me))",
+        "move": "first",
+        "hint": "who's in the Lakeside holiday group (plain question)"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Lakeside holiday\"", "turn": 1, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0283",
+    "today": "Thursday 2025-03-20",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Oriane Oduya\") that (kind = \"phone\"))",
+        "move": "first",
+        "hint": "what's Oriane Oduya's number"
+      },
+      {
+        "canonical": "show (contact channels of (parties called \"Agnieszka Brackenholt\") that (kind = \"phone\"))",
+        "move": "act",
+        "hint": "and Agnieszka? / what about Agnieszka? (just the new name)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Oriane Oduya\"", "turn": 1, "say": "full" },
+      {
+        "row": "parties \"Agnieszka Brackenholt\"",
+        "turn": 2,
+        "say": "exact: Agnieszka"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0205",
+    "today": "Thursday 2028-08-03",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Book the campsite\" }",
+        "move": "first",
+        "hint": "add a task to book the campsite (a reminder for me)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0075",
+    "today": "Tuesday 2025-03-18",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties that (role = \"Vet\")) that (kind = \"phone\"))",
+        "move": "first",
+        "hint": "what's my vet's number"
+      }
+    ],
+    "refer": [{ "row": "role \"Vet\"", "turn": 1, "say": "exact: vet" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0017",
+    "today": "Wednesday 2028-08-02",
+    "turns": [
+      {
+        "canonical": "show (notes called \"spanish\")",
+        "move": "first",
+        "hint": "find my notes about spanish / what did I write down about spanish (any note whose title mentions it; NOT a notebook)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0218",
+    "today": "Thursday 2026-09-24",
+    "turns": [
+      {
+        "canonical": "show (albums called \"best\")",
+        "move": "first",
+        "hint": "find the Park album"
+      },
+      {
+        "canonical": "show (photos of (them))",
+        "move": "act",
+        "hint": "show me those photos / the pictures in it"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0131",
+    "today": "Monday 2027-08-16",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "move": "first",
+        "hint": "who owes me money / who do I owe money to"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (them) that (settled_at is null))",
+        "move": "act",
+        "hint": "what's that altogether / how much in total (no names)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0153",
+    "today": "Tuesday 2027-09-21",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during this weekend))",
+        "move": "first",
+        "hint": "what tasks are due in that window"
+      },
+      {
+        "canonical": "show (them that (title contains \"magazine\"))",
+        "move": "refine",
+        "hint": "just the magazine ones (narrow those by a word)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0049",
+    "today": "Monday 2026-10-05",
+    "turns": [
+      {
+        "canonical": "show (things called \"receipt\")",
+        "move": "first",
+        "hint": "what do I have about receipt (anything at all, no app named)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0096",
+    "today": "Tuesday 2025-05-20",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses called \"Cinema tickets\")",
+        "move": "first",
+        "hint": "what did the tickets come to / cost"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Cinema tickets\"",
+        "turn": 1,
+        "say": "loose: tickets"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

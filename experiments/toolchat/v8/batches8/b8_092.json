@@ -1,0 +1,276 @@
+[
+  {
+    "id": "w27-0008",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks how many tasks due last month they have",
+        "say": ["last month", "how many"]
+      },
+      {
+        "hint": "(new topic) asks if they have any documents about seagull",
+        "say": ["seagull", "documents"],
+        "shown": "= 3"
+      },
+      {
+        "hint": "follow-up: asks for a task to print the receipt document wednesday",
+        "say": ["print the receipt document", "wednesday"],
+        "shown": "document \"Seagull receipt\" Fri 2024-09-13 23:14 · folder=Wedding"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w27-0009",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks which tasks due last month they have",
+        "say": ["last month", "which"]
+      },
+      {
+        "hint": "follow-up: asks to move the first one to tomorrow and the third one to friday",
+        "say": ["first", "tomorrow", "third", "friday"],
+        "shown": "task \"Sharpen the gravy at Grevhaven Leisure Centre\" Sat 2024-12-28 12:00 · status=needs-action effort_min=180\ntask \"Sharpen the marzipan\" Mon 2024-12-30 12:00 · status=completed\ntask \"Chase the salmon this week\" Sat 2024-12-28 17:00 · status=completed"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w27-0010",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks to add the Lymere picture to the Walks round Gyvidale Leisure Centre album",
+        "say": ["Lymere", "Walks round Gyvidale Leisure Centre", "album"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w27-0011",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks to save the garage code 20840 in the locker",
+        "say": ["garage code", "20840"]
+      },
+      {
+        "hint": "(new topic) asks to move the handball task to next friday and the yoga teacher to tuesday",
+        "say": ["handball", "next friday", "yoga teacher", "tuesday"],
+        "shown": "done: locker.add_item{type: \"note\", title: \"Garage code\", content: \"20840\"}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w27-0012",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      { "hint": "asks how saturday looks", "say": ["saturday"] },
+      {
+        "hint": "follow-up: asks the same for tuesday ('and tuesday?')",
+        "say": ["tuesday"],
+        "shown": "event \"Almond repair\" Sat 2025-02-01 16:30\nevent \"Grapefruit sale at Mantua Wood\" Sat 2025-02-01 20:45"
+      },
+      {
+        "hint": "follow-up: asks to move the third one to friday and the fourth one to monday",
+        "say": ["third", "friday", "fourth", "monday"],
+        "shown": "important date \"Birthday — Aleksei Zamora\" Tue 2025-01-28\ntask \"Pay the cleaner (wk 05)\" Tue 2025-01-28 09:00 · status=needs-action\ntask \"Replace the awning\" Tue 2025-01-28 17:00 · status=needs-action effort_min=120\nevent \"Seagull club\" Tue 2025-01-28 10:30\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w27-0014",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      { "hint": "asks how today looks", "say": ["today"] },
+      {
+        "hint": "(new topic) asks who they're seeing at the wardrobe fitting",
+        "say": ["wardrobe fitting"],
+        "shown": "event \"Pizaum lesson\" Sun 2025-01-26 09:00\nevent \"Carnation sale at Burnham Heath\" Sun 2025-01-26 11:00\nevent \"Tatting meetup with Olumide\" Sun 2025-01-26 15:15\nevent \"Tatting meetup with Dariush\" Sun 2025-01-26 17:00\n(+1 more)"
+      },
+      {
+        "hint": "(new topic) asks what paperwork is kept in Volunteering",
+        "say": ["Volunteering"],
+        "shown": "party \"Maud Cellow\" · role=Old flatmate"
+      },
+      {
+        "hint": "(new topic) asks what they still have to get done tuesday",
+        "say": ["tuesday"],
+        "shown": "document \"Pavilion voucher\" Thu 2024-12-05 10:28 · folder=Volunteering\ndocument \"Berat Reservoir permit\" Wed 2024-11-06 20:01 · folder=Volunteering\ndocument \"Awning bill\" Wed 2024-11-06 18:50 · folder=Volunteering"
+      },
+      {
+        "hint": "(new topic) asks who Nomara is (several people are called Nomara)",
+        "say": ["Nomara"],
+        "shown": "task \"Pay the cleaner (wk 05)\" Tue 2025-01-28 09:00 · status=needs-action\ntask \"Replace the awning\" Tue 2025-01-28 17:00 · status=needs-action effort_min=120"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w27-0015",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks when their scaffold thing is (no kind given)",
+        "say": ["scaffold"]
+      },
+      {
+        "hint": "(new topic) asks which calendar events Josefine is on",
+        "say": ["Josefine"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: asks to move the first one to friday and cancel the second one",
+        "say": ["first", "friday", "second"],
+        "shown": "event \"Dennoe holiday\" Sat 2024-11-30 08:00\nevent \"Wanaka holiday\" Mon 2025-02-10 09:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w27-0016",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      { "hint": "asks what scaffold things they have", "say": ["scaffold"] }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w27-0017",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      { "hint": "asks who is coming to the Grolou", "say": ["Grolou"] },
+      {
+        "hint": "follow-up: asks who else is coming apart from Flaisis",
+        "say": ["Flaisis"],
+        "shown": "party \"Flaisis Sadeghi\" · role=Neighbour next door\nparty \"Forrie Tyrrak\" · role=Landlord"
+      },
+      {
+        "hint": "(new topic) asks for everything mentioning awning",
+        "say": ["awning"],
+        "shown": "party \"Forrie Tyrrak\" · role=Landlord"
+      },
+      {
+        "hint": "follow-up: asks if it's in their documents as well",
+        "say": ["documents"],
+        "shown": "document \"Awning bill\" Wed 2024-11-06 18:50 · folder=Volunteering\ndocument \"Awning report\" Sun 2023-12-31 11:43\ntask \"Replace the awning\" Tue 2025-01-28 17:00 · status=needs-action effort_min=120\ntask \"Research the awning\" · status=needs-action\n(+1 more)"
+      },
+      {
+        "hint": "follow-up: asks to star the first one",
+        "say": ["first"],
+        "shown": "document \"Awning bill\" Wed 2024-11-06 18:50 · folder=Volunteering\ndocument \"Awning report\" Sun 2023-12-31 11:43"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w27-0018",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks what time the Maud thing is (no kind said)",
+        "say": ["Maud"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w27-0019",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      { "hint": "asks what they still have to do", "say": [] },
+      {
+        "hint": "(new topic) asks to find the pavilion voucher",
+        "say": ["pavilion voucher"],
+        "shown": "task \"Sharpen the gravy at Grevhaven Leisure Centre\" Sat 2024-12-28 12:00 · status=needs-action effort_min=180\ntask \"Recycle Sigrid's wardrobe\" Wed 2025-01-01 09:00 · status=needs-action\ntask \"Weigh the scaffold for Maud\" Wed 2025-01-01 18:00 · status=in-process\ntask \"Cancel Maud's kiln\" Thu 2025-01-23 09:00 · status=needs-action\n(+9 more)"
+      },
+      {
+        "hint": "(new topic) asks what they still have to do",
+        "say": [],
+        "shown": "document \"Pavilion voucher\" Thu 2024-12-05 10:28 · folder=Volunteering"
+      },
+      {
+        "hint": "follow-up: asks how many of them there are",
+        "say": [],
+        "shown": "task \"Sharpen the gravy at Grevhaven Leisure Centre\" Sat 2024-12-28 12:00 · status=needs-action effort_min=180\ntask \"Recycle Sigrid's wardrobe\" Wed 2025-01-01 09:00 · status=needs-action\ntask \"Weigh the scaffold for Maud\" Wed 2025-01-01 18:00 · status=in-process\ntask \"Cancel Maud's kiln\" Thu 2025-01-23 09:00 · status=needs-action\n(+9 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w27-0020",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      { "hint": "asks which to-dos are due next week", "say": ["next week"] }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w27-0021",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks who is coming to the kiln viewing",
+        "say": ["kiln viewing", "who"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w27-0022",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks when the kiln viewing is",
+        "say": ["kiln viewing", "when"]
+      },
+      {
+        "hint": "(detour) hang on — asks who owes them money",
+        "say": [],
+        "shown": "event \"Kiln viewing\" Tue 2025-01-21 16:15"
+      },
+      {
+        "hint": "back to that — asks who else will be there",
+        "say": [],
+        "shown": "party \"Thoswyn Kuipers\" · owed_to_me_minor=2500 role=Supplier\nparty \"Sinead Zamora\" · owed_to_me_minor=15000 role=Daughter\nparty \"Grolou Montague\" · owed_to_me_minor=2000 role=Sister\nparty \"Dariush Aksoy\" · owed_to_me_minor=3500 role=Colleague"
+      },
+      {
+        "hint": "(new topic) asks if anything is happening saturday",
+        "say": ["saturday"],
+        "shown": "party \"Nomara Vavow\" · role=Client\nparty \"Rainer Cosova\" · role=Friend from antenatal\nparty \"Salvatore Zamora\" · role=Daughter\nparty \"Cillian Egerton\" · role=Friend from the market"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w27-0023",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      { "hint": "asks to find the club portal", "say": ["club portal"] },
+      {
+        "hint": "follow-up: asks what else is on that shelf of the locker",
+        "say": ["portal"],
+        "shown": "locker item \"Snorkelling club portal\" · type=login"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  }
+]

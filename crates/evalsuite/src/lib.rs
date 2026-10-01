@@ -55,6 +55,8 @@ pub mod handles;
 /// `centraid_evalworld::Scenario::Second`. `blind.json` holds out WORDING
 /// over one world; this one holds out the SCENARIO.
 pub mod holdoutref;
+/// One name normalisation for the runtime and the suite's title checks.
+pub mod names;
 /// The degenerate and crippled measuring instruments. **In the library, not
 /// beside the binary**: `cargo test` could not reach them while they were a
 /// `#[path]` module of `run-nulls`, so the only thing asserting that a flawed
@@ -62,7 +64,7 @@ pub mod holdoutref;
 pub mod nulls;
 pub mod reference;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use centraid_apps_kit::page::PageRequest;
@@ -347,6 +349,11 @@ pub fn row_of(entity: &str) -> Option<(&'static str, &'static str)> {
 pub struct WorldTemplate {
     dir: tempfile::TempDir,
     pub inventory: centraid_evalworld::Inventory,
+    /// The world's instant. The evaluation worlds are all
+    /// [`centraid_evalworld::NOW_MS`]; a TRAINING world (see
+    /// [`WorldTemplate::empty`]) carries its own, so its sessions can be set on
+    /// any weekday.
+    now_ms: i64,
 }
 
 impl WorldTemplate {
@@ -377,6 +384,60 @@ impl WorldTemplate {
         Ok(Self {
             dir,
             inventory: world.inventory,
+            now_ms: centraid_evalworld::NOW_MS,
+        })
+    }
+
+    /// **AN EMPTY, FOUNDED WORLD** at `now_ms`, for building a TRAINING world
+    /// that shares no row with the evaluation ones: an owner, the calendar
+    /// founding mints, a live Locker key, and nothing else. Rows arrive through
+    /// [`Context::write`] on a [`WorldTemplate::deal_with_ids`] copy that
+    /// [`Dealt::freeze`] turns back into a template — the same door a candidate
+    /// writes through, so a training row has the shape a candidate's would.
+    ///
+    /// # Errors
+    ///
+    /// The vault does not open or found.
+    pub fn empty(now_ms: i64, seed: &str) -> Result<Self, String> {
+        let dir = tempfile::tempdir().map_err(|error| format!("a temp dir: {error}"))?;
+        let vault = Vault::create_with(
+            dir.path().join("world.db"),
+            Box::new(FixedClock::at(now_ms)),
+            Box::new(SeededIds::new(seed)),
+        )
+        .map_err(|error| format!("the vault is not created: {error}"))?;
+        let founded = vault
+            .found("Training vault", "Owner")
+            .map_err(|error| format!("the vault does not found: {error}"))?;
+        let custody = centraid_vault::custody::MemberKeyCustody::with_store(
+            centraid_vault::custody::KeyStore::new(dir.path().join("keys")),
+            &founded.vault_id,
+        );
+        let key_id = vault.ids().next();
+        let now = centraid_vault::clock::format_iso_ms(now_ms);
+        vault
+            .commit(|tx| {
+                centraid_vault::custody::found_locker_key(tx.connection(), &custody, &key_id, &now)
+                    .map_err(|error| centraid_vault::VaultError::Invariant {
+                        context: error.to_string(),
+                    })?;
+                Ok(())
+            })
+            .map_err(|error| format!("the locker key: {error}"))?;
+        vault
+            .close()
+            .map_err(|error| format!("the vault does not close: {error}"))?;
+        Ok(Self {
+            dir,
+            inventory: centraid_evalworld::Inventory {
+                now,
+                seed: seed.to_owned(),
+                vault_id: founded.vault_id,
+                owner_party_id: founded.owner_party_id,
+                entities: Vec::new(),
+                refusals: Vec::new(),
+            },
+            now_ms,
         })
     }
 
@@ -386,24 +447,37 @@ impl WorldTemplate {
     ///
     /// The copy fails.
     pub fn deal(&self) -> Result<Dealt, String> {
+        self.deal_with_ids("centraid-evalsuite/1")
+    }
+
+    /// [`Self::deal`] with its own id seed. A world being SEEDED must mint
+    /// from a different sequence than the deals made from it afterwards, or a
+    /// candidate's first row would take the id of the seed's first row.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::deal`].
+    pub fn deal_with_ids(&self, seed: &str) -> Result<Dealt, String> {
         let into = tempfile::tempdir().map_err(|error| format!("a temp dir: {error}"))?;
         copy_tree(self.dir.path(), into.path())?;
         let vault_path = into.path().join("world.db");
-        let now_ms = centraid_evalworld::NOW_MS;
+        let now_ms = self.now_ms;
         // THE CLOCK AND THE IDS ARE INJECTED, and they must be: `Vault::open`
         // takes the wall clock, so a candidate's write would be stamped
         // whenever the suite happened to run and a predicate about "today"
         // would drift. The id seed is distinct from the world's so a row a
         // candidate mints cannot collide with one the world planted.
+        let clock = std::sync::Arc::new(WorldClock::at(now_ms));
         let vault = Vault::open_with(
             &vault_path,
-            Box::new(FixedClock::at(now_ms)),
-            Box::new(SeededIds::new("centraid-evalsuite/1")),
+            Box::new(std::sync::Arc::clone(&clock)),
+            Box::new(SeededIds::new(seed)),
         )
         .map_err(|error| format!("the world does not open: {error}"))?;
         let registry =
             Registry::with_system_commands().map_err(|error| format!("the registry: {error}"))?;
         Ok(Dealt {
+            clock,
             digest_cache: std::cell::RefCell::new(None),
             shapes: std::cell::RefCell::new(centraid_ontology::snapshot::SnapshotCache::new()),
             scans: std::cell::Cell::new(0),
@@ -412,9 +486,11 @@ impl WorldTemplate {
             _dir: into,
             vault: Some(vault),
             registry,
-            now: centraid_evalworld::now_text(),
+            now: centraid_vault::clock::format_iso_ms(now_ms),
             now_ms,
             me: self.inventory.owner_party_id.clone(),
+            vault_id: self.inventory.vault_id.clone(),
+            seed: self.inventory.seed.clone(),
         })
     }
 }
@@ -439,8 +515,44 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// **THE VAULT'S CLOCK IN A DEALT WORLD: stopped at the world's instant, and
+/// SETTABLE — back as well as forward — by a training world's seeder.**
+///
+/// [`FixedClock`] only moves forward, the right shape for the evaluation
+/// world's own seeder (which walks a story in order). A training world is a
+/// list of writes that each name the instant they happened at (an activity
+/// last week, a task ticked off on Thursday, a note binned days ago), in no
+/// order the clock could walk, so [`Dealt::set_clock`] puts it at each one and
+/// [`Dealt::reset_clock`] brings it back. Nothing else sets it: a candidate's
+/// writes run at the world's own instant, exactly as before.
+#[derive(Debug)]
+struct WorldClock {
+    millis: std::sync::atomic::AtomicI64,
+}
+
+impl WorldClock {
+    const fn at(millis: i64) -> Self {
+        Self {
+            millis: std::sync::atomic::AtomicI64::new(millis),
+        }
+    }
+
+    fn set(&self, millis: i64) {
+        self.millis
+            .store(millis, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl centraid_vault::clock::Clock for WorldClock {
+    fn now_ms(&self) -> i64 {
+        self.millis.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
 /// One session's private world.
 pub struct Dealt {
+    /// The vault's clock — see [`WorldClock`].
+    clock: std::sync::Arc<WorldClock>,
     keys_dir: PathBuf,
     _dir: tempfile::TempDir,
     vault: Option<Vault>,
@@ -448,6 +560,9 @@ pub struct Dealt {
     now: String,
     now_ms: i64,
     me: String,
+    /// Carried for [`Dealt::freeze`], which makes a template of this copy.
+    vault_id: String,
+    seed: String,
     /// **THE LAST DIGEST, AND THE CHANGE COUNTER IT WAS TAKEN AT.**
     ///
     /// See [`Dealt::digest`]: SQLite counts every row its connection has
@@ -464,8 +579,96 @@ pub struct Dealt {
 }
 
 impl Dealt {
+    /// **THIS COPY, AS A TEMPLATE** — how a training world keeps the rows it
+    /// was seeded with. The vault is closed first, so the file on disk is
+    /// whole before anything copies it.
+    ///
+    /// # Errors
+    ///
+    /// The vault does not close.
+    pub fn freeze(mut self) -> Result<WorldTemplate, String> {
+        if let Some(vault) = self.vault.take() {
+            vault
+                .close()
+                .map_err(|error| format!("the vault does not close: {error}"))?;
+        }
+        // `Dealt` is `Drop`, so the directory is swapped out, not moved.
+        let placeholder = tempfile::tempdir().map_err(|error| format!("a temp dir: {error}"))?;
+        let dir = std::mem::replace(&mut self._dir, placeholder);
+        Ok(WorldTemplate {
+            inventory: centraid_evalworld::Inventory {
+                now: self.now.clone(),
+                seed: self.seed.clone(),
+                vault_id: self.vault_id.clone(),
+                owner_party_id: self.me.clone(),
+                entities: Vec::new(),
+                refusals: Vec::new(),
+            },
+            now_ms: self.now_ms,
+            dir,
+        })
+    }
+
     fn vault(&self) -> &Vault {
         self.vault.as_ref().expect("the vault outlives the session")
+    }
+
+    /// **RUN THE WRITES THAT FOLLOW AT `at`** (`YYYY-MM-DDTHH:MM:SS(.mmm)?Z`),
+    /// until [`Dealt::reset_clock`]. For a training world's SEEDER, never a
+    /// candidate: the world's own `now` — what "today" and "last week" mean to
+    /// a read — does not move, only the stamp a command writes.
+    ///
+    /// # Errors
+    ///
+    /// `at` is not an instant.
+    pub fn set_clock(&self, at: &str) -> Result<(), String> {
+        let millis = centraid_vault::clock::parse_iso_ms(at)
+            .ok_or_else(|| format!("{at:?} is not a YYYY-MM-DDTHH:MM:SS.mmmZ instant"))?;
+        self.clock.set(millis);
+        Ok(())
+    }
+
+    /// The vault's clock back at the world's own instant.
+    pub fn reset_clock(&self) {
+        self.clock.set(self.now_ms);
+    }
+
+    /// **STAGE ONE FACE PROPOSAL on a photograph**, as a training world's
+    /// seeder names who is in the frame: the detector's derived row, nameless
+    /// and `proposed`, written by the Photos fixture exactly as the evaluation
+    /// world stages it (`centraid_evalworld`'s `name_the_faces`) — no command
+    /// writes one, because a person never draws a region. The seeder then
+    /// answers it through `media.answer_face_proposal`, the member's own door.
+    /// `slot` spreads a frame's faces across it, so two regions on one photo
+    /// are two boxes. Answers the new region's id.
+    ///
+    /// # Errors
+    ///
+    /// The region does not land (an unknown asset, say).
+    pub fn stage_face_proposal(&self, asset_id: &str, slot: usize) -> Result<String, String> {
+        use centraid_vault::clock::Clock as _;
+        let region_id = self.vault().ids().next();
+        let now = self.clock.now_text();
+        let across = 0.05 + 0.3 * f64::from(u8::try_from(slot % 3).unwrap_or(0));
+        let bbox = format!(r#"{{"x":{across:.2},"y":0.2,"w":0.25,"h":0.4}}"#);
+        self.vault()
+            .commit(|tx| {
+                tx.set_producer("evalsuite.face_region");
+                centraid_apps_kit::fixtures::stage_face_proposal(
+                    tx.connection(),
+                    &region_id,
+                    asset_id,
+                    &bbox,
+                    0.93,
+                    &now,
+                )
+                .map_err(|error| centraid_vault::VaultError::Invariant {
+                    context: error.to_string(),
+                })?;
+                Ok(())
+            })
+            .map_err(|error| format!("a face region on {asset_id}: {error}"))?;
+        Ok(region_id)
     }
 
     /// EVERY MUTABLE ROW IN THE VAULT, AS A DIGEST.
@@ -503,10 +706,10 @@ impl Dealt {
             .vault()
             .read(|connection| Ok(connection.total_changes()))
             .unwrap_or(u64::MAX);
-        if let Some((taken_at, digest)) = self.digest_cache.borrow().as_ref() {
-            if *taken_at == changes {
-                return digest.clone();
-            }
+        if let Some((taken_at, digest)) = self.digest_cache.borrow().as_ref()
+            && *taken_at == changes
+        {
+            return digest.clone();
         }
         let started = std::time::Instant::now();
         let mut shapes = self.shapes.borrow_mut();
@@ -727,7 +930,11 @@ impl TurnCost {
 }
 
 impl<'world> Context<'world> {
-    fn new(dealt: &'world Dealt) -> Self {
+    /// A fresh conversation over `dealt`. [`run`] makes one per session; a
+    /// driver that is NOT the scoring loop (a tool server, a training-world
+    /// seeder) makes its own and closes each turn with [`Context::end_turn`].
+    #[must_use]
+    pub fn new(dealt: &'world Dealt) -> Self {
         Self {
             dealt,
             history: Vec::new(),
@@ -743,6 +950,17 @@ impl<'world> Context<'world> {
         bill.calls += 1;
         bill.rows += rows;
         bill.micros += started.elapsed().as_micros();
+    }
+
+    /// Close a turn outside [`run`]: record it in the history and reset the
+    /// per-turn write count and meter, exactly as [`run`] does between turns.
+    pub fn end_turn(&mut self, request: &str, plan: &Plan) {
+        self.history.push(TurnRecord {
+            request: request.to_owned(),
+            plan: plan.clone(),
+        });
+        self.writes_this_turn = 0;
+        *self.cost.borrow_mut() = TurnCost::default();
     }
 
     /// What this turn has cost so far, as a candidate may read it of itself.
@@ -880,6 +1098,38 @@ impl<'world> Context<'world> {
                 .ok()
                 .flatten()
                 .and_then(|row| row.get("asset_id").and_then(Cell::text).map(str::to_owned)))
+            })
+            .map_err(|error| error.to_string())
+    }
+
+    /// The owner's own calendar — the "Personal" one founding mints — for a
+    /// driver that seeds events into an EMPTY world ([`WorldTemplate::empty`]),
+    /// where no event row exists yet to read it from.
+    ///
+    /// # Errors
+    ///
+    /// The door refused.
+    pub fn calendar_id(&self) -> Result<Option<String>, String> {
+        let me = self.dealt.me.clone();
+        self.dealt
+            .vault()
+            .read(|connection| {
+                let door = TestDoor::new(connection);
+                Ok(read_by_id(
+                    &door,
+                    "evalsuite.own_calendar",
+                    "calendar_id, owner_party_id",
+                    "schedule_calendar",
+                    "owner_party_id",
+                    &me,
+                )
+                .ok()
+                .flatten()
+                .and_then(|row| {
+                    row.get("calendar_id")
+                        .and_then(Cell::text)
+                        .map(str::to_owned)
+                }))
             })
             .map_err(|error| error.to_string())
     }
@@ -1187,6 +1437,31 @@ impl Probe<'_> {
     }
 
     /// Every row of `table` whose `column` equals `value`.
+    /// The rows of `table` created at or after the world's now — the ones
+    /// this conversation wrote.
+    fn made_this_session(&self, table: &str, pk: &str, select: &str) -> Vec<Row> {
+        let query = PageQuery::new(
+            "evalsuite.probe.made",
+            select,
+            table,
+            PageOrder::asc(pk, pk),
+        )
+        .filter(
+            "created_at >= ?",
+            vec![PageBindValue::Text(self.dealt.now.clone())],
+        );
+        self.dealt
+            .vault()
+            .read(|connection| {
+                let door = TestDoor::new(connection);
+                Ok(door
+                    .page(&query, &PageRequest::first(50))
+                    .map(|page| page.rows)
+                    .unwrap_or_default())
+            })
+            .unwrap_or_default()
+    }
+
     fn by(&self, table: &str, pk: &str, select: &str, column: &str, value: &str) -> Vec<Row> {
         let query = PageQuery::new("evalsuite.probe.by", select, table, PageOrder::asc(pk, pk))
             .filter(
@@ -1222,6 +1497,11 @@ fn text(row: &Row, column: &str) -> Option<String> {
 
 fn integer(row: &Row, column: &str) -> Option<i64> {
     row.get(column).and_then(Cell::integer)
+}
+
+/// A written name against the expected one: equal but for letter case.
+fn same_name(expected: &str, written: &str) -> bool {
+    expected.trim().to_lowercase() == written.trim().to_lowercase()
 }
 
 fn arg<'a>(args: &'a Map<String, Value>, key: &str) -> Result<&'a str, String> {
@@ -1321,10 +1601,28 @@ pub fn predicates() -> BTreeMap<&'static str, Predicate> {
             "summary",
             summary,
         );
-        let live: Vec<&Row> = rows
+        let mut live: Vec<&Row> = rows
             .iter()
             .filter(|row| text(row, "deleted_at").is_none())
             .collect();
+        // A SUMMARY IN ANY CASE. `summary = ?` is a byte comparison, so
+        // "haircut" failed a case expecting "Haircut" — the same event. As
+        // `task_created` does, a row THIS CONVERSATION made passes when its
+        // summary equals the expected one case-insensitively.
+        let made = probe.made_this_session(
+            "core_event",
+            "event_id",
+            "event_id, summary, dtstart, deleted_at",
+        );
+        if live.is_empty() {
+            live = made
+                .iter()
+                .filter(|row| text(row, "deleted_at").is_none())
+                .filter(|row| {
+                    text(row, "summary").is_some_and(|written| same_name(summary, &written))
+                })
+                .collect();
+        }
         if live.is_empty() {
             return Err(format!("no live event called {summary:?}"));
         }
@@ -1412,10 +1710,30 @@ pub fn predicates() -> BTreeMap<&'static str, Predicate> {
             "title",
             title,
         );
-        let live: Vec<&Row> = rows
+        let mut live: Vec<&Row> = rows
             .iter()
             .filter(|row| text(row, "deleted_at").is_none())
             .collect();
+        // **A TITLE IN THE PERSON'S OWN WORDS.** Where no task carries the
+        // expected title exactly, a task THIS CONVERSATION created whose
+        // title is made of the expected title's words passes — read by the
+        // same [`names::labelled`] the runtime reads a `called` with, so the
+        // scorer and the executor agree on what a name is. Only a new row
+        // qualifies: a task the world already held is not the one asked for.
+        let made = probe.made_this_session(
+            "schedule_task",
+            "task_id",
+            "task_id, title, due_at, deleted_at",
+        );
+        if live.is_empty() {
+            live = made
+                .iter()
+                .filter(|row| text(row, "deleted_at").is_none())
+                .filter(|row| {
+                    text(row, "title").is_some_and(|written| names::labelled(title, &written))
+                })
+                .collect();
+        }
         if live.is_empty() {
             return Err(format!("no live task titled {title:?}"));
         }
@@ -1458,7 +1776,15 @@ pub fn predicates() -> BTreeMap<&'static str, Predicate> {
             "title",
             title,
         );
+        // A TITLE IN ANY CASE — see `event_created`.
+        let made =
+            probe.made_this_session("knowledge_note", "note_id", "note_id, title, deleted_at");
         rows.iter()
+            .chain(
+                made.iter().filter(|row| {
+                    text(row, "title").is_some_and(|written| same_name(title, &written))
+                }),
+            )
             .any(|row| text(row, "deleted_at").is_none())
             .then_some(())
             .ok_or_else(|| format!("no live note titled {title:?}"))
@@ -1752,7 +2078,7 @@ pub fn predicates() -> BTreeMap<&'static str, Predicate> {
         let found = probe
             .board(App::Locker)
             .into_iter()
-            .find(|row| row.label == title)
+            .find(|row| same_name(title, &row.label))
             .ok_or_else(|| format!("no locker item titled {title:?}"))?;
         match args.get("type").and_then(Value::as_str) {
             None => Ok(()),
@@ -3633,6 +3959,35 @@ pub fn run(
 /// costs is what a scan costs.
 const BOARD_LIMIT: usize = 100_000;
 
+/// The collections that file at least one row of `target_type`.
+///
+/// **A NOTEBOOK AND AN ALBUM ARE BOTH A `core_collection`** (#274), and the
+/// table carries no word for which it is: the Notes and Photos doors each
+/// walk every collection. What a collection HOLDS is the only thing that
+/// tells them apart, so a board hands a collection back as a notebook only
+/// when it files no photo, and as an album only when it files no note.
+fn collections_filing(door: &TestDoor<'_>, target_type: &str) -> BTreeSet<String> {
+    let query = PageQuery::new(
+        "evalsuite.board.collection_kinds",
+        "entry_id, collection_id",
+        "core_collection_entry",
+        PageOrder::asc("entry_id", "entry_id"),
+    )
+    .filter(
+        "target_type = ?",
+        vec![PageBindValue::Text(target_type.to_owned())],
+    );
+    centraid_apps_kit::reads::read_pages(
+        door,
+        &query,
+        centraid_apps_kit::reads::FanOutBound::new(1_000, 100),
+    )
+    .unwrap_or_default()
+    .iter()
+    .filter_map(|row| text(row, "collection_id"))
+    .collect()
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "eight apps, eight readers — splitting them would hide the one list a reader wants"
@@ -3781,9 +4136,11 @@ fn board_of(
             // `notebooks` (`create-notebook`, `library.notebooks`), so the
             // board hands them back as rows of their own and not only as the
             // `notebooks` extra on each note.
+            let albums = collections_filing(door, "media.asset");
             let mut rows: Vec<VaultRow> = library
                 .notebooks
                 .iter()
+                .filter(|notebook| !albums.contains(&notebook.notebook_id))
                 .map(|notebook| {
                     row(
                         "knowledge.notebook",
@@ -3895,16 +4252,40 @@ fn board_of(
                             column,
                             &person.party_id,
                         );
-                        let open: Vec<String> = door
+                        let rows = door
                             .page(&query, &PageRequest::first(50))
                             .map(|page| page.rows)
-                            .unwrap_or_default()
+                            .unwrap_or_default();
+                        let open: Vec<_> = rows
                             .iter()
                             .filter(|found| text(found, "settled_at").is_none())
+                            .collect();
+                        let ids: Vec<String> = open
+                            .iter()
                             .filter_map(|found| text(found, "obligation_id"))
                             .collect();
-                        if !open.is_empty() {
-                            extra.push((name, joined(&open)));
+                        if !ids.is_empty() {
+                            // The ids are the LINK (`obligations of`); the
+                            // amount they come to is a FIELD of its own, so
+                            // "who owes me" is `owed_to_me_minor > 0` and no
+                            // reader has to guess which one a filter meant.
+                            let minor: i64 = open
+                                .iter()
+                                .filter_map(|found| {
+                                    integer(found, "amount_minor").or_else(|| {
+                                        text(found, "amount_minor")?.parse::<i64>().ok()
+                                    })
+                                })
+                                .sum();
+                            extra.push((name, joined(&ids)));
+                            extra.push((
+                                if name == "owed_to_me" {
+                                    "owed_to_me_minor"
+                                } else {
+                                    "owed_to_them_minor"
+                                },
+                                minor.to_string(),
+                            ));
                         }
                     }
                     row("core.party", person.party_id, person.name, None, extra)
@@ -4194,9 +4575,11 @@ fn board_of(
                 now_ms,
             )
             .map_err(|error| error.to_string())?;
+            let notebooks = collections_filing(door, "knowledge.note");
             let mut rows: Vec<VaultRow> = library
                 .albums
                 .iter()
+                .filter(|album| !notebooks.contains(&album.album_id))
                 .map(|album| {
                     row(
                         "media.album",
@@ -4216,12 +4599,36 @@ fn board_of(
                     Vec::new(),
                 )
             }));
+            // WHO IS IN THE FRAME: the confirmed face regions, read through
+            // the Photos app's own face-queue statement. Only a confirmed
+            // region names a person; a proposal is the detector's guess.
+            let mut faces: BTreeMap<String, Vec<String>> = BTreeMap::new();
+            if let Ok(page) = door.page(
+                &centraid_apps_photos::faces::queue_regions_statement(),
+                &PageRequest::first(BOARD_LIMIT),
+            ) {
+                for region in page
+                    .rows
+                    .iter()
+                    .filter_map(centraid_apps_photos::faces::FaceRegion::of)
+                {
+                    if region.review_state
+                        == Some(centraid_apps_photos::faces::ReviewState::Confirmed)
+                        && let Some(party) = region.party_id
+                    {
+                        faces.entry(region.asset_id).or_default().push(party);
+                    }
+                }
+            }
             rows.extend(library.assets.into_iter().chain(library.trash).map(|grid| {
                 let captured = grid.asset.captured_at.clone();
                 let mut extra = vec![
                     ("favorite", grid.favorite.to_string()),
                     ("album_titles", joined(&grid.album_titles)),
                 ];
+                if let Some(people) = faces.get(&grid.asset.asset_id) {
+                    extra.push(("people_party_ids", joined(people)));
+                }
                 if let Some(place) = grid.place.as_ref() {
                     extra.push(("place_id", place.place_id.clone()));
                     extra.push(("place", place.name.clone()));

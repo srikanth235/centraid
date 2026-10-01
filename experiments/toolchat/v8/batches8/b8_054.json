@@ -1,0 +1,255 @@
+[
+  {
+    "id": "w16-0030",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      {
+        "hint": "asks when their batik thing is (no kind given)",
+        "say": ["batik"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w16-0031",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      { "hint": "asks what batik things they have", "say": ["batik"] },
+      {
+        "hint": "follow-up: asks to move the Afonso one to tomorrow",
+        "say": ["Afonso", "tomorrow"],
+        "shown": "event \"Batik meetup\" Wed 2027-09-15 13:30\nevent \"Batik meetup with Afonso\" Wed 2027-10-13 14:30\nnote \"Batik meetup draft\" Wed 2027-07-07 19:45 · notebooks=Travel\nnote \"Batik meetup packing list\" Fri 2027-04-23 23:37"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w16-0032",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      {
+        "hint": "asks who is coming to the geyser sale",
+        "say": ["geyser sale", "who"]
+      },
+      {
+        "hint": "follow-up: about the Emiliano one, asks what events they're coming to",
+        "say": ["Emiliano"],
+        "shown": "party \"Jimel Aubert\" · role=Manager\nparty \"Emiliano Faswick\" · role=Running club friend"
+      },
+      {
+        "hint": "(new topic) asks for the total spent in January",
+        "say": ["January"],
+        "shown": "event \"Art class (week 36)\" Sun 2027-09-12 09:30\nevent \"Geyser sale at Shoswen Hollow\" Mon 2027-09-13 08:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w16-0033",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      {
+        "hint": "asks when the geyser sale is",
+        "say": ["geyser sale", "when"]
+      },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "event \"Geyser sale at Shoswen Hollow\" Mon 2027-09-13 08:00"
+      },
+      {
+        "hint": "(new topic) asks to delete all their draft notes",
+        "say": ["draft", "note"],
+        "shown": "party \"Jimel Aubert\" · role=Manager\nparty \"Emiliano Faswick\" · role=Running club friend"
+      },
+      {
+        "hint": "follow-up: says no wait, undo that",
+        "say": [],
+        "shown": "done: delete{} on (#4, #5)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w16-0034",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      {
+        "hint": "asks for their notes on redcurrant",
+        "say": ["redcurrant", "notes"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w16-0035",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      {
+        "hint": "asks what the soapmaking meetup membership details are",
+        "say": ["soapmaking meetup", "membership"]
+      },
+      {
+        "hint": "follow-up: asks what the password on it is",
+        "say": ["password"],
+        "shown": "locker item \"Soapmaking meetup membership\" · type=membership"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w16-0036",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      {
+        "hint": "asks which plants tasks they haven't done yet",
+        "say": ["plants"]
+      },
+      {
+        "hint": "(new topic) asks to delete the invoice document",
+        "say": ["invoice", "document"],
+        "shown": "task \"Water the plants (wk 39)\" Tue 2027-09-28 09:00 · status=needs-action effort_min=30\ntask \"Water the plants (wk 38)\" Tue 2027-09-21 09:00 · status=needs-action"
+      },
+      {
+        "hint": "(new topic) asks if they have any pictures about kitesurfing",
+        "say": ["kitesurfing", "pictures"],
+        "shown": "none"
+      },
+      {
+        "hint": "(new topic) asks to bump the look fifteen minutes later",
+        "say": ["look", "fifteen minutes later"],
+        "shown": "photo \"Kitesurfing on the table\" Fri 2027-08-06 10:25 · album_titles=Kitesurfing 2027 favorite=false"
+      },
+      {
+        "hint": "(new topic) asks to move the igloo delivery appointment to saturday",
+        "say": ["igloo delivery", "saturday"],
+        "shown": "done: reschedule{by: +15m} on (#5)"
+      },
+      {
+        "hint": "follow-up: corrects: wrong event, they meant the coffee one",
+        "say": ["coffee"],
+        "shown": "done: reschedule{to: 2027-09-18} on (#14)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w16-0037",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      { "hint": "asks which shots mention Hana", "say": ["Hana", "shots"] }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w16-0038",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      { "hint": "asks where the shed backup went", "say": ["shed backup"] },
+      {
+        "hint": "(new topic) asks what time the sheepdog is",
+        "say": ["sheepdog"],
+        "shown": "locker item \"Shed backup codes\" · type=note"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w16-0039",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      {
+        "hint": "asks to show the quote tasks, tick off the first and delete the second",
+        "say": ["quote"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w16-0040",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      {
+        "hint": "asks to settle up with Flavia in billiards share",
+        "say": ["Flavia", "billiards share", "settle up"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w16-0041",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      {
+        "hint": "asks to add 11 euros for Flavia's petrol to billiards share, they paid",
+        "say": ["11 euros", "Flavia's petrol", "billiards share"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w16-0042",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      {
+        "hint": "asks where the router password went",
+        "say": ["router password"]
+      },
+      {
+        "hint": "(new topic) asks which to-dos take about twenty minute",
+        "say": ["twenty minute"],
+        "shown": "locker item \"Voudiup router password\" · type=password"
+      },
+      {
+        "hint": "(new topic) asks to note down: books to read this summer",
+        "say": ["books to read this summer"],
+        "shown": "task \"Recycle the wren\" Sun 2027-08-29 18:00 · status=needs-action effort_min=20"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w16-0043",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      {
+        "hint": "asks to delete the skijoring note",
+        "say": ["skijoring", "note"]
+      },
+      {
+        "hint": "(new topic) asks if they have any documents about redcurrant",
+        "say": ["redcurrant", "documents"],
+        "shown": "done: delete{} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks who they're having coffee with on tuesday",
+        "say": ["coffee", "tuesday"],
+        "shown": "no rows"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w16-0044",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      { "hint": "asks to delete the things note", "say": ["things", "note"] }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  }
+]

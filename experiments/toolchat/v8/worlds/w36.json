@@ -1,0 +1,6320 @@
+{
+  "now_ms": 1793693700000,
+  "seed": "v8-trainworld/v8/w36",
+  "writes": [
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Groskie Distow",
+        "role": "Partner",
+        "cadence_days": 0
+      },
+      "as": "p01",
+      "at": "2022-12-08T07:17:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Kadri Distow",
+        "role": "Daughter",
+        "cadence_days": 60
+      },
+      "as": "p02",
+      "at": "2023-10-21T16:58:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Kasia Distow",
+        "role": "Son",
+        "cadence_days": 60
+      },
+      "as": "p03",
+      "at": "2025-06-06T23:32:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Buthen Distow",
+        "role": "Daughter",
+        "cadence_days": 7
+      },
+      "as": "p04",
+      "at": "2023-03-01T07:28:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Luca Distow",
+        "role": "Mum",
+        "cadence_days": 90
+      },
+      "as": "p05",
+      "at": "2025-08-09T09:59:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Honora Huang",
+        "role": "Brother",
+        "cadence_days": 60
+      },
+      "as": "p06",
+      "at": "2025-05-07T23:25:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Enine Lombardi",
+        "role": "Sister-in-law",
+        "cadence_days": 7
+      },
+      "as": "p07",
+      "at": "2026-02-03T11:47:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Arvid Prastett",
+        "role": "Grandmother",
+        "cadence_days": 30
+      },
+      "as": "p08",
+      "at": "2024-02-25T11:55:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Nirara Distow",
+        "role": "Brother-in-law",
+        "cadence_days": 30
+      },
+      "as": "p09",
+      "at": "2024-07-24T23:52:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Kaito Scrivener",
+        "role": "Choir friend",
+        "cadence_days": 0
+      },
+      "as": "p10",
+      "at": "2023-03-16T20:01:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Farnaz Pillai",
+        "role": "Choir friend",
+        "cadence_days": 7
+      },
+      "as": "p11",
+      "at": "2026-02-18T16:04:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Carys Krishnan",
+        "role": "Friend from the gym",
+        "cadence_days": 30
+      },
+      "as": "p12",
+      "at": "2025-11-27T20:33:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Raimine Szabo",
+        "role": "Pen pal",
+        "cadence_days": 90
+      },
+      "as": "p13",
+      "at": "2026-02-11T09:37:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Owyn Zaimere",
+        "role": "Old school friend",
+        "cadence_days": 30
+      },
+      "as": "p14",
+      "at": "2024-09-28T11:14:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Tiskou Somacre",
+        "role": "Dog-walking friend",
+        "cadence_days": 14
+      },
+      "as": "p15",
+      "at": "2023-07-02T07:06:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Shatho Namova",
+        "role": "Dog-walking friend",
+        "cadence_days": 14
+      },
+      "as": "p16",
+      "at": "2023-07-09T23:09:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Tiziana Barrios",
+        "role": "Old school friend",
+        "cadence_days": 90
+      },
+      "as": "p17",
+      "at": "2024-06-26T11:22:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Vrelou Peretz",
+        "role": "Climbing partner",
+        "cadence_days": 7
+      },
+      "as": "p18",
+      "at": "2024-09-27T10:22:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Caoimhe Costa",
+        "role": "Friend from yoga",
+        "cadence_days": 7
+      },
+      "as": "p19",
+      "at": "2024-06-22T17:35:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Bongani Thorsen",
+        "role": "Mentor",
+        "cadence_days": 14
+      },
+      "as": "p20",
+      "at": "2024-12-22T15:42:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Rashid Vynuholt",
+        "role": "Director",
+        "cadence_days": 14
+      },
+      "as": "p21",
+      "at": "2024-04-05T08:03:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Radek Ozturk",
+        "role": "Supplier",
+        "cadence_days": 60
+      },
+      "as": "p22",
+      "at": "2025-07-29T10:24:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Yasmin Fedorov",
+        "role": "Mentor",
+        "cadence_days": 7
+      },
+      "as": "p23",
+      "at": "2022-09-26T08:44:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Rania Teixeira",
+        "role": "Neighbour upstairs",
+        "cadence_days": 60
+      },
+      "as": "p24",
+      "at": "2025-07-27T12:26:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Flavia Clough",
+        "role": "Caretaker",
+        "cadence_days": 14
+      },
+      "as": "p25",
+      "at": "2024-03-10T10:15:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Veskir Mannacre",
+        "role": "Neighbour next door",
+        "cadence_days": 30
+      },
+      "as": "p26",
+      "at": "2026-01-29T18:58:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Bence Marchand",
+        "role": "Caretaker",
+        "cadence_days": 0
+      },
+      "as": "p27",
+      "at": "2023-08-14T07:23:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Emrys Kranz",
+        "role": "Gardener",
+        "cadence_days": 7
+      },
+      "as": "p28",
+      "at": "2024-05-13T08:59:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Shaen Oakes",
+        "role": "Locksmith",
+        "cadence_days": 30
+      },
+      "as": "p29",
+      "at": "2023-04-20T19:21:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Meenakshi Echeverria",
+        "role": "Yoga teacher",
+        "cadence_days": 90
+      },
+      "as": "p30",
+      "at": "2024-11-06T11:35:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Reka Entwistle",
+        "role": "Roofer",
+        "cadence_days": 0
+      },
+      "as": "p31",
+      "at": "2024-07-17T23:56:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Chinonso Ekstrom",
+        "role": "Tutor",
+        "cadence_days": 0
+      },
+      "as": "p32",
+      "at": "2023-11-29T09:36:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Leocadia Cepeholt",
+        "role": "Therapist",
+        "cadence_days": 60
+      },
+      "as": "p33",
+      "at": "2025-07-15T08:12:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Bongani Vrullez",
+        "role": "University friend",
+        "cadence_days": 30
+      },
+      "as": "p34",
+      "at": "2023-11-09T07:59:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Flavia Geazaby",
+        "role": "Mentor",
+        "cadence_days": 30
+      },
+      "as": "p35",
+      "at": "2025-02-15T07:23:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Kandy Accountants",
+        "role": "Accountant",
+        "cadence_days": 0
+      },
+      "as": "p36",
+      "at": "2023-02-08T10:02:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Kandy Glazing",
+        "role": "Glazier",
+        "cadence_days": 0
+      },
+      "as": "p37",
+      "at": "2023-08-18T10:05:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Gryllo Plumbing",
+        "role": "Plumber",
+        "cadence_days": 0
+      },
+      "as": "p38",
+      "at": "2022-11-16T07:39:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Montreux Tyres",
+        "role": "Mechanic",
+        "cadence_days": 0
+      },
+      "as": "p39",
+      "at": "2025-12-20T08:07:00.000Z"
+    },
+    {
+      "cmd": "people.add_person",
+      "body": {
+        "display_name": "Mulix Clinic",
+        "role": "Doctor",
+        "cadence_days": 0
+      },
+      "as": "p40",
+      "at": "2026-02-11T07:56:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p01.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5328"
+      },
+      "at": "2022-12-28T17:42:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p01.party_id",
+        "kind": "email",
+        "label": "personal",
+        "value": "groskie.distow@post.example"
+      },
+      "at": "2023-01-23T23:58:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p02.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5005"
+      },
+      "at": "2023-11-27T21:24:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p02.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "kadri.distow@post.example"
+      },
+      "at": "2024-04-21T09:52:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p03.party_id",
+        "kind": "phone",
+        "label": "work",
+        "value": "+33 6 12 34 5805"
+      },
+      "at": "2025-07-07T07:10:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p03.party_id",
+        "kind": "email",
+        "label": "personal",
+        "value": "kasia.distow@post.example"
+      },
+      "at": "2025-08-21T11:22:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p04.party_id",
+        "kind": "phone",
+        "label": "work",
+        "value": "+33 6 12 34 5360"
+      },
+      "at": "2023-04-11T16:54:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p04.party_id",
+        "kind": "email",
+        "label": "personal",
+        "value": "buthen.distow@inbox.example"
+      },
+      "at": "2023-03-10T14:09:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p06.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5355"
+      },
+      "at": "2025-11-01T23:10:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p06.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "honora.huang@example.net"
+      },
+      "at": "2025-06-03T07:23:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p07.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "enine.lombardi@inbox.example"
+      },
+      "at": "2026-02-25T11:09:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p09.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5094"
+      },
+      "at": "2024-09-27T07:58:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p10.party_id",
+        "kind": "phone",
+        "label": "work",
+        "value": "+33 6 12 34 5937"
+      },
+      "at": "2023-03-22T09:23:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p10.party_id",
+        "kind": "email",
+        "label": "personal",
+        "value": "kaito.scrivener@mail.example"
+      },
+      "at": "2023-09-27T21:56:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p11.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5319"
+      },
+      "at": "2026-03-05T21:31:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p11.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "farnaz.pillai@inbox.example"
+      },
+      "at": "2026-07-02T08:47:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p12.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5228"
+      },
+      "at": "2026-05-29T22:09:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p13.party_id",
+        "kind": "phone",
+        "label": "home",
+        "value": "+33 6 12 34 5756"
+      },
+      "at": "2026-04-23T14:56:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p14.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5504"
+      },
+      "at": "2025-02-01T21:44:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p15.party_id",
+        "kind": "phone",
+        "label": "home",
+        "value": "+33 6 12 34 5674"
+      },
+      "at": "2023-07-18T19:10:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p15.party_id",
+        "kind": "email",
+        "label": "personal",
+        "value": "tiskou.somacre@example.org"
+      },
+      "at": "2024-01-14T09:11:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p16.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5930"
+      },
+      "at": "2023-12-06T16:42:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p17.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "tiziana.barrios@example.net"
+      },
+      "at": "2024-10-20T10:45:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p18.party_id",
+        "kind": "email",
+        "label": "personal",
+        "value": "vrelou.peretz@mail.example"
+      },
+      "at": "2025-01-12T11:13:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p19.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5735"
+      },
+      "at": "2024-12-26T09:45:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p19.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "caoimhe.costa@mail.example"
+      },
+      "at": "2024-07-11T16:43:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p20.party_id",
+        "kind": "phone",
+        "label": "home",
+        "value": "+33 6 12 34 5567"
+      },
+      "at": "2025-05-09T19:26:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p22.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5387"
+      },
+      "at": "2026-02-14T07:25:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p22.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "radek.ozturk@example.com"
+      },
+      "at": "2025-09-10T11:46:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p24.party_id",
+        "kind": "phone",
+        "label": "work",
+        "value": "+33 6 12 34 5971"
+      },
+      "at": "2025-10-23T19:49:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p24.party_id",
+        "kind": "email",
+        "label": "personal",
+        "value": "rania.teixeira@example.org"
+      },
+      "at": "2025-11-30T08:33:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p25.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5359"
+      },
+      "at": "2024-08-17T10:12:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p26.party_id",
+        "kind": "phone",
+        "label": "work",
+        "value": "+33 6 12 34 5744"
+      },
+      "at": "2026-04-16T19:36:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p27.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5303"
+      },
+      "at": "2023-09-12T10:46:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p27.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "bence.marchand@post.example"
+      },
+      "at": "2023-08-14T08:14:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p29.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5478"
+      },
+      "at": "2023-05-12T12:37:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p30.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5182"
+      },
+      "at": "2025-05-12T11:59:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p31.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5546"
+      },
+      "at": "2025-01-29T23:29:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p31.party_id",
+        "kind": "email",
+        "label": "personal",
+        "value": "reka.entwistle@example.net"
+      },
+      "at": "2024-12-28T11:42:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p33.party_id",
+        "kind": "phone",
+        "label": "mobile",
+        "value": "+33 6 12 34 5483"
+      },
+      "at": "2025-12-18T08:39:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p33.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "leocadia.cepeholt@mail.example"
+      },
+      "at": "2025-10-03T17:15:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p36.party_id",
+        "kind": "phone",
+        "label": "office",
+        "value": "+33 6 12 34 5280"
+      },
+      "at": "2023-03-06T07:42:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p36.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "hello@kandyaccountants.example"
+      },
+      "at": "2023-02-09T09:20:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p37.party_id",
+        "kind": "phone",
+        "label": "office",
+        "value": "+33 6 12 34 5382"
+      },
+      "at": "2023-08-27T07:41:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p37.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "hello@kandyglazing.example"
+      },
+      "at": "2023-09-19T07:18:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p38.party_id",
+        "kind": "phone",
+        "label": "office",
+        "value": "+33 6 12 34 5540"
+      },
+      "at": "2022-12-21T13:12:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p38.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "hello@grylloplumbing.example"
+      },
+      "at": "2022-12-04T10:18:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p39.party_id",
+        "kind": "phone",
+        "label": "office",
+        "value": "+33 6 12 34 5564"
+      },
+      "at": "2026-01-02T20:42:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p39.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "hello@montreuxtyres.example"
+      },
+      "at": "2026-01-13T10:04:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p40.party_id",
+        "kind": "phone",
+        "label": "office",
+        "value": "+33 6 12 34 5256"
+      },
+      "at": "2026-03-18T10:01:00.000Z"
+    },
+    {
+      "cmd": "people.save_contact_channel",
+      "body": {
+        "party_id": "$p40.party_id",
+        "kind": "email",
+        "label": "work",
+        "value": "hello@mulixclinic.example"
+      },
+      "at": "2026-02-16T11:38:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p01.party_id",
+        "label": "Birthday",
+        "month_day": "02-09",
+        "reminder_on": true
+      },
+      "at": "2023-01-28T23:52:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p02.party_id",
+        "label": "Birthday",
+        "month_day": "12-26",
+        "reminder_on": true
+      },
+      "at": "2024-01-02T09:58:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p06.party_id",
+        "label": "Birthday",
+        "month_day": "06-12",
+        "reminder_on": false
+      },
+      "at": "2025-08-08T12:43:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p07.party_id",
+        "label": "Birthday",
+        "month_day": "03-17",
+        "reminder_on": true
+      },
+      "at": "2026-03-15T11:48:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p08.party_id",
+        "label": "Birthday",
+        "month_day": "12-03",
+        "reminder_on": true
+      },
+      "at": "2024-03-05T09:36:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p09.party_id",
+        "label": "Birthday",
+        "month_day": "11-22",
+        "reminder_on": true
+      },
+      "at": "2024-09-14T12:21:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p10.party_id",
+        "label": "Birthday",
+        "month_day": "05-21",
+        "reminder_on": false
+      },
+      "at": "2023-04-03T15:52:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p11.party_id",
+        "label": "Birthday",
+        "month_day": "07-25",
+        "reminder_on": true
+      },
+      "at": "2026-03-16T07:47:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p13.party_id",
+        "label": "Birthday",
+        "month_day": "11-08",
+        "reminder_on": true
+      },
+      "at": "2026-04-04T10:26:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p14.party_id",
+        "label": "Birthday",
+        "month_day": "02-22",
+        "reminder_on": true
+      },
+      "at": "2024-11-22T07:15:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p15.party_id",
+        "label": "Birthday",
+        "month_day": "11-12",
+        "reminder_on": true
+      },
+      "at": "2023-09-20T19:18:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p16.party_id",
+        "label": "Birthday",
+        "month_day": "11-20",
+        "reminder_on": false
+      },
+      "at": "2023-09-25T21:14:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p18.party_id",
+        "label": "Birthday",
+        "month_day": "11-05",
+        "reminder_on": false
+      },
+      "at": "2024-11-24T17:58:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p20.party_id",
+        "label": "Birthday",
+        "month_day": "10-28",
+        "reminder_on": false
+      },
+      "at": "2025-01-30T08:06:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p33.party_id",
+        "label": "Birthday",
+        "month_day": "09-06",
+        "reminder_on": false
+      },
+      "at": "2025-09-21T10:33:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p01.party_id",
+        "label": "Anniversary",
+        "month_day": "10-08",
+        "reminder_on": true
+      },
+      "at": "2023-01-02T21:29:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p20.party_id",
+        "label": "Christening",
+        "month_day": "07-02",
+        "reminder_on": false
+      },
+      "at": "2025-04-12T11:08:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p32.party_id",
+        "label": "Memorial",
+        "month_day": "04-07",
+        "reminder_on": false
+      },
+      "at": "2024-02-01T09:49:00.000Z"
+    },
+    {
+      "cmd": "people.add_important_date",
+      "body": {
+        "party_id": "$p24.party_id",
+        "label": "Wedding anniversary",
+        "month_day": "02-24",
+        "reminder_on": false
+      },
+      "at": "2025-08-23T10:28:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/0%20Cormorant%20at%20dusk",
+        "kind": "photo",
+        "title": "Cormorant at dusk",
+        "captured_at": "2024-05-27T09:31:00.000Z",
+        "width": 3024,
+        "height": 1920
+      },
+      "as": "ph01",
+      "at": "2024-05-28T15:43:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/1%20Seashell%20at%20The%20Chestnut%20and%20Chestnut",
+        "kind": "photo",
+        "title": "Seashell at The Chestnut and Chestnut",
+        "captured_at": "2024-07-16T07:34:00.000Z",
+        "width": 3024,
+        "height": 2268,
+        "latitude": 46.62465,
+        "longitude": 2.30204
+      },
+      "as": "ph02",
+      "at": "2024-07-19T11:37:00.000Z",
+      "faces": ["$p14.party_id", "$p34.party_id"]
+    },
+    {
+      "field": ["core.content_item", "$ph02.asset_id", "place_id"],
+      "as": "pl02"
+    },
+    {
+      "cmd": "media.name_place",
+      "body": {
+        "place_id": "$pl02.value",
+        "name": "The Chestnut and Chestnut"
+      },
+      "at": "2024-07-19T11:56:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/2%20IMG_1382",
+        "kind": "photo",
+        "title": "IMG_1382",
+        "captured_at": "2025-10-19T18:25:00.000Z",
+        "width": 1080,
+        "height": 3024
+      },
+      "as": "ph03",
+      "at": "2025-10-22T09:55:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/3%20Lofoten%20Bridge%20from%20the%20path",
+        "kind": "photo",
+        "title": "Lofoten Bridge from the path",
+        "captured_at": "2026-05-12T14:36:00.000Z",
+        "width": 3024,
+        "height": 2268,
+        "latitude": 46.60166,
+        "longitude": 2.32958
+      },
+      "as": "ph04",
+      "at": "2026-05-14T23:46:00.000Z"
+    },
+    {
+      "field": ["core.content_item", "$ph04.asset_id", "place_id"],
+      "as": "pl05"
+    },
+    {
+      "cmd": "media.name_place",
+      "body": {
+        "place_id": "$pl05.value",
+        "name": "Lofoten Bridge"
+      },
+      "at": "2026-05-15T07:54:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/4%20Chestnut%20at%20Kandy%20Climbing%20Wall",
+        "kind": "photo",
+        "title": "Chestnut at Kandy Climbing Wall",
+        "captured_at": "2026-06-03T10:18:00.000Z",
+        "width": 4032,
+        "height": 1920,
+        "latitude": 46.6427,
+        "longitude": 2.30025
+      },
+      "as": "ph05",
+      "at": "2026-06-05T09:57:00.000Z"
+    },
+    {
+      "field": ["core.content_item", "$ph05.asset_id", "place_id"],
+      "as": "pl03"
+    },
+    {
+      "cmd": "media.name_place",
+      "body": {
+        "place_id": "$pl03.value",
+        "name": "Kandy Climbing Wall"
+      },
+      "at": "2026-06-05T19:32:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/5%20The%20Chestnut%20and%20Chestnut%20in%20the%20rain",
+        "kind": "photo",
+        "title": "The Chestnut and Chestnut in the rain",
+        "captured_at": "2026-06-25T10:40:00.000Z",
+        "width": 3024,
+        "height": 3024,
+        "latitude": 46.624591,
+        "longitude": 2.301671
+      },
+      "as": "ph06",
+      "at": "2026-06-26T11:59:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/6%20Octopus%20at%20Dysoe%20Pier",
+        "kind": "photo",
+        "title": "Octopus at Dysoe Pier",
+        "captured_at": "2026-08-26T08:10:00.000Z",
+        "width": 1080,
+        "height": 1920,
+        "latitude": 49.92722,
+        "longitude": -1.287
+      },
+      "as": "ph07",
+      "at": "2026-08-26T13:55:00.000Z"
+    },
+    {
+      "field": ["core.content_item", "$ph07.asset_id", "place_id"],
+      "as": "pl07"
+    },
+    {
+      "cmd": "media.name_place",
+      "body": {
+        "place_id": "$pl07.value",
+        "name": "Dysoe Pier"
+      },
+      "at": "2026-08-26T20:19:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/7%20Jellyfish%20at%20Shalmere%20Quay",
+        "kind": "photo",
+        "title": "Jellyfish at Shalmere Quay",
+        "captured_at": "2026-08-26T13:28:00.000Z",
+        "width": 1080,
+        "height": 3024,
+        "latitude": 49.94705,
+        "longitude": -1.28718
+      },
+      "as": "ph08",
+      "at": "2026-08-28T12:54:00.000Z"
+    },
+    {
+      "field": ["core.content_item", "$ph08.asset_id", "place_id"],
+      "as": "pl08"
+    },
+    {
+      "cmd": "media.name_place",
+      "body": {
+        "place_id": "$pl08.value",
+        "name": "Shalmere Quay"
+      },
+      "at": "2026-08-28T19:54:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/8%20Shalmere%20Quay%20at%20low%20tide",
+        "kind": "photo",
+        "title": "Shalmere Quay at low tide",
+        "captured_at": "2026-08-26T16:19:00.000Z",
+        "width": 1080,
+        "height": 2268,
+        "latitude": 49.947111,
+        "longitude": -1.286902
+      },
+      "as": "ph09",
+      "at": "2026-08-28T08:08:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/9%20Flavia%20at%20Jermawen%20Downs",
+        "kind": "photo",
+        "title": "Flavia at Jermawen Downs",
+        "captured_at": "2026-08-28T19:49:00.000Z",
+        "width": 4032,
+        "height": 2268,
+        "latitude": 46.66683,
+        "longitude": 2.30137
+      },
+      "as": "ph10",
+      "at": "2026-08-30T20:21:00.000Z"
+    },
+    {
+      "field": ["core.content_item", "$ph10.asset_id", "place_id"],
+      "as": "pl04"
+    },
+    {
+      "cmd": "media.name_place",
+      "body": {
+        "place_id": "$pl04.value",
+        "name": "Jermawen Downs"
+      },
+      "at": "2026-08-31T11:23:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/10%20Burrow%20at%20Dysoe%20Pier",
+        "kind": "photo",
+        "title": "Burrow at Dysoe Pier",
+        "captured_at": "2026-08-28T19:49:00.000Z",
+        "width": 4032,
+        "height": 1920,
+        "latitude": 49.927322,
+        "longitude": -1.287364
+      },
+      "as": "ph11",
+      "at": "2026-08-31T16:19:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/11%20The%20lemongrass%20at%20dusk",
+        "kind": "photo",
+        "title": "The lemongrass at dusk",
+        "captured_at": "2026-09-05T09:00:00.000Z",
+        "width": 3024,
+        "height": 3024,
+        "latitude": 46.624972,
+        "longitude": 2.302249
+      },
+      "as": "ph12",
+      "at": "2026-09-07T08:07:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/12%20Pickleball%20lesson%202025",
+        "kind": "photo",
+        "title": "Pickleball lesson 2025",
+        "captured_at": "2026-09-20T20:36:00.000Z",
+        "width": 3024,
+        "height": 1920
+      },
+      "as": "ph13",
+      "at": "2026-09-23T17:14:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/13%20Orchard%20in%20the%20snow",
+        "kind": "photo",
+        "title": "Orchard in the snow",
+        "captured_at": "2026-09-22T12:45:00.000Z",
+        "width": 1080,
+        "height": 3024,
+        "latitude": 46.601768,
+        "longitude": 2.329785
+      },
+      "as": "ph14",
+      "at": "2026-09-22T19:19:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/14%20Alcove%20on%20the%20table",
+        "kind": "photo",
+        "title": "Alcove on the table",
+        "captured_at": "2026-09-22T19:52:00.000Z",
+        "width": 4032,
+        "height": 2268
+      },
+      "as": "ph15",
+      "at": "2026-09-24T08:10:00.000Z",
+      "faces": ["$p02.party_id"]
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/15%20Macaroon%20from%20above",
+        "kind": "photo",
+        "title": "Macaroon from above",
+        "captured_at": "2026-09-23T07:53:00.000Z",
+        "width": 1080,
+        "height": 2268
+      },
+      "as": "ph16",
+      "at": "2026-09-23T11:49:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/16%20IMG_2424",
+        "kind": "photo",
+        "title": "IMG_2424",
+        "captured_at": "2026-10-01T18:42:00.000Z",
+        "width": 3024,
+        "height": 2268
+      },
+      "as": "ph17",
+      "at": "2026-10-02T15:19:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/17%20Honora%20with%20the%20ventriloquism",
+        "kind": "photo",
+        "title": "Honora with the ventriloquism",
+        "captured_at": "2026-10-02T19:31:00.000Z",
+        "width": 1080,
+        "height": 3024,
+        "latitude": 46.60052,
+        "longitude": 2.30095
+      },
+      "as": "ph18",
+      "at": "2026-10-03T16:20:00.000Z",
+      "faces": ["$p06.party_id", "$p15.party_id", "$p10.party_id"]
+    },
+    {
+      "field": ["core.content_item", "$ph18.asset_id", "place_id"],
+      "as": "pl01"
+    },
+    {
+      "cmd": "media.name_place",
+      "body": {
+        "place_id": "$pl01.value",
+        "name": "Togastead Deli"
+      },
+      "at": "2026-10-03T23:22:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/18%20Macaroon%20by%20the%20window",
+        "kind": "photo",
+        "title": "Macaroon by the window",
+        "captured_at": "2026-10-04T18:01:00.000Z",
+        "width": 1080,
+        "height": 2268
+      },
+      "as": "ph19",
+      "at": "2026-10-05T16:45:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/19%20Pulley%20from%20above",
+        "kind": "photo",
+        "title": "Pulley from above",
+        "captured_at": "2026-10-05T15:47:00.000Z",
+        "width": 4032,
+        "height": 2268
+      },
+      "as": "ph20",
+      "at": "2026-10-06T22:46:00.000Z",
+      "faces": ["$p19.party_id", "$p07.party_id"]
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/20%20Cobbler%20in%20the%20garden",
+        "kind": "photo",
+        "title": "Cobbler in the garden",
+        "captured_at": "2026-10-06T11:29:00.000Z",
+        "width": 1080,
+        "height": 1920
+      },
+      "as": "ph21",
+      "at": "2026-10-07T09:59:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/21%20Hollyhock%20close-up",
+        "kind": "photo",
+        "title": "Hollyhock close-up",
+        "captured_at": "2026-10-13T08:40:00.000Z",
+        "width": 3024,
+        "height": 3024
+      },
+      "as": "ph22",
+      "at": "2026-10-15T15:27:00.000Z",
+      "faces": ["$p06.party_id"]
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/22%20Orchard%20at%20dusk",
+        "kind": "photo",
+        "title": "Orchard at dusk",
+        "captured_at": "2026-10-13T13:29:00.000Z",
+        "width": 1080,
+        "height": 2268
+      },
+      "as": "ph23",
+      "at": "2026-10-16T11:03:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/23%20New%20stargazing",
+        "kind": "photo",
+        "title": "New stargazing",
+        "captured_at": "2026-10-14T12:27:00.000Z",
+        "width": 3024,
+        "height": 3024
+      },
+      "as": "ph24",
+      "at": "2026-10-16T21:59:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/24%20New%20stargazing%20%2801%29",
+        "kind": "photo",
+        "title": "New stargazing (01)",
+        "captured_at": "2026-10-18T09:25:00.000Z",
+        "width": 1080,
+        "height": 2268
+      },
+      "as": "ph25",
+      "at": "2026-10-20T20:49:00.000Z",
+      "faces": ["$p34.party_id", "$p01.party_id"]
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/25%20New%20stargazing%20%2802%29",
+        "kind": "photo",
+        "title": "New stargazing (02)",
+        "captured_at": "2026-10-18T09:26:00.000Z",
+        "width": 4032,
+        "height": 2268
+      },
+      "as": "ph26",
+      "at": "2026-10-20T09:28:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/26%20New%20stargazing%20%2803%29",
+        "kind": "photo",
+        "title": "New stargazing (03)",
+        "captured_at": "2026-10-18T09:27:00.000Z",
+        "width": 4032,
+        "height": 1920
+      },
+      "as": "ph27",
+      "at": "2026-10-20T10:08:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/27%20Montreux%20Bridge%20at%20dusk",
+        "kind": "photo",
+        "title": "Montreux Bridge at dusk",
+        "captured_at": "2026-10-18T11:58:00.000Z",
+        "width": 1080,
+        "height": 1920,
+        "latitude": 46.62443,
+        "longitude": 2.3294
+      },
+      "as": "ph28",
+      "at": "2026-10-20T08:47:00.000Z"
+    },
+    {
+      "field": ["core.content_item", "$ph28.asset_id", "place_id"],
+      "as": "pl06"
+    },
+    {
+      "cmd": "media.name_place",
+      "body": {
+        "place_id": "$pl06.value",
+        "name": "Montreux Bridge"
+      },
+      "at": "2026-10-20T13:02:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/28%20Jellyfish%20on%20the%20table",
+        "kind": "photo",
+        "title": "Jellyfish on the table",
+        "captured_at": "2026-10-19T12:08:00.000Z",
+        "width": 4032,
+        "height": 3024
+      },
+      "as": "ph29",
+      "at": "2026-10-20T07:45:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/29%20Cobbler%20and%20burrow",
+        "kind": "photo",
+        "title": "Cobbler and burrow",
+        "captured_at": "2026-10-20T14:59:00.000Z",
+        "width": 1080,
+        "height": 3024
+      },
+      "as": "ph30",
+      "at": "2026-10-22T21:16:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/30%20Pulley%20in%20the%20snow",
+        "kind": "photo",
+        "title": "Pulley in the snow",
+        "captured_at": "2026-10-21T07:18:00.000Z",
+        "width": 3024,
+        "height": 1920
+      },
+      "as": "ph31",
+      "at": "2026-10-22T20:50:00.000Z",
+      "faces": ["$p17.party_id", "$p34.party_id"]
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/31%20Leocadia%27s%20chestnut",
+        "kind": "photo",
+        "title": "Leocadia's chestnut",
+        "captured_at": "2026-10-25T07:01:00.000Z",
+        "width": 1080,
+        "height": 2268
+      },
+      "as": "ph32",
+      "at": "2026-10-26T21:07:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/32%20Pulley%20at%20Togastead%20Deli",
+        "kind": "photo",
+        "title": "Pulley at Togastead Deli",
+        "captured_at": "2026-10-25T13:04:00.000Z",
+        "width": 1080,
+        "height": 2268,
+        "latitude": 46.600895,
+        "longitude": 2.300599
+      },
+      "as": "ph33",
+      "at": "2026-10-26T18:13:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/33%20Thrush%20on%20the%20shelf",
+        "kind": "photo",
+        "title": "Thrush on the shelf",
+        "captured_at": "2026-10-25T13:19:00.000Z",
+        "width": 3024,
+        "height": 3024
+      },
+      "as": "ph34",
+      "at": "2026-10-26T08:11:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/34%20Burrow%20from%20above",
+        "kind": "photo",
+        "title": "Burrow from above",
+        "captured_at": "2026-10-26T07:03:00.000Z",
+        "width": 1080,
+        "height": 3024
+      },
+      "as": "ph35",
+      "at": "2026-10-29T07:19:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/35%20Flavia%27s%20lighthouse",
+        "kind": "photo",
+        "title": "Flavia's lighthouse",
+        "captured_at": "2026-10-26T19:39:00.000Z",
+        "width": 3024,
+        "height": 2268,
+        "latitude": 46.624939,
+        "longitude": 2.302122
+      },
+      "as": "ph36",
+      "at": "2026-10-29T13:52:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/36%20Kaito%20with%20the%20fuskin",
+        "kind": "photo",
+        "title": "Kaito with the fuskin",
+        "captured_at": "2026-10-28T14:37:00.000Z",
+        "width": 1080,
+        "height": 3024
+      },
+      "as": "ph37",
+      "at": "2026-10-29T07:45:00.000Z"
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/37%20Orchard%20close-up",
+        "kind": "photo",
+        "title": "Orchard close-up",
+        "captured_at": "2026-10-30T10:38:00.000Z",
+        "width": 4032,
+        "height": 1920
+      },
+      "as": "ph38",
+      "at": "2026-11-01T10:30:00.000Z",
+      "faces": ["$p19.party_id", "$p07.party_id"]
+    },
+    {
+      "cmd": "media.add_asset",
+      "body": {
+        "data_uri": "data:text/plain,photo%20v8/w36/38%20Yardarm%20at%20sunrise",
+        "kind": "photo",
+        "title": "Yardarm at sunrise",
+        "captured_at": "2026-11-01T16:07:00.000Z",
+        "width": 4032,
+        "height": 3024
+      },
+      "as": "ph39",
+      "at": "2026-11-02T22:33:00.000Z"
+    },
+    {
+      "cmd": "media.update_asset",
+      "body": {
+        "asset_id": "$ph01.asset_id",
+        "favorite": 1
+      },
+      "at": "2024-06-02T14:18:00.000Z"
+    },
+    {
+      "cmd": "media.update_asset",
+      "body": {
+        "asset_id": "$ph18.asset_id",
+        "favorite": 1
+      },
+      "at": "2026-10-29T08:14:00.000Z"
+    },
+    {
+      "cmd": "media.update_asset",
+      "body": {
+        "asset_id": "$ph03.asset_id",
+        "favorite": 1
+      },
+      "at": "2025-11-07T13:36:00.000Z"
+    },
+    {
+      "cmd": "media.update_asset",
+      "body": {
+        "asset_id": "$ph36.asset_id",
+        "favorite": 1
+      },
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "media.create_album",
+      "body": {
+        "title": "Shalmere 2026"
+      },
+      "as": "al01",
+      "at": "2025-12-04T10:21:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al01.album_id",
+        "asset_id": "$ph07.asset_id"
+      },
+      "at": "2026-09-04T11:34:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al01.album_id",
+        "asset_id": "$ph08.asset_id"
+      },
+      "at": "2026-08-31T07:34:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al01.album_id",
+        "asset_id": "$ph09.asset_id"
+      },
+      "at": "2026-09-06T11:37:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al01.album_id",
+        "asset_id": "$ph11.asset_id"
+      },
+      "at": "2026-09-03T12:07:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al01.album_id",
+        "asset_id": "$ph12.asset_id"
+      },
+      "at": "2026-09-15T23:13:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al01.album_id",
+        "asset_id": "$ph23.asset_id"
+      },
+      "at": "2026-10-18T08:41:00.000Z"
+    },
+    {
+      "cmd": "media.create_album",
+      "body": {
+        "title": "The Chestnut and Chestnut 2026"
+      },
+      "as": "al02",
+      "at": "2025-10-30T10:06:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al02.album_id",
+        "asset_id": "$ph02.asset_id"
+      },
+      "at": "2025-11-06T17:46:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al02.album_id",
+        "asset_id": "$ph06.asset_id"
+      },
+      "at": "2026-06-29T18:57:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al02.album_id",
+        "asset_id": "$ph12.asset_id"
+      },
+      "at": "2026-09-09T18:07:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al02.album_id",
+        "asset_id": "$ph36.asset_id"
+      },
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al02.album_id",
+        "asset_id": "$ph26.asset_id"
+      },
+      "at": "2026-10-28T11:00:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al02.album_id",
+        "asset_id": "$ph01.asset_id"
+      },
+      "at": "2025-11-02T23:42:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al02.album_id",
+        "asset_id": "$ph17.asset_id"
+      },
+      "at": "2026-10-08T07:08:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al02.album_id",
+        "asset_id": "$ph28.asset_id"
+      },
+      "at": "2026-10-26T09:22:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al02.album_id",
+        "asset_id": "$ph11.asset_id"
+      },
+      "at": "2026-09-01T21:07:00.000Z"
+    },
+    {
+      "cmd": "media.create_album",
+      "body": {
+        "title": "Ventriloquism progress"
+      },
+      "as": "al03",
+      "at": "2026-07-17T15:55:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al03.album_id",
+        "asset_id": "$ph18.asset_id"
+      },
+      "at": "2026-10-05T09:57:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al03.album_id",
+        "asset_id": "$ph20.asset_id"
+      },
+      "at": "2026-10-07T23:57:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al03.album_id",
+        "asset_id": "$ph04.asset_id"
+      },
+      "at": "2026-07-25T20:24:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al03.album_id",
+        "asset_id": "$ph36.asset_id"
+      },
+      "at": "2026-10-31T07:55:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al03.album_id",
+        "asset_id": "$ph17.asset_id"
+      },
+      "at": "2026-10-05T15:20:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al03.album_id",
+        "asset_id": "$ph28.asset_id"
+      },
+      "at": "2026-10-24T11:04:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al03.album_id",
+        "asset_id": "$ph27.asset_id"
+      },
+      "at": "2026-10-26T14:26:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al03.album_id",
+        "asset_id": "$ph08.asset_id"
+      },
+      "at": "2026-08-31T07:12:00.000Z"
+    },
+    {
+      "cmd": "media.create_album",
+      "body": {
+        "title": "Kaito's burrow"
+      },
+      "as": "al04",
+      "at": "2025-11-19T07:56:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al04.album_id",
+        "asset_id": "$ph11.asset_id"
+      },
+      "at": "2026-09-09T18:32:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al04.album_id",
+        "asset_id": "$ph07.asset_id"
+      },
+      "at": "2026-08-31T20:51:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al04.album_id",
+        "asset_id": "$ph27.asset_id"
+      },
+      "at": "2026-10-26T07:30:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al04.album_id",
+        "asset_id": "$ph21.asset_id"
+      },
+      "at": "2026-10-15T15:30:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al04.album_id",
+        "asset_id": "$ph12.asset_id"
+      },
+      "at": "2026-09-14T09:50:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al04.album_id",
+        "asset_id": "$ph35.asset_id"
+      },
+      "at": "2026-10-31T07:10:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al04.album_id",
+        "asset_id": "$ph09.asset_id"
+      },
+      "at": "2026-09-05T13:59:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al04.album_id",
+        "asset_id": "$ph38.asset_id"
+      },
+      "at": "2026-11-03T07:22:00.000Z"
+    },
+    {
+      "cmd": "media.create_album",
+      "body": {
+        "title": "Cribbage meetup"
+      },
+      "as": "al05",
+      "at": "2025-11-29T23:52:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al05.album_id",
+        "asset_id": "$ph25.asset_id"
+      },
+      "at": "2026-10-25T09:37:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al05.album_id",
+        "asset_id": "$ph29.asset_id"
+      },
+      "at": "2026-10-22T10:46:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al05.album_id",
+        "asset_id": "$ph21.asset_id"
+      },
+      "at": "2026-10-10T10:38:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al05.album_id",
+        "asset_id": "$ph18.asset_id"
+      },
+      "at": "2026-10-13T09:13:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al05.album_id",
+        "asset_id": "$ph36.asset_id"
+      },
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al05.album_id",
+        "asset_id": "$ph38.asset_id"
+      },
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "media.add_to_album",
+      "body": {
+        "album_id": "$al05.album_id",
+        "asset_id": "$ph37.asset_id"
+      },
+      "at": "2026-10-29T11:57:00.000Z"
+    },
+    {
+      "cmd": "media.delete_asset",
+      "body": {
+        "asset_id": "$ph34.asset_id"
+      },
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Monemvasia holiday",
+        "dtstart": "2026-11-23T10:00:00.000Z",
+        "dtend": "2026-11-29T19:00:00.000Z",
+        "attendee_party_ids": [
+          "$p11.party_id",
+          "$p10.party_id",
+          "$p15.party_id"
+        ]
+      },
+      "as": "ev01",
+      "at": "2026-10-08T14:28:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Shalmere trip",
+        "dtstart": "2026-08-25T09:00:00.000Z",
+        "dtend": "2026-08-31T18:00:00.000Z",
+        "attendee_party_ids": [
+          "$p11.party_id",
+          "$p10.party_id",
+          "$p15.party_id"
+        ]
+      },
+      "as": "ev02",
+      "at": "2026-08-11T14:16:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Pick up the ventriloquism",
+        "dtstart": "2026-11-06T07:30:00.000Z",
+        "dtend": "2026-11-06T08:15:00.000Z"
+      },
+      "as": "ev03",
+      "at": "2026-10-17T17:34:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Ventriloquism club",
+        "dtstart": "2026-11-15T10:00:00.000Z",
+        "dtend": "2026-11-15T11:00:00.000Z",
+        "attendee_party_ids": [
+          "$p27.party_id",
+          "$p26.party_id",
+          "$p25.party_id"
+        ]
+      },
+      "as": "ev04",
+      "at": "2026-10-18T20:59:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Look at the lemongrass",
+        "dtstart": "2026-11-03T15:45:00.000Z",
+        "dtend": "2026-11-03T16:45:00.000Z",
+        "attendee_party_ids": [
+          "$p22.party_id",
+          "$p23.party_id",
+          "$p20.party_id",
+          "$p35.party_id"
+        ],
+        "description": "Confirm with Flavia."
+      },
+      "as": "ev05",
+      "at": "2026-10-21T10:49:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Stargazing club",
+        "dtstart": "2026-11-11T15:30:00.000Z",
+        "dtend": "2026-11-11T16:00:00.000Z",
+        "attendee_party_ids": [
+          "$p15.party_id",
+          "$p32.party_id",
+          "$p08.party_id"
+        ]
+      },
+      "as": "ev06",
+      "at": "2026-10-16T09:56:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Meet Honora at Togastead Deli",
+        "dtstart": "2026-11-03T20:30:00.000Z",
+        "dtend": "2026-11-03T21:30:00.000Z",
+        "attendee_party_ids": [
+          "$p16.party_id",
+          "$p08.party_id",
+          "$p18.party_id",
+          "$p02.party_id"
+        ],
+        "location_place_id": "$pl01.value"
+      },
+      "as": "ev07",
+      "at": "2026-10-28T09:15:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Locksmith call",
+        "dtstart": "2026-11-14T10:15:00.000Z",
+        "dtend": "2026-11-14T13:15:00.000Z",
+        "attendee_party_ids": ["$p29.party_id"],
+        "location_place_id": "$pl05.value"
+      },
+      "as": "ev08",
+      "at": "2026-10-26T08:48:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Therapist call",
+        "dtstart": "2026-11-13T12:15:00.000Z",
+        "dtend": "2026-11-13T14:15:00.000Z",
+        "attendee_party_ids": ["$p33.party_id"],
+        "location_place_id": "$pl04.value"
+      },
+      "as": "ev09",
+      "at": "2026-10-14T18:52:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Cribbage meetup with Reka",
+        "dtstart": "2026-10-29T15:45:00.000Z",
+        "dtend": "2026-10-29T16:45:00.000Z",
+        "attendee_party_ids": ["$p24.party_id", "$p26.party_id"]
+      },
+      "as": "ev10",
+      "at": "2026-10-07T11:10:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Caddy fitting",
+        "dtstart": "2026-10-11T07:00:00.000Z",
+        "dtend": "2026-10-11T08:30:00.000Z",
+        "attendee_party_ids": ["$p34.party_id"],
+        "location_place_id": "$pl02.value"
+      },
+      "as": "ev11",
+      "at": "2026-09-20T16:40:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Lighthouse sale at Montreux Bridge",
+        "dtstart": "2026-11-02T09:45:00.000Z",
+        "dtend": "2026-11-02T11:15:00.000Z",
+        "attendee_party_ids": ["$p01.party_id"],
+        "location_place_id": "$pl06.value",
+        "description": "Deposit already paid."
+      },
+      "as": "ev12",
+      "at": "2026-10-28T11:07:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Collect the pitchfork",
+        "dtstart": "2026-11-03T12:45:00.000Z",
+        "dtend": "2026-11-03T13:30:00.000Z",
+        "attendee_party_ids": ["$p13.party_id", "$p06.party_id"]
+      },
+      "as": "ev13",
+      "at": "2026-10-05T09:50:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Collect the orchard",
+        "dtstart": "2026-11-15T18:45:00.000Z",
+        "dtend": "2026-11-15T20:15:00.000Z"
+      },
+      "as": "ev14",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Walk with Owyn",
+        "dtstart": "2026-10-27T18:15:00.000Z",
+        "dtend": "2026-10-27T19:00:00.000Z",
+        "attendee_party_ids": ["$p11.party_id", "$p09.party_id"],
+        "location_place_id": "$pl01.value"
+      },
+      "as": "ev15",
+      "at": "2026-10-14T23:07:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Lunch with Carys",
+        "dtstart": "2026-11-05T11:45:00.000Z",
+        "dtend": "2026-11-05T13:45:00.000Z",
+        "attendee_party_ids": ["$p16.party_id"],
+        "location_place_id": "$pl01.value"
+      },
+      "as": "ev16",
+      "at": "2026-10-08T11:27:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Freediving workshop",
+        "dtstart": "2026-11-06T09:30:00.000Z",
+        "dtend": "2026-11-06T10:15:00.000Z",
+        "description": "Deposit already paid."
+      },
+      "as": "ev17",
+      "at": "2026-11-02T16:07:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Freediving workshop with Chinonso",
+        "dtstart": "2026-11-08T15:00:00.000Z",
+        "dtend": "2026-11-08T15:30:00.000Z",
+        "attendee_party_ids": [
+          "$p08.party_id",
+          "$p07.party_id",
+          "$p13.party_id",
+          "$p19.party_id"
+        ],
+        "location_place_id": "$pl05.value"
+      },
+      "as": "ev18",
+      "at": "2026-10-29T11:59:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Cobbler viewing",
+        "dtstart": "2026-11-07T11:00:00.000Z",
+        "dtend": "2026-11-07T12:00:00.000Z",
+        "attendee_party_ids": ["$p25.party_id"],
+        "location_place_id": "$pl05.value",
+        "description": "Deposit already paid."
+      },
+      "as": "ev19",
+      "at": "2026-10-21T19:45:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Freediving workshop at Jermawen Downs",
+        "dtstart": "2026-11-07T08:00:00.000Z",
+        "dtend": "2026-11-07T11:00:00.000Z",
+        "attendee_party_ids": ["$p25.party_id"]
+      },
+      "as": "ev20",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Freediving workshop at Montreux Bridge",
+        "dtstart": "2026-10-14T11:45:00.000Z",
+        "dtend": "2026-10-14T13:45:00.000Z",
+        "description": "Bring the burrow."
+      },
+      "as": "ev21",
+      "at": "2026-09-19T12:16:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Pickleball lesson",
+        "dtstart": "2026-11-02T19:30:00.000Z",
+        "dtend": "2026-11-02T21:30:00.000Z",
+        "attendee_party_ids": [
+          "$p16.party_id",
+          "$p12.party_id",
+          "$p06.party_id"
+        ],
+        "location_place_id": "$pl04.value"
+      },
+      "as": "ev22",
+      "at": "2026-10-29T17:54:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Coffee with Carys",
+        "dtstart": "2026-11-03T09:45:00.000Z",
+        "dtend": "2026-11-03T11:15:00.000Z",
+        "location_place_id": "$pl04.value"
+      },
+      "as": "ev23",
+      "at": "2026-10-29T21:28:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Lighthouse fitting",
+        "dtstart": "2026-11-02T15:15:00.000Z",
+        "dtend": "2026-11-02T18:15:00.000Z",
+        "attendee_party_ids": [
+          "$p16.party_id",
+          "$p17.party_id",
+          "$p12.party_id"
+        ],
+        "location_place_id": "$pl06.value"
+      },
+      "as": "ev24",
+      "at": "2026-10-22T10:26:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Collect the burrow",
+        "dtstart": "2026-11-08T15:30:00.000Z",
+        "dtend": "2026-11-08T17:00:00.000Z",
+        "attendee_party_ids": ["$p12.party_id", "$p11.party_id"],
+        "description": "Bring the igloo."
+      },
+      "as": "ev25",
+      "at": "2026-10-28T08:01:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Seashell delivery",
+        "dtstart": "2026-11-13T14:15:00.000Z",
+        "dtend": "2026-11-13T15:45:00.000Z",
+        "attendee_party_ids": ["$p27.party_id", "$p25.party_id"]
+      },
+      "as": "ev26",
+      "at": "2026-11-02T12:34:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Igloo fitting",
+        "dtstart": "2026-11-04T20:00:00.000Z",
+        "dtend": "2026-11-04T20:30:00.000Z",
+        "attendee_party_ids": [
+          "$p09.party_id",
+          "$p14.party_id",
+          "$p13.party_id"
+        ]
+      },
+      "as": "ev27",
+      "at": "2026-10-31T21:12:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Call Tiziana about the crate",
+        "dtstart": "2026-11-07T14:45:00.000Z",
+        "dtend": "2026-11-07T16:45:00.000Z",
+        "attendee_party_ids": ["$p10.party_id"]
+      },
+      "as": "ev28",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Cribbage meetup at Togastead Deli",
+        "dtstart": "2026-10-21T18:00:00.000Z",
+        "dtend": "2026-10-21T19:00:00.000Z",
+        "attendee_party_ids": ["$p19.party_id", "$p10.party_id"],
+        "location_place_id": "$pl05.value",
+        "description": "Bring the pistachio."
+      },
+      "as": "ev29",
+      "at": "2026-10-11T10:46:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Chestnut viewing",
+        "dtstart": "2026-10-26T12:15:00.000Z",
+        "dtend": "2026-10-26T13:45:00.000Z",
+        "attendee_party_ids": ["$p06.party_id"],
+        "description": "Remember the lighthouse for Bongani."
+      },
+      "as": "ev30",
+      "at": "2026-10-18T09:41:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Call Emrys about the blender",
+        "dtstart": "2026-11-06T08:30:00.000Z",
+        "dtend": "2026-11-06T09:15:00.000Z",
+        "attendee_party_ids": ["$p07.party_id"],
+        "location_place_id": "$pl03.value",
+        "description": "Bring the rattle."
+      },
+      "as": "ev31",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Coffee with Tiskou",
+        "dtstart": "2026-11-14T18:15:00.000Z",
+        "dtend": "2026-11-14T19:45:00.000Z",
+        "attendee_party_ids": [
+          "$p26.party_id",
+          "$p16.party_id",
+          "$p03.party_id",
+          "$p35.party_id"
+        ],
+        "description": "Bring the macaroon."
+      },
+      "as": "ev32",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Coffee with Rashid",
+        "dtstart": "2026-11-04T20:30:00.000Z",
+        "dtend": "2026-11-04T22:30:00.000Z",
+        "attendee_party_ids": ["$p15.party_id"],
+        "location_place_id": "$pl05.value"
+      },
+      "as": "ev33",
+      "at": "2026-10-27T13:48:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Lemonade sale at Jermawen Downs",
+        "dtstart": "2026-11-08T17:30:00.000Z",
+        "dtend": "2026-11-08T20:30:00.000Z"
+      },
+      "as": "ev34",
+      "at": "2026-10-21T13:47:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Paragliding workshop at Togastead Deli",
+        "dtstart": "2026-11-07T19:45:00.000Z",
+        "dtend": "2026-11-07T20:30:00.000Z",
+        "attendee_party_ids": ["$p09.party_id"],
+        "location_place_id": "$pl01.value"
+      },
+      "as": "ev35",
+      "at": "2026-10-31T09:01:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Spanish class (week 42)",
+        "dtstart": "2026-10-15T11:30:00.000Z",
+        "dtend": "2026-10-15T13:00:00.000Z",
+        "attendee_party_ids": ["$p12.party_id"]
+      },
+      "as": "ev36",
+      "at": "2026-09-22T08:54:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Spanish class (week 43)",
+        "dtstart": "2026-10-22T10:15:00.000Z",
+        "dtend": "2026-10-22T11:45:00.000Z",
+        "attendee_party_ids": ["$p34.party_id", "$p05.party_id"],
+        "location_place_id": "$pl04.value",
+        "description": "Parking behind Lofoten Bridge."
+      },
+      "as": "ev37",
+      "at": "2026-10-05T19:40:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Spanish class (week 44)",
+        "dtstart": "2026-10-29T14:15:00.000Z",
+        "dtend": "2026-10-29T15:00:00.000Z",
+        "attendee_party_ids": ["$p10.party_id", "$p06.party_id"],
+        "description": "Parking behind Kandy Climbing Wall."
+      },
+      "as": "ev38",
+      "at": "2026-10-12T07:48:00.000Z"
+    },
+    {
+      "cmd": "schedule.propose_event",
+      "body": {
+        "calendar_id": "$me.calendar_id",
+        "summary": "Spanish class (week 45)",
+        "dtstart": "2026-11-05T08:00:00.000Z",
+        "dtend": "2026-11-05T09:00:00.000Z",
+        "attendee_party_ids": [
+          "$p13.party_id",
+          "$p18.party_id",
+          "$p23.party_id"
+        ],
+        "location_place_id": "$pl06.value",
+        "description": "Parking behind The Chestnut and Chestnut."
+      },
+      "as": "ev39",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Find a ventriloquism for Flavia",
+        "due_at": "2026-11-06T09:00:00.000Z",
+        "priority": 8
+      },
+      "as": "t01",
+      "at": "2026-10-30T08:44:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Sort out the ventriloquism at Lofoten Bridge",
+        "due_at": "2026-12-03T18:00:00.000Z",
+        "effort_min": 180,
+        "priority": 3
+      },
+      "as": "t02",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Wrap the lemongrass at The Chestnut and Chestnut",
+        "due_at": "2026-11-03T09:00:00.000Z",
+        "effort_min": 120
+      },
+      "as": "t03",
+      "at": "2026-10-24T16:35:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Repair the hollyhock at Montreux Bridge",
+        "due_at": "2026-10-15T17:00:00.000Z"
+      },
+      "as": "t04",
+      "at": "2026-10-05T08:15:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Service the fuskin again",
+        "due_at": "2026-10-29T12:00:00.000Z",
+        "priority": 8
+      },
+      "as": "t05",
+      "at": "2026-10-19T07:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Book the Monemvasia ferry",
+        "due_at": "2026-11-08T12:00:00.000Z",
+        "effort_min": 20,
+        "priority": 6
+      },
+      "as": "t06",
+      "at": "2026-10-20T22:55:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t06.task_id",
+        "status": "completed"
+      },
+      "at": "2026-10-28T15:31:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Ask Chinonso about the pitchfork",
+        "effort_min": 90,
+        "priority": 5
+      },
+      "as": "t07",
+      "at": "2026-10-23T10:23:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Post the orchard for Luca",
+        "due_at": "2026-10-04T09:00:00.000Z",
+        "effort_min": 10
+      },
+      "as": "t08",
+      "at": "2026-09-26T07:34:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t08.task_id",
+        "status": "completed"
+      },
+      "at": "2026-10-29T13:00:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Pay for the pulley at Lofoten Bridge",
+        "due_at": "2026-10-16T09:00:00.000Z",
+        "priority": 5
+      },
+      "as": "t09",
+      "at": "2026-10-09T10:43:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t09.task_id",
+        "status": "completed"
+      },
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Renew the snowdrop this week",
+        "due_at": "2026-10-07T12:00:00.000Z",
+        "effort_min": 10,
+        "priority": 7
+      },
+      "as": "t10",
+      "at": "2026-09-17T23:12:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t10.task_id",
+        "status": "completed"
+      },
+      "at": "2026-09-27T20:55:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Paint the pulley at Lofoten Bridge",
+        "due_at": "2026-11-30T18:00:00.000Z",
+        "effort_min": 30
+      },
+      "as": "t11",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Mend the yardarm this week",
+        "effort_min": 15
+      },
+      "as": "t12",
+      "at": "2026-10-11T19:05:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Book the burrow",
+        "effort_min": 45,
+        "priority": 4
+      },
+      "as": "t13",
+      "at": "2026-10-21T09:54:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Fix Kasia's crate",
+        "due_at": "2026-11-29T12:00:00.000Z",
+        "effort_min": 45,
+        "priority": 8
+      },
+      "as": "t14",
+      "at": "2026-10-24T08:09:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t14.task_id",
+        "status": "completed"
+      },
+      "at": "2026-11-01T13:00:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Move the caddy for Kasia",
+        "due_at": "2026-10-20T09:00:00.000Z",
+        "priority": 8
+      },
+      "as": "t15",
+      "at": "2026-10-01T08:09:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t15.task_id",
+        "status": "completed"
+      },
+      "at": "2026-10-28T13:00:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Chase the igloo at Togastead Deli",
+        "due_at": "2026-11-26T12:00:00.000Z",
+        "effort_min": 10
+      },
+      "as": "t16",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Repair Tiziana's cormorant",
+        "due_at": "2026-10-20T18:00:00.000Z",
+        "effort_min": 20,
+        "priority": 2
+      },
+      "as": "t17",
+      "at": "2026-10-03T19:13:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t17.task_id",
+        "status": "in-process"
+      }
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Book the blender this week",
+        "due_at": "2026-11-06T09:00:00.000Z"
+      },
+      "as": "t18",
+      "at": "2026-10-24T11:15:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Ask Groskie about the pulley",
+        "priority": 7
+      },
+      "as": "t19",
+      "at": "2026-10-14T22:09:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Print the yardarm",
+        "due_at": "2026-10-11T09:00:00.000Z",
+        "effort_min": 60,
+        "priority": 9,
+        "parent_task_id": "$t19.task_id"
+      },
+      "as": "t20",
+      "at": "2026-10-14T23:32:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t20.task_id",
+        "status": "completed"
+      },
+      "at": "2026-10-14T23:45:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Chase the burrow",
+        "due_at": "2026-10-28T12:00:00.000Z",
+        "effort_min": 60,
+        "parent_task_id": "$t19.task_id"
+      },
+      "as": "t21",
+      "at": "2026-10-25T11:20:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Tidy the pitchfork",
+        "due_at": "2026-10-16T17:00:00.000Z",
+        "effort_min": 15,
+        "priority": 4,
+        "parent_task_id": "$t19.task_id"
+      },
+      "as": "t22",
+      "at": "2026-10-14T22:22:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t22.task_id",
+        "status": "completed"
+      },
+      "at": "2026-10-16T08:05:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Photograph the rattle for Bongani",
+        "due_at": "2026-10-07T18:00:00.000Z",
+        "effort_min": 45
+      },
+      "as": "t23",
+      "at": "2026-09-28T17:11:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t23.task_id",
+        "status": "completed"
+      },
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Ask Farnaz about the macaroon",
+        "due_at": "2026-11-16T12:00:00.000Z"
+      },
+      "as": "t24",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Ask Honora about the orchard",
+        "effort_min": 120
+      },
+      "as": "t25",
+      "at": "2026-10-05T07:44:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Replace the pulley at Kandy Climbing Wall",
+        "due_at": "2026-11-08T17:00:00.000Z",
+        "effort_min": 120
+      },
+      "as": "t26",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Paint the igloo",
+        "effort_min": 10,
+        "parent_task_id": "$t26.task_id"
+      },
+      "as": "t27",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t27.task_id",
+        "status": "completed"
+      },
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Recycle the macaroon",
+        "due_at": "2026-10-31T12:00:00.000Z",
+        "effort_min": 10,
+        "priority": 1,
+        "parent_task_id": "$t26.task_id"
+      },
+      "as": "t28",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t28.task_id",
+        "status": "completed"
+      },
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Order Owyn's cobbler",
+        "due_at": "2026-10-22T18:00:00.000Z",
+        "priority": 9
+      },
+      "as": "t29",
+      "at": "2026-10-03T18:32:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t29.task_id",
+        "status": "completed"
+      },
+      "at": "2026-10-09T11:35:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Top up the lunch account (wk 43)",
+        "due_at": "2026-10-20T09:00:00.000Z",
+        "effort_min": 90,
+        "priority": 7
+      },
+      "as": "t30",
+      "at": "2026-10-05T17:11:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t30.task_id",
+        "status": "completed"
+      },
+      "at": "2026-10-20T12:00:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Top up the lunch account (wk 44)",
+        "due_at": "2026-10-26T09:00:00.000Z",
+        "effort_min": 180
+      },
+      "as": "t31",
+      "at": "2026-10-17T09:18:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t31.task_id",
+        "status": "completed"
+      },
+      "at": "2026-10-26T12:00:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Top up the lunch account (wk 45)",
+        "due_at": "2026-11-03T09:00:00.000Z",
+        "effort_min": 10,
+        "priority": 2
+      },
+      "as": "t32",
+      "at": "2026-10-29T20:10:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Top up the lunch account (wk 46)",
+        "due_at": "2026-11-10T09:00:00.000Z"
+      },
+      "as": "t33",
+      "at": "2026-11-02T09:42:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Top up the lunch account (wk 47)",
+        "due_at": "2026-11-16T09:00:00.000Z",
+        "effort_min": 180
+      },
+      "as": "t34",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Chase the pitchfork",
+        "effort_min": 15,
+        "parent_task_id": "$t34.task_id"
+      },
+      "as": "t35",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Unpack the alcove",
+        "due_at": "2026-11-05T09:00:00.000Z",
+        "effort_min": 30,
+        "priority": 2,
+        "parent_task_id": "$t34.task_id"
+      },
+      "as": "t36",
+      "at": "2026-11-03T08:14:00.000Z"
+    },
+    {
+      "cmd": "schedule.add_task",
+      "body": {
+        "title": "Varnish the flask",
+        "due_at": "2026-10-10T18:00:00.000Z",
+        "effort_min": 15
+      },
+      "as": "t37",
+      "at": "2026-10-10T07:15:00.000Z"
+    },
+    {
+      "cmd": "schedule.set_task_status",
+      "body": {
+        "task_id": "$t37.task_id",
+        "status": "completed"
+      },
+      "at": "2026-10-10T14:43:00.000Z"
+    },
+    {
+      "cmd": "schedule.delete_task",
+      "body": {
+        "task_id": "$t37.task_id"
+      },
+      "at": "2026-10-27T16:15:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_notebook",
+      "body": {
+        "name": "Lemongrass"
+      },
+      "as": "nb01",
+      "at": "2024-12-21T09:28:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_notebook",
+      "body": {
+        "name": "Cribbage"
+      },
+      "as": "nb02",
+      "at": "2025-07-18T09:42:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_notebook",
+      "body": {
+        "name": "Recipes"
+      },
+      "as": "nb03",
+      "at": "2026-07-09T15:27:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_notebook",
+      "body": {
+        "name": "Kids"
+      },
+      "as": "nb04",
+      "at": "2026-03-26T20:25:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_notebook",
+      "body": {
+        "name": "Money"
+      },
+      "as": "nb05",
+      "at": "2025-11-06T11:05:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Ventriloquism contacts",
+        "body_text": "Ventriloquism contacts\n\n- Orchard\n- ask Rashid\n- Montreux Bridge",
+        "format": "markdown"
+      },
+      "as": "n01",
+      "at": "2026-09-08T09:04:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Lemongrass shopping list",
+        "body_text": "Lemongrass shopping list\n\n- Chestnut\n- ask Buthen\n- Jermawen Downs",
+        "format": "markdown",
+        "notebook_id": "$nb01.notebook_id"
+      },
+      "as": "n02",
+      "at": "2026-10-21T09:58:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Stargazing plan",
+        "body_text": "Stargazing plan\n\n- Blender\n- ask Owyn\n- The Chestnut and Chestnut",
+        "format": "markdown",
+        "notebook_id": "$nb05.notebook_id"
+      },
+      "as": "n03",
+      "at": "2026-06-28T23:07:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Hollyhock budget",
+        "body_text": "Hollyhock budget\n\n- Caddy\n- ask Owyn\n- The Chestnut and Chestnut",
+        "format": "markdown",
+        "notebook_id": "$nb03.notebook_id"
+      },
+      "as": "n04",
+      "at": "2026-10-30T22:21:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Fuskin log",
+        "body_text": "Fuskin log\n\n- Macaroon\n- ask Nirara\n- Montreux Bridge",
+        "format": "markdown",
+        "notebook_id": "$nb03.notebook_id"
+      },
+      "as": "n05",
+      "at": "2026-09-12T11:36:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Monemvasia packing list",
+        "body_text": "Monemvasia packing list\n\n- Yardarm\n- ask Bongani\n- Jermawen Downs",
+        "format": "markdown",
+        "notebook_id": "$nb02.notebook_id"
+      },
+      "as": "n06",
+      "at": "2026-07-18T07:34:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Luca's lighthouse ideas",
+        "body_text": "Luca's lighthouse ideas\n\n- Pistachio\n- ask Rania\n- Togastead Deli",
+        "format": "markdown",
+        "notebook_id": "$nb04.notebook_id"
+      },
+      "as": "n07",
+      "at": "2026-06-15T07:54:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Shaen's caddy log",
+        "body_text": "Shaen's caddy log\n\n- Pistachio\n- ask Flavia\n- Lofoten Bridge",
+        "format": "markdown"
+      },
+      "as": "n08",
+      "at": "2026-10-11T18:39:00.000Z"
+    },
+    {
+      "cmd": "knowledge.delete_note",
+      "body": {
+        "note_id": "$n08.note_id"
+      },
+      "at": "2026-10-18T17:40:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Cobbler timeline",
+        "body_text": "Cobbler timeline\n\n- Octopus\n- ask Veskir\n- Montreux Bridge",
+        "format": "markdown",
+        "notebook_id": "$nb01.notebook_id"
+      },
+      "as": "n09",
+      "at": "2026-10-16T23:31:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Things to ask Enine",
+        "body_text": "Things to ask Enine\n\n- Blender\n- ask Radek\n- Togastead Deli",
+        "format": "markdown",
+        "notebook_id": "$nb02.notebook_id"
+      },
+      "as": "n10",
+      "at": "2026-06-23T11:20:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Things to ask Tiziana",
+        "body_text": "Things to ask Tiziana\n\n- Cardamom\n- ask Rania\n- The Chestnut and Chestnut",
+        "format": "markdown",
+        "notebook_id": "$nb05.notebook_id"
+      },
+      "as": "n11",
+      "at": "2026-08-23T11:57:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Gift ideas for Arvid",
+        "body_text": "Gift ideas for Arvid\n\n- Pulley\n- ask Tiziana\n- Kandy Climbing Wall",
+        "format": "markdown",
+        "notebook_id": "$nb02.notebook_id"
+      },
+      "as": "n12",
+      "at": "2026-11-01T08:25:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Things to ask Farnaz",
+        "body_text": "Things to ask Farnaz\n\n- Cormorant\n- ask Shaen\n- Montreux Bridge",
+        "format": "markdown",
+        "notebook_id": "$nb05.notebook_id"
+      },
+      "as": "n13",
+      "at": "2026-10-31T08:14:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Pickleball lesson list",
+        "body_text": "Pickleball lesson list\n\n- Chestnut\n- ask Flavia\n- Montreux Bridge",
+        "format": "markdown",
+        "notebook_id": "$nb03.notebook_id"
+      },
+      "as": "n14",
+      "at": "2026-07-09T16:57:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Bence's caddy draft",
+        "body_text": "Bence's caddy draft\n\n- Pulley\n- ask Emrys\n- Montreux Bridge",
+        "format": "markdown"
+      },
+      "as": "n15",
+      "at": "2026-08-08T11:35:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Igloo packing list",
+        "body_text": "Igloo packing list\n\n- Yardarm\n- ask Flavia\n- The Chestnut and Chestnut",
+        "format": "markdown",
+        "notebook_id": "$nb01.notebook_id"
+      },
+      "as": "n16",
+      "at": "2026-07-20T09:27:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Kadri's cormorant packing list",
+        "body_text": "Kadri's cormorant packing list\n\n- Snowdrop\n- ask Kadri\n- Jermawen Downs",
+        "format": "markdown",
+        "notebook_id": "$nb03.notebook_id"
+      },
+      "as": "n17",
+      "at": "2026-07-09T16:40:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Notes from Togastead Deli",
+        "body_text": "Notes from Togastead Deli\n\n- Alcove\n- ask Yasmin\n- Togastead Deli",
+        "format": "markdown",
+        "notebook_id": "$nb01.notebook_id"
+      },
+      "as": "n18",
+      "at": "2026-08-01T12:24:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Notes from The Chestnut and Chestnut",
+        "body_text": "Notes from The Chestnut and Chestnut\n\n- Macaroon\n- ask Bongani\n- Montreux Bridge",
+        "format": "markdown",
+        "notebook_id": "$nb02.notebook_id"
+      },
+      "as": "n19",
+      "at": "2026-09-17T22:53:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Freediving workshop tips",
+        "body_text": "Freediving workshop tips\n\n- Rattle\n- ask Radek\n- The Chestnut and Chestnut",
+        "format": "markdown",
+        "notebook_id": "$nb03.notebook_id"
+      },
+      "as": "n20",
+      "at": "2026-07-09T16:19:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Things to ask Veskir",
+        "body_text": "Things to ask Veskir\n\n- Yacht\n- ask Yasmin\n- Togastead Deli",
+        "format": "markdown"
+      },
+      "as": "n21",
+      "at": "2026-08-20T08:53:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Seashell ideas",
+        "body_text": "Seashell ideas\n\n- Lemonade\n- ask Arvid\n- The Chestnut and Chestnut",
+        "format": "markdown"
+      },
+      "as": "n22",
+      "at": "2026-07-12T09:25:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Pickleball lesson questions",
+        "body_text": "Pickleball lesson questions\n\n- Yardarm\n- ask Owyn\n- Lofoten Bridge",
+        "format": "markdown"
+      },
+      "as": "n23",
+      "at": "2026-07-25T22:45:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Notes from Kandy Climbing Wall",
+        "body_text": "Notes from Kandy Climbing Wall\n\n- Lemonade\n- ask Carys\n- Lofoten Bridge",
+        "format": "markdown",
+        "notebook_id": "$nb03.notebook_id"
+      },
+      "as": "n24",
+      "at": "2026-08-15T10:01:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Freediving workshop budget",
+        "body_text": "Freediving workshop budget\n\n- Alcove\n- ask Leocadia\n- Lofoten Bridge",
+        "format": "markdown",
+        "notebook_id": "$nb04.notebook_id"
+      },
+      "as": "n25",
+      "at": "2026-06-21T23:51:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Shopping list (wk 45)",
+        "body_text": "Shopping list (wk 45)\n\n- Burrow\n- ask Bongani\n- The Chestnut and Chestnut",
+        "format": "markdown",
+        "notebook_id": "$nb04.notebook_id"
+      },
+      "as": "n26",
+      "at": "2026-11-02T07:07:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Shopping list (wk 44)",
+        "body_text": "Shopping list (wk 44)\n\n- Pitchfork\n- ask Bence\n- Jermawen Downs",
+        "format": "markdown"
+      },
+      "as": "n27",
+      "at": "2026-10-27T08:05:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Shopping list (wk 43)",
+        "body_text": "Shopping list (wk 43)\n\n- Macaroon\n- ask Tiziana\n- Montreux Bridge",
+        "format": "markdown",
+        "notebook_id": "$nb01.notebook_id"
+      },
+      "as": "n28",
+      "at": "2026-10-20T08:07:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Shopping list (wk 42)",
+        "body_text": "Shopping list (wk 42)\n\n- Chestnut\n- ask Luca\n- Lofoten Bridge",
+        "format": "markdown",
+        "notebook_id": "$nb05.notebook_id"
+      },
+      "as": "n29",
+      "at": "2026-10-11T20:19:00.000Z"
+    },
+    {
+      "cmd": "knowledge.create_note",
+      "body": {
+        "title": "Piccolo tips",
+        "body_text": "Piccolo tips\n\n- Lemonade\n- ask Tiskou\n- Jermawen Downs",
+        "format": "markdown",
+        "notebook_id": "$nb03.notebook_id"
+      },
+      "as": "n30",
+      "at": "2026-10-16T14:27:00.000Z"
+    },
+    {
+      "cmd": "knowledge.delete_note",
+      "body": {
+        "note_id": "$n30.note_id"
+      },
+      "at": "2026-10-26T07:39:00.000Z"
+    },
+    {
+      "cmd": "core.create_folder",
+      "body": {
+        "name": "Charity"
+      },
+      "as": "fo01",
+      "at": "2024-10-15T11:46:00.000Z"
+    },
+    {
+      "cmd": "core.create_folder",
+      "body": {
+        "name": "School"
+      },
+      "as": "fo02",
+      "at": "2024-10-01T11:53:00.000Z"
+    },
+    {
+      "cmd": "core.create_folder",
+      "body": {
+        "name": "Bills"
+      },
+      "as": "fo03",
+      "at": "2026-09-01T10:23:00.000Z"
+    },
+    {
+      "cmd": "core.create_folder",
+      "body": {
+        "name": "Legal"
+      },
+      "as": "fo04",
+      "at": "2025-08-17T09:23:00.000Z"
+    },
+    {
+      "cmd": "core.create_folder",
+      "body": {
+        "name": "Monemvasia trip"
+      },
+      "as": "fo05",
+      "at": "2026-01-07T12:25:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Ventriloquism form",
+        "data_uri": "data:text/markdown,%23%20Ventriloquism%20form%0A%0ARef%20VEN-4119.%20Contact%3A%20Nirara%20Distow.%20Filed%202025-11-11.",
+        "folder_id": "$fo01.folder_id"
+      },
+      "as": "d01",
+      "at": "2026-10-31T16:56:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d01.document_id",
+        "title": "Ventriloquism form"
+      },
+      "at": "2026-10-31T16:57:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Lemongrass agreement",
+        "data_uri": "data:text/markdown,%23%20Lemongrass%20agreement%0A%0ARef%20LEM-3542.%20Contact%3A%20Caoimhe%20Costa.%20Filed%202026-01-20.",
+        "folder_id": "$fo05.folder_id"
+      },
+      "as": "d02",
+      "at": "2026-08-13T21:35:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d02.document_id",
+        "title": "Lemongrass agreement"
+      },
+      "at": "2026-08-13T21:36:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Stargazing agreement",
+        "data_uri": "data:text/markdown,%23%20Stargazing%20agreement%0A%0ARef%20STA-4231.%20Contact%3A%20Mulix%20Clinic.%20Filed%202026-02-28.",
+        "folder_id": "$fo04.folder_id"
+      },
+      "as": "d03",
+      "at": "2026-08-26T10:47:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d03.document_id",
+        "title": "Stargazing agreement"
+      },
+      "at": "2026-08-26T10:48:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Hollyhock voucher",
+        "data_uri": "data:text/markdown,%23%20Hollyhock%20voucher%0A%0ARef%20HOL-6177.%20Contact%3A%20Buthen%20Distow.%20Filed%202026-07-08.",
+        "folder_id": "$fo04.folder_id"
+      },
+      "as": "d04",
+      "at": "2025-11-12T20:34:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d04.document_id",
+        "title": "Hollyhock voucher"
+      },
+      "at": "2025-11-12T20:35:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Fuskin form",
+        "data_uri": "data:text/markdown,%23%20Fuskin%20form%0A%0ARef%20FUS-7296.%20Contact%3A%20Nirara%20Distow.%20Filed%202025-12-23.",
+        "folder_id": "$fo01.folder_id"
+      },
+      "as": "d05",
+      "at": "2026-07-06T17:17:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d05.document_id",
+        "title": "Fuskin form"
+      },
+      "at": "2026-07-06T17:18:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Monemvasia booking confirmation",
+        "data_uri": "data:text/markdown,%23%20Monemvasia%20booking%20confirmation%0A%0ARef%20MON-0345.%20Contact%3A%20Arvid%20Prastett.%20Filed%202026-07-23.",
+        "folder_id": "$fo05.folder_id"
+      },
+      "as": "d06",
+      "at": "2026-06-09T11:15:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d06.document_id",
+        "title": "Monemvasia booking confirmation"
+      },
+      "at": "2026-06-09T11:16:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Igloo scan 2024",
+        "data_uri": "data:text/markdown,%23%20Igloo%20scan%202024%0A%0ARef%20IGL-8202.%20Contact%3A%20Yasmin%20Fedorov.%20Filed%202025-11-09.",
+        "folder_id": "$fo02.folder_id"
+      },
+      "as": "d07",
+      "at": "2026-10-12T14:02:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d07.document_id",
+        "title": "Igloo scan 2024"
+      },
+      "at": "2026-10-12T14:03:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Zerrix water voucher",
+        "data_uri": "data:text/markdown,%23%20Zerrix%20water%20voucher%0A%0ARef%20ZER-3326.%20Contact%3A%20Radek%20Ozturk.%20Filed%202026-03-11.",
+        "folder_id": "$fo01.folder_id"
+      },
+      "as": "d08",
+      "at": "2026-08-11T19:10:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d08.document_id",
+        "title": "Zerrix water voucher"
+      },
+      "at": "2026-08-11T19:11:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Shalva payroll quote",
+        "data_uri": "data:text/markdown,%23%20Shalva%20payroll%20quote%0A%0ARef%20SHA-2093.%20Contact%3A%20Groskie%20Distow.%20Filed%202026-03-12."
+      },
+      "as": "d09",
+      "at": "2025-09-30T09:18:00.000Z"
+    },
+    {
+      "cmd": "core.star_document",
+      "body": {
+        "document_id": "$d09.document_id"
+      },
+      "at": "2025-09-30T15:50:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Cardamom invoice 2025",
+        "data_uri": "data:text/markdown,%23%20Cardamom%20invoice%202025%0A%0ARef%20CAR-1242.%20Contact%3A%20Kasia%20Distow.%20Filed%202026-06-26."
+      },
+      "as": "d10",
+      "at": "2026-02-23T10:18:00.000Z"
+    },
+    {
+      "cmd": "core.star_document",
+      "body": {
+        "document_id": "$d10.document_id"
+      },
+      "at": "2026-02-24T20:36:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Graskora airline statement",
+        "data_uri": "data:text/markdown,%23%20Graskora%20airline%20statement%0A%0ARef%20GRA-8681.%20Contact%3A%20Buthen%20Distow.%20Filed%202025-11-11."
+      },
+      "as": "d11",
+      "at": "2026-05-24T14:05:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d11.document_id",
+        "title": "Graskora airline statement"
+      },
+      "at": "2026-05-24T14:06:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Jermawen Downs membership form",
+        "data_uri": "data:text/markdown,%23%20Jermawen%20Downs%20membership%20form%0A%0ARef%20JER-2745.%20Contact%3A%20Farnaz%20Pillai.%20Filed%202025-11-28.",
+        "folder_id": "$fo02.folder_id"
+      },
+      "as": "d12",
+      "at": "2026-06-29T13:34:00.000Z"
+    },
+    {
+      "cmd": "core.star_document",
+      "body": {
+        "document_id": "$d12.document_id"
+      },
+      "at": "2026-07-05T16:57:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Cardamom permit",
+        "data_uri": "data:text/markdown,%23%20Cardamom%20permit%0A%0ARef%20CAR-2517.%20Contact%3A%20Arvid%20Prastett.%20Filed%202026-09-19.",
+        "folder_id": "$fo01.folder_id"
+      },
+      "as": "d13",
+      "at": "2026-09-14T08:20:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d13.document_id",
+        "title": "Cardamom permit"
+      },
+      "at": "2026-09-14T08:21:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Lofoten Bridge permit",
+        "data_uri": "data:text/markdown,%23%20Lofoten%20Bridge%20permit%0A%0ARef%20LOF-4111.%20Contact%3A%20Kandy%20Glazing.%20Filed%202026-05-14.",
+        "folder_id": "$fo05.folder_id"
+      },
+      "as": "d14",
+      "at": "2026-08-06T20:56:00.000Z"
+    },
+    {
+      "cmd": "core.star_document",
+      "body": {
+        "document_id": "$d14.document_id"
+      },
+      "at": "2026-08-27T11:48:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Thomex dentist agreement",
+        "data_uri": "data:text/markdown,%23%20Thomex%20dentist%20agreement%0A%0ARef%20THO-5609.%20Contact%3A%20Honora%20Huang.%20Filed%202025-11-09.",
+        "folder_id": "$fo03.folder_id"
+      },
+      "as": "d15",
+      "at": "2026-09-01T11:24:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d15.document_id",
+        "title": "Thomex dentist agreement"
+      },
+      "at": "2026-09-01T11:25:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Togastead Deli membership form",
+        "data_uri": "data:text/markdown,%23%20Togastead%20Deli%20membership%20form%0A%0ARef%20TOG-5012.%20Contact%3A%20Enine%20Lombardi.%20Filed%202026-07-17."
+      },
+      "as": "d16",
+      "at": "2026-05-28T23:38:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d16.document_id",
+        "title": "Togastead Deli membership form"
+      },
+      "at": "2026-05-28T23:39:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Chestnut permit",
+        "data_uri": "data:text/markdown,%23%20Chestnut%20permit%0A%0ARef%20CHE-8202.%20Contact%3A%20Nirara%20Distow.%20Filed%202026-06-04.",
+        "folder_id": "$fo03.folder_id"
+      },
+      "as": "d17",
+      "at": "2026-09-01T10:49:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d17.document_id",
+        "title": "Chestnut permit"
+      },
+      "at": "2026-09-01T10:50:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Caddy statement 2025",
+        "data_uri": "data:text/markdown,%23%20Caddy%20statement%202025%0A%0ARef%20CAD-1624.%20Contact%3A%20Meenakshi%20Echeverria.%20Filed%202025-12-25."
+      },
+      "as": "d18",
+      "at": "2026-07-05T07:37:00.000Z"
+    },
+    {
+      "cmd": "core.trash_document",
+      "body": {
+        "document_id": "$d18.document_id"
+      },
+      "at": "2026-07-08T14:43:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Burrow manual",
+        "data_uri": "data:text/markdown,%23%20Burrow%20manual%0A%0ARef%20BUR-9033.%20Contact%3A%20Montreux%20Tyres.%20Filed%202026-04-26.",
+        "folder_id": "$fo03.folder_id"
+      },
+      "as": "d19",
+      "at": "2026-09-13T08:33:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d19.document_id",
+        "title": "Burrow manual"
+      },
+      "at": "2026-09-13T08:34:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Zerrix vet warranty",
+        "data_uri": "data:text/markdown,%23%20Zerrix%20vet%20warranty%0A%0ARef%20ZER-3024.%20Contact%3A%20Bongani%20Thorsen.%20Filed%202026-05-08.",
+        "folder_id": "$fo04.folder_id"
+      },
+      "as": "d20",
+      "at": "2025-10-24T22:14:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d20.document_id",
+        "title": "Zerrix vet warranty"
+      },
+      "at": "2025-10-24T22:15:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Phone bill (01)",
+        "data_uri": "data:text/markdown,%23%20Phone%20bill%20%2801%29%0A%0ARef%20PHO-8290.%20Contact%3A%20Raimine%20Szabo.%20Filed%202026-08-22.",
+        "folder_id": "$fo01.folder_id"
+      },
+      "as": "d21",
+      "at": "2026-03-06T19:58:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d21.document_id",
+        "title": "Phone bill (01)"
+      },
+      "at": "2026-03-06T19:59:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Phone bill (02)",
+        "data_uri": "data:text/markdown,%23%20Phone%20bill%20%2802%29%0A%0ARef%20PHO-2640.%20Contact%3A%20Reka%20Entwistle.%20Filed%202026-02-14.",
+        "folder_id": "$fo01.folder_id"
+      },
+      "as": "d22",
+      "at": "2026-05-23T19:48:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d22.document_id",
+        "title": "Phone bill (02)"
+      },
+      "at": "2026-05-23T19:49:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Phone bill (03)",
+        "data_uri": "data:text/markdown,%23%20Phone%20bill%20%2803%29%0A%0ARef%20PHO-4746.%20Contact%3A%20Kandy%20Accountants.%20Filed%202025-10-22."
+      },
+      "as": "d23",
+      "at": "2026-04-24T07:29:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d23.document_id",
+        "title": "Phone bill (03)"
+      },
+      "at": "2026-04-24T07:30:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Phone bill (04)",
+        "data_uri": "data:text/markdown,%23%20Phone%20bill%20%2804%29%0A%0ARef%20PHO-8201.%20Contact%3A%20Arvid%20Prastett.%20Filed%202025-12-09.",
+        "folder_id": "$fo01.folder_id"
+      },
+      "as": "d24",
+      "at": "2026-07-27T15:07:00.000Z"
+    },
+    {
+      "cmd": "core.rename_document",
+      "body": {
+        "document_id": "$d24.document_id",
+        "title": "Phone bill (04)"
+      },
+      "at": "2026-07-27T15:08:00.000Z"
+    },
+    {
+      "cmd": "core.add_document",
+      "body": {
+        "title": "Muffin booking",
+        "data_uri": "data:text/markdown,%23%20Muffin%20booking%0A%0ARef%20MUF-8345.%20Contact%3A%20Groskie%20Distow.%20Filed%202026-08-19.",
+        "folder_id": "$fo05.folder_id"
+      },
+      "as": "d25",
+      "at": "2026-10-01T11:39:00.000Z"
+    },
+    {
+      "cmd": "core.trash_document",
+      "body": {
+        "document_id": "$d25.document_id"
+      },
+      "at": "2026-10-11T21:43:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p12.party_id",
+        "kind": "coffee",
+        "text": "Coffee and a walk round Jermawen Downs"
+      },
+      "at": "2026-10-09T16:15:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p12.party_id",
+        "kind": "coffee",
+        "text": "Coffee at Togastead Deli; talked about pickleball lesson"
+      },
+      "at": "2026-10-27T15:00:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p12.party_id",
+        "kind": "message",
+        "text": "Voice note about paragliding workshop"
+      },
+      "at": "2026-11-01T17:15:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p12.party_id",
+        "kind": "message",
+        "text": "Shared the caddy details"
+      },
+      "at": "2026-10-28T18:15:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p16.party_id",
+        "kind": "coffee",
+        "text": "Coffee and a walk round Jermawen Downs"
+      },
+      "at": "2026-10-31T18:30:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p16.party_id",
+        "kind": "visit",
+        "text": "Popped round with the pitchfork"
+      },
+      "at": "2026-10-29T20:45:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p10.party_id",
+        "kind": "coffee",
+        "text": "Tea at Jermawen Downs"
+      },
+      "at": "2026-10-12T21:30:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p10.party_id",
+        "kind": "call",
+        "text": "Quick call about the octopus"
+      },
+      "at": "2026-10-29T12:15:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p10.party_id",
+        "kind": "coffee",
+        "text": "Coffee and a walk round Montreux Bridge"
+      },
+      "at": "2026-10-30T10:45:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p32.party_id",
+        "kind": "call",
+        "text": "Rang about pickleball lesson"
+      },
+      "at": "2026-10-20T08:00:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p15.party_id",
+        "kind": "visit",
+        "text": "Popped round with the orchard"
+      },
+      "at": "2026-10-31T10:00:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p31.party_id",
+        "kind": "message",
+        "text": "Messaged about the jellyfish"
+      },
+      "at": "2026-10-27T17:45:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p25.party_id",
+        "kind": "visit",
+        "text": "Stayed for dinner; the Monemvasia trip"
+      },
+      "at": "2026-09-29T18:30:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p02.party_id",
+        "kind": "coffee",
+        "text": "Coffee and a walk round Lofoten Bridge"
+      },
+      "at": "2026-10-03T13:15:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p27.party_id",
+        "kind": "message",
+        "text": "Messaged about taiko meetup"
+      },
+      "at": "2026-10-10T16:30:00.000Z"
+    },
+    {
+      "cmd": "people.log_interaction",
+      "body": {
+        "party_id": "$p05.party_id",
+        "kind": "message",
+        "text": "Messaged about the alcove"
+      },
+      "at": "2026-10-28T09:00:00.000Z"
+    },
+    {
+      "cmd": "people.add_debt",
+      "body": {
+        "party_id": "$p08.party_id",
+        "direction": "owe",
+        "amount_minor": 4800,
+        "reason": "Cormorant deposit"
+      },
+      "as": "db01",
+      "at": "2026-10-09T18:52:00.000Z"
+    },
+    {
+      "cmd": "people.add_debt",
+      "body": {
+        "party_id": "$p05.party_id",
+        "direction": "owed",
+        "amount_minor": 7500,
+        "reason": "Freediving workshop repair"
+      },
+      "as": "db02",
+      "at": "2026-07-19T08:14:00.000Z"
+    },
+    {
+      "cmd": "people.add_debt",
+      "body": {
+        "party_id": "$p17.party_id",
+        "direction": "owe",
+        "amount_minor": 4800,
+        "reason": "Cardamom lessons"
+      },
+      "as": "db03",
+      "at": "2026-10-17T08:25:00.000Z"
+    },
+    {
+      "cmd": "people.add_debt",
+      "body": {
+        "party_id": "$p14.party_id",
+        "direction": "owed",
+        "amount_minor": 500,
+        "reason": "Monemvasia deposit"
+      },
+      "as": "db04",
+      "at": "2026-07-09T17:48:00.000Z"
+    },
+    {
+      "cmd": "people.add_debt",
+      "body": {
+        "party_id": "$p09.party_id",
+        "direction": "owed",
+        "amount_minor": 500,
+        "reason": "Pistachio parts"
+      },
+      "as": "db05",
+      "at": "2026-09-11T21:30:00.000Z"
+    },
+    {
+      "cmd": "people.add_debt",
+      "body": {
+        "party_id": "$p20.party_id",
+        "direction": "owed",
+        "amount_minor": 2500,
+        "reason": "Fuskin fee"
+      },
+      "as": "db06",
+      "at": "2026-08-23T18:51:00.000Z"
+    },
+    {
+      "cmd": "people.add_debt",
+      "body": {
+        "party_id": "$p12.party_id",
+        "direction": "owed",
+        "amount_minor": 15000,
+        "reason": "Monemvasia tickets"
+      },
+      "as": "db07",
+      "at": "2026-07-07T12:49:00.000Z"
+    },
+    {
+      "cmd": "people.add_debt",
+      "body": {
+        "party_id": "$p07.party_id",
+        "direction": "owe",
+        "amount_minor": 2500,
+        "reason": "Caddy lessons"
+      },
+      "as": "db08",
+      "at": "2026-08-29T07:09:00.000Z"
+    },
+    {
+      "cmd": "people.settle_debt",
+      "body": {
+        "debt_id": "$db06.debt_id"
+      },
+      "at": "2026-10-30T18:00:00.000Z"
+    },
+    {
+      "cmd": "people.settle_debt",
+      "body": {
+        "debt_id": "$db05.debt_id"
+      },
+      "at": "2026-10-25T10:49:00.000Z"
+    },
+    {
+      "cmd": "tally.create_group",
+      "body": {
+        "name": "Shalmere trip",
+        "icon": "🛶",
+        "currency": "EUR",
+        "member_ids": ["$p11.party_id", "$p10.party_id", "$p15.party_id"]
+      },
+      "as": "g01",
+      "at": "2026-07-19T20:59:00.000Z"
+    },
+    {
+      "cmd": "tally.create_group",
+      "body": {
+        "name": "Stargazing gang",
+        "icon": "🎻",
+        "currency": "EUR",
+        "member_ids": ["$p14.party_id", "$p04.party_id"]
+      },
+      "as": "g02",
+      "at": "2026-02-13T10:31:00.000Z"
+    },
+    {
+      "cmd": "tally.create_group",
+      "body": {
+        "name": "Paragliding syndicate",
+        "icon": "🏕️",
+        "currency": "EUR",
+        "member_ids": ["$p02.party_id", "$p13.party_id"]
+      },
+      "as": "g03",
+      "at": "2026-06-15T14:40:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g01.group_id",
+        "description": "Dinner on the last night",
+        "amount_minor": 20478,
+        "paid_by": "$p11.party_id",
+        "category": "groceries",
+        "spent_on": "2026-08-26",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 5119
+          },
+          {
+            "party_id": "$p11.party_id",
+            "share_minor": 5121
+          },
+          {
+            "party_id": "$p10.party_id",
+            "share_minor": 5119
+          },
+          {
+            "party_id": "$p15.party_id",
+            "share_minor": 5119
+          }
+        ]
+      },
+      "at": "2026-08-26T16:41:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g02.group_id",
+        "description": "Pizza night (wk 44)",
+        "amount_minor": 1699,
+        "paid_by": "$p04.party_id",
+        "category": "rent",
+        "spent_on": "2026-11-01",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 566
+          },
+          {
+            "party_id": "$p14.party_id",
+            "share_minor": 566
+          },
+          {
+            "party_id": "$p04.party_id",
+            "share_minor": 567
+          }
+        ]
+      },
+      "at": "2026-11-01T10:09:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g03.group_id",
+        "description": "Stargazing supplies",
+        "amount_minor": 400,
+        "paid_by": "$me.party_id",
+        "category": "utilities",
+        "spent_on": "2026-09-30",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 200
+          },
+          {
+            "party_id": "$p02.party_id",
+            "share_minor": 200
+          }
+        ]
+      },
+      "at": "2026-09-30T15:26:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g01.group_id",
+        "description": "Car hire",
+        "amount_minor": 350,
+        "paid_by": "$me.party_id",
+        "category": "transport",
+        "spent_on": "2026-08-28",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 118
+          },
+          {
+            "party_id": "$p10.party_id",
+            "share_minor": 116
+          },
+          {
+            "party_id": "$p15.party_id",
+            "share_minor": 116
+          }
+        ]
+      },
+      "at": "2026-08-28T17:01:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g02.group_id",
+        "description": "Fuskin refund",
+        "amount_minor": 10389,
+        "paid_by": "$p04.party_id",
+        "category": "groceries",
+        "spent_on": "2026-09-29",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 3463
+          },
+          {
+            "party_id": "$p14.party_id",
+            "share_minor": 3463
+          },
+          {
+            "party_id": "$p04.party_id",
+            "share_minor": 3463
+          }
+        ]
+      },
+      "at": "2026-09-29T14:40:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g03.group_id",
+        "description": "Ventriloquism supplies",
+        "amount_minor": 9802,
+        "paid_by": "$p13.party_id",
+        "category": "fun",
+        "spent_on": "2026-09-29",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 3267
+          },
+          {
+            "party_id": "$p02.party_id",
+            "share_minor": 3267
+          },
+          {
+            "party_id": "$p13.party_id",
+            "share_minor": 3268
+          }
+        ]
+      },
+      "at": "2026-09-29T14:19:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g03.group_id",
+        "description": "Pizza night (wk 42)",
+        "amount_minor": 20111,
+        "paid_by": "$me.party_id",
+        "category": "travel",
+        "spent_on": "2026-10-13",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 10056
+          },
+          {
+            "party_id": "$p13.party_id",
+            "share_minor": 10055
+          }
+        ]
+      },
+      "at": "2026-10-13T20:15:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g02.group_id",
+        "description": "Stargazing subscription",
+        "amount_minor": 11592,
+        "paid_by": "$me.party_id",
+        "category": "travel",
+        "spent_on": "2026-09-30",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 3864
+          },
+          {
+            "party_id": "$p14.party_id",
+            "share_minor": 3864
+          },
+          {
+            "party_id": "$p04.party_id",
+            "share_minor": 3864
+          }
+        ]
+      },
+      "at": "2026-09-30T22:20:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g02.group_id",
+        "description": "Hollyhock deposit",
+        "amount_minor": 4800,
+        "paid_by": "$p04.party_id",
+        "category": "shopping",
+        "spent_on": "2026-10-13",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 1600
+          },
+          {
+            "party_id": "$p14.party_id",
+            "share_minor": 1600
+          },
+          {
+            "party_id": "$p04.party_id",
+            "share_minor": 1600
+          }
+        ]
+      },
+      "at": "2026-10-13T20:32:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g02.group_id",
+        "description": "Dinner at Kandy Climbing Wall",
+        "amount_minor": 5650,
+        "paid_by": "$me.party_id",
+        "category": "rent",
+        "spent_on": "2026-10-24",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 2825
+          },
+          {
+            "party_id": "$p04.party_id",
+            "share_minor": 2825
+          }
+        ]
+      },
+      "at": "2026-10-24T20:10:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g03.group_id",
+        "description": "Blender deposit",
+        "amount_minor": 3399,
+        "paid_by": "$p02.party_id",
+        "category": "fun",
+        "spent_on": "2026-10-12",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 1133
+          },
+          {
+            "party_id": "$p02.party_id",
+            "share_minor": 1133
+          },
+          {
+            "party_id": "$p13.party_id",
+            "share_minor": 1133
+          }
+        ]
+      },
+      "at": "2026-10-12T19:57:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g02.group_id",
+        "description": "Pizza night (wk 41)",
+        "amount_minor": 18185,
+        "paid_by": "$p04.party_id",
+        "category": "travel",
+        "spent_on": "2026-10-07",
+        "splits": [
+          {
+            "party_id": "$p14.party_id",
+            "share_minor": 9092
+          },
+          {
+            "party_id": "$p04.party_id",
+            "share_minor": 9093
+          }
+        ]
+      },
+      "at": "2026-10-07T15:17:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g01.group_id",
+        "description": "Octopus tickets",
+        "amount_minor": 6885,
+        "paid_by": "$me.party_id",
+        "category": "fun",
+        "spent_on": "2026-08-28",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 2295
+          },
+          {
+            "party_id": "$p10.party_id",
+            "share_minor": 2295
+          },
+          {
+            "party_id": "$p15.party_id",
+            "share_minor": 2295
+          }
+        ]
+      },
+      "at": "2026-08-28T17:20:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g02.group_id",
+        "description": "Alcove top-up",
+        "amount_minor": 15156,
+        "paid_by": "$me.party_id",
+        "category": "travel",
+        "spent_on": "2026-10-07",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 5052
+          },
+          {
+            "party_id": "$p14.party_id",
+            "share_minor": 5052
+          },
+          {
+            "party_id": "$p04.party_id",
+            "share_minor": 5052
+          }
+        ]
+      },
+      "at": "2026-10-07T12:05:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g02.group_id",
+        "description": "Alcove refund",
+        "amount_minor": 10082,
+        "paid_by": "$p14.party_id",
+        "category": "groceries",
+        "spent_on": "2026-10-07",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 3360
+          },
+          {
+            "party_id": "$p14.party_id",
+            "share_minor": 3362
+          },
+          {
+            "party_id": "$p04.party_id",
+            "share_minor": 3360
+          }
+        ]
+      },
+      "at": "2026-10-07T18:47:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g01.group_id",
+        "description": "Ferry to Shalmere",
+        "amount_minor": 3900,
+        "paid_by": "$me.party_id",
+        "category": "shopping",
+        "spent_on": "2026-08-27",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 975
+          },
+          {
+            "party_id": "$p11.party_id",
+            "share_minor": 975
+          },
+          {
+            "party_id": "$p10.party_id",
+            "share_minor": 975
+          },
+          {
+            "party_id": "$p15.party_id",
+            "share_minor": 975
+          }
+        ]
+      },
+      "at": "2026-08-27T20:27:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g03.group_id",
+        "description": "Paragliding workshop repair",
+        "amount_minor": 2800,
+        "paid_by": "$p02.party_id",
+        "category": "transport",
+        "spent_on": "2026-11-01",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 933
+          },
+          {
+            "party_id": "$p02.party_id",
+            "share_minor": 934
+          },
+          {
+            "party_id": "$p13.party_id",
+            "share_minor": 933
+          }
+        ]
+      },
+      "at": "2026-11-01T09:02:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g03.group_id",
+        "description": "Dinner at Montreux Bridge",
+        "amount_minor": 16446,
+        "paid_by": "$me.party_id",
+        "category": "groceries",
+        "spent_on": "2026-10-07",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 8223
+          },
+          {
+            "party_id": "$p13.party_id",
+            "share_minor": 8223
+          }
+        ]
+      },
+      "at": "2026-10-07T18:37:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g02.group_id",
+        "description": "Dinner at Jermawen Downs",
+        "amount_minor": 899,
+        "paid_by": "$p14.party_id",
+        "category": "rent",
+        "spent_on": "2026-10-14",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 449
+          },
+          {
+            "party_id": "$p14.party_id",
+            "share_minor": 450
+          }
+        ]
+      },
+      "at": "2026-10-14T18:50:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g01.group_id",
+        "description": "Cobbler top-up",
+        "amount_minor": 2199,
+        "paid_by": "$p15.party_id",
+        "category": "transport",
+        "spent_on": "2026-08-27",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 549
+          },
+          {
+            "party_id": "$p11.party_id",
+            "share_minor": 549
+          },
+          {
+            "party_id": "$p10.party_id",
+            "share_minor": 549
+          },
+          {
+            "party_id": "$p15.party_id",
+            "share_minor": 552
+          }
+        ]
+      },
+      "at": "2026-08-27T21:30:00.000Z"
+    },
+    {
+      "cmd": "tally.add_expense",
+      "body": {
+        "group_id": "$g02.group_id",
+        "description": "Freediving workshop supplies",
+        "amount_minor": 3250,
+        "paid_by": "$me.party_id",
+        "category": "travel",
+        "spent_on": "2026-10-07",
+        "splits": [
+          {
+            "party_id": "$me.party_id",
+            "share_minor": 1084
+          },
+          {
+            "party_id": "$p14.party_id",
+            "share_minor": 1083
+          },
+          {
+            "party_id": "$p04.party_id",
+            "share_minor": 1083
+          }
+        ]
+      },
+      "at": "2026-10-07T10:03:00.000Z"
+    },
+    {
+      "cmd": "tally.settle_up",
+      "body": {
+        "from_party": "$p02.party_id",
+        "to_party": "$me.party_id",
+        "amount_minor": 1000,
+        "group_id": "$g03.group_id",
+        "paid_on": "2026-11-02"
+      },
+      "at": "2026-11-02T08:15:00.000Z"
+    },
+    {
+      "canon": "locker.add_item{type: \"login\", title: \"Hollyhock club portal\", content: \"username bongani.v · password quartz-willow-22\"}",
+      "at": "2025-09-06T08:32:00.000Z"
+    },
+    {
+      "canon": "locker.add_item{type: \"wifi\", title: \"Togastead Deli wifi\", content: \"network Orchid-5 · key juniper699\"}",
+      "at": "2026-06-14T07:03:00.000Z"
+    },
+    {
+      "canon": "locker.add_item{type: \"wifi\", title: \"Guest wifi\", content: \"network Velvet-6 · key falcon947\"}",
+      "at": "2025-01-02T00:50:00.000Z"
+    },
+    {
+      "canon": "locker.add_item{type: \"card\", title: \"Holiday Visa card\", content: \"card number 4580 4987 3315 7523 · expires 12/27 · cvc 639\"}",
+      "at": "2026-02-06T16:59:00.000Z"
+    },
+    {
+      "canon": "locker.add_item{type: \"note\", title: \"Monemvasia villa PIN\", content: \"PIN 4146\"}",
+      "at": "2025-05-14T15:13:00.000Z"
+    },
+    {
+      "canon": "locker.add_item{type: \"card\", title: \"Thomex holiday card\", content: \"card number 4227 5108 8153 8601 · expires 06/28 · cvc 160\"}",
+      "at": "2025-12-22T06:40:00.000Z"
+    },
+    {
+      "canon": "locker.add_item{type: \"login\", title: \"Thomex library portal\", content: \"username reka.e · password tundra-tundra-97\"}",
+      "at": "2026-09-26T19:42:00.000Z"
+    },
+    {
+      "canon": "locker.add_item{type: \"login\", title: \"Thomex tax app\", content: \"username enine.l · password juniper-heron-89\"}",
+      "at": "2026-05-05T10:50:00.000Z"
+    },
+    {
+      "canon": "locker.add_item{type: \"note\", title: \"Lemonade backup codes\", content: \"PIN 2602\"}",
+      "at": "2025-12-30T14:07:00.000Z"
+    },
+    {
+      "canon": "locker.add_item{type: \"login\", title: \"Mulix energy app\", content: \"username bongani.t · password pebble-juniper-95\"}",
+      "at": "2025-02-21T14:32:00.000Z"
+    },
+    {
+      "cmd": "people.add_journal_entry",
+      "body": {
+        "mood": "grateful",
+        "text": "Worried about cribbage meetup",
+        "entry_date": "2026-10-17"
+      },
+      "at": "2026-10-17T22:49:00.000Z"
+    },
+    {
+      "cmd": "people.add_journal_entry",
+      "body": {
+        "mood": "calm",
+        "text": "Worried about the blender",
+        "entry_date": "2026-10-18"
+      },
+      "at": "2026-10-18T22:41:00.000Z"
+    },
+    {
+      "cmd": "people.add_journal_entry",
+      "body": {
+        "mood": "content",
+        "text": "Sorted out freediving workshop at last",
+        "entry_date": "2026-10-24"
+      },
+      "at": "2026-10-24T21:06:00.000Z"
+    },
+    {
+      "cmd": "people.add_journal_entry",
+      "body": {
+        "mood": "flat",
+        "text": "Long day; mostly the alcove",
+        "entry_date": "2026-10-31"
+      },
+      "at": "2026-10-31T22:43:00.000Z"
+    },
+    {
+      "cmd": "people.add_journal_entry",
+      "body": {
+        "mood": "grateful",
+        "text": "Long day; mostly cribbage meetup",
+        "entry_date": "2026-11-01"
+      },
+      "at": "2026-11-01T22:02:00.000Z"
+    },
+    {
+      "cmd": "people.add_journal_entry",
+      "body": {
+        "mood": "tired",
+        "text": "Sorted out the lighthouse at last",
+        "entry_date": "2026-11-02"
+      },
+      "at": "2026-11-02T21:57:00.000Z"
+    }
+  ],
+  "meta": {
+    "now": "2026-11-03T08:15:00.000Z",
+    "weekday": "Tuesday",
+    "region": "France",
+    "currency": "EUR",
+    "themes": [
+      "ventriloquism",
+      "lemongrass",
+      "stargazing",
+      "hollyhock",
+      "fuskin"
+    ],
+    "vocab": {
+      "themes": [
+        "ventriloquism",
+        "lemongrass",
+        "stargazing",
+        "hollyhock",
+        "fuskin"
+      ],
+      "nouns": [
+        "cormorant",
+        "orchard",
+        "lemonade",
+        "pitchfork",
+        "yardarm",
+        "yacht",
+        "pulley",
+        "jellyfish",
+        "cobbler",
+        "blender",
+        "chestnut",
+        "cardamom",
+        "crate",
+        "alcove",
+        "caddy",
+        "snowdrop",
+        "rattle",
+        "seashell",
+        "igloo",
+        "burrow",
+        "lighthouse",
+        "macaroon",
+        "pistachio",
+        "octopus"
+      ],
+      "trash_words": ["thrush", "flask", "piccolo", "muffin"],
+      "hobbies": [
+        "cribbage",
+        "lacemaking",
+        "ikebana",
+        "freediving",
+        "taiko",
+        "pickleball",
+        "paragliding"
+      ],
+      "brands": ["Graskora", "Mulix", "Thomex", "Gryllo", "Shalva", "Zerrix"],
+      "place_words": [
+        "Lofoten",
+        "Dimhaven",
+        "Montreux",
+        "Togastead",
+        "Arbroath",
+        "Hihaven",
+        "Dandow",
+        "Bergen",
+        "Jermawen",
+        "Kandy"
+      ],
+      "destinations": ["Monemvasia", "Shalmere"],
+      "trip_place_words": ["Dysoe", "Ljubljana"],
+      "firsts": [
+        "Groskie",
+        "Kadri",
+        "Kasia",
+        "Buthen",
+        "Luca",
+        "Honora",
+        "Enine",
+        "Arvid",
+        "Nirara",
+        "Kaito",
+        "Farnaz",
+        "Carys",
+        "Raimine",
+        "Owyn",
+        "Tiskou",
+        "Shatho",
+        "Tiziana",
+        "Vrelou",
+        "Caoimhe",
+        "Bongani",
+        "Rashid",
+        "Radek",
+        "Yasmin",
+        "Rania",
+        "Flavia",
+        "Veskir",
+        "Bence",
+        "Emrys",
+        "Shaen",
+        "Meenakshi",
+        "Reka",
+        "Chinonso",
+        "Leocadia",
+        "Sakura",
+        "Joro",
+        "Tesfaye",
+        "Olwen",
+        "Desmond",
+        "Yael",
+        "Zasketh"
+      ],
+      "lasts": [
+        "Distow",
+        "Mizrahi",
+        "Huang",
+        "Lombardi",
+        "Prastett",
+        "Barraclough",
+        "Scrivener",
+        "Pillai",
+        "Krishnan",
+        "Szabo",
+        "Zaimere",
+        "Somacre",
+        "Namova",
+        "Barrios",
+        "Peretz",
+        "Costa",
+        "Thorsen",
+        "Vynuholt",
+        "Ozturk",
+        "Fedorov",
+        "Teixeira",
+        "Clough",
+        "Mannacre",
+        "Marchand",
+        "Kranz",
+        "Oakes",
+        "Echeverria",
+        "Entwistle",
+        "Ekstrom",
+        "Cepeholt",
+        "Vrullez",
+        "Geazaby",
+        "Wampuak",
+        "Loani",
+        "Albanese",
+        "Fleani",
+        "Brarett",
+        "Trennova",
+        "Losescu",
+        "Renwick"
+      ]
+    },
+    "counts": {
+      "parties": 40,
+      "contact channels": 51,
+      "important dates": 19,
+      "photos": 39,
+      "places": 8,
+      "albums": 5,
+      "events": 39,
+      "tasks": 37,
+      "notebooks": 5,
+      "notes": 30,
+      "folders": 5,
+      "documents": 25,
+      "activities": 16,
+      "obligations": 8,
+      "groups": 3,
+      "expenses": 21,
+      "locker items": 10,
+      "journal notes": 6
+    },
+    "people": [
+      {
+        "name": "Groskie Distow",
+        "first": "Groskie",
+        "last": "Distow",
+        "role": "Partner",
+        "group": "family",
+        "channels": ["phone", "email"],
+        "activities": 0
+      },
+      {
+        "name": "Kadri Distow",
+        "first": "Kadri",
+        "last": "Distow",
+        "role": "Daughter",
+        "group": "family",
+        "channels": ["phone", "email"],
+        "activities": 1
+      },
+      {
+        "name": "Kasia Distow",
+        "first": "Kasia",
+        "last": "Distow",
+        "role": "Son",
+        "group": "family",
+        "channels": ["phone", "email"],
+        "activities": 0
+      },
+      {
+        "name": "Buthen Distow",
+        "first": "Buthen",
+        "last": "Distow",
+        "role": "Daughter",
+        "group": "family",
+        "channels": ["phone", "email"],
+        "activities": 0
+      },
+      {
+        "name": "Luca Distow",
+        "first": "Luca",
+        "last": "Distow",
+        "role": "Mum",
+        "group": "family",
+        "channels": [],
+        "activities": 1
+      },
+      {
+        "name": "Honora Huang",
+        "first": "Honora",
+        "last": "Huang",
+        "role": "Brother",
+        "group": "family",
+        "channels": ["phone", "email"],
+        "activities": 0
+      },
+      {
+        "name": "Enine Lombardi",
+        "first": "Enine",
+        "last": "Lombardi",
+        "role": "Sister-in-law",
+        "group": "family",
+        "channels": ["email"],
+        "activities": 0
+      },
+      {
+        "name": "Arvid Prastett",
+        "first": "Arvid",
+        "last": "Prastett",
+        "role": "Grandmother",
+        "group": "family",
+        "channels": [],
+        "activities": 0
+      },
+      {
+        "name": "Nirara Distow",
+        "first": "Nirara",
+        "last": "Distow",
+        "role": "Brother-in-law",
+        "group": "family",
+        "channels": ["phone"],
+        "activities": 0
+      },
+      {
+        "name": "Kaito Scrivener",
+        "first": "Kaito",
+        "last": "Scrivener",
+        "role": "Choir friend",
+        "group": "friend",
+        "channels": ["phone", "email"],
+        "activities": 3
+      },
+      {
+        "name": "Farnaz Pillai",
+        "first": "Farnaz",
+        "last": "Pillai",
+        "role": "Choir friend",
+        "group": "friend",
+        "channels": ["phone", "email"],
+        "activities": 0
+      },
+      {
+        "name": "Carys Krishnan",
+        "first": "Carys",
+        "last": "Krishnan",
+        "role": "Friend from the gym",
+        "group": "friend",
+        "channels": ["phone"],
+        "activities": 4
+      },
+      {
+        "name": "Raimine Szabo",
+        "first": "Raimine",
+        "last": "Szabo",
+        "role": "Pen pal",
+        "group": "friend",
+        "channels": ["phone"],
+        "activities": 0
+      },
+      {
+        "name": "Owyn Zaimere",
+        "first": "Owyn",
+        "last": "Zaimere",
+        "role": "Old school friend",
+        "group": "friend",
+        "channels": ["phone"],
+        "activities": 0
+      },
+      {
+        "name": "Tiskou Somacre",
+        "first": "Tiskou",
+        "last": "Somacre",
+        "role": "Dog-walking friend",
+        "group": "friend",
+        "channels": ["phone", "email"],
+        "activities": 1
+      },
+      {
+        "name": "Shatho Namova",
+        "first": "Shatho",
+        "last": "Namova",
+        "role": "Dog-walking friend",
+        "group": "friend",
+        "channels": ["phone"],
+        "activities": 2
+      },
+      {
+        "name": "Tiziana Barrios",
+        "first": "Tiziana",
+        "last": "Barrios",
+        "role": "Old school friend",
+        "group": "friend",
+        "channels": ["email"],
+        "activities": 0
+      },
+      {
+        "name": "Vrelou Peretz",
+        "first": "Vrelou",
+        "last": "Peretz",
+        "role": "Climbing partner",
+        "group": "friend",
+        "channels": ["email"],
+        "activities": 0
+      },
+      {
+        "name": "Caoimhe Costa",
+        "first": "Caoimhe",
+        "last": "Costa",
+        "role": "Friend from yoga",
+        "group": "friend",
+        "channels": ["phone", "email"],
+        "activities": 0
+      },
+      {
+        "name": "Bongani Thorsen",
+        "first": "Bongani",
+        "last": "Thorsen",
+        "role": "Mentor",
+        "group": "work",
+        "channels": ["phone"],
+        "activities": 0
+      },
+      {
+        "name": "Rashid Vynuholt",
+        "first": "Rashid",
+        "last": "Vynuholt",
+        "role": "Director",
+        "group": "work",
+        "channels": [],
+        "activities": 0
+      },
+      {
+        "name": "Radek Ozturk",
+        "first": "Radek",
+        "last": "Ozturk",
+        "role": "Supplier",
+        "group": "work",
+        "channels": ["phone", "email"],
+        "activities": 0
+      },
+      {
+        "name": "Yasmin Fedorov",
+        "first": "Yasmin",
+        "last": "Fedorov",
+        "role": "Mentor",
+        "group": "work",
+        "channels": [],
+        "activities": 0
+      },
+      {
+        "name": "Rania Teixeira",
+        "first": "Rania",
+        "last": "Teixeira",
+        "role": "Neighbour upstairs",
+        "group": "neighbour",
+        "channels": ["phone", "email"],
+        "activities": 0
+      },
+      {
+        "name": "Flavia Clough",
+        "first": "Flavia",
+        "last": "Clough",
+        "role": "Caretaker",
+        "group": "neighbour",
+        "channels": ["phone"],
+        "activities": 1
+      },
+      {
+        "name": "Veskir Mannacre",
+        "first": "Veskir",
+        "last": "Mannacre",
+        "role": "Neighbour next door",
+        "group": "neighbour",
+        "channels": ["phone"],
+        "activities": 0
+      },
+      {
+        "name": "Bence Marchand",
+        "first": "Bence",
+        "last": "Marchand",
+        "role": "Caretaker",
+        "group": "neighbour",
+        "channels": ["phone", "email"],
+        "activities": 1
+      },
+      {
+        "name": "Emrys Kranz",
+        "first": "Emrys",
+        "last": "Kranz",
+        "role": "Gardener",
+        "group": "service",
+        "channels": [],
+        "activities": 0
+      },
+      {
+        "name": "Shaen Oakes",
+        "first": "Shaen",
+        "last": "Oakes",
+        "role": "Locksmith",
+        "group": "service",
+        "channels": ["phone"],
+        "activities": 0
+      },
+      {
+        "name": "Meenakshi Echeverria",
+        "first": "Meenakshi",
+        "last": "Echeverria",
+        "role": "Yoga teacher",
+        "group": "service",
+        "channels": ["phone"],
+        "activities": 0
+      },
+      {
+        "name": "Reka Entwistle",
+        "first": "Reka",
+        "last": "Entwistle",
+        "role": "Roofer",
+        "group": "service",
+        "channels": ["phone", "email"],
+        "activities": 1
+      },
+      {
+        "name": "Chinonso Ekstrom",
+        "first": "Chinonso",
+        "last": "Ekstrom",
+        "role": "Tutor",
+        "group": "service",
+        "channels": [],
+        "activities": 1
+      },
+      {
+        "name": "Leocadia Cepeholt",
+        "first": "Leocadia",
+        "last": "Cepeholt",
+        "role": "Therapist",
+        "group": "service",
+        "channels": ["phone", "email"],
+        "activities": 0
+      },
+      {
+        "name": "Bongani Vrullez",
+        "first": "Bongani",
+        "last": "Vrullez",
+        "role": "University friend",
+        "group": "friend",
+        "channels": [],
+        "activities": 0
+      },
+      {
+        "name": "Flavia Geazaby",
+        "first": "Flavia",
+        "last": "Geazaby",
+        "role": "Mentor",
+        "group": "work",
+        "channels": [],
+        "activities": 0
+      },
+      {
+        "name": "Kandy Accountants",
+        "first": null,
+        "last": null,
+        "role": "Accountant",
+        "group": "org",
+        "channels": ["phone", "email"],
+        "activities": 0
+      },
+      {
+        "name": "Kandy Glazing",
+        "first": null,
+        "last": null,
+        "role": "Glazier",
+        "group": "org",
+        "channels": ["phone", "email"],
+        "activities": 0
+      },
+      {
+        "name": "Gryllo Plumbing",
+        "first": null,
+        "last": null,
+        "role": "Plumber",
+        "group": "org",
+        "channels": ["phone", "email"],
+        "activities": 0
+      },
+      {
+        "name": "Montreux Tyres",
+        "first": null,
+        "last": null,
+        "role": "Mechanic",
+        "group": "org",
+        "channels": ["phone", "email"],
+        "activities": 0
+      },
+      {
+        "name": "Mulix Clinic",
+        "first": null,
+        "last": null,
+        "role": "Doctor",
+        "group": "org",
+        "channels": ["phone", "email"],
+        "activities": 0
+      }
+    ],
+    "shared_first_names": ["Bongani", "Flavia"],
+    "first_name_clashes": {
+      "Bongani": ["Bongani Thorsen", "Bongani Vrullez"],
+      "Flavia": ["Flavia Clough", "Flavia Geazaby"]
+    },
+    "important_dates": [
+      {
+        "label": "Birthday",
+        "party": "Groskie Distow"
+      },
+      {
+        "label": "Birthday",
+        "party": "Kadri Distow"
+      },
+      {
+        "label": "Birthday",
+        "party": "Honora Huang"
+      },
+      {
+        "label": "Birthday",
+        "party": "Enine Lombardi"
+      },
+      {
+        "label": "Birthday",
+        "party": "Arvid Prastett"
+      },
+      {
+        "label": "Birthday",
+        "party": "Nirara Distow"
+      },
+      {
+        "label": "Birthday",
+        "party": "Kaito Scrivener"
+      },
+      {
+        "label": "Birthday",
+        "party": "Farnaz Pillai"
+      },
+      {
+        "label": "Birthday",
+        "party": "Raimine Szabo"
+      },
+      {
+        "label": "Birthday",
+        "party": "Owyn Zaimere"
+      },
+      {
+        "label": "Birthday",
+        "party": "Tiskou Somacre"
+      },
+      {
+        "label": "Birthday",
+        "party": "Shatho Namova"
+      },
+      {
+        "label": "Birthday",
+        "party": "Vrelou Peretz"
+      },
+      {
+        "label": "Birthday",
+        "party": "Bongani Thorsen"
+      },
+      {
+        "label": "Birthday",
+        "party": "Leocadia Cepeholt"
+      },
+      {
+        "label": "Anniversary",
+        "party": "Groskie Distow"
+      },
+      {
+        "label": "Christening",
+        "party": "Bongani Thorsen"
+      },
+      {
+        "label": "Memorial",
+        "party": "Chinonso Ekstrom"
+      },
+      {
+        "label": "Wedding anniversary",
+        "party": "Rania Teixeira"
+      }
+    ],
+    "debts": [
+      {
+        "party": "Arvid Prastett",
+        "direction": "owe",
+        "reason": "Cormorant deposit",
+        "settled": false
+      },
+      {
+        "party": "Luca Distow",
+        "direction": "owed",
+        "reason": "Freediving workshop repair",
+        "settled": false
+      },
+      {
+        "party": "Tiziana Barrios",
+        "direction": "owe",
+        "reason": "Cardamom lessons",
+        "settled": false
+      },
+      {
+        "party": "Owyn Zaimere",
+        "direction": "owed",
+        "reason": "Monemvasia deposit",
+        "settled": false
+      },
+      {
+        "party": "Nirara Distow",
+        "direction": "owed",
+        "reason": "Pistachio parts",
+        "settled": true
+      },
+      {
+        "party": "Bongani Thorsen",
+        "direction": "owed",
+        "reason": "Fuskin fee",
+        "settled": true
+      },
+      {
+        "party": "Carys Krishnan",
+        "direction": "owed",
+        "reason": "Monemvasia tickets",
+        "settled": false
+      },
+      {
+        "party": "Enine Lombardi",
+        "direction": "owe",
+        "reason": "Caddy lessons",
+        "settled": false
+      }
+    ],
+    "groups": [
+      {
+        "name": "Shalmere trip",
+        "members": ["Farnaz Pillai", "Kaito Scrivener", "Tiskou Somacre"]
+      },
+      {
+        "name": "Stargazing gang",
+        "members": ["Owyn Zaimere", "Buthen Distow"]
+      },
+      {
+        "name": "Paragliding syndicate",
+        "members": ["Kadri Distow", "Raimine Szabo"]
+      }
+    ],
+    "albums": [
+      "Shalmere 2026",
+      "The Chestnut and Chestnut 2026",
+      "Ventriloquism progress",
+      "Kaito's burrow",
+      "Cribbage meetup"
+    ],
+    "places": [
+      "Togastead Deli",
+      "The Chestnut and Chestnut",
+      "Kandy Climbing Wall",
+      "Jermawen Downs",
+      "Lofoten Bridge",
+      "Montreux Bridge"
+    ],
+    "trip_places": ["Dysoe Pier", "Shalmere Quay"],
+    "trips": [
+      {
+        "title": "Monemvasia holiday",
+        "destination": "Monemvasia",
+        "start": "2026-11-23T10:00:00.000Z",
+        "end": "2026-11-29T19:00:00.000Z",
+        "people": ["Farnaz Pillai", "Kaito Scrivener", "Tiskou Somacre"]
+      },
+      {
+        "title": "Shalmere trip",
+        "destination": "Shalmere",
+        "start": "2026-08-25T09:00:00.000Z",
+        "end": "2026-08-31T18:00:00.000Z",
+        "people": ["Farnaz Pillai", "Kaito Scrivener", "Tiskou Somacre"]
+      }
+    ],
+    "folders": ["Charity", "School", "Bills", "Legal", "Monemvasia trip"],
+    "document_folders": {
+      "Ventriloquism form": "Charity",
+      "Lemongrass agreement": "Monemvasia trip",
+      "Stargazing agreement": "Legal",
+      "Hollyhock voucher": "Legal",
+      "Fuskin form": "Charity",
+      "Monemvasia booking confirmation": "Monemvasia trip",
+      "Igloo scan 2024": "School",
+      "Zerrix water voucher": "Charity",
+      "Jermawen Downs membership form": "School",
+      "Cardamom permit": "Charity",
+      "Lofoten Bridge permit": "Monemvasia trip",
+      "Thomex dentist agreement": "Bills",
+      "Chestnut permit": "Bills",
+      "Burrow manual": "Bills",
+      "Zerrix vet warranty": "Legal",
+      "Phone bill (01)": "Charity",
+      "Phone bill (02)": "Charity",
+      "Phone bill (04)": "Charity",
+      "Muffin booking": "Monemvasia trip"
+    },
+    "notebooks": ["Lemongrass", "Cribbage", "Recipes", "Kids", "Money"],
+    "locker": [
+      {
+        "type": "login",
+        "title": "Hollyhock club portal"
+      },
+      {
+        "type": "wifi",
+        "title": "Togastead Deli wifi"
+      },
+      {
+        "type": "wifi",
+        "title": "Guest wifi"
+      },
+      {
+        "type": "card",
+        "title": "Holiday Visa card"
+      },
+      {
+        "type": "note",
+        "title": "Monemvasia villa PIN"
+      },
+      {
+        "type": "card",
+        "title": "Thomex holiday card"
+      },
+      {
+        "type": "login",
+        "title": "Thomex library portal"
+      },
+      {
+        "type": "login",
+        "title": "Thomex tax app"
+      },
+      {
+        "type": "note",
+        "title": "Lemonade backup codes"
+      },
+      {
+        "type": "login",
+        "title": "Mulix energy app"
+      }
+    ],
+    "favorites": [
+      "Cormorant at dusk",
+      "Honora with the ventriloquism",
+      "IMG_1382",
+      "Flavia's lighthouse"
+    ],
+    "starred": [
+      "Shalva payroll quote",
+      "Cardamom invoice 2025",
+      "Jermawen Downs membership form",
+      "Lofoten Bridge permit"
+    ],
+    "trashed": [
+      {
+        "kind": "photos",
+        "title": "Thrush on the shelf",
+        "only_in_trash": "thrush"
+      },
+      {
+        "kind": "tasks",
+        "title": "Varnish the flask",
+        "only_in_trash": "flask"
+      },
+      {
+        "kind": "notes",
+        "title": "Piccolo tips",
+        "only_in_trash": "piccolo"
+      },
+      {
+        "kind": "documents",
+        "title": "Muffin booking",
+        "only_in_trash": "muffin"
+      },
+      {
+        "kind": "notes",
+        "title": "Shaen's caddy log",
+        "only_in_trash": null
+      },
+      {
+        "kind": "documents",
+        "title": "Caddy statement 2025",
+        "only_in_trash": null
+      }
+    ],
+    "tasks_done_last_week": [
+      "Move the caddy for Kasia",
+      "Post the orchard for Luca",
+      "Fix Kasia's crate"
+    ],
+    "undated_tasks": [
+      "Mend the yardarm this week",
+      "Book the burrow",
+      "Ask Honora about the orchard"
+    ],
+    "journal": [
+      {
+        "date": "2026-10-17",
+        "mood": "grateful"
+      },
+      {
+        "date": "2026-10-18",
+        "mood": "calm"
+      },
+      {
+        "date": "2026-10-24",
+        "mood": "content"
+      },
+      {
+        "date": "2026-10-31",
+        "mood": "flat"
+      },
+      {
+        "date": "2026-11-01",
+        "mood": "grateful"
+      },
+      {
+        "date": "2026-11-02",
+        "mood": "tired"
+      }
+    ],
+    "faces_intended": [
+      {
+        "photo": "Hollyhock close-up",
+        "people": ["Honora Huang"]
+      },
+      {
+        "photo": "New stargazing (01)",
+        "people": ["Bongani Vrullez", "Groskie Distow"]
+      },
+      {
+        "photo": "Orchard close-up",
+        "people": ["Caoimhe Costa", "Enine Lombardi"]
+      },
+      {
+        "photo": "Pulley from above",
+        "people": ["Caoimhe Costa", "Enine Lombardi"]
+      },
+      {
+        "photo": "Honora with the ventriloquism",
+        "people": ["Honora Huang", "Tiskou Somacre", "Kaito Scrivener"]
+      },
+      {
+        "photo": "Seashell at The Chestnut and Chestnut",
+        "people": ["Owyn Zaimere", "Bongani Vrullez"]
+      },
+      {
+        "photo": "Pulley in the snow",
+        "people": ["Tiziana Barrios", "Bongani Vrullez"]
+      },
+      {
+        "photo": "Alcove on the table",
+        "people": ["Kadri Distow"]
+      }
+    ],
+    "shared_keywords": {
+      "alcove": ["expenses", "photos", "tasks"],
+      "arvid": ["notes", "parties"],
+      "bence": ["notes", "parties"],
+      "blender": ["events", "expenses", "tasks"],
+      "bongani": ["parties", "tasks"],
+      "burrow": ["albums", "documents", "events", "photos", "tasks"],
+      "caddy": ["events", "notes", "obligations", "tasks"],
+      "cardamom": ["documents", "obligations"],
+      "carys": ["events", "parties"],
+      "chestnut": [
+        "albums",
+        "documents",
+        "events",
+        "notes",
+        "photos",
+        "places",
+        "tasks"
+      ],
+      "chinonso": ["events", "parties", "tasks"],
+      "cobbler": ["events", "expenses", "notes", "photos", "tasks"],
+      "cormorant": ["notes", "obligations", "photos", "tasks"],
+      "crate": ["events", "tasks"],
+      "cribbage": ["albums", "events", "notebooks"],
+      "dysoe": ["photos", "places"],
+      "emrys": ["events", "parties"],
+      "enine": ["notes", "parties"],
+      "farnaz": ["notes", "parties", "tasks"],
+      "flavia": ["parties", "photos", "tasks"],
+      "freediving": ["events", "expenses", "notes", "obligations"],
+      "fuskin": [
+        "documents",
+        "expenses",
+        "notes",
+        "obligations",
+        "photos",
+        "tasks"
+      ],
+      "groskie": ["parties", "tasks"],
+      "hollyhock": [
+        "documents",
+        "expenses",
+        "locker items",
+        "notes",
+        "photos",
+        "tasks"
+      ],
+      "honora": ["events", "parties", "photos", "tasks"],
+      "igloo": ["documents", "events", "notes", "tasks"],
+      "jermawen": ["documents", "events", "expenses", "photos", "places"],
+      "kadri": ["notes", "parties"],
+      "kaito": ["albums", "parties", "photos"],
+      "kandy": ["expenses", "notes", "parties", "photos", "places", "tasks"],
+      "kasia": ["parties", "tasks"],
+      "lemonade": ["events", "locker items"],
+      "lemongrass": [
+        "documents",
+        "events",
+        "notebooks",
+        "notes",
+        "photos",
+        "tasks"
+      ],
+      "leocadia": ["parties", "photos"],
+      "lofoten": ["documents", "photos", "places", "tasks"],
+      "luca": ["notes", "parties", "tasks"],
+      "macaroon": ["photos", "tasks"],
+      "monemvasia": [
+        "documents",
+        "events",
+        "folders",
+        "locker items",
+        "notes",
+        "obligations",
+        "tasks"
+      ],
+      "montreux": [
+        "events",
+        "expenses",
+        "parties",
+        "photos",
+        "places",
+        "tasks"
+      ],
+      "mulix": ["locker items", "parties"],
+      "octopus": ["expenses", "photos"],
+      "owyn": ["events", "parties", "tasks"],
+      "paragliding": ["events", "expenses", "groups"],
+      "pickleball": ["events", "notes", "photos"],
+      "pitchfork": ["events", "tasks"],
+      "pulley": ["photos", "tasks"],
+      "rashid": ["events", "parties"],
+      "reka": ["events", "parties"],
+      "seashell": ["events", "notes", "photos"],
+      "shalmere": [
+        "albums",
+        "events",
+        "expenses",
+        "groups",
+        "photos",
+        "places"
+      ],
+      "stargazing": [
+        "documents",
+        "events",
+        "expenses",
+        "groups",
+        "notes",
+        "photos"
+      ],
+      "thomex": ["documents", "locker items"],
+      "tiskou": ["events", "parties"],
+      "tiziana": ["events", "notes", "parties", "tasks"],
+      "togastead": [
+        "documents",
+        "events",
+        "locker items",
+        "notes",
+        "photos",
+        "places",
+        "tasks"
+      ],
+      "ventriloquism": [
+        "albums",
+        "documents",
+        "events",
+        "expenses",
+        "notes",
+        "photos",
+        "tasks"
+      ],
+      "veskir": ["notes", "parties"],
+      "yardarm": ["photos", "tasks"]
+    },
+    "labels": {
+      "albums": [
+        "Cribbage meetup",
+        "Kaito's burrow",
+        "Shalmere 2026",
+        "The Chestnut and Chestnut 2026",
+        "Ventriloquism progress"
+      ],
+      "documents": [
+        "Burrow manual",
+        "Cardamom invoice 2025",
+        "Cardamom permit",
+        "Chestnut permit",
+        "Fuskin form",
+        "Graskora airline statement",
+        "Hollyhock voucher",
+        "Igloo scan 2024",
+        "Jermawen Downs membership form",
+        "Lemongrass agreement",
+        "Lofoten Bridge permit",
+        "Monemvasia booking confirmation",
+        "Phone bill (01)",
+        "Phone bill (02)",
+        "Phone bill (03)",
+        "Phone bill (04)",
+        "Shalva payroll quote",
+        "Stargazing agreement",
+        "Thomex dentist agreement",
+        "Togastead Deli membership form",
+        "Ventriloquism form",
+        "Zerrix vet warranty",
+        "Zerrix water voucher"
+      ],
+      "events": [
+        "Caddy fitting",
+        "Call Emrys about the blender",
+        "Call Tiziana about the crate",
+        "Chestnut viewing",
+        "Cobbler viewing",
+        "Coffee with Carys",
+        "Coffee with Rashid",
+        "Coffee with Tiskou",
+        "Collect the burrow",
+        "Collect the orchard",
+        "Collect the pitchfork",
+        "Cribbage meetup at Togastead Deli",
+        "Cribbage meetup with Reka",
+        "Freediving workshop",
+        "Freediving workshop at Jermawen Downs",
+        "Freediving workshop at Montreux Bridge",
+        "Freediving workshop with Chinonso",
+        "Igloo fitting",
+        "Lemonade sale at Jermawen Downs",
+        "Lighthouse fitting",
+        "Lighthouse sale at Montreux Bridge",
+        "Locksmith call",
+        "Look at the lemongrass",
+        "Lunch with Carys",
+        "Meet Honora at Togastead Deli",
+        "Monemvasia holiday",
+        "Paragliding workshop at Togastead Deli",
+        "Pick up the ventriloquism",
+        "Pickleball lesson",
+        "Seashell delivery",
+        "Shalmere trip",
+        "Spanish class (week 42)",
+        "Spanish class (week 43)",
+        "Spanish class (week 44)",
+        "Spanish class (week 45)",
+        "Stargazing club",
+        "Therapist call",
+        "Ventriloquism club",
+        "Walk with Owyn"
+      ],
+      "expenses": [
+        "Alcove refund",
+        "Alcove top-up",
+        "Blender deposit",
+        "Car hire",
+        "Cobbler top-up",
+        "Dinner at Jermawen Downs",
+        "Dinner at Kandy Climbing Wall",
+        "Dinner at Montreux Bridge",
+        "Dinner on the last night",
+        "Ferry to Shalmere",
+        "Freediving workshop supplies",
+        "Fuskin refund",
+        "Hollyhock deposit",
+        "Octopus tickets",
+        "Paragliding workshop repair",
+        "Pizza night (wk 41)",
+        "Pizza night (wk 42)",
+        "Pizza night (wk 44)",
+        "Stargazing subscription",
+        "Stargazing supplies",
+        "Ventriloquism supplies"
+      ],
+      "folders": ["Bills", "Charity", "Legal", "Monemvasia trip", "School"],
+      "groups": ["Paragliding syndicate", "Shalmere trip", "Stargazing gang"],
+      "locker": [
+        "Guest wifi",
+        "Holiday Visa card",
+        "Hollyhock club portal",
+        "Lemonade backup codes",
+        "Monemvasia villa PIN",
+        "Mulix energy app",
+        "Thomex holiday card",
+        "Thomex library portal",
+        "Thomex tax app",
+        "Togastead Deli wifi"
+      ],
+      "notebooks": ["Cribbage", "Kids", "Lemongrass", "Money", "Recipes"],
+      "notes": [
+        "Bence's caddy draft",
+        "Cobbler timeline",
+        "Freediving workshop budget",
+        "Freediving workshop tips",
+        "Fuskin log",
+        "Gift ideas for Arvid",
+        "Hollyhock budget",
+        "Igloo packing list",
+        "Kadri's cormorant packing list",
+        "Lemongrass shopping list",
+        "Luca's lighthouse ideas",
+        "Monemvasia packing list",
+        "Notes from Kandy Climbing Wall",
+        "Notes from The Chestnut and Chestnut",
+        "Notes from Togastead Deli",
+        "Pickleball lesson list",
+        "Pickleball lesson questions",
+        "Seashell ideas",
+        "Shopping list (wk 42)",
+        "Shopping list (wk 43)",
+        "Shopping list (wk 44)",
+        "Shopping list (wk 45)",
+        "Stargazing plan",
+        "Things to ask Enine",
+        "Things to ask Farnaz",
+        "Things to ask Tiziana",
+        "Things to ask Veskir",
+        "Ventriloquism contacts"
+      ],
+      "obligations": [
+        "Caddy lessons",
+        "Cardamom lessons",
+        "Cormorant deposit",
+        "Freediving workshop repair",
+        "Fuskin fee",
+        "Monemvasia deposit",
+        "Monemvasia tickets",
+        "Pistachio parts"
+      ],
+      "parties": [
+        "Arvid Prastett",
+        "Bence Marchand",
+        "Bongani Thorsen",
+        "Bongani Vrullez",
+        "Buthen Distow",
+        "Caoimhe Costa",
+        "Carys Krishnan",
+        "Chinonso Ekstrom",
+        "Emrys Kranz",
+        "Enine Lombardi",
+        "Farnaz Pillai",
+        "Flavia Clough",
+        "Flavia Geazaby",
+        "Groskie Distow",
+        "Gryllo Plumbing",
+        "Honora Huang",
+        "Kadri Distow",
+        "Kaito Scrivener",
+        "Kandy Accountants",
+        "Kandy Glazing",
+        "Kasia Distow",
+        "Leocadia Cepeholt",
+        "Luca Distow",
+        "Meenakshi Echeverria",
+        "Montreux Tyres",
+        "Mulix Clinic",
+        "Nirara Distow",
+        "Owyn Zaimere",
+        "Radek Ozturk",
+        "Raimine Szabo",
+        "Rania Teixeira",
+        "Rashid Vynuholt",
+        "Reka Entwistle",
+        "Shaen Oakes",
+        "Shatho Namova",
+        "Tiskou Somacre",
+        "Tiziana Barrios",
+        "Veskir Mannacre",
+        "Vrelou Peretz",
+        "Yasmin Fedorov"
+      ],
+      "photos": [
+        "Alcove on the table",
+        "Burrow at Dysoe Pier",
+        "Burrow from above",
+        "Chestnut at Kandy Climbing Wall",
+        "Cobbler and burrow",
+        "Cobbler in the garden",
+        "Cormorant at dusk",
+        "Flavia at Jermawen Downs",
+        "Flavia's lighthouse",
+        "Hollyhock close-up",
+        "Honora with the ventriloquism",
+        "IMG_1382",
+        "IMG_2424",
+        "Jellyfish at Shalmere Quay",
+        "Jellyfish on the table",
+        "Kaito with the fuskin",
+        "Leocadia's chestnut",
+        "Lofoten Bridge from the path",
+        "Macaroon by the window",
+        "Macaroon from above",
+        "Montreux Bridge at dusk",
+        "New stargazing",
+        "New stargazing (01)",
+        "New stargazing (02)",
+        "New stargazing (03)",
+        "Octopus at Dysoe Pier",
+        "Orchard at dusk",
+        "Orchard close-up",
+        "Orchard in the snow",
+        "Pickleball lesson 2025",
+        "Pulley at Togastead Deli",
+        "Pulley from above",
+        "Pulley in the snow",
+        "Seashell at The Chestnut and Chestnut",
+        "Shalmere Quay at low tide",
+        "The Chestnut and Chestnut in the rain",
+        "The lemongrass at dusk",
+        "Yardarm at sunrise"
+      ],
+      "places": [
+        "Dysoe Pier",
+        "Jermawen Downs",
+        "Kandy Climbing Wall",
+        "Lofoten Bridge",
+        "Montreux Bridge",
+        "Shalmere Quay",
+        "The Chestnut and Chestnut",
+        "Togastead Deli"
+      ],
+      "tasks": [
+        "Ask Chinonso about the pitchfork",
+        "Ask Farnaz about the macaroon",
+        "Ask Groskie about the pulley",
+        "Ask Honora about the orchard",
+        "Book the Monemvasia ferry",
+        "Book the blender this week",
+        "Book the burrow",
+        "Chase the burrow",
+        "Chase the igloo at Togastead Deli",
+        "Chase the pitchfork",
+        "Find a ventriloquism for Flavia",
+        "Fix Kasia's crate",
+        "Mend the yardarm this week",
+        "Move the caddy for Kasia",
+        "Order Owyn's cobbler",
+        "Paint the igloo",
+        "Paint the pulley at Lofoten Bridge",
+        "Pay for the pulley at Lofoten Bridge",
+        "Photograph the rattle for Bongani",
+        "Post the orchard for Luca",
+        "Print the yardarm",
+        "Recycle the macaroon",
+        "Renew the snowdrop this week",
+        "Repair Tiziana's cormorant",
+        "Repair the hollyhock at Montreux Bridge",
+        "Replace the pulley at Kandy Climbing Wall",
+        "Service the fuskin again",
+        "Sort out the ventriloquism at Lofoten Bridge",
+        "Tidy the pitchfork",
+        "Top up the lunch account (wk 43)",
+        "Top up the lunch account (wk 44)",
+        "Top up the lunch account (wk 45)",
+        "Top up the lunch account (wk 46)",
+        "Top up the lunch account (wk 47)",
+        "Unpack the alcove",
+        "Wrap the lemongrass at The Chestnut and Chestnut"
+      ]
+    },
+    "examples": {
+      "channel_party": "Kadri Distow",
+      "date_party": "Vrelou Peretz",
+      "nonbirthday_date": ["Wedding anniversary", "Rania Teixeira"],
+      "event_with_attendees": "Ventriloquism club",
+      "event_place": "Togastead Deli",
+      "parent_task": "Ask Groskie about the pulley",
+      "interaction_party": "Carys Krishnan",
+      "interaction_single": "Luca Distow",
+      "debt_party": "Arvid Prastett",
+      "album": "Shalmere 2026",
+      "photo_place": "Dysoe Pier",
+      "home_place": "The Chestnut and Chestnut",
+      "group": "Shalmere trip",
+      "theme_event": "ventriloquism",
+      "theme_task": "ventriloquism",
+      "venue": "Togastead Deli",
+      "trip": "Monemvasia holiday",
+      "shared_first": "Bongani",
+      "locker_shared": "hollyhock",
+      "trash_only": [
+        {
+          "kind": "photos",
+          "title": "Thrush on the shelf",
+          "word": "thrush"
+        },
+        {
+          "kind": "tasks",
+          "title": "Varnish the flask",
+          "word": "flask"
+        },
+        {
+          "kind": "notes",
+          "title": "Piccolo tips",
+          "word": "piccolo"
+        },
+        {
+          "kind": "documents",
+          "title": "Muffin booking",
+          "word": "muffin"
+        }
+      ],
+      "face_photo": "Hollyhock close-up",
+      "face_person": "Honora Huang"
+    }
+  }
+}

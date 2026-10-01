@@ -1,0 +1,227 @@
+[
+  {
+    "id": "a0238",
+    "today": "Wednesday 2026-05-13",
+    "turns": [
+      {
+        "canonical": "tally.settle_up{ group_id: (groups called \"Swimming gang\"), from_party: (parties called \"Saskia Oyelowo\"), amount_minor: 950 }",
+        "move": "first",
+        "hint": "record that Saskia paid me that amount in the group"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Swimming gang\"", "turn": 1, "say": "exact: gang" },
+      { "row": "parties \"Saskia Oyelowo\"", "turn": 1, "say": "exact: Saskia" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0580",
+    "today": "Saturday 2027-12-18",
+    "turns": [
+      {
+        "canonical": "show (expenses that (amount_minor < 1000 and spent_on during this month))",
+        "move": "first",
+        "hint": "small expenses under that amount in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0110",
+    "today": "Sunday 2028-06-11",
+    "turns": [
+      {
+        "canonical": "core.restore_document{} on (documents called \"Chimney sweep invoice\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "restore the binned invoice document"
+      }
+    ],
+    "refer": [
+      {
+        "row": "documents \"Chimney sweep invoice\"",
+        "turn": 1,
+        "say": "exact: invoice"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0072",
+    "today": "Wednesday 2026-01-14",
+    "turns": [
+      {
+        "canonical": "show (places called \"Old Mill Yard\")",
+        "move": "first",
+        "hint": "find the place Yard in my photos' places"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Old Mill Yard\"", "turn": 1, "say": "exact: Yard" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0023",
+    "today": "Saturday 2028-02-12",
+    "turns": [
+      {
+        "canonical": "show (important dates)",
+        "move": "first",
+        "hint": "list all the important dates (birthdays, anniversaries) I've saved"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0171",
+    "today": "Wednesday 2028-04-26",
+    "turns": [
+      {
+        "canonical": "media.restore_asset{} on (photos called \"choir\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "restore the deleted choir photo"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0995",
+    "today": "Tuesday 2026-07-07",
+    "turns": [
+      {
+        "canonical": "show (parties of (events called \"Cheese tasting\"))",
+        "move": "first",
+        "hint": "who's coming to / invited to the cheese"
+      }
+    ],
+    "refer": [
+      { "row": "events \"Cheese tasting\"", "turn": 1, "say": "exact: cheese" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0340",
+    "today": "Saturday 2028-07-08",
+    "turns": [
+      {
+        "canonical": "count of (locker items that (type = \"note\"))",
+        "move": "first",
+        "hint": "how many of that type are in my locker"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0086",
+    "today": "Monday 2027-06-14",
+    "turns": [
+      {
+        "canonical": "show (things called \"March\")",
+        "move": "first",
+        "hint": "what do I have about March (anything: diary, to-dos, notes...)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0690",
+    "today": "Wednesday 2028-06-14",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Osric Brightman\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete Osric from my contacts"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Osric Brightman\"", "turn": 1, "say": "exact: Osric" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0321",
+    "today": "Wednesday 2025-10-22",
+    "turns": [
+      {
+        "canonical": "count of (important dates that (next_occurrence during this month))",
+        "move": "first",
+        "hint": "how many birthdays/anniversaries coming up in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0821",
+    "today": "Sunday 2028-04-16",
+    "turns": [
+      {
+        "canonical": "max dtstart of (events of (parties called \"Ursula\"))",
+        "move": "first",
+        "hint": "the last date in my calendar with Ursula"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0294",
+    "today": "Monday 2028-11-06",
+    "turns": [
+      {
+        "canonical": "count of (events during next month)",
+        "move": "first",
+        "hint": "how many things in the calendar in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1143",
+    "today": "Monday 2028-07-24",
+    "turns": [
+      {
+        "canonical": "show (things during thursday)",
+        "move": "first",
+        "hint": "what's on in that window"
+      },
+      {
+        "canonical": "delete{} on (the 2nd one)",
+        "move": "act",
+        "hint": "get rid of one of them by position"
+      },
+      {
+        "canonical": "restore{} on (it)",
+        "move": "undo",
+        "hint": "oops, bring it back"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0557",
+    "today": "Monday 2028-03-20",
+    "turns": [
+      {
+        "canonical": "show (events that (dtstart > next tuesday) ordered by dtstart asc)",
+        "move": "first",
+        "hint": "events after that day, soonest first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

@@ -1,0 +1,240 @@
+[
+  {
+    "id": "c0246",
+    "today": "Friday 2025-06-20",
+    "turns": [
+      {
+        "canonical": "delete{} on (things called \"open\")",
+        "move": "first",
+        "hint": "delete / get rid of all my open stuff"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0035",
+    "today": "Monday 2026-02-16",
+    "turns": [
+      {
+        "canonical": "show (photos called \"harbour\")",
+        "move": "first",
+        "hint": "have I got anything in my photos for/about harbour"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0176",
+    "today": "Thursday 2026-09-24",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Vet appointment\", dtstart: monday at 13:00, dtend: monday at 14:00 }",
+        "move": "first",
+        "hint": "put a Vet appointment in the diary/calendar monday at one (a one-hour appointment; say the time like 'one')"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0041",
+    "today": "Saturday 2028-07-22",
+    "turns": [
+      {
+        "canonical": "show (things called \"pub\")",
+        "move": "first",
+        "hint": "what do I have about pub (anything at all, no app named)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0072",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties that (role = \"Solicitor\")) that (kind = \"phone\"))",
+        "move": "first",
+        "hint": "what's my solicitor's number"
+      }
+    ],
+    "refer": [
+      { "row": "role \"Solicitor\"", "turn": 1, "say": "exact: solicitor" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0211",
+    "today": "Saturday 2025-08-09",
+    "turns": [
+      {
+        "canonical": "show (photos during last month)",
+        "move": "first",
+        "hint": "photos from that window"
+      },
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Frosty mornings\") } on (them that (label contains \"Gwilym\"))",
+        "move": "act",
+        "hint": "put the one with Gwilym in it into the Frosty mornings album"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Northgate Pool\"", "turn": 1, "say": "loose: Pool" },
+      { "row": "albums \"Frosty mornings\"", "turn": 2, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0188",
+    "today": "Friday 2028-05-05",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Call the plumber\" }",
+        "move": "first",
+        "hint": "add a task / remind me to call the plumber (NO date given)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0090",
+    "today": "Thursday 2027-08-19",
+    "turns": [
+      {
+        "canonical": "show (obligations that (settled_at is null and from_party = me))",
+        "move": "first",
+        "hint": "what debts do I still owe"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "what's that come to / how much is that altogether / total? (short follow-up, no names)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0234",
+    "today": "Tuesday 2028-08-01",
+    "turns": [
+      {
+        "canonical": "show (events called \"Piano at Coppice Wood\" during this weekend)",
+        "move": "first",
+        "hint": "is the Coppice Wood on in that window"
+      },
+      {
+        "canonical": "show (parties of (it))",
+        "move": "act",
+        "hint": "who is that with / which person is that (pronoun)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Piano at Coppice Wood\"",
+        "turn": 1,
+        "say": "exact: Coppice Wood"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0038",
+    "today": "Monday 2026-06-29",
+    "turns": [
+      {
+        "canonical": "show (locker items called \"school\")",
+        "move": "first",
+        "hint": "have I got anything in my locker / saved logins for/about school"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0155",
+    "today": "Tuesday 2028-09-05",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"table\")",
+        "move": "first",
+        "hint": "show my table tasks"
+      },
+      {
+        "canonical": "show (them that (status != \"completed\"))",
+        "move": "refine",
+        "hint": "which of those are still open / what's left of them"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0209",
+    "today": "Thursday 2027-03-25",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"Lake\"))",
+        "move": "first",
+        "hint": "photos taken at Lake"
+      },
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Harvest supper\") } on (them that (label contains \"Winifred\"))",
+        "move": "act",
+        "hint": "put the one with Winifred in it into the Harvest supper album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Harvest supper\"", "turn": 2, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0060",
+    "today": "Wednesday 2025-09-10",
+    "turns": [
+      {
+        "canonical": "count of (tasks called \"optician\")",
+        "move": "first",
+        "hint": "how many optician tasks have I got (the optician is a word in the task titles, not a person)"
+      }
+    ],
+    "refer": [
+      { "row": "role \"Optician\"", "turn": 1, "say": "exact: optician" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0183",
+    "today": "Saturday 2027-12-18",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Yoga class\", dtstart: tomorrow at 11:00, dtend: tomorrow at 12:00 }",
+        "move": "first",
+        "hint": "put a Yoga class in the diary/calendar tomorrow at eleven (a one-hour appointment; say the time like 'eleven')"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0264",
+    "today": "Monday 2026-11-23",
+    "turns": [
+      {
+        "canonical": "show (locker items called \"card\" that (type = \"login\"))",
+        "move": "first",
+        "hint": "have I got a login for card"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

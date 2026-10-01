@@ -1,0 +1,298 @@
+[
+  {
+    "id": "w36-0013",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks how many tasks due friday they have",
+        "say": ["friday", "how many"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w36-0014",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks which tasks due friday they have",
+        "say": ["friday", "which"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w36-0015",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks which pictures mention hollyhock",
+        "say": ["hollyhock", "pictures"]
+      },
+      {
+        "hint": "(new topic) asks for the an hour and a half jobs on their list",
+        "say": ["an hour and a half"],
+        "shown": "photo \"Hollyhock close-up\" Tue 2026-10-13 08:40 · favorite=false people=Honora Huang"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w36-0017",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      { "hint": "asks who'll be at the Shalmere", "say": ["Shalmere"] },
+      {
+        "hint": "(new topic) asks to reveal the password for the deli wifi",
+        "say": ["deli wifi", "password"],
+        "shown": "party \"Farnaz Pillai\" · role=Choir friend\nparty \"Tiskou Somacre\" · role=Dog-walking friend\nparty \"Kaito Scrivener\" · role=Choir friend"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w36-0018",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks which pictures mention lemongrass",
+        "say": ["lemongrass", "pictures"]
+      },
+      {
+        "hint": "(detour) hang on — asks what they paid for the alcove refund",
+        "say": ["alcove refund"],
+        "shown": "photo \"The lemongrass at dusk\" Sat 2026-09-05 09:00 · album_titles=Shalmere 2026, The Chestnut and Chestnut… favorite=false"
+      },
+      {
+        "hint": "back to the lemongrass pictures — asks what their calendar have on it",
+        "say": ["calendar"],
+        "shown": "= 10082"
+      },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "event \"Look at the lemongrass\" Tue 2026-11-03 15:45"
+      },
+      {
+        "hint": "(new topic) asks for the photos in the The Chestnut and Chestnut 2026 album",
+        "say": ["The Chestnut and Chestnut 2026", "album"],
+        "shown": "party \"Radek Ozturk\" · role=Supplier\nparty \"Flavia Geazaby\" · role=Mentor\nparty \"Bongani Thorsen\" · role=Mentor\nparty \"Yasmin Fedorov\" · role=Mentor"
+      },
+      {
+        "hint": "follow-up: asks to put the sixth one in the Cribbage meetup album",
+        "say": ["sixth", "Cribbage meetup", "album"],
+        "shown": "photo \"Flavia's lighthouse\" Mon 2026-10-26 19:39 · album_titles=The Chestnut and Chestnut 2026, Ventrilo… favorite=true\nphoto \"Montreux Bridge at dusk\" Sun 2026-10-18 11:58 · album_titles=Ventriloquism progress, The Chestnut and… favorite=false\nphoto \"New stargazing (02)\" Sun 2026-10-18 09:26 · album_titles=The Chestnut and Chestnut 2026 favorite=false\nphoto \"IMG_2424\" Thu 2026-10-01 18:42 · album_titles=Ventriloquism progress, The Chestnut and… favorite=false\n(+5 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w36-0019",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks for the photos they took last week",
+        "say": ["last week"]
+      },
+      {
+        "hint": "follow-up: asks to put the second one in the Ventriloquism progress album",
+        "say": ["second", "Ventriloquism progress", "album"],
+        "shown": "photo \"Yardarm at sunrise\" Sun 2026-11-01 16:07 · favorite=false\nphoto \"Orchard close-up\" Fri 2026-10-30 10:38 · album_titles=Kaito's burrow, Cribbage meetup favorite=false people=Caoimhe Costa, Enine Lombardi\nphoto \"Kaito with the fuskin\" Wed 2026-10-28 14:37 · album_titles=Cribbage meetup favorite=false\nphoto \"Flavia's lighthouse\" Mon 2026-10-26 19:39 · album_titles=The Chestnut and Chestnut 2026, Ventrilo… favorite=true\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w36-0020",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      { "hint": "asks who is coming to the crate", "say": ["crate", "who"] },
+      {
+        "hint": "follow-up: asks what events they're coming to",
+        "say": [],
+        "shown": "party \"Kaito Scrivener\" · role=Choir friend"
+      },
+      {
+        "hint": "follow-up: asks to move the third one to wednesday and cancel the fourth one",
+        "say": ["third", "wednesday", "fourth"],
+        "shown": "event \"Shalmere trip\" Tue 2026-08-25 09:00\nevent \"Cribbage meetup at Togastead Deli\" Wed 2026-10-21 18:00\nevent \"Spanish class (week 44)\" Thu 2026-10-29 14:15\nevent \"Call Tiziana about the crate\" Sat 2026-11-07 14:45\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w36-0021",
+    "today": "Tuesday 2026-11-03",
+    "turns": [{ "hint": "asks when the crate is", "say": ["crate", "when"] }],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w36-0022",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks what the last thing they wrote in their journal was",
+        "say": []
+      },
+      {
+        "hint": "(detour) hang on — asks to pull up Flavia (two contacts share the name)",
+        "say": ["Flavia"],
+        "shown": "journal note \"People journal · tired\" Mon 2026-11-02 12:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w36-0023",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "says they paid sixteen euros for pizza — put it in Shalmere trip",
+        "say": ["sixteen euros", "pizza", "Shalmere trip"]
+      },
+      {
+        "hint": "(new topic) asks what's in the Recipes notebook",
+        "say": ["Recipes", "notebook"],
+        "shown": "done: tally.add_expense{description: \"Pizza\", amount_minor: 1600, paid_by: me, group_id: (#2)}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w36-0024",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      { "hint": "asks for the football scores from friday", "say": ["friday"] },
+      {
+        "hint": "(new topic) asks to pull up Shatho Namova",
+        "say": ["Shatho Namova"],
+        "shown": "refuse"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w36-0025",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks for the tax app entry in the locker (the row, not the password)",
+        "say": ["tax app"]
+      },
+      {
+        "hint": "(new topic) asks for their favourite photos",
+        "say": [],
+        "shown": "locker item \"Thomex tax app\" · type=login"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w36-0026",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the tax app is",
+        "say": ["tax app", "password"]
+      },
+      {
+        "hint": "(new topic) asks to add forty euros for wine to the stargazing gang group, they paid",
+        "say": ["forty euros", "wine", "stargazing gang"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks what pictures are in the Shalmere 2026 album",
+        "say": ["Shalmere 2026", "album"],
+        "shown": "done: tally.add_expense{description: \"Wine\", amount_minor: 4000, paid_by: me, group_id: (#2)}"
+      },
+      {
+        "hint": "(detour) hang on — asks if anyone owes them cash",
+        "say": [],
+        "shown": "photo \"Orchard at dusk\" Tue 2026-10-13 13:29 · album_titles=Shalmere 2026 favorite=false\nphoto \"The lemongrass at dusk\" Sat 2026-09-05 09:00 · album_titles=Shalmere 2026, The Chestnut and Chestnut… favorite=false\nphoto \"Burrow at Dysoe Pier\" Fri 2026-08-28 19:49 · album_titles=Kaito's burrow, Shalmere 2026, The Chest… favorite=false\nphoto \"Shalmere Quay at low tide\" Wed 2026-08-26 16:19 · album_titles=Shalmere 2026, Kaito's burrow favorite=false\n(+2 more)"
+      },
+      {
+        "hint": "back to the Shalmere 2026 album — asks for the fifth one on that list",
+        "say": ["fifth"],
+        "shown": "party \"Carys Krishnan\" · owed_to_me_minor=15000 role=Friend from the gym\nparty \"Luca Distow\" · owed_to_me_minor=7500 role=Mum\nparty \"Owyn Zaimere\" · owed_to_me_minor=500 role=Old school friend"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w36-0027",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks to find their locksmith in contacts",
+        "say": ["locksmith"]
+      },
+      {
+        "hint": "(new topic) asks to look up Kasia",
+        "say": ["Kasia"],
+        "shown": "party \"Shaen Oakes\" · role=Locksmith"
+      },
+      {
+        "hint": "follow-up: asks what events they're coming to",
+        "say": [],
+        "shown": "party \"Kasia Distow\" · role=Son"
+      },
+      {
+        "hint": "follow-up: asks the same about Raimine Szabo ('and Raimine Szabo?')",
+        "say": ["Raimine Szabo"],
+        "shown": "event \"Coffee with Tiskou\" Sat 2026-11-14 18:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w36-0028",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "hint": "asks if they have any to-dos about hollyhock",
+        "say": ["hollyhock", "to-dos"]
+      },
+      {
+        "hint": "(new topic) asks for anything to do with Kandy",
+        "say": ["Kandy"],
+        "shown": "task \"Repair the hollyhock at Montreux Bridge\" Thu 2026-10-15 17:00 · status=needs-action"
+      },
+      {
+        "hint": "follow-up: about the third one, asks for their contact details",
+        "say": ["third"],
+        "shown": "note \"Notes from Kandy Climbing Wall\" Sat 2026-08-15 10:01 · notebooks=Recipes\nparty \"Kandy Glazing\" · role=Glazier\nparty \"Kandy Accountants\" · role=Accountant\ncontact channel \"Kandy Glazing — work\" · kind=email value=hello@kandyglazing.example\n(+7 more)"
+      },
+      {
+        "hint": "(new topic) asks how much they spent recently",
+        "say": ["recently"],
+        "shown": "contact channel \"Kandy Accountants — office\" · kind=phone value=+33 6 12 34 5280\ncontact channel \"Kandy Accountants — work\" · kind=email value=hello@kandyaccountants.example"
+      },
+      {
+        "hint": "(new topic) asks what the blender deposit came to",
+        "say": ["blender deposit"],
+        "shown": "= 4499"
+      },
+      {
+        "hint": "(new topic) asks to put call with the bank in the calendar tomorrow at 2pm",
+        "say": ["call with the bank", "tomorrow", "at 2pm"],
+        "shown": "= 3399"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  }
+]

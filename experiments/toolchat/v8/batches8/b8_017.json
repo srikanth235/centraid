@@ -1,0 +1,284 @@
+[
+  {
+    "id": "w06-0007",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks to add fourteen euros for Vesna's lunch to Crycombe trip, they paid",
+        "say": ["fourteen euros", "Vesna's lunch", "Crycombe trip"]
+      },
+      {
+        "hint": "(new topic) asks what they have about Tealine",
+        "say": ["Tealine"],
+        "shown": "done: tally.add_expense{description: \"Vesna's lunch\", amount_minor: 1400, paid_by: me, group_id: (#2)}"
+      },
+      {
+        "hint": "(new topic) asks which tasks are still open",
+        "say": [],
+        "shown": "event \"Walk with Tealine\" Mon 2026-10-26 07:30\nparty \"Tealine Forziak\" · role=Business partner\ncontact channel \"Tealine Forziak — work\" · kind=email value=tealine.forziak@mail.example\ncontact channel \"Tealine Forziak — home\" · kind=phone value=+351 912 345 633"
+      },
+      {
+        "hint": "follow-up: asks to push the fourth one to wednesday",
+        "say": ["fourth", "wednesday"],
+        "shown": "task \"Recycle the daffodil at Kampot Quay\" Fri 2026-10-23 18:00 · status=in-process effort_min=10\ntask \"Move the poncho\" Wed 2026-10-28 12:00 · status=needs-action\ntask \"Clean the rockpool\" · status=cancelled\ntask \"Collect the glove\" · status=in-process\n(+9 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w06-0008",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      { "hint": "asks what's in their calendar saturday", "say": ["saturday"] },
+      {
+        "hint": "follow-up: asks to move both of them to saturday",
+        "say": ["saturday"],
+        "shown": "event \"Tadpole delivery\" Sat 2026-11-21 07:00\nevent \"Unicycling meetup\" Sat 2026-11-21 20:30"
+      },
+      {
+        "hint": "(new topic) asks to look up Hendan Vrellova",
+        "say": ["Hendan Vrellova"],
+        "shown": "done: reschedule{to: 2026-11-21} on (#1, #2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w06-0009",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      { "hint": "asks how many tasks are due next week", "say": ["next week"] },
+      {
+        "hint": "follow-up: says scrap that, they'll check later themselves",
+        "say": [],
+        "shown": "= 1"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w06-0010",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks when their glove thing is (no kind given)",
+        "say": ["glove"]
+      },
+      {
+        "hint": "(new topic) asks which expenses were over forty euros",
+        "say": ["forty euros"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: asks for only those more than eighty euros",
+        "say": ["eighty euros"],
+        "shown": "expense \"Takeaway (wk 45)\" Wed 2026-11-04 · amount_minor=5350 paid_by=Kerem Westova\nexpense \"Milkjug\" Sun 2026-10-25 · amount_minor=8642 paid_by=Solenne Treverrow\nexpense \"Turret tickets\" Sat 2026-10-24 · amount_minor=14301 paid_by=Seraphina Morescu\nexpense \"Dinner at Kingsbridge Leisure Centre\" Sat 2026-10-17 · amount_minor=11705 paid_by=Owner\n(+9 more)"
+      },
+      {
+        "hint": "(new topic) asks which tasks are still open",
+        "say": [],
+        "shown": "expense \"Milkjug\" Sun 2026-10-25 · amount_minor=8642 paid_by=Solenne Treverrow\nexpense \"Turret tickets\" Sat 2026-10-24 · amount_minor=14301 paid_by=Seraphina Morescu\nexpense \"Dinner at Kingsbridge Leisure Centre\" Sat 2026-10-17 · amount_minor=11705 paid_by=Owner\nexpense \"Marionette hire\" Thu 2026-10-08 · amount_minor=18787 paid_by=Owner\n(+4 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w06-0011",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      { "hint": "asks what glove things they have", "say": ["glove"] },
+      {
+        "hint": "(detour) hang on — asks what the Kingsbridge expenses add up to",
+        "say": ["Kingsbridge"],
+        "shown": "event \"Collect the glove\" Wed 2026-10-28 11:00\nevent \"Glove sale at Kampot Deli\" Thu 2026-11-05 13:30\nexpense \"Glove tickets\" Sun 2026-11-15 · amount_minor=1799 paid_by=Owner\ntask \"Collect the glove\" · status=in-process\n(+1 more)"
+      },
+      {
+        "hint": "back to that — about the first one, asks who's coming to it",
+        "say": ["first"],
+        "shown": "= 16772"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w06-0012",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      { "hint": "asks for everything mentioning Teodor", "say": ["Teodor"] },
+      {
+        "hint": "follow-up: asks to make the bassoon one an hour later",
+        "say": ["bassoon"],
+        "shown": "event \"Bassoon meetup with Teodor\" Mon 2026-11-09 15:30\nparty \"Teodor Revlowick\" · owed_to_them_minor=3500 role=Friend from antenatal\nimportant date \"Birthday — Teodor Revlowick\" Tue 2026-08-04\ncontact channel \"Teodor Revlowick — mobile\" · kind=phone value=+351 912 345 365"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w06-0013",
+    "today": "Sunday 2026-11-15",
+    "turns": [{ "hint": "asks to see photos of Teodor", "say": ["Teodor"] }],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w06-0014",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks when they're next seeing Doleth Summerfield",
+        "say": ["Doleth Summerfield"]
+      },
+      {
+        "hint": "follow-up: asks who else will be there",
+        "say": [],
+        "shown": "event \"Walk with Tealine\" Mon 2026-10-26 07:30"
+      },
+      {
+        "hint": "follow-up: asks if they have a photo of any of them",
+        "say": [],
+        "shown": "party \"Doleth Summerfield\" · role=Glazier\nparty \"Vesna Castellano\" · role=Godparent"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w06-0015",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks for the turret fund expenses above thirty five",
+        "say": ["turret fund", "thirty five"]
+      },
+      {
+        "hint": "follow-up: asks how many that is",
+        "say": [],
+        "shown": "expense \"Takeaway (wk 45)\" Wed 2026-11-04 · amount_minor=5350 paid_by=Kerem Westova\nexpense \"Dinner at Kingsbridge Leisure Centre\" Sat 2026-10-17 · amount_minor=11705 paid_by=Owner\nexpense \"Marionette hire\" Thu 2026-10-08 · amount_minor=18787 paid_by=Owner"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w06-0016",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks for the garage portal entry in the locker (the row, not the password)",
+        "say": ["garage portal"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w06-0017",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the garage portal is",
+        "say": ["garage portal", "password"]
+      },
+      {
+        "hint": "(new topic) asks whether they deleted the waterlily photo",
+        "say": ["waterlily", "photo"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w06-0018",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks what is in their Arequipa trip folder",
+        "say": ["Arequipa trip"]
+      },
+      {
+        "hint": "follow-up: asks the same for the Bills folder ('and Bills?')",
+        "say": ["Bills"],
+        "shown": "document \"Woodstove permit\" Sat 2026-10-10 15:19 · folder=Arequipa trip\ndocument \"Arequipa booking receipt\" Sat 2026-08-01 08:57 · folder=Arequipa trip\ndocument \"Pravix vet quote\" Sun 2026-06-21 09:09 · folder=Arequipa trip\ndocument \"Roshaven Reservoir permit\" Thu 2025-11-20 17:48 · folder=Arequipa trip"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w06-0019",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      { "hint": "asks to mark the bollard to-do complete", "say": ["bollard"] },
+      {
+        "hint": "follow-up: corrects: wrong task, they meant the lend one",
+        "say": ["lend"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks to see photos of Shythir",
+        "say": ["Shythir"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks for a task to call the marsh photo next monday",
+        "say": ["call the marsh photo", "next monday"],
+        "shown": "photo \"Inglenook at Crickhowell Marsh\" Wed 2026-08-26 13:01 · album_titles=Crycombe 2026 favorite=false people=Teodor Revlowick, Shythir Paredes"
+      },
+      {
+        "hint": "(new topic) asks when they have the soapmaking",
+        "say": ["soapmaking"],
+        "shown": "done: schedule.add_task{title: \"Call the marsh photo\", due_at: 2026-11-16}"
+      },
+      {
+        "hint": "follow-up: asks the same about the shovel ('and the shovel?')",
+        "say": ["shovel"],
+        "shown": "event \"Soapmaking fair\" Fri 2026-11-20 15:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w06-0020",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks what their spending came to last week",
+        "say": ["last week"]
+      },
+      {
+        "hint": "(new topic) asks for their shots about squash",
+        "say": ["squash", "shots"],
+        "shown": "= 11050"
+      },
+      {
+        "hint": "follow-up: asks the same about Vesna instead ('what about Vesna?')",
+        "say": ["Vesna"],
+        "shown": "photo \"Squash night 2026\" Sat 2026-05-23 14:43 · album_titles=Crycombe 2026 favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w06-0023",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      { "hint": "asks to delete the Seren note", "say": ["Seren", "note"] },
+      {
+        "hint": "(new topic) asks which task is roughly a an hour job",
+        "say": ["an hour"],
+        "shown": "done: delete{} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  }
+]

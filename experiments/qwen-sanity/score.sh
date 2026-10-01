@@ -20,12 +20,21 @@ for corpus in suite blind holdout; do
         --out "$PREFIX-$corpus.rendered.jsonl"
 done
 
-# one scored file for `run-model --corpus all`
-cat "$PREFIX"-suite.rendered.jsonl "$PREFIX"-blind.rendered.jsonl \
-    "$PREFIX"-holdout.rendered.jsonl > "$PREFIX-scored.jsonl"
+# one scored file, out of whichever corpora this arm actually ran.  A dev
+# variant runs `suite` alone, and scoring the other two would spend the
+# executor's time proving that an arm which produced no blind rows fails every
+# blind session.
+: > "$PREFIX-scored.jsonl"
+WHICH=""
+for corpus in suite blind holdout; do
+    [ -f "$PREFIX-$corpus.rendered.jsonl" ] || continue
+    cat "$PREFIX-$corpus.rendered.jsonl" >> "$PREFIX-scored.jsonl"
+    WHICH="${WHICH:+$WHICH,}$corpus"
+done
+[ "$WHICH" = "suite,blind,holdout" ] && WHICH="all"
 
 cd "$REPO"
 rel=$(python3 -c "import os,sys;print(os.path.relpath(sys.argv[1], sys.argv[2]))" \
       "$PREFIX-scored.jsonl" "$REPO")
 exec cargo run --release -q -p centraid-candidates --bin run-model -- \
-    --corpus all --outputs "$rel"
+    --corpus "$WHICH" --outputs "$rel"

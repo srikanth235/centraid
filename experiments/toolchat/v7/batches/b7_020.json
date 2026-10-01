@@ -1,0 +1,252 @@
+[
+  {
+    "id": "w04-066",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks which places they have exactly two photos from",
+        "say": ["two"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "polite"]
+  },
+  {
+    "id": "w04-067",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks where the Streaming backup codes details are",
+        "say": ["Streaming"]
+      },
+      {
+        "hint": "(new topic) asks for their pictures from Coppice Wood",
+        "say": ["Coppice Wood"]
+      },
+      { "hint": "asks which albums those photos are in", "say": [] },
+      { "hint": "asks how many there are in total", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "polite"]
+  },
+  {
+    "id": "w04-068",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks when they have the training", "say": ["training"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "spoken"]
+  },
+  {
+    "id": "w04-069",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks which tasks they finished today", "say": ["today"] },
+      { "hint": "asks for just the ones due this week", "say": ["this week"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "question"]
+  },
+  {
+    "id": "w04-070",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks when they last caught up with Esme Treverrow",
+        "say": ["Esme Treverrow"]
+      },
+      {
+        "hint": "(new topic) asks to pull up Dorian Blomqvist",
+        "say": ["Dorian Blomqvist"]
+      },
+      {
+        "hint": "(new topic) asks what debts there are between them and Zelda Gunnarsson",
+        "say": ["Zelda Gunnarsson"]
+      },
+      {
+        "hint": "(new topic) asks who they're seeing at the Garden centre",
+        "say": ["Garden centre"]
+      },
+      { "hint": "asks how many that is", "say": [] },
+      { "hint": "asks what else there is apart from the first one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w04-071",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks to find anything to do with Spanish class",
+        "say": ["Spanish class"]
+      },
+      {
+        "hint": "(new topic) asks when they were last in touch with Ysolde Renwick",
+        "say": ["Ysolde Renwick"]
+      },
+      {
+        "hint": "(new topic) asks for the list of places in their photo library",
+        "say": []
+      },
+      { "hint": "(new topic) asks who they owe money to", "say": [] },
+      { "hint": "asks how many that is", "say": [] },
+      {
+        "hint": "asks about the debts with them (all of those people)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "texting"]
+  },
+  {
+    "id": "w04-072",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks to add 30 (money) for parking to the Caravan share group, paid by them",
+        "say": ["Caravan share", "parking"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "texting"]
+  },
+  {
+    "id": "w04-073",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks who is coming to the Chess rehearsal",
+        "say": ["Chess rehearsal"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "spoken"]
+  },
+  {
+    "id": "w04-074",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "says the Move task is done", "say": ["Move"] },
+      {
+        "hint": "(new topic) asks what places they have in their photos",
+        "say": []
+      },
+      { "hint": "asks to see the photos from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks to find anything to do with final",
+        "say": ["final"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      { "hint": "asks what about in their calendar events", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "w04-075",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks to see the diary entries they made this week",
+        "say": ["this week"]
+      },
+      { "hint": "(new topic) asks what is overdue", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "spoken"]
+  },
+  {
+    "id": "w04-076",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks whether they binned the Cabin document",
+        "say": ["Cabin"]
+      },
+      {
+        "hint": "(new topic) asks what debts there are between them and Zelda Gunnarsson",
+        "say": ["Zelda Gunnarsson"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "question"]
+  },
+  {
+    "id": "w04-077",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks for their notes about Deposit tips",
+        "say": ["Deposit tips"]
+      },
+      { "hint": "(new topic) asks what tasks have no due date", "say": [] },
+      { "hint": "asks how many that is", "say": [] },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks to add 25 (money) for museum to the licence fund group, paid by them",
+        "say": ["licence fund", "museum"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "spoken"]
+  },
+  {
+    "id": "w05-000",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks for their locker entries about Garage code",
+        "say": ["Garage code"]
+      },
+      {
+        "hint": "asks the same about Streaming instead ('what about Streaming?')",
+        "say": ["Streaming"]
+      },
+      { "hint": "(new topic) asks to see their favourited pics", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w05-001",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks whether Bastian Pendry's birthday is coming up",
+        "say": ["Bastian Pendry"]
+      },
+      {
+        "hint": "(new topic) asks whose birthdays are coming up next 2 weeks",
+        "say": ["next 2 weeks"]
+      },
+      {
+        "hint": "(new topic) asks to log a message with Yolanda (several people are called Yolanda)",
+        "say": ["Yolanda"]
+      },
+      {
+        "hint": "says it was Yolanda Holloway (the Holloway one)",
+        "say": ["Holloway"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "spoken"]
+  },
+  {
+    "id": "w05-002",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks to put 'Coffee with the neighbours' in the calendar monday at 10:30",
+        "say": ["Coffee with the neighbours", "monday"]
+      },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "texting"]
+  }
+]

@@ -1,0 +1,278 @@
+[
+  {
+    "id": "g0715",
+    "today": "Wednesday 2025-06-11",
+    "turns": [
+      {
+        "canonical": "show (expenses that (spent_on during last month))",
+        "gloss": "List expenses where the date spent falls last month.",
+        "move": "first",
+        "hint": "what did I spend last month"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0483",
+    "today": "Sunday 2025-11-09",
+    "turns": [
+      {
+        "canonical": "show (expenses that (spent_on during this month))",
+        "gloss": "List expenses where the date spent falls this month.",
+        "move": "first",
+        "hint": "what did I spend this month"
+      },
+      {
+        "canonical": "show (them that (amount_minor > 3000))",
+        "gloss": "List them (the rows the previous turn answered) where the amount (in pence) is more than / after 3000.",
+        "move": "refine",
+        "hint": "only the ones over thirty"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "gloss": "What is the total amount (in pence) of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "total of those"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0161",
+    "today": "Thursday 2026-01-01",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Bastian\" that (role contains \"colleague\"))",
+        "gloss": "List parties named \"Bastian\" where the role contains \"colleague\".",
+        "move": "first",
+        "hint": "the Bastian I used to work with"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0072",
+    "today": "Monday 2026-07-06",
+    "turns": [
+      {
+        "canonical": "dtstart of (events called \"boiler\")",
+        "gloss": "What is the start time of [events named \"boiler\"]?",
+        "move": "first",
+        "hint": "when is my boiler"
+      },
+      {
+        "canonical": "reschedule{ by: +1h } on (it)",
+        "gloss": "Shift [it (the one row the previous turn is about)] 1 hour later.",
+        "move": "act",
+        "hint": "push it an hour later"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Ursula Tennant\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Ursula Tennant\"], sorted by start time descending (highest/latest first)].",
+        "move": "switch",
+        "hint": "when did I last see/speak to Ursula Tennant"
+      },
+      {
+        "canonical": "dtstart of (events called \"boiler\")",
+        "gloss": "What is the start time of [events named \"boiler\"]?",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      },
+      {
+        "canonical": "refuse: out_of_ontology",
+        "gloss": "Refuse, because the request is outside what this vault/app can do or know (out_of_ontology).",
+        "move": "new",
+        "hint": "user asks to look up the news (outside the vault)"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "h020",
+    "today": "Tuesday 2028-07-18",
+    "turns": [
+      {
+        "canonical": "show (important dates of (parties called \"Cormac\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Cormac\"] where the label contains \"Birthday\".",
+        "move": "first",
+        "hint": "when is Cormac's birthday"
+      },
+      {
+        "canonical": "show (things during next monday)",
+        "gloss": "",
+        "move": "new",
+        "hint": "what's on next monday"
+      },
+      {
+        "canonical": "show (things during tomorrow)",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) dated tomorrow.",
+        "move": "substitute",
+        "hint": "and tomorrow?"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (parties called \"Sol\") that (settled_at is null))",
+        "gloss": "Mark [the obligations linked to [parties named \"Sol\"] where there is no date settled] as settled / paid off.",
+        "move": "new",
+        "hint": "pay off / settle what I owe Sol"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0369",
+    "today": "Thursday 2027-09-23",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Xavier Pellegrini\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Xavier Pellegrini\"], sorted by start time descending (highest/latest first)].",
+        "move": "first",
+        "hint": "when did I last see/speak to Xavier Pellegrini"
+      },
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during last weekend))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls last weekend.",
+        "move": "new",
+        "hint": "tasks ticked off / done last weekend"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0495",
+    "today": "Monday 2026-05-18",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\") ordered by due_at asc)",
+        "gloss": "List tasks where the due date falls before now (already past \u2014 overdue) and the status is not \"completed\", sorted by due date ascending (lowest/earliest first).",
+        "move": "first",
+        "hint": "overdue (past due, not done) tasks"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "act",
+        "hint": "mark the 1st one done"
+      },
+      {
+        "canonical": "reschedule{ to: monday } on (the 2nd one)",
+        "gloss": "Move [the 2nd one (by position in the previous answer)] to monday.",
+        "move": "act",
+        "hint": "move another one by position"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0697",
+    "today": "Monday 2027-05-03",
+    "turns": [
+      {
+        "canonical": "show (obligations of (parties called \"Juno\") that (settled_at is null))",
+        "gloss": "List the obligations linked to [parties named \"Juno\"] where there is no date settled.",
+        "move": "first",
+        "hint": "do I owe Juno anything / does Juno owe me"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0636",
+    "today": "Thursday 2025-11-13",
+    "turns": [
+      {
+        "canonical": "knowledge.create_note{ title: \"Film night picks\" }",
+        "gloss": "Create a note titled \"Film night picks\".",
+        "move": "first",
+        "hint": "make a note called ..."
+      },
+      {
+        "canonical": "show (locker items called \"insurance\")",
+        "gloss": "List locker items named \"insurance\".",
+        "move": "new",
+        "hint": "what's the login for insurance"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0441",
+    "today": "Tuesday 2026-01-20",
+    "turns": [
+      {
+        "canonical": "show (places of (photos called \"mural\"))",
+        "gloss": "List the places linked to [photos named \"mural\"].",
+        "move": "first",
+        "hint": "where was the mural photo taken"
+      },
+      {
+        "canonical": "show ((photos of (it)) except (photos called \"mural\"))",
+        "gloss": "List [the photos linked to [it (the one row the previous turn is about)]] leaving out [photos named \"mural\"].",
+        "move": "act",
+        "hint": "what else did I take there (the excluded photo is the one the SENTENCE named: C13 names it)"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0349",
+    "today": "Thursday 2026-06-04",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Mortgage meeting\", dtstart: tuesday at 19:15, dtend: tuesday at 20:15 }",
+        "gloss": "Put an event titled \"Mortgage meeting\" in the calendar starting tuesday at 19:15 and ending tuesday at 20:15.",
+        "move": "first",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      },
+      {
+        "canonical": "reschedule{ by: +1h } on (it)",
+        "gloss": "Shift [it (the one row the previous turn is about)] 1 hour later.",
+        "move": "act",
+        "hint": "make it an hour later"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "h028",
+    "today": "Tuesday 2025-03-04",
+    "turns": [
+      {
+        "canonical": "balance of (members called \"Otto\") in (groups called \"festival tickets\")",
+        "gloss": "What is the balance of [members named \"Otto\"] within [groups named \"festival tickets\"]?",
+        "move": "first",
+        "hint": "what does Otto owe me for festival tickets"
+      },
+      {
+        "canonical": "show (things during next week)",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) dated next week.",
+        "move": "new",
+        "hint": "what's on next week"
+      },
+      {
+        "canonical": "delete{} on (the 2nd one)",
+        "gloss": "Delete (move to trash) [the 2nd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      },
+      {
+        "canonical": "reschedule{ to: tuesday } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to tuesday.",
+        "move": "act",
+        "hint": "and push it to a day (C12: it = the row just written)"
+      },
+      {
+        "canonical": "show (parties called \"Ilse\" that (role contains \"colleague\"))",
+        "gloss": "List parties named \"Ilse\" where the role contains \"colleague\".",
+        "move": "new",
+        "hint": "the Ilse I used to work with"
+      }
+    ],
+    "registers": ["terse", "question"]
+  }
+]

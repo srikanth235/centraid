@@ -1,0 +1,32 @@
+[package]
+name = "centraid-nativetools"
+description = "The flat tool surface for a small on-device model: eight tools over the real vault, the date-expression evaluator, observations and the system prompt (experiments/toolchat/native/SPEC.md)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_nativetools"
+path = "src/lib.rs"
+
+[[bin]]
+name = "nativetools"
+path = "src/bin/nativetools.rs"
+
+[dependencies]
+centraid-apps-kit = { path = "../apps/kit" }
+centraid-apps-tally = { path = "../apps/tally" }
+centraid-ontology = { path = "../ontology" }
+centraid-search = { path = "../search" }
+centraid-vault = { path = "../vault" }
+base64.workspace = true
+jiff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile.workspace = true

@@ -1,0 +1,284 @@
+[
+  {
+    "id": "g0500",
+    "today": "Wednesday 2027-07-21",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"wash\" that (deleted_at is not null))",
+        "gloss": "List tasks named \"wash\" where the date deleted (trash) is set.",
+        "move": "first",
+        "hint": "did I delete / bin the wash task"
+      },
+      {
+        "canonical": "schedule.restore_task{} on (it)",
+        "gloss": "Restore [it (the one row the previous turn is about)] from the trash.",
+        "move": "act",
+        "hint": "put it back"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0595",
+    "today": "Monday 2027-11-22",
+    "turns": [
+      {
+        "canonical": "show (important dates of (parties called \"Rhiannon\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Rhiannon\"] where the label contains \"Birthday\".",
+        "move": "first",
+        "hint": "when is Rhiannon's birthday"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0327",
+    "today": "Wednesday 2027-10-13",
+    "turns": [
+      {
+        "canonical": "knowledge.create_note{ title: \"Car insurance comparison\" }",
+        "gloss": "Create a note titled \"Car insurance comparison\".",
+        "move": "first",
+        "hint": "make a note called ..."
+      },
+      {
+        "canonical": "show (first 1 of (journal notes ordered by created_at desc))",
+        "gloss": "List the first 1 of [journal notes, sorted by date created descending (highest/latest first)].",
+        "move": "new",
+        "hint": "my last journal entry"
+      },
+      {
+        "canonical": "show (important dates of (parties called \"Wendell\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Wendell\"] where the label contains \"Birthday\".",
+        "move": "switch",
+        "hint": "when is Wendell's birthday"
+      },
+      {
+        "canonical": "knowledge.create_note{ title: \"Car insurance comparison\" }",
+        "gloss": "Create a note titled \"Car insurance comparison\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0385",
+    "today": "Monday 2027-05-24",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"Foxglove Farm\"))",
+        "gloss": "List the members linked to [groups named \"Foxglove Farm\"].",
+        "move": "first",
+        "hint": "who's in the Foxglove Farm group"
+      },
+      {
+        "canonical": "same? (members called \"Stellan\") (parties called \"Stellan Lomax\")",
+        "gloss": "Are [members named \"Stellan\"] and [parties named \"Stellan Lomax\"] the same (do they share a row)?",
+        "move": "new",
+        "hint": "is that Stellan the same Stellan as in my contacts (full name said)"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0006",
+    "today": "Wednesday 2028-02-16",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"sunday football\"))",
+        "gloss": "List the members linked to [groups named \"sunday football\"].",
+        "move": "first",
+        "hint": "who's in the sunday football group"
+      },
+      {
+        "canonical": "same? (members called \"Ismael\") (parties called \"Ismael Underhill\")",
+        "gloss": "Are [members named \"Ismael\"] and [parties named \"Ismael Underhill\"] the same (do they share a row)?",
+        "move": "new",
+        "hint": "is that Ismael the same Ismael as in my contacts (full name said)"
+      },
+      {
+        "canonical": "schedule.propose_event{ summary: \"Wedding rehearsal\", dtstart: monday at 13:45, dtend: monday at 14:45 }",
+        "gloss": "Put an event titled \"Wedding rehearsal\" in the calendar starting monday at 13:45 and ending monday at 14:45.",
+        "move": "new",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      },
+      {
+        "canonical": "reschedule{ by: +1h } on (it)",
+        "gloss": "Shift [it (the one row the previous turn is about)] 1 hour later.",
+        "move": "act",
+        "hint": "make it an hour later"
+      },
+      {
+        "canonical": "refuse: out_of_ontology",
+        "gloss": "Refuse, because the request is outside what this vault/app can do or know (out_of_ontology).",
+        "move": "new",
+        "hint": "user asks to check whether the trains to Saltmarsh Cafe are running (outside the vault)"
+      },
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\"))",
+        "gloss": "List tasks where the due date falls before now (already past \u2014 overdue) and the status is not \"completed\".",
+        "move": "new",
+        "hint": "overdue (past due, not done) tasks"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0456",
+    "today": "Wednesday 2028-03-01",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Kalinda\") that (kind = \"email\"))",
+        "gloss": "List the contact channels linked to [parties named \"Kalinda\"] where the kind is \"email\".",
+        "move": "first",
+        "hint": "what's Kalinda's email"
+      },
+      {
+        "canonical": "people.log_interaction{ kind: \"call\", since: today } on (parties called \"Kalinda\")",
+        "gloss": "Log that I had a call with [parties named \"Kalinda\"].",
+        "move": "act",
+        "hint": "log that I called him/her today (pronoun -> the name, C14)"
+      },
+      {
+        "canonical": "dtstart of (events called \"day\")",
+        "gloss": "What is the start time of [events named \"day\"]?",
+        "move": "new",
+        "hint": "when is my day"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0701",
+    "today": "Saturday 2025-07-12",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Orthodontist visit\", dtstart: next wednesday at 09:00, dtend: next wednesday at 10:00 }",
+        "gloss": "Put an event titled \"Orthodontist visit\" in the calendar starting next wednesday at 09:00 and ending next wednesday at 10:00.",
+        "move": "first",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0685",
+    "today": "Thursday 2028-11-02",
+    "turns": [
+      {
+        "canonical": "people.log_interaction{ kind: \"call\", since: yesterday } on (parties called \"Greta Upton\")",
+        "gloss": "Log that I had a call with [parties named \"Greta Upton\"].",
+        "move": "first",
+        "hint": "log a call with Greta Upton (yesterday)"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0481",
+    "today": "Wednesday 2026-10-28",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "first",
+        "hint": "open tasks with no due date"
+      },
+      {
+        "canonical": "nothing",
+        "gloss": "Do nothing: the member withdraws the request.",
+        "move": "undo",
+        "hint": "actually never mind, forget it"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0068",
+    "today": "Tuesday 2028-07-25",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Mauricio\") that (settled_at is null))",
+        "gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Mauricio\"] where there is no date settled]?",
+        "move": "first",
+        "hint": "how much do I owe Mauricio"
+      },
+      {
+        "canonical": "people.settle_debt{} on (it)",
+        "gloss": "Mark [it (the one row the previous turn is about)] as settled / paid off.",
+        "move": "act",
+        "hint": "settle it (R-X2: the rows the sum folded)"
+      },
+      {
+        "canonical": "dtstart of (events called \"Porto\")",
+        "gloss": "What is the start time of [events named \"Porto\"]?",
+        "move": "new",
+        "hint": "when is my Porto"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "h032",
+    "today": "Monday 2027-12-13",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Yara\") that (kind = \"email\"))",
+        "gloss": "List the contact channels linked to [parties named \"Yara\"] where the kind is \"email\".",
+        "move": "first",
+        "hint": "what's Yara's email"
+      },
+      {
+        "canonical": "show (contact channels of (parties called \"Dalia Sutcliffe\") that (kind = \"email\"))",
+        "gloss": "List the contact channels linked to [parties named \"Dalia Sutcliffe\"] where the kind is \"email\".",
+        "move": "substitute",
+        "hint": "and Dalia Sutcliffe's?"
+      },
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during last weekend))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls last weekend]?",
+        "move": "switch",
+        "hint": "what did I spend last weekend"
+      },
+      {
+        "canonical": "show (contact channels of (parties called \"Yara\") that (kind = \"email\"))",
+        "gloss": "List the contact channels linked to [parties named \"Yara\"] where the kind is \"email\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Elio\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Elio\"], sorted by start time descending (highest/latest first)].",
+        "move": "new",
+        "hint": "when did I last see/speak to Elio"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Joaquim Whitlock\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Joaquim Whitlock\"], sorted by start time descending (highest/latest first)].",
+        "move": "substitute",
+        "hint": "and Joaquim Whitlock?"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0110",
+    "today": "Thursday 2025-10-16",
+    "turns": [
+      {
+        "canonical": "show (photos called \"new\")",
+        "gloss": "List photos named \"new\".",
+        "move": "first",
+        "hint": "find the new photo"
+      },
+      {
+        "canonical": "show (places of (it))",
+        "gloss": "List the places linked to [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "where was it taken"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  }
+]

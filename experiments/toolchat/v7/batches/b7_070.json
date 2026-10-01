@@ -1,0 +1,224 @@
+[
+  {
+    "id": "w14-036",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      {
+        "hint": "asks to move the loft task to thursday",
+        "say": ["loft", "thursday"]
+      },
+      {
+        "hint": "(new topic) asks what is on their calendar saturday",
+        "say": ["saturday"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "texting"]
+  },
+  {
+    "id": "w14-037",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      { "hint": "asks what they have filed under Taxes", "say": ["Taxes"] },
+      { "hint": "asks which of those are starred", "say": [] },
+      { "hint": "asks what else is in the same folder", "say": [] },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "spoken"]
+  },
+  {
+    "id": "w14-038",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      {
+        "hint": "asks how much has been spent in the Roof kitty group",
+        "say": ["Roof kitty"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "polite"]
+  },
+  {
+    "id": "w14-039",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      {
+        "hint": "asks to save the locker combination 72509 in the locker",
+        "say": ["locker combination", "72509"]
+      },
+      {
+        "hint": "(new topic) asks to save the safe code 73877 in the locker",
+        "say": ["safe code", "73877"]
+      },
+      {
+        "hint": "(new topic) asks which to-dos are past their due date and not done",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "question"]
+  },
+  {
+    "id": "w14-040",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      {
+        "hint": "asks for the documents in the Garden folder",
+        "say": ["Garden"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "polite"]
+  },
+  {
+    "id": "w14-041",
+    "today": "Monday 2027-07-26",
+    "turns": [{ "hint": "asks what Bastian's email is", "say": ["Bastian"] }],
+    "versions": 3,
+    "registers": ["terse", "question", "polite"]
+  },
+  {
+    "id": "w14-042",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      { "hint": "asks for their to-dos about Label", "say": ["Label"] },
+      { "hint": "asks which of those are still to do", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "spoken"]
+  },
+  {
+    "id": "w14-043",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      {
+        "hint": "asks to delete all their shopping list notes",
+        "say": ["shopping list"]
+      },
+      { "hint": "(new topic) asks what's left on their to-do list", "say": [] },
+      {
+        "hint": "asks for just the weekend ones (this weekend)",
+        "say": ["weekend"]
+      },
+      {
+        "hint": "asks for just the ones on saturday (saturday)",
+        "say": ["saturday"]
+      },
+      {
+        "hint": "(new topic) asks what their plan for next friday looks like, earliest first",
+        "say": ["next friday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "spoken"]
+  },
+  {
+    "id": "w14-044",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      { "hint": "asks what's in the vault about Roof", "say": ["Roof"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "polite"]
+  },
+  {
+    "id": "w14-045",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      { "hint": "asks what they have filed under Legal", "say": ["Legal"] },
+      {
+        "hint": "asks to add a task for friday to deal with 'Knife agreement'",
+        "say": ["friday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "polite"]
+  },
+  {
+    "id": "w14-046",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      { "hint": "asks to pull up Otto Coldwell", "say": ["Otto Coldwell"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "question"]
+  },
+  {
+    "id": "w14-047",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      {
+        "hint": "asks to put back the draft note they deleted",
+        "say": ["draft"]
+      },
+      {
+        "hint": "asks to add a task for friday to deal with 'Quiz night draft'",
+        "say": ["friday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "question"]
+  },
+  {
+    "id": "w14-048",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      {
+        "hint": "asks which to-dos are past their due date and not done",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks what the login for Pharmacy portal is (not the password)",
+        "say": ["Pharmacy portal"]
+      },
+      {
+        "hint": "(new topic) asks which locker entries mention Supermarket login",
+        "say": ["Supermarket login"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "question"]
+  },
+  {
+    "id": "w14-049",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      {
+        "hint": "asks what their plan for wednesday looks like, earliest first",
+        "say": ["wednesday"]
+      },
+      {
+        "hint": "asks for just the adviser ones among those",
+        "say": ["adviser"]
+      },
+      { "hint": "asks who else will be there", "say": [] },
+      {
+        "hint": "(new topic) asks who Yolanda Everard is",
+        "say": ["Yolanda Everard"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "texting"]
+  },
+  {
+    "id": "w14-050",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      { "hint": "asks for train times to the city", "say": [] },
+      {
+        "hint": "(new topic) asks for everything mentioning Helmet",
+        "say": ["Helmet"]
+      },
+      { "hint": "asks for just the ones due this week", "say": ["this week"] },
+      {
+        "hint": "(new topic) asks which tasks take about 30 minutes",
+        "say": ["30"]
+      },
+      { "hint": "asks for just the fridge ones among those", "say": ["fridge"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "spoken"]
+  }
+]

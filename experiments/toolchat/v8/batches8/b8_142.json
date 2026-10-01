@@ -1,0 +1,331 @@
+[
+  {
+    "id": "w40-0046",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks for pictures with Iara Dvorak in them",
+        "say": ["Iara Dvorak"]
+      },
+      {
+        "hint": "(detour) hang on — asks what's due friday",
+        "say": ["friday"],
+        "shown": "photo \"Ginger at Jathoe Meadows\" Sat 2027-07-17 19:54 · favorite=false people=Iara Dvorak, Antoine Czarnecki\nphoto \"Raffaella at Pecs Cliffs\" Wed 2027-06-09 08:51 · album_titles=Pecs 2027 favorite=false people=Iara Dvorak, Rohit Horak, Raffaella Ramsay"
+      },
+      {
+        "hint": "back to the photos of Iara Dvorak — asks for just the ones from last month",
+        "say": ["last month"],
+        "shown": "task \"Cancel the prism\" Fri 2027-08-13 09:00 · status=needs-action effort_min=20"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w40-0047",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks what the abseiling deposit came to",
+        "say": ["abseiling deposit"]
+      },
+      {
+        "hint": "(new topic) asks which group the butterscotch expense is in",
+        "say": ["butterscotch"],
+        "shown": "= 15942"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w40-0048",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in salmon collective",
+        "say": ["salmon collective", "how much"]
+      },
+      {
+        "hint": "follow-up: about the first one, asks who's in it",
+        "say": ["first"],
+        "shown": "= 91259"
+      },
+      {
+        "hint": "follow-up: asks how many of them there are",
+        "say": [],
+        "shown": "member \"Benedetta Draivosen\"\nmember \"Raffaella Ramsay\""
+      },
+      {
+        "hint": "(detour) hang on — asks what's in the vault about Raffaella",
+        "say": ["Raffaella"],
+        "shown": "= 2"
+      },
+      {
+        "hint": "back to that — asks how many of them there are",
+        "say": [],
+        "shown": "note \"Gift ideas for Raffaella\" Mon 2027-03-22 19:42 · notebooks=Drynnoe house\nparty \"Raffaella Ramsay\" · role=Neighbour across the road\nparty \"Raffaella Novova\" · role=Business partner\ncontact channel \"Raffaella Ramsay — mobile\" · kind=phone value=+44 7700 900840\n(+3 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w40-0049",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in salmon collective (the expenses)",
+        "say": ["salmon collective"]
+      },
+      {
+        "hint": "follow-up: asks to delete the sixth one",
+        "say": ["sixth"],
+        "shown": "expense \"Petrol (wk 31)\" Sat 2027-08-07 · amount_minor=18769 paid_by=Benedetta Draivosen\nexpense \"Windmill refund\" Fri 2027-08-06 · amount_minor=2750 paid_by=Raffaella Ramsay\nexpense \"Dennery repair\" Tue 2027-08-03 · amount_minor=465 paid_by=Owner\nexpense \"Windmill\" Mon 2027-08-02 · amount_minor=3499 paid_by=Benedetta Draivosen\n(+7 more)"
+      },
+      {
+        "hint": "(new topic) asks for the total they spent recently",
+        "say": ["recently"],
+        "shown": "done: tally.delete_expense{} on (#8)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w40-0050",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to add the trombone picture to the Lacrosse lesson highlights album",
+        "say": ["trombone", "Lacrosse lesson highlights", "album"]
+      },
+      {
+        "hint": "(new topic) asks to order more printer ink online",
+        "say": [],
+        "shown": "done: media.add_to_album{album_id: (#4)} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks if the call antoine appointment can go to next friday instead",
+        "say": ["call antoine", "next friday"],
+        "shown": "refuse"
+      },
+      {
+        "hint": "(new topic) says they visited Caspar and asks to log it",
+        "say": ["Caspar", "visited"],
+        "shown": "done: reschedule{to: 2027-08-13} on (#5)"
+      },
+      {
+        "hint": "follow-up: corrects: sorry, it was Nilufar, not them",
+        "say": ["Nilufar"],
+        "shown": "done: people.log_interaction{kind: \"visit\"} on (#6)"
+      },
+      {
+        "hint": "(new topic) asks to book a table at a restaurant for tomorrow",
+        "say": ["tomorrow"],
+        "shown": "done: people.log_interaction{kind: \"visit\"} on (#11)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w40-0051",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks for the photos they took this month",
+        "say": ["this month"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w40-0052",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks what photos they have from Jathoe Lido",
+        "say": ["Jathoe Lido"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w40-0053",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks what Iskander Rivas's email is",
+        "say": ["Iskander Rivas"]
+      },
+      {
+        "hint": "(new topic) asks when they're next seeing Piotr",
+        "say": ["Piotr"],
+        "shown": "contact channel \"Iskander Rivas — work\" · kind=email value=iskander.rivas@example.net"
+      },
+      {
+        "hint": "follow-up: asks to move both of them to saturday",
+        "say": ["saturday"],
+        "shown": "event \"Bocce lesson with Piotr\" Mon 2027-07-12 17:00\nevent \"Walk with Benedetta\" Fri 2027-08-13 17:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w40-0054",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks how many tasks due last week they have",
+        "say": ["last week", "how many"]
+      },
+      {
+        "hint": "(new topic) asks how much they owe Antoine Czarnecki",
+        "say": ["Antoine Czarnecki"],
+        "shown": "= 5"
+      },
+      {
+        "hint": "(new topic) asks when they were last in touch with Lucasta",
+        "say": ["Lucasta"],
+        "shown": "= 4800"
+      },
+      {
+        "hint": "(new topic) asks what they ticked off last weekend",
+        "say": ["last weekend"],
+        "shown": "activity \"interaction — Lucasta Draivosen\" Thu 2027-08-05 18:15"
+      },
+      {
+        "hint": "follow-up: says scrap that, they'll check later themselves",
+        "say": [],
+        "shown": "task \"Post the linen for Iara\" Sun 2027-08-15 18:00 · status=completed"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w40-0055",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks which tasks due last week they have",
+        "say": ["last week", "which"]
+      },
+      {
+        "hint": "follow-up: asks how many of them there are",
+        "say": [],
+        "shown": "task \"Ask Piotr about the ivy\" Mon 2027-07-26 12:00 · status=needs-action effort_min=20\ntask \"Research Gosou's turnip\" Thu 2027-07-29 18:00 · status=needs-action\ntask \"Return the cradle\" Sat 2027-07-31 09:00 · status=completed\ntask \"Walk the dog (wk 30)\" Tue 2027-07-27 09:00 · status=completed\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w40-0056",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks for photos taken at Jathoe Lido",
+        "say": ["Jathoe Lido"]
+      },
+      {
+        "hint": "(detour) hang on — asks when they're next at Kinsale Tearooms",
+        "say": ["Kinsale Tearooms"],
+        "shown": "photo \"Abseiling at Kinsale Jetty\" Mon 2027-07-26 10:48 · favorite=false\nphoto \"Pretzel at night (04)\" Wed 2027-07-21 15:24 · album_titles=Lacrosse lesson highlights favorite=false people=Hugo Draivosen\nphoto \"Pretzel at night (03)\" Wed 2027-07-21 15:23 · album_titles=Lacrosse lesson highlights favorite=false\nphoto \"Pretzel at night (02)\" Wed 2027-07-21 15:22 · album_titles=Abseiling 2027, Pecs 2027 favorite=false\n(+4 more)"
+      },
+      {
+        "hint": "back to the Jathoe Lido photos — asks for just the ones from last month",
+        "say": ["last month"],
+        "shown": "event \"Squash night at Kinsale Tearooms\" Sun 2027-08-08 13:45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w40-0057",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      { "hint": "asks who they owe money to", "say": [] },
+      {
+        "hint": "follow-up: asks to narrow that to anything about Dietrich",
+        "say": ["Dietrich"],
+        "shown": "party \"Mahala Dietrich\" · owed_to_them_minor=2000 role=Supplier\nparty \"Rohit Horak\" · owed_to_them_minor=1200 role=University friend\nparty \"Dorie Vrestova\" · owed_to_them_minor=4800 role=Old school friend\nparty \"Antoine Czarnecki\" · owed_to_them_minor=4800 role=Old flatmate"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w40-0058",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      { "hint": "asks what the night came to", "say": ["night"] },
+      {
+        "hint": "(new topic) says they had a call with Raffaella and asks to log it (two contacts are called Raffaella; the message doesn't say which)",
+        "say": ["Raffaella", "call"],
+        "shown": "= 5700"
+      },
+      {
+        "hint": "follow-up: says it was Raffaella Ramsay",
+        "say": ["Raffaella Ramsay"],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w40-0059",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to pull up the rudder close-up thing",
+        "say": ["rudder close-up"]
+      },
+      {
+        "hint": "(new topic) asks who is coming to the walk",
+        "say": ["walk"],
+        "shown": "photo \"Rudder close-up\" Tue 2026-06-23 16:59 · favorite=false"
+      },
+      {
+        "hint": "(new topic) asks to undelete the tadpole task",
+        "say": ["tadpole", "task"],
+        "shown": "party \"Kofi Iyer\" · role=Neighbour upstairs\nparty \"Kofi Fenwick\" · role=Roofer\nparty \"Piotr Drullani\" · role=Client\nparty \"Iara Dvorak\" · role=Friend from antenatal"
+      },
+      {
+        "hint": "(new topic) asks to move both Antoine things (the task and the calendar entry) to tuesday",
+        "say": ["Antoine", "tuesday"],
+        "shown": "done: restore{} on (#7)"
+      },
+      {
+        "hint": "(new topic) asks what they wrote in their journal last month",
+        "say": ["last month", "diary"],
+        "shown": "done: reschedule{to: 2027-08-10} on (#8, #11)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w40-0060",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to settle up with Raffaella in salmon collective",
+        "say": ["Raffaella", "salmon collective", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks who they're seeing at the chiropodist",
+        "say": ["chiropodist"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#4) in (#1)} on (#4)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  }
+]

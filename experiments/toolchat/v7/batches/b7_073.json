@@ -1,0 +1,250 @@
+[
+  {
+    "id": "w15-003",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks when they last caught up with Winifred Rasmussen",
+        "say": ["Winifred Rasmussen"]
+      },
+      {
+        "hint": "(new topic) asks what time the Pension is",
+        "say": ["Pension"]
+      },
+      { "hint": "asks who's coming to it", "say": [] },
+      {
+        "hint": "(new topic) asks what birthdays or anniversaries there are next 2 weeks",
+        "say": ["next 2 weeks"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "texting"]
+  },
+  {
+    "id": "w15-004",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks for the latest football scores", "say": [] },
+      {
+        "hint": "(new topic) asks what time the session is",
+        "say": ["session"]
+      },
+      { "hint": "asks who else will be there", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "polite"]
+  },
+  {
+    "id": "w15-005",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks where the Chess club app details are",
+        "say": ["Chess club"]
+      },
+      {
+        "hint": "asks the same about club instead ('what about club?')",
+        "say": ["club"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w15-006",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks what they have on the 12th", "say": ["the 12th"] },
+      { "hint": "asks which of those are about garden", "say": ["garden"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "polite"]
+  },
+  {
+    "id": "w15-007",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks to see the documents they marked with a star",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks what they have about winter",
+        "say": ["winter"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "texting"]
+  },
+  {
+    "id": "w15-008",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks to star the Piano document", "say": ["Piano"] },
+      {
+        "hint": "(new topic) asks for the Library login entry",
+        "say": ["Library"]
+      },
+      {
+        "hint": "(new topic) asks to move the kitchen task to wednesday",
+        "say": ["kitchen", "wednesday"]
+      },
+      {
+        "hint": "(new topic) asks for Coral Tolliver's mobile number",
+        "say": ["Coral Tolliver"]
+      },
+      {
+        "hint": "(new topic) asks for their notes about Carpet",
+        "say": ["Carpet"]
+      },
+      {
+        "hint": "asks the same about Birthday instead ('what about Birthday?')",
+        "say": ["Birthday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "spoken"]
+  },
+  {
+    "id": "w15-009",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks to add a task 'Email the dentist'",
+        "say": ["Email the dentist"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "spoken"]
+  },
+  {
+    "id": "w15-010",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks for the pictures they marked as favourites", "say": [] },
+      { "hint": "takes it back: never mind", "say": [] },
+      { "hint": "asks which albums those photos are in", "say": [] },
+      { "hint": "asks to see the photos in it", "say": [] },
+      { "hint": "(new topic) asks who they still have to pay back", "say": [] },
+      { "hint": "asks what else there is apart from the second one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  },
+  {
+    "id": "w15-011",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks to put 'Book club' in the calendar next friday at 14:00",
+        "say": ["Book club", "next friday"]
+      },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "(new topic) asks to add 120 (money) for petrol to the share group, paid by them",
+        "say": ["share", "petrol"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "texting"]
+  },
+  {
+    "id": "w15-012",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks to find anything to do with Ashcombe",
+        "say": ["Ashcombe"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "question"]
+  },
+  {
+    "id": "w15-013",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks if they have any notes about steps", "say": ["steps"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "w15-014",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks which to-dos are past their due date and not done",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks who they're seeing at the Physio",
+        "say": ["Physio"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "polite"]
+  },
+  {
+    "id": "w15-015",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks to delete all their reading notes notes",
+        "say": ["reading notes"]
+      },
+      { "hint": "(new topic) asks what they got done today", "say": ["today"] },
+      {
+        "hint": "(new topic) asks for the Chess club app entry",
+        "say": ["Chess club"]
+      },
+      {
+        "hint": "(new topic) asks what the wifi is at the School",
+        "say": ["School"]
+      },
+      {
+        "hint": "asks the same about card instead ('what about card?')",
+        "say": ["card"]
+      },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "polite"]
+  },
+  {
+    "id": "w15-016",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks if they have any expenses about Museum entry",
+        "say": ["Museum entry"]
+      },
+      {
+        "hint": "(new topic) asks to find the calendar events on Swimming",
+        "say": ["Swimming"]
+      },
+      {
+        "hint": "asks for just the ones on thursday (thursday)",
+        "say": ["thursday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w15-017",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks to log that they had a coffee with Leopold",
+        "say": ["Leopold"]
+      },
+      {
+        "hint": "(new topic) asks which important dates fall next month",
+        "say": ["next month"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "polite"]
+  }
+]

@@ -1,0 +1,332 @@
+[
+  {
+    "id": "g0025",
+    "today": "Friday 2026-03-13",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during next tuesday) ordered by due_at asc)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's due next tuesday (open tasks)"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "act",
+        "hint": "tick one off by position"
+      },
+      {
+        "canonical": "reschedule{ to: in 3 days } on (the 3rd one)",
+        "gloss": "Move [the 3rd one (by position in the previous answer)] to in 3 days.",
+        "move": "act",
+        "hint": "push another to a day"
+      },
+      {
+        "canonical": "knowledge.create_note{ title: \"Christmas card list\" }",
+        "gloss": "Create a note titled \"Christmas card list\".",
+        "move": "new",
+        "hint": "make a note called ..."
+      },
+      {
+        "canonical": "knowledge.delete_note{} on (it)",
+        "gloss": "Delete (move to trash) [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "delete it again"
+      },
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during last weekend))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls last weekend.",
+        "move": "new",
+        "hint": "what did I do/take/spend over the weekend (past tense)"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "h003",
+    "today": "Friday 2028-06-23",
+    "turns": [
+      {
+        "canonical": "people.log_interaction{ kind: \"call\", since: today } on (parties called \"Yannick\")",
+        "gloss": "Log that I had a call with [parties named \"Yannick\"].",
+        "move": "first",
+        "hint": "log a call with Yannick (today)"
+      },
+      {
+        "canonical": "show (things during tomorrow)",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) dated tomorrow.",
+        "move": "switch",
+        "hint": "what's on tomorrow"
+      },
+      {
+        "canonical": "people.log_interaction{ kind: \"call\", since: today } on (parties called \"Yannick\")",
+        "gloss": "Log that I had a call with [parties named \"Yannick\"].",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0069",
+    "today": "Wednesday 2028-08-16",
+    "turns": [
+      {
+        "canonical": "dtstart of (events called \"quiz\")",
+        "gloss": "What is the start time of [events named \"quiz\"]?",
+        "move": "first",
+        "hint": "when is my quiz"
+      },
+      {
+        "canonical": "reschedule{ to: saturday } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to saturday.",
+        "move": "act",
+        "hint": "move it to another day"
+      },
+      {
+        "canonical": "show (things during tuesday)",
+        "gloss": "",
+        "move": "new",
+        "hint": "what's on tuesday"
+      },
+      {
+        "canonical": "delete{} on (the 1st one)",
+        "gloss": "Delete (move to trash) [the 1st one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      },
+      {
+        "canonical": "reschedule{ to: thursday } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to thursday.",
+        "move": "act",
+        "hint": "and push it to a day (C12: it = the row just written)"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0185",
+    "today": "Wednesday 2028-11-01",
+    "turns": [
+      {
+        "canonical": "balance of (members called \"Vesna Falkenberg\") in (groups called \"Ski chalet 2027\")",
+        "gloss": "What is the balance of [members named \"Vesna Falkenberg\"] within [groups named \"Ski chalet 2027\"]?",
+        "move": "first",
+        "hint": ""
+      },
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "gloss": "List parties where the amount I owe them is set.",
+        "move": "new",
+        "hint": "who do I owe money to"
+      },
+      {
+        "canonical": "dtstart of (events called \"service\")",
+        "gloss": "What is the start time of [events named \"service\"]?",
+        "move": "switch",
+        "hint": "when is my service"
+      },
+      {
+        "canonical": "balance of (members called \"Vesna Falkenberg\") in (groups called \"Ski chalet 2027\")",
+        "gloss": "What is the balance of [members named \"Vesna Falkenberg\"] within [groups named \"Ski chalet 2027\"]?",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0572",
+    "today": "Monday 2026-11-02",
+    "turns": [
+      {
+        "canonical": "knowledge.create_note{ title: \"Kitchen measurements\" }",
+        "gloss": "Create a note titled \"Kitchen measurements\".",
+        "move": "first",
+        "hint": "make a note called ..."
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "h023",
+    "today": "Tuesday 2027-08-10",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "first",
+        "hint": "open tasks with no due date"
+      },
+      {
+        "canonical": "reschedule{ to: tuesday } on (the 2nd one)",
+        "gloss": "Move [the 2nd one (by position in the previous answer)] to tuesday.",
+        "move": "act",
+        "hint": "give one a date"
+      },
+      {
+        "canonical": "tally.add_expense{ amount_minor: 950, description: \"Wine for the party\" }",
+        "gloss": "Add an expense \"Wine for the party\" of 9.50 (950 pence).",
+        "move": "new",
+        "hint": "log an expense of 9.50"
+      },
+      {
+        "canonical": "tally.delete_expense{} on (it)",
+        "gloss": "Delete (move to trash) [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "actually delete that"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0462",
+    "today": "Wednesday 2027-05-26",
+    "turns": [
+      {
+        "canonical": "balance of (members called \"Margit\") in (groups called \"present\")",
+        "gloss": "What is the balance of [members named \"Margit\"] within [groups named \"present\"]?",
+        "move": "first",
+        "hint": "what does Margit owe me for present"
+      },
+      {
+        "canonical": "balance of (members called \"Gideon\") in (groups called \"present\")",
+        "gloss": "What is the balance of [members named \"Gideon\"] within [groups named \"present\"]?",
+        "move": "substitute",
+        "hint": "and Gideon?"
+      },
+      {
+        "canonical": "knowledge.create_note{ title: \"Holiday ideas\" }",
+        "gloss": "Create a note titled \"Holiday ideas\".",
+        "move": "new",
+        "hint": "make a note called ..."
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0147",
+    "today": "Tuesday 2025-04-22",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Horatio\" that (role contains \"colleague\"))",
+        "gloss": "List parties named \"Horatio\" where the role contains \"colleague\".",
+        "move": "first",
+        "hint": "the Horatio I used to work with"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (it) ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [it (the one row the previous turn is about)], sorted by start time descending (highest/latest first)].",
+        "move": "act",
+        "hint": "when did I last speak to them"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0381",
+    "today": "Saturday 2025-11-01",
+    "turns": [
+      {
+        "canonical": "show (photos during last weekend)",
+        "gloss": "List photos dated last weekend.",
+        "move": "first",
+        "hint": "what did I do/take/spend over the weekend (past tense)"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Uriel\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Uriel\"], sorted by start time descending (highest/latest first)].",
+        "move": "switch",
+        "hint": "when did I last see/speak to Uriel"
+      },
+      {
+        "canonical": "show (photos during last weekend)",
+        "gloss": "List photos dated last weekend.",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0187",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "canonical": "show locker items",
+        "gloss": "List locker items.",
+        "move": "first",
+        "hint": ""
+      },
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "gloss": "List parties where the amount I owe them is set.",
+        "move": "new",
+        "hint": "who do I owe money to"
+      },
+      {
+        "canonical": "show (contact channels of (the 1st one) that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [the 1st one (by position in the previous answer)] where the kind is \"phone\".",
+        "move": "act",
+        "hint": "the Nth one's number"
+      },
+      {
+        "canonical": "schedule.delete_event{} on (events called \"physio\")",
+        "gloss": "Delete (move to trash) [events named \"physio\"].",
+        "move": "new",
+        "hint": "delete/trash the physio events"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0692",
+    "today": "Friday 2026-12-04",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Quincy\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Quincy\"], sorted by start time descending (highest/latest first)].",
+        "move": "first",
+        "hint": "when did I last see/speak to Quincy"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0243",
+    "today": "Sunday 2026-07-12",
+    "turns": [
+      {
+        "canonical": "balance of (members called \"Yannick\") in (groups called \"doubles\")",
+        "gloss": "What is the balance of [members named \"Yannick\"] within [groups named \"doubles\"]?",
+        "move": "first",
+        "hint": "what does Yannick owe me for doubles"
+      },
+      {
+        "canonical": "balance of (members called \"Vesna\") in (groups called \"doubles\")",
+        "gloss": "What is the balance of [members named \"Vesna\"] within [groups named \"doubles\"]?",
+        "move": "substitute",
+        "hint": "and Vesna?"
+      },
+      {
+        "canonical": "schedule.add_task{ title: \"Cancel the gym membership\", due_at: 2026-09-04 }",
+        "gloss": "Add a task titled \"Cancel the gym membership\" due Friday 2026-09-04.",
+        "move": "new",
+        "hint": "add a task"
+      },
+      {
+        "canonical": "schedule.delete_task{} on (it)",
+        "gloss": "Delete (move to trash) [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "scrap that, delete it"
+      }
+    ],
+    "registers": ["terse", "question"]
+  }
+]

@@ -1,0 +1,269 @@
+[
+  {
+    "id": "w19-0030",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks how many photos taken this week they have",
+        "say": ["this week", "how many"]
+      },
+      {
+        "hint": "(new topic) asks who they owe money to",
+        "say": [],
+        "shown": "= 3"
+      },
+      {
+        "hint": "follow-up: asks how much that is in all",
+        "say": [],
+        "shown": "party \"Rhona Famsen\" · owed_to_them_minor=7500 role=Friend from the market\nparty \"Yejin Crennard\" · owed_to_them_minor=2000 role=Daughter\nparty \"Berit Lansen\" · owed_to_them_minor=2500 role=Godparent"
+      },
+      {
+        "hint": "follow-up: asks if they have a photo of any of them",
+        "say": [],
+        "shown": "= 12000"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w19-0031",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks which photos taken this week they have",
+        "say": ["this week", "which"]
+      },
+      {
+        "hint": "follow-up: about the hedgehog one, asks which album it's in",
+        "say": ["hedgehog"],
+        "shown": "photo \"Sunflower at night\" Thu 2027-03-18 13:29 · album_titles=Byblos 2027 favorite=false\nphoto \"Marigold at dusk\" Thu 2027-03-18 09:50 · album_titles=Walks round Café Zoby favorite=false\nphoto \"Hedgehog in the garden\" Tue 2027-03-16 11:01 · album_titles=Coral progress, Walks round Café Zoby favorite=false"
+      },
+      {
+        "hint": "follow-up: asks what else is in that album",
+        "say": [],
+        "shown": "album \"Walks round Café Zoby\"\nalbum \"Coral progress\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w19-0032",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks to make the walk half an hour earlier",
+        "say": ["walk", "half an hour earlier"]
+      },
+      {
+        "hint": "follow-up: corrects: wrong event, they meant the tearooms one",
+        "say": ["tearooms"],
+        "shown": "done: reschedule{by: -30m} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks if the petanque appointment can go to sunday instead",
+        "say": ["petanque", "sunday"],
+        "shown": "done: reschedule{by: -30m} on (#2)"
+      },
+      {
+        "hint": "follow-up: corrects: wrong event, they meant the Adele one",
+        "say": ["Adele"],
+        "shown": "done: reschedule{to: 2027-03-21} on (#8)"
+      },
+      {
+        "hint": "(new topic) asks how many documents are in the Contracts folder",
+        "say": ["Contracts"],
+        "shown": "done: reschedule{to: 2027-03-21} on (#16)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w19-0033",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks to clear out the contacts notes",
+        "say": ["contacts", "note"]
+      },
+      {
+        "hint": "follow-up: says no wait, undo that",
+        "say": [],
+        "shown": "done: delete{} on (#1, #2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w19-0035",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks what Doleth's balance with them is in the petanque crew group",
+        "say": ["Doleth", "petanque crew"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w19-0036",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks to log five euros of taxi in petanque crew, paid by them",
+        "say": ["five euros", "taxi", "petanque crew"]
+      },
+      {
+        "hint": "(new topic) asks to make the cheesemaking an hour earlier",
+        "say": ["cheesemaking", "an hour earlier"],
+        "shown": "done: tally.add_expense{description: \"Taxi\", amount_minor: 500, paid_by: me, group_id: (#1)}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w19-0038",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the payroll app is",
+        "say": ["payroll app", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w19-0039",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks to dump all their passwords into a spreadsheet",
+        "say": []
+      },
+      {
+        "hint": "(new topic) says they paid five euros for snacks — put it in Byblos",
+        "say": ["five euros", "snacks", "Byblos"],
+        "shown": "refuse"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w19-0040",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks to reserve a table at Café Zoby for tomorrow",
+        "say": ["Café Zoby", "tomorrow"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w19-0041",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks for their pictures about marigold",
+        "say": ["marigold", "pictures"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w19-0042",
+    "today": "Saturday 2027-03-20",
+    "turns": [{ "hint": "asks for the total spent in July", "say": ["July"] }],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w19-0043",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      { "hint": "asks to trash the lesson locker entry", "say": ["lesson"] },
+      {
+        "hint": "follow-up: takes it back: scratch that, put it back",
+        "say": [],
+        "shown": "done: locker.trash_item{} on (#5)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w19-0045",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks what the last thing they wrote in their journal was",
+        "say": []
+      },
+      {
+        "hint": "(detour) hang on — asks for the photos they took this week",
+        "say": ["this week"],
+        "shown": "journal note \"People journal · hopeful\" Fri 2027-03-19 12:00"
+      },
+      {
+        "hint": "(new topic) asks to reveal the password for the club",
+        "say": ["club", "password"],
+        "shown": "photo \"Sunflower at night\" Thu 2027-03-18 13:29 · album_titles=Byblos 2027 favorite=false\nphoto \"Marigold at dusk\" Thu 2027-03-18 09:50 · album_titles=Walks round Café Zoby favorite=false\nphoto \"Hedgehog in the garden\" Tue 2027-03-16 11:01 · album_titles=Coral progress, Walks round Café Zoby favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w19-0046",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks how many photos taken this month they have",
+        "say": ["this month", "how many"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w19-0047",
+    "today": "Saturday 2027-03-20",
+    "turns": [
+      {
+        "hint": "asks which photos taken this month they have",
+        "say": ["this month", "which"]
+      },
+      {
+        "hint": "(new topic) asks if they have any shots about Noemie",
+        "say": ["Noemie", "shots"],
+        "shown": "photo \"Sunflower at night\" Thu 2027-03-18 13:29 · album_titles=Byblos 2027 favorite=false\nphoto \"Marigold at dusk\" Thu 2027-03-18 09:50 · album_titles=Walks round Café Zoby favorite=false\nphoto \"Hedgehog in the garden\" Tue 2027-03-16 11:01 · album_titles=Coral progress, Walks round Café Zoby favorite=false\nphoto \"Snooker meetup 2027\" Thu 2027-03-11 20:12 · favorite=true\n(+5 more)"
+      },
+      {
+        "hint": "(new topic) asks to delete all their viewing appointments",
+        "say": ["viewing", "appointment"],
+        "shown": "photo \"Noemie at Dennoe Gardens\" Tue 2027-01-26 16:22 · album_titles=Byblos 2027 favorite=false"
+      },
+      {
+        "hint": "(new topic) asks to see the diary entries they made last week",
+        "say": ["last week", "diary"],
+        "shown": "done: delete{} on (#11, #12)"
+      },
+      {
+        "hint": "(new topic) asks when their Cemzumere thing is (no kind given)",
+        "say": ["Cemzumere"],
+        "shown": "journal note \"People journal · low\" Sun 2027-03-14 12:00\njournal note \"People journal · calm\" Sat 2027-03-13 12:00\njournal note \"People journal · tired\" Thu 2027-03-11 12:00\njournal note \"People journal · low\" Tue 2027-03-09 12:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  }
+]

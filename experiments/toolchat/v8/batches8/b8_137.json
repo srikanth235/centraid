@@ -1,0 +1,322 @@
+[
+  {
+    "id": "w39-0031",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the club account is",
+        "say": ["club account", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w39-0032",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      { "hint": "asks what is still due thursday", "say": ["thursday"] },
+      {
+        "hint": "follow-up: asks to move the first one to saturday and the second one to wednesday",
+        "say": ["first", "saturday", "second", "wednesday"],
+        "shown": "task \"Varnish the nectarine at The Old Wisteria\" Thu 2026-01-15 09:00 · status=needs-action\ntask \"Lend the cormorant\" Thu 2026-01-15 17:00 · status=needs-action"
+      },
+      {
+        "hint": "follow-up: asks the same for tomorrow ('and tomorrow?')",
+        "say": ["tomorrow"],
+        "shown": "done: reschedule{to: 2026-01-10} on (#1) then reschedule{to: 2026-01-14} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks to tick off the first one and delete the second one",
+        "say": ["first", "second"],
+        "shown": "task \"Varnish the nectarine at The Old Wisteria\" Sat 2026-01-10 09:00 · status=needs-action\ntask \"Sell the badger at The Old Cockpit\" Sat 2026-01-10 17:00 · status=in-process effort_min=20"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w39-0033",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks to mark the debt with Brelleth Palmqvist as paid",
+        "say": ["Brelleth Palmqvist"]
+      },
+      {
+        "hint": "(new topic) asks for the guest wifi details",
+        "say": ["guest", "wifi"],
+        "shown": "done: people.settle_debt{} on (#2)"
+      },
+      {
+        "hint": "follow-up: says nah, leave it",
+        "say": [],
+        "shown": "locker item \"Guest wifi\" · type=wifi"
+      },
+      {
+        "hint": "(new topic) asks what the Farton trip total is so far",
+        "say": ["Farton trip"],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w39-0034",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks which tasks they finished last weekend",
+        "say": ["last weekend"]
+      },
+      {
+        "hint": "(new topic) asks whether they binned the shelf photo",
+        "say": ["shelf", "photo"],
+        "shown": "task \"Ask Briskia about the primrose\" · status=completed effort_min=60"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w39-0035",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks when they have the therapist visit",
+        "say": ["therapist visit"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w39-0036",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks when their draughts thing is (no kind given)",
+        "say": ["draughts"]
+      },
+      {
+        "hint": "follow-up: says actually, don't bother",
+        "say": [],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "(new topic) asks what Flallie Driskino's number is",
+        "say": ["Flallie Driskino"],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w39-0037",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks to move the sanby yard half an hour later",
+        "say": ["sanby yard", "half an hour later"]
+      },
+      {
+        "hint": "follow-up: corrects: wrong event, they meant the visit one",
+        "say": ["visit"],
+        "shown": "done: reschedule{by: +30m} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks what album has the dagger close-up picture",
+        "say": ["dagger close-up"],
+        "shown": "done: reschedule{by: +30m} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w39-0038",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks to settle up with Briskia in Farton trip",
+        "say": ["Briskia", "Farton trip", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks to bring the research task back from the bin",
+        "say": ["research", "task"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#2) in (#1)} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w39-0039",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks to add 40 naira for Briskia's tickets to Farton trip, they paid",
+        "say": ["40 naira", "Briskia's tickets", "Farton trip"]
+      },
+      {
+        "hint": "follow-up: asks for its expenses",
+        "say": [],
+        "shown": "done: tally.add_expense{description: \"Briskia's tickets\", amount_minor: 4000, paid_by: me, group_id: (#1)}"
+      },
+      {
+        "hint": "follow-up: about the tickets one, asks which group it's in",
+        "say": ["tickets"],
+        "shown": "expense \"Briskia's tickets\" Fri 2026-01-09 · amount_minor=4000 paid_by=Owner\nexpense \"Velvet refund\" Thu 2025-10-09 · amount_minor=4009 paid_by=Owner\nexpense \"Farton repair\" Thu 2025-10-09 · amount_minor=19602 paid_by=Bartholomew Nordin\nexpense \"Farton deposit\" Tue 2025-10-07 · amount_minor=16707 paid_by=Chinwe Sowerby\n(+6 more)"
+      },
+      {
+        "hint": "follow-up: asks who's in it",
+        "say": [],
+        "shown": "group \"Farton trip\""
+      },
+      {
+        "hint": "follow-up: asks for pictures with any of those people in",
+        "say": [],
+        "shown": "member \"Briskia Carrington\"\nmember \"Flallie Driskino\"\nmember \"Bartholomew Nordin\"\nmember \"Chinwe Sowerby\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w39-0040",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks for the spending above one hundred and sixty",
+        "say": ["one hundred and sixty"]
+      },
+      {
+        "hint": "(new topic) asks when they're next seeing Forrie Vasconcelos",
+        "say": ["Forrie Vasconcelos"],
+        "shown": "expense \"Bakery run (wk 51)\" Thu 2025-12-18 · amount_minor=19760 paid_by=Gaman Vravridge\nexpense \"Dinner at Sanby Yard\" Fri 2025-12-05 · amount_minor=23667 paid_by=Ailsa Lambert\nexpense \"Farton repair\" Thu 2025-10-09 · amount_minor=19602 paid_by=Bartholomew Nordin\nexpense \"Farton deposit\" Tue 2025-10-07 · amount_minor=16707 paid_by=Chinwe Sowerby\n(+4 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w39-0041",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks to come up with a password for the gym account",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks what events Wysou Netherby is coming to",
+        "say": ["Wysou Netherby"],
+        "shown": "refuse"
+      },
+      {
+        "hint": "follow-up: asks to call off the billiards one",
+        "say": ["billiards"],
+        "shown": "event \"Dinner with Wysou\" Fri 2025-12-19 14:45\nevent \"Billiards workshop with Trollou\" Tue 2025-12-23 17:15\nevent \"Cockpit fitting\" Tue 2026-01-06 19:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w39-0042",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks for the total they spent last month",
+        "say": ["last month"]
+      },
+      { "hint": "follow-up: says never mind", "say": [], "shown": "= 81171" },
+      {
+        "hint": "(new topic) asks which appointments they have wednesday",
+        "say": ["wednesday"],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: asks the same for saturday ('and saturday?')",
+        "say": ["saturday"],
+        "shown": "event \"Macrame club\" Wed 2026-01-14 11:15\nevent \"Nectarine sale at The Old Wisteria\" Wed 2026-01-14 11:45"
+      },
+      {
+        "hint": "follow-up: about the driving one, asks who's coming to it",
+        "say": ["driving"],
+        "shown": "event \"Ganesh's radish party\" Sat 2026-01-10 10:45\nevent \"Driving instructor call\" Sat 2026-01-10 14:45\nevent \"Billiards workshop at The Old Cockpit\" Sat 2026-01-10 17:30"
+      },
+      {
+        "hint": "(new topic) asks what's left to do on the weekly shop (wk 52) plan",
+        "say": ["weekly shop (wk 52)"],
+        "shown": "party \"Galina Gwynne\" · role=Driving instructor"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w39-0043",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks to square their number 17 flat balance with Yaw",
+        "say": ["Yaw", "number 17 flat"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w39-0044",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks which expenses were over eleven naira",
+        "say": ["eleven naira"]
+      },
+      {
+        "hint": "follow-up: asks to delete the second one",
+        "say": ["second"],
+        "shown": "expense \"Bakery run (wk 52)\" Sat 2025-12-27 · amount_minor=3899 paid_by=Owner\nexpense \"Kombucha lesson supplies\" Fri 2025-12-26 · amount_minor=7184 paid_by=Farai Palmqvist\nexpense \"Macrame refund\" Fri 2025-12-26 · amount_minor=3699 paid_by=Owner\nexpense \"Dagger kit\" Thu 2025-12-25 · amount_minor=3236 paid_by=Yaw Gallardo\n(+9 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w39-0045",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      { "hint": "asks who is coming to the dinner", "say": ["dinner", "who"] },
+      {
+        "hint": "follow-up: asks how many that is",
+        "say": [],
+        "shown": "party \"Forrie Vasconcelos\" · role=Landlord\nparty \"Wysou Netherby\" · role=Client"
+      },
+      {
+        "hint": "follow-up: about the Forrie one, asks for their contact details",
+        "say": ["Forrie"],
+        "shown": "= 2"
+      },
+      {
+        "hint": "(detour) hang on — asks who Forrie is",
+        "say": ["Forrie"],
+        "shown": "contact channel \"Forrie Vasconcelos — work\" · kind=phone value=+234 803 555 0573\ncontact channel \"Forrie Vasconcelos — personal\" · kind=email value=forrie.vasconcelos@inbox.example"
+      },
+      {
+        "hint": "follow-up: asks how many that is",
+        "say": [],
+        "shown": "party \"Forrie Vasconcelos\" · role=Landlord"
+      },
+      {
+        "hint": "(new topic) asks how much the copperplate was",
+        "say": ["copperplate"],
+        "shown": "= 1"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  }
+]

@@ -1,0 +1,273 @@
+[
+  {
+    "id": "w01-0041",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      {
+        "hint": "asks to move the paperweight an hour later",
+        "say": ["paperweight", "an hour later"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w01-0043",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      {
+        "hint": "asks what the login for the drum club account is (not the password)",
+        "say": ["drum club", "account"]
+      },
+      {
+        "hint": "(new topic) asks to dump all their passwords into a spreadsheet",
+        "say": [],
+        "shown": "locker item \"Drum club account\" · type=login"
+      },
+      {
+        "hint": "(new topic) asks to settle up their debt with Trynnis Varard",
+        "say": ["Trynnis Varard"],
+        "shown": "refuse"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w01-0044",
+    "today": "Tuesday 2027-01-19",
+    "turns": [{ "hint": "asks to order more printer ink online", "say": [] }],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w01-0045",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      {
+        "hint": "asks which events are at Kanazawa Climbing Wall (by the place itself)",
+        "say": ["Kanazawa Climbing Wall"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w01-0046",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      { "hint": "asks for the total they spent recently", "say": ["recently"] },
+      {
+        "hint": "(new topic) asks how much they spent on Cartomere in total",
+        "say": ["Cartomere"],
+        "shown": "= 16271"
+      },
+      {
+        "hint": "(new topic) asks how many documents they have",
+        "say": [],
+        "shown": "= 12949"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w01-0047",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      {
+        "hint": "asks which steps of the kanazawa climbing job are still open",
+        "say": ["kanazawa climbing"]
+      },
+      {
+        "hint": "(new topic) asks what else is on during the Jermawen trip",
+        "say": ["Jermawen"],
+        "shown": "task \"Lend the sorbet\" · status=needs-action"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w01-0048",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      {
+        "hint": "asks how much the bagpipes hire cost",
+        "say": ["bagpipes hire"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w01-0050",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      {
+        "hint": "asks what the croquet crew group's spending comes to",
+        "say": ["croquet crew"]
+      },
+      {
+        "hint": "(new topic) asks to text Prestou that they're running late",
+        "say": ["Prestou"],
+        "shown": "= 54667"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w01-0051",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      {
+        "hint": "asks for the subtasks of the kanazawa climbing task",
+        "say": ["kanazawa climbing"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w01-0052",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      {
+        "hint": "asks to show the Kanazawa tasks, tick off the first and delete the second",
+        "say": ["Kanazawa"]
+      },
+      {
+        "hint": "(new topic) asks which events are at Cartomere Island (by the place itself)",
+        "say": ["Cartomere Island"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#1) then delete{} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w01-0053",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      {
+        "hint": "asks if they have any shots about Gerran",
+        "say": ["Gerran", "shots"]
+      },
+      {
+        "hint": "(detour) hang on — asks to see the diary entries they made this month",
+        "say": ["this month", "journal"],
+        "shown": "photo \"Gerran at Cartomere Island\" Wed 2026-10-28 17:20 · album_titles=Bruges 2026 favorite=false"
+      },
+      {
+        "hint": "back to the Gerran shots — asks what their notes have on it",
+        "say": ["notes"],
+        "shown": "journal note \"People journal · busy\" Mon 2027-01-18 12:00\njournal note \"People journal · content\" Sun 2027-01-17 12:00\njournal note \"People journal · anxious\" Sat 2027-01-16 12:00\njournal note \"People journal · calm\" Tue 2027-01-12 12:00\n(+1 more)"
+      },
+      {
+        "hint": "(new topic) asks to see the Gyllix savings password itself",
+        "say": ["Gyllix savings", "password"],
+        "shown": "note \"Gift ideas for Gerran\" Mon 2026-11-02 09:24 · notebooks=Work"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w01-0055",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      {
+        "hint": "asks to open the Thusine's hoop album",
+        "say": ["Thusine's hoop", "album"]
+      },
+      {
+        "hint": "follow-up: asks what the third one is",
+        "say": ["third"],
+        "shown": "photo \"Kerosene after the rain\" Thu 2026-12-24 08:21 · album_titles=Thusine's hoop favorite=false\nphoto \"Llinos's pearl\" Wed 2026-06-17 16:06 · album_titles=Thusine's hoop favorite=false\nphoto \"Oar close-up\" Thu 2024-10-10 12:15 · album_titles=Ukulele, Thusine's hoop favorite=false people=Jerome Vitale, Priziel Drertiak"
+      },
+      {
+        "hint": "follow-up: asks for a task to print the close-up photo sunday",
+        "say": ["print the close-up photo", "sunday"],
+        "shown": "photo \"Oar close-up\" Thu 2024-10-10 12:15 · album_titles=Ukulele, Thusine's hoop favorite=false people=Jerome Vitale, Priziel Drertiak"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w01-0056",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      { "hint": "asks who is coming to the pool", "say": ["pool", "who"] },
+      {
+        "hint": "(new topic) asks when they're next seeing Jarrah Cemard",
+        "say": ["Jarrah Cemard"],
+        "shown": "party \"Pistette Aksoy\" · role=Pen pal"
+      },
+      {
+        "hint": "follow-up: asks to make the thimble one an hour later",
+        "say": ["thimble"],
+        "shown": "event \"Coasteering class with Priziel\" Tue 2027-01-19 15:30\nevent \"Tabla class with Priziel\" Fri 2027-01-22 14:15\nevent \"Thimble lesson\" Thu 2027-01-28 16:45"
+      },
+      {
+        "hint": "(new topic) asks which important dates fall this week",
+        "say": ["this week", "week"],
+        "shown": "done: reschedule{by: +1h} on (#9)"
+      },
+      {
+        "hint": "(detour) hang on — asks to list the albums",
+        "say": [],
+        "shown": "important date \"Birthday — Gerran Wousow\" Thu 2027-01-21"
+      },
+      {
+        "hint": "(new topic) asks for their newest photo",
+        "say": [],
+        "shown": "album \"Ukulele\"\nalbum \"Jermawen trips\"\nalbum \"Best of 2027\"\nalbum \"Work\"\n(+6 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w01-0057",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      { "hint": "asks when the pool is", "say": ["pool", "when"] },
+      {
+        "hint": "(new topic) asks what's planned for next friday",
+        "say": ["next friday"],
+        "shown": "event \"Glassblowing night at Ely Pool\" Mon 2027-01-18 20:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w01-0058",
+    "today": "Tuesday 2027-01-19",
+    "turns": [
+      {
+        "hint": "asks for their pictures from Bruges Cliffs",
+        "say": ["Bruges Cliffs"]
+      },
+      {
+        "hint": "follow-up: asks for a task to reply to the cliffs photo next monday",
+        "say": ["reply to the cliffs photo", "next monday"],
+        "shown": "photo \"Bruges Cliffs at low tide\" Wed 2026-10-28 16:52 · album_titles=Bruges 2026 favorite=false"
+      },
+      {
+        "hint": "follow-up: asks whether there's anything in their expenses about it too",
+        "say": ["expenses"],
+        "shown": "done: schedule.add_task{title: \"Reply to the cliffs photo\", due_at: 2027-01-25}"
+      },
+      {
+        "hint": "follow-up: asks how much",
+        "say": [],
+        "shown": "expense \"Bruges Cliffs tickets\" Thu 2026-10-29 · amount_minor=950 paid_by=Chinonso Chukwu"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  }
+]

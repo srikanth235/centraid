@@ -1,0 +1,346 @@
+[
+  {
+    "id": "w25-0057",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks if there's a calendar event at Cosmere Sands",
+        "say": ["Cosmere Sands"]
+      },
+      {
+        "hint": "(new topic) asks what's still on their list",
+        "say": [],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w25-0058",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks for the osprey club entry in the locker (the row, not the password)",
+        "say": ["osprey club"]
+      },
+      {
+        "hint": "(new topic) asks to note down: Wathie likes the cellar",
+        "say": ["Wathie likes the cellar"],
+        "shown": "locker item \"Osprey club login\" · type=login"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w25-0059",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the osprey club is",
+        "say": ["osprey club", "password"]
+      },
+      {
+        "hint": "(new topic) asks to see the shots from Cosmere Sands",
+        "say": ["Cosmere Sands"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks to delete the first one",
+        "say": ["first"],
+        "shown": "photo \"Larch at Cosmere Sands\" Thu 2026-04-02 19:47 · album_titles=Jimhaven 2026 favorite=false people=Anneliese Holloway\nphoto \"Cosmere Sands in the mist\" Thu 2026-04-02 08:51 · album_titles=Jimhaven 2026 favorite=false"
+      },
+      {
+        "hint": "follow-up: corrects: wrong one, they meant the third one",
+        "say": ["third"],
+        "shown": "done: media.delete_asset{} on (#3)"
+      },
+      {
+        "hint": "follow-up: asks whether there's anything in their expenses about it too",
+        "say": ["expenses"],
+        "shown": "done: media.delete_asset{} on (#4)"
+      },
+      {
+        "hint": "follow-up: says scrap that, they'll check later themselves",
+        "say": [],
+        "shown": "expense \"Cosmere Sands repair\" Sat 2026-04-04 · amount_minor=4550 paid_by=Owner\nexpense \"Cosmere Sands delivery\" Thu 2026-04-02 · amount_minor=2400 paid_by=Varir Papadakis"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w26-0001",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "asks when their Treskan thing is (no kind given)",
+        "say": ["Treskan"]
+      },
+      {
+        "hint": "(new topic) asks to move the sharpen task to friday",
+        "say": ["sharpen", "friday"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: corrects: wrong task, they meant the cockpit one",
+        "say": ["cockpit"],
+        "shown": "done: reschedule{to: 2025-03-07} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks what's in their calendar sunday",
+        "say": ["sunday"],
+        "shown": "done: reschedule{to: 2025-03-07} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks the same for wednesday ('and wednesday?')",
+        "say": ["wednesday"],
+        "shown": "event \"Calligraphy session with Selim\" Sun 2025-03-02 08:00\nevent \"Mycology lesson at Kindoe Lighthouse\" Sun 2025-03-02 13:30\nevent \"Shamisen class\" Sun 2025-03-02 19:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w26-0002",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      { "hint": "asks what Treskan things they have", "say": ["Treskan"] },
+      {
+        "hint": "follow-up: says they phoned the third one, log it",
+        "say": ["third"],
+        "shown": "event \"Coffee with Treskan\" Mon 2025-02-24 16:15\nparty \"Treskan Yildiz\" · role=Friend\nparty \"Treskan Aimani\" · role=Dog groomer\nimportant date \"Birthday — Treskan Yildiz\" Sun 2025-03-09\n(+7 more)"
+      },
+      {
+        "hint": "follow-up: corrects: wrong one, they meant the second one",
+        "say": ["second"],
+        "shown": "done: people.log_interaction{kind: \"call\"} on (#3)"
+      },
+      {
+        "hint": "(new topic) asks how much Enou owes them",
+        "say": ["Enou"],
+        "shown": "done: people.log_interaction{kind: \"call\"} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks about the debts with them",
+        "say": [],
+        "shown": "= 3500"
+      },
+      {
+        "hint": "follow-up: says they've paid it, mark it settled",
+        "say": [],
+        "shown": "obligation \"Cockpit top-up\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w26-0003",
+    "today": "Saturday 2025-03-01",
+    "turns": [{ "hint": "asks what's planned for monday", "say": ["monday"] }],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w26-0005",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "asks what the last thing they wrote in their journal was",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks which expenses were over fourteen",
+        "say": ["fourteen"],
+        "shown": "journal note \"People journal · busy\" Fri 2025-02-28 12:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w26-0006",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "asks where they stand with Priziel in flint fund",
+        "say": ["Priziel", "flint fund"]
+      },
+      {
+        "hint": "follow-up: asks the same for Drennette ('and Drennette?')",
+        "say": ["Drennette"],
+        "shown": "= 10516"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w26-0007",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "asks when they were last in touch with Enou Gokhale",
+        "say": ["Enou Gokhale"]
+      },
+      {
+        "hint": "(new topic) asks what documents are in the bin",
+        "say": [],
+        "shown": "activity \"interaction — Enou Gokhale\" Mon 2025-01-27 21:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w26-0008",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "says they visited Treskan today, log it (two contacts are called Treskan)",
+        "say": ["Treskan", "visited"]
+      },
+      {
+        "hint": "follow-up: says it was Treskan Yildiz",
+        "say": ["Treskan Yildiz"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "(new topic) asks what's still on their list",
+        "say": [],
+        "shown": "done: people.log_interaction{kind: \"visit\"} on (#1)"
+      },
+      {
+        "hint": "(detour) hang on — asks what's due monday",
+        "say": ["monday"],
+        "shown": "task \"Ask Cathine about the fireplace\" Thu 2025-01-30 17:00 · status=in-process effort_min=20\ntask \"Sell the organ at Kindoe Community Hall\" Fri 2025-01-31 17:00 · status=needs-action effort_min=90\ntask \"Pay the cleaner (wk 07)\" Mon 2025-02-10 09:00 · status=needs-action\ntask \"Chase the hoop\" · status=needs-action effort_min=90\n(+9 more)"
+      },
+      {
+        "hint": "back to the open tasks — asks to tick off the second one",
+        "say": ["second"],
+        "shown": "task \"Paint the organ\" Mon 2025-03-03 12:00 · status=needs-action effort_min=60"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w26-0009",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "says they visited Treskan (the dog groomer one) today, log it",
+        "say": ["Treskan", "groomer", "visited"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w26-0010",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "asks to delete the mycology photo",
+        "say": ["mycology", "photo"]
+      },
+      {
+        "hint": "(new topic) asks what is still due monday",
+        "say": ["monday"],
+        "shown": "done: media.delete_asset{} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks what they've written in the Travel notebook",
+        "say": ["Travel", "notebook"],
+        "shown": "task \"Paint the organ\" Mon 2025-03-03 12:00 · status=needs-action effort_min=60"
+      },
+      {
+        "hint": "follow-up: asks to narrow that to anything about daffodil",
+        "say": ["daffodil"],
+        "shown": "note \"Weekly review (wk 09)\" Fri 2025-02-28 20:13 · notebooks=Travel\nnote \"Weekly review (wk 07)\" Fri 2025-02-14 11:38 · notebooks=Travel\nnote \"Bracelet wishlist\" Sat 2024-12-21 11:58 · notebooks=Travel\nnote \"Candin plan\" Thu 2024-12-19 22:01 · notebooks=Travel\n(+3 more)"
+      },
+      {
+        "hint": "(detour) hang on — asks what the last thing they wrote in their journal was",
+        "say": [],
+        "shown": "note \"Shomen's daffodil notes\" Thu 2024-12-19 21:31 · notebooks=Travel"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w26-0011",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      { "hint": "asks to delete the dusk photo", "say": ["dusk", "photo"] },
+      {
+        "hint": "(new topic) asks for everything mentioning cockpit",
+        "say": ["cockpit"],
+        "shown": "none"
+      },
+      {
+        "hint": "(detour) hang on — asks for their pictures from Kindoe Community Hall",
+        "say": ["Kindoe Community Hall"],
+        "shown": "photo \"Cockpit at Lucca Lane\" Wed 2024-12-18 10:57 · favorite=true\nphoto \"Cockpit at Kindoe Community Hall\" Mon 2024-10-28 12:23 · favorite=false\ntask \"Borrow the cockpit this week\" Thu 2025-03-27 17:00 · status=cancelled effort_min=20\nobligation \"Cockpit top-up\""
+      },
+      {
+        "hint": "back to the cockpit stuff — asks to put the second one in the Aviemore Arts Centre 2025 album",
+        "say": ["second", "Aviemore Arts Centre 2025", "album"],
+        "shown": "photo \"Trumpet at night\" Thu 2025-02-27 09:36 · favorite=false\nphoto \"Figurine with Tanvi\" Fri 2025-02-07 07:27 · favorite=false people=Tanvi Gillespie, Thusine Isaksen, Wusia Shamow\nphoto \"Cockpit at Kindoe Community Hall\" Mon 2024-10-28 12:23 · favorite=false\nphoto \"IMG_8852\" Tue 2022-04-05 13:41 · album_titles=Fireplace progress favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w26-0012",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "asks for the photos in the Summer 2027 album",
+        "say": ["Summer 2027", "album"]
+      },
+      {
+        "hint": "follow-up: asks to delete the first one",
+        "say": ["first"],
+        "shown": "photo \"Cinder after the rain\" Wed 2025-02-26 11:32 · album_titles=Aviemore Arts Centre 2025, Summer 2027 favorite=false\nphoto \"Anjali at Eilean Hollow (02)\" Fri 2025-02-21 11:09 · album_titles=Summer 2027, Dalat 2024 favorite=true\nphoto \"Periscope at night\" Tue 2025-01-21 09:21 · album_titles=Summer 2027 favorite=false\nphoto \"Melon in the snow\" Sun 2023-04-16 11:28 · album_titles=Summer 2027 favorite=false"
+      },
+      {
+        "hint": "follow-up: takes it back: scratch that, put it back",
+        "say": [],
+        "shown": "done: media.delete_asset{} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w26-0013",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "asks to mark the ask minseo to-do complete",
+        "say": ["ask minseo"]
+      },
+      {
+        "hint": "(new topic) asks to see the shots from January",
+        "say": ["January"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#1)"
+      },
+      {
+        "hint": "follow-up: says never mind",
+        "say": [],
+        "shown": "photo \"Candin close-up\" Sat 2025-01-25 11:44 · favorite=false\nphoto \"Periscope at night\" Tue 2025-01-21 09:21 · album_titles=Summer 2027 favorite=false\nphoto \"Capoeira close-up\" Mon 2025-01-20 10:01 · album_titles=Fireplace progress favorite=false\nphoto \"Przemek at Margaret Yard\" Mon 2025-01-20 09:35 · album_titles=Dalat 2024 favorite=false people=Jonas Borkowski, Przemek Sokolov, Priziel Junzawick\n(+3 more)"
+      },
+      {
+        "hint": "follow-up: about the Przemek one, asks who is in it",
+        "say": ["Przemek"],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  }
+]

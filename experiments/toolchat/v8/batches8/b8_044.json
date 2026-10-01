@@ -1,0 +1,306 @@
+[
+  {
+    "id": "w13-0039",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks to delete all their table pictures",
+        "say": ["table", "picture"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w13-0040",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks to delete all their oven to-dos",
+        "say": ["oven", "to-do"]
+      },
+      {
+        "hint": "follow-up: says oops, undo that",
+        "say": [],
+        "shown": "done: delete{} on (#1, #2, #3, #4)"
+      },
+      {
+        "hint": "(new topic) asks to delete their barley photo",
+        "say": ["barley", "photo"],
+        "shown": "done: restore{} on (#1, #2, #3, #4)"
+      },
+      {
+        "hint": "(new topic) asks for everything mentioning lattice",
+        "say": ["lattice"],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: asks if it's in their to-do list as well",
+        "say": ["to-do list"],
+        "shown": "note \"Lattice shopping list\" Wed 2027-08-11 21:28 · notebooks=Garden log\nexpense \"Lattice\" Mon 2027-08-02 · amount_minor=5299 paid_by=Fennel Wikstrom\ntask \"Buy the lattice at Dreford Pavilion\" Wed 2027-08-25 18:00 · status=needs-action\ntask \"Varnish the lattice at Craster Community Hall\" · status=needs-action"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w13-0042",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks to pull up the anvil contract thing",
+        "say": ["anvil contract"]
+      },
+      {
+        "hint": "(new topic) asks what's left to do on the buy the nutmeg this week plan",
+        "say": ["buy the nutmeg this week"],
+        "shown": "document \"Anvil contract 2026\" Mon 2027-06-21 21:10 · folder=Ystad flat"
+      },
+      {
+        "hint": "(new topic) asks what documents they have linked to Thawick Island",
+        "say": ["Thawick Island"],
+        "shown": "task \"Service the heather\" Mon 2027-09-06 18:00 · status=needs-action\ntask \"Sharpen the colander\" · status=needs-action effort_min=10\ntask \"Return the croissant\" · status=needs-action"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w13-0043",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      { "hint": "asks what the mallet came to", "say": ["mallet"] },
+      {
+        "hint": "(new topic) asks to show the sort tasks, tick off the first and delete the second",
+        "say": ["sort"],
+        "shown": "= 3350"
+      },
+      {
+        "hint": "(new topic) asks what documents they have linked to Craster Community Hall",
+        "say": ["Craster Community Hall"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#1) then delete{} on (#2)"
+      },
+      {
+        "hint": "(new topic) says the gate code is 62159 — keep it in the locker",
+        "say": ["gate code", "62159"],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w13-0044",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in Seswick trip",
+        "say": ["Seswick trip", "how much"]
+      },
+      {
+        "hint": "(new topic) asks what the steps for the buy the lattice at dreford pavilion are",
+        "say": ["buy the lattice at dreford pavilion"],
+        "shown": "= 69085"
+      },
+      {
+        "hint": "follow-up: asks to move the first one to next monday and the second one to monday",
+        "say": ["first", "next monday", "second", "monday"],
+        "shown": "task \"Borrow the amulet\" · status=needs-action effort_min=15\ntask \"Renew the colander\" · status=needs-action effort_min=15\ntask \"Insure the heather\" · status=needs-action"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w13-0045",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in Seswick trip (the expenses)",
+        "say": ["Seswick trip"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w13-0046",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      { "hint": "asks where the door code went", "say": ["door code"] },
+      {
+        "hint": "(new topic) asks to count the pictures from Seswick",
+        "say": ["Seswick"],
+        "shown": "locker item \"Shed door code\" · type=note"
+      },
+      {
+        "hint": "follow-up: asks to make the holiday one an hour later",
+        "say": ["holiday"],
+        "shown": "= 3"
+      },
+      {
+        "hint": "follow-up: asks who else will be there",
+        "say": [],
+        "shown": "done: reschedule{by: +1h} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks if they have a photo of any of them",
+        "say": [],
+        "shown": "party \"Sinead Oduro\" · role=University friend\nparty \"Angharad Ortega\" · role=Partner\nparty \"Laszlo Synacre\" · role=Brother\nparty \"Vaimir Sorham\" · owed_to_me_minor=4800 role=Friend from the allotment"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w13-0047",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in main crew",
+        "say": ["main crew", "how much"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w13-0048",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in main crew (the expenses)",
+        "say": ["main crew"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w13-0049",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks who is coming to the dreford garden",
+        "say": ["dreford garden", "who"]
+      },
+      {
+        "hint": "follow-up: says they phoned the Somchai one, log it",
+        "say": ["Somchai"],
+        "shown": "party \"Jarek Celik\" · role=Neighbour across the road\nparty \"Heloisa Sowerby\" · role=Neighbour\nparty \"Somchai Arbuthnot\" · role=Neighbour upstairs"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w13-0050",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks when the dreford garden is",
+        "say": ["dreford garden", "when"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w13-0051",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks which group the lattice expense is in",
+        "say": ["lattice"]
+      },
+      {
+        "hint": "(detour) hang on — asks what's due wednesday",
+        "say": ["wednesday"],
+        "shown": "group \"Wasoe house share\""
+      },
+      {
+        "hint": "follow-up: asks what else went into that group",
+        "say": [],
+        "shown": "task \"Borrow the ramekin this week\" Wed 2027-09-01 17:00 · status=needs-action effort_min=90"
+      },
+      {
+        "hint": "follow-up: asks to delete the sixth one",
+        "say": ["sixth"],
+        "shown": "expense \"Windsurfing night fee\" Tue 2027-08-24 · amount_minor=300 paid_by=Losuan Colombo\nexpense \"Wicker tickets\" Tue 2027-08-17 · amount_minor=20907 paid_by=Losuan Colombo\nexpense \"Badminton repair\" Mon 2027-08-16 · amount_minor=12462 paid_by=Fennel Wikstrom\nexpense \"Main tickets\" Fri 2027-08-13 · amount_minor=5103 paid_by=Owner\n(+4 more)"
+      },
+      {
+        "hint": "follow-up: says they didn't mean that, bring it back",
+        "say": [],
+        "shown": "done: tally.delete_expense{} on (#9)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w13-0052",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in Wasoe house share",
+        "say": ["Wasoe house share", "how much"]
+      },
+      {
+        "hint": "(detour) hang on — asks for their most recent journal entry",
+        "say": [],
+        "shown": "= 74543"
+      },
+      {
+        "hint": "back to that — asks who's in it",
+        "say": [],
+        "shown": "journal note \"People journal · tired\" Fri 2027-08-27 12:00"
+      },
+      {
+        "hint": "(new topic) asks to pull up the bridge permit thing",
+        "say": ["bridge permit"],
+        "shown": "member \"Losuan Colombo\"\nmember \"Fennel Wikstrom\""
+      },
+      {
+        "hint": "(new topic) says they visited Losuan Colombo and asks to log it",
+        "say": ["Losuan Colombo", "visited"],
+        "shown": "document \"Wasoe Bridge permit\" Thu 2026-10-01 21:15 · folder=Dental"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w13-0053",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in Wasoe house share (the expenses)",
+        "say": ["Wasoe house share"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w13-0054",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks to move the cashew task to saturday",
+        "say": ["cashew", "saturday"]
+      },
+      {
+        "hint": "follow-up: corrects: wrong task, they meant the sell one",
+        "say": ["sell"],
+        "shown": "done: reschedule{to: 2027-09-04} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks which events are at Seswick Pier (by the place itself)",
+        "say": ["Seswick Pier"],
+        "shown": "done: reschedule{to: 2027-09-04} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  }
+]

@@ -1,0 +1,231 @@
+[
+  {
+    "id": "w15-063",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks what they have about Sandoval", "say": ["Sandoval"] },
+      {
+        "hint": "(new topic) asks what's in the vault about contacts",
+        "say": ["contacts"]
+      },
+      { "hint": "asks whether there are any notes about it too", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "question"]
+  },
+  {
+    "id": "w15-064",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks who Vesna is (several people are called Vesna)",
+        "say": ["Vesna"]
+      },
+      { "hint": "asks what else there is apart from the second one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "polite"]
+  },
+  {
+    "id": "w15-065",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks for everything mentioning journal", "say": ["journal"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "texting"]
+  },
+  {
+    "id": "w15-066",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks to log a message with Fern (several people are called Fern)",
+        "say": ["Fern"]
+      },
+      {
+        "hint": "says it was Fern Fernihough (the Fernihough one)",
+        "say": ["Fernihough"]
+      },
+      {
+        "hint": "(new topic) asks to see the diary entries they made last week",
+        "say": ["last week"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "terse"]
+  },
+  {
+    "id": "w15-067",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks what's in the Work notebook", "say": ["Work"] },
+      { "hint": "asks how many that is", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  },
+  {
+    "id": "w15-068",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks what's happening last weekend", "say": ["last weekend"] },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "polite"]
+  },
+  {
+    "id": "w15-069",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks what paperwork is kept in Pet records",
+        "say": ["Pet records"]
+      },
+      {
+        "hint": "(new topic) asks to find anything to do with receipt",
+        "say": ["receipt"]
+      },
+      {
+        "hint": "asks to add a task for saturday to deal with 'Tenancy deposit receipt'",
+        "say": ["saturday"]
+      },
+      {
+        "hint": "asks the same about Pippa instead ('what about Pippa?')",
+        "say": ["Pippa"]
+      },
+      { "hint": "asks for just the work ones among those", "say": ["work"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "question"]
+  },
+  {
+    "id": "w15-070",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks to delete all their reading notes notes",
+        "say": ["reading notes"]
+      },
+      {
+        "hint": "(new topic) asks to add 18 (money) for parking to the Pilates group, paid by them",
+        "say": ["Pilates", "parking"]
+      },
+      {
+        "hint": "(new topic) asks to run through their day last week in time order",
+        "say": ["last week"]
+      },
+      { "hint": "asks for just the violin ones among those", "say": ["violin"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "polite"]
+  },
+  {
+    "id": "w15-071",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks what they have about form", "say": ["form"] },
+      {
+        "hint": "asks the same about Thackeray instead ('what about Thackeray?')",
+        "say": ["Thackeray"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "polite"]
+  },
+  {
+    "id": "w15-072",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks what album has the bike picture", "say": ["bike"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "spoken"]
+  },
+  {
+    "id": "w15-073",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks for everything mentioning Lunchbox",
+        "say": ["Lunchbox"]
+      },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "spoken"]
+  },
+  {
+    "id": "w15-074",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks what the last thing they wrote in their journal was",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks who Greta Rasmussen is",
+        "say": ["Greta Rasmussen"]
+      },
+      {
+        "hint": "(new topic) asks what the share group's spending comes to",
+        "say": ["share"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "terse"]
+  },
+  {
+    "id": "w15-075",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks for Greta Rasmussen's contact card",
+        "say": ["Greta Rasmussen"]
+      },
+      {
+        "hint": "(new topic) asks whether Tove Rasmussen's birthday is coming up",
+        "say": ["Tove Rasmussen"]
+      },
+      { "hint": "(new topic) asks what Dagmar's email is", "say": ["Dagmar"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "w15-076",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks what the wifi is at the School", "say": ["School"] },
+      {
+        "hint": "(new topic) asks for the Choir club account entry",
+        "say": ["Choir club"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "w15-077",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks if they have any to-dos about winter",
+        "say": ["winter"]
+      },
+      {
+        "hint": "(new topic) asks for everything mentioning quote",
+        "say": ["quote"]
+      },
+      {
+        "hint": "(new topic) asks which steps of 'Photograph the knife before winter' are still open",
+        "say": ["Photograph the knife before winter"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  }
+]

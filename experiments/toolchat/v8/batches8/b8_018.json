@@ -1,0 +1,240 @@
+[
+  {
+    "id": "w06-0024",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      { "hint": "asks to delete the log note", "say": ["log", "note"] }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w06-0026",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks which notes mention porcupine",
+        "say": ["porcupine", "notes"]
+      },
+      {
+        "hint": "follow-up: asks whether there's anything in their pictures about it too",
+        "say": ["pictures"],
+        "shown": "note \"Porcupine shopping list\" Wed 2026-10-14 07:17 · notebooks=Soapmaking"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w06-0027",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks for their pictures from Kingsbridge Leisure",
+        "say": ["Kingsbridge Leisure"]
+      },
+      {
+        "hint": "(detour) hang on — asks when they're next seeing Vesna Castellano",
+        "say": ["Vesna Castellano"],
+        "shown": "photo \"Pantry close-up (03)\" Sat 2026-11-14 13:29 · album_titles=Paragliding night highlights favorite=false\nphoto \"Pantry close-up (02)\" Sat 2026-11-14 13:28 · album_titles=Birding 2026, Hurling lesson highlights,… favorite=false\nphoto \"Pantry close-up (01)\" Sat 2026-11-14 13:27 · favorite=false\nphoto \"Pantry close-up\" Mon 2026-11-09 20:57 · album_titles=Hurling lesson highlights favorite=false people=Vilma Sathez, Verity Grevak\n(+3 more)"
+      },
+      {
+        "hint": "back to the Kingsbridge Leisure photos — asks for just the weekend ones",
+        "say": ["weekend"],
+        "shown": "event \"Trip to Crycombe\" Sun 2026-08-23 07:00\nevent \"Walk with Tealine\" Mon 2026-10-26 07:30\nevent \"Shovel repair\" Sun 2026-11-15 09:45\nevent \"Lunch with Vesna\" Sun 2026-11-15 17:15\n(+1 more)"
+      },
+      {
+        "hint": "follow-up: about the first one, asks where it was taken",
+        "say": ["first"],
+        "shown": "photo \"Pantry close-up (03)\" Sat 2026-11-14 13:29 · album_titles=Paragliding night highlights favorite=false\nphoto \"Pantry close-up (02)\" Sat 2026-11-14 13:28 · album_titles=Birding 2026, Hurling lesson highlights,… favorite=false\nphoto \"Pantry close-up (01)\" Sat 2026-11-14 13:27 · favorite=false"
+      },
+      {
+        "hint": "(new topic) asks what the wifi is at the studio",
+        "say": ["studio", "wifi"],
+        "shown": "place \"Kingsbridge Leisure Centre\""
+      },
+      {
+        "hint": "(new topic) asks what they paid for the deposit",
+        "say": ["deposit"],
+        "shown": "locker item \"Studio wifi\" · type=wifi"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w06-0028",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks to bump the whirligig back a day",
+        "say": ["whirligig", "back a day"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w06-0029",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks whether they binned the waterlily photo",
+        "say": ["waterlily", "photo"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w06-0030",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      { "hint": "asks to find the ask nomara", "say": ["ask nomara"] },
+      {
+        "hint": "(detour) hang on — asks what's in the vault about turret",
+        "say": ["turret"],
+        "shown": "note \"Things to ask Nomara\" Sun 2026-07-26 09:14 · notebooks=Eskdale house"
+      },
+      {
+        "hint": "follow-up: asks what else is in that notebook",
+        "say": [],
+        "shown": "event \"Turret viewing\" Tue 2026-11-17 09:00\ndocument \"Turret report\" Wed 2026-11-04 08:05 · folder=Renovation\nnote \"Turret tips\" Tue 2026-10-27 07:55 · notebooks=Soapmaking\nphoto \"Turret close-up\" Fri 2026-10-09 09:20 · album_titles=Crycombe 2026 favorite=false people=Solenne Treverrow\n(+3 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w06-0031",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks to settle up with Brelleth in Hyrby",
+        "say": ["Brelleth", "Hyrby", "settle up"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w06-0032",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks to add fourteen euros for Brelleth's tickets to Hyrby, they paid",
+        "say": ["fourteen euros", "Brelleth's tickets", "Hyrby"]
+      },
+      {
+        "hint": "(new topic) asks to put lunch with Owyn in the calendar sunday at 1pm",
+        "say": ["lunch with Owyn", "sunday", "at 1pm"],
+        "shown": "done: tally.add_expense{description: \"Brelleth's tickets\", amount_minor: 1400, paid_by: me, group_id: (#1)}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w06-0033",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks which steps of the unpack the plum at café kingsbridge job are still open",
+        "say": ["unpack the plum at café kingsbridge"]
+      },
+      {
+        "hint": "(new topic) asks what they paid for the crycombe yard",
+        "say": ["crycombe yard"],
+        "shown": "task \"Post the pantry\" · status=needs-action effort_min=60\ntask \"Return the glove\" · status=needs-action effort_min=60\ntask \"Wrap the milkjug\" · status=in-process effort_min=20"
+      },
+      {
+        "hint": "follow-up: asks how much it was",
+        "say": [],
+        "shown": "= 4857"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w06-0034",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      { "hint": "asks to delete their paint task", "say": ["paint", "task"] },
+      {
+        "hint": "(new topic) asks what's left to do on the order thelel's inglenook plan",
+        "say": ["order thelel's inglenook"],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w06-0035",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks what time the birding thing is (no kind said)",
+        "say": ["birding"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w06-0036",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks the assistant to make up a new router password",
+        "say": []
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w06-0037",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      { "hint": "asks for the studio wifi details", "say": ["studio", "wifi"] },
+      {
+        "hint": "(new topic) asks which events are at Crickhowell Marsh (by the place itself)",
+        "say": ["Crickhowell Marsh"],
+        "shown": "locker item \"Studio wifi\" · type=wifi"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w06-0038",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks how many events next week they have",
+        "say": ["next week", "how many"]
+      },
+      {
+        "hint": "(new topic) asks what the hurling lesson membership details are",
+        "say": ["hurling lesson", "membership"],
+        "shown": "= 11"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w06-0039",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks which events next week they have",
+        "say": ["next week", "which"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  }
+]

@@ -1,0 +1,238 @@
+[
+  {
+    "id": "w10-063",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks what time the trip is", "say": ["trip"] },
+      {
+        "hint": "(new topic) asks when they need to remember Wystan's birthday",
+        "say": ["Wystan"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "texting"]
+  },
+  {
+    "id": "w10-064",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks to add a task 'Check the parcel' for saturday",
+        "say": ["Check the parcel", "saturday"]
+      },
+      { "hint": "(new topic) asks to delete the rules note", "say": ["rules"] },
+      {
+        "hint": "(new topic) asks to see the Quillon album",
+        "say": ["Quillon"]
+      },
+      {
+        "hint": "(new topic) asks to star the Caravan quote document",
+        "say": ["Caravan quote"]
+      },
+      {
+        "hint": "(new topic) asks for Wystan Oakes's number",
+        "say": ["Wystan Oakes"]
+      },
+      { "hint": "(new topic) asks for their favourite photos", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w10-065",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks what's happening next week", "say": ["next week"] },
+      { "hint": "asks how many that is", "say": [] },
+      { "hint": "asks for just the ones on monday (monday)", "say": ["monday"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "polite"]
+  },
+  {
+    "id": "w10-066",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks to add 12 (money) for tickets to the Cheese group, paid by them",
+        "say": ["Cheese", "tickets"]
+      },
+      {
+        "hint": "(new topic) asks what paperwork is kept in Car",
+        "say": ["Car"]
+      },
+      { "hint": "(new topic) asks for Umber's mobile number", "say": ["Umber"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "question"]
+  },
+  {
+    "id": "w10-067",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks to log a coffee with Pascal (several people are called Pascal)",
+        "say": ["Pascal"]
+      },
+      {
+        "hint": "(new topic) asks what the drawing share group's spending comes to",
+        "say": ["drawing share"]
+      },
+      { "hint": "takes it back: never mind", "say": [] },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "polite"]
+  },
+  {
+    "id": "w10-068",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks to put 'Pottery taster' in the calendar wednesday at 10:30",
+        "say": ["Pottery taster", "wednesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "w10-069",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks what date Wren Prescott's birthday falls on",
+        "say": ["Wren Prescott"]
+      },
+      {
+        "hint": "(new topic) asks to pull up Pascal Achebe",
+        "say": ["Pascal Achebe"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  },
+  {
+    "id": "w10-070",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks what they still have to do", "say": [] },
+      { "hint": "asks for just the ones due next week", "say": ["next week"] },
+      {
+        "hint": "(new topic) asks what day the Swimming is on",
+        "say": ["Swimming"]
+      },
+      {
+        "hint": "(new topic) asks which important dates fall next 2 weeks",
+        "say": ["next 2 weeks"]
+      },
+      {
+        "hint": "asks for just the ones on wednesday (wednesday)",
+        "say": ["wednesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "texting"]
+  },
+  {
+    "id": "w10-071",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks who Zelda is", "say": ["Zelda"] },
+      {
+        "hint": "asks what events they're coming to (the one person just shown)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w10-072",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks which to-dos are past their due date and not done",
+        "say": []
+      },
+      { "hint": "asks for just the comes ones among those", "say": ["comes"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "question"]
+  },
+  {
+    "id": "w10-073",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks for their most recent journal entry", "say": [] },
+      {
+        "hint": "(new topic) asks what's in the vault about lemon drizzle",
+        "say": ["lemon drizzle"]
+      },
+      {
+        "hint": "asks the same about Birthday instead ('what about Birthday?')",
+        "say": ["Birthday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  },
+  {
+    "id": "w10-074",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks which album the Bonfire photo is in", "say": ["Bonfire"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "spoken"]
+  },
+  {
+    "id": "w10-075",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks for Wilhelmina Varga's phone number",
+        "say": ["Wilhelmina Varga"]
+      },
+      {
+        "hint": "(new topic) asks who Lark is (several people are called Lark)",
+        "say": ["Lark"]
+      },
+      {
+        "hint": "(new topic) asks for the notes in their Pension notebook",
+        "say": ["Pension"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "terse"]
+  },
+  {
+    "id": "w10-076",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks how many events they have next week",
+        "say": ["next week"]
+      },
+      {
+        "hint": "(new topic) asks for the documents in the Bike folder",
+        "say": ["Bike"]
+      },
+      {
+        "hint": "(new topic) asks what's in the vault about Jablonski",
+        "say": ["Jablonski"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "polite"]
+  },
+  {
+    "id": "w10-077",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks for the pictures they marked as favourites", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "question"]
+  }
+]

@@ -1,0 +1,302 @@
+[
+  {
+    "id": "w15-0036",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks what's gone into number 44 flat",
+        "say": ["number 44 flat"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w15-0038",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks to see the shots from Wyvgeholm Hollow",
+        "say": ["Wyvgeholm Hollow"]
+      },
+      {
+        "hint": "follow-up: asks where it was taken",
+        "say": [],
+        "shown": "photo \"Anya at Wyvgeholm Hollow\" Fri 2026-05-29 15:49 · album_titles=Viola, Summer 2026, Wyvgeholm 2026 favorite=true people=Vruwyn Ueda, Vranir Gauthier, Anya Baisescu"
+      },
+      {
+        "hint": "(detour) hang on — asks what's in the vault about Bhavna",
+        "say": ["Bhavna"],
+        "shown": "place \"Wyvgeholm Hollow\""
+      },
+      {
+        "hint": "back to the Wyvgeholm Hollow photos — asks to see the photos from there",
+        "say": [],
+        "shown": "event \"Oboe class with Bhavna\" Sun 2026-06-14 19:30\nparty \"Bhavna Huskani\" · owed_to_them_minor=4800 role=Choir friend\nimportant date \"Birthday — Bhavna Huskani\" Thu 2026-10-15\ncontact channel \"Bhavna Huskani — personal\" · kind=email value=bhavna.huskani@mail.example"
+      },
+      {
+        "hint": "follow-up: asks for a task to check the hollow photo tuesday",
+        "say": ["check the hollow photo", "tuesday"],
+        "shown": "photo \"Anya at Wyvgeholm Hollow\" Fri 2026-05-29 15:49 · album_titles=Viola, Summer 2026, Wyvgeholm 2026 favorite=true people=Vruwyn Ueda, Vranir Gauthier, Anya Baisescu"
+      },
+      {
+        "hint": "follow-up: asks whether there's anything in their expenses about it too",
+        "say": ["expenses"],
+        "shown": "done: schedule.add_task{title: \"Check the hollow photo\", due_at: 2026-07-21}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w15-0039",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks for the photos from the Wyvgeholm trip",
+        "say": ["Wyvgeholm"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w15-0040",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "says next monday — add a task to email Grerra about the crumpet",
+        "say": ["email Grerra about the crumpet", "next monday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w15-0041",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks how many photos they took on the Wyvgeholm trip",
+        "say": ["Wyvgeholm"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w15-0042",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks how many documents are in the Bukhara trip folder",
+        "say": ["Bukhara trip"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w15-0044",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks to add thirty five naira for groceries to the Wyvgeholm trip group, they paid",
+        "say": ["thirty five naira", "groceries", "Wyvgeholm trip"]
+      },
+      {
+        "hint": "(new topic) asks how much the mill kit was",
+        "say": ["mill kit"],
+        "shown": "done: tally.add_expense{description: \"Groceries\", amount_minor: 3500, paid_by: me, group_id: (#2)}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w15-0045",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks to clear out the lido pictures",
+        "say": ["lido", "picture"]
+      },
+      {
+        "hint": "follow-up: says they didn't mean that, bring it back",
+        "say": [],
+        "shown": "done: media.delete_asset{} on (#1, #2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w15-0046",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks if they have any notes about seashell",
+        "say": ["seashell", "notes"]
+      },
+      {
+        "hint": "(new topic) asks for their pictures about cowbell close-up",
+        "say": ["cowbell close-up", "pictures"],
+        "shown": "no rows"
+      },
+      {
+        "hint": "follow-up: asks for a task to print the close-up photo saturday",
+        "say": ["print the close-up photo", "saturday"],
+        "shown": "photo \"Cowbell close-up\" Wed 2026-06-17 13:20 · favorite=false"
+      },
+      {
+        "hint": "follow-up: asks the same about Vunnow instead ('what about Vunnow?')",
+        "say": ["Vunnow"],
+        "shown": "done: schedule.add_task{title: \"Print the close-up photo\", due_at: 2026-07-18}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w15-0047",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks when they need to remember Vranir Gauthier's birthday",
+        "say": ["Vranir Gauthier", "birthday"]
+      },
+      {
+        "hint": "(new topic) asks to see the diary entries they made last week",
+        "say": ["last week", "journal"],
+        "shown": "important date \"Birthday — Vranir Gauthier\" Thu 2026-07-16"
+      },
+      {
+        "hint": "(new topic) asks when they have the horseshoe",
+        "say": ["horseshoe"],
+        "shown": "journal note \"People journal · flat\" Sat 2026-07-11 12:00\njournal note \"People journal · tired\" Fri 2026-07-10 12:00\njournal note \"People journal · low\" Thu 2026-07-09 12:00"
+      },
+      {
+        "hint": "follow-up: asks if it's in their to-do list as well",
+        "say": ["to-do list"],
+        "shown": "event \"Horseshoe sale at Ledbury Leisure Centre\" Sat 2026-08-01 09:45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w15-0048",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks who they're having coffee with on friday",
+        "say": ["coffee", "friday"]
+      },
+      {
+        "hint": "follow-up: asks for a task to print the coffee booking friday",
+        "say": ["print the coffee booking", "friday"],
+        "shown": "event \"Coffee with Euan\" Fri 2026-07-17 16:00"
+      },
+      {
+        "hint": "(new topic) asks for the subtasks of the ask iskander task",
+        "say": ["ask iskander"],
+        "shown": "done: schedule.add_task{title: \"Print the coffee booking\", due_at: 2026-07-17}"
+      },
+      {
+        "hint": "follow-up: says all of them are done, tick them off",
+        "say": [],
+        "shown": "task \"Empty the duffel\" Sat 2026-07-04 18:00 · status=needs-action\ntask \"Mend the hatchet\" · status=needs-action\ntask \"Research the duffel\" · status=in-process effort_min=180"
+      },
+      {
+        "hint": "(new topic) asks who is in the Anya photo",
+        "say": ["Anya"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#3, #4, #5)"
+      },
+      {
+        "hint": "follow-up: asks which of those are about Baisescu",
+        "say": ["Baisescu"],
+        "shown": "party \"Vruwyn Ueda\" · role=Choir friend\nparty \"Anya Baisescu\" · role=Electrician\nparty \"Vranir Gauthier\" · owed_to_me_minor=4800 role=Old flatmate"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w15-0049",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks to count the pictures from Wyvgeholm",
+        "say": ["Wyvgeholm"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w15-0050",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks to settle up with Bartosz in number 44 flat",
+        "say": ["Bartosz", "number 44 flat", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks to move the gazebo task to tomorrow and the ikebana to tuesday",
+        "say": ["gazebo", "tomorrow", "ikebana", "tuesday"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#4) in (#1)} on (#4)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w15-0051",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks to add thirty five naira for Bartosz's tickets to number 44 flat, they paid",
+        "say": ["thirty five naira", "Bartosz's tickets", "number 44 flat"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w15-0052",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks to message Apolline the Centre wifi",
+        "say": ["Apolline", "Centre wifi"]
+      },
+      {
+        "hint": "(new topic) asks who their coffee on friday is with",
+        "say": ["coffee", "friday"],
+        "shown": "refuse"
+      },
+      {
+        "hint": "(new topic) asks to see the shots from Wyvgeholm Hollow",
+        "say": ["Wyvgeholm Hollow"],
+        "shown": "event \"Coffee with Euan\" Fri 2026-07-17 16:00"
+      },
+      {
+        "hint": "follow-up: asks if it's in their expenses as well",
+        "say": ["expenses"],
+        "shown": "photo \"Anya at Wyvgeholm Hollow\" Fri 2026-05-29 15:49 · album_titles=Viola, Summer 2026, Wyvgeholm 2026 favorite=true people=Vruwyn Ueda, Vranir Gauthier, Anya Baisescu"
+      },
+      {
+        "hint": "(new topic) asks for their pictures about kettledrum",
+        "say": ["kettledrum", "pictures"],
+        "shown": "expense \"Wyvgeholm Hollow delivery\" Fri 2026-05-29 · amount_minor=14537 paid_by=Owner"
+      },
+      {
+        "hint": "follow-up: asks what their calendar have on it",
+        "say": ["calendar"],
+        "shown": "photo \"Kettledrum in the snow\" Sun 2026-07-12 08:46 · favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  }
+]

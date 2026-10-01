@@ -1,0 +1,233 @@
+[
+  {
+    "id": "w05-018",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks what's in the Cheese notebook", "say": ["Cheese"] },
+      {
+        "hint": "(new topic) asks what tasks are due next week",
+        "say": ["next week"]
+      },
+      { "hint": "asks for just the ones on monday (monday)", "say": ["monday"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "texting"]
+  },
+  {
+    "id": "w05-019",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks who is coming to the inspection", "say": ["inspection"] },
+      { "hint": "asks which of those are about salazar", "say": ["salazar"] },
+      {
+        "hint": "(new topic) asks for Wherry Motors's email address",
+        "say": ["Wherry Motors"]
+      },
+      { "hint": "(new topic) asks to see their favourited pics", "say": [] },
+      {
+        "hint": "(new topic) asks which album the night photo is in",
+        "say": ["night"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  },
+  {
+    "id": "w05-020",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks to find the notes on budget", "say": ["budget"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "terse"]
+  },
+  {
+    "id": "w05-021",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks to put 'Eye test' in the calendar friday at 09:00",
+        "say": ["Eye test", "friday"]
+      },
+      {
+        "hint": "(new topic) asks to log that they had a message with Valeska",
+        "say": ["Valeska"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "question"]
+  },
+  {
+    "id": "w05-022",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks to text the alarm code to the neighbour", "say": [] },
+      {
+        "hint": "(new topic) asks to log a visit with Ulysses (several people are called Ulysses)",
+        "say": ["Ulysses"]
+      },
+      {
+        "hint": "says it was Ulysses Winslow (the Winslow one)",
+        "say": ["Winslow"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "texting"]
+  },
+  {
+    "id": "w05-023",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks what is in their Travel folder", "say": ["Travel"] },
+      {
+        "hint": "(new topic) asks to add 30 (money) for tickets to the weekend group, paid by them",
+        "say": ["weekend", "tickets"]
+      },
+      {
+        "hint": "(new topic) asks which username they use for login",
+        "say": ["login"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "terse"]
+  },
+  {
+    "id": "w05-024",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks what's in the Allotment notebook", "say": ["Allotment"] },
+      { "hint": "asks for just the vocab ones among those", "say": ["vocab"] },
+      {
+        "hint": "(new topic) asks to save the safe code 41922 in the locker",
+        "say": ["safe code", "41922"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "question"]
+  },
+  {
+    "id": "w05-025",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks to see the diary entries they made last week",
+        "say": ["last week"]
+      },
+      {
+        "hint": "(new topic) asks which to-dos are estimated at 45 minutes",
+        "say": ["45"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "texting"]
+  },
+  {
+    "id": "w05-026",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks which open tasks aren't scheduled for any date",
+        "say": []
+      },
+      { "hint": "asks which of those are about insure", "say": ["insure"] },
+      {
+        "hint": "(new topic) asks which locker entries mention Broadband account",
+        "say": ["Broadband account"]
+      },
+      {
+        "hint": "(new topic) asks when Soraya Northcott's birthday is",
+        "say": ["Soraya Northcott"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "question"]
+  },
+  {
+    "id": "w05-027",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks how much has been spent in the crew group",
+        "say": ["crew"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "texting"]
+  },
+  {
+    "id": "w05-028",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks for the photos in the Kestrel Hill album",
+        "say": ["Kestrel Hill"]
+      },
+      {
+        "hint": "(new topic) asks for the photos in the progress album",
+        "say": ["progress"]
+      },
+      {
+        "hint": "(new topic) asks what pictures are in the progress album",
+        "say": ["progress"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "w05-029",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks to log that they had a message with Umber",
+        "say": ["Umber"]
+      },
+      {
+        "hint": "(new topic) asks what's in the vault about Bastian comes",
+        "say": ["Bastian comes"]
+      },
+      { "hint": "asks if it's in their to-dos as well", "say": [] },
+      {
+        "hint": "(new topic) asks which places their photos were taken at",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "terse"]
+  },
+  {
+    "id": "w05-030",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks which places they have exactly two photos from",
+        "say": ["two"]
+      },
+      { "hint": "asks to see the photos from the first one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "polite"]
+  },
+  {
+    "id": "w05-031",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks who Xavier Northcott is", "say": ["Xavier Northcott"] },
+      {
+        "hint": "(new topic) asks which to-dos mention winter",
+        "say": ["winter"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "texting"]
+  },
+  {
+    "id": "w05-032",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks for Pascal Zhou's phone number", "say": ["Pascal Zhou"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "spoken"]
+  }
+]

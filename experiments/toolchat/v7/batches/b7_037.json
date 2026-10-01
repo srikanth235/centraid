@@ -1,0 +1,294 @@
+[
+  {
+    "id": "w08-009",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks when they last spoke to Arvid Blomqvist",
+        "say": ["Arvid Blomqvist"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "spoken"]
+  },
+  {
+    "id": "w08-010",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks to add a task 'Pay the gym pass' for wednesday",
+        "say": ["Pay the gym pass", "wednesday"]
+      },
+      {
+        "hint": "(new topic) asks to log a visit with Arvid (several people are called Arvid)",
+        "say": ["Arvid"]
+      },
+      {
+        "hint": "says it was Arvid Holloway (the Holloway one)",
+        "say": ["Holloway"]
+      },
+      {
+        "hint": "asks when their birthday is (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks what they wrote in their journal this week",
+        "say": ["this week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "terse"]
+  },
+  {
+    "id": "w08-011",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      { "hint": "asks when the Flight is", "say": ["Flight"] },
+      {
+        "hint": "asks the same about Lark instead ('what about Lark?')",
+        "say": ["Lark"]
+      },
+      {
+        "hint": "asks the same about Running instead ('what about Running?')",
+        "say": ["Running"]
+      },
+      { "hint": "asks what else there is apart from the third one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "terse"]
+  },
+  {
+    "id": "w08-012",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks which steps of 'Oil the barbecue' are still open",
+        "say": ["Oil the barbecue"]
+      },
+      {
+        "hint": "(new topic) asks to star the letter document",
+        "say": ["letter"]
+      },
+      {
+        "hint": "(new topic) asks what the club crew group's spending comes to",
+        "say": ["club crew"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w08-013",
+    "today": "Tuesday 2027-10-05",
+    "turns": [{ "hint": "asks who Greta is", "say": ["Greta"] }],
+    "versions": 3,
+    "registers": ["terse", "texting", "spoken"]
+  },
+  {
+    "id": "w08-014",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks to log that they had a message with Sebastiano",
+        "say": ["Sebastiano"]
+      },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks whether Arvid Holloway's birthday is coming up",
+        "say": ["Arvid Holloway"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "texting"]
+  },
+  {
+    "id": "w08-015",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks to find the calendar events on Spanish class",
+        "say": ["Spanish class"]
+      },
+      {
+        "hint": "(new topic) asks to make a note called 'Questions for the builder'",
+        "say": ["Questions for the builder"]
+      },
+      {
+        "hint": "(new topic) asks to save the bike lock code 40457 in the locker",
+        "say": ["bike lock code", "40457"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "texting"]
+  },
+  {
+    "id": "w08-016",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks to find the locker entries on School code",
+        "say": ["School code"]
+      },
+      {
+        "hint": "(new topic) asks what's on their list with no date set",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks which places they have exactly two photos from",
+        "say": ["two"]
+      },
+      {
+        "hint": "(new topic) asks to move the barbecue task to saturday",
+        "say": ["barbecue", "saturday"]
+      },
+      {
+        "hint": "(new topic) asks to add 12 (money) for taxi to the Book group, paid by them",
+        "say": ["Book", "taxi"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "polite"]
+  },
+  {
+    "id": "w08-017",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks what Rushmere Lettings's number is",
+        "say": ["Rushmere Lettings"]
+      },
+      {
+        "hint": "(new topic) asks for the 45-minute jobs on their list",
+        "say": ["45"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "question"]
+  },
+  {
+    "id": "w08-018",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks which documents mention Window certificate",
+        "say": ["Window certificate"]
+      },
+      {
+        "hint": "(new topic) asks which calendar events mention appointment",
+        "say": ["appointment"]
+      },
+      { "hint": "asks what else there is apart from the third one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "texting"]
+  },
+  {
+    "id": "w08-019",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      { "hint": "asks to find the calendar events on Book", "say": ["Book"] },
+      { "hint": "asks if it's in their to-dos as well", "say": [] },
+      { "hint": "asks how many that is", "say": [] },
+      {
+        "hint": "(new topic) asks where the Lodge photo was taken",
+        "say": ["Lodge"]
+      },
+      { "hint": "asks to see the photos from that place", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "w08-020",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks to make a note called 'Books to read this summer'",
+        "say": ["Books to read this summer"]
+      },
+      {
+        "hint": "(new topic) asks when they last heard from Xavier",
+        "say": ["Xavier"]
+      },
+      {
+        "hint": "(new topic) asks to add 18 (money) for groceries to the Book club group, paid by them",
+        "say": ["Book club", "groceries"]
+      },
+      {
+        "hint": "(new topic) asks to add a task 'Email the chimney sweep' for saturday",
+        "say": ["Email the chimney sweep", "saturday"]
+      },
+      {
+        "hint": "(new topic) asks for the documents in the Travel 2027 folder",
+        "say": ["Travel 2027"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "question"]
+  },
+  {
+    "id": "w08-021",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks to put back the Choir note they deleted",
+        "say": ["Choir"]
+      },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "asks to add a task for tuesday to deal with 'Choir ideas'",
+        "say": ["tuesday"]
+      },
+      {
+        "hint": "(new topic) asks to log a call with Arvid (several people are called Arvid)",
+        "say": ["Arvid"]
+      },
+      {
+        "hint": "(new topic) asks what they ticked off recently",
+        "say": ["recently"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w08-022",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks what's in the vault about Hollin Quay",
+        "say": ["Hollin Quay"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "question"]
+  },
+  {
+    "id": "w08-023",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks what debts there are between them and Idris Oduya",
+        "say": ["Idris Oduya"]
+      },
+      {
+        "hint": "(new topic) asks to put 'Coffee with the neighbours' in the calendar wednesday at 18:00",
+        "say": ["Coffee with the neighbours", "wednesday"]
+      },
+      {
+        "hint": "(new topic) asks which places their photos were taken at",
+        "say": []
+      },
+      {
+        "hint": "asks for just the farthing ones among those",
+        "say": ["farthing"]
+      },
+      { "hint": "asks to see the photos from that place", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "texting"]
+  }
+]

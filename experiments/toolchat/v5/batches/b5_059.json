@@ -1,0 +1,250 @@
+[
+  {
+    "id": "a0267",
+    "today": "Monday 2027-01-25",
+    "turns": [
+      {
+        "canonical": "count of (contact channels of (parties called \"Valeska Underhill\"))",
+        "move": "first",
+        "hint": "how many numbers/emails do I have for Valeska"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Valeska Underhill\"",
+        "turn": 1,
+        "say": "exact: Valeska"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0826",
+    "today": "Saturday 2027-08-28",
+    "turns": [
+      {
+        "canonical": "count of (members of (groups called \"Porthcurl Cove holiday\") that (party_id is not me))",
+        "move": "first",
+        "hint": "how many other people besides me are in the holiday group"
+      }
+    ],
+    "refer": [
+      {
+        "row": "groups \"Porthcurl Cove holiday\"",
+        "turn": 1,
+        "say": "exact: holiday"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0652",
+    "today": "Monday 2025-06-09",
+    "turns": [
+      {
+        "canonical": "show (notes that (pinned = true))",
+        "move": "first",
+        "hint": "my pinned notes"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0803",
+    "today": "Wednesday 2028-03-29",
+    "turns": [
+      {
+        "canonical": "max amount_minor of (expenses of (groups called \"Cabin weekend\"))",
+        "move": "first",
+        "hint": "the biggest expense in the cabin group"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Cabin weekend\"", "turn": 1, "say": "loose: cabin" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0039",
+    "today": "Thursday 2025-05-01",
+    "turns": [
+      {
+        "canonical": "show (settlements)",
+        "move": "first",
+        "hint": "show all the settle-ups / payments recorded in my groups"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0129",
+    "today": "Monday 2026-05-18",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"login\", title: \"Photo backup\", content: \"K3ttle-drum\" }",
+        "move": "first",
+        "hint": "save a login for Photo backup with password K3ttle-drum"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0981",
+    "today": "Saturday 2028-03-25",
+    "turns": [
+      {
+        "canonical": "show (groups of (expenses called \"Cheese platter\"))",
+        "move": "first",
+        "hint": "which group was the cheese platter expense in"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Cheese platter\"",
+        "turn": 1,
+        "say": "exact: cheese platter"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0384",
+    "today": "Saturday 2028-10-07",
+    "turns": [
+      {
+        "canonical": "count of (parties that (role = \"Vet\"))",
+        "move": "first",
+        "hint": "how many vets have I got in my contacts"
+      }
+    ],
+    "refer": [{ "row": "role \"Vet\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0032",
+    "today": "Tuesday 2025-07-08",
+    "turns": [
+      {
+        "canonical": "show (obligations)",
+        "move": "first",
+        "hint": "list all the debts between me and people (IOUs)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0112",
+    "today": "Wednesday 2025-05-14",
+    "turns": [
+      {
+        "canonical": "core.restore_document{} on (documents called \"loft\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "restore the binned loft document"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1147",
+    "today": "Sunday 2026-12-20",
+    "turns": [
+      {
+        "canonical": "show (things during today)",
+        "move": "first",
+        "hint": "what's on in that window"
+      },
+      {
+        "canonical": "delete{} on (the 2nd one)",
+        "move": "act",
+        "hint": "get rid of one of them by position"
+      },
+      {
+        "canonical": "restore{} on (it)",
+        "move": "undo",
+        "hint": "oops, bring it back"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0440",
+    "today": "Thursday 2025-11-06",
+    "turns": [
+      {
+        "canonical": "due_at of (tasks called \"Clean the gutters\")",
+        "move": "first",
+        "hint": "when is the gutters task due"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Clean the gutters\"",
+        "turn": 1,
+        "say": "exact: gutters"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0078",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "canonical": "show (places called \"Harwick Point\")",
+        "move": "first",
+        "hint": "find the place Point in my photos' places"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Harwick Point\"", "turn": 1, "say": "exact: Point" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0839",
+    "today": "Thursday 2025-11-27",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"Band van\") that (party_id is not me))",
+        "move": "first",
+        "hint": "who else is in the van group apart from me"
+      }
+    ],
+    "refer": [{ "row": "groups \"Band van\"", "turn": 1, "say": "exact: van" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1023",
+    "today": "Sunday 2028-08-27",
+    "turns": [
+      {
+        "canonical": "show (photos of (albums called \"Road trip north\"))",
+        "move": "first",
+        "hint": "show the photos in the road trip album"
+      }
+    ],
+    "refer": [
+      {
+        "row": "albums \"Road trip north\"",
+        "turn": 1,
+        "say": "loose: road trip"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

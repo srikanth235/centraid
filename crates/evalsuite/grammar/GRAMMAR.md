@@ -10,7 +10,7 @@
 
 ## 1. The grammar
 
-Literals are `"quoted"`; dates are bare (`2026-06-19`, `2026-06-19T14:00`, `2026-05`, `2026-06-04..2026-06-06`). A `Set` operand is parenthesised wherever it is nested; a `Pred` is always parenthesised.
+Literals are `"quoted"`; dates are bare (`2026-06-19`, `2026-06-19T14:00`, `2026-05`, `2026-06-04..2026-06-06`) or relative (`friday`, `friday at 14:00`, `the 21st` — §1.3). A `Set` operand is parenthesised wherever it is nested; a `Pred` is always parenthesised.
 
 ```
 Turn    := "show" Set                       -- a list of rows
@@ -29,7 +29,7 @@ Value   := "count" "of" Set
 
 Cmd     := Verb "{" Args "}" [ "on" Set ]
 Args    := ( Name ":" ArgVal ) *
-ArgVal  := Lit | Date | "null" | "true" | "false" | "me" | Duration
+ArgVal  := Lit | Date | RelDate | "null" | "true" | "false" | "me" | Duration
          | "(" Set ")"                      -- an id resolved from a set
          | Value                            -- e.g. `due_at: dtstart of (it)`
 
@@ -45,7 +45,7 @@ Set     := Kind                             -- a board
          | Ref                              -- context terminal (§3)
 
 Pred    := Pred ("and"|"or") Pred | "not" Pred | "(" Pred ")"
-         | Field Cmp (Lit | Num | Date | "true"|"false"|"null"|"me"
+         | Field Cmp (Lit | Num | Date | RelDate | "true"|"false"|"null"|"me"
                       | Field                 -- FIELD-TO-FIELD (§2.4)
                       | "(" Set ")")          -- an id from a nested set
          | Field "contains" Lit
@@ -63,7 +63,18 @@ Window  := "today" | "tomorrow" | "yesterday" | "before now"
          | "this month" | "last month"
          | "next" Num ("days"|"weeks"|"months")
          | Date | Month | DateRange
+         | Weekday | ("next"|"last") Weekday   -- RELATIVE, no "at" (§1.3)
+         | "the" Ordinal | "in" Num "days"
          | "from" "(" Value ")" "to" "(" Value ")"   -- ANCHORED (§2.6)
+
+RelDate := RelDay [ "at" Time ]              -- RELATIVE (§1.3)
+RelDay  := Weekday | ("next"|"last") Weekday
+         | "today" | "tomorrow" | "yesterday"
+         | "the" Ordinal                      -- the 21st
+         | "in" Num "days"
+Weekday := "monday" | "tuesday" | "wednesday" | "thursday" | "friday"
+         | "saturday" | "sunday"
+Time    := HH ":" MM                          -- 24h, e.g. 14:00
 
 Ref     := "it" | "them" | "that one" | "the N'th one" | "the other one"
          | "the earlier one" | "the last thing I added"
@@ -96,6 +107,24 @@ Turn := Cmd ("then" Cmd)+
 One sentence, two writes, and the arguments differ. `s107.3` ("that one needs to be thursday; it's the booking that goes to friday") moves two rows to two different days; `s113.3` rolls one expense back and trashes another; `h61.0` finishes a task and cancels the event of the same title. A `Cmd` carries one Verb and one `Args`, and a `write_set` reaches these only when ONE verb with ONE argument applies to a union of rows (`s75`), so none of the three could be said at all before.
 
 `then` and not `and`: the order is part of the meaning (`s113.3` must restore before it trashes, or the member's own correction reads as two trashes), and `and` is already the union inside a `Set`. The executor runs the steps in the sentence's order and **the first step that declines is the turn's outcome** — a half-finished sequence is worse than none, for the same reason a bulk write is all-or-nothing (R-W1).
+
+### 1.3 Relative dates — resolved by the executor
+
+```
+RelDate := RelDay [ "at" Time ]
+```
+
+A relative date is legal wherever a `Date` literal is — an `ArgVal` (`due_at: thursday`, `to: friday at 14:00`) and a comparison operand (`due_at < friday`) — and, without `at Time`, as a `Window` (`during next friday`, `during the 3rd`, `during in 3 days`). Inside a window `today` / `tomorrow` / `yesterday` are the existing window PHRASES. The weekday words are a generated terminal (`relativeDays` in `derive/terminals.json`), so `check.py`, `canon.rs` and the GBNF read one list. Absolute ISO dates stay legal and are what the model writes when the member states an explicit date.
+
+**The model never computes a date.** The executor resolves every relative date against the session's today BEFORE execution (`canon::resolve_relative`, applied by `canon::parse_for_execution` at every site that executes a parsed canonical), rewriting it to an ordinary `date` / `datetime` literal or a `date` window, so the executor proper only ever sees absolute dates:
+
+- `Weekday` — the next occurrence strictly after today (1..7 days ahead; today's own weekday is +7).
+- `next Weekday` — that weekday in the Monday-start week after the current one.
+- `last Weekday` — the most recent occurrence strictly before today.
+- `today` / `tomorrow` / `yesterday` — today, +1, -1.
+- `the Nth` — day N of the current month if N >= today's day, else day N of the next month. A day the chosen month lacks (`the 31st` in June) does not resolve and the turn is declined, never rolled into the following month.
+- `in N days` — today + N.
+- `at HH:MM` makes it a datetime; without it a date, and the executor's existing default-time rules apply (e.g. `add_task` due 09:00).
 
 ### Depth bounds
 
@@ -280,7 +309,7 @@ Per-node fragments:
 | --- | --- |
 | `Kind` | the door's board read for that (entity, door), `deleted_at IS NULL` |
 | `Kind of Set` | inner ids → `WHERE <fk> IN (?,…)`, or the join table's two-step |
-| `called Lit` | `WHERE lower(<label col>) LIKE lower('%' |  | ? |  | '%')` — the FTS domain when the Kind has one, the board scan when it does not |
+| `called Lit` | `WHERE lower(<label col>) LIKE lower('%' |  | ? |  | '%')`, else every content word of `Lit` present in the label by equal stem (C6) — the FTS domain when the Kind has one, the board scan when it does not |
 | `that (Pred)` | the `Pred` fragment, `AND`-ed |
 | `during Window` | `WHERE substr(<salient date>,1,10) BETWEEN ? AND ?` |
 | `ordered by F d` | `ORDER BY F ASC\|DESC` |
@@ -344,7 +373,7 @@ Every rule here is a reading the grammar left open and the corpus had to settle 
 
 **C5 — R-C1 counts ANSWERS, not rows.** One row is needed where the answer would otherwise be ambiguous; several rows that all hold the same value are not ambiguous. "How often am I supposed to call Ray" over nine Rays who share a cadence has one answer and not a question.
 
-**C6 — where the rows DISAGREE, the door's rank resolves.** `called` is a ranked retrieval against the FTS plane, and the plane's own order is the only resolution the product has. Dropping it would make "Ray" a coin toss, which is worse than a wrong answer because it is a different wrong answer each time. C5 and C6 together are what R-C1 means in a vault with collisions.
+**C6 — where the rows DISAGREE, the door's rank resolves.** `called` is a ranked retrieval against the FTS plane, and the plane's own order is the only resolution the product has. Dropping it would make "Ray" a coin toss, which is worse than a wrong answer because it is a different wrong answer each time. C5 and C6 together are what R-C1 means in a vault with collisions. What a label ANSWERS to, before any ranking: the literal as a case-insensitive substring, or else every content word of it matching a word of the label. Both sides are normalised alike — lowercased, a trailing possessive `'s`/`’s` dropped, the function words `the a an my our at of for to in on about with and` dropped, and one of `-ing`/`-ed`/`-es`/`-s` stripped where three letters remain — and words match by EQUAL stem, never by prefix. So `parties called "Ana Ferreira's"` answers to "Ana Ferreira", `locker items called "wifi at the cabin"` to "Cabin wifi", `tasks called "cabin booking"` to "Book the Tahoe cabin", and `called "cabin wifi"` does not answer to "Cabinet wifi" (a bare `called "cabin"` still does, as a raw substring). A literal that is all function words matches only as a substring (`crates/candidates/src/exec.rs`, `labelled`).
 
 **C7 — `things` includes the obligations.** R-T1 is the union over the eight doors, and a debt is one of the things a member has about the dentist even though no board row holds it: the People reader hangs it off the party. So the fan-out joins the obligations the roster computed. (`s03`, `s35`, `h42`.)
 

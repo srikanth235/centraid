@@ -1,0 +1,30 @@
+{
+  "$note": "the tuning set. NEVER iterate against screen90.json; these ten suite sessions are disjoint from it.",
+  "categories": {
+    "abandonment": "s09",
+    "abstract_temporal": "s02",
+    "ambiguity_clarify": "s03",
+    "cross_app": "s93",
+    "cross_app_hop": "s31",
+    "deep": "s106",
+    "locker_only": "s04",
+    "refusal": "s07",
+    "single_read": "s12",
+    "value_read": "s65"
+  },
+  "seed": 20260922,
+  "sessions": {
+    "suite": [
+      "s02",
+      "s04",
+      "s117",
+      "s24",
+      "s30",
+      "s54",
+      "s57",
+      "s65",
+      "s82",
+      "s95"
+    ]
+  }
+}

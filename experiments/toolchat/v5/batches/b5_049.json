@@ -1,0 +1,224 @@
+[
+  {
+    "id": "a0958",
+    "today": "Tuesday 2027-03-30",
+    "turns": [
+      {
+        "canonical": "show (events of (parties called \"Honora Radley\"))",
+        "move": "first",
+        "hint": "what's in my calendar with Honora"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Honora Radley\"", "turn": 1, "say": "exact: Honora" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0262",
+    "today": "Friday 2027-06-25",
+    "turns": [
+      {
+        "canonical": "count of (contact channels of (parties called \"Rufus\"))",
+        "move": "first",
+        "hint": "how many numbers/emails do I have for Rufus"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0679",
+    "today": "Wednesday 2025-04-30",
+    "turns": [
+      {
+        "canonical": "show (obligations that (to_party = me and settled_at is null))",
+        "move": "first",
+        "hint": "money people still owe me (the debts)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0094",
+    "today": "Monday 2025-11-10",
+    "turns": [
+      {
+        "canonical": "show (things called \"form\")",
+        "move": "first",
+        "hint": "what do I have about form (anything: diary, to-dos, notes...)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0365",
+    "today": "Saturday 2028-11-18",
+    "turns": [
+      {
+        "canonical": "count of (notes)",
+        "move": "first",
+        "hint": "how many notes do I have"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0928",
+    "today": "Saturday 2028-07-15",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_me is not null) ordered by owed_to_me desc)",
+        "move": "first",
+        "hint": "who owes me, biggest first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1079",
+    "today": "Wednesday 2026-05-27",
+    "turns": [
+      {
+        "canonical": "tally.delete_expense{} on (expenses called \"Petrol\")",
+        "move": "first",
+        "hint": "delete the petrol expense"
+      },
+      {
+        "canonical": "tally.undo_expense{} on (it)",
+        "move": "undo",
+        "hint": "oh no, put it back / undo that"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Petrol\"", "turn": 1, "say": "exact: petrol" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0761",
+    "today": "Monday 2026-01-12",
+    "turns": [
+      {
+        "canonical": "show (places that (kind = \"city\"))",
+        "move": "first",
+        "hint": "places of that kind"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0809",
+    "today": "Monday 2028-10-02",
+    "turns": [
+      {
+        "canonical": "max amount_minor of (expenses of (groups called \"Pottery class kitty\"))",
+        "move": "first",
+        "hint": "the biggest expense in the kitty group"
+      }
+    ],
+    "refer": [
+      {
+        "row": "groups \"Pottery class kitty\"",
+        "turn": 1,
+        "say": "exact: kitty"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0049",
+    "today": "Sunday 2028-08-20",
+    "turns": [
+      {
+        "canonical": "show (albums called \"Pottery\")",
+        "move": "first",
+        "hint": "find the Pottery album"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1022",
+    "today": "Sunday 2028-06-18",
+    "turns": [
+      {
+        "canonical": "show (photos of (albums called \"Physio highlights\"))",
+        "move": "first",
+        "hint": "show the photos in the Physio highlights album"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1122",
+    "today": "Wednesday 2025-12-24",
+    "turns": [
+      {
+        "canonical": "show (photos during today)",
+        "move": "first",
+        "hint": "photos from that window"
+      },
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Sports day\") } on (them)",
+        "move": "act",
+        "hint": "add those to the Sports day album"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Saltmarsh Cafe\"", "turn": 1, "say": "loose: Cafe" },
+      { "row": "albums \"Sports day\"", "turn": 2, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0715",
+    "today": "Saturday 2025-07-05",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "move": "first",
+        "hint": "who do I owe money to"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0456",
+    "today": "Wednesday 2027-02-03",
+    "turns": [
+      {
+        "canonical": "spent_on of (expenses called \"carpet fitting\")",
+        "move": "first",
+        "hint": "when did I pay for the carpet fitting"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0126",
+    "today": "Thursday 2026-07-09",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"login\", title: \"Broadband\", content: \"Maple#2031\" }",
+        "move": "first",
+        "hint": "save a login for Broadband with password Maple#2031"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

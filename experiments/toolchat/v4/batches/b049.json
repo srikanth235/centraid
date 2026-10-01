@@ -1,0 +1,260 @@
+[
+  {
+    "id": "g0215",
+    "today": "Tuesday 2028-11-07",
+    "turns": [
+      {
+        "canonical": "reschedule{ to: the 14th } on (events called \"review\")",
+        "gloss": "Move [events named \"review\"] to the 14th.",
+        "move": "first",
+        "hint": "push/move the named event"
+      },
+      {
+        "canonical": "show (obligations of (parties called \"Gideon\") that (settled_at is null))",
+        "gloss": "List the obligations linked to [parties named \"Gideon\"] where there is no date settled.",
+        "move": "switch",
+        "hint": "do I owe Gideon anything / does Gideon owe me"
+      },
+      {
+        "canonical": "reschedule{ to: the 14th } on (events called \"review\")",
+        "gloss": "Move [events named \"review\"] to the 14th.",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0449",
+    "today": "Thursday 2026-06-18",
+    "turns": [
+      {
+        "canonical": "show (places of (photos called \"cat\"))",
+        "gloss": "List the places linked to [photos named \"cat\"].",
+        "move": "first",
+        "hint": "where was the cat photo taken"
+      },
+      {
+        "canonical": "show ((photos of (it)) except (photos called \"cat\"))",
+        "gloss": "List [the photos linked to [it (the one row the previous turn is about)]] leaving out [photos named \"cat\"].",
+        "move": "act",
+        "hint": "what else did I take there (the excluded photo is the one the SENTENCE named: C13 names it)"
+      },
+      {
+        "canonical": "media.delete_asset{} on (the 3rd one)",
+        "gloss": "Delete (move to trash) [the 3rd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "delete the Nth"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "h082",
+    "today": "Monday 2028-08-07",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"climbing\"))",
+        "gloss": "List the members linked to [groups named \"climbing\"].",
+        "move": "first",
+        "hint": "who's in the climbing group"
+      },
+      {
+        "canonical": "same? (members called \"Stellan\") (parties called \"Stellan Dyer\")",
+        "gloss": "Are [members named \"Stellan\"] and [parties named \"Stellan Dyer\"] the same (do they share a row)?",
+        "move": "new",
+        "hint": "is that Stellan the same Stellan as in my contacts (full name said)"
+      },
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "gloss": "List parties where the amount I owe them is set.",
+        "move": "new",
+        "hint": "who do I owe money to"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0377",
+    "today": "Monday 2028-05-22",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during last month))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls last month]?",
+        "move": "first",
+        "hint": "what did I spend last month"
+      },
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during last week))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls last week]?",
+        "move": "substitute",
+        "hint": "and last week?"
+      },
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "new",
+        "hint": "open tasks with no due date"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0556",
+    "today": "Saturday 2025-03-15",
+    "turns": [
+      {
+        "canonical": "locker.trash_item{} on (locker items called \"spotify\")",
+        "gloss": "Delete (move to trash) [locker items named \"spotify\"].",
+        "move": "first",
+        "hint": "delete/trash the spotify locker items"
+      },
+      {
+        "canonical": "reschedule{ to: tuesday } on (events called \"choir\")",
+        "gloss": "Move [events named \"choir\"] to tuesday.",
+        "move": "new",
+        "hint": "push/move the named event"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0469",
+    "today": "Monday 2028-10-30",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Order more printer ink\", due_at: in 8 days }",
+        "gloss": "Add a task titled \"Order more printer ink\" due in 8 days.",
+        "move": "first",
+        "hint": "add a task"
+      },
+      {
+        "canonical": "balance of (members called \"Keziah\") in (groups called \"night\")",
+        "gloss": "What is the balance of [members named \"Keziah\"] within [groups named \"night\"]?",
+        "move": "new",
+        "hint": "what does Keziah owe me for night"
+      },
+      {
+        "canonical": "balance of (members called \"Quincy\") in (groups called \"night\")",
+        "gloss": "What is the balance of [members named \"Quincy\"] within [groups named \"night\"]?",
+        "move": "substitute",
+        "hint": "and Quincy?"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0642",
+    "today": "Sunday 2027-02-21",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during this month))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls this month]?",
+        "move": "first",
+        "hint": "what did I spend this month"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (parties called \"Mauricio\") that (settled_at is null))",
+        "gloss": "Mark [the obligations linked to [parties named \"Mauricio\"] where there is no date settled] as settled / paid off.",
+        "move": "new",
+        "hint": "pay off / settle what I owe Mauricio"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0573",
+    "today": "Thursday 2028-08-03",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Cormac\") that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [parties named \"Cormac\"] where the kind is \"phone\".",
+        "move": "first",
+        "hint": "what's Cormac's number"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0135",
+    "today": "Tuesday 2027-05-11",
+    "turns": [
+      {
+        "canonical": "show (parties that (role = \"Gardener\"))",
+        "gloss": "List parties where the role is \"Gardener\".",
+        "move": "first",
+        "hint": "who's my gardener"
+      },
+      {
+        "canonical": "show (contact channels of (it) that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [it (the one row the previous turn is about)] where the kind is \"phone\".",
+        "move": "act",
+        "hint": "what's their number"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0395",
+    "today": "Tuesday 2027-04-06",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"apple\" that (deleted_at is not null))",
+        "gloss": "List tasks named \"apple\" where the date deleted (trash) is set.",
+        "move": "first",
+        "hint": "did I delete / bin the apple task"
+      },
+      {
+        "canonical": "show (members of (groups called \"watch\"))",
+        "gloss": "List the members linked to [groups named \"watch\"].",
+        "move": "new",
+        "hint": "who's in the watch group"
+      },
+      {
+        "canonical": "same? (members called \"Viggo\") (parties called \"Viggo Yamamoto\")",
+        "gloss": "Are [members named \"Viggo\"] and [parties named \"Viggo Yamamoto\"] the same (do they share a row)?",
+        "move": "new",
+        "hint": "is that Viggo the same Viggo as in my contacts (full name said)"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0672",
+    "today": "Tuesday 2028-06-13",
+    "turns": [
+      {
+        "canonical": "show (important dates of (parties called \"Rosalia\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Rosalia\"] where the label contains \"Birthday\".",
+        "move": "first",
+        "hint": "when is Rosalia's birthday"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0427",
+    "today": "Tuesday 2025-12-23",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "first",
+        "hint": "open tasks with no due date"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Umberto\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Umberto\"], sorted by start time descending (highest/latest first)].",
+        "move": "switch",
+        "hint": "when did I last see/speak to Umberto"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic: act on those rows (C10 ref)"
+      }
+    ],
+    "registers": ["question", "terse"]
+  }
+]

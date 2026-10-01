@@ -1,0 +1,280 @@
+[
+  {
+    "id": "w13-024",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks for the 60-minute jobs on their list", "say": ["60"] },
+      {
+        "hint": "(new topic) asks for their documents about contract",
+        "say": ["contract"]
+      },
+      {
+        "hint": "asks the same about Deposit instead ('what about Deposit?')",
+        "say": ["Deposit"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "texting"]
+  },
+  {
+    "id": "w13-025",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks which expenses were over 150 (money)", "say": ["150"] },
+      { "hint": "asks for just the wine ones among those", "say": ["wine"] },
+      {
+        "hint": "(new topic) asks how many events they have next week",
+        "say": ["next week"]
+      },
+      {
+        "hint": "(new topic) asks what they have about Zuniga",
+        "say": ["Zuniga"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "terse"]
+  },
+  {
+    "id": "w13-026",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks if the Tent note is in the trash", "say": ["Tent"] },
+      {
+        "hint": "(new topic) asks who is coming to the Allotment",
+        "say": ["Allotment"]
+      },
+      {
+        "hint": "(new topic) asks which username they use for Library",
+        "say": ["Library"]
+      },
+      {
+        "hint": "(new topic) asks what they last talked about with Sebastiano Tennant",
+        "say": ["Sebastiano Tennant"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  },
+  {
+    "id": "w13-027",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks where the Water portal details are", "say": ["Water"] },
+      {
+        "hint": "asks the same about Mastercard card instead ('what about Mastercard card?')",
+        "say": ["Mastercard card"]
+      },
+      {
+        "hint": "(new topic) asks for the notes in their School uniform notebook",
+        "say": ["School uniform"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks for the notes in their School uniform notebook",
+        "say": ["School uniform"]
+      },
+      {
+        "hint": "asks to add a task for thursday to deal with 'Boiler error codes'",
+        "say": ["thursday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "spoken"]
+  },
+  {
+    "id": "w13-028",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks to add a task 'Collect new batteries' for saturday",
+        "say": ["Collect new batteries", "saturday"]
+      },
+      {
+        "hint": "(new topic) asks what the login for Water is (not the password)",
+        "say": ["Water"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "texting"]
+  },
+  {
+    "id": "w13-029",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks what they wrote in their journal yesterday",
+        "say": ["yesterday"]
+      },
+      {
+        "hint": "(new topic) asks to see the diary entries they made this week",
+        "say": ["this week"]
+      },
+      {
+        "hint": "asks for just the weekend ones (this weekend)",
+        "say": ["weekend"]
+      },
+      {
+        "hint": "(new topic) asks where they took the mural picture",
+        "say": ["mural"]
+      },
+      {
+        "hint": "(new topic) asks if anything is happening on the 28th",
+        "say": ["the 28th"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "texting"]
+  },
+  {
+    "id": "w13-030",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks which important dates fall this week",
+        "say": ["this week"]
+      },
+      {
+        "hint": "(new topic) asks for Dagmar's contact card",
+        "say": ["Dagmar"]
+      },
+      {
+        "hint": "asks what events they're coming to (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks which important dates fall this month",
+        "say": ["this month"]
+      },
+      { "hint": "(new topic) asks what they haven't done yet", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w13-031",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks for Zbigniew's contact card", "say": ["Zbigniew"] },
+      {
+        "hint": "(new topic) asks how many events they have this weekend",
+        "say": ["this weekend"]
+      },
+      {
+        "hint": "(new topic) asks what they have about Payslip",
+        "say": ["Payslip"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "texting"]
+  },
+  {
+    "id": "w13-032",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks what's in the vault about Yamamoto",
+        "say": ["Yamamoto"]
+      },
+      {
+        "hint": "(new topic) asks what birthdays or anniversaries there are this month",
+        "say": ["this month"]
+      },
+      {
+        "hint": "asks for just the ones next week (next week)",
+        "say": ["next week"]
+      },
+      {
+        "hint": "asks for just the ones on tuesday (tuesday)",
+        "say": ["tuesday"]
+      },
+      {
+        "hint": "(new topic) asks to tick off the dishwasher task",
+        "say": ["dishwasher"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "w13-033",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks to see the mornings album", "say": ["mornings"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "polite"]
+  },
+  {
+    "id": "w13-034",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks for their calendar events about lesson",
+        "say": ["lesson"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "polite"]
+  },
+  {
+    "id": "w13-035",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks when Pippa Tolliver's birthday is",
+        "say": ["Pippa Tolliver"]
+      },
+      {
+        "hint": "(new topic) asks who is in the Climbing tour group",
+        "say": ["Climbing tour"]
+      },
+      { "hint": "asks how much Juno owes them in that group", "say": ["Juno"] },
+      { "hint": "asks how many that is", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "texting"]
+  },
+  {
+    "id": "w13-036",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks when they last heard from Greta Tolliver",
+        "say": ["Greta Tolliver"]
+      },
+      {
+        "hint": "(new topic) asks what Hedda Kavanagh's phone number is",
+        "say": ["Hedda Kavanagh"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w13-037",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks which documents mention Fishing", "say": ["Fishing"] },
+      {
+        "hint": "(new topic) asks who is in the Climbing group",
+        "say": ["Climbing"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "question"]
+  },
+  {
+    "id": "w13-038",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks for the members of the Drama group", "say": ["Drama"] },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks when they were last in touch with Ursula Pendry",
+        "say": ["Ursula Pendry"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "question"]
+  }
+]

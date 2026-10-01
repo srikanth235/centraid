@@ -1,0 +1,2018 @@
+{
+  "version": 1,
+  "purpose": "The v8 skill inventory. Training data is built skill by skill with a coverage floor per skill; each run is judged per skill by v8/skillscore.py over v8/dev_skills.json. Example phrasings here were written for this file (a different world from the eval corpora) and MAY be used as training seeds.",
+  "judgement_note": "judgement=true marks skills where asking back (the runtime's clarify, reached via `done` or a call over an ambiguous set) is an acceptable outcome.",
+  "groups": [
+    {
+      "id": "copy",
+      "desc": "Copying spans from the message into calls: names, anchor words, titles, numbers, dates."
+    },
+    {
+      "id": "route",
+      "desc": "Kind routing: the question's form decides which kind of row answers it."
+    },
+    {
+      "id": "filter",
+      "desc": "Field filters on a set: open/overdue, field values, numeric comparisons, the trash."
+    },
+    {
+      "id": "link",
+      "desc": "Link walks from one row to its related rows."
+    },
+    {
+      "id": "time",
+      "desc": "Time windows, relative shifts, which date field a window applies to, ordering by time."
+    },
+    {
+      "id": "num",
+      "desc": "Number answers: count, sum, one row's amount, dtstart of, group balance, owed_*."
+    },
+    {
+      "id": "follow",
+      "desc": "Follow-ups that refine, extend, switch or resume the conversation's current set."
+    },
+    {
+      "id": "handle",
+      "desc": "Row handles: reading the #n shown, ordinals, rows from several turns back, `them` and multi-row."
+    },
+    {
+      "id": "write",
+      "desc": "One skill per write verb (verbs of one call shape share a skill)."
+    },
+    {
+      "id": "compose",
+      "desc": "Composing writes: look-then-write, bulk, `A then B`, corrections, undo."
+    },
+    {
+      "id": "judge",
+      "desc": "Judgement: ask on real ambiguity, say nothing, refuse by reason."
+    }
+  ],
+  "skills": [
+    {
+      "id": "copy.name",
+      "group": "copy",
+      "desc": "Copy a proper name (person, place, group, album, trip) letter for letter into `called`/`search`; never respell, shorten or swap it for a similar word.",
+      "calls": [
+        "search \"Omar Haddad\"",
+        "(parties) called \"Omar Haddad\"",
+        "(notes) called \"Alfama\""
+      ],
+      "examples": [
+        {
+          "say": "find Omar Haddad",
+          "calls": ["search \"Omar Haddad\"", "answer #1"]
+        },
+        {
+          "say": "anything about Alfama in my notes?",
+          "calls": ["answer (notes) called \"Alfama\""]
+        },
+        {
+          "say": "show me the Garden 2026 album",
+          "calls": ["answer (albums) called \"Garden 2026\""]
+        },
+        {
+          "say": "which people share the House Bills group with me?",
+          "calls": [
+            "search \"House Bills\"",
+            "answer (members of (#1)) that (party_id is not me)"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "copy.anchor",
+      "group": "copy",
+      "desc": "Pick the matching word(s) out of a descriptive phrase: the head noun(s) a row's title would carry, dropping my/the/thing/stuff, verbs and filler.",
+      "calls": [
+        "(things) called \"fridge warranty\"",
+        "(locker items) called \"gym locker\"",
+        "(notes) called \"boiler\""
+      ],
+      "examples": [
+        {
+          "say": "what's the code for the gym locker?",
+          "calls": ["answer (locker items called \"gym locker\")"]
+        },
+        {
+          "say": "find the note I made about the old boiler",
+          "calls": ["answer (notes called \"boiler\")"]
+        },
+        {
+          "say": "where's my passport scan?",
+          "calls": ["answer (things called \"passport\")"]
+        },
+        {
+          "say": "have I got anything on the vet?",
+          "calls": ["answer (things called \"vet\")"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "copy.title",
+      "group": "copy",
+      "desc": "Write a create's title / description / content from the message: drop the command words ('add a task to', 'remind me to', 'make a note to'), capitalise the first word, keep the person's own words and details.",
+      "calls": [
+        "schedule.add_task{title: \"Renew the car insurance\"}",
+        "knowledge.create_note{title: \"…\"}",
+        "locker.add_item{type: \"note\", title: \"…\", content: \"…\"}"
+      ],
+      "examples": [
+        {
+          "say": "remind me to renew the car insurance",
+          "calls": ["schedule.add_task{title: \"Renew the car insurance\"}"]
+        },
+        {
+          "say": "jot down a note: ask Lena about the lease",
+          "calls": [
+            "knowledge.create_note{title: \"Ask Lena about the lease\"}"
+          ]
+        },
+        {
+          "say": "keep the bike lock combination 2291 in my locker",
+          "calls": [
+            "locker.add_item{type: \"note\", title: \"Bike lock combination\", content: \"2291\"}"
+          ]
+        },
+        {
+          "say": "add a task to email the landlord about the heating",
+          "calls": [
+            "schedule.add_task{title: \"Email the landlord about the heating\"}"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "copy.number",
+      "group": "copy",
+      "desc": "Turn numbers said in words into digits: money into minor units (sixty dollars → 6000, twelve fifty → 1250), plain counts and minutes as they are (half an hour → 30, three photos → 3).",
+      "calls": [
+        "amount_minor: 6000",
+        "owed_to_me_minor > 3000",
+        "effort_min = 20",
+        "count of photos = 3"
+      ],
+      "examples": [
+        {
+          "say": "log sixty dollars for the plumber in House Bills, I paid",
+          "calls": [
+            "search \"House Bills\"",
+            "tally.add_expense{description: \"Plumber\", amount_minor: 6000, paid_by: me, group_id: (#1)}"
+          ]
+        },
+        {
+          "say": "who owes me more than thirty bucks?",
+          "calls": ["answer (parties that (owed_to_me_minor > 3000))"]
+        },
+        {
+          "say": "which task is roughly a twenty minute job?",
+          "calls": [
+            "answer (tasks) that (effort_min = 20 and status != \"completed\")"
+          ]
+        },
+        {
+          "say": "where have I taken exactly three pictures?",
+          "calls": ["answer (places that (count of photos = 3))"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "copy.date",
+      "group": "copy",
+      "desc": "Copy a day or time into a write the way it was said ('thursday', 'the 3rd', 'next monday'), spoken times as 24h ('at two' → 14:00, 'half nine' → 09:30); leave the date out when none was said.",
+      "calls": [
+        "due_at: thursday",
+        "dtstart: saturday at 10:00",
+        "reschedule{to: the 3rd} on #2"
+      ],
+      "examples": [
+        {
+          "say": "monday I need to call the bank — add that as a task",
+          "calls": [
+            "schedule.add_task{title: \"Call the bank\", due_at: monday}"
+          ]
+        },
+        {
+          "say": "put yoga on saturday at ten",
+          "calls": [
+            "schedule.propose_event{summary: \"Yoga\", dtstart: saturday at 10:00}"
+          ]
+        },
+        {
+          "say": "coffee with Kofi tomorrow at 3pm",
+          "calls": [
+            "schedule.propose_event{summary: \"Coffee with Kofi\", dtstart: tomorrow at 15:00}"
+          ]
+        },
+        {
+          "say": "add a task to sort out the garage",
+          "calls": ["schedule.add_task{title: \"Sort out the garage\"}"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "route.people",
+      "group": "route",
+      "desc": "'Who …', a person to find, a surname, 'my <role>' (my plumber, the Lena from choir) → people rows (`parties`), never the events or debts that mention them.",
+      "calls": [
+        "answer (parties called \"…\")",
+        "search \"…\" then answer #n",
+        "answer parties of (#n)"
+      ],
+      "examples": [
+        {
+          "say": "find Sofia Marin",
+          "calls": ["answer (parties called \"Sofia Marin\")"]
+        },
+        {
+          "say": "what's Kofi's surname?",
+          "calls": ["answer (parties called \"Kofi\")"]
+        },
+        {
+          "say": "the Lena from choir — who is she exactly?",
+          "calls": ["search \"Lena\"", "answer #2"]
+        },
+        {
+          "say": "which contact is my plumber?",
+          "calls": ["search \"plumber\"", "answer #1"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "route.day",
+      "group": "route",
+      "desc": "'What's on X', 'what have I got that day', 'anything happening on …' → everything dated that day: `things during X` (calendar, open to-dos, birthdays), listed `ordered by dtstart asc`.",
+      "calls": ["answer (things during saturday) ordered by dtstart asc"],
+      "examples": [
+        {
+          "say": "saturday — what's planned?",
+          "calls": ["answer (things during saturday) ordered by dtstart asc"]
+        },
+        {
+          "say": "anything going on the 9th?",
+          "calls": ["answer (things during the 9th) ordered by dtstart asc"]
+        },
+        {
+          "say": "what have I got tomorrow?",
+          "calls": ["answer (things during tomorrow) ordered by dtstart asc"]
+        },
+        {
+          "say": "how does my thursday look?",
+          "calls": ["answer (things during thursday) ordered by dtstart asc"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "route.schedule",
+      "group": "route",
+      "desc": "Pick the schedule kind the words name: calendar / appointment / 'what time is' / 'when do I' → `events`; list / to-do / due / tasks → `tasks`; birthday / anniversary → `important dates`.",
+      "calls": [
+        "answer (events) during next week",
+        "answer (events called \"vet\")",
+        "answer (tasks called \"car\")",
+        "answer (important dates called \"Kofi\")"
+      ],
+      "examples": [
+        {
+          "say": "which appointments do I have next week?",
+          "calls": ["answer (events) during next week"]
+        },
+        {
+          "say": "when's Kofi's birthday?",
+          "calls": ["answer (important dates called \"Kofi\")"]
+        },
+        {
+          "say": "what time's my vet visit?",
+          "calls": ["answer (events called \"vet\")"]
+        },
+        {
+          "say": "what car tasks have I got?",
+          "calls": ["answer (tasks) called \"car\""]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "route.locker",
+      "group": "route",
+      "desc": "Wifi, logins, passwords, PINs, codes, 'in my locker' → `locker items` (search does not reach the locker); the row, not the secret, unless the secret itself is asked for.",
+      "calls": [
+        "answer (locker items called \"router\")",
+        "answer count of (locker items)"
+      ],
+      "examples": [
+        {
+          "say": "what's the router login?",
+          "calls": ["answer (locker items called \"router\")"]
+        },
+        {
+          "say": "how many things have I got saved in the locker?",
+          "calls": ["answer count of (locker items)"]
+        },
+        {
+          "say": "any gym entries in my locker?",
+          "calls": ["answer (locker items called \"gym\")"]
+        },
+        {
+          "say": "what's the alarm code at the lake house?",
+          "calls": ["answer (locker items called \"lake house alarm\")"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "route.library",
+      "group": "route",
+      "desc": "Notes vs journal vs documents: notes / 'I wrote down' / notebook → `notes`; my journal / diary → `journal notes`; document / paperwork / agreement / policy / scan / folder → `documents`.",
+      "calls": [
+        "answer (notes called \"…\")",
+        "answer (journal notes) during yesterday",
+        "answer (documents called \"…\")"
+      ],
+      "examples": [
+        {
+          "say": "find my notes on the lease",
+          "calls": ["answer (notes called \"lease\")"]
+        },
+        {
+          "say": "what did I put in my journal yesterday?",
+          "calls": ["answer (journal notes) during yesterday"]
+        },
+        {
+          "say": "do I have a copy of the tenancy agreement?",
+          "calls": ["answer (documents called \"tenancy agreement\")"]
+        },
+        {
+          "say": "any paperwork for the boiler?",
+          "calls": ["answer (documents called \"boiler\")"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "route.media",
+      "group": "route",
+      "desc": "Photos / pictures / shots → `photos`; album → `albums`; 'where was it taken', 'places in my photos' → `places`.",
+      "calls": [
+        "answer (photos called \"…\")",
+        "answer albums",
+        "answer places",
+        "answer photos of (#n)"
+      ],
+      "examples": [
+        {
+          "say": "find the photo of the red door",
+          "calls": ["answer (photos called \"red door\")"]
+        },
+        {
+          "say": "what albums have I got?",
+          "calls": ["answer albums"]
+        },
+        {
+          "say": "which places show up in my photos?",
+          "calls": ["answer places"]
+        },
+        {
+          "say": "show me pictures from the lake house",
+          "calls": ["search \"lake house\"", "answer photos of (#1)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "route.money",
+      "group": "route",
+      "desc": "Spending → `expenses` (rows for 'what did we spend on …', a sum for 'how much'); 'do I owe / does she owe me' → the debts `obligations of (party)`; a shared-expense group → `groups` and its expenses/members.",
+      "calls": [
+        "answer expenses of (#n)",
+        "answer obligations of (#n)",
+        "answer (expenses called \"…\")"
+      ],
+      "examples": [
+        {
+          "say": "list the grocery expenses in House Bills",
+          "calls": [
+            "search \"House Bills\"",
+            "answer (expenses of (#1)) called \"groceries\""
+          ]
+        },
+        {
+          "say": "is there money I owe Omar?",
+          "calls": ["answer obligations of (parties called \"Omar\")"]
+        },
+        {
+          "say": "show me the House Bills expenses",
+          "calls": ["search \"House Bills\"", "answer expenses of (#1)"]
+        },
+        {
+          "say": "which expenses are in the Lisbon group?",
+          "calls": ["search \"Lisbon\"", "answer expenses of (#1)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "route.everything",
+      "group": "route",
+      "desc": "No kind named: 'what do I have about X' → every kind (`things called \"X\"`); 'find X' / 'where's my X' where X names one thing → that one row only (look, then `answer #n`).",
+      "calls": ["answer (things called \"…\")", "search \"…\" then answer #n"],
+      "examples": [
+        {
+          "say": "what have I got on the Lisbon trip?",
+          "calls": ["answer (things called \"Lisbon\")"]
+        },
+        {
+          "say": "find the fridge warranty",
+          "calls": ["answer (things called \"fridge warranty\")"]
+        },
+        {
+          "say": "where's the lease?",
+          "calls": ["search \"lease\"", "answer #1"]
+        },
+        {
+          "say": "anything about Kofi's wedding?",
+          "calls": ["answer (things called \"Kofi wedding\")"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "filter.open",
+      "group": "filter",
+      "desc": "'Left', 'still', 'to do', 'due', 'open', 'haven't done' → `status != \"completed\"`; 'overdue' → `due_at during before now and status != \"completed\"`.",
+      "calls": [
+        "(tasks) that (status != \"completed\")",
+        "(tasks) that (due_at during before now and status != \"completed\")"
+      ],
+      "examples": [
+        {
+          "say": "what haven't I done yet?",
+          "calls": ["answer (tasks) that (status != \"completed\")"]
+        },
+        {
+          "say": "am I late on any tasks?",
+          "calls": [
+            "answer (tasks) that (due_at during before now and status != \"completed\")"
+          ]
+        },
+        {
+          "say": "which steps of the move plan are still open?",
+          "calls": [
+            "search \"move\"",
+            "answer (tasks of (#1)) that (status != \"completed\")"
+          ]
+        },
+        {
+          "say": "which car jobs haven't I done yet?",
+          "calls": [
+            "answer (tasks called \"car\") that (status != \"completed\")"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "filter.field",
+      "group": "filter",
+      "desc": "A field equals a value: flags (`favorite = true`, `starred = true`), filing (`folder = \"Tax\"`, `notebooks = \"Garden\"`), kind/type (`kind = \"phone\"`), empty fields (`due_at is null`), and 'not me' (`party_id is not me`).",
+      "calls": [
+        "(photos) that (favorite = true)",
+        "(documents) that (folder = \"Tax\")",
+        "(notes) that (notebooks = \"Garden\")",
+        "(tasks) that (due_at is null)",
+        "(members of (#1)) that (party_id is not me)"
+      ],
+      "examples": [
+        {
+          "say": "which photos are favourites?",
+          "calls": ["answer (photos) that (favorite = true)"]
+        },
+        {
+          "say": "list the documents filed in Tax",
+          "calls": ["answer (documents) that (folder = \"Tax\")"]
+        },
+        {
+          "say": "show me the Garden notebook's notes",
+          "calls": ["answer (notes) that (notebooks = \"Garden\")"]
+        },
+        {
+          "say": "which to-dos are undated?",
+          "calls": [
+            "answer (tasks) that (due_at is null and status != \"completed\")"
+          ]
+        },
+        {
+          "say": "who else is in the House Bills group?",
+          "calls": [
+            "search \"House Bills\"",
+            "answer (members of (#1)) that (party_id is not me)"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "filter.numeric",
+      "group": "filter",
+      "desc": "Compare a number field (`amount_minor > 10000`, `owed_to_me_minor > 3000`, `effort_min = 20`) or count a link (`count of photos = 3`).",
+      "calls": [
+        "(expenses of (#1)) that (amount_minor > 10000)",
+        "(tasks) that (effort_min = 20)",
+        "(places that (count of photos = 1))"
+      ],
+      "examples": [
+        {
+          "say": "which House Bills expenses were over a hundred dollars?",
+          "calls": [
+            "search \"House Bills\"",
+            "answer (expenses of (#1)) that (amount_minor > 10000)"
+          ]
+        },
+        {
+          "say": "which task is about an hour's work?",
+          "calls": [
+            "answer (tasks) that (effort_min = 60 and status != \"completed\")"
+          ]
+        },
+        {
+          "say": "places I've only got one photo from",
+          "calls": ["answer (places that (count of photos = 1))"]
+        },
+        {
+          "say": "only those above twenty bucks",
+          "calls": ["answer (them) that (amount_minor > 2000)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "filter.trashed",
+      "group": "filter",
+      "desc": "'Did I delete / bin X', 'is X in the trash' → trashed rows are hidden unless asked for: `(<kind> called \"X\") that (deleted_at is not null)`.",
+      "calls": [
+        "show (tasks called \"gutter\") that (deleted_at is not null)",
+        "answer (notes) that (deleted_at is not null)"
+      ],
+      "examples": [
+        {
+          "say": "is the gutter task in the bin?",
+          "calls": [
+            "show (tasks called \"gutter\") that (deleted_at is not null)",
+            "answer #1"
+          ]
+        },
+        {
+          "say": "is the old lease in the trash?",
+          "calls": [
+            "answer (documents called \"lease\") that (deleted_at is not null)"
+          ]
+        },
+        {
+          "say": "has the kitchen picture been deleted?",
+          "calls": [
+            "answer (photos called \"kitchen\") that (deleted_at is not null)"
+          ]
+        },
+        {
+          "say": "which notes have I thrown away?",
+          "calls": ["answer (notes) that (deleted_at is not null)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "link.parties_of",
+      "group": "link",
+      "desc": "Who is at an event, who a debt or a photo is with → `parties of (#n)`; 'who's coming' leaves me out: `(parties of (#n)) that (party_id is not me)`.",
+      "calls": [
+        "answer (parties of (#1)) that (party_id is not me)",
+        "answer parties of (#3)"
+      ],
+      "examples": [
+        {
+          "say": "who's invited to the barbecue?",
+          "calls": [
+            "show (events called \"barbecue\")",
+            "answer (parties of (#1)) that (party_id is not me)"
+          ]
+        },
+        {
+          "say": "who is that debt with?",
+          "calls": ["answer parties of (#3)"]
+        },
+        {
+          "say": "who's in this photo?",
+          "calls": ["answer parties of (#2)"]
+        },
+        {
+          "say": "which person is my accountant?",
+          "calls": ["search \"accountant\"", "answer parties of (#1)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "link.of_person",
+      "group": "link",
+      "desc": "A person's own rows: `obligations of`, `contact channels of` (number, email), `important dates of`, `activities of` (calls, coffees), `events of`.",
+      "calls": [
+        "answer (contact channels of (#1)) that (kind = \"email\")",
+        "answer events of (#2)",
+        "answer obligations of (#4)",
+        "answer activities of (#1)"
+      ],
+      "examples": [
+        {
+          "say": "what's Omar's email?",
+          "calls": [
+            "answer (contact channels of (parties called \"Omar\")) that (kind = \"email\")"
+          ]
+        },
+        {
+          "say": "when's my next meeting with her?",
+          "calls": ["answer events of (#2)"]
+        },
+        {
+          "say": "what was my most recent contact with Kofi?",
+          "calls": [
+            "show (parties called \"Kofi\")",
+            "answer first 1 of ((activities of (#1)) ordered by started_at desc)"
+          ]
+        },
+        {
+          "say": "is Sofia in debt to me?",
+          "calls": ["answer obligations of (parties called \"Sofia\")"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "link.of_group",
+      "group": "link",
+      "desc": "A shared-expense group's `expenses of`, `members of`, `settlements of`; an expense's `groups of`.",
+      "calls": [
+        "answer expenses of (#1)",
+        "answer (members of (#1)) that (party_id is not me)",
+        "answer groups of (#3)"
+      ],
+      "examples": [
+        {
+          "say": "what's gone into House Bills?",
+          "calls": ["search \"House Bills\"", "answer expenses of (#1)"]
+        },
+        {
+          "say": "list the people in the Lisbon group",
+          "calls": [
+            "search \"Lisbon\"",
+            "answer (members of (#1)) that (party_id is not me)"
+          ]
+        },
+        {
+          "say": "which group is the ferry ticket in?",
+          "calls": ["search \"ferry\"", "answer groups of (#1)"]
+        },
+        {
+          "say": "has anyone settled up in House Bills?",
+          "calls": ["answer settlements of (#1)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "link.media",
+      "group": "link",
+      "desc": "Photos ↔ places ↔ albums ↔ people: `photos of` a place / album / person, `places of` / `albums of` a photo; `(albums) that (member of (#n))`.",
+      "calls": [
+        "answer places of (#2)",
+        "answer albums of (#2)",
+        "answer photos of (#1)",
+        "answer photos of (places called \"…\")"
+      ],
+      "examples": [
+        {
+          "say": "where did I shoot that one?",
+          "calls": ["answer places of (#2)"]
+        },
+        {
+          "say": "which album is it in?",
+          "calls": ["answer albums of (#2)"]
+        },
+        {
+          "say": "have I got photos of Lena?",
+          "calls": ["show (parties called \"Lena\")", "answer photos of (#1)"]
+        },
+        {
+          "say": "pictures from Alfama",
+          "calls": ["answer photos of (places called \"Alfama\")"]
+        },
+        {
+          "say": "open the Garden 2026 album",
+          "calls": ["search \"Garden 2026\"", "answer photos of (#1)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "link.subtasks",
+      "group": "link",
+      "desc": "The steps of a task: `tasks of (#n)`; 'what's left on the X plan' → `(tasks of (#n)) that (status != \"completed\")`.",
+      "calls": [
+        "answer tasks of (#1)",
+        "answer (tasks of (#1)) that (status != \"completed\")"
+      ],
+      "examples": [
+        {
+          "say": "what are the steps for the move?",
+          "calls": ["search \"move\"", "answer tasks of (#1)"]
+        },
+        {
+          "say": "which garden project steps remain?",
+          "calls": [
+            "search \"garden project\"",
+            "answer (tasks of (#1)) that (status != \"completed\")"
+          ]
+        },
+        {
+          "say": "which bits of the wedding prep are done?",
+          "calls": [
+            "search \"wedding prep\"",
+            "answer (tasks of (#1)) that (status = \"completed\")"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "time.window",
+      "group": "time",
+      "desc": "Named days and periods as said: `today`, `tomorrow`, `friday`, `the 9th`, `this week`, `this weekend`, `last month`, `next 2 months`, `recently`; a named month → its date range.",
+      "calls": [
+        "(events) during this week",
+        "(things during the 9th)",
+        "that (captured_at during 2026-04-01..2026-04-30)"
+      ],
+      "examples": [
+        {
+          "say": "which events do I have this weekend?",
+          "calls": ["answer (events) during this weekend"]
+        },
+        {
+          "say": "what's scheduled for the 9th?",
+          "calls": ["answer (things during the 9th) ordered by dtstart asc"]
+        },
+        {
+          "say": "photos from april",
+          "calls": [
+            "answer (photos) that (captured_at during 2026-04-01..2026-04-30)"
+          ]
+        },
+        {
+          "say": "whose birthdays fall in the next two weeks?",
+          "calls": ["answer (important dates) during next 2 weeks"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "time.shift",
+      "group": "time",
+      "desc": "Relative moves: 'an hour later' → `by: +1h`, 'half an hour earlier' → `by: -30m`, 'a day later' → `by: +1d`; 'in three days', 'next friday' as windows.",
+      "calls": [
+        "reschedule{by: +1h} on #3",
+        "reschedule{by: -30m} on #2",
+        "(things during in 3 days)"
+      ],
+      "examples": [
+        {
+          "say": "bump the call back by an hour",
+          "calls": ["reschedule{by: +1h} on #2"]
+        },
+        {
+          "say": "make yoga half an hour earlier",
+          "calls": ["reschedule{by: -30m} on #1"]
+        },
+        {
+          "say": "push it back a day",
+          "calls": ["reschedule{by: +1d} on #1"]
+        },
+        {
+          "say": "what's on in three days?",
+          "calls": ["answer (things during in 3 days) ordered by dtstart asc"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "time.field",
+      "group": "time",
+      "desc": "Which date a window applies to: the row's own date `(set) during W`, or a named field — `due_at` (due), `completed_at` (ticked off / finished), `spent_on` (money), `captured_at` (photos, journal).",
+      "calls": [
+        "(tasks) that (due_at during monday)",
+        "tasks that (completed_at during last week)",
+        "(expenses that (spent_on during last month))",
+        "(photos) that (captured_at during last weekend)"
+      ],
+      "examples": [
+        {
+          "say": "what did I finish yesterday?",
+          "calls": ["answer tasks that (completed_at during yesterday)"]
+        },
+        {
+          "say": "which tasks fall due on monday?",
+          "calls": ["answer (tasks) that (due_at during monday)"]
+        },
+        {
+          "say": "what was my spending last week?",
+          "calls": [
+            "answer sum amount_minor of (expenses that (spent_on during last week))"
+          ]
+        },
+        {
+          "say": "photos I took last weekend",
+          "calls": ["answer (photos) that (captured_at during last weekend)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "time.derived",
+      "group": "time",
+      "desc": "A window the person doesn't name but the vault dates ('while we're away', 'on the trip', 'during the conference'): read the dates of the rows that define it, then use an absolute range `2026-07-02..2026-07-06`.",
+      "calls": [
+        "search \"Lisbon\"",
+        "(things during 2026-07-02..2026-07-06)",
+        "count of (photos during 2026-07-02..2026-07-06)"
+      ],
+      "examples": [
+        {
+          "say": "what else is going on during my Lisbon stay?",
+          "calls": [
+            "search \"Lisbon\"",
+            "answer (things during 2026-07-02..2026-07-06) ordered by dtstart asc"
+          ]
+        },
+        {
+          "say": "count the pictures from the Lisbon trip",
+          "calls": [
+            "search \"Lisbon\"",
+            "answer count of (photos during 2026-07-02..2026-07-06)"
+          ]
+        },
+        {
+          "say": "anything else on while the conference is on?",
+          "calls": [
+            "show (events called \"conference\")",
+            "answer (things during 2026-09-14..2026-09-16) ordered by dtstart asc"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "time.order",
+      "group": "time",
+      "desc": "'Last', 'latest', 'most recent', 'next', 'earliest' → order and take: `first 1 of ((…) ordered by captured_at desc)`; a day's schedule `ordered by dtstart asc`.",
+      "calls": [
+        "first 1 of ((journal notes) ordered by captured_at desc)",
+        "first 1 of ((activities of (#1)) ordered by started_at desc)"
+      ],
+      "examples": [
+        {
+          "say": "show my most recent journal entry",
+          "calls": [
+            "answer first 1 of ((journal notes) ordered by captured_at desc)"
+          ]
+        },
+        {
+          "say": "what's the latest activity logged with Omar?",
+          "calls": [
+            "show (parties called \"Omar\")",
+            "answer first 1 of ((activities of (#1)) ordered by started_at desc)"
+          ]
+        },
+        {
+          "say": "what's my earliest thing tomorrow?",
+          "calls": [
+            "answer first 1 of ((things during tomorrow) ordered by dtstart asc)"
+          ]
+        },
+        {
+          "say": "my newest photo?",
+          "calls": ["answer first 1 of ((photos) ordered by captured_at desc)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "num.count",
+      "group": "num",
+      "desc": "'How many' → `answer count of (<set>)`.",
+      "calls": ["answer count of (…)"],
+      "examples": [
+        {
+          "say": "how many notes are in the Garden notebook?",
+          "calls": ["answer count of ((notes) that (notebooks = \"Garden\"))"]
+        },
+        {
+          "say": "how many pictures are from last weekend?",
+          "calls": [
+            "answer count of ((photos) that (captured_at during last weekend))"
+          ]
+        },
+        {
+          "say": "how many tasks are overdue?",
+          "calls": [
+            "answer count of ((tasks) that (due_at during before now and status != \"completed\"))"
+          ]
+        },
+        {
+          "say": "how many of them are still open?",
+          "calls": ["answer count of ((them) that (status != \"completed\"))"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "num.sum",
+      "group": "num",
+      "desc": "'How much did we spend', 'total', 'what does that come to', 'altogether' → `answer sum amount_minor of (<set>)`; over people `sum owed_to_me_minor of (them)`.",
+      "calls": [
+        "answer sum amount_minor of (expenses of (#1))",
+        "answer sum amount_minor of (them)",
+        "answer sum owed_to_me_minor of (them)"
+      ],
+      "examples": [
+        {
+          "say": "what's the House Bills total so far?",
+          "calls": [
+            "search \"House Bills\"",
+            "answer sum amount_minor of (expenses of (#1))"
+          ]
+        },
+        {
+          "say": "add those up for me",
+          "calls": ["answer sum amount_minor of (them)"]
+        },
+        {
+          "say": "total spending for this month?",
+          "calls": [
+            "answer sum amount_minor of (expenses that (spent_on during this month))"
+          ]
+        },
+        {
+          "say": "how much is that altogether?",
+          "calls": ["answer sum owed_to_me_minor of (them)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "num.value_of",
+      "group": "num",
+      "desc": "One row's number: 'what did X cost / come to', 'how much is the balance' → `answer amount_minor of (#n)`.",
+      "calls": ["answer amount_minor of (#1)"],
+      "examples": [
+        {
+          "say": "how much were the ferry tickets?",
+          "calls": ["search \"ferry tickets\"", "answer amount_minor of (#1)"]
+        },
+        {
+          "say": "how much is the vet bill?",
+          "calls": ["search \"vet\"", "answer amount_minor of (#3)"]
+        },
+        {
+          "say": "how much was that one?",
+          "calls": ["answer amount_minor of (#2)"]
+        },
+        {
+          "say": "how much is left to pay on the garage bill?",
+          "calls": ["search \"garage\"", "answer amount_minor of (#4)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "num.dtstart_of",
+      "group": "num",
+      "desc": "'When's my X thing' with no kind given, where X matches rows of several kinds → `answer dtstart of (things called \"X\")` so the runtime asks back; never pick one candidate yourself.",
+      "calls": ["answer dtstart of (things called \"…\")"],
+      "examples": [
+        {
+          "say": "the vet thing — when is it?",
+          "calls": ["answer dtstart of (things called \"vet\")"]
+        },
+        {
+          "say": "when's the bank business?",
+          "calls": ["answer dtstart of (things called \"bank\")"]
+        },
+        {
+          "say": "when's the passport thing again?",
+          "calls": ["answer dtstart of (things called \"passport\")"]
+        }
+      ],
+      "judgement": true
+    },
+    {
+      "id": "num.balance",
+      "group": "num",
+      "desc": "'How much does X owe me in the group / for the trip' → `answer balance of (#member) in (#group)`; 'and Y?' asks the same number for Y.",
+      "calls": ["answer balance of (#2) in (#1)"],
+      "examples": [
+        {
+          "say": "what's Kofi's Lisbon balance with me?",
+          "calls": [
+            "search \"Lisbon\"",
+            "show (members of (#1))",
+            "answer balance of (#3) in (#1)"
+          ]
+        },
+        {
+          "say": "where do I stand with Omar in House Bills?",
+          "calls": [
+            "search \"House Bills\"",
+            "show (members of (#1))",
+            "answer balance of (#2) in (#1)"
+          ]
+        },
+        {
+          "say": "and Lena?",
+          "calls": ["answer balance of (#4) in (#1)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "num.owed",
+      "group": "num",
+      "desc": "Personal debts on people: 'who owes me' → `(parties that (owed_to_me_minor > 0))`; 'who do I owe' → `owed_to_them_minor > 0`; 'how much do I owe her' → `owed_to_them_minor of (#n)`; 'how much does he owe me' → `owed_to_me_minor of (#n)`.",
+      "calls": [
+        "answer (parties that (owed_to_me_minor > 0))",
+        "answer (parties that (owed_to_them_minor > 0))",
+        "answer owed_to_them_minor of (#1)",
+        "answer owed_to_me_minor of (#4)"
+      ],
+      "examples": [
+        {
+          "say": "anyone owe me cash?",
+          "calls": ["answer (parties that (owed_to_me_minor > 0))"]
+        },
+        {
+          "say": "who am I in debt to?",
+          "calls": ["answer (parties that (owed_to_them_minor > 0))"]
+        },
+        {
+          "say": "what's my debt to Sofia?",
+          "calls": [
+            "show (parties called \"Sofia\")",
+            "answer owed_to_them_minor of (#1)"
+          ]
+        },
+        {
+          "ctx": "who am I in debt to?",
+          "say": "and the amount?",
+          "calls": ["answer owed_to_them_minor of (#1)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "follow.narrow",
+      "group": "follow",
+      "desc": "Refine the previous answer: 'just the weekend ones' → `answer (them during this weekend)`; 'only the open ones' → `answer (them) that (…)`; 'of those, the X ones' → `answer (them) called \"X\"`.",
+      "calls": [
+        "answer (them during this weekend)",
+        "answer (them) that (status != \"completed\")",
+        "answer (them) called \"…\""
+      ],
+      "examples": [
+        {
+          "ctx": "which events do I have next week?",
+          "say": "just the ones on monday",
+          "calls": ["answer (them during monday)"]
+        },
+        {
+          "ctx": "what haven't I done yet?",
+          "say": "narrow that to anything about the car",
+          "calls": ["answer (them) called \"car\""]
+        },
+        {
+          "ctx": "anyone owe me cash?",
+          "say": "only the ones over fifty",
+          "calls": ["answer (them that (owed_to_me_minor > 5000))"]
+        },
+        {
+          "ctx": "which tasks fall due this week?",
+          "say": "which of those are still open?",
+          "calls": ["answer (them) that (status != \"completed\")"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "follow.except",
+      "group": "follow",
+      "desc": "'What else' = the set the conversation is on minus the row just discussed: `answer (<set>) except (#n)`; 'what else have I got that day' still lists the whole day.",
+      "calls": [
+        "answer (photos of (#1)) except (#3)",
+        "answer ((documents) that (folder = \"Tax\")) except (#2)"
+      ],
+      "examples": [
+        {
+          "ctx": "which album holds it?",
+          "say": "what other shots are in there?",
+          "calls": ["answer (photos of (#4)) except (#2)"]
+        },
+        {
+          "ctx": "find the tax return",
+          "say": "what sits alongside it in that folder?",
+          "calls": ["answer ((documents) that (folder = \"Tax\")) except (#1)"]
+        },
+        {
+          "ctx": "which locker entries mention the flat?",
+          "say": "anything else on that shelf?",
+          "calls": ["answer (locker items called \"flat\") except (#1)"]
+        },
+        {
+          "ctx": "who's joining yoga on thursday?",
+          "say": "anything besides that on thursday?",
+          "calls": ["answer (things during thursday) ordered by dtstart asc"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "follow.switch_kind",
+      "group": "follow",
+      "desc": "Same subject, another kind: 'is there a document for it too?', 'and on my task list?', 'photos of any of them' → the new kind over the same name (`documents called \"X\"`) or over `them` (`photos of (them)`).",
+      "calls": [
+        "answer (documents called \"…\")",
+        "answer (tasks called \"…\")",
+        "answer photos of (them)"
+      ],
+      "examples": [
+        {
+          "ctx": "open my notes on the lease",
+          "say": "any documents on it?",
+          "calls": ["answer (documents called \"lease\")"]
+        },
+        {
+          "ctx": "is the gym renewal on my calendar?",
+          "say": "is it a task as well?",
+          "calls": ["answer (tasks called \"gym renewal\")"]
+        },
+        {
+          "ctx": "who's invited to the barbecue?",
+          "say": "any photos with them in?",
+          "calls": ["answer photos of (them)"]
+        },
+        {
+          "ctx": "list the Garden folder",
+          "say": "sorry, the Garden notebook, not the folder",
+          "calls": ["answer (notes) that (notebooks = \"Garden\")"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "follow.swap_subject",
+      "group": "follow",
+      "desc": "Same question, new subject: 'what about Alfama?', 'and Kofi?', 'and last month?' → repeat the previous call shape with the new name or window.",
+      "calls": ["(same shape as the previous turn, new name/window)"],
+      "examples": [
+        {
+          "ctx": "open my notes on Lisbon",
+          "say": "what about Porto?",
+          "calls": ["answer (notes) called \"Porto\""]
+        },
+        {
+          "ctx": "what's Kofi's Lisbon balance with me?",
+          "say": "and Lena?",
+          "calls": ["answer balance of (#4) in (#1)"]
+        },
+        {
+          "ctx": "total spending for this month?",
+          "say": "and last month?",
+          "calls": [
+            "answer sum amount_minor of (expenses that (spent_on during last month))"
+          ]
+        },
+        {
+          "ctx": "the harbour picture — where's that from?",
+          "say": "same for the sunset picture?",
+          "calls": ["search \"sunset\"", "answer places of (#6)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "follow.back_to",
+      "group": "follow",
+      "desc": "'Back to X —' resumes an earlier thread: reuse the #n and sets from those turns, not the detour's.",
+      "calls": ["(the earlier turn's #n / set)"],
+      "examples": [
+        {
+          "ctx": "(after a detour about the calendar)",
+          "say": "ok, returning to those pictures: put the second in Garden 2026",
+          "calls": ["media.add_to_album{album_id: (#9)} on #2"]
+        },
+        {
+          "ctx": "(after a detour)",
+          "say": "returning to the debts — which of those two is at saturday's barbecue?",
+          "calls": [
+            "show (events during saturday)",
+            "show parties of (#7)",
+            "answer #3"
+          ]
+        },
+        {
+          "ctx": "(after starring and a detour)",
+          "say": "back to the folder — bin the old lease",
+          "calls": ["core.trash_document{} on #2"]
+        },
+        {
+          "ctx": "(after a detour)",
+          "say": "going back to the locker: reveal the router password as well",
+          "calls": ["locker.reveal_receipt{columns: \"password\"} on #2"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "handle.pick",
+      "group": "handle",
+      "desc": "Point at the row the words describe in what was just shown ('the wifi one', 'the one with Lena', 'that', 'it', 'her') by its `#n`; never retype a title you can point at.",
+      "calls": [
+        "core.star_document{} on #2",
+        "answer parties of (#2)",
+        "reschedule{to: monday} on #1"
+      ],
+      "examples": [
+        {
+          "say": "star the lease one",
+          "calls": ["core.star_document{} on #2"]
+        },
+        {
+          "say": "the picture with Lena — put it in the album",
+          "calls": ["media.add_to_album{album_id: (#9)} on #4"]
+        },
+        {
+          "say": "which person does that involve?",
+          "calls": ["answer parties of (#1)"]
+        },
+        {
+          "say": "make it monday instead",
+          "calls": ["reschedule{to: monday} on #1"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "handle.ordinal",
+      "group": "handle",
+      "desc": "'The first / second / last one' → the #n at that position in the last list as printed.",
+      "calls": ["complete{} on #2", "reschedule{to: thursday} on #1"],
+      "examples": [
+        {
+          "say": "the second — mark it complete",
+          "calls": ["complete{} on #2"]
+        },
+        {
+          "say": "shift the top one to thursday",
+          "calls": ["reschedule{to: thursday} on #1"]
+        },
+        {
+          "say": "delete the last one",
+          "calls": ["delete{} on #3"]
+        },
+        {
+          "say": "what's the third one?",
+          "calls": ["answer #3"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "handle.far",
+      "group": "handle",
+      "desc": "A row from several turns back ('her', 'that balance', 'the note from earlier') keeps its `#n` for the whole conversation: use it, don't search again.",
+      "calls": [
+        "people.settle_debt{} on #3",
+        "answer (contact channels of (#2)) that (kind = \"phone\")"
+      ],
+      "examples": [
+        {
+          "ctx": "(four turns after the debt #3 was shown)",
+          "say": "clear that debt now",
+          "calls": ["people.settle_debt{} on #3"]
+        },
+        {
+          "ctx": "(after a detour)",
+          "say": "her phone number, again?",
+          "calls": ["answer (contact channels of (#2)) that (kind = \"phone\")"]
+        },
+        {
+          "ctx": "(the parking note was #1, three turns ago)",
+          "say": "put printing that parking note on my list",
+          "calls": ["schedule.add_task{title: \"Print the parking note\"}"]
+        },
+        {
+          "ctx": "(Ray was #4 two turns ago)",
+          "say": "put down that I phoned him",
+          "calls": ["people.log_interaction{kind: \"call\"} on #4"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "handle.them",
+      "group": "handle",
+      "desc": "`them` = every row of the last result (also when more were found than printed); several named rows → `#2, #5`.",
+      "calls": [
+        "answer sum amount_minor of (them)",
+        "reschedule{to: friday} on #2, #5",
+        "answer albums of (them)"
+      ],
+      "examples": [
+        {
+          "say": "what do those add up to?",
+          "calls": ["answer sum amount_minor of (them)"]
+        },
+        {
+          "say": "both of those can go on friday",
+          "calls": ["reschedule{to: friday} on #2, #5"]
+        },
+        {
+          "say": "which albums are they in?",
+          "calls": ["answer albums of (them)"]
+        },
+        {
+          "say": "photos with any of those people?",
+          "calls": ["answer photos of (them)"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "write.add_task",
+      "group": "write",
+      "desc": "'Remind me to', 'add a task', 'put X on my list' → `schedule.add_task{title: \"…\", due_at: …}` (due_at only when a day was said).",
+      "calls": ["schedule.add_task{title: \"…\", due_at: friday}"],
+      "examples": [
+        {
+          "say": "remind me to water the plants tomorrow",
+          "calls": [
+            "schedule.add_task{title: \"Water the plants\", due_at: tomorrow}"
+          ]
+        },
+        {
+          "say": "new task: call Omar back",
+          "calls": ["schedule.add_task{title: \"Call Omar back\"}"]
+        },
+        {
+          "say": "put renewing my passport on the list for the 30th",
+          "calls": [
+            "schedule.add_task{title: \"Renew my passport\", due_at: the 30th}"
+          ]
+        },
+        {
+          "say": "ok then, put it on my to-do list instead",
+          "calls": ["schedule.add_task{title: \"Order the ink\"}"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "write.event",
+      "group": "write",
+      "desc": "Something at a time on a day → a calendar event: `schedule.propose_event{summary: \"…\", dtstart: <day> at HH:MM}`.",
+      "calls": [
+        "schedule.propose_event{summary: \"…\", dtstart: friday at 14:00}"
+      ],
+      "examples": [
+        {
+          "say": "put a vet appointment on tuesday at four",
+          "calls": [
+            "schedule.propose_event{summary: \"Vet appointment\", dtstart: tuesday at 16:00}"
+          ]
+        },
+        {
+          "say": "lunch with Sofia friday at 1",
+          "calls": [
+            "schedule.propose_event{summary: \"Lunch with Sofia\", dtstart: friday at 13:00}"
+          ]
+        },
+        {
+          "say": "book in a call with the bank monday at 9:30",
+          "calls": [
+            "schedule.propose_event{summary: \"Call with the bank\", dtstart: monday at 09:30}"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "write.note",
+      "group": "write",
+      "desc": "'Make a note to / note down' → `knowledge.create_note{title}`; 'save / keep X in my locker' → `locker.add_item{type: \"note\"|\"login\"|\"card\", title, content}`.",
+      "calls": [
+        "knowledge.create_note{title: \"…\"}",
+        "locker.add_item{type: \"note\", title: \"…\", content: \"…\"}"
+      ],
+      "examples": [
+        {
+          "say": "note to self: check the gutters",
+          "calls": ["knowledge.create_note{title: \"Check the gutters\"}"]
+        },
+        {
+          "say": "note down that the plumber prefers texts",
+          "calls": [
+            "knowledge.create_note{title: \"The plumber prefers texts\"}"
+          ]
+        },
+        {
+          "say": "the garage code is 8812 — keep it in my locker",
+          "calls": [
+            "locker.add_item{type: \"note\", title: \"Garage code\", content: \"8812\"}"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "write.reschedule",
+      "group": "write",
+      "desc": "Move a task or event: `reschedule{to: <day or day at HH:MM>} on #n`, or by an offset `reschedule{by: +1h} on #n`.",
+      "calls": [
+        "reschedule{to: friday} on #4",
+        "reschedule{to: monday at 10:00} on #2",
+        "reschedule{by: +1h} on #3"
+      ],
+      "examples": [
+        {
+          "say": "can it go to thursday instead?",
+          "calls": ["reschedule{to: thursday} on #1"]
+        },
+        {
+          "say": "move the call to monday at 10",
+          "calls": ["reschedule{to: monday at 10:00} on #2"]
+        },
+        {
+          "say": "yoga should start an hour later",
+          "calls": ["reschedule{by: +1h} on #3"]
+        },
+        {
+          "say": "both of them can move to next monday",
+          "calls": ["reschedule{to: next monday} on #1, #2"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "write.mark",
+      "group": "write",
+      "desc": "Mark done or star: `complete{} on #n` (a task), `core.star_document{} on #n` (a document).",
+      "calls": ["complete{} on #4", "core.star_document{} on #2"],
+      "examples": [
+        {
+          "say": "mark it done",
+          "calls": ["complete{} on #1"]
+        },
+        {
+          "say": "first one's done",
+          "calls": ["complete{} on #1"]
+        },
+        {
+          "say": "star that document",
+          "calls": ["core.star_document{} on #2"]
+        },
+        {
+          "say": "I've done the tax return task",
+          "calls": ["show (tasks called \"tax return\")", "complete{} on #1"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "write.trash",
+      "group": "write",
+      "desc": "Delete by kind: `delete{}` (task, event, note), `cancel{}` (an event call-off), `core.trash_document{}`, `tally.delete_expense{}`, `people.trash_person{}`, `locker.trash_item{}`, `media.delete_asset{}` — each `on #n`.",
+      "calls": [
+        "delete{} on #4",
+        "core.trash_document{} on #4",
+        "tally.delete_expense{} on #1",
+        "people.trash_person{} on #1",
+        "media.delete_asset{} on #2"
+      ],
+      "examples": [
+        {
+          "say": "get rid of my old car note",
+          "calls": ["show (notes called \"old car\")", "delete{} on #1"]
+        },
+        {
+          "say": "bin the parking expense",
+          "calls": ["search \"parking\"", "tally.delete_expense{} on #1"]
+        },
+        {
+          "say": "remove Kofi Mensah from my contacts",
+          "calls": ["search \"Kofi Mensah\"", "people.trash_person{} on #1"]
+        },
+        {
+          "say": "trash the blurry photo",
+          "calls": ["search \"blurry\"", "media.delete_asset{} on #1"]
+        },
+        {
+          "say": "call off the vet appointment",
+          "calls": ["show (events called \"vet\")", "cancel{} on #1"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "write.restore",
+      "group": "write",
+      "desc": "Put a trashed row back: `restore{} on #n` (task, note, photo, person), `core.restore_document{}`, `media.restore_asset{}`; an expense comes back with `tally.undo_expense{} on #n`.",
+      "calls": [
+        "restore{} on #1",
+        "tally.undo_expense{} on #1",
+        "core.restore_document{} on #2"
+      ],
+      "examples": [
+        {
+          "say": "undelete it",
+          "calls": ["restore{} on #1"]
+        },
+        {
+          "say": "restore the gutter task",
+          "calls": [
+            "show (tasks called \"gutter\") that (deleted_at is not null)",
+            "restore{} on #1"
+          ]
+        },
+        {
+          "say": "bring the lease back",
+          "calls": ["core.restore_document{} on #1"]
+        },
+        {
+          "say": "undo that expense",
+          "calls": ["tally.undo_expense{} on #1"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "write.reveal",
+      "group": "write",
+      "desc": "Only when the secret itself is asked for ('show me the password', 'what's the PIN') → `locker.reveal_receipt{columns: \"password\"} on #n`.",
+      "calls": ["locker.reveal_receipt{columns: \"password\"} on #1"],
+      "examples": [
+        {
+          "say": "what's the password on it?",
+          "calls": ["locker.reveal_receipt{columns: \"password\"} on #1"]
+        },
+        {
+          "say": "what's the actual password for the router one?",
+          "calls": ["locker.reveal_receipt{columns: \"password\"} on #2"]
+        },
+        {
+          "say": "reveal the gym one too",
+          "calls": ["locker.reveal_receipt{columns: \"password\"} on #3"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "write.album_add",
+      "group": "write",
+      "desc": "`media.add_to_album{album_id: (#album)} on #photo` — the album is a `#n` too (find it first if unseen).",
+      "calls": ["media.add_to_album{album_id: (#9)} on #4"],
+      "examples": [
+        {
+          "say": "add it to the Garden 2026 album",
+          "calls": [
+            "search \"Garden 2026\"",
+            "media.add_to_album{album_id: (#5)} on #2"
+          ]
+        },
+        {
+          "say": "put the sunset one in Lisbon highlights",
+          "calls": [
+            "search \"Lisbon highlights\"",
+            "media.add_to_album{album_id: (#7)} on #3"
+          ]
+        },
+        {
+          "say": "add both to that album",
+          "calls": ["media.add_to_album{album_id: (#1)} on #3, #4"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "write.log_interaction",
+      "group": "write",
+      "desc": "'Log that I called / had coffee with / visited / messaged X' → `people.log_interaction{kind: \"call\"|\"coffee\"|\"visit\"|\"message\"} on #party`.",
+      "calls": ["people.log_interaction{kind: \"call\"} on #4"],
+      "examples": [
+        {
+          "say": "I phoned Omar, log it",
+          "calls": [
+            "show (parties called \"Omar\")",
+            "people.log_interaction{kind: \"call\"} on #1"
+          ]
+        },
+        {
+          "say": "I had coffee with Lena — log it",
+          "calls": [
+            "show (parties called \"Lena\")",
+            "people.log_interaction{kind: \"coffee\"} on #1"
+          ]
+        },
+        {
+          "say": "note that I messaged Kofi",
+          "calls": [
+            "show (parties called \"Kofi\")",
+            "people.log_interaction{kind: \"message\"} on #1"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "write.settle",
+      "group": "write",
+      "desc": "Pay off a personal debt → `people.settle_debt{} on #debt-or-party`; settle a group balance → `tally.settle_up{to_party: me, group_id: (#g), amount_minor: balance of (#m) in (#g)} on #m`.",
+      "calls": [
+        "people.settle_debt{} on #2",
+        "tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#3) in (#1)} on #3"
+      ],
+      "examples": [
+        {
+          "say": "mark that debt paid",
+          "calls": ["people.settle_debt{} on #2"]
+        },
+        {
+          "say": "pay Sofia back",
+          "calls": [
+            "show (parties called \"Sofia\")",
+            "people.settle_debt{} on #1"
+          ]
+        },
+        {
+          "say": "square my Lisbon balance with Kofi",
+          "calls": [
+            "search \"Lisbon\"",
+            "show (members of (#1))",
+            "tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#3) in (#1)} on #3"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "write.tally",
+      "group": "write",
+      "desc": "Add a shared expense `tally.add_expense{description, amount_minor, paid_by: me, group_id: (#g)}`, or add a person to a group `tally.add_group_member{group_id: (#g)} on #p`.",
+      "calls": [
+        "tally.add_expense{description: \"…\", amount_minor: 4200, paid_by: me, group_id: (#5)}",
+        "tally.add_group_member{group_id: (#1)} on #5"
+      ],
+      "examples": [
+        {
+          "say": "add thirty dollars for the taxi to the Lisbon group, I paid",
+          "calls": [
+            "search \"Lisbon\"",
+            "tally.add_expense{description: \"Taxi\", amount_minor: 3000, paid_by: me, group_id: (#1)}"
+          ]
+        },
+        {
+          "say": "add Lena Novak to House Bills",
+          "calls": [
+            "search \"House Bills\"",
+            "show (parties called \"Lena Novak\")",
+            "tally.add_group_member{group_id: (#1)} on #2"
+          ]
+        },
+        {
+          "say": "put a 120 dollar electricity bill in House Bills",
+          "calls": [
+            "search \"House Bills\"",
+            "tally.add_expense{description: \"Electricity bill\", amount_minor: 12000, paid_by: me, group_id: (#1)}"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "compose.lookup_write",
+      "group": "compose",
+      "desc": "When a write's target hasn't been shown, find it first (`search \"…\"` / `show (<kind>) called \"…\"`), then write on its `#n`; a group or album argument is a `#n` too.",
+      "calls": [
+        "search \"…\" → <write> on #1",
+        "show (parties called \"…\") → <write> on #1"
+      ],
+      "examples": [
+        {
+          "say": "trash the old lease",
+          "calls": ["search \"old lease\"", "core.trash_document{} on #1"]
+        },
+        {
+          "say": "record that I rang Omar Haddad",
+          "calls": [
+            "show (parties called \"Omar Haddad\")",
+            "people.log_interaction{kind: \"call\"} on #1"
+          ]
+        },
+        {
+          "say": "I paid twenty dollars for snacks — put it in the Lisbon group",
+          "calls": [
+            "search \"Lisbon\"",
+            "tally.add_expense{description: \"Snacks\", amount_minor: 2000, paid_by: me, group_id: (#1)}"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "compose.bulk",
+      "group": "compose",
+      "desc": "One write names everything it applies to: `delete{} on #1, #4, #7`; 'settle up with everyone' → ONE `tally.settle_up{…, amount_minor: balance of (it) in (#g)} on #2, #3, #4`; never piecemeal across calls or turns.",
+      "calls": [
+        "delete{} on #1, #4, #7",
+        "reschedule{to: friday} on #2, #5",
+        "tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (it) in (#1)} on #2, #3, #4"
+      ],
+      "examples": [
+        {
+          "say": "clear out everything gym-related",
+          "calls": ["search \"gym\"", "delete{} on #1, #2, #3"]
+        },
+        {
+          "say": "square up with all the House Bills members",
+          "calls": [
+            "search \"House Bills\"",
+            "show (members of (#1)) that (party_id is not me)",
+            "tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (it) in (#1)} on #2, #3, #4"
+          ]
+        },
+        {
+          "say": "move the renewal to monday, task and calendar entry alike",
+          "calls": ["search \"renewal\"", "reschedule{to: monday} on #1, #3"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "compose.then",
+      "group": "compose",
+      "desc": "Two different changes in one message → `A then B`.",
+      "calls": ["<write A> then <write B>"],
+      "examples": [
+        {
+          "say": "move the call to thursday and the booking to friday",
+          "calls": [
+            "reschedule{to: thursday} on #2 then reschedule{to: friday} on #3"
+          ]
+        },
+        {
+          "say": "tick off the first and delete the second",
+          "calls": ["complete{} on #1 then delete{} on #2"]
+        },
+        {
+          "say": "star it, and put printing it on my list",
+          "calls": [
+            "core.star_document{} on #1 then schedule.add_task{title: \"Print the lease\"}"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "compose.correction",
+      "group": "compose",
+      "desc": "'Sorry, it was the other X' / 'no — that one's thursday' → the same write aimed at the right row (plus any new change it names); the first write stands — this is not an undo.",
+      "calls": ["<same write> on #<right row>"],
+      "examples": [
+        {
+          "ctx": "I rang Lena Novak — log it",
+          "say": "wrong Lena — I meant the other one",
+          "calls": [
+            "show (parties called \"Lena\")",
+            "people.log_interaction{kind: \"call\"} on #2"
+          ]
+        },
+        {
+          "ctx": "put the second task on friday",
+          "say": "no, that one belongs on tuesday — friday is for the booking",
+          "calls": [
+            "reschedule{to: tuesday} on #4 then reschedule{to: friday} on #3"
+          ]
+        },
+        {
+          "ctx": "add the harbour one to the album",
+          "say": "wrong photo — the sunset one",
+          "calls": ["media.add_to_album{album_id: (#9)} on #5"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "compose.undo",
+      "group": "compose",
+      "desc": "'Scratch that', 'put it back', 'I didn't mean to' right after a write → undo it on the same row: `restore{} on #n`, `tally.undo_expense{} on #n`.",
+      "calls": ["restore{} on #1", "tally.undo_expense{} on #1"],
+      "examples": [
+        {
+          "ctx": "bin the taxi expense",
+          "say": "hmm, no — undo that",
+          "calls": ["tally.undo_expense{} on #1"]
+        },
+        {
+          "ctx": "remove Kofi Mensah as a contact",
+          "say": "no, bring him back",
+          "calls": ["restore{} on #1"]
+        },
+        {
+          "ctx": "delete the gutter task",
+          "say": "oops, I didn't mean that",
+          "calls": ["restore{} on #1"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "judge.ambiguous",
+      "group": "judge",
+      "desc": "A vague target (several Omars, 'the group' when there are two, 'all my X stuff' spanning many kinds): make the call over the set exactly as said and let the runtime ask; after `ambiguous: …`, name the `#n` if the message decides, else `done`.",
+      "calls": [
+        "<write> on (parties called \"Omar\")",
+        "answer sum amount_minor of (expenses of (groups))",
+        "done"
+      ],
+      "examples": [
+        {
+          "say": "pay Omar what I owe him",
+          "calls": ["people.settle_debt{} on (parties called \"Omar\")"]
+        },
+        {
+          "say": "is that Lena from work or the other one?",
+          "calls": ["done"]
+        },
+        {
+          "say": "put Kofi in the group",
+          "calls": [
+            "tally.add_group_member{group_id: (groups)} on (parties called \"Kofi\")"
+          ]
+        },
+        {
+          "say": "how much have I paid into the group?",
+          "calls": [
+            "answer sum amount_minor of ((expenses of (groups)) that (paid_by = me))"
+          ]
+        }
+      ],
+      "judgement": true
+    },
+    {
+      "id": "judge.no_link",
+      "group": "judge",
+      "desc": "A walk over a link the vault doesn't hold ('is there an event at that place?') comes back `ambiguous: no link …` → `done` (the runtime asks); when a who/what link is ambiguous but the starting row already answers, `answer #n` with that row.",
+      "calls": ["answer events of (#7)", "done", "answer #1"],
+      "examples": [
+        {
+          "say": "any calendar event at that spot?",
+          "calls": ["answer events of (#4)"]
+        },
+        {
+          "say": "is the photo's Omar the same person?",
+          "calls": ["answer parties of (#2)"]
+        },
+        {
+          "say": "saturday's lunch — who's it with?",
+          "calls": [
+            "show (events called \"lunch\") that (dtstart during saturday)",
+            "answer parties of (#1)",
+            "answer #1"
+          ]
+        }
+      ],
+      "judgement": true
+    },
+    {
+      "id": "judge.nothing_there",
+      "group": "judge",
+      "desc": "The target is only in the trash, or nowhere: a write → `nothing`; a read → the honest empty set or 0, never a near-miss row of another name or kind.",
+      "calls": [
+        "nothing",
+        "answer (documents called \"…\")  (empty)",
+        "answer sum amount_minor of (…)  (0)"
+      ],
+      "examples": [
+        {
+          "say": "trash my note on the old van",
+          "calls": [
+            "show (notes called \"van\")",
+            "show (notes called \"van\") that (deleted_at is not null)",
+            "nothing"
+          ]
+        },
+        {
+          "say": "any document for Alfama?",
+          "calls": ["answer (documents called \"Alfama\")"]
+        },
+        {
+          "say": "total spent back in march?",
+          "calls": [
+            "answer sum amount_minor of (expenses that (spent_on during 2026-03-01..2026-03-31))"
+          ]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "judge.never_mind",
+      "group": "judge",
+      "desc": "'Never mind', 'forget it', 'actually no', 'leave it' before anything was done → `nothing`.",
+      "calls": ["nothing"],
+      "examples": [
+        {
+          "say": "actually, don't bother",
+          "calls": ["nothing"]
+        },
+        {
+          "say": "forget it",
+          "calls": ["nothing"]
+        },
+        {
+          "say": "scrap that, I'll check later myself",
+          "calls": ["nothing"]
+        },
+        {
+          "say": "nah, leave it",
+          "calls": ["nothing"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "judge.refuse_outside",
+      "group": "judge",
+      "desc": "Anything the vault doesn't hold or can't do — weather, the web, booking or buying online, sending a text or email — → `refuse: out_of_ontology`.",
+      "calls": ["refuse: out_of_ontology"],
+      "examples": [
+        {
+          "say": "will it rain in Lisbon tomorrow?",
+          "calls": ["refuse: out_of_ontology"]
+        },
+        {
+          "say": "order more printer ink",
+          "calls": ["refuse: out_of_ontology"]
+        },
+        {
+          "say": "send Omar a message saying happy birthday",
+          "calls": ["refuse: out_of_ontology"]
+        },
+        {
+          "say": "reserve a table at the Italian place for friday",
+          "calls": ["refuse: out_of_ontology"]
+        }
+      ],
+      "judgement": false
+    },
+    {
+      "id": "judge.refuse_guard",
+      "group": "judge",
+      "desc": "Protect the vault: sending a secret out of it → `refuse: sealed_egress`; inventing a password or code → `refuse: fabricated_secret`; 'delete everything' → `refuse: unbounded_destruction`.",
+      "calls": [
+        "refuse: sealed_egress",
+        "refuse: fabricated_secret",
+        "refuse: unbounded_destruction"
+      ],
+      "examples": [
+        {
+          "say": "message Kofi the garage code",
+          "calls": ["refuse: sealed_egress"]
+        },
+        {
+          "say": "dump all my passwords into a spreadsheet",
+          "calls": ["refuse: sealed_egress"]
+        },
+        {
+          "say": "make up a new router password for me",
+          "calls": ["refuse: fabricated_secret"]
+        },
+        {
+          "say": "wipe everything in my vault",
+          "calls": ["refuse: unbounded_destruction"]
+        }
+      ],
+      "judgement": false
+    }
+  ]
+}

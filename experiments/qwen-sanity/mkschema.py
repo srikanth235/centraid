@@ -137,8 +137,24 @@ def _enum(values):
     return {"type": "string", "enum": list(values)}
 
 
+# `format` keywords llama.cpp's JSON-schema-to-GBNF converter builds a real
+# rule for.  MEASURED, not assumed: `pattern` is accepted by the schema and
+# then IGNORED by that converter -- a `{"type": "string", "pattern":
+# "^\\d{4}-\\d{2}-\\d{2}$"}` slot happily generated "banana...".  So a shape
+# that only `pattern` can express is NOT enforced at decode time, however
+# correct the schema is, and the proofs below (which use a real JSON-schema
+# validator) will not tell you so.  Where a `format` exists the grammar really
+# constrains the model; elsewhere the pattern documents the contract and
+# catches the frame on the way back in, which is worth having but is not the
+# same thing.
+_FORMAT = {"date": "date", "datetime": "date-time"}
+
+
 def _pattern(name):
-    return {"type": "string", "pattern": PAT[name]}
+    out = {"type": "string", "pattern": PAT[name]}
+    if name in _FORMAT:
+        out["format"] = _FORMAT[name]
+    return out
 
 
 def _obj(props, required=()):
@@ -402,12 +418,21 @@ def defs():
     for level in range(1, SET_DEPTH + 1):
         out["set%d" % level] = {"anyOf": _set_branches(level)}
         out["atom%d" % level] = {"anyOf": _atom_branches(level)}
-        out["pred%d" % level] = _obj(
-            {"join": _enum(["none", "and", "or"]),
-             "atoms": {"type": "array",
-                       "items": {"$ref": "#/$defs/atom%d" % level},
-                       "minItems": 1, "maxItems": 3}},
-            ["join", "atoms"])
+        # `_pred_decode` only reaches the connective when there is more than
+        # one atom, and then refuses anything but `and`/`or` -- so `none` with
+        # two atoms is `connective 'none'`, which was 13 of the 16 unrenderable
+        # turns in the first 2B kNN arm. The arity is part of the contract.
+        atom = {"$ref": "#/$defs/atom%d" % level}
+        out["pred%d" % level] = {"anyOf": [
+            _obj({"join": _enum(["none"]),
+                  "atoms": {"type": "array", "items": atom,
+                            "minItems": 1, "maxItems": 1}},
+                 ["join", "atoms"]),
+            _obj({"join": _enum(["and", "or"]),
+                  "atoms": {"type": "array", "items": atom,
+                            "minItems": 2, "maxItems": 3}},
+                 ["join", "atoms"]),
+        ]}
     return out
 
 

@@ -1,0 +1,238 @@
+[
+  {
+    "id": "w01-075",
+    "today": "Tuesday 2025-06-10",
+    "turns": [{ "hint": "asks what is due next week", "say": ["next week"] }],
+    "versions": 3,
+    "registers": ["texting", "polite", "question"]
+  },
+  {
+    "id": "w01-076",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      { "hint": "asks when the Kayak lesson is", "say": ["Kayak lesson"] },
+      {
+        "hint": "asks the same about Haircut instead ('what about Haircut?')",
+        "say": ["Haircut"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w01-077",
+    "today": "Tuesday 2025-06-10",
+    "turns": [
+      {
+        "hint": "asks what the wifi is at the Kayak club",
+        "say": ["Kayak club"]
+      },
+      {
+        "hint": "asks the same about wifi instead ('what about wifi?')",
+        "say": ["wifi"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "spoken"]
+  },
+  {
+    "id": "w02-000",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      { "hint": "asks to find anything to do with dusk", "say": ["dusk"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "w02-001",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      { "hint": "asks what they have filed under Work", "say": ["Work"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "spoken"]
+  },
+  {
+    "id": "w02-002",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks what they have about Allotment open",
+        "say": ["Allotment open"]
+      },
+      {
+        "hint": "asks to add a task for monday to deal with 'Allotment open day'",
+        "say": ["monday"]
+      },
+      {
+        "hint": "(new topic) asks if they have any locker entries about Business",
+        "say": ["Business"]
+      },
+      {
+        "hint": "asks the same about Airline backup instead ('what about Airline backup?')",
+        "say": ["Airline backup"]
+      },
+      {
+        "hint": "asks the same about portal instead ('what about portal?')",
+        "say": ["portal"]
+      },
+      {
+        "hint": "asks the same about Airline backup instead ('what about Airline backup?')",
+        "say": ["Airline backup"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "terse"]
+  },
+  {
+    "id": "w02-003",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks to find anything to do with Swimming",
+        "say": ["Swimming"]
+      },
+      {
+        "hint": "(new topic) asks which calendar events mention Team",
+        "say": ["Team"]
+      },
+      {
+        "hint": "asks the same about night catch-up instead ('what about night catch-up?')",
+        "say": ["night catch-up"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "spoken"]
+  },
+  {
+    "id": "w02-004",
+    "today": "Wednesday 2025-06-18",
+    "turns": [{ "hint": "asks for Wystan's contact card", "say": ["Wystan"] }],
+    "versions": 3,
+    "registers": ["polite", "terse", "texting"]
+  },
+  {
+    "id": "w02-005",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      { "hint": "asks if the Fence note is in the trash", "say": ["Fence"] },
+      {
+        "hint": "(new topic) asks to add 120 (money) for snacks to the club fund group, paid by them",
+        "say": ["club fund", "snacks"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  },
+  {
+    "id": "w02-006",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks what they have about Juniper Plumbing",
+        "say": ["Juniper Plumbing"]
+      },
+      {
+        "hint": "asks the same about Lucinda instead ('what about Lucinda?')",
+        "say": ["Lucinda"]
+      },
+      {
+        "hint": "asks the same about Elderberry instead ('what about Elderberry?')",
+        "say": ["Elderberry"]
+      },
+      { "hint": "(new topic) asks what's left on their to-do list", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "terse"]
+  },
+  {
+    "id": "w02-007",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      { "hint": "asks for their favourite photos", "say": [] },
+      {
+        "hint": "asks for just the magazine ones among those",
+        "say": ["magazine"]
+      },
+      {
+        "hint": "(new topic) asks which documents mention Bookshelf",
+        "say": ["Bookshelf"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "polite"]
+  },
+  {
+    "id": "w02-008",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks to move the Sort task to thursday",
+        "say": ["Sort", "thursday"]
+      },
+      {
+        "hint": "(new topic) asks who is coming to the Greenhouse fair",
+        "say": ["Greenhouse fair"]
+      },
+      { "hint": "asks for Thibault's number", "say": ["Thibault"] },
+      {
+        "hint": "(new topic) asks to find the documents on form",
+        "say": ["form"]
+      },
+      {
+        "hint": "(new topic) asks what the login for Payroll is (not the password)",
+        "say": ["Payroll"]
+      },
+      {
+        "hint": "(new topic) asks to add 55 (money) for museum to the watch group, paid by them",
+        "say": ["watch", "museum"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "texting"]
+  },
+  {
+    "id": "w02-009",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks to save the gate code 8925 in the locker",
+        "say": ["gate code", "8925"]
+      },
+      {
+        "hint": "(new topic) asks what paperwork is kept in Work",
+        "say": ["Work"]
+      },
+      {
+        "hint": "(new topic) asks for the members of the Neighbourhood watch group",
+        "say": ["Neighbourhood watch"]
+      },
+      {
+        "hint": "asks how much Jessamy owes them in that group",
+        "say": ["Jessamy"]
+      },
+      { "hint": "takes it back: never mind", "say": [] },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "question"]
+  },
+  {
+    "id": "w02-010",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      { "hint": "asks for their starred files", "say": [] },
+      { "hint": "asks how many that is", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "question"]
+  },
+  {
+    "id": "w02-011",
+    "today": "Wednesday 2025-06-18",
+    "turns": [{ "hint": "asks what day the Flight is on", "say": ["Flight"] }],
+    "versions": 3,
+    "registers": ["terse", "spoken", "question"]
+  }
+]

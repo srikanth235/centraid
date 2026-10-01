@@ -1,0 +1,268 @@
+[
+  {
+    "id": "w39-0046",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      { "hint": "asks when the dinner is", "say": ["dinner", "when"] },
+      {
+        "hint": "(new topic) asks to email Priskel the mobile login",
+        "say": ["Priskel", "mobile login"],
+        "shown": "event \"Dinner with Wysou\" Fri 2025-12-19 14:45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w39-0047",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks for Priskel's number (two contacts are called Priskel, the message doesn't say which)",
+        "say": ["Priskel"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w39-0048",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks to add a task to renew the badger insurance, due next monday",
+        "say": ["renew the badger insurance", "next monday"]
+      },
+      {
+        "hint": "(new topic) asks to find Priskel Sjoberg in their contacts",
+        "say": ["Priskel Sjoberg"],
+        "shown": "done: schedule.add_task{title: \"Renew the badger insurance\", due_at: 2026-01-12}"
+      },
+      {
+        "hint": "(new topic) asks to pull up the nectarine budget thing",
+        "say": ["nectarine budget"],
+        "shown": "party \"Priskel Sjoberg\" · role=Neighbour next door"
+      },
+      {
+        "hint": "(detour) hang on — asks what pictures are in the Dagger progress album",
+        "say": ["Dagger progress", "album"],
+        "shown": "note \"Kousan's nectarine budget\" Sun 2025-12-07 08:14"
+      },
+      {
+        "hint": "(new topic) asks to bring the research task back from the bin",
+        "say": ["research", "task"],
+        "shown": "photo \"Copperplate from above\" Wed 2025-12-24 09:12 · album_titles=Dagger progress favorite=false people=Flallie Driskino\nphoto \"Copperplate at dusk\" Mon 2025-12-22 17:35 · album_titles=Dagger progress favorite=false people=Jyoti Kapoor, Fabrice Palmqvist\nphoto \"Soapmaking lesson 2024\" Sun 2025-12-21 19:50 · album_titles=Summer 2025, Dagger progress favorite=false\nphoto \"Camel close-up\" Sun 2025-11-30 13:52 · album_titles=Walks round The Old Cockpit, Dagger prog… favorite=false\n(+3 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w39-0049",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks to see the diary entries they made recently",
+        "say": ["recently", "diary"]
+      },
+      {
+        "hint": "(detour) hang on — asks what's gone into number 17 flat",
+        "say": ["number 17 flat"],
+        "shown": "journal note \"People journal · tired\" Tue 2026-01-06 12:00\njournal note \"People journal · happy\" Sat 2026-01-03 12:00"
+      },
+      {
+        "hint": "back to the journal — asks for just the ones from last week",
+        "say": ["last week"],
+        "shown": "expense \"Bakery run (wk 52)\" Sat 2025-12-27 · amount_minor=3899 paid_by=Owner\nexpense \"Kombucha lesson supplies\" Fri 2025-12-26 · amount_minor=7184 paid_by=Farai Palmqvist\nexpense \"Macrame refund\" Fri 2025-12-26 · amount_minor=3699 paid_by=Owner\nexpense \"Dagger kit\" Thu 2025-12-25 · amount_minor=3236 paid_by=Yaw Gallardo\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w39-0050",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks when their wisteria thing is (no kind given)",
+        "say": ["wisteria"]
+      },
+      {
+        "hint": "(new topic) asks to settle up with everyone who owes them in macrame pot",
+        "say": ["macrame pot"],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w39-0051",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in macrame pot",
+        "say": ["macrame pot", "how much"]
+      },
+      {
+        "hint": "(new topic) asks to move the Akaroa appointment to friday",
+        "say": ["Akaroa", "friday"],
+        "shown": "= 39004"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w39-0052",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in macrame pot (the expenses)",
+        "say": ["macrame pot"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w39-0053",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks to make a note: books to read this summer",
+        "say": ["books to read this summer"]
+      },
+      {
+        "hint": "(new topic) asks which to-dos take about ten minute",
+        "say": ["ten minute"],
+        "shown": "done: knowledge.create_note{title: \"Books to read this summer\"}"
+      },
+      {
+        "hint": "(new topic) asks which important dates fall next month",
+        "say": ["next month", "month"],
+        "shown": "task \"Cancel the bobsleigh\" · status=needs-action effort_min=10"
+      },
+      {
+        "hint": "(new topic) asks which fix jobs are still open",
+        "say": ["fix"],
+        "shown": "important date \"Anniversary — Farai Palmqvist\" Wed 2026-02-04\nimportant date \"Birthday — Gwyneth Traskova\" Fri 2026-02-06\nimportant date \"Birthday — Wynne Kang\" Fri 2026-02-27\nimportant date \"Wedding anniversary — Ryota Obi\" Fri 2026-02-13"
+      },
+      {
+        "hint": "(new topic) asks to move the coffee an hour earlier",
+        "say": ["coffee", "an hour earlier"],
+        "shown": "task \"Fix the griddle before Yaw comes\" Tue 2025-12-16 18:00 · status=needs-action"
+      },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "done: reschedule{by: -1h} on (#17)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w39-0054",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      { "hint": "asks which to-dos have no deadline", "say": [] },
+      {
+        "hint": "(detour) hang on — asks to open the Dagger progress album",
+        "say": ["Dagger progress", "album"],
+        "shown": "task \"Cancel the bobsleigh\" · status=needs-action effort_min=10\ntask \"Oil the primrose\" · status=needs-action effort_min=20\ntask \"Insure the bramble this week\" · status=needs-action\ntask \"Post the sandal\" · status=in-process effort_min=180\n(+4 more)"
+      },
+      {
+        "hint": "back to the undated tasks — asks to move the oil one to sunday",
+        "say": ["oil", "sunday"],
+        "shown": "photo \"Copperplate from above\" Wed 2025-12-24 09:12 · album_titles=Dagger progress favorite=false people=Flallie Driskino\nphoto \"Copperplate at dusk\" Mon 2025-12-22 17:35 · album_titles=Dagger progress favorite=false people=Jyoti Kapoor, Fabrice Palmqvist\nphoto \"Soapmaking lesson 2024\" Sun 2025-12-21 19:50 · album_titles=Summer 2025, Dagger progress favorite=false\nphoto \"Camel close-up\" Sun 2025-11-30 13:52 · album_titles=Walks round The Old Cockpit, Dagger prog… favorite=false\n(+3 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w39-0055",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      { "hint": "asks which to-dos take about one hour", "say": ["one hour"] }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w39-0056",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks to pull up the dastum list thing",
+        "say": ["dastum list"]
+      },
+      {
+        "hint": "follow-up: asks what else is in that notebook",
+        "say": [],
+        "shown": "note \"Dastum list\" Fri 2025-08-15 07:37 · notebooks=Ideas"
+      },
+      {
+        "hint": "(new topic) asks if the Wysou task can go to tuesday instead",
+        "say": ["Wysou", "tuesday"],
+        "shown": "note \"Notes from Kycombe Hollow\" Sat 2025-11-22 10:57 · notebooks=Ideas\nnote \"Things to ask Jessamy\" Sun 2025-10-05 09:08 · notebooks=Ideas\nnote \"Ganesh's chisel packing list\" Sat 2025-09-13 17:40 · notebooks=Ideas\nnote \"Gaman's camel wishlist\" Thu 2025-08-14 11:15 · notebooks=Ideas"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w39-0057",
+    "today": "Friday 2026-01-09",
+    "turns": [{ "hint": "asks who still has to pay them back", "say": [] }],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w39-0058",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "says note to self: ideas for the wren",
+        "say": ["ideas for the wren"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w39-0059",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks to star the chisel document and add a task to print the chisel monday",
+        "say": ["chisel", "print the chisel", "monday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w39-0060",
+    "today": "Friday 2026-01-09",
+    "turns": [
+      {
+        "hint": "asks for the settlements in the number 17 flat group",
+        "say": ["number 17 flat"]
+      },
+      {
+        "hint": "(new topic) asks to clear what's owed between them and Jyoti Kapoor",
+        "say": ["Jyoti Kapoor"],
+        "shown": "settlement \"settlement 500\" Thu 2026-01-08 · amount_minor=500"
+      },
+      {
+        "hint": "(new topic) asks if the therapist appointment can go to monday instead",
+        "say": ["therapist", "monday"],
+        "shown": "done: people.settle_debt{} on (#5)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  }
+]

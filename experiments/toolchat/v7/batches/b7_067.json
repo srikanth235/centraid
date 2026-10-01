@@ -1,0 +1,268 @@
+[
+  {
+    "id": "w13-069",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks which notes mention Cabin packing",
+        "say": ["Cabin packing"]
+      },
+      {
+        "hint": "(new topic) asks where the Library password details are",
+        "say": ["Library"]
+      },
+      {
+        "hint": "(new topic) asks what paperwork is kept in Boat",
+        "say": ["Boat"]
+      },
+      {
+        "hint": "(new topic) asks who is coming to the grooming",
+        "say": ["grooming"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "spoken"]
+  },
+  {
+    "id": "w13-070",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks who they're seeing at the Housewarming",
+        "say": ["Housewarming"]
+      },
+      {
+        "hint": "(new topic) asks to log that they had a visit with Sebastiano",
+        "say": ["Sebastiano"]
+      },
+      { "hint": "(new topic) asks which documents they starred", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  },
+  {
+    "id": "w13-071",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks what day the rehearsal is on", "say": ["rehearsal"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "spoken"]
+  },
+  {
+    "id": "w13-072",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks who Rhiannon Kilbride is", "say": ["Rhiannon Kilbride"] },
+      {
+        "hint": "asks when their birthday is (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks if they have any documents about Tent receipt",
+        "say": ["Tent receipt"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "terse"]
+  },
+  {
+    "id": "w13-073",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks which photos they hearted", "say": [] },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks what they have on the 24th",
+        "say": ["the 24th"]
+      },
+      { "hint": "asks for just the ones due next week", "say": ["next week"] },
+      {
+        "hint": "(new topic) asks to add 18 (money) for taxi to the Office group, paid by them",
+        "say": ["Office", "taxi"]
+      },
+      {
+        "hint": "(new topic) asks what they have about plants",
+        "say": ["plants"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "question"]
+  },
+  {
+    "id": "w13-074",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks for their calendar events about School",
+        "say": ["School"]
+      },
+      {
+        "hint": "asks the same about Kayak instead ('what about Kayak?')",
+        "say": ["Kayak"]
+      },
+      { "hint": "asks to move the first one to friday", "say": ["friday"] },
+      { "hint": "asks what about in their notes", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "terse"]
+  },
+  {
+    "id": "w13-075",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks to see the Frosty album", "say": ["Frosty"] },
+      {
+        "hint": "(new topic) asks to see the documents they marked with a star",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "spoken"]
+  },
+  {
+    "id": "w13-076",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks to book a table at a restaurant", "say": [] },
+      { "hint": "(new topic) asks for their starred files", "say": [] },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "(new topic) asks whether Rhiannon Blomqvist's birthday is coming up",
+        "say": ["Rhiannon Blomqvist"]
+      },
+      {
+        "hint": "(new topic) asks what they last talked about with Ursula Pendry",
+        "say": ["Ursula Pendry"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "question"]
+  },
+  {
+    "id": "w13-077",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks which expenses were over 150 (money)", "say": ["150"] },
+      { "hint": "asks which of those are about top-up", "say": ["top-up"] },
+      {
+        "hint": "(new topic) asks to find the locker entries on portal",
+        "say": ["portal"]
+      },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks to move the knife task to friday",
+        "say": ["knife", "friday"]
+      },
+      {
+        "hint": "(new topic) asks which tasks take about 60 minutes",
+        "say": ["60"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "texting"]
+  },
+  {
+    "id": "w14-000",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      { "hint": "asks who they still have to pay back", "say": [] },
+      {
+        "hint": "asks about the debts with them (all of those people)",
+        "say": []
+      },
+      { "hint": "(new topic) asks what they're behind on", "say": [] },
+      { "hint": "asks for just the ones due today", "say": ["today"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "spoken"]
+  },
+  {
+    "id": "w14-001",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      { "hint": "asks to book a table at a restaurant", "say": [] },
+      {
+        "hint": "(new topic) asks for their notes about Wardrobe notes",
+        "say": ["Wardrobe notes"]
+      },
+      {
+        "hint": "(new topic) asks for the members of the Harvest group",
+        "say": ["Harvest"]
+      },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks what is on their calendar today",
+        "say": ["today"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "spoken"]
+  },
+  {
+    "id": "w14-002",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      { "hint": "asks what they ticked off this week", "say": ["this week"] },
+      { "hint": "asks for just just today's (today)", "say": ["today"] },
+      {
+        "hint": "(new topic) asks what they have on saturday (calendar, to-dos, birthdays)",
+        "say": ["saturday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "texting"]
+  },
+  {
+    "id": "w14-003",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      {
+        "hint": "asks to pull up Cinder Electrics",
+        "say": ["Cinder Electrics"]
+      },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "terse"]
+  },
+  {
+    "id": "w14-004",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      { "hint": "asks which album the Rent photo is in", "say": ["Rent"] },
+      { "hint": "asks what else is in that album", "say": [] },
+      {
+        "hint": "(new topic) asks to add a task 'Collect the council tax' for tomorrow",
+        "say": ["Collect the council tax", "tomorrow"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "w14-005",
+    "today": "Monday 2027-07-26",
+    "turns": [
+      {
+        "hint": "asks whose birthdays are coming up next 2 weeks",
+        "say": ["next 2 weeks"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "terse"]
+  }
+]

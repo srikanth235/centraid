@@ -1,0 +1,201 @@
+[
+  {
+    "id": "w06-030",
+    "today": "Sunday 2025-01-12",
+    "turns": [{ "hint": "asks what they have about Care", "say": ["Care"] }],
+    "versions": 3,
+    "registers": ["polite", "terse", "question"]
+  },
+  {
+    "id": "w06-031",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks when they have the Elderberry Hill",
+        "say": ["Elderberry Hill"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "terse"]
+  },
+  {
+    "id": "w06-032",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks who they owe money to", "say": [] },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks for everything mentioning Football",
+        "say": ["Football"]
+      },
+      { "hint": "asks what else there is apart from the second one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "polite"]
+  },
+  {
+    "id": "w06-033",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks what they're behind on", "say": [] },
+      {
+        "hint": "(new topic) asks what's in the vault about Tove Mortimer",
+        "say": ["Tove Mortimer"]
+      },
+      {
+        "hint": "asks the same about Phone parts instead ('what about Phone parts?')",
+        "say": ["Phone parts"]
+      },
+      { "hint": "(new topic) asks which documents they starred", "say": [] },
+      { "hint": "asks what else there is apart from the third one", "say": [] },
+      {
+        "hint": "(new topic) asks what time the evening is",
+        "say": ["evening"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w06-034",
+    "today": "Sunday 2025-01-12",
+    "turns": [{ "hint": "asks to delete the ideas note", "say": ["ideas"] }],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  },
+  {
+    "id": "w06-035",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks where they took the Tutor picture", "say": ["Tutor"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "terse"]
+  },
+  {
+    "id": "w06-036",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks to move the Swimming appointment to tuesday",
+        "say": ["Swimming", "tuesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "w06-037",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks for the notes in their Piano notebook",
+        "say": ["Piano"]
+      },
+      {
+        "hint": "asks to add a task for tuesday to deal with 'Monitor recipe'",
+        "say": ["tuesday"]
+      },
+      {
+        "hint": "(new topic) asks what they have about Nakagawa",
+        "say": ["Nakagawa"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  },
+  {
+    "id": "w06-038",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks to find the to-dos on shop", "say": ["shop"] },
+      {
+        "hint": "asks for just the ones on monday (monday)",
+        "say": ["monday"]
+      },
+      {
+        "hint": "asks the same about Clean instead ('what about Clean?')",
+        "say": ["Clean"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "question"]
+  },
+  {
+    "id": "w06-039",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks if they have any notes about recipe", "say": ["recipe"] },
+      { "hint": "asks what else there is apart from the first one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "question"]
+  },
+  {
+    "id": "w06-040",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks for photos taken at Glenfarrow Falls",
+        "say": ["Glenfarrow Falls"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "question"]
+  },
+  {
+    "id": "w06-041",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks who they're seeing at the Dentist meetup",
+        "say": ["Dentist meetup"]
+      },
+      {
+        "hint": "(new topic) asks when they have the Charity",
+        "say": ["Charity"]
+      },
+      { "hint": "asks who else will be there", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "polite"]
+  },
+  {
+    "id": "w06-042",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks for their journal entries from recently",
+        "say": ["recently"]
+      },
+      { "hint": "asks for just the tired ones among those", "say": ["tired"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "w06-043",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks which expenses were over 75 (money)", "say": ["75"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "terse"]
+  },
+  {
+    "id": "w06-044",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks what time the Charity quiz is", "say": ["Charity quiz"] },
+      {
+        "hint": "asks to add a task for thursday to deal with 'Charity quiz'",
+        "say": ["thursday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "texting"]
+  }
+]

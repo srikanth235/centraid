@@ -1,0 +1,325 @@
+[
+  {
+    "id": "w05-0017",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the arts centre is",
+        "say": ["arts centre", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w05-0018",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks for their photos about burrow",
+        "say": ["burrow", "photos"]
+      },
+      {
+        "hint": "follow-up: asks how many there are in total",
+        "say": [],
+        "shown": "photo \"Burrow from above\" Mon 2023-04-03 09:38 · album_titles=Abseiling class, Abseiling class highlig… favorite=false\nphoto \"Burrow at sunrise\" Sun 2024-01-28 15:20 · album_titles=Ottoman 2025 favorite=false"
+      },
+      {
+        "hint": "(new topic) asks for their files about lothock",
+        "say": ["lothock", "files"],
+        "shown": "= 2"
+      },
+      {
+        "hint": "follow-up: asks for a task to call the bill document friday",
+        "say": ["call the bill document", "friday"],
+        "shown": "document \"Lothock bill\" Fri 2024-09-13 21:41 · folder=Invoices"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w05-0019",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      { "hint": "asks what is still due this week", "say": ["this week"] },
+      {
+        "hint": "follow-up: asks to move the last one to monday",
+        "say": ["last", "monday"],
+        "shown": "task \"Buy the scaffold\" Mon 2025-01-13 18:00 · status=needs-action effort_min=45\ntask \"Collect the teacake\" Thu 2025-01-16 17:00 · status=needs-action"
+      },
+      {
+        "hint": "(new topic) asks to find the paperwork on clover",
+        "say": ["clover", "paperwork"],
+        "shown": "done: reschedule{to: 2025-01-20} on (#2)"
+      },
+      {
+        "hint": "(detour) hang on — asks what pictures are in the Best of 2025 album",
+        "say": ["Best of 2025", "album"],
+        "shown": "document \"Clover agreement 2025\" Tue 2024-07-02 10:15 · folder=Volunteering"
+      },
+      {
+        "hint": "(new topic) asks if they have any paperwork about report",
+        "say": ["report", "paperwork"],
+        "shown": "photo \"Apricot at Crusaness Food Hall\" Tue 2024-12-10 12:22 · album_titles=Best of 2025 favorite=false\nphoto \"IMG_6213\" Fri 2024-12-06 20:48 · album_titles=Best of 2025 favorite=true\nphoto \"Maelle with the charcoal\" Tue 2024-12-03 19:30 · album_titles=Best of 2025 favorite=true"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w05-0020",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks for pictures with Karin Siddiqui in them",
+        "say": ["Karin Siddiqui"]
+      },
+      {
+        "hint": "follow-up: asks who is in it",
+        "say": [],
+        "shown": "photo \"Karin at Bellagio Dunes\" Mon 2024-10-28 17:15 · album_titles=Bellagio 2024 favorite=false people=Eleni Delmere, Hideo Lansen, Karin Siddiqui"
+      },
+      {
+        "hint": "follow-up: asks which of those are about Lansen",
+        "say": ["Lansen"],
+        "shown": "party \"Eleni Delmere\" · role=Friend from the gym\nparty \"Hideo Lansen\" · role=Sister-in-law\nparty \"Karin Siddiqui\" · role=Dog groomer"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w05-0021",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks what Eleni's balance with them is in the lothock pot group",
+        "say": ["Eleni", "lothock pot"]
+      },
+      {
+        "hint": "(new topic) asks to put Vralou in lothock pot",
+        "say": ["Vralou", "lothock pot"],
+        "shown": "= 36742"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w05-0022",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      { "hint": "asks for the pictures they marked as favourites", "say": [] },
+      {
+        "hint": "follow-up: about the letterpress one, asks which album it's in",
+        "say": ["letterpress"],
+        "shown": "photo \"Letterpress on the table\" Sun 2024-12-22 14:07 · album_titles=Abseiling class highlights, Crusaness Fo… favorite=true\nphoto \"Zither in the snow\" Sun 2024-12-08 10:58 · album_titles=Abseiling class favorite=true people=Ozan Pralow, Hideo Lansen\nphoto \"Pelican at sunrise\" Sat 2024-12-07 18:41 · album_titles=Abseiling class highlights, Ottoman 2025 favorite=true\nphoto \"IMG_6213\" Fri 2024-12-06 20:48 · album_titles=Best of 2025 favorite=true\n(+2 more)"
+      },
+      {
+        "hint": "(detour) hang on — asks for their pictures from Bantry Lido",
+        "say": ["Bantry Lido"],
+        "shown": "album \"Crusaness Food Hall\"\nalbum \"Abseiling class highlights\""
+      },
+      {
+        "hint": "back to the favourite photos — about the abseiling one, asks to see the photos in it",
+        "say": ["abseiling"],
+        "shown": "photo \"Vearie at Bantry Lido\" Mon 2024-12-30 12:21 · favorite=false people=Vralou Quanacre, Vearie Pralow"
+      },
+      {
+        "hint": "follow-up: about the letterpress one, asks which album it's in",
+        "say": ["letterpress"],
+        "shown": "photo \"Letterpress on the table\" Sun 2024-12-22 14:07 · album_titles=Abseiling class highlights, Crusaness Fo… favorite=true\nphoto \"Pelican at sunrise\" Sat 2024-12-07 18:41 · album_titles=Abseiling class highlights, Ottoman 2025 favorite=true\nphoto \"Garland at Bantry Arts Centre\" Fri 2024-10-11 07:36 · album_titles=Ottoman 2025, Abseiling class highlights… favorite=true\nphoto \"Burrow from above\" Mon 2023-04-03 09:38 · album_titles=Abseiling class, Abseiling class highlig… favorite=false"
+      },
+      {
+        "hint": "follow-up: asks what else is in that album",
+        "say": [],
+        "shown": "album \"Crusaness Food Hall\"\nalbum \"Abseiling class highlights\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w05-0023",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      { "hint": "asks who'll be at the Postuton", "say": ["Postuton"] },
+      {
+        "hint": "follow-up: asks for just the Hideo ones among those",
+        "say": ["Hideo"],
+        "shown": "party \"Radek Brackenholt\" · role=Dog-walking friend\nparty \"Flarel Llewellyn\" · role=Aunt\nparty \"Amelie Forsyth\" · role=Dog-walking friend\nparty \"Hideo Lansen\" · role=Sister-in-law"
+      },
+      {
+        "hint": "follow-up: asks for their contact details",
+        "say": [],
+        "shown": "party \"Hideo Lansen\" · role=Sister-in-law"
+      },
+      {
+        "hint": "(new topic) asks to open the Food Hall album",
+        "say": ["Food Hall", "album"],
+        "shown": "contact channel \"Hideo Lansen — mobile\" · kind=phone value=+48 512 345 454"
+      },
+      {
+        "hint": "follow-up: asks to put the fourth one in the Best of 2025 album",
+        "say": ["fourth", "Best of 2025", "album"],
+        "shown": "photo \"Meilin at Crusaness Food Hall\" Mon 2025-01-13 10:12 · album_titles=Crusaness Food Hall favorite=false\nphoto \"Bellflower from above\" Sat 2024-12-28 15:11 · album_titles=Abseiling class, Crusaness Food Hall favorite=false people=Shethara Llewellyn\nphoto \"Letterpress on the table\" Sun 2024-12-22 14:07 · album_titles=Abseiling class highlights, Crusaness Fo… favorite=true\nphoto \"Potter at Grantown Heath\" Tue 2024-10-29 12:12 · album_titles=Crusaness Food Hall, Bellagio 2024 favorite=false\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w05-0025",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in lothock pot",
+        "say": ["lothock pot", "how much"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w05-0026",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in lothock pot (the expenses)",
+        "say": ["lothock pot"]
+      },
+      {
+        "hint": "(new topic) asks which spending entries mention Bellagio",
+        "say": ["Bellagio", "entries"],
+        "shown": "expense \"Didgeridoo tickets\" Tue 2025-01-14 · amount_minor=18852 paid_by=Shethara Llewellyn\nexpense \"Clover\" Sat 2025-01-11 · amount_minor=23470 paid_by=Hideo Lansen\nexpense \"Coffee run (wk 02)\" Sat 2025-01-11 · amount_minor=5799 paid_by=Forrie Pralow\nexpense \"Kombucha meetup hire\" Fri 2025-01-10 · amount_minor=5050 paid_by=Hideo Lansen\n(+9 more)"
+      },
+      {
+        "hint": "follow-up: about the hire one, asks which group it's in",
+        "say": ["hire"],
+        "shown": "expense \"Bellagio tickets\" Tue 2024-10-29 · amount_minor=10707 paid_by=Amelie Forsyth\nexpense \"Bellagio fee\" Tue 2024-10-29 · amount_minor=18799 paid_by=Owner\nexpense \"Bellagio kit\" Mon 2024-10-28 · amount_minor=1750 paid_by=Amelie Forsyth\nexpense \"Bellagio Dunes tickets\" Sun 2024-10-27 · amount_minor=3799 paid_by=Owner\n(+3 more)"
+      },
+      {
+        "hint": "follow-up: asks who's in it",
+        "say": [],
+        "shown": "group \"Bellagio trip\""
+      },
+      {
+        "hint": "follow-up: asks the same about lemongrass instead ('what about lemongrass?')",
+        "say": ["lemongrass"],
+        "shown": "member \"Amelie Forsyth\"\nmember \"Radek Brackenholt\"\nmember \"You\"\nmember \"Flarel Llewellyn\"\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w05-0029",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      { "hint": "asks who'll be at the potter", "say": ["potter"] },
+      {
+        "hint": "follow-up: says they phoned the Radek one, log it",
+        "say": ["Radek"],
+        "shown": "party \"Radek Brackenholt\" · role=Dog-walking friend\nparty \"Flarel Llewellyn\" · role=Aunt\nparty \"Vearie Pralow\" · role=Sister\nparty \"Ozan Pralow\" · role=Mum"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w05-0030",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "says note to self: gift ideas for Amelie",
+        "say": ["gift ideas for Amelie"]
+      },
+      {
+        "hint": "(new topic) asks where the thomex parking went",
+        "say": ["thomex parking"],
+        "shown": "done: knowledge.create_note{title: \"Gift ideas for Amelie\"}"
+      },
+      {
+        "hint": "(new topic) asks the assistant to make up a new router password",
+        "say": [],
+        "shown": "locker item \"Thomex parking login\" · type=login"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w05-0031",
+    "today": "Saturday 2025-01-18",
+    "turns": [{ "hint": "asks who they still have to pay back", "say": [] }],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w05-0032",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks to trash the vennoe wood picture",
+        "say": ["vennoe wood"]
+      },
+      {
+        "hint": "follow-up: says they didn't mean that, bring it back",
+        "say": [],
+        "shown": "done: media.delete_asset{} on (#3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w05-0033",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks who is coming to the ottoman club",
+        "say": ["ottoman club"]
+      },
+      {
+        "hint": "(new topic) asks what album has the moat picture",
+        "say": ["moat"],
+        "shown": "party \"Vearie Pralow\" · role=Sister\nparty \"Nadia Coldwell\" · role=Barber\nparty \"Shethara Llewellyn\" · role=Partner\nparty \"Kalinda Kenduwick\" · role=Old flatmate"
+      },
+      {
+        "hint": "(new topic) asks for the football scores from saturday",
+        "say": ["saturday"],
+        "shown": "album \"Bellagio 2024\""
+      },
+      {
+        "hint": "(new topic) asks if they have any tasks about ottoman",
+        "say": ["ottoman", "tasks"],
+        "shown": "refuse"
+      },
+      {
+        "hint": "follow-up: asks the same about rosemary instead ('what about rosemary?')",
+        "say": ["rosemary"],
+        "shown": "task \"Weigh the ottoman\" Sun 2025-01-12 09:00 · status=completed effort_min=20\ntask \"Print the ottoman at Vennoe Wood\" Fri 2025-01-03 09:00 · status=in-process effort_min=120"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w05-0034",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks what their earliest thing is wednesday",
+        "say": ["wednesday"]
+      },
+      {
+        "hint": "(new topic) asks what the meetup tickets came to",
+        "say": ["meetup tickets"],
+        "shown": "important date \"Birthday — Vralou Quanacre\" Wed 2025-01-22"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  }
+]

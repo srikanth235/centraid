@@ -1,0 +1,271 @@
+[
+  {
+    "id": "w22-0006",
+    "today": "Tuesday 2025-05-13",
+    "turns": [{ "hint": "asks what's on tuesday", "say": ["tuesday"] }],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w22-0007",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks to clear out the wishlist notes",
+        "say": ["wishlist", "note"]
+      },
+      {
+        "hint": "follow-up: says they didn't mean that, bring it back",
+        "say": [],
+        "shown": "done: delete{} on (#1, #2, #3)"
+      },
+      {
+        "hint": "(new topic) asks what's in the Wheatsheaf notebook",
+        "say": ["Wheatsheaf", "notebook"],
+        "shown": "done: restore{} on (#1, #2, #3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w22-0008",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks what their earliest thing is wednesday",
+        "say": ["wednesday"]
+      },
+      {
+        "hint": "follow-up: asks for a task to reply to the fitting booking thursday",
+        "say": ["reply to the fitting booking", "thursday"],
+        "shown": "event \"Linen fitting\" Wed 2025-05-14 07:00"
+      },
+      {
+        "hint": "follow-up: asks who else will be there",
+        "say": [],
+        "shown": "done: schedule.add_task{title: \"Reply to the fitting booking\", due_at: 2025-05-15}"
+      },
+      {
+        "hint": "follow-up: says they phoned the first one, log it",
+        "say": ["first"],
+        "shown": "party \"Dunja Santangelo\" · role=Neighbour next door\nparty \"Fosbaen Ogawa\" · role=Neighbour next door"
+      },
+      {
+        "hint": "(new topic) asks what is overdue",
+        "say": [],
+        "shown": "done: people.log_interaction{kind: \"call\"} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w22-0009",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks for the Growen Bakery entry in the locker (the row, not the password)",
+        "say": ["Growen Bakery"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w22-0010",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the Growen Bakery is",
+        "say": ["Growen Bakery", "password"]
+      },
+      {
+        "hint": "(new topic) asks how wednesday looks",
+        "say": ["wednesday"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks to move the linen one to tuesday",
+        "say": ["linen", "tuesday"],
+        "shown": "event \"Linen fitting\" Wed 2025-05-14 07:00\nevent \"Tutor check-up\" Wed 2025-05-14 20:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w22-0011",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks how many events friday they have",
+        "say": ["friday", "how many"]
+      },
+      {
+        "hint": "(new topic) asks for Mounir Rivas's contact card",
+        "say": ["Mounir Rivas"],
+        "shown": "= 3"
+      },
+      {
+        "hint": "(new topic) asks for the last photo they took",
+        "say": [],
+        "shown": "party \"Mounir Rivas\" · role=Sister-in-law"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w22-0012",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks which events friday they have",
+        "say": ["friday", "which"]
+      },
+      {
+        "hint": "(detour) hang on — asks what day the cushion is on",
+        "say": ["cushion"],
+        "shown": "event \"Call Ambika about the kingfisher\" Fri 2025-05-16 14:30\nevent \"Mandolin lesson at Stonehaven Climbing Wall\" Fri 2025-05-16 19:45\nevent \"Beekeeper visit\" Fri 2025-05-16 20:30"
+      },
+      {
+        "hint": "back to that — asks how many there are in total",
+        "say": [],
+        "shown": "event \"Cushion delivery\" Fri 2025-05-09 17:15"
+      },
+      {
+        "hint": "follow-up: about the mandolin one, asks who else will be there",
+        "say": ["mandolin"],
+        "shown": "= 3"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w22-0014",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      { "hint": "asks how wednesday looks", "say": ["wednesday"] },
+      {
+        "hint": "follow-up: asks to move both of them to friday",
+        "say": ["friday"],
+        "shown": "event \"Linen fitting\" Wed 2025-05-14 07:00\nevent \"Tutor check-up\" Wed 2025-05-14 20:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w22-0015",
+    "today": "Tuesday 2025-05-13",
+    "turns": [{ "hint": "asks who they still have to pay back", "say": [] }],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w22-0016",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks what the cresvaet expenses add up to",
+        "say": ["cresvaet"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w22-0017",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks for the Valletta house wifi details",
+        "say": ["Valletta house", "wifi"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w22-0018",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks to be reminded to return Mounir's oar friday",
+        "say": ["return Mounir's oar", "friday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w22-0020",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks who is coming to the linen fitting",
+        "say": ["linen fitting", "who"]
+      },
+      {
+        "hint": "follow-up: about the Fosbaen one, asks for their contact details",
+        "say": ["Fosbaen"],
+        "shown": "party \"Dunja Santangelo\" · role=Neighbour next door\nparty \"Fosbaen Ogawa\" · role=Neighbour next door"
+      },
+      {
+        "hint": "(new topic) asks for the notes in their Recipes notebook",
+        "say": ["Recipes", "notebook"],
+        "shown": "contact channel \"Fosbaen Ogawa — work\" · kind=phone value=+65 8123 4240"
+      },
+      {
+        "hint": "follow-up: asks to delete the xiangqi one",
+        "say": ["xiangqi"],
+        "shown": "note \"Aylin's sundial timeline\" Wed 2025-05-07 22:09 · notebooks=Recipes\nnote \"Budget check (wk 18)\" Mon 2025-04-28 13:02 · notebooks=Recipes\nnote \"Xiangqi wishlist\" Mon 2025-01-06 09:22 · notebooks=Recipes\nnote \"Notes from The Old Pancake\" Fri 2025-01-03 19:35 · notebooks=Recipes"
+      },
+      {
+        "hint": "follow-up: corrects: wrong one, they meant the fourth one",
+        "say": ["fourth"],
+        "shown": "done: delete{} on (#7)"
+      },
+      {
+        "hint": "follow-up: asks the same for the Wheatsheaf notebook ('and Wheatsheaf?')",
+        "say": ["Wheatsheaf"],
+        "shown": "done: delete{} on (#8)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w22-0021",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks when the linen fitting is",
+        "say": ["linen fitting", "when"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w22-0022",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      { "hint": "asks how many files they have under Legal", "say": ["Legal"] },
+      {
+        "hint": "(new topic) asks for pictures with Eyota in them",
+        "say": ["Eyota"],
+        "shown": "= 2"
+      },
+      {
+        "hint": "(new topic) asks what's left on their to-do list",
+        "say": [],
+        "shown": "photo \"Cresvaet from above\" Fri 2025-04-04 13:19 · favorite=false people=Eyota Gillespie"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  }
+]

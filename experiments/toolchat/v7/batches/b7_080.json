@@ -1,0 +1,229 @@
+[
+  {
+    "id": "w16-030",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks what birthdays or anniversaries there are next 2 weeks",
+        "say": ["next 2 weeks"]
+      },
+      {
+        "hint": "asks for just the ones next week (next week)",
+        "say": ["next week"]
+      },
+      {
+        "hint": "(new topic) asks what birthdays or anniversaries there are next 2 weeks",
+        "say": ["next 2 weeks"]
+      },
+      {
+        "hint": "asks for just the ones on friday (friday)",
+        "say": ["friday"]
+      },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "spoken"]
+  },
+  {
+    "id": "w16-031",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks what tasks are due tuesday", "say": ["tuesday"] },
+      {
+        "hint": "(new topic) asks to log a message with Joaquim (several people are called Joaquim)",
+        "say": ["Joaquim"]
+      },
+      {
+        "hint": "says it was Joaquim Kavanagh (the Kavanagh one)",
+        "say": ["Kavanagh"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "polite"]
+  },
+  {
+    "id": "w16-032",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks to see the first album", "say": ["first"] },
+      { "hint": "(new topic) asks what's still on their list", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "question"]
+  },
+  {
+    "id": "w16-033",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks for their to-dos about Ximena", "say": ["Ximena"] },
+      {
+        "hint": "asks the same about Tidy instead ('what about Tidy?')",
+        "say": ["Tidy"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  },
+  {
+    "id": "w16-034",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks which username they use for Mobile", "say": ["Mobile"] },
+      {
+        "hint": "asks the same about portal instead ('what about portal?')",
+        "say": ["portal"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "question"]
+  },
+  {
+    "id": "w16-035",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks what they have filed under Receipts",
+        "say": ["Receipts"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "texting"]
+  },
+  {
+    "id": "w16-036",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks which notes mention Shopping list",
+        "say": ["Shopping list"]
+      },
+      { "hint": "asks how many there are in total", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "texting"]
+  },
+  {
+    "id": "w16-037",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks to find Honora Prescott in their contacts",
+        "say": ["Honora Prescott"]
+      },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) says the insulation task is done",
+        "say": ["insulation"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "w16-038",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks what's in the vault about Magnus", "say": ["Magnus"] },
+      {
+        "hint": "asks the same about Council instead ('what about Council?')",
+        "say": ["Council"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "texting"]
+  },
+  {
+    "id": "w16-039",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks for the notes in their Work notebook", "say": ["Work"] },
+      {
+        "hint": "(new topic) asks who Tove Hargreaves is",
+        "say": ["Tove Hargreaves"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "terse"]
+  },
+  {
+    "id": "w16-040",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks to add 25 (money) for museum to the Swimming group, paid by them",
+        "say": ["Swimming", "museum"]
+      },
+      {
+        "hint": "(new topic) asks to find anything to do with Shopping",
+        "say": ["Shopping"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "polite"]
+  },
+  {
+    "id": "w16-041",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks what they ticked off this week", "say": ["this week"] },
+      {
+        "hint": "asks for just the ones this week (this week)",
+        "say": ["week"]
+      },
+      {
+        "hint": "(new topic) asks what's on their list with no date set",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "terse"]
+  },
+  {
+    "id": "w16-042",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks for the documents in the Travel 2027 folder",
+        "say": ["Travel 2027"]
+      },
+      { "hint": "asks which of those are starred", "say": [] },
+      {
+        "hint": "(new topic) asks to add 60 (money) for petrol to the weekend group, paid by them",
+        "say": ["weekend", "petrol"]
+      },
+      {
+        "hint": "(new topic) asks for Wendell's phone number",
+        "say": ["Wendell"]
+      },
+      {
+        "hint": "(new topic) asks what time the Pebble Library is",
+        "say": ["Pebble Library"]
+      },
+      { "hint": "asks what else they have that day", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "spoken"]
+  },
+  {
+    "id": "w16-043",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks to find Perpetua in their contacts", "say": ["Perpetua"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "w16-044",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks to find anything to do with Quote", "say": ["Quote"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "question"]
+  }
+]

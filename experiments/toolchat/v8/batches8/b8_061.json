@@ -1,0 +1,334 @@
+[
+  {
+    "id": "w18-0026",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks to open the Chess night album",
+        "say": ["Chess night", "album"]
+      },
+      {
+        "hint": "follow-up: about the Nirara one, asks where it was taken",
+        "say": ["Nirara"],
+        "shown": "photo \"Mead session 2026\" Mon 2026-02-16 17:45 · album_titles=Brewing 2026, Walks round The Old Crate,… favorite=false\nphoto \"Nirara at Piran Springs\" Sat 2025-11-01 16:05 · album_titles=Brewing 2026, Chess night, Gitedale 2025 favorite=false\nphoto \"Stagecoach on the table\" Fri 2025-03-14 10:48 · album_titles=Chess night favorite=false\nphoto \"IMG_6464\" Sun 2023-12-10 18:13 · album_titles=Brewing 2026, Chess night favorite=false"
+      },
+      {
+        "hint": "(new topic) asks where the villa alarm went",
+        "say": ["villa alarm"],
+        "shown": "place \"Piran Springs\""
+      },
+      {
+        "hint": "follow-up: asks for the actual password",
+        "say": ["password"],
+        "shown": "locker item \"Porlock villa alarm code\" · type=note"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w18-0027",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks to settle up with Pieter in Gitedale trip",
+        "say": ["Pieter", "Gitedale trip", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks to pull up the crate booking thing",
+        "say": ["crate booking"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#2) in (#1)} on (#2)"
+      },
+      {
+        "hint": "(new topic) asks to mark the paddle to-do complete",
+        "say": ["paddle"],
+        "shown": "document \"The Old Crate booking\" Fri 2025-04-04 19:23"
+      },
+      {
+        "hint": "(new topic) asks which shots mention cinder",
+        "say": ["cinder", "shots"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#8)"
+      },
+      {
+        "hint": "follow-up: asks the same about harp instead ('what about harp?')",
+        "say": ["harp"],
+        "shown": "photo \"New cinder\" Mon 2026-02-16 14:46 · favorite=false"
+      },
+      {
+        "hint": "follow-up: asks to put it in the Gitedale 2025 album",
+        "say": ["Gitedale 2025", "album"],
+        "shown": "photo \"Harp at The Old Crate\" Fri 2025-12-19 18:09 · album_titles=Walks round The Old Crate favorite=true"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w18-0028",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks to add five dollars for Pieter's tickets to Gitedale trip, they paid",
+        "say": ["five dollars", "Pieter's tickets", "Gitedale trip"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w18-0029",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks how many photos they took on the Gitedale trip",
+        "say": ["Gitedale"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w18-0030",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks what pictures are in the Brewing album",
+        "say": ["Brewing", "album"]
+      },
+      {
+        "hint": "(new topic) asks to book in vet appointment next monday at half nine",
+        "say": ["vet appointment", "next monday", "at half nine"],
+        "shown": "photo \"Macaroon by the window\" Sun 2026-03-08 09:15 · album_titles=Brewing 2026 favorite=true people=Maskan Moyo, Jessamy Fealuham\nphoto \"Inkwell on the table\" Wed 2026-02-25 16:08 · album_titles=Brewing 2026 favorite=true\nphoto \"Kasock at The Old Crate\" Thu 2026-02-19 19:25 · album_titles=Brewing 2026 favorite=false people=Matilda Vasconcelos\nphoto \"Mead session 2026\" Mon 2026-02-16 17:45 · album_titles=Brewing 2026, Walks round The Old Crate,… favorite=false\n(+2 more)"
+      },
+      {
+        "hint": "(new topic) asks to find the notes on Xochitl",
+        "say": ["Xochitl", "notes"],
+        "shown": "done: schedule.propose_event{summary: \"Vet appointment\", dtstart: 2026-03-30T09:30}"
+      },
+      {
+        "hint": "follow-up: asks the same about Maskan instead ('what about Maskan?')",
+        "say": ["Maskan"],
+        "shown": "note \"Things to ask Xochitl\" Mon 2026-03-02 19:38\nnote \"Gift ideas for Xochitl\" Mon 2026-01-19 15:02 · notebooks=Lacemaking"
+      },
+      {
+        "hint": "follow-up: asks what their to-do list have on it",
+        "say": ["to-do list"],
+        "shown": "note \"Gift ideas for Maskan\" Fri 2025-12-05 11:53 · notebooks=Money"
+      },
+      {
+        "hint": "follow-up: asks to move the second one to monday",
+        "say": ["second", "monday"],
+        "shown": "task \"Quote for Maskan's mooring\" Thu 2026-02-26 09:00 · status=completed\ntask \"Find a inkwell for Maskan\" · status=cancelled"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w18-0031",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks who they had dinner with last monday",
+        "say": ["dinner", "last monday"]
+      },
+      {
+        "hint": "(new topic) asks what's left to do on the ask einar plan",
+        "say": ["ask einar"],
+        "shown": "event \"Dinner with Leonor\" Mon 2026-03-23 08:15"
+      },
+      {
+        "hint": "follow-up: asks for just the ones from last month",
+        "say": ["last month"],
+        "shown": "task \"Check the castle\" Sat 2026-02-28 09:00 · status=in-process\ntask \"Empty the pennant\" Fri 2026-03-13 17:00 · status=needs-action effort_min=15\ntask \"Research the sandbank\" Mon 2026-04-20 09:00 · status=needs-action effort_min=10"
+      },
+      {
+        "hint": "(new topic) asks to put back the medallion photo they deleted",
+        "say": ["medallion", "photo"],
+        "shown": "task \"Check the castle\" Sat 2026-02-28 09:00 · status=in-process"
+      },
+      {
+        "hint": "(new topic) asks who they still have to pay back",
+        "say": [],
+        "shown": "done: media.restore_asset{} on (#6)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w18-0032",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      { "hint": "asks when they have the Einar", "say": ["Einar"] },
+      {
+        "hint": "(detour) hang on — asks for the spending above sixteen dollars",
+        "say": ["sixteen dollars"],
+        "shown": "event \"Call Einar about the magnolia\" Sun 2026-03-29 18:15"
+      },
+      {
+        "hint": "back to the Einar — asks whether there's anything in their to-do list about it too",
+        "say": ["to-do list"],
+        "shown": "expense \"Cinder lessons\" Fri 2026-03-27 · amount_minor=2899 paid_by=Pistette Entwistle\nexpense \"Petrol (wk 13)\" Thu 2026-03-26 · amount_minor=4999 paid_by=Owner\nexpense \"Kasock tickets\" Tue 2026-03-24 · amount_minor=11743 paid_by=Owner\nexpense \"Porridge refund\" Mon 2026-03-23 · amount_minor=13209 paid_by=Owner\n(+9 more)"
+      },
+      {
+        "hint": "follow-up: asks for its steps",
+        "say": [],
+        "shown": "task \"Ask Einar about the sandbank\" Wed 2026-03-04 18:00 · status=needs-action effort_min=20"
+      },
+      {
+        "hint": "follow-up: asks what their calendar have on it",
+        "say": ["calendar"],
+        "shown": "task \"Check the castle\" Sat 2026-02-28 09:00 · status=in-process\ntask \"Empty the pennant\" Fri 2026-03-13 17:00 · status=needs-action effort_min=15\ntask \"Research the sandbank\" Mon 2026-04-20 09:00 · status=needs-action effort_min=10"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w18-0033",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks when Takeshi's birthday is",
+        "say": ["Takeshi", "birthday"]
+      },
+      {
+        "hint": "(new topic) asks what the steps for the recycle are",
+        "say": ["recycle"],
+        "shown": "important date \"Birthday — Takeshi Sokolov\" Sun 2026-03-29"
+      },
+      {
+        "hint": "follow-up: asks what the second one is",
+        "say": ["second"],
+        "shown": "task \"Photograph the magnolia\" Fri 2026-03-06 12:00 · status=in-process effort_min=90\ntask \"Book the harp\" · status=needs-action effort_min=120\ntask \"Sort out the harp\" · status=needs-action"
+      },
+      {
+        "hint": "(new topic) asks when they have the Takeshi",
+        "say": ["Takeshi"],
+        "shown": "task \"Book the harp\" · status=needs-action effort_min=120"
+      },
+      {
+        "hint": "(detour) hang on — asks for the documents in the Vehicle folder",
+        "say": ["Vehicle"],
+        "shown": "event \"Walk with Takeshi\" Sun 2026-03-22 13:00"
+      },
+      {
+        "hint": "back to the Takeshi — asks who's coming to it",
+        "say": [],
+        "shown": "document \"Harp policy\" Sat 2025-11-08 12:15 · folder=Vehicle\ndocument \"Brewing receipt\" Sun 2025-08-31 12:00 · folder=Vehicle\ndocument \"Lacemaking quote\" Sat 2025-08-16 22:23 · folder=Vehicle\ndocument \"Prearix payroll form\" Thu 2025-05-22 09:29 · folder=Vehicle\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w18-0034",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks when their walk with Takeshi is",
+        "say": ["Takeshi", "walk"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w18-0035",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks what they wrote in their journal yesterday",
+        "say": ["yesterday", "journal"]
+      },
+      {
+        "hint": "(new topic) asks to settle up with Vymie Jansen in cinder fund",
+        "say": ["Vymie Jansen", "cinder fund"],
+        "shown": "journal note \"People journal · hopeful\" Thu 2026-03-26 12:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w18-0036",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks who Maskan is (several people are called Maskan)",
+        "say": ["Maskan"]
+      },
+      {
+        "hint": "follow-up: asks for pictures with any of those people in",
+        "say": [],
+        "shown": "party \"Maskan Moyo\" · role=Dog-walking friend\nparty \"Maskan Chikwanha\" · role=Neighbour"
+      },
+      {
+        "hint": "follow-up: asks for just the favourites among them",
+        "say": [],
+        "shown": "photo \"Crate with Gemma (03)\" Mon 2026-03-16 17:04 · favorite=false people=Maskan Moyo, Vymie Jansen, Gemma Ahlberg\nphoto \"Macaroon by the window\" Sun 2026-03-08 09:15 · album_titles=Brewing 2026 favorite=true people=Maskan Moyo, Jessamy Fealuham"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w18-0037",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks to settle up with Pieter in Gitedale trip",
+        "say": ["Pieter", "Gitedale trip", "settle up"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w18-0038",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks to add three dollars for Pieter's lunch to Gitedale trip, they paid",
+        "say": ["three dollars", "Pieter's lunch", "Gitedale trip"]
+      },
+      {
+        "hint": "(new topic) asks what pictures they took while in Gitedale",
+        "say": ["Gitedale"],
+        "shown": "done: tally.add_expense{description: \"Pieter's lunch\", amount_minor: 300, paid_by: me, group_id: (#1)}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w18-0039",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks if there's a calendar event at Criness Allotments",
+        "say": ["Criness Allotments"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w18-0040",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks to find the written notes on Emrys",
+        "say": ["Emrys", "notes"]
+      },
+      {
+        "hint": "follow-up: asks the same about magnolia instead ('what about magnolia?')",
+        "say": ["magnolia"],
+        "shown": "note \"Emrys's magnolia plan\" Sat 2026-01-31 11:08 · notebooks=Money"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  }
+]

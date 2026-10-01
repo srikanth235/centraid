@@ -1,0 +1,269 @@
+[
+  {
+    "id": "w02-0001",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      { "hint": "asks what's in the vault about Leonie", "say": ["Leonie"] },
+      {
+        "hint": "(detour) hang on — asks for the photos they took last week",
+        "say": ["last week"],
+        "shown": "event \"Snorkelling club with Leonie\" Sun 2026-09-20 07:45\nevent \"Longboarding meetup with Leonie\" Sun 2026-09-27 13:30\nnote \"Leonie's carnation measurements\" Wed 2026-06-24 21:15 · notebooks=Snorkelling\nparty \"Leonie Volkov\" · role=Neighbour across the road\n(+4 more)"
+      },
+      {
+        "hint": "back to the Leonie stuff — about the fifth one, asks for their contact details",
+        "say": ["fifth"],
+        "shown": "photo \"Pewter at sunrise (04)\" Fri 2026-09-11 15:18 · favorite=false\nphoto \"Pewter at sunrise (03)\" Fri 2026-09-11 15:17 · album_titles=Walks round Fisumere Tearooms favorite=false\nphoto \"Pewter at sunrise (02)\" Fri 2026-09-11 15:16 · album_titles=Nettle 2027 favorite=true\nphoto \"Pewter at sunrise (01)\" Fri 2026-09-11 15:15 · favorite=false"
+      },
+      {
+        "hint": "(new topic) asks who they're in debt to",
+        "say": [],
+        "shown": "contact channel \"Leonie Postett — work\" · kind=email value=leonie.postett@example.net"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w02-0002",
+    "today": "Wednesday 2026-09-16",
+    "turns": [{ "hint": "asks what's on next monday", "say": ["next monday"] }],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w02-0006",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      { "hint": "asks who they owe money to", "say": [] },
+      {
+        "hint": "(detour) hang on — asks what events Ebba is coming to",
+        "say": ["Ebba"],
+        "shown": "party \"Wilfred Termere\" · owed_to_them_minor=15000 role=Intern\nparty \"Ebba Veracre\" · owed_to_them_minor=2000 role=Dog-walking friend"
+      },
+      {
+        "hint": "back to the money — about the Ebba one, asks about the debts with them",
+        "say": ["Ebba"],
+        "shown": "event \"Brass band (week 36)\" Sat 2026-09-05 07:45\nevent \"Longboarding meetup at Jeonju Common\" Wed 2026-09-16 13:30\nevent \"Theremin club\" Thu 2026-09-24 19:00\nevent \"Gargoyle repair\" Sun 2026-09-27 18:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w02-0008",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks for the drainpipe entry in the locker (the row, not the password)",
+        "say": ["drainpipe"]
+      },
+      {
+        "hint": "(new topic) asks for their documents about steeple",
+        "say": ["steeple", "documents"],
+        "shown": "locker item \"The Flint and Drainpipe wifi\" · type=wifi"
+      },
+      {
+        "hint": "follow-up: asks the same about drainpipe instead ('what about drainpipe?')",
+        "say": ["drainpipe"],
+        "shown": "document \"Steeple warranty 2025\" Fri 2026-01-02 11:28"
+      },
+      {
+        "hint": "(new topic) asks what's planned for tuesday",
+        "say": ["tuesday"],
+        "shown": "document \"The Flint and Drainpipe booking\" Thu 2026-04-23 15:10 · folder=Taxes"
+      },
+      {
+        "hint": "(new topic) asks which gargoyle jobs are still open",
+        "say": ["gargoyle"],
+        "shown": "task \"Put the bins out (wk 39)\" Tue 2026-09-22 09:00 · status=needs-action effort_min=20\nevent \"Dog walker check-up\" Tue 2026-09-22 07:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w02-0009",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the drainpipe is",
+        "say": ["drainpipe", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w02-0011",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks who is coming to the quilt fitting",
+        "say": ["quilt fitting", "who"]
+      },
+      {
+        "hint": "follow-up: asks what events they're coming to",
+        "say": [],
+        "shown": "party \"Flolara Crabtree\" · role=Director"
+      },
+      {
+        "hint": "follow-up: asks to move the third one to friday and cancel the fourth one",
+        "say": ["third", "friday", "fourth"],
+        "shown": "event \"Quilt fitting\" Mon 2026-08-17 15:45\nevent \"Flint repair\" Fri 2026-09-04 17:45\nevent \"Lunch with Kalliope\" Mon 2026-09-14 19:30\nevent \"Philately workshop at Grestoe Steps\" Sat 2026-09-19 10:15\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w02-0012",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks when the quilt fitting is",
+        "say": ["quilt fitting", "when"]
+      },
+      {
+        "hint": "follow-up: asks for a task to call the fitting booking thursday",
+        "say": ["call the fitting booking", "thursday"],
+        "shown": "event \"Quilt fitting\" Mon 2026-08-17 15:45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w02-0013",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      { "hint": "asks if anything is happening the 18th", "say": ["the 18th"] },
+      {
+        "hint": "(detour) hang on — asks for their pictures from Fisumere Tearooms",
+        "say": ["Fisumere Tearooms"],
+        "shown": "important date \"Birthday — Odhran Everard\" Fri 2026-09-18\nevent \"Marquee delivery\" Fri 2026-09-18 08:30\nevent \"Marimba club with Yesenia\" Fri 2026-09-18 17:30"
+      },
+      {
+        "hint": "back to the 18th — asks which of those are about birthday",
+        "say": ["birthday"],
+        "shown": "photo \"Oud from above\" Sun 2026-09-06 08:31 · album_titles=Walks round Fisumere Tearooms favorite=false\nphoto \"Wheatsheaf at dusk\" Sun 2026-08-23 20:29 · album_titles=Walks round Fisumere Tearooms, Gryndiby … favorite=true\nphoto \"Amara at Fisumere Tearooms\" Tue 2026-03-17 17:06 · album_titles=Walks round Fisumere Tearooms, Summer 20… favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w02-0014",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      { "hint": "asks which events they have monday", "say": ["monday"] },
+      {
+        "hint": "follow-up: asks to call off the quiz one",
+        "say": ["quiz"],
+        "shown": "event \"Quiz at The Flint and Drainpipe\" Mon 2026-09-21 16:00\nevent \"Steeple delivery\" Mon 2026-09-21 19:00\nevent \"Asle meetup\" Mon 2026-09-21 20:30"
+      },
+      {
+        "hint": "(new topic) asks if they have any shots about Fisumere",
+        "say": ["Fisumere", "shots"],
+        "shown": "done: cancel{} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w02-0015",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks what pictures they have from this week",
+        "say": ["this week"]
+      },
+      {
+        "hint": "follow-up: asks for a task to call the Tariro photo thursday",
+        "say": ["call the Tariro photo", "thursday"],
+        "shown": "photo \"Corduroy with Tariro\" Mon 2026-09-14 09:05 · album_titles=Walks round Fisumere Tearooms favorite=false"
+      },
+      {
+        "hint": "follow-up: asks which album it's in",
+        "say": [],
+        "shown": "done: schedule.add_task{title: \"Call the Tariro photo\", due_at: 2026-09-17}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w02-0017",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      { "hint": "asks for their photos from July", "say": ["July"] },
+      {
+        "hint": "follow-up: asks to put the first one in the Walks round Fisumere Tearooms album",
+        "say": ["first", "Walks round Fisumere Tearooms", "album"],
+        "shown": "photo \"Cheddar Sands at dusk\" Wed 2026-07-22 19:49 · album_titles=Summer 2026 favorite=false\nphoto \"Grestoe Steps in the rain\" Wed 2026-07-22 15:11 · favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w02-0018",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks who is coming to the instructor visit",
+        "say": ["instructor visit", "who"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w02-0019",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks when the instructor visit is",
+        "say": ["instructor visit", "when"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w02-0020",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks for their documents about cobblestone",
+        "say": ["cobblestone", "documents"]
+      },
+      {
+        "hint": "follow-up: says never mind",
+        "say": [],
+        "shown": "document \"Cobblestone policy 2024\" Sun 2026-09-13 14:56 · folder=Pets"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w02-0021",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      { "hint": "asks what's on in four days", "say": ["four", "days"] },
+      {
+        "hint": "follow-up: about the Yesenia one, asks who's coming to it",
+        "say": ["Yesenia"],
+        "shown": "task \"Find a flagpole for Petra\" Sun 2026-09-20 09:00 · status=needs-action effort_min=20\nevent \"Snorkelling club with Leonie\" Sun 2026-09-20 07:45\nevent \"Snorkelling club with Amara\" Sun 2026-09-20 11:00\nevent \"Tangerine fitting\" Sun 2026-09-20 14:00\n(+1 more)"
+      },
+      {
+        "hint": "follow-up: asks for a task to email Beatrix next friday",
+        "say": ["email Beatrix", "next friday"],
+        "shown": "party \"Beatrix Wastard\" · role=Neighbour"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  }
+]

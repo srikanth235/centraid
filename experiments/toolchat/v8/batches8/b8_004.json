@@ -1,0 +1,228 @@
+[
+  {
+    "id": "w02-0022",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks to pull up the drainpipe booking thing",
+        "say": ["drainpipe booking"]
+      },
+      {
+        "hint": "(new topic) asks when the yangshuo trip is",
+        "say": ["yangshuo trip"],
+        "shown": "document \"The Flint and Drainpipe booking\" Thu 2026-04-23 15:10 · folder=Taxes"
+      },
+      {
+        "hint": "follow-up: asks the same about the call flolara ('and the call flolara?')",
+        "say": ["call flolara"],
+        "shown": "event \"Yangshuo trip\" Fri 2026-10-02 09:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w02-0023",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks to see the marimba collective expenses",
+        "say": ["marimba collective"]
+      },
+      {
+        "hint": "follow-up: asks for only those more than thirteen kronor",
+        "say": ["thirteen kronor"],
+        "shown": "expense \"Dinner at Cheddar Sands\" Wed 2026-09-16 · amount_minor=2759 paid_by=Owner\nexpense \"Dinner at Grestoe Steps\" Sun 2026-09-13 · amount_minor=1750 paid_by=Petra Gwynne\nexpense \"Philately workshop delivery\" Fri 2026-09-11 · amount_minor=6323 paid_by=Owner\nexpense \"Crochet night lessons\" Mon 2026-09-07 · amount_minor=9787 paid_by=Ebba Veracre\n(+7 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w02-0024",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks to settle up with Kalliope in trombone collective",
+        "say": ["Kalliope", "trombone collective", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks to move the Kalliope fifteen minutes later",
+        "say": ["Kalliope", "fifteen minutes later"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#5) in (#1)} on (#5)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w02-0025",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks to add five kronor for Kalliope's petrol to trombone collective, they paid",
+        "say": ["five kronor", "Kalliope's petrol", "trombone collective"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w02-0026",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      { "hint": "asks for their photos about Losa", "say": ["Losa", "photos"] },
+      {
+        "hint": "(new topic) asks what the login for the Kumluly streaming login is (not the password)",
+        "say": ["Kumluly streaming", "login"],
+        "shown": "photo \"Losa at Rye Viewpoint\" Wed 2026-05-20 09:27 · album_titles=Gryndiby 2026 favorite=false"
+      },
+      {
+        "hint": "(new topic) asks to bump the instructor visit a day later",
+        "say": ["instructor visit", "a day later"],
+        "shown": "locker item \"Kumluly streaming login\" · type=login"
+      },
+      {
+        "hint": "follow-up: asks who else will be there",
+        "say": [],
+        "shown": "done: reschedule{by: +1d} on (#9)"
+      },
+      {
+        "hint": "(new topic) asks what time the oud lesson is",
+        "say": ["oud lesson"],
+        "shown": "party \"Sunen Glanville\" · role=Driving instructor"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w02-0027",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "says they went round to visit Leonie and asks to log it (two contacts are called Leonie; the message doesn't say which)",
+        "say": ["Leonie", "visit"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w02-0029",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks if they have photos of Ebba Veracre",
+        "say": ["Ebba Veracre"]
+      },
+      {
+        "hint": "follow-up: asks for a task to sign the trombone photo sunday",
+        "say": ["sign the trombone photo", "sunday"],
+        "shown": "photo \"The trombone at dusk\" Sat 2026-09-05 14:58 · favorite=false people=Ebba Veracre, Bongani Hossain"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w02-0031",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      { "hint": "asks who still has to pay them back", "say": [] },
+      {
+        "hint": "(detour) hang on — asks to find Anwar Demir in their contacts",
+        "say": ["Anwar Demir"],
+        "shown": "party \"Dostir Barraclough\" · owed_to_me_minor=7500 role=Friend from the gym\nparty \"Leonie Postett\" · owed_to_me_minor=4800 role=Old flatmate"
+      },
+      {
+        "hint": "back to the money — asks for just the ones over sixty",
+        "say": ["sixty"],
+        "shown": "party \"Anwar Demir\" · role=Caretaker"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w02-0032",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      { "hint": "asks when Ebba's birthday is", "say": ["Ebba", "birthday"] }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w02-0033",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks when their dinner with Ebba is",
+        "say": ["Ebba", "dinner"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w02-0035",
+    "today": "Wednesday 2026-09-16",
+    "turns": [{ "hint": "asks to order more printer ink online", "say": [] }],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w02-0036",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks who they had dinner with last tuesday",
+        "say": ["dinner", "last tuesday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w02-0038",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks to put 'water the plants' on the list for next monday",
+        "say": ["water the plants", "next monday"]
+      },
+      {
+        "hint": "(new topic) asks to email Lilia the address of the party",
+        "say": ["Lilia"],
+        "shown": "done: schedule.add_task{title: \"Water the plants\", due_at: 2026-09-21}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w02-0042",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks to make the check-up a day later",
+        "say": ["check-up", "a day later"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w02-0043",
+    "today": "Wednesday 2026-09-16",
+    "turns": [
+      {
+        "hint": "asks to text Flovie the Drainpipe wifi",
+        "say": ["Flovie", "Drainpipe wifi"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  }
+]

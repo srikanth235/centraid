@@ -1,0 +1,230 @@
+[
+  {
+    "id": "g0708",
+    "today": "Wednesday 2026-11-25",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Order more printer ink\", due_at: next sunday }",
+        "gloss": "Add a task titled \"Order more printer ink\" due next sunday.",
+        "move": "first",
+        "hint": "add a task"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "h083",
+    "today": "Thursday 2028-01-27",
+    "turns": [
+      {
+        "canonical": "show (important dates of (parties called \"Dalia Zamora\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Dalia Zamora\"] where the label contains \"Birthday\".",
+        "move": "first",
+        "hint": "when is Dalia Zamora's birthday"
+      },
+      {
+        "canonical": "show (important dates of (parties called \"Jasper\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Jasper\"] where the label contains \"Birthday\".",
+        "move": "substitute",
+        "hint": "and Jasper?"
+      },
+      {
+        "canonical": "show (photos called \"old bridge\" that (deleted_at is not null))",
+        "gloss": "List photos named \"old bridge\" where the date deleted (trash) is set.",
+        "move": "new",
+        "hint": "did I delete / bin the old bridge photo"
+      },
+      {
+        "canonical": "media.restore_asset{} on (it)",
+        "gloss": "Restore [it (the one row the previous turn is about)] from the trash.",
+        "move": "act",
+        "hint": "put it back"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0246",
+    "today": "Monday 2026-08-17",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses of (groups called \"castlegate\"))",
+        "gloss": "What is the total amount (in pence) of [the expenses linked to [groups named \"castlegate\"]]?",
+        "move": "first",
+        "hint": "how much did we spend on the castlegate"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0279",
+    "today": "Thursday 2028-08-10",
+    "turns": [
+      {
+        "canonical": "knowledge.create_note{ title: \"Things to ask the vet\" }",
+        "gloss": "Create a note titled \"Things to ask the vet\".",
+        "move": "first",
+        "hint": "make a note called ..."
+      },
+      {
+        "canonical": "show (documents that (folder = \"Work\"))",
+        "gloss": "List documents where the folder is \"Work\".",
+        "move": "new",
+        "hint": "what's in my Work folder/notebook"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0051",
+    "today": "Thursday 2027-03-11",
+    "turns": [
+      {
+        "canonical": "show (things during next saturday)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's on next saturday"
+      },
+      {
+        "canonical": "delete{} on (the 2nd one)",
+        "gloss": "Delete (move to trash) [the 2nd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      },
+      {
+        "canonical": "reschedule{ to: in 2 days } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to in 2 days.",
+        "move": "act",
+        "hint": "and push it to a day (C12: it = the row just written)"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0674",
+    "today": "Friday 2026-10-30",
+    "turns": [
+      {
+        "canonical": "show (photos called \"harbour\")",
+        "gloss": "List photos named \"harbour\".",
+        "move": "first",
+        "hint": "find the harbour photo"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0312",
+    "today": "Saturday 2025-06-28",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during last week))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls last week]?",
+        "move": "first",
+        "hint": "what did I spend last week"
+      },
+      {
+        "canonical": "show (them)",
+        "gloss": "List them (the rows the previous turn answered).",
+        "move": "act",
+        "hint": "which ones (C11: the rows the sum folded)"
+      },
+      {
+        "canonical": "tally.delete_expense{} on (the 2nd one)",
+        "gloss": "Delete (move to trash) [the 2nd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "delete one by position"
+      },
+      {
+        "canonical": "show (things that (folder = \"School\" or notebooks contains \"School\"))",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) where (the folder is \"School\" or the notebooks it is in contains \"School\").",
+        "move": "new",
+        "hint": "what's in my School folder/notebook"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0580",
+    "today": "Saturday 2026-12-05",
+    "turns": [
+      {
+        "canonical": "reschedule{ to: friday at 13:45 } on (events called \"service\")",
+        "gloss": "Move [events named \"service\"] to friday at 13:45.",
+        "move": "first",
+        "hint": "push/move the named event"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0041",
+    "today": "Sunday 2025-06-01",
+    "turns": [
+      {
+        "canonical": "show (things during tomorrow)",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) dated tomorrow.",
+        "move": "first",
+        "hint": "what's on tomorrow"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0615",
+    "today": "Friday 2026-01-23",
+    "turns": [
+      {
+        "canonical": "social.send_message{ body: \"Remember to bring the charger\" } on (contact channels of (parties called \"Nadia\") that (kind = \"phone\"))",
+        "gloss": "",
+        "move": "first",
+        "hint": "text Nadia: Remember to bring the charger"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0465",
+    "today": "Sunday 2027-02-21",
+    "turns": [
+      {
+        "canonical": "show (photos during last weekend)",
+        "gloss": "List photos dated last weekend.",
+        "move": "first",
+        "hint": "what did I do/take/spend over the weekend (past tense)"
+      },
+      {
+        "canonical": "balance of (members called \"Arvid\") in (groups called \"ski chalet\")",
+        "gloss": "What is the balance of [members named \"Arvid\"] within [groups named \"ski chalet\"]?",
+        "move": "new",
+        "hint": "what does Arvid owe me for ski chalet"
+      },
+      {
+        "canonical": "balance of (members called \"Wendell\") in (groups called \"ski chalet\")",
+        "gloss": "What is the balance of [members named \"Wendell\"] within [groups named \"ski chalet\"]?",
+        "move": "substitute",
+        "hint": "and Wendell?"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0603",
+    "today": "Monday 2025-03-17",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Kids' swimming lesson\", dtstart: thursday at 20:15, dtend: thursday at 21:15 }",
+        "gloss": "Put an event titled \"Kids' swimming lesson\" in the calendar starting thursday at 20:15 and ending thursday at 21:15.",
+        "move": "first",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  }
+]

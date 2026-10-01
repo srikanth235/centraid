@@ -1,0 +1,230 @@
+[
+  {
+    "id": "a0306",
+    "today": "Sunday 2027-03-07",
+    "turns": [
+      {
+        "canonical": "count of (expenses that (spent_on during last weekend))",
+        "move": "first",
+        "hint": "how many expenses did I log in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0510",
+    "today": "Tuesday 2028-11-14",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Kit Grieve\") that (label = \"home\"))",
+        "move": "first",
+        "hint": "Kit's number/email with that label (work/home/mobile)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Kit Grieve\"", "turn": 1, "say": "exact: Kit" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0553",
+    "today": "Monday 2025-04-28",
+    "turns": [
+      {
+        "canonical": "show (events that (dtstart > next sunday) ordered by dtstart asc)",
+        "move": "first",
+        "hint": "events after that day, soonest first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0873",
+    "today": "Thursday 2028-03-09",
+    "turns": [
+      {
+        "canonical": "show (first 5 of (documents ordered by created_at desc))",
+        "move": "first",
+        "hint": "the newest N documents"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0571",
+    "today": "Saturday 2027-01-09",
+    "turns": [
+      {
+        "canonical": "show (events that (status = \"cancelled\") during this week)",
+        "move": "first",
+        "hint": "cancelled events in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0295",
+    "today": "Saturday 2028-11-18",
+    "turns": [
+      {
+        "canonical": "count of (events)",
+        "move": "first",
+        "hint": "how many events are in my calendar in total"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0740",
+    "today": "Sunday 2026-09-20",
+    "turns": [
+      {
+        "canonical": "show (photos that (favorite = true) during today)",
+        "move": "first",
+        "hint": "favourite photos from that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0350",
+    "today": "Monday 2028-01-17",
+    "turns": [
+      {
+        "canonical": "count of (members of (groups called \"Hen do\"))",
+        "move": "first",
+        "hint": "how many people are in the Hen do group"
+      }
+    ],
+    "refer": [{ "row": "groups \"Hen do\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0215",
+    "today": "Wednesday 2026-07-22",
+    "turns": [
+      {
+        "canonical": "schedule.restore_task{} on (tasks called \"Post the birthday parcel\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "bring back the deleted parcel task"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Post the birthday parcel\"",
+        "turn": 1,
+        "say": "exact: parcel"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0011",
+    "today": "Friday 2025-08-08",
+    "turns": [
+      {
+        "canonical": "show (events)",
+        "move": "first",
+        "hint": "list everything in my calendar"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0741",
+    "today": "Wednesday 2028-04-19",
+    "turns": [
+      {
+        "canonical": "show (photos that (favorite = true) during last month)",
+        "move": "first",
+        "hint": "favourite photos from that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0264",
+    "today": "Monday 2026-12-14",
+    "turns": [
+      {
+        "canonical": "count of (contact channels of (parties called \"Cormac Hazeldine\"))",
+        "move": "first",
+        "hint": "how many numbers/emails do I have for Cormac"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Cormac Hazeldine\"",
+        "turn": 1,
+        "say": "exact: Cormac"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0998",
+    "today": "Tuesday 2025-09-16",
+    "turns": [
+      {
+        "canonical": "count of (parties of (events called \"Dentist with Yolanda\"))",
+        "move": "first",
+        "hint": "how many people are coming to the dentist"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Dentist with Yolanda\"",
+        "turn": 1,
+        "say": "exact: dentist"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1074",
+    "today": "Sunday 2026-11-01",
+    "turns": [
+      {
+        "canonical": "show (tasks of (tasks called \"Order new wiper blades\") that (status != \"completed\"))",
+        "move": "first",
+        "hint": "which subtasks of new wiper are still open"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Order new wiper blades\"",
+        "turn": 1,
+        "say": "loose: new wiper"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0383",
+    "today": "Wednesday 2028-08-09",
+    "turns": [
+      {
+        "canonical": "count of (parties that (role = \"Piano teacher\"))",
+        "move": "first",
+        "hint": "how many piano teachers have I got in my contacts"
+      }
+    ],
+    "refer": [{ "row": "role \"Piano teacher\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

@@ -1,0 +1,246 @@
+[
+  {
+    "id": "w03-009",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks for the Allotment club portal entry",
+        "say": ["Allotment club"]
+      },
+      {
+        "hint": "(new topic) asks what's left to do on the 'Move the piano next week' task",
+        "say": ["Move the piano next week"]
+      },
+      { "hint": "asks how many that is", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "texting"]
+  },
+  {
+    "id": "w03-010",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks to log a call with Rosalia (several people are called Rosalia)",
+        "say": ["Rosalia"]
+      },
+      {
+        "hint": "says it was Rosalia Kilbride (the Kilbride one)",
+        "say": ["Kilbride"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "polite"]
+  },
+  {
+    "id": "w03-011",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks where they took the bridge picture", "say": ["bridge"] },
+      {
+        "hint": "(new topic) asks whether they binned the draft note",
+        "say": ["draft"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "spoken"]
+  },
+  {
+    "id": "w03-012",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks for their most recent journal entry", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "polite"]
+  },
+  {
+    "id": "w03-013",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks for everything mentioning wiper blades",
+        "say": ["wiper blades"]
+      },
+      { "hint": "asks what about in their to-dos", "say": [] },
+      {
+        "hint": "asks the same about Hang instead ('what about Hang?')",
+        "say": ["Hang"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "texting"]
+  },
+  {
+    "id": "w03-014",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks if they have any to-dos about Wystan",
+        "say": ["Wystan"]
+      },
+      {
+        "hint": "asks the same about Ring instead ('what about Ring?')",
+        "say": ["Ring"]
+      },
+      {
+        "hint": "(new topic) asks what they have filed under Work",
+        "say": ["Work"]
+      },
+      {
+        "hint": "asks for just the passport ones among those",
+        "say": ["passport"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "w03-015",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks which album the table photo is in", "say": ["table"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "polite"]
+  },
+  {
+    "id": "w03-016",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks what they've written in the Roof notebook",
+        "say": ["Roof"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "question"]
+  },
+  {
+    "id": "w03-017",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks when Osric's birthday is", "say": ["Osric"] },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "(new topic) asks what's in the vault about Farewell dinner",
+        "say": ["Farewell dinner"]
+      },
+      {
+        "hint": "(new topic) asks what debts there are between them and Saskia Radley",
+        "say": ["Saskia Radley"]
+      },
+      {
+        "hint": "(new topic) asks to save the wifi at the shed 83478 in the locker",
+        "say": ["wifi at the shed", "83478"]
+      },
+      {
+        "hint": "(new topic) asks to move the Fence club appointment to tomorrow",
+        "say": ["Fence club", "tomorrow"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "spoken"]
+  },
+  {
+    "id": "w03-018",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks whether Viggo's birthday is coming up", "say": ["Viggo"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "texting"]
+  },
+  {
+    "id": "w03-019",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks what they have about Groceries", "say": ["Groceries"] },
+      { "hint": "(new topic) asks who is in the fund group", "say": ["fund"] },
+      {
+        "hint": "(new topic) asks what the login for Insurance is (not the password)",
+        "say": ["Insurance"]
+      },
+      {
+        "hint": "asks the same about club instead ('what about club?')",
+        "say": ["club"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "terse"]
+  },
+  {
+    "id": "w03-020",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks to log that they had a visit with Quincy",
+        "say": ["Quincy"]
+      },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  },
+  {
+    "id": "w03-021",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks to pull up Mabel Illingworth",
+        "say": ["Mabel Illingworth"]
+      },
+      {
+        "hint": "(new topic) asks what's in the vault about Merriweather",
+        "say": ["Merriweather"]
+      },
+      {
+        "hint": "asks for just the birthday ones among those",
+        "say": ["birthday"]
+      },
+      {
+        "hint": "asks the same about Roof instead ('what about Roof?')",
+        "say": ["Roof"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "question"]
+  },
+  {
+    "id": "w03-022",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks if anything is happening on the 17th",
+        "say": ["the 17th"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      { "hint": "(new topic) asks who still has to pay them back", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "spoken"]
+  },
+  {
+    "id": "w03-023",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks to add a task 'Check the boiler check' for wednesday at 14:00",
+        "say": ["Check the boiler check", "wednesday"]
+      },
+      {
+        "hint": "(new topic) asks what the login for Insurance is (not the password)",
+        "say": ["Insurance"]
+      },
+      {
+        "hint": "(new topic) asks which username they use for Allotment club",
+        "say": ["Allotment club"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "polite"]
+  }
+]

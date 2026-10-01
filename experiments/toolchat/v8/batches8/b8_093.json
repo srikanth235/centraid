@@ -1,0 +1,305 @@
+[
+  {
+    "id": "w27-0024",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks what time the haystack party is",
+        "say": ["haystack party"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w27-0025",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks for the Dennoe trip expenses above one hundred and seventy",
+        "say": ["Dennoe trip", "one hundred and seventy"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w27-0026",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "says dentist check-up tuesday at 4:30pm — add it",
+        "say": ["dentist check-up", "tuesday", "at 4:30pm"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w27-0027",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      { "hint": "asks what Josefine's surname is", "say": ["Josefine"] }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w27-0028",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      { "hint": "asks which events they have friday", "say": ["friday"] },
+      {
+        "hint": "(new topic) asks for their calendar events on blackbird",
+        "say": ["blackbird", "events"],
+        "shown": "event \"Carnation sale at Gyvidale Heath\" Fri 2025-01-31 15:30"
+      },
+      {
+        "hint": "(new topic) asks for the pictures they marked as favourites",
+        "say": [],
+        "shown": "no rows"
+      },
+      {
+        "hint": "follow-up: asks to put the third one in the Dennoe 2024 album",
+        "say": ["third", "Dennoe 2024", "album"],
+        "shown": "photo \"Almond on the table\" Mon 2025-01-20 18:07 · album_titles=Aleksei's mitten, Best of 2027 favorite=true people=Cillian Egerton, Eara Chukwu\nphoto \"Gravy in the garden\" Fri 2025-01-10 12:41 · album_titles=Best of 2027 favorite=true\nphoto \"Cillian at Gyvidale Heath\" Sun 2024-11-24 17:22 · album_titles=Aleksei's mitten favorite=true\nphoto \"Mantua Wood at dusk\" Sun 2024-09-01 12:31 · album_titles=Dennoe 2024 favorite=true\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w27-0029",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "says they phoned Nomara today, log it (two contacts are called Nomara)",
+        "say": ["Nomara", "phoned"]
+      },
+      {
+        "hint": "(new topic) asks which to-dos take about ten minute",
+        "say": ["ten minute"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "(new topic) asks if they have any pictures about Portloe",
+        "say": ["Portloe", "pictures"],
+        "shown": "task \"Sort out the rocket this week\" · status=in-process effort_min=10"
+      },
+      {
+        "hint": "follow-up: asks what about in their calendar",
+        "say": ["calendar"],
+        "shown": "photo \"Portloe Bakery at sunrise\" Wed 2024-12-25 13:34 · favorite=false"
+      },
+      {
+        "hint": "follow-up: asks to move the squash one to saturday",
+        "say": ["squash", "saturday"],
+        "shown": "event \"Tatting meetup at Portloe Bakery\" Sat 2025-02-08 20:45\nevent \"Squash meetup at Portloe Bakery\" Wed 2025-01-22 14:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w27-0030",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "says they phoned Nomara Brandow today, log it",
+        "say": ["Nomara Brandow", "phoned"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w27-0031",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      { "hint": "asks to delete the service task", "say": ["service"] },
+      {
+        "hint": "follow-up: corrects: wrong task, they meant the empty one",
+        "say": ["empty"],
+        "shown": "done: delete{} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks to delete all their table photos",
+        "say": ["table", "photo"],
+        "shown": "done: delete{} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w27-0032",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks to put the mantua wood photo in the Seagull 2025 album",
+        "say": ["mantua wood", "Seagull 2025", "album"]
+      },
+      {
+        "hint": "follow-up: asks where it was taken",
+        "say": [],
+        "shown": "done: media.add_to_album{album_id: (#8)} on (#5)"
+      },
+      {
+        "hint": "follow-up: asks to see the photos from there",
+        "say": [],
+        "shown": "place \"Mantua Wood\""
+      },
+      {
+        "hint": "follow-up: about the Mantua one, asks where it was taken",
+        "say": ["Mantua"],
+        "shown": "photo \"Almond on the table\" Mon 2025-01-20 18:07 · album_titles=Aleksei's mitten, Best of 2027 favorite=true people=Cillian Egerton, Eara Chukwu\nphoto \"Mantua Wood at dusk\" Sun 2024-09-01 12:31 · album_titles=Seagull 2025, Dennoe 2024 favorite=true"
+      },
+      {
+        "hint": "follow-up: asks what other shots are in there",
+        "say": [],
+        "shown": "place \"Mantua Wood\""
+      },
+      {
+        "hint": "(new topic) asks to log that they had coffee with Grolou Montague today",
+        "say": ["Grolou Montague", "coffee"],
+        "shown": "photo \"Almond and mitten\" Sat 2025-01-11 10:22 · album_titles=Seagull 2025 favorite=false people=Nomara Brandow, Rainer Cosova\nphoto \"Grapefruit by the window\" Tue 2024-12-24 18:27 · album_titles=Dennoe 2024, Seagull 2025 favorite=false\nphoto \"Mooring from above\" Fri 2024-04-05 09:21 · album_titles=Seagull 2025, Walks round Gyvidale Leisu… favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w27-0033",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks which pictures mention marzipan",
+        "say": ["marzipan", "pictures"]
+      },
+      {
+        "hint": "follow-up: asks where it was taken",
+        "say": [],
+        "shown": "photo \"Marzipan at dusk\" Wed 2024-12-18 16:40 · favorite=false"
+      },
+      {
+        "hint": "(new topic) asks which events are at Lymere Cove (by the place itself)",
+        "say": ["Lymere Cove"],
+        "shown": "place \"Burnham Heath\""
+      },
+      {
+        "hint": "follow-up: asks to see the photos from there",
+        "say": [],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "(new topic) asks if they have any photos about salmon",
+        "say": ["salmon", "photos"],
+        "shown": "photo \"Lymere Cove at sunrise\" Mon 2024-11-11 14:56 · favorite=false people=Salvatore Zamora"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w27-0034",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks if they have any paperwork about pizaum",
+        "say": ["pizaum", "paperwork"]
+      },
+      {
+        "hint": "follow-up: says nah, leave it",
+        "say": [],
+        "shown": "document \"Pizaum letter\" Sat 2024-01-06 09:45 · folder=Taxes"
+      },
+      {
+        "hint": "follow-up: asks what their notes have on it",
+        "say": ["notes"],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w27-0035",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks how much Josefine owes them in Dennoe",
+        "say": ["Josefine", "Dennoe"]
+      },
+      {
+        "hint": "follow-up: asks the same for Nomara ('and Nomara?')",
+        "say": ["Nomara"],
+        "shown": "= -10017"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w27-0036",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      { "hint": "asks when Maud's birthday is", "say": ["Maud", "birthday"] },
+      {
+        "hint": "(new topic) asks which places they have exactly one photo from",
+        "say": ["one"],
+        "shown": "important date \"Birthday — Maud Cellow\" Sat 2025-09-20"
+      },
+      {
+        "hint": "follow-up: about the Flemness one, asks to see the photos from there",
+        "say": ["Flemness"],
+        "shown": "place \"Flemness Hill\"\nplace \"Gyvidale Heath\"\nplace \"Berat Reservoir\"\nplace \"Dennoe Pier\"\n(+1 more)"
+      },
+      {
+        "hint": "(new topic) asks to star the parking document",
+        "say": ["parking"],
+        "shown": "photo \"Flemness Hill at low tide\" Tue 2024-12-03 19:42 · album_titles=Dennoe 2024 favorite=false"
+      },
+      {
+        "hint": "follow-up: corrects: wrong document, they meant the wardrobe one",
+        "say": ["wardrobe"],
+        "shown": "done: core.star_document{} on (#8)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w27-0037",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks when their dinner with Maud is",
+        "say": ["Maud", "dinner"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w27-0038",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks what's left to do on the mantua wood plan",
+        "say": ["mantua wood"]
+      },
+      {
+        "hint": "(new topic) asks for the ten minute jobs on their list",
+        "say": ["ten minute"],
+        "shown": "task \"Research the awning\" · status=needs-action"
+      },
+      {
+        "hint": "(new topic) asks what the steps for the cancel maud's kiln are",
+        "say": ["cancel maud's kiln"],
+        "shown": "task \"Sort out the rocket this week\" · status=in-process effort_min=10"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  }
+]

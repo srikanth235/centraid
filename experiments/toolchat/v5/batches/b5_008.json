@@ -1,0 +1,222 @@
+[
+  {
+    "id": "a0627",
+    "today": "Saturday 2028-08-05",
+    "turns": [
+      {
+        "canonical": "show (locker items that (type = \"membership\"))",
+        "move": "first",
+        "hint": "which locker entries are of that type"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0369",
+    "today": "Wednesday 2026-09-09",
+    "turns": [
+      {
+        "canonical": "count of (notes that (notebooks contains \"Work\"))",
+        "move": "first",
+        "hint": "how many notes in the Work notebook"
+      }
+    ],
+    "refer": [{ "row": "notebooks \"Work\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0861",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      {
+        "canonical": "min due_at of (tasks that (status != \"completed\"))",
+        "move": "first",
+        "hint": "when is my next deadline (earliest due date of open tasks)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0002",
+    "today": "Wednesday 2028-01-26",
+    "turns": [
+      {
+        "canonical": "show (albums)",
+        "move": "first",
+        "hint": "what photo albums do I have"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0636",
+    "today": "Saturday 2026-10-10",
+    "turns": [
+      {
+        "canonical": "show (notes that (deleted_at is not null))",
+        "move": "first",
+        "hint": "notes I've deleted / in the bin"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0919",
+    "today": "Friday 2025-10-31",
+    "turns": [
+      {
+        "canonical": "show (obligations of (parties called \"Griffin Kowalczyk\") ordered by incurred_on desc)",
+        "move": "first",
+        "hint": "debts with Griffin, newest first"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Griffin Kowalczyk\"",
+        "turn": 1,
+        "say": "exact: Griffin"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0362",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "canonical": "count of (members of (groups called \"Chess night\"))",
+        "move": "first",
+        "hint": "how many people are in the chess group"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Chess night\"", "turn": 1, "say": "exact: chess" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0317",
+    "today": "Wednesday 2026-11-25",
+    "turns": [
+      {
+        "canonical": "count of (groups)",
+        "move": "first",
+        "hint": "how many shared-expense groups am I in"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0586",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "canonical": "show (expenses that (amount_minor > 20000))",
+        "move": "first",
+        "hint": "expenses over that amount"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0982",
+    "today": "Saturday 2025-05-17",
+    "turns": [
+      {
+        "canonical": "show (groups of (expenses called \"pottery clay\"))",
+        "move": "first",
+        "hint": "which group was the pottery clay expense in"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0752",
+    "today": "Sunday 2025-12-07",
+    "turns": [
+      {
+        "canonical": "show (photos that (place = \"Tidewater Point\"))",
+        "move": "first",
+        "hint": "photos whose place is tidewater"
+      }
+    ],
+    "refer": [
+      {
+        "row": "places \"Tidewater Point\"",
+        "turn": 1,
+        "say": "exact: tidewater"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0559",
+    "today": "Tuesday 2027-01-26",
+    "turns": [
+      {
+        "canonical": "show (events that (dtstart < next friday))",
+        "move": "first",
+        "hint": "events before that day"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0566",
+    "today": "Monday 2026-04-20",
+    "turns": [
+      {
+        "canonical": "show (events that (status = \"tentative\"))",
+        "move": "first",
+        "hint": "which events are cancelled / tentative"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0063",
+    "today": "Thursday 2025-10-02",
+    "turns": [
+      {
+        "canonical": "show (journal notes called \"Visit to Margit's new flat\")",
+        "move": "first",
+        "hint": "find my journal entry about visit"
+      }
+    ],
+    "refer": [
+      {
+        "row": "journal notes \"Visit to Margit's new flat\"",
+        "turn": 1,
+        "say": "loose: visit"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0398",
+    "today": "Sunday 2026-01-11",
+    "turns": [
+      {
+        "canonical": "count of (photos during this month)",
+        "move": "first",
+        "hint": "how many photos did I take in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

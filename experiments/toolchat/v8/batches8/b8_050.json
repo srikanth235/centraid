@@ -1,0 +1,318 @@
+[
+  {
+    "id": "w15-0020",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      { "hint": "asks what is overdue", "say": [] },
+      {
+        "hint": "(new topic) asks for the photos they took last weekend",
+        "say": ["last weekend"],
+        "shown": "task \"Ask Iskander about the crumpet\" Fri 2026-06-26 09:00 · status=needs-action effort_min=45\ntask \"Empty the duffel\" Sat 2026-07-04 18:00 · status=needs-action\ntask \"Find a viola for Treskan\" Tue 2026-07-07 09:00 · status=needs-action\ntask \"Recycle Iskander's attic\" Thu 2026-07-09 09:00 · status=needs-action effort_min=180\n(+3 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w15-0021",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in number 44 flat",
+        "say": ["number 44 flat", "how much"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w15-0022",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in number 44 flat (the expenses)",
+        "say": ["number 44 flat"]
+      },
+      {
+        "hint": "follow-up: asks what those add up to",
+        "say": [],
+        "shown": "expense \"Dinner at Café Vunnow\" Sun 2026-07-12 · amount_minor=2952 paid_by=Owner\nexpense \"Saxophone lessons\" Sat 2026-07-11 · amount_minor=1300 paid_by=Grerra Ozturk\nexpense \"Dinner at Holwen Common\" Wed 2026-07-08 · amount_minor=14273 paid_by=Owner\nexpense \"Hatchet\" Wed 2026-07-08 · amount_minor=5050 paid_by=Owner\n(+6 more)"
+      },
+      {
+        "hint": "follow-up: about the saxophone one, asks which group it's in",
+        "say": ["saxophone"],
+        "shown": "= 57643"
+      },
+      {
+        "hint": "follow-up: asks who's in it",
+        "say": [],
+        "shown": "group \"Number 44 flat\""
+      },
+      {
+        "hint": "follow-up: asks how many there are in total",
+        "say": [],
+        "shown": "member \"You\"\nmember \"Grerra Ozturk\"\nmember \"Bartosz Reawick\"\nmember \"Vranir Gauthier\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w15-0023",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks for the photos in the Wyvgeholm 2026 album",
+        "say": ["Wyvgeholm 2026", "album"]
+      },
+      {
+        "hint": "(detour) hang on — asks who they're in debt to",
+        "say": [],
+        "shown": "photo \"Saffron at Ledbury Leisure Centre (02)\" Sat 2026-06-27 10:52 · album_titles=Wyvgeholm 2026, Summer 2026 favorite=false\nphoto \"Kapaet at Holwen Common\" Wed 2026-06-24 17:39 · album_titles=Wyvgeholm 2026 favorite=false\nphoto \"Chandelier by the window\" Fri 2026-06-05 07:06 · album_titles=Wyvgeholm 2026 favorite=false\nphoto \"Rosalina at Wyvgeholm Mill\" Mon 2026-06-01 09:51 · album_titles=Wyvgeholm 2026 favorite=false\n(+5 more)"
+      },
+      {
+        "hint": "back to the Wyvgeholm 2026 album — asks to put the fourth one in the Café Vunnow album",
+        "say": ["fourth", "Café Vunnow", "album"],
+        "shown": "party \"Fumiko Lallett\" · owed_to_them_minor=500 role=Friend from the gym\nparty \"Rosalina Nieminen\" · owed_to_them_minor=4800 role=Partner\nparty \"Bhavna Huskani\" · owed_to_them_minor=4800 role=Choir friend\nparty \"Digby Vrasfeby\" · owed_to_them_minor=500 role=Old flatmate"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w15-0024",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      { "hint": "asks which expenses were over 25 naira", "say": ["25 naira"] },
+      {
+        "hint": "(new topic) asks to undelete the chandelier note",
+        "say": ["chandelier", "note"],
+        "shown": "expense \"Dinner at Café Vunnow\" Sun 2026-07-12 · amount_minor=2952 paid_by=Owner\nexpense \"Bakery run (wk 28)\" Fri 2026-07-10 · amount_minor=3950 paid_by=Marrette Morescu\nexpense \"Dinner at Holwen Common\" Wed 2026-07-08 · amount_minor=14273 paid_by=Owner\nexpense \"Hatchet\" Wed 2026-07-08 · amount_minor=5050 paid_by=Owner\n(+9 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w15-0025",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks where they stand with Vranir Gauthier in number 44 flat",
+        "say": ["Vranir Gauthier", "number 44 flat"]
+      },
+      {
+        "hint": "follow-up: asks the same for Grerra ('and Grerra?')",
+        "say": ["Grerra"],
+        "shown": "= -2361"
+      },
+      {
+        "hint": "(new topic) asks to look up Drulleo Joinery",
+        "say": ["Drulleo Joinery"],
+        "shown": "= -9449"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w15-0026",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks to add the attic picture to the Viola album",
+        "say": ["attic", "Viola", "album"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w15-0027",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks to jot down a note that says measure the saxophone",
+        "say": ["measure the saxophone"]
+      },
+      {
+        "hint": "(new topic) asks what their earliest appointment is sunday",
+        "say": ["sunday"],
+        "shown": "done: knowledge.create_note{title: \"Measure the saxophone\"}"
+      },
+      {
+        "hint": "(new topic) asks who's invited to the electrician",
+        "say": ["electrician"],
+        "shown": "event \"Look at the viola\" Sun 2026-07-19 08:45"
+      },
+      {
+        "hint": "(new topic) asks what the most recent picture they took is",
+        "say": [],
+        "shown": "party \"Anya Baisescu\" · role=Electrician"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w15-0028",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks to delete the fencing photo",
+        "say": ["fencing", "photo"]
+      },
+      {
+        "hint": "(new topic) asks when the cricket business is",
+        "say": ["cricket"],
+        "shown": "done: media.delete_asset{} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w15-0029",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      { "hint": "asks to delete the poppy photo", "say": ["poppy", "photo"] },
+      {
+        "hint": "(new topic) asks if anyone owes them cash",
+        "say": [],
+        "shown": "none"
+      },
+      {
+        "hint": "(new topic) asks which steps of ask vranir they've finished",
+        "say": ["ask vranir"],
+        "shown": "party \"Gaelle Reawick\" · owed_to_me_minor=1200 role=Nephew\nparty \"Vranir Gauthier\" · owed_to_me_minor=4800 role=Old flatmate"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w15-0030",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks to open the Summer 2026 album",
+        "say": ["Summer 2026", "album"]
+      },
+      {
+        "hint": "(detour) hang on — asks when they have the cricket viewing",
+        "say": ["cricket viewing"],
+        "shown": "photo \"Cricket close-up\" Mon 2026-07-13 18:32 · album_titles=Summer 2026 favorite=false\nphoto \"Saffron at Ledbury Leisure Centre (02)\" Sat 2026-06-27 10:52 · album_titles=Wyvgeholm 2026, Summer 2026 favorite=false\nphoto \"Saffron at Ledbury Leisure Centre\" Mon 2026-06-08 17:54 · album_titles=Summer 2026 favorite=false\nphoto \"Meadowlark in the garden\" Mon 2026-06-01 19:52 · album_titles=Summer 2026 favorite=false\n(+3 more)"
+      },
+      {
+        "hint": "back to the Summer 2026 album — asks to narrow that to anything about viola",
+        "say": ["viola"],
+        "shown": "event \"Cricket viewing\" Fri 2026-07-17 07:00"
+      },
+      {
+        "hint": "follow-up: asks where it was taken",
+        "say": [],
+        "shown": "photo \"The viola at dusk\" Wed 2026-05-20 10:45 · album_titles=Viola, Summer 2026 favorite=false"
+      },
+      {
+        "hint": "(new topic) asks what Ifeoma's surname is",
+        "say": ["Ifeoma"],
+        "shown": "place \"Ledbury Leisure Centre\""
+      },
+      {
+        "hint": "(new topic) asks to jot down a note that says ask Iskander about the cricket",
+        "say": ["ask Iskander about the cricket"],
+        "shown": "party \"Ifeoma Vrestova\" · role=Former colleague"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w15-0031",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks if they have photos of Viggo Nieminen",
+        "say": ["Viggo Nieminen"]
+      },
+      {
+        "hint": "follow-up: asks who is in it",
+        "say": [],
+        "shown": "photo \"Gazebo on the table\" Mon 2026-05-25 18:58 · album_titles=Café Vunnow favorite=false people=Viggo Nieminen, Vranir Gauthier"
+      },
+      {
+        "hint": "follow-up: says they phoned the Viggo one, log it",
+        "say": ["Viggo"],
+        "shown": "party \"Viggo Nieminen\" · role=Cousin\nparty \"Vranir Gauthier\" · owed_to_me_minor=4800 role=Old flatmate"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w15-0032",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks to email Calla the Centre wifi",
+        "say": ["Calla", "Centre wifi"]
+      },
+      {
+        "hint": "(new topic) asks what they paid for the night",
+        "say": ["night"],
+        "shown": "refuse"
+      },
+      {
+        "hint": "follow-up: says scrap that, they'll check later themselves",
+        "say": [],
+        "shown": "= 20654"
+      },
+      {
+        "hint": "(new topic) asks to book in fencing class wednesday at 9:30",
+        "say": ["fencing class", "wednesday", "at 9:30"],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w15-0033",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the router is",
+        "say": ["router", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w15-0034",
+    "today": "Tuesday 2026-07-14",
+    "turns": [
+      {
+        "hint": "asks for the photos in the Viola album",
+        "say": ["Viola", "album"]
+      },
+      {
+        "hint": "follow-up: asks which of those are favourites",
+        "say": [],
+        "shown": "photo \"Saffron at Ledbury Leisure Centre (03)\" Sat 2026-06-27 10:53 · album_titles=Viola favorite=false\nphoto \"The kitesurfing at dusk\" Thu 2026-06-18 10:59 · album_titles=Viola favorite=false\nphoto \"Hatchet on the table\" Wed 2026-06-10 13:20 · album_titles=Viola favorite=true\nphoto \"Anya at Wyvgeholm Hollow\" Fri 2026-05-29 15:49 · album_titles=Viola, Summer 2026, Wyvgeholm 2026 favorite=true people=Vruwyn Ueda, Vranir Gauthier, Anya Baisescu\n(+1 more)"
+      },
+      {
+        "hint": "(detour) hang on — asks how much the kapaet fee was",
+        "say": ["kapaet fee"],
+        "shown": "photo \"Hatchet on the table\" Wed 2026-06-10 13:20 · album_titles=Viola favorite=true\nphoto \"Anya at Wyvgeholm Hollow\" Fri 2026-05-29 15:49 · album_titles=Viola, Summer 2026, Wyvgeholm 2026 favorite=true people=Vruwyn Ueda, Vranir Gauthier, Anya Baisescu"
+      },
+      {
+        "hint": "back to the Viola album — about the hatchet one, asks where it was taken",
+        "say": ["hatchet"],
+        "shown": "= 20531"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  }
+]

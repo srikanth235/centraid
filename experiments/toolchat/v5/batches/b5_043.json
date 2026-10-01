@@ -1,0 +1,231 @@
+[
+  {
+    "id": "a0614",
+    "today": "Friday 2027-06-18",
+    "turns": [
+      {
+        "canonical": "show (important dates that (next_occurrence during next week))",
+        "move": "first",
+        "hint": "which birthdays/anniversaries are coming up in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0255",
+    "today": "Wednesday 2027-10-13",
+    "turns": [
+      {
+        "canonical": "count of (albums)",
+        "move": "first",
+        "hint": "how many photo albums have I got"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0847",
+    "today": "Sunday 2025-10-05",
+    "turns": [
+      {
+        "canonical": "min amount_minor of (expenses that (spent_on during this week))",
+        "move": "first",
+        "hint": "smallest expense in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0027",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "canonical": "show (locker items)",
+        "move": "first",
+        "hint": "what's saved in my locker / password manager"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0045",
+    "today": "Saturday 2025-03-22",
+    "turns": [
+      {
+        "canonical": "show (albums called \"Harvest supper\")",
+        "move": "first",
+        "hint": "find the Harvest supper album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Harvest supper\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0901",
+    "today": "Friday 2027-12-03",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (expenses ordered by amount_minor desc))",
+        "move": "first",
+        "hint": "my biggest expense ever"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0234",
+    "today": "Tuesday 2027-09-07",
+    "turns": [
+      {
+        "canonical": "tally.settle_up{ group_id: (groups called \"Allotment weekend\"), from_party: (parties called \"Dalia Hazeldine\"), amount_minor: 1250 }",
+        "move": "first",
+        "hint": "record that Dalia paid me that amount in the group"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Allotment weekend\"", "turn": 1, "say": "full" },
+      { "row": "parties \"Dalia Hazeldine\"", "turn": 1, "say": "exact: Dalia" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0993",
+    "today": "Tuesday 2025-12-16",
+    "turns": [
+      {
+        "canonical": "show (parties of (events called \"Pottery workshop\"))",
+        "move": "first",
+        "hint": "who's coming to / invited to the pottery"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Pottery workshop\"",
+        "turn": 1,
+        "say": "exact: pottery"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1019",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "canonical": "show (photos of (albums called \"Kitchen renovation\"))",
+        "move": "first",
+        "hint": "show the photos in the Kitchen renovation album"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"Kitchen renovation\"", "turn": 1, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0488",
+    "today": "Sunday 2027-07-04",
+    "turns": [
+      {
+        "canonical": "show (activities that (started_at during last month))",
+        "move": "first",
+        "hint": "who did I call/see/have coffee with in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1088",
+    "today": "Tuesday 2026-02-10",
+    "turns": [
+      {
+        "canonical": "tally.delete_expense{} on (expenses called \"Pottery clay\")",
+        "move": "first",
+        "hint": "delete the clay expense"
+      },
+      {
+        "canonical": "tally.undo_expense{} on (it)",
+        "move": "undo",
+        "hint": "oh no, put it back / undo that"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Pottery clay\"", "turn": 1, "say": "loose: clay" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0269",
+    "today": "Wednesday 2025-08-27",
+    "turns": [
+      {
+        "canonical": "count of (contact channels of (parties called \"Elio Rookwood\"))",
+        "move": "first",
+        "hint": "how many numbers/emails do I have for Elio"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Elio Rookwood\"", "turn": 1, "say": "exact: Elio" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0320",
+    "today": "Wednesday 2028-05-10",
+    "turns": [
+      {
+        "canonical": "count of (important dates that (next_occurrence during next month))",
+        "move": "first",
+        "hint": "how many birthdays/anniversaries coming up in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0519",
+    "today": "Friday 2027-08-13",
+    "turns": [
+      {
+        "canonical": "show (documents that (starred = true))",
+        "move": "first",
+        "hint": "my starred documents"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1083",
+    "today": "Sunday 2028-05-07",
+    "turns": [
+      {
+        "canonical": "tally.delete_expense{} on (expenses called \"Petrol\")",
+        "move": "first",
+        "hint": "delete the petrol expense"
+      },
+      {
+        "canonical": "tally.undo_expense{} on (it)",
+        "move": "undo",
+        "hint": "oh no, put it back / undo that"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Petrol\"", "turn": 1, "say": "exact: petrol" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

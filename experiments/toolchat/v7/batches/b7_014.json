@@ -1,0 +1,211 @@
+[
+  {
+    "id": "w03-054",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks whether they owe Birgit Tolliver anything",
+        "say": ["Birgit Tolliver"]
+      },
+      {
+        "hint": "(new topic) asks to find anything to do with Dovecote",
+        "say": ["Dovecote"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "w03-055",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks if they have any documents about Payslip",
+        "say": ["Payslip"]
+      },
+      { "hint": "asks how many there are in total", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "question"]
+  },
+  {
+    "id": "w03-056",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks to move the monitor task to friday",
+        "say": ["monitor", "friday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "texting"]
+  },
+  {
+    "id": "w03-057",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks which username they use for Insurance",
+        "say": ["Insurance"]
+      },
+      {
+        "hint": "asks the same about Mobile login instead ('what about Mobile login?')",
+        "say": ["Mobile login"]
+      },
+      {
+        "hint": "(new topic) asks what they have on tomorrow (calendar, to-dos, birthdays)",
+        "say": ["tomorrow"]
+      },
+      { "hint": "(new topic) asks to see their favourited pics", "say": [] },
+      {
+        "hint": "(new topic) asks where they took the Fence picture",
+        "say": ["Fence"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "texting"]
+  },
+  {
+    "id": "w03-058",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks where they took the table picture", "say": ["table"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "polite"]
+  },
+  {
+    "id": "w03-059",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks to see the Train login entry", "say": ["Train"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "polite"]
+  },
+  {
+    "id": "w03-060",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks if they have any notes about contacts",
+        "say": ["contacts"]
+      },
+      {
+        "hint": "(new topic) asks to make a note called 'Books to read this summer'",
+        "say": ["Books to read this summer"]
+      },
+      {
+        "hint": "asks to add a task for friday to deal with 'Physio contacts'",
+        "say": ["friday"]
+      },
+      {
+        "hint": "asks to add a task for tuesday to deal with 'Physio contacts'",
+        "say": ["tuesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "polite"]
+  },
+  {
+    "id": "w03-061",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks to move the test appointment to next friday",
+        "say": ["test", "next friday"]
+      },
+      { "hint": "(new topic) asks for their completed to-dos", "say": [] },
+      {
+        "hint": "asks for just the ones this week (this week)",
+        "say": ["week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "question"]
+  },
+  {
+    "id": "w03-062",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks what's in the vault about Cabin", "say": ["Cabin"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "polite"]
+  },
+  {
+    "id": "w03-063",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks to delete the draft note", "say": ["draft"] },
+      {
+        "hint": "(new topic) asks what they wrote in their journal yesterday",
+        "say": ["yesterday"]
+      },
+      {
+        "hint": "(new topic) asks for the someday tasks with no deadline",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "question"]
+  },
+  {
+    "id": "w03-064",
+    "today": "Thursday 2025-05-08",
+    "turns": [{ "hint": "asks what time the test is", "say": ["test"] }],
+    "versions": 3,
+    "registers": ["polite", "question", "texting"]
+  },
+  {
+    "id": "w03-065",
+    "today": "Thursday 2025-05-08",
+    "turns": [{ "hint": "asks to find the notes on ideas", "say": ["ideas"] }],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w03-066",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks when they have the Choir", "say": ["Choir"] },
+      { "hint": "asks what else is on that day", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "polite"]
+  },
+  {
+    "id": "w03-067",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks to find anything to do with work", "say": ["work"] },
+      {
+        "hint": "(new topic) asks what date Leopold Blomqvist's birthday falls on",
+        "say": ["Leopold Blomqvist"]
+      },
+      {
+        "hint": "(new topic) asks when Ursula Draycott's birthday is",
+        "say": ["Ursula Draycott"]
+      },
+      { "hint": "(new topic) asks what is due this week", "say": ["this week"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "polite"]
+  },
+  {
+    "id": "w03-068",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks what the last thing they wrote in their journal was",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks to log that they had a visit with Soraya",
+        "say": ["Soraya"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "polite"]
+  }
+]

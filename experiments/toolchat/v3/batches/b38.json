@@ -1,0 +1,355 @@
+[
+  {
+    "id": "v0870",
+    "today": "Tuesday 2025-10-07",
+    "prev": "show notebooks of it",
+    "prev_gloss": "List the notebooks linked to [it (the one row the previous turn is about)].",
+    "target": "show notes of the earlier one",
+    "gloss": "List the notes linked to [the earlier one (what was answered TWO turns back)].",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "v1571",
+    "today": "Thursday 2025-08-14",
+    "prev": "show parties called \"Keziah Quayle\"",
+    "prev_gloss": "List parties named \"Keziah Quayle\".",
+    "target": "show first 1 of (activities of it ordered by started_at desc)",
+    "gloss": "List the first 1 of [the activities linked to [it (the one row the previous turn is about)], sorted by start time descending (highest/latest first)].",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "v1208",
+    "today": "Tuesday 2025-12-09",
+    "prev": "show expenses called \"parking\" and expenses called \"Groceries\"",
+    "prev_gloss": "List [expenses named \"parking\"] together with [expenses named \"Groceries\"].",
+    "target": "tally.delete_expense{} on the 1st one then tally.delete_expense{} on the other one",
+    "gloss": "First: Delete (move to trash) [the 1st one (by position in the previous answer)]. Then: Delete (move to trash) [the other one (of the two rows the previous turn answered)].",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v1423",
+    "today": "Tuesday 2026-07-07",
+    "prev": "NONE",
+    "target": "core.trash_document{} on (documents that (folder = \"Work\"))",
+    "gloss": "Delete (move to trash) [documents where the folder is \"Work\"].",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "v0553",
+    "today": "Wednesday 2027-09-22",
+    "prev": "show parties called \"Rosalia\"",
+    "prev_gloss": "List parties named \"Rosalia\".",
+    "target": "show parties called \"Gwilym Kowalczyk\"",
+    "gloss": "List parties named \"Gwilym Kowalczyk\".",
+    "hint": "The follow-up keeps the previous question's shape and swaps one name/date ('and for X?', 'what about next week?').",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "v1097",
+    "today": "Friday 2028-09-22",
+    "prev": "show photos that (capture_group_id is not null and exif_json is null)",
+    "prev_gloss": "List photos where the capture group is set and there is no exif json.",
+    "target": "show them that (source_asset_id is not null and exif_json is not null)",
+    "gloss": "List them (the rows the previous turn answered) where the source asset is set and the exif json is set.",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "v0447",
+    "today": "Wednesday 2026-01-14",
+    "prev": "NONE",
+    "target": "show expenses during this week",
+    "gloss": "List expenses dated this week.",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "v0501",
+    "today": "Tuesday 2025-03-11",
+    "prev": "NONE",
+    "target": "locker.reveal_receipt{} on (locker items that (network is not null or url contains \"netflix\"))",
+    "gloss": "Reveal the password of [locker items where (the network is set or the url contains \"netflix\")].",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "v0036",
+    "today": "Monday 2028-10-02",
+    "prev": "show documents",
+    "prev_gloss": "List documents.",
+    "target": "show notes",
+    "gloss": "List notes.",
+    "hint": "The follow-up changes topic completely.",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v1547",
+    "today": "Sunday 2028-02-13",
+    "prev": "people.trash_person{} on (parties called \"Juno Vasquez\")",
+    "prev_gloss": "Delete (move to trash) [parties named \"Juno Vasquez\"].",
+    "target": "people.undo_person{} on it",
+    "gloss": "Undo the last change made to [it (the one row the previous turn is about)].",
+    "hint": "The follow-up takes the previous write back ('undo that', 'put it back', 'oops, restore it').",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "v0856",
+    "today": "Wednesday 2027-04-07",
+    "prev": "sum amount_minor of (obligations of (parties called \"Niamh Zamora\"))",
+    "prev_gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Niamh Zamora\"]]?",
+    "target": "people.trash_person{} on (parties called \"Niamh Zamora\")",
+    "gloss": "Delete (move to trash) [parties named \"Niamh Zamora\"].",
+    "hint": "The previous turn named Niamh Zamora and got back only a number; the member now refers to them with a pronoun (him/her/them), which the canonical resolves to the name.",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "v1421",
+    "today": "Tuesday 2026-01-13",
+    "prev": "NONE",
+    "target": "sum byte_size of photos",
+    "gloss": "What is the total file size in bytes of [photos]?",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "v0861",
+    "today": "Wednesday 2025-06-25",
+    "prev": "show tasks called \"Measure the alcove for shelves\"",
+    "prev_gloss": "List tasks named \"Measure the alcove for shelves\".",
+    "target": "delete{} on that one",
+    "gloss": "Delete (move to trash) [that one (the row the previous turn is about)].",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "v1705",
+    "today": "Monday 2026-10-19",
+    "prev": "show tasks ordered by updated_at asc",
+    "prev_gloss": "List tasks, sorted by date last changed ascending (lowest/earliest first).",
+    "target": "delete{} on them",
+    "gloss": "Delete (move to trash) [them (the rows the previous turn answered)].",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "v1439",
+    "today": "Tuesday 2025-08-12",
+    "prev": "show contact channels that (kind in (\"address\", \"email\") and party_id = me)",
+    "prev_gloss": "List contact channels where the kind is one of \"address\", \"email\" and the person is me (the member).",
+    "target": "show parties of them",
+    "gloss": "List the parties linked to [them (the rows the previous turn answered)].",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v1016",
+    "today": "Saturday 2028-09-09",
+    "prev": "NONE",
+    "target": "min posted_at of transactions",
+    "gloss": "What is the lowest / earliest date posted of [transactions]?",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "v1285",
+    "today": "Thursday 2025-10-23",
+    "prev": "NONE",
+    "target": "core.star_document{} on (documents called \"Lease renewal letter\")",
+    "gloss": "Star [documents named \"Lease renewal letter\"].",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "v0762",
+    "today": "Wednesday 2028-03-15",
+    "prev": "count of (activities of (parties called \"Niamh Sandoval\"))",
+    "prev_gloss": "What is the number of [the activities linked to [parties named \"Niamh Sandoval\"]]?",
+    "target": "people.log_interaction{ kind: \"visit\" } on (parties called \"Niamh Sandoval\")",
+    "gloss": "Log that I had a visit with [parties named \"Niamh Sandoval\"].",
+    "hint": "The previous turn named Niamh Sandoval and got back only a number; the member now refers to them with a pronoun (him/her/them), which the canonical resolves to the name.",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "v0108",
+    "today": "Tuesday 2027-02-16",
+    "prev": "NONE",
+    "target": "show contact channels that (created_at during 2026-12-19..2026-12-22)",
+    "gloss": "List contact channels where the date created falls between Saturday 2026-12-19 and Tuesday 2026-12-22.",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "v1812",
+    "today": "Monday 2027-09-27",
+    "prev": "show expenses called \"Internet bill\" and expenses called \"birthday present\"",
+    "prev_gloss": "List [expenses named \"Internet bill\"] together with [expenses named \"birthday present\"].",
+    "target": "created_at of the other one",
+    "gloss": "What is the date created of [the other one (of the two rows the previous turn answered)]?",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "v1671",
+    "today": "Thursday 2027-11-25",
+    "prev": "show events during 2027-12",
+    "prev_gloss": "List events dated in December 2027.",
+    "target": "show them ordered by updated_at desc",
+    "gloss": "List them (the rows the previous turn answered), sorted by date last changed descending (highest/latest first).",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v0088",
+    "today": "Thursday 2027-10-28",
+    "prev": "show important dates that (label != \"name day\")",
+    "prev_gloss": "List important dates where the label is not \"name day\".",
+    "target": "nothing",
+    "gloss": "Do nothing: the member withdraws the request.",
+    "hint": "The follow-up withdraws: the member says never mind / leave it / actually don't.",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "v1303",
+    "today": "Saturday 2028-04-01",
+    "prev": "show profiles of (members that (birth_date is null))",
+    "prev_gloss": "List the profiles linked to [members where there is no date of birth].",
+    "target": "show them that (role is null)",
+    "gloss": "List them (the rows the previous turn answered) where there is no role.",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "v1553",
+    "today": "Sunday 2026-04-26",
+    "prev": "NONE",
+    "target": "show obligations of (parties called \"Viggo\")",
+    "gloss": "List the obligations linked to [parties named \"Viggo\"].",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "v1108",
+    "today": "Sunday 2027-10-31",
+    "prev": "show transactions during today",
+    "prev_gloss": "List transactions dated today.",
+    "target": "sum amount_minor of them",
+    "gloss": "What is the total amount (in pence) of [them (the rows the previous turn answered)]?",
+    "hint": "The follow-up is a bare fragment asking the total, e.g. 'how much?' / 'total?' / 'and in money?'",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "v1716",
+    "today": "Tuesday 2025-10-07",
+    "prev": "NONE",
+    "target": "show parties called \"Nils Falkenberg\"",
+    "gloss": "List parties named \"Nils Falkenberg\".",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "v1237",
+    "today": "Sunday 2025-10-19",
+    "prev": "count of (accounts called \"Business account\")",
+    "prev_gloss": "What is the number of [accounts named \"Business account\"]?",
+    "target": "show them that (institution_party_id = (members called \"Benedikt Eklund\") and currency contains \"USD\")",
+    "gloss": "List them (the rows the previous turn answered) where the bank / institution is [members named \"Benedikt Eklund\"] and the currency contains \"USD\".",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v0943",
+    "today": "Friday 2027-01-01",
+    "prev": "show tasks called \"fix the dripping tap\"",
+    "prev_gloss": "List tasks named \"fix the dripping tap\".",
+    "target": "show places",
+    "gloss": "List places.",
+    "hint": "The follow-up changes topic completely.",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "v0764",
+    "today": "Friday 2028-06-30",
+    "prev": "show tasks called \"Order more printer ink\" and tasks called \"Repaint the fence\"",
+    "prev_gloss": "List [tasks named \"Order more printer ink\"] together with [tasks named \"Repaint the fence\"].",
+    "target": "schedule.set_task_status{ status: \"needs-action\" } on the 1st one then schedule.delete_task{} on the other one",
+    "gloss": "First: Set the status of [the 1st one (by position in the previous answer)] to \"needs-action\". Then: Delete (move to trash) [the other one (of the two rows the previous turn answered)].",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "v1961",
+    "today": "Tuesday 2027-03-30",
+    "prev": "show expenses called \"birthday present\" and expenses called \"electricity bill\"",
+    "prev_gloss": "List [expenses named \"birthday present\"] together with [expenses named \"electricity bill\"].",
+    "target": "count of (them that (original_amount_minor > amount_minor and paid_by = me))",
+    "gloss": "What is the number of [them (the rows the previous turn answered) where the original amount (minor units) is more than / after its own amount (in pence) and the who paid is me (the member)]?",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "v0365",
+    "today": "Tuesday 2028-09-26",
+    "prev": "NONE",
+    "target": "schedule.edit_task{ to: 2028-10-04 } on (tasks that (due_at during last month and status != \"completed\"))",
+    "gloss": "Move [tasks where the due date falls last month and the status is not \"completed\"] to Wednesday 2028-10-04.",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "v1160",
+    "today": "Sunday 2025-09-28",
+    "prev": "show transactions",
+    "prev_gloss": "List transactions.",
+    "target": "show them during this month",
+    "gloss": "List them (the rows the previous turn answered) dated this month.",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "v1719",
+    "today": "Thursday 2028-06-08",
+    "prev": "NONE",
+    "target": "show tasks that (due_at during before now and status != \"completed\" and project_id = (projects called \"Job hunt\"))",
+    "gloss": "List tasks where the due date falls before now (already past — overdue) and the status is not \"completed\" and the project is [projects named \"Job hunt\"].",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v0778",
+    "today": "Monday 2026-03-09",
+    "prev": "show notes called \"running splits\"",
+    "prev_gloss": "List notes named \"running splits\".",
+    "target": "knowledge.delete_note{} on that one",
+    "gloss": "Delete (move to trash) [that one (the row the previous turn is about)].",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "v1480",
+    "today": "Saturday 2025-05-03",
+    "prev": "NONE",
+    "target": "refuse: unbounded_destruction",
+    "gloss": "Refuse, because it would delete an unbounded set (everything of a kind) (unbounded_destruction).",
+    "hint": "The member asks the assistant to remove every contact.",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "v1466",
+    "today": "Wednesday 2025-12-10",
+    "prev": "NONE",
+    "target": "show parties called \"Clementine Prescott\"",
+    "gloss": "List parties named \"Clementine Prescott\".",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "v0007",
+    "today": "Saturday 2026-06-06",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Kit Yardley\") ordered by started_at desc)",
+    "gloss": "List the first 1 of [the activities linked to [parties named \"Kit Yardley\"], sorted by start time descending (highest/latest first)].",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "v1137",
+    "today": "Sunday 2025-09-14",
+    "prev": "show expenses during today",
+    "prev_gloss": "List expenses dated today.",
+    "target": "min spent_on of them",
+    "gloss": "What is the lowest / earliest date spent of [them (the rows the previous turn answered)]?",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "v0261",
+    "today": "Tuesday 2027-07-06",
+    "prev": "NONE",
+    "target": "core.trash_document{} on (documents during this week)",
+    "gloss": "Delete (move to trash) [documents dated this week].",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v0253",
+    "today": "Tuesday 2027-02-16",
+    "prev": "NONE",
+    "target": "author_party_id of (notes called \"Sourdough starter log\")",
+    "gloss": "What is the author of [notes named \"Sourdough starter log\"]?",
+    "registers": ["spoken", "question", "terse"]
+  }
+]

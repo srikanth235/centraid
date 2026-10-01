@@ -1,0 +1,243 @@
+[
+  {
+    "id": "a1135",
+    "today": "Saturday 2025-08-02",
+    "turns": [
+      {
+        "canonical": "show (documents ordered by updated_at desc)",
+        "move": "first",
+        "hint": "documents, most recently changed first"
+      },
+      {
+        "canonical": "nothing",
+        "move": "undo",
+        "hint": "actually forget it / never mind (takes the request back)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1121",
+    "today": "Saturday 2027-04-03",
+    "turns": [
+      {
+        "canonical": "show (photos during this week)",
+        "move": "first",
+        "hint": "photos from that window"
+      },
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Hiking\") } on (them)",
+        "move": "act",
+        "hint": "add those to the Hiking album"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Rushmere Park\"", "turn": 1, "say": "exact: Park" },
+      { "row": "albums \"Hiking\"", "turn": 2, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0527",
+    "today": "Tuesday 2027-08-24",
+    "turns": [
+      {
+        "canonical": "show (documents that (updated_at during this month))",
+        "move": "first",
+        "hint": "docs changed in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0202",
+    "today": "Thursday 2028-08-17",
+    "turns": [
+      {
+        "canonical": "schedule.cancel_event{} on (events called \"Garden centre trip\")",
+        "move": "first",
+        "hint": "cancel the trip"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Garden centre trip\"",
+        "turn": 1,
+        "say": "exact: trip"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0455",
+    "today": "Tuesday 2028-08-01",
+    "turns": [
+      {
+        "canonical": "next_occurrence of (important dates of (parties called \"Coral Coldwell\") that (label contains \"Birthday\"))",
+        "move": "first",
+        "hint": "when is Coral's next birthday (date)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Coral Coldwell\"", "turn": 1, "say": "exact: Coral" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0333",
+    "today": "Sunday 2025-10-26",
+    "turns": [
+      {
+        "canonical": "count of (locker items)",
+        "move": "first",
+        "hint": "how many things are saved in my locker"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0955",
+    "today": "Tuesday 2028-09-19",
+    "turns": [
+      {
+        "canonical": "show (albums of (photos called \"Fishing at Quarry Lake\"))",
+        "move": "first",
+        "hint": "which album is the Quarry photo in"
+      }
+    ],
+    "refer": [
+      {
+        "row": "photos \"Fishing at Quarry Lake\"",
+        "turn": 1,
+        "say": "exact: Quarry"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0867",
+    "today": "Monday 2027-03-08",
+    "turns": [
+      {
+        "canonical": "show (documents ordered by updated_at desc)",
+        "move": "first",
+        "hint": "documents, most recently changed first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0375",
+    "today": "Monday 2025-09-15",
+    "turns": [
+      {
+        "canonical": "count of (notes)",
+        "move": "first",
+        "hint": "how many notes do I have"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0160",
+    "today": "Friday 2028-08-04",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Winter 2023\") } on (photos of (places called \"Sandholme Camp\"))",
+        "move": "first",
+        "hint": "add the photos from sandholme to the album"
+      }
+    ],
+    "refer": [
+      {
+        "row": "places \"Sandholme Camp\"",
+        "turn": 1,
+        "say": "exact: sandholme"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0167",
+    "today": "Friday 2028-01-21",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Porto trip\") } on (photos called \"Snow in the garden\")",
+        "move": "first",
+        "hint": "add the snow photo to the album"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"Porto trip\"", "turn": 1, "say": "full" },
+      {
+        "row": "photos \"Snow in the garden\"",
+        "turn": 1,
+        "say": "exact: snow"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0716",
+    "today": "Friday 2025-09-12",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "move": "first",
+        "hint": "who do I owe money to"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0785",
+    "today": "Wednesday 2027-04-14",
+    "turns": [
+      {
+        "canonical": "show (tasks that (priority <= 2))",
+        "move": "first",
+        "hint": "tasks with priority that number or higher-priority (lower number)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0342",
+    "today": "Wednesday 2027-12-01",
+    "turns": [
+      {
+        "canonical": "count of (locker items that (type = \"wifi\"))",
+        "move": "first",
+        "hint": "how many of that type are in my locker"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0609",
+    "today": "Thursday 2028-08-24",
+    "turns": [
+      {
+        "canonical": "show (important dates that (next_occurrence during next week))",
+        "move": "first",
+        "hint": "which birthdays/anniversaries are coming up in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

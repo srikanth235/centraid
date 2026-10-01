@@ -1,0 +1,30 @@
+{
+  "$note": "DEV-15: dev10 plus five sessions covering the categories dev10 has no session for (correction, reference_into_result, undo, write_only, write_set). Disjoint from screen90.json by assertion. NEVER iterate against screen90.",
+  "added": {
+    "s05": "reference_into_result",
+    "s11": "write_only",
+    "s48": "correction",
+    "s72": "write_set",
+    "s86": "undo"
+  },
+  "extends": "dev10.json",
+  "sessions": {
+    "suite": [
+      "s02",
+      "s04",
+      "s05",
+      "s11",
+      "s117",
+      "s24",
+      "s30",
+      "s48",
+      "s54",
+      "s57",
+      "s65",
+      "s72",
+      "s82",
+      "s86",
+      "s95"
+    ]
+  }
+}

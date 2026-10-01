@@ -1,0 +1,213 @@
+[
+  {
+    "id": "w13-039",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks what is due thursday", "say": ["thursday"] },
+      {
+        "hint": "(new topic) asks whether Oriane Oyelowo's birthday is coming up",
+        "say": ["Oriane Oyelowo"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  },
+  {
+    "id": "w13-040",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks where the Alarm account details are", "say": ["Alarm"] },
+      {
+        "hint": "(new topic) asks to see the diary entries they made yesterday",
+        "say": ["yesterday"]
+      },
+      {
+        "hint": "(new topic) asks to find the documents on Tent receipt",
+        "say": ["Tent receipt"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "spoken"]
+  },
+  {
+    "id": "w13-041",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks to see the Water login entry", "say": ["Water"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w13-042",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks which tasks are still open", "say": [] },
+      { "hint": "asks for just the ones due next week", "say": ["next week"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "w13-043",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks what they haven't done yet", "say": [] },
+      { "hint": "asks for just the ones due today", "say": ["today"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "question"]
+  },
+  {
+    "id": "w13-044",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks to see the documents they marked with a star", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "texting"]
+  },
+  {
+    "id": "w13-045",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks what they've written in the Ideas notebook",
+        "say": ["Ideas"]
+      },
+      { "hint": "asks which of those are about notes", "say": ["notes"] },
+      {
+        "hint": "(new topic) asks what's in the School uniform notebook",
+        "say": ["School uniform"]
+      },
+      {
+        "hint": "(new topic) asks for their photos about Graduation",
+        "say": ["Graduation"]
+      },
+      {
+        "hint": "(new topic) asks to save the gate code 56024 in the locker",
+        "say": ["gate code", "56024"]
+      },
+      {
+        "hint": "(new topic) asks what's in the vault about Groceries",
+        "say": ["Groceries"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "texting"]
+  },
+  {
+    "id": "w13-046",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks if they have any to-dos about barbecue",
+        "say": ["barbecue"]
+      },
+      {
+        "hint": "asks the same about gate instead ('what about gate?')",
+        "say": ["gate"]
+      },
+      {
+        "hint": "asks the same about hedge instead ('what about hedge?')",
+        "say": ["hedge"]
+      },
+      {
+        "hint": "(new topic) asks if they have any locker entries about Payroll",
+        "say": ["Payroll"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "w13-047",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks to find anything to do with Birthday",
+        "say": ["Birthday"]
+      },
+      {
+        "hint": "asks the same about Ursula instead ('what about Ursula?')",
+        "say": ["Ursula"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "texting"]
+  },
+  {
+    "id": "w13-048",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks to find the photos on rain", "say": ["rain"] },
+      { "hint": "(new topic) asks what tasks have no due date", "say": [] },
+      { "hint": "asks to move the third one to friday", "say": ["friday"] },
+      {
+        "hint": "(new topic) asks what they have about Nadia",
+        "say": ["Nadia"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks when Margit's birthday is",
+        "say": ["Margit"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "w13-049",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks to star the Birth document", "say": ["Birth"] },
+      {
+        "hint": "asks to add a task for monday to deal with 'Birth certificate copy'",
+        "say": ["monday"]
+      },
+      {
+        "hint": "asks to add a task for monday to deal with 'Birth certificate copy'",
+        "say": ["monday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "terse"]
+  },
+  {
+    "id": "w13-050",
+    "today": "Sunday 2026-03-22",
+    "turns": [{ "hint": "asks when the Violin is", "say": ["Violin"] }],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "w13-051",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks who they're seeing at the Team", "say": ["Team"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "spoken"]
+  },
+  {
+    "id": "w13-052",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      {
+        "hint": "asks to put 'Book club' in the calendar thursday at 13:00",
+        "say": ["Book club", "thursday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "terse"]
+  },
+  {
+    "id": "w13-053",
+    "today": "Sunday 2026-03-22",
+    "turns": [
+      { "hint": "asks which places their photos were taken at", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  }
+]

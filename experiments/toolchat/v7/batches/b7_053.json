@@ -1,0 +1,245 @@
+[
+  {
+    "id": "w11-015",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks to find Teodora in their contacts", "say": ["Teodora"] },
+      {
+        "hint": "(new topic) asks which important dates fall next week",
+        "say": ["next week"]
+      },
+      {
+        "hint": "asks for just the ones on thursday (thursday)",
+        "say": ["thursday"]
+      },
+      {
+        "hint": "(new topic) asks what album has the shore picture",
+        "say": ["shore"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "polite"]
+  },
+  {
+    "id": "w11-016",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks when the training appointment is",
+        "say": ["training appointment"]
+      },
+      { "hint": "asks who else will be there", "say": [] },
+      {
+        "hint": "asks what events they are coming to (all of those people)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "terse"]
+  },
+  {
+    "id": "w11-017",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to add 25 (money) for ferry to the Quiz group, paid by them",
+        "say": ["Quiz", "ferry"]
+      },
+      {
+        "hint": "(new topic) asks what photos they have from Farthing Wood",
+        "say": ["Farthing Wood"]
+      },
+      {
+        "hint": "(new topic) asks for everything mentioning Zelda",
+        "say": ["Zelda"]
+      },
+      { "hint": "(new topic) asks which documents they starred", "say": [] },
+      {
+        "hint": "(new topic) asks to find the documents on invoice",
+        "say": ["invoice"]
+      },
+      {
+        "hint": "(new topic) asks if they have any calendar events about grooming",
+        "say": ["grooming"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "question"]
+  },
+  {
+    "id": "w11-018",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks what the weather will be tomorrow", "say": [] },
+      {
+        "hint": "(new topic) asks to add 75 (money) for ferry to the Violin group, paid by them",
+        "say": ["Violin", "ferry"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "polite"]
+  },
+  {
+    "id": "w11-019",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks when they were last in touch with Zelda",
+        "say": ["Zelda"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "spoken"]
+  },
+  {
+    "id": "w11-020",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks to find the documents on Garden", "say": ["Garden"] },
+      {
+        "hint": "asks the same about invoice instead ('what about invoice?')",
+        "say": ["invoice"]
+      },
+      { "hint": "asks for just the camera ones among those", "say": ["camera"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "question"]
+  },
+  {
+    "id": "w11-021",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks who they're seeing at the Optician",
+        "say": ["Optician"]
+      },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "question"]
+  },
+  {
+    "id": "w11-022",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks which expenses mention Watch", "say": ["Watch"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w11-023",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks to find Evander in their contacts", "say": ["Evander"] },
+      {
+        "hint": "(new topic) asks which notes mention Meal plan",
+        "say": ["Meal plan"]
+      },
+      {
+        "hint": "asks the same about Meal instead ('what about Meal?')",
+        "say": ["Meal"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "texting"]
+  },
+  {
+    "id": "w11-024",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks if anything is going on next monday",
+        "say": ["next monday"]
+      },
+      { "hint": "asks for just the ones due next week", "say": ["next week"] },
+      { "hint": "(new topic) asks for the School app entry", "say": ["School"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "texting"]
+  },
+  {
+    "id": "w11-025",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks to book a table at a restaurant", "say": [] },
+      {
+        "hint": "(new topic) asks what they have to get done friday",
+        "say": ["friday"]
+      },
+      { "hint": "asks which of those are still to do", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "spoken"]
+  },
+  {
+    "id": "w11-026",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks which username they use for Streaming",
+        "say": ["Streaming"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "question"]
+  },
+  {
+    "id": "w11-027",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks when they were last in touch with Sebastiano Yamamoto",
+        "say": ["Sebastiano Yamamoto"]
+      },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "polite"]
+  },
+  {
+    "id": "w11-028",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks for their most recent journal entry", "say": [] },
+      {
+        "hint": "(new topic) asks to see the Council login entry",
+        "say": ["Council"]
+      },
+      {
+        "hint": "asks the same about Pension instead ('what about Pension?')",
+        "say": ["Pension"]
+      },
+      {
+        "hint": "(new topic) asks to add 120 (money) for snacks to the Violin group, paid by them",
+        "say": ["Violin", "snacks"]
+      },
+      { "hint": "asks to move the first one to saturday", "say": ["saturday"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  },
+  {
+    "id": "w11-029",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to move the Cabin appointment to saturday",
+        "say": ["Cabin", "saturday"]
+      },
+      {
+        "hint": "(new topic) asks how many photos they have marked as favourites",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks whose birthdays are coming up next week",
+        "say": ["next week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  }
+]

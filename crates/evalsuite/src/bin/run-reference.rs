@@ -153,7 +153,10 @@ fn main() -> ExitCode {
     );
     for score in report.decline_scores() {
         let rate = |value: Option<f64>| {
-            value.map_or_else(|| "     —".to_owned(), |value| format!("{:>5.1}%", value * 100.0))
+            value.map_or_else(
+                || "     —".to_owned(),
+                |value| format!("{:>5.1}%", value * 100.0),
+            )
         };
         println!(
             "{:<10} {:>9} {:>8} {:>10} {:>8}",
@@ -196,7 +199,10 @@ fn main() -> ExitCode {
     // the per-id detail behind it.
     let partial = report.partial_rows();
     if !partial.is_empty() {
-        println!("\nPARTLY RIGHT ({} turn(s)) — graded, never passed:", partial.len());
+        println!(
+            "\nPARTLY RIGHT ({} turn(s)) — graded, never passed:",
+            partial.len()
+        );
         for (session, turn) in partial {
             if let Some(overlap) = &turn.overlap {
                 println!(

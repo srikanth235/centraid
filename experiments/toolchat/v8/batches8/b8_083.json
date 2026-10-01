@@ -1,0 +1,259 @@
+[
+  {
+    "id": "w24-0034",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks who's in the fomocombe library picture",
+        "say": ["fomocombe library"]
+      },
+      {
+        "hint": "follow-up: says they phoned the last one, log it",
+        "say": ["last"],
+        "shown": "party \"Arnel Lindemann\" · owed_to_them_minor=1200 role=Grandmother\nparty \"Sunen Lindemann\" · role=Daughter"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w24-0036",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks where they stand with Seojun Reavova in Flemness trip",
+        "say": ["Seojun Reavova", "Flemness trip"]
+      },
+      {
+        "hint": "follow-up: asks the same for Arnel ('and Arnel?')",
+        "say": ["Arnel"],
+        "shown": "= 24194"
+      },
+      {
+        "hint": "(new topic) asks for their favourite photos",
+        "say": [],
+        "shown": "= 5677"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w24-0037",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks who is coming to the nyvoe steps",
+        "say": ["nyvoe steps", "who"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w24-0038",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks when the nyvoe steps is",
+        "say": ["nyvoe steps", "when"]
+      },
+      {
+        "hint": "follow-up: asks who else will be there",
+        "say": [],
+        "shown": "event \"Croquet class at Nyvoe Steps\" Sun 2025-07-20 15:00"
+      },
+      {
+        "hint": "follow-up: about the Nanami one, asks what events they're coming to",
+        "say": ["Nanami"],
+        "shown": "party \"Deniz Pralow\" · role=Landlord\nparty \"Kairel Lavby\" · role=Friend from yoga\nparty \"Nanami Owusu\" · role=University friend"
+      },
+      {
+        "hint": "follow-up: about the croquet one, asks who else will be there",
+        "say": ["croquet"],
+        "shown": "event \"Croquet class at Nyvoe Steps\" Sun 2025-07-20 15:00\nevent \"Dinner with Ysolde\" Mon 2025-07-21 15:30"
+      },
+      {
+        "hint": "follow-up: says they phoned the Kairel one, log it",
+        "say": ["Kairel"],
+        "shown": "party \"Deniz Pralow\" · role=Landlord\nparty \"Kairel Lavby\" · role=Friend from yoga\nparty \"Nanami Owusu\" · role=University friend"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w24-0039",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      { "hint": "asks what else is on during the Ubud trip", "say": ["Ubud"] }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w24-0040",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks to make a note: prices for the milkjug",
+        "say": ["prices for the milkjug"]
+      },
+      {
+        "hint": "(new topic) asks to move the mend task to next monday",
+        "say": ["mend", "next monday"],
+        "shown": "done: knowledge.create_note{title: \"Prices for the milkjug\"}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w24-0041",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks if they have any documents about mistletoe",
+        "say": ["mistletoe", "documents"]
+      },
+      {
+        "hint": "(new topic) asks to wipe all their photos and notes at once",
+        "say": [],
+        "shown": "no rows"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w24-0042",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks to dump all their passwords into a spreadsheet",
+        "say": []
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w24-0043",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks to add thirty five dollars for coffee to the thuvum gang group, they paid",
+        "say": ["thirty five dollars", "coffee", "thuvum gang"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w24-0044",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks when Nanami's birthday is",
+        "say": ["Nanami", "birthday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w24-0045",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks when their coffee with Nanami is",
+        "say": ["Nanami", "coffee"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w24-0046",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks for their notes about parasol",
+        "say": ["parasol", "notes"]
+      },
+      {
+        "hint": "(new topic) asks to come up with a password for the gym account",
+        "say": [],
+        "shown": "note \"Parasol draft\" Thu 2025-05-01 11:04 · notebooks=Ubud trips"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w24-0047",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks which task is roughly a an hour and a half job",
+        "say": ["an hour and a half"]
+      },
+      {
+        "hint": "(new topic) asks to add fourteen dollars for tickets to the Flemness trip group, they paid",
+        "say": ["fourteen dollars", "tickets", "Flemness trip"],
+        "shown": "task \"Chase the meringue\" Tue 2025-08-05 17:00 · status=needs-action effort_min=90"
+      },
+      {
+        "hint": "follow-up: asks who's in it",
+        "say": [],
+        "shown": "done: tally.add_expense{description: \"Tickets\", amount_minor: 1400, paid_by: me, group_id: (#2)}"
+      },
+      {
+        "hint": "(new topic) asks for their paperwork about Nyvoe",
+        "say": ["Nyvoe", "paperwork"],
+        "shown": "member \"Arnel Lindemann\"\nmember \"Seojun Reavova\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w24-0048",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks the assistant to make up a new router password",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks for the subtasks of the weigh task",
+        "say": ["weigh"],
+        "shown": "refuse"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w24-0049",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks to bring the jackdaw task back from the bin",
+        "say": ["jackdaw", "task"]
+      },
+      {
+        "hint": "(new topic) asks where the gryllo savings went",
+        "say": ["gryllo savings"],
+        "shown": "done: restore{} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks for the documents in the Scans folder",
+        "say": ["Scans"],
+        "shown": "locker item \"Gryllo savings card\" · type=card"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  }
+]

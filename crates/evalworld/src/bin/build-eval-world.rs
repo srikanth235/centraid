@@ -82,9 +82,7 @@ fn main() {
             // THE PLANTED AMBIGUITIES OF WHICHEVER WORLD THIS IS. The two
             // share no proper noun, so one list could not serve both.
             let needles: &[&str] = match scenario {
-                centraid_evalworld::Scenario::First => {
-                    &["dentist", "Neha", "Marco", "Emerald Bay"]
-                }
+                centraid_evalworld::Scenario::First => &["dentist", "Neha", "Marco", "Emerald Bay"],
                 centraid_evalworld::Scenario::Second => {
                     &["optometrist", "Yusuf", "Halla", "Glass Beach"]
                 }

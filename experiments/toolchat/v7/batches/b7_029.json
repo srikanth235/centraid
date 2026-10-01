@@ -1,0 +1,222 @@
+[
+  {
+    "id": "w06-045",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks to put 'Boiler service' in the calendar tomorrow at 10:30",
+        "say": ["Boiler service", "tomorrow"]
+      },
+      {
+        "hint": "(new topic) asks what is in their House purchase folder",
+        "say": ["House purchase"]
+      },
+      { "hint": "(new topic) asks to delete the Attic note", "say": ["Attic"] },
+      { "hint": "(new topic) asks how many notes they have", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "texting"]
+  },
+  {
+    "id": "w06-046",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks which open tasks aren't scheduled for any date",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w06-047",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks what the login for Pension is (not the password)",
+        "say": ["Pension"]
+      },
+      {
+        "hint": "asks the same about Energy account instead ('what about Energy account?')",
+        "say": ["Energy account"]
+      },
+      {
+        "hint": "(new topic) asks to find the notes on Radiator",
+        "say": ["Radiator"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "w06-048",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks to add a task 'Pay the dentist' for saturday",
+        "say": ["Pay the dentist", "saturday"]
+      },
+      {
+        "hint": "(new topic) asks which expenses were over 75 (money)",
+        "say": ["75"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  },
+  {
+    "id": "w06-049",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks what's in the vault about Yara", "say": ["Yara"] },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks whether Arvid's birthday is coming up",
+        "say": ["Arvid"]
+      },
+      {
+        "hint": "(new topic) asks whether Juno Gorman's birthday is coming up",
+        "say": ["Juno Gorman"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w06-050",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks what's left to do on the 'Return the dishwasher' task",
+        "say": ["Return the dishwasher"]
+      },
+      {
+        "hint": "(new topic) asks whether Dorian Dunstable's birthday is coming up",
+        "say": ["Dorian Dunstable"]
+      },
+      { "hint": "(new topic) asks for Lark's phone number", "say": ["Lark"] },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "terse"]
+  },
+  {
+    "id": "w06-051",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks what they got done today", "say": ["today"] },
+      { "hint": "asks for just the ones due this week", "say": ["this week"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  },
+  {
+    "id": "w06-052",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks which expenses were over 100 (money)", "say": ["100"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w06-053",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks for their starred files", "say": [] },
+      {
+        "hint": "(new topic) asks if anything is going on this weekend",
+        "say": ["this weekend"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "terse"]
+  },
+  {
+    "id": "w06-054",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks what's in the vault about Plumbing",
+        "say": ["Plumbing"]
+      },
+      {
+        "hint": "(new topic) asks what tasks are due saturday",
+        "say": ["saturday"]
+      },
+      {
+        "hint": "(new topic) asks for the Garage backup codes entry",
+        "say": ["Garage"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "texting"]
+  },
+  {
+    "id": "w06-055",
+    "today": "Sunday 2025-01-12",
+    "turns": [{ "hint": "asks for train times to the city", "say": [] }],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w06-056",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks which expenses mention refund", "say": ["refund"] },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "asks the same about Loft instead ('what about Loft?')",
+        "say": ["Loft"]
+      },
+      { "hint": "asks if it's in their notes as well", "say": [] },
+      { "hint": "(new topic) asks what's still on their list", "say": [] },
+      {
+        "hint": "asks which of those are about insulation",
+        "say": ["insulation"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "spoken"]
+  },
+  {
+    "id": "w06-057",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      {
+        "hint": "asks when they last caught up with Wilhelmina Sandoval",
+        "say": ["Wilhelmina Sandoval"]
+      },
+      {
+        "hint": "(new topic) asks whether Yannick Oyelowo's birthday is coming up",
+        "say": ["Yannick Oyelowo"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "w06-058",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks to see the Payroll login entry", "say": ["Payroll"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "polite"]
+  },
+  {
+    "id": "w06-059",
+    "today": "Sunday 2025-01-12",
+    "turns": [
+      { "hint": "asks which expenses were over 75 (money)", "say": ["75"] },
+      { "hint": "asks for just the ones over 100 (money)", "say": ["100"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "question"]
+  }
+]

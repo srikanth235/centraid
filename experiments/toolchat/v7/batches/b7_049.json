@@ -1,0 +1,220 @@
+[
+  {
+    "id": "w10-033",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks who Mossley is (several people are called Mossley)",
+        "say": ["Mossley"]
+      },
+      {
+        "hint": "asks for just the builders ones among those",
+        "say": ["builders"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "polite"]
+  },
+  {
+    "id": "w10-034",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "says the hedge task is done", "say": ["hedge"] },
+      {
+        "hint": "(new topic) asks to add a task 'Collect the birthday cake' for monday at 17:30",
+        "say": ["Collect the birthday cake", "monday"]
+      },
+      {
+        "hint": "(new topic) asks for the notes in their Netball notebook",
+        "say": ["Netball"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "spoken"]
+  },
+  {
+    "id": "w10-035",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks what they wrote in their journal last weekend",
+        "say": ["last weekend"]
+      },
+      {
+        "hint": "(new topic) asks if anything is going on next week",
+        "say": ["next week"]
+      },
+      { "hint": "asks for just the task ones", "say": [] },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "(new topic) asks to see the diary entries they made last weekend",
+        "say": ["last weekend"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "texting"]
+  },
+  {
+    "id": "w10-036",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks what's left on their to-do list", "say": [] },
+      {
+        "hint": "(new topic) asks to put back the openings note they deleted",
+        "say": ["openings"]
+      },
+      {
+        "hint": "asks to add a task for saturday to deal with 'Chess openings'",
+        "say": ["saturday"]
+      },
+      {
+        "hint": "(new topic) asks to pull up Saskia Larkin",
+        "say": ["Saskia Larkin"]
+      },
+      {
+        "hint": "asks when their birthday is (the one person just shown)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "polite"]
+  },
+  {
+    "id": "w10-037",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks what album has the Wiper picture", "say": ["Wiper"] },
+      {
+        "hint": "(new topic) asks what they have to get done this weekend",
+        "say": ["this weekend"]
+      },
+      {
+        "hint": "(new topic) asks to save the boat shed PIN 45193 in the locker",
+        "say": ["boat shed PIN", "45193"]
+      },
+      {
+        "hint": "(new topic) asks when they last heard from Zelda",
+        "say": ["Zelda"]
+      },
+      {
+        "hint": "(new topic) asks for their documents about Roofer quote",
+        "say": ["Roofer quote"]
+      },
+      {
+        "hint": "(new topic) asks to move the quiz appointment to thursday",
+        "say": ["quiz", "thursday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "question"]
+  },
+  {
+    "id": "w10-038",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks for the 15-minute jobs on their list", "say": ["15"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "spoken"]
+  },
+  {
+    "id": "w10-039",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks for everything mentioning plan", "say": ["plan"] },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks what time the workshop is",
+        "say": ["workshop"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "terse"]
+  },
+  {
+    "id": "w10-040",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks for the photos in the Lucinda album",
+        "say": ["Lucinda"]
+      },
+      {
+        "hint": "(new topic) asks how many events they have this weekend",
+        "say": ["this weekend"]
+      },
+      { "hint": "asks how many there are in total", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "terse"]
+  },
+  {
+    "id": "w10-041",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks where the Energy app details are", "say": ["Energy"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "polite"]
+  },
+  {
+    "id": "w10-042",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks which documents mention receipt", "say": ["receipt"] },
+      {
+        "hint": "(new topic) asks to see the documents they marked with a star",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  },
+  {
+    "id": "w10-043",
+    "today": "Thursday 2026-04-09",
+    "turns": [{ "hint": "asks to see their favourited pics", "say": [] }],
+    "versions": 3,
+    "registers": ["spoken", "texting", "polite"]
+  },
+  {
+    "id": "w10-044",
+    "today": "Thursday 2026-04-09",
+    "turns": [{ "hint": "says the Move task is done", "say": ["Move"] }],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  },
+  {
+    "id": "w10-045",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks what date Dorian Ingram's birthday falls on",
+        "say": ["Dorian Ingram"]
+      },
+      {
+        "hint": "(new topic) asks what they wrote in their journal last weekend",
+        "say": ["last weekend"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "texting"]
+  },
+  {
+    "id": "w10-046",
+    "today": "Thursday 2026-04-09",
+    "turns": [{ "hint": "asks for their favourite photos", "say": [] }],
+    "versions": 3,
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "w10-047",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks to bin the Deposit document", "say": ["Deposit"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "question"]
+  }
+]

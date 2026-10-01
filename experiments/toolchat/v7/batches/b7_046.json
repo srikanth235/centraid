@@ -1,0 +1,212 @@
+[
+  {
+    "id": "w09-066",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks what's in the vault about Street", "say": ["Street"] },
+      {
+        "hint": "(new topic) asks what appointments they have yesterday",
+        "say": ["yesterday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "terse"]
+  },
+  {
+    "id": "w09-067",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks what they have to get done this weekend",
+        "say": ["this weekend"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "polite"]
+  },
+  {
+    "id": "w09-068",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks what they still have to do", "say": [] },
+      { "hint": "asks for just the ones due today", "say": ["today"] },
+      {
+        "hint": "(new topic) asks to put 'Dentist check-up' in the calendar thursday at 16:30",
+        "say": ["Dentist check-up", "thursday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "spoken"]
+  },
+  {
+    "id": "w09-069",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks which important dates fall next week",
+        "say": ["next week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "question"]
+  },
+  {
+    "id": "w09-070",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks whether they binned the survey document",
+        "say": ["survey"]
+      },
+      {
+        "hint": "(new topic) asks which expenses were over 75 (money)",
+        "say": ["75"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "polite"]
+  },
+  {
+    "id": "w09-071",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks for everything mentioning Coral", "say": ["Coral"] },
+      { "hint": "asks how many there are in total", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "polite"]
+  },
+  {
+    "id": "w09-072",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks if they have any locker entries about Credit",
+        "say": ["Credit"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "polite"]
+  },
+  {
+    "id": "w09-073",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks which important dates fall next week",
+        "say": ["next week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  },
+  {
+    "id": "w09-074",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks when Stellan Wetherby's birthday is",
+        "say": ["Stellan Wetherby"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "question"]
+  },
+  {
+    "id": "w09-075",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks to find anything to do with Iwasaki",
+        "say": ["Iwasaki"]
+      },
+      {
+        "hint": "asks for just the ones on friday (friday)",
+        "say": ["friday"]
+      },
+      {
+        "hint": "(new topic) asks for their documents about receipt",
+        "say": ["receipt"]
+      },
+      { "hint": "asks which of those are about bike", "say": ["bike"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w09-076",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks to find anything to do with Passport",
+        "say": ["Passport"]
+      },
+      { "hint": "asks for just the photo ones", "say": [] },
+      { "hint": "asks if it's in their photos as well", "say": [] },
+      { "hint": "asks if it's in their expenses as well", "say": [] },
+      {
+        "hint": "asks the same about Roof instead ('what about Roof?')",
+        "say": ["Roof"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "texting"]
+  },
+  {
+    "id": "w09-077",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks what's in the Ideas notebook", "say": ["Ideas"] },
+      {
+        "hint": "(new topic) asks what the weather will be tomorrow",
+        "say": []
+      },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "question"]
+  },
+  {
+    "id": "w10-000",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks for Saskia Larkin's phone number",
+        "say": ["Saskia Larkin"]
+      },
+      { "hint": "(new topic) asks what they haven't done yet", "say": [] },
+      { "hint": "asks for just the ones due this week", "say": ["this week"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "texting"]
+  },
+  {
+    "id": "w10-001",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks to find anything to do with Piano", "say": ["Piano"] },
+      {
+        "hint": "asks for just the recital ones among those",
+        "say": ["recital"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w10-002",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks to delete all their reading notes notes",
+        "say": ["reading notes"]
+      },
+      {
+        "hint": "asks to add a task for friday to deal with 'Reading notes (wk 12)'",
+        "say": ["friday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  }
+]

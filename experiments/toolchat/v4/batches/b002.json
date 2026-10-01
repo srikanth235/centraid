@@ -1,0 +1,278 @@
+[
+  {
+    "id": "g0019",
+    "today": "Thursday 2027-07-22",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\"))",
+        "gloss": "List tasks where the due date falls before now (already past \u2014 overdue) and the status is not \"completed\".",
+        "move": "first",
+        "hint": "overdue (past due, not done) tasks"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0420",
+    "today": "Saturday 2026-06-20",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during last weekend))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls last weekend.",
+        "move": "first",
+        "hint": "what did I do/take/spend over the weekend (past tense)"
+      },
+      {
+        "canonical": "show (locker items called \"gym\")",
+        "gloss": "List locker items named \"gym\".",
+        "move": "switch",
+        "hint": "what's the login for gym"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic: act on those rows (C10 ref)"
+      },
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "new",
+        "hint": "open tasks with no due date"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0075",
+    "today": "Sunday 2027-08-01",
+    "turns": [
+      {
+        "canonical": "show (important dates of (parties called \"Percival\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Percival\"] where the label contains \"Birthday\".",
+        "move": "first",
+        "hint": "when is Percival's birthday"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0295",
+    "today": "Thursday 2026-08-06",
+    "turns": [
+      {
+        "canonical": "show (notes that (notebooks contains \"Car\"))",
+        "gloss": "List notes where the notebooks it is in contains \"Car\".",
+        "move": "first",
+        "hint": "what's in my Car folder/notebook"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      },
+      {
+        "canonical": "show (locker items called \"login\")",
+        "gloss": "List locker items named \"login\".",
+        "move": "new",
+        "hint": "what's the login for login"
+      },
+      {
+        "canonical": "locker.reveal_receipt{ columns: \"password\" } on (it)",
+        "gloss": "Reveal the \"password\" of [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "show me the password"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "h009",
+    "today": "Friday 2027-05-28",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Call the boiler engineer\", due_at: thursday at 11:15 }",
+        "gloss": "Add a task titled \"Call the boiler engineer\" due thursday at 11:15.",
+        "move": "first",
+        "hint": "add a task"
+      },
+      {
+        "canonical": "reschedule{ to: tuesday } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to tuesday.",
+        "move": "act",
+        "hint": "actually make it another day (C2 it = the task just added)"
+      },
+      {
+        "canonical": "schedule.propose_event{ summary: \"Lunch with Rosalia\", dtstart: sunday at 17:00, dtend: sunday at 18:00 }",
+        "gloss": "Put an event titled \"Lunch with Rosalia\" in the calendar starting sunday at 17:00 and ending sunday at 18:00.",
+        "move": "new",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      },
+      {
+        "canonical": "show (photos called \"rainbow\")",
+        "gloss": "List photos named \"rainbow\".",
+        "move": "new",
+        "hint": "find the rainbow photo"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0413",
+    "today": "Tuesday 2027-11-23",
+    "turns": [
+      {
+        "canonical": "show (locker items called \"app\")",
+        "gloss": "List locker items named \"app\".",
+        "move": "first",
+        "hint": "what's the login for app"
+      },
+      {
+        "canonical": "locker.reveal_receipt{ columns: \"password\" } on (it)",
+        "gloss": "Reveal the \"password\" of [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "show me the password"
+      },
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during last month))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls last month]?",
+        "move": "switch",
+        "hint": "what did I spend last month"
+      },
+      {
+        "canonical": "show (locker items called \"app\")",
+        "gloss": "List locker items named \"app\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0092",
+    "today": "Monday 2026-06-01",
+    "turns": [
+      {
+        "canonical": "knowledge.delete_note{} on (notes called \"list\")",
+        "gloss": "Delete (move to trash) [notes named \"list\"].",
+        "move": "first",
+        "hint": "delete/trash the list notes"
+      },
+      {
+        "canonical": "show (important dates of (parties called \"Lark Farrant\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Lark Farrant\"] where the label contains \"Birthday\".",
+        "move": "switch",
+        "hint": "when is Lark Farrant's birthday"
+      },
+      {
+        "canonical": "knowledge.delete_note{} on (notes called \"list\")",
+        "gloss": "Delete (move to trash) [notes named \"list\"].",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0655",
+    "today": "Friday 2025-11-21",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Walk with Yolanda Jessop\", dtstart: tuesday at 18:00, dtend: tuesday at 19:00 }",
+        "gloss": "Put an event titled \"Walk with Yolanda Jessop\" in the calendar starting tuesday at 18:00 and ending tuesday at 19:00.",
+        "move": "first",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      },
+      {
+        "canonical": "reschedule{ to: sunday at 15:15 } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to sunday at 15:15.",
+        "move": "act",
+        "hint": "move it"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0211",
+    "today": "Saturday 2026-12-19",
+    "turns": [
+      {
+        "canonical": "show (obligations of (parties called \"Ursula\") that (settled_at is null))",
+        "gloss": "List the obligations linked to [parties named \"Ursula\"] where there is no date settled.",
+        "move": "first",
+        "hint": "do I owe Ursula anything / does Ursula owe me"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "gloss": "What is the total amount (in pence) of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how much?"
+      },
+      {
+        "canonical": "people.settle_debt{} on (them)",
+        "gloss": "Mark [them (the rows the previous turn answered)] as settled / paid off.",
+        "move": "act",
+        "hint": "pay it off (R-X2 when after the how-much)"
+      },
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during this week))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls this week]?",
+        "move": "new",
+        "hint": "what did I spend this week"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0098",
+    "today": "Sunday 2025-08-03",
+    "turns": [
+      {
+        "canonical": "show (parties that (role = \"Landlord\"))",
+        "gloss": "List parties where the role is \"Landlord\".",
+        "move": "first",
+        "hint": "who's my landlord"
+      },
+      {
+        "canonical": "show (contact channels of (it) that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [it (the one row the previous turn is about)] where the kind is \"phone\".",
+        "move": "act",
+        "hint": "what's their number"
+      },
+      {
+        "canonical": "social.send_message{ body: \"Can you call me back\" } on (it)",
+        "gloss": "",
+        "move": "act",
+        "hint": "text them that"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0570",
+    "today": "Friday 2028-04-14",
+    "turns": [
+      {
+        "canonical": "knowledge.create_note{ title: \"Recipe for lemon drizzle\" }",
+        "gloss": "Create a note titled \"Recipe for lemon drizzle\".",
+        "move": "first",
+        "hint": "make a note called ..."
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0216",
+    "today": "Friday 2028-04-21",
+    "turns": [
+      {
+        "canonical": "show (obligations of (parties called \"Imogen\") that (settled_at is null))",
+        "gloss": "List the obligations linked to [parties named \"Imogen\"] where there is no date settled.",
+        "move": "first",
+        "hint": "do I owe Imogen anything / does Imogen owe me"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  }
+]

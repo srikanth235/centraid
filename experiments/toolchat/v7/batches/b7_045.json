@@ -1,0 +1,246 @@
+[
+  {
+    "id": "w09-051",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks for their journal entries from this month",
+        "say": ["this month"]
+      },
+      {
+        "hint": "asks for just the ones this week (this week)",
+        "say": ["week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "question"]
+  },
+  {
+    "id": "w09-052",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks what is due this week", "say": ["this week"] },
+      {
+        "hint": "asks for just the weekend ones (this weekend)",
+        "say": ["weekend"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "terse"]
+  },
+  {
+    "id": "w09-053",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks to delete all their meal plan notes",
+        "say": ["meal plan"]
+      },
+      {
+        "hint": "asks to add a task for saturday to deal with 'Meal plan (wk 43)'",
+        "say": ["saturday"]
+      },
+      {
+        "hint": "(new topic) asks to find the notes on Barbecue",
+        "say": ["Barbecue"]
+      },
+      {
+        "hint": "(new topic) asks what photos they have from Wherry",
+        "say": ["Wherry"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "terse"]
+  },
+  {
+    "id": "w09-054",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks to log that they had a call with Rufus",
+        "say": ["Rufus"]
+      },
+      {
+        "hint": "asks what events they're coming to (the one person just shown)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "polite"]
+  },
+  {
+    "id": "w09-055",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks for their calendar events about Book club",
+        "say": ["Book club"]
+      },
+      {
+        "hint": "(new topic) asks which expenses were over 75 (money)",
+        "say": ["75"]
+      },
+      { "hint": "asks which of those are about parking", "say": ["parking"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w09-056",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks for the someday tasks with no deadline", "say": [] },
+      { "hint": "(new topic) asks to delete the Pond note", "say": ["Pond"] },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "(new topic) asks what Henrike Wetherby's phone number is",
+        "say": ["Henrike Wetherby"]
+      },
+      {
+        "hint": "(new topic) asks for the Bike club password entry",
+        "say": ["Bike club"]
+      },
+      {
+        "hint": "(new topic) asks for their calendar events about Blood test",
+        "say": ["Blood test"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "w09-057",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks when the Wherry Farm is", "say": ["Wherry Farm"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "texting"]
+  },
+  {
+    "id": "w09-058",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks what day the trip is on", "say": ["trip"] },
+      { "hint": "asks what else they have that day", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "question"]
+  },
+  {
+    "id": "w09-059",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks to log a coffee with Quincy (several people are called Quincy)",
+        "say": ["Quincy"]
+      },
+      { "hint": "(new topic) says the Quincy task is done", "say": ["Quincy"] },
+      { "hint": "(new topic) asks for the latest football scores", "say": [] },
+      {
+        "hint": "(new topic) asks what the weather will be tomorrow",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "terse"]
+  },
+  {
+    "id": "w09-060",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks to delete all their meal plan notes",
+        "say": ["meal plan"]
+      },
+      {
+        "hint": "(new topic) asks what they have about Pritchard",
+        "say": ["Pritchard"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "asks the same about Thackeray instead ('what about Thackeray?')",
+        "say": ["Thackeray"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "w09-061",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks for their documents about bill", "say": ["bill"] },
+      {
+        "hint": "asks the same about Watch instead ('what about Watch?')",
+        "say": ["Watch"]
+      },
+      { "hint": "asks what else is in the same folder", "say": [] },
+      {
+        "hint": "(new topic) asks when they last caught up with Quentin",
+        "say": ["Quentin"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  },
+  {
+    "id": "w09-062",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks for their journal entries from last week",
+        "say": ["last week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "question"]
+  },
+  {
+    "id": "w09-063",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks whether Otto Thackeray owes them anything",
+        "say": ["Otto Thackeray"]
+      },
+      {
+        "hint": "(new topic) asks what is in their Pet records folder",
+        "say": ["Pet records"]
+      },
+      { "hint": "asks which of those are starred", "say": [] },
+      { "hint": "asks what else is in the same folder", "say": [] },
+      {
+        "hint": "(new topic) asks where they took the Aurelio picture",
+        "say": ["Aurelio"]
+      },
+      { "hint": "asks to see the photos from that place", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "question"]
+  },
+  {
+    "id": "w09-064",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks for the pictures they marked as favourites", "say": [] },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks for their journal entries from last weekend",
+        "say": ["last weekend"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "spoken"]
+  },
+  {
+    "id": "w09-065",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks what tasks have no due date", "say": [] },
+      { "hint": "asks how many that is", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "spoken"]
+  }
+]

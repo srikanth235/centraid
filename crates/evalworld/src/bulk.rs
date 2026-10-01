@@ -208,13 +208,13 @@ impl Dice {
 /// pool is short and drawn from two hundred times: most first names here are
 /// carried by a dozen people and several surnames by twenty.
 ///
-/// The story's own first names are in it ON PURPOSE. An earlier cut left them
-/// out, because two questions elsewhere resolved a first name to a person and
-/// did so only while the world held exactly one of each — so a twelfth person
-/// of that name did not make them harder, it made their expected answers wrong.
-/// The right fix was to those questions, and it has been made: both now narrow
-/// by something other than scarcity. With that done the pool can say what a
-/// real address book says, which is that a first name is not an identifier.
+/// The story's own first names are in the pool and are NEVER MINTED: `people`
+/// renames any draw whose first name a story person carries
+/// ([`crate::scenario::story_people`]). A tail person sharing a story first
+/// name adds a person the story's questions never planted — "the other Neha"
+/// stops naming one row — so the story's own ambiguities (three Nehas, three
+/// Marcos) are the only ones, and a first name still repeats hard among the
+/// tail's own people.
 const FIRST_NAMES: &[&str] = &[
     "Neha", "Marco", "Ana", "Priya", "Ray", "Dan", "Mira", "Tomas", "Sara", "Ben", "Leah", "Owen",
     "Nina", "Raj", "Ines", "Luis", "Iris", "Kai", "Nadia", "Theo", "Elif", "Pim", "Rosa", "Gus",
@@ -228,8 +228,21 @@ const FIRST_NAMES: &[&str] = &[
 /// two rows and stop the run by name. Full names are how the suite points at a
 /// person; first names are what it has to disambiguate.
 const SURNAMES: &[&str] = &[
-    "Nunes", "Okafor", "Lindqvist", "Moreau", "Bianchi", "Haddad", "Novak", "Petrov", "Reyes",
-    "Osei", "Vargas", "Kowal", "Berger", "Aitken", "Duarte",
+    "Nunes",
+    "Okafor",
+    "Lindqvist",
+    "Moreau",
+    "Bianchi",
+    "Haddad",
+    "Novak",
+    "Petrov",
+    "Reyes",
+    "Osei",
+    "Vargas",
+    "Kowal",
+    "Berger",
+    "Aitken",
+    "Duarte",
 ];
 
 const ROLES: &[&str] = &[
@@ -371,7 +384,7 @@ const BURSTS: &[(&str, f64, f64)] = &[
 /// this phase, which is the only reason the tail can hold sealed secrets at
 /// all — see [`crate::scenario::found_key`].
 pub(crate) fn seed(seeder: &mut Seeder, me: &str, locker_key: Option<(&[u8], &str)>) {
-    let mut dice = Dice::new(0x5EED_10_C0_FFEE_u64);
+    let mut dice = Dice::new(0x5EED_10C0_FFEE_u64);
     let friends = people(seeder, &mut dice);
     notes(seeder, &mut dice);
     tasks(seeder, &mut dice);
@@ -395,30 +408,46 @@ fn people(seeder: &mut Seeder, dice: &mut Dice) -> Vec<String> {
     // THE STORY'S OWN PEOPLE, BY NAME. Never minted here — a second
     // "Neha Rao" would make the suite's handle for the first one ambiguous,
     // which is the one thing the bulk may not do.
-    for reserved in [
-        "Neha Rao",
-        "Neha Kulkarni",
-        "Marco Ferreira",
-        "Marco Ferriera",
-        "Marco Silva",
-        "Ana Ferreira",
-        "Ray Alvarez",
-        "Priya Raman",
-        "Neha",
-        "Marco",
-        "Ana",
-    ] {
-        seen.insert(reserved.to_owned());
+    let story = crate::scenario::story_people();
+    for reserved in &story {
+        seen.insert((*reserved).to_owned());
     }
+    // NOR ANY FIRST NAME THE STORY USES. A tail "Neha Okafor" is a third
+    // Neha the story never planted, and a question that says "the other
+    // Neha" is then asking about two people, not one — the expected answer
+    // is the world's defect, not the runtime's. A colliding draw keeps its
+    // surname and takes the next first name the story does not use.
+    let mut minted = seen.clone();
+    let story_first: std::collections::BTreeSet<&str> = story
+        .iter()
+        .filter_map(|name| name.split_whitespace().next())
+        .collect();
     // A SURNAME SPELLED TWO WAYS, which every contact list eventually has.
     let mut misspelled_once = false;
     for index in 0..PEOPLE {
         let first = *dice.pick(FIRST_NAMES);
         let last = *dice.pick(SURNAMES);
-        let name = format!("{first} {last}");
-        if !seen.insert(name.clone()) {
+        let drawn = format!("{first} {last}");
+        if !seen.insert(drawn.clone()) {
             continue;
         }
+        // The substitute is found WITHOUT the dice, and whether a draw is
+        // skipped is decided by the DRAWN name alone: the rest of the tail is
+        // drawn from the same sequence it always was, so no other row moves.
+        let name = if story_first.contains(first) || !minted.insert(drawn.clone()) {
+            let at = FIRST_NAMES
+                .iter()
+                .position(|name| *name == first)
+                .unwrap_or(0);
+            (1..FIRST_NAMES.len())
+                .map(|step| FIRST_NAMES[(at + step) % FIRST_NAMES.len()])
+                .filter(|other| !story_first.contains(other))
+                .map(|other| format!("{other} {last}"))
+                .find(|candidate| minted.insert(candidate.clone()))
+                .unwrap_or(drawn)
+        } else {
+            drawn
+        };
         let cadence = *dice.pick(&[7_i64, 14, 30, 30, 60, 90, 90, 180, 365]);
         let Some(party) = seeder.id(
             "people.add_person",
@@ -443,8 +472,8 @@ fn people(seeder: &mut Seeder, dice: &mut Dice) -> Vec<String> {
 
         // A SIXTH OF THEM CARRY A PHONE NUMBER, not all — a roster where
         // everybody is reachable makes "who can I actually call" a no-op.
-        if dice.chance(16) {
-            if let Some(channel) = seeder.id(
+        if dice.chance(16)
+            && let Some(channel) = seeder.id(
                 "people.save_contact_channel",
                 "channel_id",
                 json!({
@@ -453,17 +482,17 @@ fn people(seeder: &mut Seeder, dice: &mut Dice) -> Vec<String> {
                     "label": "Mobile",
                     "value": format!("+1-555-{:04}", 1000 + index),
                 }),
-            ) {
-                seeder.note(
-                    &channel,
-                    ("people", "social.contact_channel"),
-                    &format!("{name} — Mobile phone"),
-                    None,
-                    State::Live,
-                    None,
-                );
-                seeder.value(&channel, format!("+1-555-{:04}", 1000 + index));
-            }
+            )
+        {
+            seeder.note(
+                &channel,
+                ("people", "social.contact_channel"),
+                &format!("{name} — Mobile phone"),
+                None,
+                State::Live,
+                None,
+            );
+            seeder.value(&channel, format!("+1-555-{:04}", 1000 + index));
         }
         // A FIFTH CARRY A REMINDER, most of them REAL BIRTHDAYS, so that a
         // birthday is an ordinary row in this world and not a unique one.
@@ -507,9 +536,13 @@ fn people(seeder: &mut Seeder, dice: &mut Dice) -> Vec<String> {
         // mistyped. One is plenty: it is a shape, not a population.
         if !misspelled_once && index > 40 {
             misspelled_once = true;
-            let typo = format!("{first} {}", last.replace("er", "re").replace("an", "en"));
+            let respelled = last.replace("er", "re").replace("an", "en");
+            let drawn_typo = format!("{first} {respelled}");
+            let own_first = name.split_whitespace().next().unwrap_or(first);
+            let typo = format!("{own_first} {respelled}");
             if typo != name
-                && seen.insert(typo.clone())
+                && seen.insert(drawn_typo)
+                && minted.insert(typo.clone())
                 && let Some(double) = seeder.id(
                     "people.add_person",
                     "party_id",
@@ -553,9 +586,10 @@ fn notes(seeder: &mut Seeder, dice: &mut Dice) {
         let shape = *dice.pick(NOTE_SHAPES);
         // `{}` twice: the subject, then a discriminator, so a thousand notes
         // about sixteen subjects are still individually nameable.
-        let title = shape
-            .replacen("{}", subject, 1)
-            .replacen("{}", &format!("{:03}", index % 400), 1);
+        let title =
+            shape
+                .replacen("{}", subject, 1)
+                .replacen("{}", &format!("{:03}", index % 400), 1);
         let body = format!(
             "{subject}. Picked this up again and wrote down what I remembered.\n\n\
              - the bit I keep forgetting\n- what to do next\n- who to ask\n\nEntry {index}."

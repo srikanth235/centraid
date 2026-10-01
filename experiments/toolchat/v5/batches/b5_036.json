@@ -1,0 +1,233 @@
+[
+  {
+    "id": "a0683",
+    "today": "Friday 2028-06-23",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations that (to_party = me and settled_at is null))",
+        "move": "first",
+        "hint": "how much am I owed in total"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0903",
+    "today": "Wednesday 2027-11-17",
+    "turns": [
+      {
+        "canonical": "show (expenses that (spent_on during this month) ordered by amount_minor desc)",
+        "move": "first",
+        "hint": "expenses in that window, biggest first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0154",
+    "today": "Wednesday 2026-01-14",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Tulips\") } on (photos called \"Passport photo after the rain\")",
+        "move": "first",
+        "hint": "add the rain photo to the album"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"Tulips\"", "turn": 1, "say": "full" },
+      {
+        "row": "photos \"Passport photo after the rain\"",
+        "turn": 1,
+        "say": "exact: rain"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0931",
+    "today": "Sunday 2027-05-23",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"Lane\") ordered by captured_at asc)",
+        "move": "first",
+        "hint": "photos from Lane oldest first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0808",
+    "today": "Tuesday 2028-10-03",
+    "turns": [
+      {
+        "canonical": "max amount_minor of (expenses of (groups called \"Kestrel Ridge hike\"))",
+        "move": "first",
+        "hint": "the biggest expense in the hike group"
+      }
+    ],
+    "refer": [
+      {
+        "row": "groups \"Kestrel Ridge hike\"",
+        "turn": 1,
+        "say": "loose: hike"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0578",
+    "today": "Thursday 2025-07-03",
+    "turns": [
+      {
+        "canonical": "show (expenses that (amount_minor < 500 and spent_on during last week))",
+        "move": "first",
+        "hint": "small expenses under that amount in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0281",
+    "today": "Wednesday 2028-07-12",
+    "turns": [
+      {
+        "canonical": "count of (documents that (folder = \"Warranty\"))",
+        "move": "first",
+        "hint": "how many docs in the Warranty folder"
+      }
+    ],
+    "refer": [{ "row": "folder \"Warranty\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0971",
+    "today": "Sunday 2027-03-14",
+    "turns": [
+      {
+        "canonical": "show (events of (parties called \"Honora\") during tomorrow)",
+        "move": "first",
+        "hint": "when am I seeing Honora in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0753",
+    "today": "Sunday 2026-08-09",
+    "turns": [
+      {
+        "canonical": "show (photos that (place = \"Stonecross Garage\"))",
+        "move": "first",
+        "hint": "photos whose place is stonecross"
+      }
+    ],
+    "refer": [
+      {
+        "row": "places \"Stonecross Garage\"",
+        "turn": 1,
+        "say": "exact: stonecross"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0430",
+    "today": "Friday 2027-04-09",
+    "turns": [
+      {
+        "canonical": "due_at of (tasks called \"Collect dry cleaning\")",
+        "move": "first",
+        "hint": "when is the cleaning task due"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Collect dry cleaning\"",
+        "turn": 1,
+        "say": "exact: cleaning"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0315",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "canonical": "count of (groups)",
+        "move": "first",
+        "hint": "how many shared-expense groups am I in"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0735",
+    "today": "Wednesday 2027-06-02",
+    "turns": [
+      {
+        "canonical": "show (photos that (favorite = true) during this week)",
+        "move": "first",
+        "hint": "favourite photos from that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0028",
+    "today": "Thursday 2028-01-20",
+    "turns": [
+      {
+        "canonical": "show (notes)",
+        "move": "first",
+        "hint": "show all my notes"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1085",
+    "today": "Monday 2025-07-21",
+    "turns": [
+      {
+        "canonical": "tally.delete_expense{} on (expenses called \"Ski passes\")",
+        "move": "first",
+        "hint": "delete the Ski passes expense"
+      },
+      {
+        "canonical": "tally.undo_expense{} on (it)",
+        "move": "undo",
+        "hint": "oh no, put it back / undo that"
+      }
+    ],
+    "refer": [{ "row": "expenses \"Ski passes\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0632",
+    "today": "Friday 2027-03-26",
+    "turns": [
+      {
+        "canonical": "show (locker items that (type = \"wifi\"))",
+        "move": "first",
+        "hint": "which locker entries are of that type"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

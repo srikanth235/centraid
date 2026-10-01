@@ -1,0 +1,227 @@
+[
+  {
+    "id": "w07-027",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      { "hint": "asks where they took the Tulips picture", "say": ["Tulips"] },
+      {
+        "hint": "(new topic) asks for their calendar events about planning",
+        "say": ["planning"]
+      },
+      {
+        "hint": "asks to add a task for wednesday to deal with 'Sprint planning'",
+        "say": ["wednesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "question"]
+  },
+  {
+    "id": "w07-028",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      { "hint": "asks for the pictures they marked as favourites", "say": [] },
+      {
+        "hint": "(new topic) asks what day the Optician appointment is on",
+        "say": ["Optician appointment"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "spoken"]
+  },
+  {
+    "id": "w07-029",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      {
+        "hint": "asks to move the Drama appointment to wednesday",
+        "say": ["Drama", "wednesday"]
+      },
+      { "hint": "corrects: no, make it thursday", "say": ["thursday"] },
+      { "hint": "asks who's coming to it", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "spoken"]
+  },
+  {
+    "id": "w07-030",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      { "hint": "asks what album has the Lark picture", "say": ["Lark"] },
+      { "hint": "asks to see the photos in it", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "spoken"]
+  },
+  {
+    "id": "w07-031",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      {
+        "hint": "asks what the login for password is (not the password)",
+        "say": ["password"]
+      },
+      { "hint": "(new topic) asks to see their favourited pics", "say": [] },
+      {
+        "hint": "(new topic) asks which documents mention Christening",
+        "say": ["Christening"]
+      },
+      {
+        "hint": "(new topic) asks which album the Oven photo is in",
+        "say": ["Oven"]
+      },
+      { "hint": "asks what else is in that album", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "texting"]
+  },
+  {
+    "id": "w07-032",
+    "today": "Monday 2027-10-11",
+    "turns": [{ "hint": "asks who is coming to the Drama", "say": ["Drama"] }],
+    "versions": 3,
+    "registers": ["terse", "question", "texting"]
+  },
+  {
+    "id": "w07-033",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      { "hint": "asks for everything mentioning Roof", "say": ["Roof"] },
+      {
+        "hint": "(new topic) asks if they have any notes about Shopping",
+        "say": ["Shopping"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "polite"]
+  },
+  {
+    "id": "w07-034",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      {
+        "hint": "asks to find the calendar events on Pension",
+        "say": ["Pension"]
+      },
+      { "hint": "asks if it's in their documents as well", "say": [] },
+      { "hint": "asks what about in their calendar events", "say": [] },
+      {
+        "hint": "asks the same about Pilates instead ('what about Pilates?')",
+        "say": ["Pilates"]
+      },
+      {
+        "hint": "asks for just the ones on wednesday (wednesday)",
+        "say": ["wednesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "texting"]
+  },
+  {
+    "id": "w07-035",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      { "hint": "asks what they still have to do", "say": [] },
+      {
+        "hint": "(new topic) asks what they have on tuesday (calendar, to-dos, birthdays)",
+        "say": ["tuesday"]
+      },
+      { "hint": "asks for just the ones due tomorrow", "say": ["tomorrow"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "question"]
+  },
+  {
+    "id": "w07-036",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      { "hint": "asks which photos they hearted", "say": [] },
+      { "hint": "asks which albums those photos are in", "say": [] },
+      { "hint": "asks which of those are about bike", "say": ["bike"] },
+      { "hint": "asks to see the photos in it", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "terse"]
+  },
+  {
+    "id": "w07-037",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      {
+        "hint": "asks how many events they have this weekend",
+        "say": ["this weekend"]
+      },
+      {
+        "hint": "(new topic) asks what photos they have from Kestrel Quay",
+        "say": ["Kestrel Quay"]
+      },
+      {
+        "hint": "(new topic) asks when they have the Physio rehearsal",
+        "say": ["Physio rehearsal"]
+      },
+      { "hint": "(new topic) asks when the Physio is", "say": ["Physio"] },
+      { "hint": "asks what else they have that day", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "spoken"]
+  },
+  {
+    "id": "w07-038",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      {
+        "hint": "asks what birthdays or anniversaries there are next month",
+        "say": ["next month"]
+      },
+      { "hint": "asks which of those are about birthday", "say": ["birthday"] },
+      { "hint": "asks what else there is apart from the third one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "texting"]
+  },
+  {
+    "id": "w07-039",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      {
+        "hint": "asks if they have any locker entries about Roof club",
+        "say": ["Roof club"]
+      },
+      {
+        "hint": "(new topic) asks who'll be at the barbecue",
+        "say": ["barbecue"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w07-040",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      { "hint": "says the Insure task is done", "say": ["Insure"] },
+      {
+        "hint": "(new topic) asks to see the Pension login entry",
+        "say": ["Pension"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "polite"]
+  },
+  {
+    "id": "w07-041",
+    "today": "Monday 2027-10-11",
+    "turns": [
+      { "hint": "asks to bin the Phone document", "say": ["Phone"] },
+      { "hint": "(new topic) says the fence task is done", "say": ["fence"] },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "(new topic) asks what appointments they have wednesday",
+        "say": ["wednesday"]
+      },
+      { "hint": "asks for just the chess ones among those", "say": ["chess"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  }
+]

@@ -1,0 +1,225 @@
+[
+  {
+    "id": "a0405",
+    "today": "Saturday 2028-10-14",
+    "turns": [
+      {
+        "canonical": "count of (photos during yesterday)",
+        "move": "first",
+        "hint": "how many photos did I take in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0841",
+    "today": "Friday 2027-11-05",
+    "turns": [
+      {
+        "canonical": "count of (members of (groups called \"Sunday football\") that (party_id is not me))",
+        "move": "first",
+        "hint": "how many other people besides me are in the Sunday football group"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Sunday football\"", "turn": 1, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0778",
+    "today": "Monday 2025-09-15",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"Tidy the cable drawer\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the cable drawer task"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Tidy the cable drawer\"",
+        "turn": 1,
+        "say": "loose: cable drawer"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0852",
+    "today": "Friday 2027-04-23",
+    "turns": [
+      {
+        "canonical": "min amount_minor of (expenses of (groups called \"Football fund\"))",
+        "move": "first",
+        "hint": "the cheapest expense in the fund group"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Football fund\"", "turn": 1, "say": "exact: fund" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0620",
+    "today": "Saturday 2026-10-10",
+    "turns": [
+      {
+        "canonical": "show (locker items that (compromised = true))",
+        "move": "first",
+        "hint": "which of my passwords/logins are compromised"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0033",
+    "today": "Sunday 2028-02-27",
+    "turns": [
+      {
+        "canonical": "show (obligations)",
+        "move": "first",
+        "hint": "list all the debts between me and people (IOUs)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0190",
+    "today": "Wednesday 2028-06-21",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Stellan Treverrow\")",
+        "move": "first",
+        "hint": "delete Stellan from my contacts"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Stellan Treverrow\"",
+        "turn": 1,
+        "say": "exact: Stellan"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0624",
+    "today": "Tuesday 2027-05-04",
+    "turns": [
+      {
+        "canonical": "show (locker items that (type = \"wifi\"))",
+        "move": "first",
+        "hint": "which locker entries are of that type"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0569",
+    "today": "Friday 2028-03-17",
+    "turns": [
+      {
+        "canonical": "show (events that (status = \"cancelled\"))",
+        "move": "first",
+        "hint": "which events are cancelled / tentative"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0006",
+    "today": "Wednesday 2028-03-22",
+    "turns": [
+      {
+        "canonical": "show (documents)",
+        "move": "first",
+        "hint": "list all my documents/files"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0734",
+    "today": "Monday 2027-06-21",
+    "turns": [
+      {
+        "canonical": "show (photos that (favorite = true) during last month)",
+        "move": "first",
+        "hint": "favourite photos from that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0348",
+    "today": "Saturday 2025-10-11",
+    "turns": [
+      {
+        "canonical": "count of (locker items that (type = \"card\"))",
+        "move": "first",
+        "hint": "how many of that type are in my locker"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0259",
+    "today": "Monday 2025-10-13",
+    "turns": [
+      {
+        "canonical": "count of (contact channels of (parties called \"Zeno\"))",
+        "move": "first",
+        "hint": "how many numbers/emails do I have for Zeno"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0422",
+    "today": "Tuesday 2025-07-08",
+    "turns": [
+      {
+        "canonical": "amount_minor of (expenses called \"Train tickets\")",
+        "move": "first",
+        "hint": "how much was the tickets expense"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Train tickets\"",
+        "turn": 1,
+        "say": "exact: tickets"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0228",
+    "today": "Saturday 2028-04-01",
+    "turns": [
+      {
+        "canonical": "tally.settle_up{ group_id: (groups called \"Supper club\"), from_party: me, amount_minor: 5000 }",
+        "move": "first",
+        "hint": "record that I paid/settled that amount in the group Supper club"
+      }
+    ],
+    "refer": [{ "row": "groups \"Supper club\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

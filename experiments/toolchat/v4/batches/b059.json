@@ -1,0 +1,302 @@
+[
+  {
+    "id": "h017",
+    "today": "Sunday 2028-11-12",
+    "turns": [
+      {
+        "canonical": "show (photos during last weekend)",
+        "gloss": "List photos dated last weekend.",
+        "move": "first",
+        "hint": "what did I do/take/spend over the weekend (past tense)"
+      },
+      {
+        "canonical": "show (places of (the 3rd one))",
+        "gloss": "List the places linked to [the 3rd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "where was the Nth taken"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0438",
+    "today": "Monday 2026-06-22",
+    "turns": [
+      {
+        "canonical": "show (places of (photos called \"asleep\"))",
+        "gloss": "List the places linked to [photos named \"asleep\"].",
+        "move": "first",
+        "hint": "where was the asleep photo taken"
+      },
+      {
+        "canonical": "show ((photos of (it)) except (photos called \"asleep\"))",
+        "gloss": "List [the photos linked to [it (the one row the previous turn is about)]] leaving out [photos named \"asleep\"].",
+        "move": "act",
+        "hint": "what else did I take there (the excluded photo is the one the SENTENCE named: C13 names it)"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Wren\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Wren\"], sorted by start time descending (highest/latest first)].",
+        "move": "switch",
+        "hint": "when did I last see/speak to Wren"
+      },
+      {
+        "canonical": "show (places of (photos called \"asleep\"))",
+        "gloss": "List the places linked to [photos named \"asleep\"].",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      },
+      {
+        "canonical": "social.send_message{ body: \"Remember to bring the charger\" } on (contact channels of (parties called \"Henrike\") that (kind = \"phone\"))",
+        "gloss": "",
+        "move": "new",
+        "hint": "text Henrike: Remember to bring the charger"
+      },
+      {
+        "canonical": "people.log_interaction{ kind: \"visit\", since: yesterday } on (parties called \"Saskia\")",
+        "gloss": "Log that I had a visit with [parties named \"Saskia\"].",
+        "move": "new",
+        "hint": "log a visit with Saskia (yesterday)"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0373",
+    "today": "Tuesday 2026-02-24",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "first",
+        "hint": "open tasks with no due date"
+      },
+      {
+        "canonical": "reschedule{ to: today } on (the 2nd one)",
+        "gloss": "Move [the 2nd one (by position in the previous answer)] to today.",
+        "move": "act",
+        "hint": "give one a date"
+      },
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during last weekend))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls last weekend.",
+        "move": "new",
+        "hint": "what did I do/take/spend over the weekend (past tense)"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0516",
+    "today": "Saturday 2027-01-16",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses of (groups called \"doubles\"))",
+        "gloss": "What is the total amount (in pence) of [the expenses linked to [groups named \"doubles\"]]?",
+        "move": "first",
+        "hint": "how much did we spend on the doubles"
+      },
+      {
+        "canonical": "show (them)",
+        "gloss": "List them (the rows the previous turn answered).",
+        "move": "act",
+        "hint": "show me them / list those"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0202",
+    "today": "Saturday 2027-11-06",
+    "turns": [
+      {
+        "canonical": "show (obligations of (parties called \"Bastian\") that (settled_at is null))",
+        "gloss": "List the obligations linked to [parties named \"Bastian\"] where there is no date settled.",
+        "move": "first",
+        "hint": "do I owe Bastian anything / does Bastian owe me"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0048",
+    "today": "Friday 2028-03-17",
+    "turns": [
+      {
+        "canonical": "show (things during friday)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's on friday"
+      },
+      {
+        "canonical": "delete{} on (the 2nd one)",
+        "gloss": "Delete (move to trash) [the 2nd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0560",
+    "today": "Wednesday 2027-09-08",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"Ember Valley\"))",
+        "gloss": "List the members linked to [groups named \"Ember Valley\"].",
+        "move": "first",
+        "hint": "who's in the Ember Valley group"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "h002",
+    "today": "Monday 2028-09-11",
+    "turns": [
+      {
+        "canonical": "show (expenses that (spent_on during this week))",
+        "gloss": "List expenses where the date spent falls this week.",
+        "move": "first",
+        "hint": "what did I spend this week"
+      },
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during thursday))",
+        "gloss": "",
+        "move": "new",
+        "hint": "which tasks are still due thursday"
+      },
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during the 3rd))",
+        "gloss": "",
+        "move": "substitute",
+        "hint": "and the 3rd? (same question, other window)"
+      },
+      {
+        "canonical": "show (events called \"wine\")",
+        "gloss": "List events named \"wine\".",
+        "move": "switch",
+        "hint": "when is my wine"
+      },
+      {
+        "canonical": "show (expenses that (spent_on during this week))",
+        "gloss": "List expenses where the date spent falls this week.",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      },
+      {
+        "canonical": "show (them that (amount_minor > 3000))",
+        "gloss": "List them (the rows the previous turn answered) where the amount (in pence) is more than / after 3000.",
+        "move": "refine",
+        "hint": "only the ones over thirty"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0214",
+    "today": "Wednesday 2028-02-16",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Uriel\") that (kind = \"email\"))",
+        "gloss": "List the contact channels linked to [parties named \"Uriel\"] where the kind is \"email\".",
+        "move": "first",
+        "hint": "what's Uriel's email"
+      },
+      {
+        "canonical": "people.log_interaction{ kind: \"call\", since: today } on (parties called \"Uriel\")",
+        "gloss": "Log that I had a call with [parties named \"Uriel\"].",
+        "move": "act",
+        "hint": "log that I called him/her today (pronoun -> the name, C14)"
+      },
+      {
+        "canonical": "show (obligations of (parties called \"Ismael\") that (settled_at is null))",
+        "gloss": "List the obligations linked to [parties named \"Ismael\"] where there is no date settled.",
+        "move": "switch",
+        "hint": "do I owe Ismael anything / does Ismael owe me"
+      },
+      {
+        "canonical": "show (contact channels of (parties called \"Uriel\") that (kind = \"email\"))",
+        "gloss": "List the contact channels linked to [parties named \"Uriel\"] where the kind is \"email\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      },
+      {
+        "canonical": "tally.add_expense{ amount_minor: 2000, description: \"Bike repair\" }",
+        "gloss": "Add an expense \"Bike repair\" of 20.00 (2000 pence).",
+        "move": "new",
+        "hint": "log an expense of 20.00"
+      },
+      {
+        "canonical": "show (activities that (started_at during last weekend))",
+        "gloss": "List activities where the start time falls last weekend.",
+        "move": "new",
+        "hint": "what did I do/take/spend over the weekend (past tense)"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0514",
+    "today": "Monday 2025-03-24",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during last month))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls last month]?",
+        "move": "first",
+        "hint": "what did I spend last month"
+      },
+      {
+        "canonical": "show (them)",
+        "gloss": "List them (the rows the previous turn answered).",
+        "move": "act",
+        "hint": "which ones (C11: the rows the sum folded)"
+      },
+      {
+        "canonical": "tally.delete_expense{} on (the 1st one)",
+        "gloss": "Delete (move to trash) [the 1st one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "delete one by position"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0240",
+    "today": "Wednesday 2027-06-02",
+    "turns": [
+      {
+        "canonical": "balance of (members called \"Winifred\") in (groups called \"cottage\")",
+        "gloss": "What is the balance of [members named \"Winifred\"] within [groups named \"cottage\"]?",
+        "move": "first",
+        "hint": "what does Winifred owe me for cottage"
+      },
+      {
+        "canonical": "balance of (members called \"Jolene\") in (groups called \"cottage\")",
+        "gloss": "What is the balance of [members named \"Jolene\"] within [groups named \"cottage\"]?",
+        "move": "substitute",
+        "hint": "and Jolene?"
+      },
+      {
+        "canonical": "people.log_interaction{ kind: \"message\", since: today } on (parties called \"Jolene\")",
+        "gloss": "Log that I had a message with [parties named \"Jolene\"].",
+        "move": "act",
+        "hint": "log that I messaged him/her about it today (C14 name)"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0557",
+    "today": "Friday 2027-08-27",
+    "turns": [
+      {
+        "canonical": "social.send_message{ body: \"Meet you outside\" } on (contact channels of (parties called \"Tove Radley\") that (kind = \"phone\"))",
+        "gloss": "",
+        "move": "first",
+        "hint": "text Tove Radley: Meet you outside"
+      }
+    ],
+    "registers": ["terse", "question"]
+  }
+]

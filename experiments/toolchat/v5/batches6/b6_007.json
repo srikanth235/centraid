@@ -1,0 +1,243 @@
+[
+  {
+    "id": "c0008",
+    "today": "Sunday 2025-04-27",
+    "turns": [
+      {
+        "canonical": "show (notes called \"radiator\")",
+        "move": "first",
+        "hint": "find my notes about radiator / what did I write down about radiator (any note whose title mentions it; NOT a notebook)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0137",
+    "today": "Monday 2028-07-31",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status != \"completed\"))",
+        "move": "first",
+        "hint": "what's still on my list / what's left to do / what haven't I done yet"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0146",
+    "today": "Monday 2027-01-04",
+    "turns": [
+      {
+        "canonical": "count of (tasks that (due_at during before now and status != \"completed\"))",
+        "move": "first",
+        "hint": "how many things are overdue"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0253",
+    "today": "Sunday 2025-09-21",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Leopold\" that (role contains \"colleague\"))",
+        "move": "first",
+        "hint": "the Leopold I work with / from work / used to work with \u2014 what's their full name"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0047",
+    "today": "Wednesday 2026-06-10",
+    "turns": [
+      {
+        "canonical": "show (things called \"cleaner\")",
+        "move": "first",
+        "hint": "what do I have about cleaner (anything at all, no app named)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0111",
+    "today": "Tuesday 2026-09-15",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Jessamy Winslow\")",
+        "move": "first",
+        "hint": "look up Jessamy"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (it) that (settled_at is null))",
+        "move": "act",
+        "hint": "how much is outstanding with them / what do they still owe (pronoun, no name)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (it))",
+        "move": "act",
+        "hint": "pay it off / settle up with them (pronoun)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Jessamy Winslow\"",
+        "turn": 1,
+        "say": "exact: Jessamy"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0019",
+    "today": "Saturday 2025-08-02",
+    "turns": [
+      {
+        "canonical": "show (notes called \"pottery\")",
+        "move": "first",
+        "hint": "what notes have I got about pottery"
+      },
+      {
+        "canonical": "show (notes that (notebooks contains \"Reading\"))",
+        "move": "act",
+        "hint": "correction: no, I meant the Reading NOTEBOOK (the person says the word notebook)"
+      }
+    ],
+    "refer": [{ "row": "notebooks \"Reading\"", "turn": 2, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0024",
+    "today": "Sunday 2025-03-09",
+    "turns": [
+      {
+        "canonical": "show (notes called \"meeting\")",
+        "move": "first",
+        "hint": "what notes have I got about meeting"
+      },
+      {
+        "canonical": "show (notes that (notebooks contains \"Ideas\"))",
+        "move": "act",
+        "hint": "correction: no, I meant the Ideas NOTEBOOK (the person says the word notebook)"
+      }
+    ],
+    "refer": [{ "row": "notebooks \"Ideas\"", "turn": 2, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0199",
+    "today": "Wednesday 2027-02-24",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Order a new filter\" }",
+        "move": "first",
+        "hint": "add a task / remind me to order a new filter (NO date given)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0262",
+    "today": "Saturday 2028-09-23",
+    "turns": [
+      {
+        "canonical": "show (locker items called \"work\" that (type = \"login\"))",
+        "move": "first",
+        "hint": "have I got a login for work"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0226",
+    "today": "Saturday 2026-08-01",
+    "turns": [
+      {
+        "canonical": "show (events called \"Harvest supper\" during tomorrow)",
+        "move": "first",
+        "hint": "is the supper on in that window"
+      },
+      {
+        "canonical": "show (parties of (it))",
+        "move": "act",
+        "hint": "who is that with / which person is that (pronoun)"
+      }
+    ],
+    "refer": [
+      { "row": "events \"Harvest supper\"", "turn": 1, "say": "exact: supper" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0078",
+    "today": "Monday 2027-09-13",
+    "turns": [
+      {
+        "canonical": "show (obligations that (settled_at is null and from_party = me))",
+        "move": "first",
+        "hint": "what debts do I still owe"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "what's that come to / how much is that altogether / total? (short follow-up, no names)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0250",
+    "today": "Wednesday 2025-10-22",
+    "turns": [
+      {
+        "canonical": "delete{} on (things called \"landlord\")",
+        "move": "first",
+        "hint": "delete / get rid of all my landlord stuff"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0098",
+    "today": "Monday 2027-03-15",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses called \"Ski passes\")",
+        "move": "first",
+        "hint": "what did the Ski passes come to / cost"
+      }
+    ],
+    "refer": [{ "row": "expenses \"Ski passes\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0068",
+    "today": "Saturday 2025-12-06",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations of (parties that (role = \"Electrician\")) that (settled_at is null))",
+        "move": "first",
+        "hint": "how much do I still owe the electrician"
+      }
+    ],
+    "refer": [
+      { "row": "role \"Electrician\"", "turn": 1, "say": "exact: electrician" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

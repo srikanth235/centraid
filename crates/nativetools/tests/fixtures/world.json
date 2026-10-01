@@ -1,0 +1,196 @@
+{
+  "me": "Sam Park",
+  "epoch": "2026-01-05T09:00",
+  "seed": "fixture",
+  "people": [
+    {
+      "key": "neha_r",
+      "name": "Neha Rao",
+      "role": "designer",
+      "cadence": 30,
+      "starred": true,
+      "last_contacted": "2026-09-01T10:00"
+    },
+    {
+      "key": "neha_k",
+      "name": "Neha Kulkarni",
+      "nickname": "NK",
+      "cadence": 14
+    },
+    { "key": "benedikt", "name": "Benedikt Weiss", "met": "Berlin 2019" },
+    { "key": "ray", "name": "Ray Ochoa" },
+    { "key": "old", "name": "Old Contact", "trashed": "2026-03-01T09:00" }
+  ],
+  "groups": [
+    {
+      "key": "tahoe",
+      "name": "Tahoe Trip",
+      "members": ["neha_r", "ray"],
+      "created": "2026-02-01T09:00"
+    },
+    {
+      "key": "flat",
+      "name": "Flat 4B",
+      "members": ["benedikt"],
+      "created": "2026-02-02T09:00"
+    }
+  ],
+  "expenses": [
+    {
+      "group": "tahoe",
+      "name": "Cabin",
+      "amount": 300,
+      "paid_by": "me",
+      "split": ["me", "neha_r", "ray"],
+      "date": "2026-08-01"
+    },
+    {
+      "group": "tahoe",
+      "name": "Groceries",
+      "amount": 60,
+      "paid_by": "ray",
+      "split": ["me", "ray"],
+      "date": "2026-08-02"
+    }
+  ],
+  "lists": [{ "key": "home", "name": "Home" }],
+  "events": [
+    {
+      "key": "tabla",
+      "name": "Tabla class with Benedikt",
+      "start": "2026-10-03T10:00",
+      "attendees": ["benedikt"]
+    },
+    {
+      "key": "dentist",
+      "name": "Dentist",
+      "start": "2026-10-02T09:00",
+      "end": "2026-10-02T09:45"
+    },
+    {
+      "key": "mallaig",
+      "name": "Ferry to Mallaig",
+      "start": "2026-11-12T08:00"
+    },
+    {
+      "key": "party",
+      "name": "Launch party",
+      "start": "2026-11-20T19:00",
+      "cancelled": true
+    }
+  ],
+  "tasks": [
+    {
+      "key": "cabin",
+      "name": "Book the cabin",
+      "due": "2026-10-02T09:00",
+      "effort": 30,
+      "list": "home"
+    },
+    {
+      "key": "reed",
+      "name": "Mend reed for Benedikt",
+      "due": "2026-10-05",
+      "effort": 20
+    },
+    {
+      "key": "report",
+      "name": "Write report",
+      "due": "2026-09-20",
+      "status": "completed",
+      "completed": "2026-09-19T17:00"
+    },
+    { "key": "outline", "name": "Report outline", "parent": "report" },
+    { "key": "library", "name": "Library books", "trashed": true },
+    { "key": "pay", "name": "Pay rent", "due": "2026-10-01", "priority": 2 }
+  ],
+  "notebooks": [
+    { "key": "recipes", "name": "Recipes" },
+    { "key": "empty_nb", "name": "Ideas" }
+  ],
+  "notes": [
+    {
+      "key": "dal",
+      "name": "Dal",
+      "body": "lentils, cumin and a lot of patience",
+      "notebook": "recipes",
+      "created": "2026-09-10T08:00"
+    },
+    {
+      "key": "journal",
+      "name": "Diary entry",
+      "body": "Quiet day",
+      "pinned": true,
+      "created": "2026-09-25T21:00"
+    }
+  ],
+  "folders": [{ "key": "taxes", "name": "Taxes" }],
+  "documents": [
+    {
+      "key": "w2",
+      "name": "W2 2025",
+      "text": "wages",
+      "folder": "taxes",
+      "starred": true,
+      "created": "2026-02-10T10:00"
+    },
+    { "key": "lease", "name": "Lease agreement", "created": "2026-03-01T10:00" }
+  ],
+  "albums": [
+    { "key": "summer", "name": "Summer" },
+    { "key": "empty_album", "name": "Wedding" }
+  ],
+  "photos": [
+    {
+      "key": "beach",
+      "name": "Beach day",
+      "taken": "2026-07-01T10:00",
+      "albums": ["summer"],
+      "people": ["neha_r"],
+      "starred": true
+    },
+    {
+      "key": "hike",
+      "name": "Hike",
+      "taken": "2026-07-03T08:30",
+      "albums": ["summer"]
+    }
+  ],
+  "debts": [
+    {
+      "key": "tickets",
+      "person": "neha_r",
+      "direction": "owes_me",
+      "amount": 25.5,
+      "name": "concert tickets",
+      "date": "2026-05-01"
+    },
+    {
+      "key": "lunch",
+      "person": "ray",
+      "direction": "i_owe",
+      "amount": 12,
+      "name": "lunch",
+      "date": "2026-06-01",
+      "settled": "2026-06-10T12:00"
+    }
+  ],
+  "locker": [
+    {
+      "key": "wifi",
+      "name": "Home wifi",
+      "type": "wifi",
+      "password": "hunter2",
+      "starred": true
+    },
+    {
+      "key": "bank",
+      "name": "Bank login",
+      "type": "login",
+      "username": "sam",
+      "url": "https://bank.example",
+      "password": "s3cret"
+    }
+  ],
+  "links": [{ "from": "reed", "to": "benedikt" }]
+}

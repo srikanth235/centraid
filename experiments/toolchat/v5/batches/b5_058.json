@@ -1,0 +1,218 @@
+[
+  {
+    "id": "a0523",
+    "today": "Thursday 2027-06-24",
+    "turns": [
+      {
+        "canonical": "show (documents that (updated_at during today))",
+        "move": "first",
+        "hint": "docs changed in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0397",
+    "today": "Thursday 2027-11-25",
+    "turns": [
+      {
+        "canonical": "count of (photos that (album_titles contains \"Chess club\"))",
+        "move": "first",
+        "hint": "how many photos in the Chess club album"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0747",
+    "today": "Sunday 2026-08-23",
+    "turns": [
+      {
+        "canonical": "show (photos that (place = \"Saltmarsh Cafe\"))",
+        "move": "first",
+        "hint": "photos whose place is Saltmarsh Cafe"
+      }
+    ],
+    "refer": [{ "row": "places \"Saltmarsh Cafe\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0563",
+    "today": "Saturday 2028-01-15",
+    "turns": [
+      {
+        "canonical": "show (events that (status = \"cancelled\") during tomorrow)",
+        "move": "first",
+        "hint": "cancelled events in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0046",
+    "today": "Monday 2025-04-28",
+    "turns": [
+      {
+        "canonical": "show (albums called \"year\")",
+        "move": "first",
+        "hint": "find the year album"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1092",
+    "today": "Wednesday 2025-04-23",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Nadia Crowther\")",
+        "move": "first",
+        "hint": "delete Nadia from my contacts"
+      },
+      {
+        "canonical": "people.undo_person{} on (it)",
+        "move": "undo",
+        "hint": "wait, put them back / undo that"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Nadia Crowther\"", "turn": 1, "say": "exact: Nadia" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0089",
+    "today": "Monday 2027-08-09",
+    "turns": [
+      {
+        "canonical": "show (things called \"urgent\")",
+        "move": "first",
+        "hint": "what do I have about urgent (anything: diary, to-dos, notes...)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0684",
+    "today": "Wednesday 2025-04-16",
+    "turns": [
+      {
+        "canonical": "show (parties that (deleted_at is not null))",
+        "move": "first",
+        "hint": "contacts I've deleted"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0555",
+    "today": "Saturday 2027-06-12",
+    "turns": [
+      {
+        "canonical": "show (events that (dtstart < wednesday))",
+        "move": "first",
+        "hint": "events before that day"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1130",
+    "today": "Sunday 2025-08-24",
+    "turns": [
+      {
+        "canonical": "show (documents that (deleted_at is not null))",
+        "move": "first",
+        "hint": "documents I binned"
+      },
+      {
+        "canonical": "nothing",
+        "move": "undo",
+        "hint": "actually forget it / never mind (takes the request back)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0950",
+    "today": "Monday 2026-12-07",
+    "turns": [
+      {
+        "canonical": "show (albums of (photos called \"lanterns\"))",
+        "move": "first",
+        "hint": "which album is the lanterns photo in"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0648",
+    "today": "Wednesday 2026-03-18",
+    "turns": [
+      {
+        "canonical": "show (notes called \"recipe\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the recipe note"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0973",
+    "today": "Sunday 2028-08-27",
+    "turns": [
+      {
+        "canonical": "show (groups of (expenses called \"Museum entry\"))",
+        "move": "first",
+        "hint": "which group was the museum entry expense in"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Museum entry\"",
+        "turn": 1,
+        "say": "exact: museum entry"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0613",
+    "today": "Monday 2027-03-22",
+    "turns": [
+      {
+        "canonical": "show (important dates that (next_occurrence during this month))",
+        "move": "first",
+        "hint": "which birthdays/anniversaries are coming up in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1011",
+    "today": "Tuesday 2025-04-01",
+    "turns": [
+      {
+        "canonical": "show (parties of (obligations that (amount_minor > 5000)))",
+        "move": "first",
+        "hint": "who are the debts over that amount with"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

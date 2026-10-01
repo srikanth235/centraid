@@ -1,0 +1,266 @@
+[
+  {
+    "id": "g0430",
+    "today": "Friday 2025-08-29",
+    "turns": [
+      {
+        "canonical": "show (things during tomorrow)",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) dated tomorrow.",
+        "move": "first",
+        "hint": "what's on tomorrow"
+      },
+      {
+        "canonical": "delete{} on (the 2nd one)",
+        "gloss": "Delete (move to trash) [the 2nd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      },
+      {
+        "canonical": "reschedule{ to: next wednesday } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to next wednesday.",
+        "move": "act",
+        "hint": "and push it to a day (C12: it = the row just written)"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0262",
+    "today": "Tuesday 2027-09-07",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during this month))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls this month]?",
+        "move": "first",
+        "hint": "what did I spend this month"
+      },
+      {
+        "canonical": "show (them)",
+        "gloss": "List them (the rows the previous turn answered).",
+        "move": "act",
+        "hint": "which ones (C11: the rows the sum folded)"
+      },
+      {
+        "canonical": "tally.delete_expense{} on (the 1st one)",
+        "gloss": "Delete (move to trash) [the 1st one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "delete one by position"
+      },
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "new",
+        "hint": "open tasks with no due date"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0102",
+    "today": "Tuesday 2027-03-23",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Call with Vivienne\", dtstart: tomorrow at 18:00, dtend: tomorrow at 19:00 }",
+        "gloss": "Put an event titled \"Call with Vivienne\" in the calendar starting tomorrow at 18:00 and ending tomorrow at 19:00.",
+        "move": "first",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      },
+      {
+        "canonical": "show (contact channels of (parties called \"Coral\") that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [parties named \"Coral\"] where the kind is \"phone\".",
+        "move": "switch",
+        "hint": "what's Coral's number"
+      },
+      {
+        "canonical": "schedule.propose_event{ summary: \"Call with Vivienne\", dtstart: tomorrow at 18:00, dtend: tomorrow at 19:00 }",
+        "gloss": "Put an event titled \"Call with Vivienne\" in the calendar starting tomorrow at 18:00 and ending tomorrow at 19:00.",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0319",
+    "today": "Friday 2025-07-25",
+    "turns": [
+      {
+        "canonical": "show (photos that (album_titles contains \"wedding\"))",
+        "gloss": "List photos where the albums it is in contains \"wedding\".",
+        "move": "first",
+        "hint": "photos in the wedding album"
+      },
+      {
+        "canonical": "show (them during last weekend)",
+        "gloss": "List them (the rows the previous turn answered) dated last weekend.",
+        "move": "refine",
+        "hint": "just the ones from over the weekend / last month"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0485",
+    "today": "Thursday 2026-01-15",
+    "turns": [
+      {
+        "canonical": "show (expenses that (spent_on during last weekend))",
+        "gloss": "List expenses where the date spent falls last weekend.",
+        "move": "first",
+        "hint": "what did I do/take/spend over the weekend (past tense)"
+      },
+      {
+        "canonical": "show (them that (amount_minor > 3000))",
+        "gloss": "List them (the rows the previous turn answered) where the amount (in pence) is more than / after 3000.",
+        "move": "refine",
+        "hint": "only the ones over thirty"
+      },
+      {
+        "canonical": "show (them that (amount_minor > 3000))",
+        "gloss": "List them (the rows the previous turn answered) where the amount (in pence) is more than / after 3000.",
+        "move": "refine",
+        "hint": "only the ones over thirty"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0042",
+    "today": "Wednesday 2027-03-03",
+    "turns": [
+      {
+        "canonical": "show (things during tomorrow)",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) dated tomorrow.",
+        "move": "first",
+        "hint": "what's on tomorrow"
+      },
+      {
+        "canonical": "delete{} on (the 3rd one)",
+        "gloss": "Delete (move to trash) [the 3rd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      },
+      {
+        "canonical": "reschedule{ to: monday } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to monday.",
+        "move": "act",
+        "hint": "and push it to a day (C12: it = the row just written)"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0347",
+    "today": "Friday 2026-08-07",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"sort\" that (deleted_at is not null))",
+        "gloss": "List tasks named \"sort\" where the date deleted (trash) is set.",
+        "move": "first",
+        "hint": "did I delete / bin the sort task"
+      },
+      {
+        "canonical": "schedule.restore_task{} on (it)",
+        "gloss": "Restore [it (the one row the previous turn is about)] from the trash.",
+        "move": "act",
+        "hint": "put it back"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0508",
+    "today": "Monday 2028-03-13",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during last weekend))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls last weekend]?",
+        "move": "first",
+        "hint": "what did I spend last weekend"
+      },
+      {
+        "canonical": "show (them)",
+        "gloss": "List them (the rows the previous turn answered).",
+        "move": "act",
+        "hint": "which ones (C11: the rows the sum folded)"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0231",
+    "today": "Friday 2025-10-17",
+    "turns": [
+      {
+        "canonical": "balance of (members called \"Sol\") in (groups called \"Foxglove Farm\")",
+        "gloss": "What is the balance of [members named \"Sol\"] within [groups named \"Foxglove Farm\"]?",
+        "move": "first",
+        "hint": "what does Sol owe me for Foxglove Farm"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0507",
+    "today": "Wednesday 2028-01-26",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during last month))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls last month]?",
+        "move": "first",
+        "hint": "what did I spend last month"
+      },
+      {
+        "canonical": "show (them)",
+        "gloss": "List them (the rows the previous turn answered).",
+        "move": "act",
+        "hint": "which ones (C11: the rows the sum folded)"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "h049",
+    "today": "Friday 2026-07-03",
+    "turns": [
+      {
+        "canonical": "reschedule{ to: next monday } on (tasks called \"flu jabs\")",
+        "gloss": "Move [tasks named \"flu jabs\"] to next monday.",
+        "move": "first",
+        "hint": "push/move the named task"
+      },
+      {
+        "canonical": "show (things during today)",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) dated today.",
+        "move": "new",
+        "hint": "what's on today"
+      },
+      {
+        "canonical": "delete{} on (the 3rd one)",
+        "gloss": "Delete (move to trash) [the 3rd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0087",
+    "today": "Thursday 2025-03-13",
+    "turns": [
+      {
+        "canonical": "show (important dates of (parties called \"Ilse\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Ilse\"] where the label contains \"Birthday\".",
+        "move": "first",
+        "hint": "when is Ilse's birthday"
+      },
+      {
+        "canonical": "show (important dates of (parties called \"Jasper\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Jasper\"] where the label contains \"Birthday\".",
+        "move": "substitute",
+        "hint": "and Jasper?"
+      }
+    ],
+    "registers": ["question", "terse"]
+  }
+]

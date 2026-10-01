@@ -1,0 +1,278 @@
+[
+  {
+    "id": "g0275",
+    "today": "Tuesday 2027-06-22",
+    "turns": [
+      {
+        "canonical": "show (documents that (folder = \"Kids\"))",
+        "gloss": "List documents where the folder is \"Kids\".",
+        "move": "first",
+        "hint": "what's in my Kids folder/notebook"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0664",
+    "today": "Tuesday 2026-11-03",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "first",
+        "hint": "open tasks with no due date"
+      },
+      {
+        "canonical": "reschedule{ to: friday } on (the 2nd one)",
+        "gloss": "Move [the 2nd one (by position in the previous answer)] to friday.",
+        "move": "act",
+        "hint": "give one a date"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0239",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "canonical": "balance of (members called \"Lark\") in (groups called \"farewell\")",
+        "gloss": "What is the balance of [members named \"Lark\"] within [groups named \"farewell\"]?",
+        "move": "first",
+        "hint": "what does Lark owe me for farewell"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "h045",
+    "today": "Friday 2028-06-16",
+    "turns": [
+      {
+        "canonical": "show (things during in 6 days)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's on in 6 days"
+      },
+      {
+        "canonical": "reschedule{ to: the 12th } on (events called \"car service\")",
+        "gloss": "Move [events named \"car service\"] to the 12th.",
+        "move": "act",
+        "hint": "move the car service one (named) to another day"
+      },
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during monday) ordered by due_at asc)",
+        "gloss": "",
+        "move": "new",
+        "hint": "what's due monday (open tasks)"
+      },
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during next week) ordered by due_at asc)",
+        "gloss": "List tasks where the status is not \"completed\" and the due date falls next week, sorted by due date ascending (lowest/earliest first).",
+        "move": "substitute",
+        "hint": "and next week? (same question, other window)"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0457",
+    "today": "Saturday 2027-05-01",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Ismael\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Ismael\"], sorted by start time descending (highest/latest first)].",
+        "move": "first",
+        "hint": "when did I last see/speak to Ismael"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Umberto\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Umberto\"], sorted by start time descending (highest/latest first)].",
+        "move": "substitute",
+        "hint": "and Umberto?"
+      },
+      {
+        "canonical": "people.log_interaction{ kind: \"coffee\", since: last friday } on (parties called \"Umberto\")",
+        "gloss": "Log that I had a coffee with [parties named \"Umberto\"].",
+        "move": "act",
+        "hint": "log a coffee with him/her (last friday) - pronoun resolved to the name (C14)"
+      },
+      {
+        "canonical": "dtstart of (events called \"choir\")",
+        "gloss": "What is the start time of [events named \"choir\"]?",
+        "move": "new",
+        "hint": "when is my choir"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0034",
+    "today": "Wednesday 2027-04-14",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during next week) ordered by due_at asc)",
+        "gloss": "List tasks where the status is not \"completed\" and the due date falls next week, sorted by due date ascending (lowest/earliest first).",
+        "move": "first",
+        "hint": "what's due next week (open tasks)"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 2nd one)",
+        "gloss": "Set the status of [the 2nd one (by position in the previous answer)] to \"completed\".",
+        "move": "act",
+        "hint": "tick one off by position"
+      },
+      {
+        "canonical": "reschedule{ to: tuesday } on (the 3rd one)",
+        "gloss": "Move [the 3rd one (by position in the previous answer)] to tuesday.",
+        "move": "act",
+        "hint": "push another to a day"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0269",
+    "today": "Tuesday 2028-06-13",
+    "turns": [
+      {
+        "canonical": "reschedule{ by: +1h } on (events called \"planning\")",
+        "gloss": "Shift [events named \"planning\"] 1 hour later.",
+        "move": "first",
+        "hint": "push/move the named event"
+      },
+      {
+        "canonical": "nothing",
+        "gloss": "Do nothing: the member withdraws the request.",
+        "move": "undo",
+        "hint": "actually never mind / leave it"
+      },
+      {
+        "canonical": "show (contact channels of (parties called \"Jasper\") that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [parties named \"Jasper\"] where the kind is \"phone\".",
+        "move": "new",
+        "hint": "what's Jasper's number"
+      },
+      {
+        "canonical": "show (documents that (folder = \"Car\"))",
+        "gloss": "List documents where the folder is \"Car\".",
+        "move": "new",
+        "hint": "what's in my Car folder/notebook"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0617",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "canonical": "show (things during next week)",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) dated next week.",
+        "move": "first",
+        "hint": "what's on next week"
+      },
+      {
+        "canonical": "delete{} on (the 3rd one)",
+        "gloss": "Delete (move to trash) [the 3rd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0182",
+    "today": "Tuesday 2026-12-15",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "gloss": "List parties where the amount I owe them is set.",
+        "move": "first",
+        "hint": "who do I owe money to"
+      },
+      {
+        "canonical": "show (contact channels of (the 3rd one) that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [the 3rd one (by position in the previous answer)] where the kind is \"phone\".",
+        "move": "act",
+        "hint": "the Nth one's number"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0530",
+    "today": "Wednesday 2028-01-05",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Update the CV\", due_at: wednesday }",
+        "gloss": "Add a task titled \"Update the CV\" due wednesday.",
+        "move": "first",
+        "hint": "add a task"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0219",
+    "today": "Tuesday 2026-04-28",
+    "turns": [
+      {
+        "canonical": "people.log_interaction{ kind: \"call\", since: last sunday } on (parties called \"Folasade Zuniga\")",
+        "gloss": "Log that I had a call with [parties named \"Folasade Zuniga\"].",
+        "move": "first",
+        "hint": "log a call with Folasade Zuniga (last sunday)"
+      },
+      {
+        "canonical": "show (locker items called \"code\")",
+        "gloss": "List locker items named \"code\".",
+        "move": "new",
+        "hint": "what's the login for code"
+      },
+      {
+        "canonical": "locker.reveal_receipt{ columns: \"password\" } on (it)",
+        "gloss": "Reveal the \"password\" of [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "show me the password"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (parties called \"Saskia\") that (settled_at is null))",
+        "gloss": "Mark [the obligations linked to [parties named \"Saskia\"] where there is no date settled] as settled / paid off.",
+        "move": "new",
+        "hint": "pay off / settle what I owe Saskia"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Jasper Tennant\") that (settled_at is null))",
+        "gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Jasper Tennant\"] where there is no date settled]?",
+        "move": "new",
+        "hint": "how much do I owe Jasper Tennant"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0121",
+    "today": "Sunday 2026-01-18",
+    "turns": [
+      {
+        "canonical": "show (places of (photos called \"hut\"))",
+        "gloss": "List the places linked to [photos named \"hut\"].",
+        "move": "first",
+        "hint": "where was the hut photo taken"
+      },
+      {
+        "canonical": "show ((photos of (it)) except (photos called \"hut\"))",
+        "gloss": "List [the photos linked to [it (the one row the previous turn is about)]] leaving out [photos named \"hut\"].",
+        "move": "act",
+        "hint": "what else did I take there (the excluded photo is the one the SENTENCE named: C13 names it)"
+      },
+      {
+        "canonical": "show (places of (the 1st one))",
+        "gloss": "List the places linked to [the 1st one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "where was the Nth taken"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  }
+]

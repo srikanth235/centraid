@@ -1,0 +1,356 @@
+[
+  {
+    "id": "v0288",
+    "today": "Tuesday 2025-09-09",
+    "prev": "tally.add_expense{ amount_minor: 2400, description: \"train tickets\", group_id: (groups called \"Kids' carpool\"), paid_by: me }",
+    "prev_gloss": "Add an expense \"train tickets\" of 24.00 (2400 pence), in the group [groups named \"Kids' carpool\"], paid by me (the member).",
+    "target": "nothing",
+    "gloss": "Do nothing: the member withdraws the request.",
+    "hint": "The follow-up withdraws: the member says never mind / leave it / actually don't.",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v0568",
+    "today": "Saturday 2026-08-08",
+    "prev": "NONE",
+    "target": "created_at of (notebooks called \"Recipes\")",
+    "gloss": "What is the date created of [notebooks named \"Recipes\"]?",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "v0401",
+    "today": "Monday 2027-08-30",
+    "prev": "show groups called \"Quarry\"",
+    "prev_gloss": "List groups named \"Quarry\".",
+    "target": "circle_id of it",
+    "gloss": "What is the circle of [it (the one row the previous turn is about)]?",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "v0625",
+    "today": "Friday 2026-04-10",
+    "prev": "show events called \"Vet appointment for Biscuit\"",
+    "prev_gloss": "List events named \"Vet appointment for Biscuit\".",
+    "target": "summary of it",
+    "gloss": "What is the title of [it (the one row the previous turn is about)]?",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "v1122",
+    "today": "Monday 2027-07-19",
+    "prev": "show tasks during next month",
+    "prev_gloss": "List tasks dated next month.",
+    "target": "show them that (due_at during next month and status != \"completed\")",
+    "gloss": "List them (the rows the previous turn answered) where the due date falls next month and the status is not \"completed\".",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "v0674",
+    "today": "Tuesday 2025-06-24",
+    "prev": "show members called \"Henrike Birkett\" and members called \"Henrike Hargreaves\"",
+    "prev_gloss": "List [members named \"Henrike Birkett\"] together with [members named \"Henrike Hargreaves\"].",
+    "target": "clarify: out_of_ontology",
+    "gloss": "Ask the member to clarify: the request cannot be resolved as said (out_of_ontology).",
+    "hint": "The previous answer listed two different people who share the first name Henrike; the member now says 'when did I last see Henrike' using only the first name, so it is ambiguous which one.",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "v1726",
+    "today": "Friday 2028-04-21",
+    "prev": "show tasks called \"Renew passport\" and tasks called \"Book the MOT\"",
+    "prev_gloss": "List [tasks named \"Renew passport\"] together with [tasks named \"Book the MOT\"].",
+    "target": "due_at of the other one",
+    "gloss": "What is the due date of [the other one (of the two rows the previous turn answered)]?",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v0873",
+    "today": "Sunday 2028-02-06",
+    "prev": "show important dates during 2028-02",
+    "prev_gloss": "List important dates dated in February 2028.",
+    "target": "show members of them",
+    "gloss": "List the members linked to [them (the rows the previous turn answered)].",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "v1998",
+    "today": "Saturday 2026-10-31",
+    "prev": "NONE",
+    "target": "people.log_interaction{} on (parties called \"Emrys\")",
+    "gloss": "Log that I had a call with [parties named \"Emrys\"].",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "v0050",
+    "today": "Monday 2026-06-08",
+    "prev": "show parties called \"Imogen\"",
+    "prev_gloss": "List parties named \"Imogen\".",
+    "target": "show notebooks of it",
+    "gloss": "List the notebooks linked to [it (the one row the previous turn is about)].",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "v0323",
+    "today": "Thursday 2027-08-12",
+    "prev": "count of (members called \"Ilse\")",
+    "prev_gloss": "What is the number of [members named \"Ilse\"]?",
+    "target": "show them that (owed_to_me > 5000)",
+    "gloss": "List them (the rows the previous turn answered) where the amount they owe me is more than / after 5000.",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "v1647",
+    "today": "Saturday 2027-01-23",
+    "prev": "NONE",
+    "target": "show places that (count of activities > 2)",
+    "gloss": "List places where the number of their activities is more than 2.",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "v1988",
+    "today": "Monday 2025-09-22",
+    "prev": "NONE",
+    "target": "refuse: out_of_ontology",
+    "gloss": "Refuse, because the request is outside what this vault/app can do or know (out_of_ontology).",
+    "hint": "The member asks the assistant to book a table at Foxglove Farm for Friday night.",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v1927",
+    "today": "Tuesday 2026-11-17",
+    "prev": "show expenses that (paid_by = me and settlement_currency is not null)",
+    "prev_gloss": "List expenses where the who paid is me (the member) and the settlement currency is set.",
+    "target": "show them during this month",
+    "gloss": "List them (the rows the previous turn answered) dated this month.",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "v0888",
+    "today": "Saturday 2027-04-24",
+    "prev": "show tasks called \"Plan the garden party\"",
+    "prev_gloss": "List tasks named \"Plan the garden party\".",
+    "target": "nothing",
+    "gloss": "Do nothing: the member withdraws the request.",
+    "hint": "The follow-up withdraws: the member says never mind / leave it / actually don't.",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "v1620",
+    "today": "Saturday 2026-10-03",
+    "prev": "show parties called \"Kit\"",
+    "prev_gloss": "List parties named \"Kit\".",
+    "target": "display_name of it",
+    "gloss": "What is the name of [it (the one row the previous turn is about)]?",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "v0936",
+    "today": "Friday 2027-03-26",
+    "prev": "show photos called \"First day of school\" and photos called \"Autumn leaves\"",
+    "prev_gloss": "List [photos named \"First day of school\"] together with [photos named \"Autumn leaves\"].",
+    "target": "media.add_to_album{ album_id: (albums called \"Kitchen renovation\") } on the 1st one then delete{} on the other one",
+    "gloss": "First: Add [the 1st one (by position in the previous answer)] to the album [albums named \"Kitchen renovation\"]. Then: Delete (move to trash) [the other one (of the two rows the previous turn answered)].",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "v1216",
+    "today": "Tuesday 2026-08-11",
+    "prev": "NONE",
+    "target": "show parties called \"Cormac\"",
+    "gloss": "List parties named \"Cormac\".",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "v1981",
+    "today": "Tuesday 2027-03-16",
+    "prev": "show expenses called \"birthday present\"",
+    "prev_gloss": "List expenses named \"birthday present\".",
+    "target": "rate_date of it",
+    "gloss": "What is the exchange-rate date of [it (the one row the previous turn is about)]?",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v1180",
+    "today": "Tuesday 2028-06-20",
+    "prev": "show tasks",
+    "prev_gloss": "List tasks.",
+    "target": "count of (them that (due_at during next month and status != \"completed\"))",
+    "gloss": "What is the number of [them (the rows the previous turn answered) where the due date falls next month and the status is not \"completed\"]?",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "v0710",
+    "today": "Saturday 2026-05-23",
+    "prev": "show notes during last weekend",
+    "prev_gloss": "List notes dated last weekend.",
+    "target": "delete{} on the 1st one",
+    "gloss": "Delete (move to trash) [the 1st one (by position in the previous answer)].",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "v0034",
+    "today": "Wednesday 2028-04-05",
+    "prev": "show documents called \"Tax return 2026\" and documents called \"Gym contract\"",
+    "prev_gloss": "List [documents named \"Tax return 2026\"] together with [documents named \"Gym contract\"].",
+    "target": "core.star_document{} on the 2nd one then core.trash_document{} on the 1st one",
+    "gloss": "First: Star [the 2nd one (by position in the previous answer)]. Then: Delete (move to trash) [the 1st one (by position in the previous answer)].",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "v0380",
+    "today": "Wednesday 2025-04-02",
+    "prev": "NONE",
+    "target": "show parties called \"Arvid\"",
+    "gloss": "List parties named \"Arvid\".",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "v0077",
+    "today": "Monday 2028-06-05",
+    "prev": "NONE",
+    "target": "show locker items that (archived_at < 2028-05-04 and url_match_policy != \"exact-host\")",
+    "gloss": "List locker items where the date archived is less than / before Thursday 2028-05-04 and the url match policy is not \"exact-host\".",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "v1365",
+    "today": "Monday 2025-08-11",
+    "prev": "show tasks during this week",
+    "prev_gloss": "List tasks dated this week.",
+    "target": "show tasks",
+    "gloss": "List tasks.",
+    "hint": "The follow-up widens the previous question by dropping its time limit ('any time, not just then' / 'what about all of them?').",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v1656",
+    "today": "Friday 2027-08-06",
+    "prev": "NONE",
+    "target": "count of (important dates that (label = \"name day\" and next_occurrence during tomorrow))",
+    "gloss": "What is the number of [important dates where the label is \"name day\" and the next date it comes round falls tomorrow]?",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "v1938",
+    "today": "Tuesday 2026-09-29",
+    "prev": "NONE",
+    "target": "show notes that (current_revision_id is not null)",
+    "gloss": "List notes where the current revision is set.",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "v0723",
+    "today": "Saturday 2026-11-28",
+    "prev": "count of (photos that (origin_device_id is not null and created_at < 2026-10-16))",
+    "prev_gloss": "What is the number of [photos where the origin device is set and the date created is less than / before Friday 2026-10-16]?",
+    "target": "media.delete_asset{} on them",
+    "gloss": "Delete (move to trash) [them (the rows the previous turn answered)].",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "v0128",
+    "today": "Thursday 2028-11-30",
+    "prev": "show events called \"Orthodontist visit\" and events called \"Bin collection\"",
+    "prev_gloss": "List [events named \"Orthodontist visit\"] together with [events named \"Bin collection\"].",
+    "target": "reschedule{ to: dtstart of (events called \"Mortgage meeting\") } on the other one",
+    "gloss": "Move [the other one (of the two rows the previous turn answered)] to the start time of [events named \"Mortgage meeting\"].",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "v0878",
+    "today": "Thursday 2028-03-16",
+    "prev": "show profiles that (nickname is not null and role is not null)",
+    "prev_gloss": "List profiles where the nickname is set and the role is set.",
+    "target": "sum cadence_days of them",
+    "gloss": "What is the total how often to keep in touch (days) of [them (the rows the previous turn answered)]?",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "v0118",
+    "today": "Wednesday 2027-06-09",
+    "prev": "NONE",
+    "target": "clarify: out_of_ontology",
+    "gloss": "Ask the member to clarify: the request cannot be resolved as said (out_of_ontology).",
+    "hint": "Conversation start. The member uses a pronoun with nothing earlier to point at (e.g. 'what time is it on'), so the assistant cannot tell what they mean.",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v1452",
+    "today": "Monday 2026-02-09",
+    "prev": "owed_to_them of (parties called \"Arvid Ulrich\")",
+    "prev_gloss": "What is the amount I owe them of [parties named \"Arvid Ulrich\"]?",
+    "target": "people.log_interaction{ kind: \"message\" } on (parties called \"Arvid Ulrich\")",
+    "gloss": "Log that I had a message with [parties named \"Arvid Ulrich\"].",
+    "hint": "The previous turn named Arvid Ulrich and got back only a number; the member now refers to them with a pronoun (him/her/them), which the canonical resolves to the name.",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "v1768",
+    "today": "Monday 2026-05-04",
+    "prev": "show parties called \"Ilse Underhill\"",
+    "prev_gloss": "List parties named \"Ilse Underhill\".",
+    "target": "show first 1 of (activities of it ordered by started_at desc)",
+    "gloss": "List the first 1 of [the activities linked to [it (the one row the previous turn is about)], sorted by start time descending (highest/latest first)].",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "v0588",
+    "today": "Monday 2026-11-02",
+    "prev": "show important dates",
+    "prev_gloss": "List important dates.",
+    "target": "count of (them during this weekend)",
+    "gloss": "What is the number of [them (the rows the previous turn answered) dated this weekend]?",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "v0324",
+    "today": "Sunday 2026-01-04",
+    "prev": "NONE",
+    "target": "show important dates",
+    "gloss": "List important dates.",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "v1969",
+    "today": "Thursday 2028-07-06",
+    "prev": "NONE",
+    "target": "refuse: fabricated_secret",
+    "gloss": "Refuse, because it needs a secret the member has not supplied, and the assistant must not invent one (fabricated_secret).",
+    "hint": "The member asks the assistant to save a new Car insurance login login with whatever password the assistant picks.",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "v1263",
+    "today": "Sunday 2028-09-24",
+    "prev": "NONE",
+    "target": "show things during 2028-09-29",
+    "gloss": "List anything at all (events, open tasks, important dates, …) dated on Friday 2028-09-29.",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "v0627",
+    "today": "Saturday 2027-05-08",
+    "prev": "show notes called \"Christmas card list\"",
+    "prev_gloss": "List notes named \"Christmas card list\".",
+    "target": "delete{} on that one",
+    "gloss": "Delete (move to trash) [that one (the row the previous turn is about)].",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "v1986",
+    "today": "Sunday 2028-06-18",
+    "prev": "NONE",
+    "target": "show expenses that (not (currency = \"EUR\"))",
+    "gloss": "List expenses where NOT (the currency is \"EUR\").",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "v1029",
+    "today": "Monday 2025-06-23",
+    "prev": "show tasks called \"change the smoke alarm battery\"",
+    "prev_gloss": "List tasks named \"change the smoke alarm battery\".",
+    "target": "remind_before_min of it",
+    "gloss": "What is the reminder lead time in minutes of [it (the one row the previous turn is about)]?",
+    "registers": ["terse", "spoken", "question"]
+  }
+]

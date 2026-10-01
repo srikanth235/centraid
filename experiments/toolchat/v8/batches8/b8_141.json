@@ -1,0 +1,321 @@
+[
+  {
+    "id": "w40-0031",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "says the shed PIN is 31196 — keep it in the locker",
+        "say": ["shed PIN", "31196"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w40-0032",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks what they have on while they're away in Jalhaven",
+        "say": ["Jalhaven"]
+      },
+      {
+        "hint": "follow-up: asks for just the birthday ones among those",
+        "say": ["birthday"],
+        "shown": "important date \"Birthday — Nilufar Moravec\" Tue 2027-08-17\ntask \"Walk the dog (wk 33)\" Tue 2027-08-17 09:00 · status=needs-action effort_min=90\ntask \"Unpack the mothball\" Sat 2027-08-21 18:00 · status=cancelled\nevent \"Trip to Jalhaven\" Tue 2027-08-17 07:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w40-0033",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "says new task: pay the pigeon bill",
+        "say": ["pay the pigeon bill"]
+      },
+      {
+        "hint": "(new topic) asks for Hyejin Ellingham's contact card",
+        "say": ["Hyejin Ellingham"],
+        "shown": "done: schedule.add_task{title: \"Pay the pigeon bill\"}"
+      },
+      {
+        "hint": "follow-up: asks the same about Thavmoara Theskino ('and Thavmoara Theskino?')",
+        "say": ["Thavmoara Theskino"],
+        "shown": "party \"Hyejin Ellingham\" · role=Accountant"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w40-0034",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks what time the linen thing is (no kind said)",
+        "say": ["linen"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w40-0035",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      { "hint": "asks when Iara's birthday is", "say": ["Iara", "birthday"] },
+      {
+        "hint": "follow-up: asks the same about Crevir Ferrani ('and Crevir Ferrani's?')",
+        "say": ["Crevir Ferrani"],
+        "shown": "important date \"Birthday — Iara Dvorak\" Wed 2027-09-22"
+      },
+      {
+        "hint": "(new topic) asks for the Damdale house share expenses above one hundred and sixty pounds",
+        "say": ["Damdale house share", "one hundred and sixty pounds"],
+        "shown": "important date \"Birthday — Crevir Ferrani\" Mon 2027-07-05"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w40-0036",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks what the wifi is at the Jathoe Lido",
+        "say": ["Jathoe Lido", "wifi"]
+      },
+      {
+        "hint": "(detour) hang on — asks how much they owe Rohit Horak",
+        "say": ["Rohit Horak"],
+        "shown": "locker item \"Jathoe Lido wifi\" · type=wifi"
+      },
+      {
+        "hint": "back to the Jathoe Lido wifi — asks what their photos have on it",
+        "say": ["photos"],
+        "shown": "= 1200"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w40-0037",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to settle up with Prestou in Pecs trip",
+        "say": ["Prestou", "Pecs trip", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks which expenses were over 160 pounds",
+        "say": ["160 pounds"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#2), amount_minor: balance of (#4) in (#2)} on (#4)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w40-0038",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to add seventeen pounds for Prestou's tickets to Pecs trip, they paid",
+        "say": ["seventeen pounds", "Prestou's tickets", "Pecs trip"]
+      },
+      {
+        "hint": "(new topic) asks which expenses were over one hundred and sixty pounds",
+        "say": ["one hundred and sixty pounds"],
+        "shown": "done: tally.add_expense{description: \"Prestou's tickets\", amount_minor: 1700, paid_by: me, group_id: (#2)}"
+      },
+      {
+        "hint": "follow-up: asks for just the quay ones among those",
+        "say": ["quay"],
+        "shown": "expense \"Petrol (wk 31)\" Sat 2027-08-07 · amount_minor=18769 paid_by=Benedetta Draivosen\nexpense \"Butterscotch\" Tue 2027-07-27 · amount_minor=21636 paid_by=Owner\nexpense \"Linen\" Sun 2027-07-25 · amount_minor=16557 paid_by=Crevir Ferrani\nexpense \"Woodpecker\" Thu 2027-07-22 · amount_minor=23872 paid_by=Maricel Leclerc\n(+4 more)"
+      },
+      {
+        "hint": "follow-up: asks which group it's in",
+        "say": [],
+        "shown": "expense \"Plovdiv Quay subscription\" Fri 2027-06-11 · amount_minor=16748 paid_by=Owner"
+      },
+      {
+        "hint": "(detour) hang on — asks who'll be at the pick",
+        "say": ["pick"],
+        "shown": "group \"Pecs trip\""
+      },
+      {
+        "hint": "(new topic) asks to find the expenses on Pecs",
+        "say": ["Pecs", "expenses"],
+        "shown": "party \"Nilufar Moravec\" · role=Best friend\nparty \"Thusine Rookwood\" · owed_to_me_minor=4800 role=Dog-walking friend"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w40-0039",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks how much has been spent in the Damdale house share group",
+        "say": ["Damdale house share"]
+      },
+      {
+        "hint": "(new topic) asks to record that they had coffee with Dorie Vrestova",
+        "say": ["Dorie Vrestova", "coffee"],
+        "shown": "= 96206"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w40-0040",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      { "hint": "asks for pictures with Iara in them", "say": ["Iara"] },
+      {
+        "hint": "follow-up: asks for just the ones from last month",
+        "say": ["last month"],
+        "shown": "photo \"Ginger at Jathoe Meadows\" Sat 2027-07-17 19:54 · favorite=false people=Iara Dvorak, Antoine Czarnecki\nphoto \"Raffaella at Pecs Cliffs\" Wed 2027-06-09 08:51 · album_titles=Pecs 2027 favorite=false people=Iara Dvorak, Rohit Horak, Raffaella Ramsay"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w40-0041",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks when they're next at Drynnoe Fields",
+        "say": ["Drynnoe Fields"]
+      },
+      {
+        "hint": "follow-up: asks if it's in their pictures as well",
+        "say": ["pictures"],
+        "shown": "event \"Windmill sale at Drynnoe Fields\" Sat 2027-09-04 09:15\nevent \"Theremin meetup at Drynnoe Fields\" Sun 2027-08-08 15:45"
+      },
+      {
+        "hint": "(new topic) asks what's on at Drynnoe Fields",
+        "say": ["Drynnoe Fields"],
+        "shown": "photo \"Armoire at Drynnoe Fields\" Mon 2027-07-26 07:58 · favorite=false"
+      },
+      {
+        "hint": "(new topic) asks whose birthdays are coming up next two weeks",
+        "say": ["next two weeks", "weeks"],
+        "shown": "event \"Windmill sale at Drynnoe Fields\" Sat 2027-09-04 09:15\nevent \"Theremin meetup at Drynnoe Fields\" Sun 2027-08-08 15:45"
+      },
+      {
+        "hint": "follow-up: says nah, leave it",
+        "say": [],
+        "shown": "important date \"Birthday — Nilufar Moravec\" Tue 2027-08-17\nimportant date \"Birthday — Hugo Draivosen\" Mon 2027-08-09"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w40-0042",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks what group the butterscotch went into",
+        "say": ["butterscotch"]
+      },
+      {
+        "hint": "follow-up: asks for the other expenses in that group",
+        "say": [],
+        "shown": "group \"Damdale house share\""
+      },
+      {
+        "hint": "follow-up: asks how much the salmon one was",
+        "say": ["salmon"],
+        "shown": "expense \"Salmon delivery\" Sat 2027-07-31 · amount_minor=12599 paid_by=Crevir Ferrani\nexpense \"Abseiling deposit\" Fri 2027-07-30 · amount_minor=15942 paid_by=Owner\nexpense \"Dinner at Jathoe Meadows\" Wed 2027-07-28 · amount_minor=2150 paid_by=Owner\nexpense \"Linen\" Sun 2027-07-25 · amount_minor=16557 paid_by=Crevir Ferrani\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w40-0043",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks when Crevir's birthday is",
+        "say": ["Crevir", "birthday"]
+      },
+      {
+        "hint": "(new topic) asks for any wifi entries in their locker",
+        "say": ["wifi", "locker"],
+        "shown": "important date \"Birthday — Crevir Ferrani\" Mon 2027-07-05"
+      },
+      {
+        "hint": "follow-up: asks for the password of the Jathoe one",
+        "say": ["Jathoe"],
+        "shown": "locker item \"Home wifi\" · type=wifi\nlocker item \"Jathoe Lido wifi\" · type=wifi"
+      },
+      {
+        "hint": "(new topic) asks to show the linen tasks, tick off the first and delete the second",
+        "say": ["linen"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#3)"
+      },
+      {
+        "hint": "(new topic) asks how much they spent on salmon in total",
+        "say": ["salmon"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#4) then delete{} on (#5)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w40-0044",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks when their dinner with Crevir is",
+        "say": ["Crevir", "dinner"]
+      },
+      {
+        "hint": "follow-up: says never mind",
+        "say": [],
+        "shown": "event \"Dinner with Crevir\" Mon 2027-08-09 18:45"
+      },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w40-0045",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "hint": "asks to put haircut in the calendar tuesday at 10am",
+        "say": ["haircut", "tuesday", "at 10am"]
+      },
+      {
+        "hint": "(new topic) asks to log forty pounds of parking in Pecs trip, paid by them",
+        "say": ["forty pounds", "parking", "Pecs trip"],
+        "shown": "done: schedule.propose_event{summary: \"Haircut\", dtstart: 2027-08-10T10:00}"
+      },
+      {
+        "hint": "follow-up: about the second one, asks for its expenses",
+        "say": ["second"],
+        "shown": "done: tally.add_expense{description: \"Parking\", amount_minor: 4000, paid_by: me, group_id: (#2)}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  }
+]

@@ -96,6 +96,54 @@ fn depth(seeder: &mut Seeder, circle: &Circle) {
     link_the_trip(seeder);
     link_the_dentist(seeder, circle);
     tag_the_two_anchors(seeder);
+    name_the_faces(seeder, circle);
+}
+
+/// **THE FACES, NAMED.** A photograph of a person is joined to that person the
+/// way the product joins them: the detector proposes a region (a derived row,
+/// staged here directly exactly as the Photos fixtures stage it — #712 changed
+/// the ANSWERING of proposals, not the finding of them), and the member's own
+/// `media.answer_face_proposal` confirms who it is. Without this the only
+/// thing tying "Ana at the trailhead" to Ana Ferreira is a word in its title.
+fn name_the_faces(seeder: &mut Seeder, circle: &Circle) {
+    for (title, person) in [
+        ("Ana at the trailhead", "Ana Ferreira"),
+        ("Marco in the workshop", "Marco Ferreira"),
+    ] {
+        let (Some(asset), Some(party)) = (
+            found(seeder, "photos", "core.content_item", title),
+            circle.get(person).cloned(),
+        ) else {
+            continue;
+        };
+        let region = seeder.mint();
+        let now = centraid_vault::clock::format_iso_ms(seeder.vault().clock().now_ms());
+        let staged = seeder.vault().commit(|tx| {
+            tx.set_producer("evalworld.face_region");
+            centraid_apps_kit::fixtures::stage_face_proposal(
+                tx.connection(),
+                &region,
+                &asset,
+                r#"{"x":0.3,"y":0.2,"w":0.3,"h":0.4}"#,
+                0.93,
+                &now,
+            )
+            .map_err(|error| centraid_vault::VaultError::Invariant {
+                context: error.to_string(),
+            })?;
+            Ok(())
+        });
+        if let Err(error) = staged {
+            seeder
+                .refusals
+                .push(format!("face region for {title}: {error}"));
+            continue;
+        }
+        seeder.run(
+            "media.answer_face_proposal",
+            json!({ "region_id": region, "answer": "confirm", "party_id": party }),
+        );
+    }
 }
 
 /// One asserted edge, by the two rows' own names.
@@ -175,14 +223,7 @@ fn link_the_trip(seeder: &mut Seeder) {
             "about",
         ),
     ] {
-        link(
-            seeder,
-            plan,
-            "schedule.task",
-            target,
-            target_type,
-            relation,
-        );
+        link(seeder, plan, "schedule.task", target, target_type, relation);
     }
     // THE PERMIT IS NOT LINKED, AND COULD NOT BE. `core.link_entities` has a
     // `subject_is_live` precondition, so a row already in the bin cannot be
@@ -202,12 +243,7 @@ fn link_the_dentist(seeder: &mut Seeder, circle: &Circle) {
         return;
     };
     for (app, entity, label, logical) in [
-        (
-            "agenda",
-            "core.event",
-            "Dentist — cleaning",
-            "core.event",
-        ),
+        ("agenda", "core.event", "Dentist — cleaning", "core.event"),
         (
             "notes",
             "knowledge.note",
@@ -220,12 +256,7 @@ fn link_the_dentist(seeder: &mut Seeder, circle: &Circle) {
             "Dentist pre-authorisation (sample)",
             "core.document",
         ),
-        (
-            "tally",
-            "tally.expense",
-            "Dentist copay",
-            "tally.expense",
-        ),
+        ("tally", "tally.expense", "Dentist copay", "tally.expense"),
     ] {
         let Some(from_id) = found(seeder, app, entity, label) else {
             continue;
@@ -332,8 +363,18 @@ fn tag_the_two_anchors(seeder: &mut Seeder) {
             "core.document",
             "Dentist pre-authorisation (sample)",
         ),
-        ("home", "docs", "core.document", "Renters insurance policy (sample)"),
-        ("home", "notes", "knowledge.note", "Mom's chili, written down properly"),
+        (
+            "home",
+            "docs",
+            "core.document",
+            "Renters insurance policy (sample)",
+        ),
+        (
+            "home",
+            "notes",
+            "knowledge.note",
+            "Mom's chili, written down properly",
+        ),
         ("home", "tasks", "schedule.task", "Weekly grocery run"),
         ("home", "tasks", "schedule.task", "Learn to make sourdough"),
         (
@@ -377,6 +418,59 @@ fn tag_the_two_anchors(seeder: &mut Seeder) {
 /// be the fixture quietly asserting the thing the world exists to deny.
 type Circle = std::collections::BTreeMap<&'static str, String>;
 
+/// The story's People roster: name, role, cadence, and what it plants.
+const ROSTER: [(&str, &str, i64, Option<&str>); 7] = [
+    (
+        "Neha Rao",
+        "Dentist",
+        180,
+        Some("one of three parties called Neha; also the only 'dentist' PERSON"),
+    ),
+    (
+        "Neha Kulkarni",
+        "College friend",
+        30,
+        Some("one of three parties called Neha"),
+    ),
+    (
+        "Marco Ferreira",
+        "Old roommate from Portland",
+        45,
+        Some("one of three parties called Marco"),
+    ),
+    (
+        "Ana Ferreira",
+        "Marco's sister",
+        60,
+        Some("shares a surname with Marco Ferreira"),
+    ),
+    ("Ray Alvarez", "Grandfather", 7, None),
+    ("Priya Raman", "Design lead, ex-colleague", 90, None),
+    (
+        "Marco Silva",
+        "Climbing partner",
+        120,
+        Some("one of three parties called Marco"),
+    ),
+];
+
+/// The duplicate somebody made and then trashed.
+const DUPLICATE: &str = "Marco Ferriera";
+
+/// The Tally friends, known by a bare first name.
+const TALLY_FRIENDS: [&str; 3] = ["Neha", "Marco", "Ana"];
+
+/// Every person the story names, in full — what the long tail must not mint
+/// again, and whose FIRST names it must not reuse (`crate::bulk`).
+pub(crate) fn story_people() -> Vec<&'static str> {
+    ROSTER
+        .iter()
+        .map(|(name, ..)| *name)
+        .chain([DUPLICATE])
+        .chain(TALLY_FRIENDS)
+        .collect()
+}
+
 /// A small living circle — **with two Nehas and two Marcos in it**.
 ///
 /// The duplication is the point. "Dinner with Neha" is a sentence a member
@@ -386,41 +480,7 @@ type Circle = std::collections::BTreeMap<&'static str, String>;
 fn people(seeder: &mut Seeder) -> Circle {
     let mut circle = Circle::new();
 
-    let roster: [(&str, &str, i64, Option<&str>); 7] = [
-        (
-            "Neha Rao",
-            "Dentist",
-            180,
-            Some("one of three parties called Neha; also the only 'dentist' PERSON"),
-        ),
-        (
-            "Neha Kulkarni",
-            "College friend",
-            30,
-            Some("one of three parties called Neha"),
-        ),
-        (
-            "Marco Ferreira",
-            "Old roommate from Portland",
-            45,
-            Some("one of three parties called Marco"),
-        ),
-        (
-            "Ana Ferreira",
-            "Marco's sister",
-            60,
-            Some("shares a surname with Marco Ferreira"),
-        ),
-        ("Ray Alvarez", "Grandfather", 7, None),
-        ("Priya Raman", "Design lead, ex-colleague", 90, None),
-        (
-            "Marco Silva",
-            "Climbing partner",
-            120,
-            Some("one of three parties called Marco"),
-        ),
-    ];
-    for (name, role, cadence, planted) in roster {
+    for (name, role, cadence, planted) in ROSTER {
         let Some(party) = seeder.id(
             "people.add_person",
             "party_id",
@@ -449,7 +509,7 @@ fn people(seeder: &mut Seeder) -> Circle {
     if let Some(party) = seeder.id(
         "people.add_person",
         "party_id",
-        json!({ "display_name": "Marco Ferriera", "role": "Duplicate — misspelled", "cadence_days": 45 }),
+        json!({ "display_name": DUPLICATE, "role": "Duplicate — misspelled", "cadence_days": 45 }),
     ) {
         seeder.note(
             &party,
@@ -487,8 +547,16 @@ fn people(seeder: &mut Seeder) -> Circle {
             "Caught up about her Denver move; she wants the Tahoe dates.",
         ),
         ("Marco Ferreira", "message", "Sent him the cabin shortlist."),
-        ("Ana Ferreira", "message", "Confirmed she is driving up with Marco."),
-        ("Priya Raman", "call", "Portfolio review; she is hiring again."),
+        (
+            "Ana Ferreira",
+            "message",
+            "Confirmed she is driving up with Marco.",
+        ),
+        (
+            "Priya Raman",
+            "call",
+            "Portfolio review; she is hiring again.",
+        ),
         ("Ray Alvarez", "call", "Sunday call. The mower is running."),
     ] {
         let Some(party) = circle.get(name) else {
@@ -557,8 +625,8 @@ fn people(seeder: &mut Seeder) -> Circle {
     // THE DEBT IS A `tally.obligation`, which is what `people.add_debt`
     // writes — the same table Tally's own balances live in, reached through
     // the People door.
-    if let Some(party) = circle.get("Neha Rao").cloned() {
-        if let Some(debt) = seeder.id(
+    if let Some(party) = circle.get("Neha Rao").cloned()
+        && let Some(debt) = seeder.id(
             "people.add_debt",
             "debt_id",
             json!({
@@ -567,19 +635,19 @@ fn people(seeder: &mut Seeder) -> Circle {
                 "amount_minor": 12_500,
                 "reason": "Dentist balance after insurance",
             }),
-        ) {
-            seeder.note(
-                &debt,
-                ("people", "tally.obligation"),
-                "Dentist balance after insurance",
-                None,
-                State::Live,
-                Some("an eighth row saying 'dentist', and the only debt the OWNER owes"),
-            );
-            seeder.value(&debt, "12500");
-            seeder.fact(&debt, "direction", "owe");
-            seeder.fact(&debt, "party", "Neha Rao");
-        }
+        )
+    {
+        seeder.note(
+            &debt,
+            ("people", "tally.obligation"),
+            "Dentist balance after insurance",
+            None,
+            State::Live,
+            Some("an eighth row saying 'dentist', and the only debt the OWNER owes"),
+        );
+        seeder.value(&debt, "12500");
+        seeder.fact(&debt, "direction", "owe");
+        seeder.fact(&debt, "party", "Neha Rao");
     }
 
     // FOUR MORE OBLIGATIONS, and every one of them points the OTHER WAY.
@@ -1601,15 +1669,18 @@ fn photos(seeder: &mut Seeder) {
     // because a frame in two albums would make "what album is that in" a
     // question with two right answers and no way to say which was meant.
     for (title, members) in [
-        ("People of mine", ["Ana at the trailhead", "Marco in the workshop"].as_slice()),
-        ("Around the house", ["Last light in the backyard"].as_slice()),
+        (
+            "People of mine",
+            ["Ana at the trailhead", "Marco in the workshop"].as_slice(),
+        ),
+        (
+            "Around the house",
+            ["Last light in the backyard"].as_slice(),
+        ),
         ("Rolls to sort", ["Marco in the workshop"].as_slice()),
     ] {
-        let Some(album) = seeder.id(
-            "media.create_album",
-            "album_id",
-            json!({ "title": title }),
-        ) else {
+        let Some(album) = seeder.id("media.create_album", "album_id", json!({ "title": title }))
+        else {
             continue;
         };
         seeder.note(
@@ -1730,7 +1801,7 @@ type SeededExpense = (
 fn tally(seeder: &mut Seeder, me: &str, _circle: &Circle) {
     let mut friends = Vec::new();
     let mut names: Vec<String> = vec![crate::OWNER.to_owned()];
-    for name in ["Neha", "Marco", "Ana"] {
+    for name in TALLY_FRIENDS {
         let Some(party) = seeder.id("tally.add_friend", "party_id", json!({ "name": name })) else {
             continue;
         };
@@ -1859,7 +1930,11 @@ fn tally(seeder: &mut Seeder, me: &str, _circle: &Circle) {
         seeder.fact(
             &expense,
             "group",
-            if dentist { "Clinic costs" } else { "Tahoe Trip" },
+            if dentist {
+                "Clinic costs"
+            } else {
+                "Tahoe Trip"
+            },
         );
         seeder.fact(&expense, "paid_by", names[payer_index].clone());
         if description == "Ski rentals"
@@ -2017,7 +2092,8 @@ pub(crate) fn rotate_secret(
     item_id: &str,
     plaintext: &str,
 ) {
-    let Ok(cell) = centraid_vault::custody::encrypt_under_locker_key(key, key_id, item_id, plaintext)
+    let Ok(cell) =
+        centraid_vault::custody::encrypt_under_locker_key(key, key_id, item_id, plaintext)
     else {
         return;
     };

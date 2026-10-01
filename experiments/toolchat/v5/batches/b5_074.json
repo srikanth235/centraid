@@ -1,0 +1,240 @@
+[
+  {
+    "id": "a0162",
+    "today": "Friday 2025-03-21",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"School plays\") } on (photos called \"Chess board in the park\")",
+        "move": "first",
+        "hint": "add the park photo to the album"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"School plays\"", "turn": 1, "say": "full" },
+      {
+        "row": "photos \"Chess board in the park\"",
+        "turn": 1,
+        "say": "exact: park"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0944",
+    "today": "Friday 2028-05-12",
+    "turns": [
+      {
+        "canonical": "show (albums of (photos called \"Violin case\"))",
+        "move": "first",
+        "hint": "which album is the case photo in"
+      }
+    ],
+    "refer": [
+      { "row": "photos \"Violin case\"", "turn": 1, "say": "exact: case" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0194",
+    "today": "Wednesday 2025-08-27",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Ulysses Fontaine\")",
+        "move": "first",
+        "hint": "delete Ulysses from my contacts"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Ulysses Fontaine\"",
+        "turn": 1,
+        "say": "exact: Ulysses"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0179",
+    "today": "Sunday 2026-12-27",
+    "turns": [
+      {
+        "canonical": "media.restore_asset{} on (photos called \"Chess board in the park\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "restore the deleted chess board photo"
+      }
+    ],
+    "refer": [
+      {
+        "row": "photos \"Chess board in the park\"",
+        "turn": 1,
+        "say": "exact: chess board"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0673",
+    "today": "Friday 2027-09-03",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations that (from_party = me and settled_at is null))",
+        "move": "first",
+        "hint": "how much do I owe in total"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0434",
+    "today": "Wednesday 2028-03-29",
+    "turns": [
+      {
+        "canonical": "due_at of (tasks called \"MOT\")",
+        "move": "first",
+        "hint": "when is the MOT task due"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0204",
+    "today": "Tuesday 2027-06-08",
+    "turns": [
+      {
+        "canonical": "schedule.cancel_event{} on (events called \"Photography walk\")",
+        "move": "first",
+        "hint": "cancel the photography walk"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Photography walk\"",
+        "turn": 1,
+        "say": "exact: photography walk"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0156",
+    "today": "Friday 2026-11-27",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Harvest supper\") } on (photos called \"Harbour at dusk\")",
+        "move": "first",
+        "hint": "add the dusk photo to the album"
+      }
+    ],
+    "refer": [
+      { "row": "photos \"Harbour at dusk\"", "turn": 1, "say": "exact: dusk" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1103",
+    "today": "Wednesday 2026-08-12",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Sebastiano\")",
+        "move": "first",
+        "hint": "delete Sebastiano from my contacts"
+      },
+      {
+        "canonical": "people.undo_person{} on (it)",
+        "move": "undo",
+        "hint": "wait, put them back / undo that"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0896",
+    "today": "Sunday 2027-01-24",
+    "turns": [
+      {
+        "canonical": "show (expenses that (spent_on during last weekend) ordered by amount_minor desc)",
+        "move": "first",
+        "hint": "expenses in that window, biggest first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0409",
+    "today": "Friday 2027-08-13",
+    "turns": [
+      {
+        "canonical": "count of (photos that (album_titles contains \"Tulips\"))",
+        "move": "first",
+        "hint": "how many photos in the Tulips album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Tulips\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0165",
+    "today": "Tuesday 2028-04-25",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Dog\") } on (photos during last weekend)",
+        "move": "first",
+        "hint": "put the photos from that window into the Dog album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Dog\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0147",
+    "today": "Thursday 2026-02-12",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"note\", title: \"Wifi password for the cabin\", content: \"2291\" }",
+        "move": "first",
+        "hint": "save the wifi password for the cabin 2291 in my locker (title = the words the person uses for it, content = the code)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0392",
+    "today": "Monday 2026-02-23",
+    "turns": [
+      {
+        "canonical": "count of (parties that (role = \"Builder\"))",
+        "move": "first",
+        "hint": "how many builders have I got in my contacts"
+      }
+    ],
+    "refer": [{ "row": "role \"Builder\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0462",
+    "today": "Monday 2028-09-11",
+    "turns": [
+      {
+        "canonical": "spent_on of (expenses called \"boat\")",
+        "move": "first",
+        "hint": "when did I pay for the boat"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

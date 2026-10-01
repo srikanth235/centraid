@@ -1,0 +1,219 @@
+[
+  {
+    "id": "w02-042",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      { "hint": "asks what they have to get done monday", "say": ["monday"] },
+      { "hint": "(new topic) asks who they still have to pay back", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w02-043",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks when they last spoke to Ysolde Ibarra",
+        "say": ["Ysolde Ibarra"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  },
+  {
+    "id": "w02-044",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      { "hint": "asks who still has to pay them back", "say": [] },
+      { "hint": "asks how many that is", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w02-045",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks to delete all their training log notes",
+        "say": ["training log"]
+      },
+      { "hint": "(new topic) asks which tasks they have finished", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "terse"]
+  },
+  {
+    "id": "w02-046",
+    "today": "Wednesday 2025-06-18",
+    "turns": [{ "hint": "asks to delete the Fence note", "say": ["Fence"] }],
+    "versions": 3,
+    "registers": ["texting", "polite", "spoken"]
+  },
+  {
+    "id": "w02-047",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks for their pictures from Thistle Market",
+        "say": ["Thistle Market"]
+      },
+      { "hint": "asks what album that photo is in", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w02-048",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      { "hint": "asks to bin the Tyre document", "say": ["Tyre"] },
+      {
+        "hint": "(new topic) asks who Saskia Kowalczyk is",
+        "say": ["Saskia Kowalczyk"]
+      },
+      {
+        "hint": "(new topic) asks to log that they had a coffee with Faustina",
+        "say": ["Faustina"]
+      },
+      {
+        "hint": "(new topic) asks for Kit Jessop's mobile number",
+        "say": ["Kit Jessop"]
+      },
+      {
+        "hint": "(new topic) asks for the subtasks of 'Oil the tap'",
+        "say": ["Oil the tap"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "terse"]
+  },
+  {
+    "id": "w02-049",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks whose birthdays are coming up this month",
+        "say": ["this month"]
+      },
+      {
+        "hint": "(new topic) asks to find the photos on kitchen",
+        "say": ["kitchen"]
+      },
+      {
+        "hint": "(new topic) asks for the members of the Neighbourhood watch group",
+        "say": ["Neighbourhood watch"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "polite"]
+  },
+  {
+    "id": "w02-050",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks where the Airline backup codes details are",
+        "say": ["Airline"]
+      },
+      {
+        "hint": "(new topic) asks which to-dos mention Research",
+        "say": ["Research"]
+      },
+      {
+        "hint": "(new topic) asks to bin the certificate document",
+        "say": ["certificate"]
+      },
+      {
+        "hint": "asks to add a task for saturday to deal with 'Attic certificate'",
+        "say": ["saturday"]
+      },
+      {
+        "hint": "(new topic) asks to text the alarm code to the neighbour",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "terse"]
+  },
+  {
+    "id": "w02-051",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks when Zacharias Novak's birthday is",
+        "say": ["Zacharias Novak"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "terse"]
+  },
+  {
+    "id": "w02-052",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks how much has been spent in the Kayak gang group",
+        "say": ["Kayak gang"]
+      },
+      {
+        "hint": "(new topic) asks which notes mention setup steps",
+        "say": ["setup steps"]
+      },
+      {
+        "hint": "(new topic) asks what photos they have from Tidewater Point",
+        "say": ["Tidewater Point"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  },
+  {
+    "id": "w02-053",
+    "today": "Wednesday 2025-06-18",
+    "turns": [{ "hint": "asks what is due today", "say": ["today"] }],
+    "versions": 3,
+    "registers": ["texting", "terse", "question"]
+  },
+  {
+    "id": "w02-054",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      { "hint": "asks what they have about Keziah", "say": ["Keziah"] },
+      { "hint": "asks for just the home ones among those", "say": ["home"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "polite"]
+  },
+  {
+    "id": "w02-055",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks to add 18 (money) for pizza to the kitty group, paid by them",
+        "say": ["kitty", "pizza"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "question"]
+  },
+  {
+    "id": "w02-056",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks for the notes in their Fitness notebook",
+        "say": ["Fitness"]
+      },
+      { "hint": "(new topic) asks what is due monday", "say": ["monday"] },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks to find the calendar events on Cheese tasting",
+        "say": ["Cheese tasting"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "polite"]
+  }
+]

@@ -1,0 +1,236 @@
+[
+  {
+    "id": "a0465",
+    "today": "Saturday 2026-12-05",
+    "turns": [
+      {
+        "canonical": "spent_on of (expenses called \"Football boots delivery\")",
+        "move": "first",
+        "hint": "when did I pay for the delivery"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Football boots delivery\"",
+        "turn": 1,
+        "say": "exact: delivery"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1044",
+    "today": "Tuesday 2026-08-11",
+    "turns": [
+      {
+        "canonical": "count of (photos of (places called \"Lakeside Cabins\"))",
+        "move": "first",
+        "hint": "how many photos did I take at lakeside"
+      }
+    ],
+    "refer": [
+      {
+        "row": "places \"Lakeside Cabins\"",
+        "turn": 1,
+        "say": "loose: lakeside"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0930",
+    "today": "Saturday 2025-12-13",
+    "turns": [
+      {
+        "canonical": "show (first 3 of (photos ordered by captured_at desc))",
+        "move": "first",
+        "hint": "my latest N photos"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1082",
+    "today": "Monday 2025-10-06",
+    "turns": [
+      {
+        "canonical": "tally.delete_expense{} on (expenses called \"Ferry crossing\")",
+        "move": "first",
+        "hint": "delete the crossing expense"
+      },
+      {
+        "canonical": "tally.undo_expense{} on (it)",
+        "move": "undo",
+        "hint": "oh no, put it back / undo that"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Ferry crossing\"",
+        "turn": 1,
+        "say": "loose: crossing"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0906",
+    "today": "Wednesday 2027-08-04",
+    "turns": [
+      {
+        "canonical": "show (notes ordered by updated_at desc)",
+        "move": "first",
+        "hint": "notes, most recently edited first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0656",
+    "today": "Thursday 2026-09-10",
+    "turns": [
+      {
+        "canonical": "show (notes that (updated_at during last week))",
+        "move": "first",
+        "hint": "notes I edited in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0258",
+    "today": "Thursday 2028-05-04",
+    "turns": [
+      {
+        "canonical": "count of (contact channels of (parties called \"Sol Farrant\"))",
+        "move": "first",
+        "hint": "how many numbers/emails do I have for Sol"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Sol Farrant\"", "turn": 1, "say": "exact: Sol" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1020",
+    "today": "Monday 2026-04-06",
+    "turns": [
+      {
+        "canonical": "show (photos of (albums called \"Harvest supper\"))",
+        "move": "first",
+        "hint": "show the photos in the Harvest supper album"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0229",
+    "today": "Saturday 2026-04-18",
+    "turns": [
+      {
+        "canonical": "tally.settle_up{ group_id: (groups called \"Ember Valley\"), from_party: me, amount_minor: 950 }",
+        "move": "first",
+        "hint": "record that I paid/settled that amount in the group Ember Valley"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0329",
+    "today": "Thursday 2028-11-02",
+    "turns": [
+      {
+        "canonical": "count of (important dates that (next_occurrence during next week))",
+        "move": "first",
+        "hint": "how many birthdays/anniversaries coming up in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0522",
+    "today": "Tuesday 2026-09-22",
+    "turns": [
+      {
+        "canonical": "show (documents that (updated_at during today))",
+        "move": "first",
+        "hint": "docs changed in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0230",
+    "today": "Saturday 2028-06-03",
+    "turns": [
+      {
+        "canonical": "tally.settle_up{ group_id: (groups called \"Kestrel Ridge hike\"), from_party: (parties called \"Saskia\"), amount_minor: 15000 }",
+        "move": "first",
+        "hint": "record that Saskia paid me that amount in the group"
+      }
+    ],
+    "refer": [
+      {
+        "row": "groups \"Kestrel Ridge hike\"",
+        "turn": 1,
+        "say": "loose: hike"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0227",
+    "today": "Wednesday 2027-06-02",
+    "turns": [
+      {
+        "canonical": "tally.settle_up{ group_id: (groups called \"carpool\"), from_party: me, amount_minor: 1999 }",
+        "move": "first",
+        "hint": "record that I paid/settled that amount in the group carpool"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0401",
+    "today": "Monday 2028-03-20",
+    "turns": [
+      {
+        "canonical": "count of (photos during last weekend)",
+        "move": "first",
+        "hint": "how many photos did I take in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0355",
+    "today": "Monday 2025-07-07",
+    "turns": [
+      {
+        "canonical": "count of (members of (groups called \"Drama club crew\"))",
+        "move": "first",
+        "hint": "how many people are in the drama group"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Drama club crew\"", "turn": 1, "say": "exact: drama" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

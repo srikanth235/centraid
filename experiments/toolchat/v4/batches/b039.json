@@ -1,0 +1,272 @@
+[
+  {
+    "id": "g0126",
+    "today": "Wednesday 2028-08-09",
+    "turns": [
+      {
+        "canonical": "show (photos that (album_titles contains \"festival\"))",
+        "gloss": "List photos where the albums it is in contains \"festival\".",
+        "move": "first",
+        "hint": "photos in the festival album"
+      },
+      {
+        "canonical": "show (places of (the 3rd one))",
+        "gloss": "List the places linked to [the 3rd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "where was the Nth taken"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0016",
+    "today": "Thursday 2026-03-26",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\") ordered by due_at asc)",
+        "gloss": "List tasks where the due date falls before now (already past \u2014 overdue) and the status is not \"completed\", sorted by due date ascending (lowest/earliest first).",
+        "move": "first",
+        "hint": "overdue (past due, not done) tasks"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 3rd one)",
+        "gloss": "Set the status of [the 3rd one (by position in the previous answer)] to \"completed\".",
+        "move": "act",
+        "hint": "mark the 3rd one done"
+      },
+      {
+        "canonical": "reschedule{ to: friday } on (the 1st one)",
+        "gloss": "Move [the 1st one (by position in the previous answer)] to friday.",
+        "move": "act",
+        "hint": "move another one by position"
+      },
+      {
+        "canonical": "show (expenses that (spent_on during last weekend))",
+        "gloss": "List expenses where the date spent falls last weekend.",
+        "move": "new",
+        "hint": "what did I do/take/spend over the weekend (past tense)"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0303",
+    "today": "Sunday 2025-11-02",
+    "turns": [
+      {
+        "canonical": "show (documents called \"tenancy agreement\" that (deleted_at is not null))",
+        "gloss": "List documents named \"tenancy agreement\" where the date deleted (trash) is set.",
+        "move": "first",
+        "hint": "did I delete / bin the tenancy agreement document"
+      },
+      {
+        "canonical": "core.restore_document{} on (it)",
+        "gloss": "Restore [it (the one row the previous turn is about)] from the trash.",
+        "move": "act",
+        "hint": "put it back"
+      },
+      {
+        "canonical": "show (things that (folder = \"Kids\" or notebooks contains \"Kids\"))",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) where (the folder is \"Kids\" or the notebooks it is in contains \"Kids\").",
+        "move": "new",
+        "hint": "what's in my Kids folder/notebook"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0418",
+    "today": "Sunday 2027-06-20",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during last week))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls last week.",
+        "move": "first",
+        "hint": "tasks ticked off / done last week"
+      },
+      {
+        "canonical": "show (obligations of (parties called \"Sol\") that (settled_at is null))",
+        "gloss": "List the obligations linked to [parties named \"Sol\"] where there is no date settled.",
+        "move": "switch",
+        "hint": "do I owe Sol anything / does Sol owe me"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic: act on those rows (C10 ref)"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0221",
+    "today": "Wednesday 2026-12-23",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Emrys\") that (settled_at is null))",
+        "gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Emrys\"] where there is no date settled]?",
+        "move": "first",
+        "hint": "how much do I owe Emrys"
+      },
+      {
+        "canonical": "people.settle_debt{} on (it)",
+        "gloss": "Mark [it (the one row the previous turn is about)] as settled / paid off.",
+        "move": "act",
+        "hint": "settle it (R-X2: the rows the sum folded)"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0585",
+    "today": "Thursday 2028-02-03",
+    "turns": [
+      {
+        "canonical": "show (photos that (album_titles contains \"summer\"))",
+        "gloss": "List photos where the albums it is in contains \"summer\".",
+        "move": "first",
+        "hint": "photos in the summer album"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0364",
+    "today": "Friday 2025-05-02",
+    "turns": [
+      {
+        "canonical": "people.settle_debt{} on (obligations of (parties called \"Rufus\") that (settled_at is null))",
+        "gloss": "Mark [the obligations linked to [parties named \"Rufus\"] where there is no date settled] as settled / paid off.",
+        "move": "first",
+        "hint": "pay off / settle what I owe Rufus"
+      },
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during this month))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls this month.",
+        "move": "new",
+        "hint": "tasks ticked off / done this month"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0293",
+    "today": "Saturday 2028-10-07",
+    "turns": [
+      {
+        "canonical": "show (documents called \"payslip march\" that (deleted_at is not null))",
+        "gloss": "List documents named \"payslip march\" where the date deleted (trash) is set.",
+        "move": "first",
+        "hint": "did I delete / bin the payslip march document"
+      },
+      {
+        "canonical": "core.restore_document{} on (it)",
+        "gloss": "Restore [it (the one row the previous turn is about)] from the trash.",
+        "move": "act",
+        "hint": "put it back"
+      },
+      {
+        "canonical": "show (notes that (notebooks contains \"Garden\"))",
+        "gloss": "List notes where the notebooks it is in contains \"Garden\".",
+        "move": "new",
+        "hint": "what's in my Garden folder/notebook"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0598",
+    "today": "Monday 2027-04-19",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Emrys Lomax\") that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [parties named \"Emrys Lomax\"] where the kind is \"phone\".",
+        "move": "first",
+        "hint": "what's Emrys Lomax's number"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0183",
+    "today": "Tuesday 2025-12-09",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "gloss": "List parties where the amount I owe them is set.",
+        "move": "first",
+        "hint": "who do I owe money to"
+      },
+      {
+        "canonical": "show (obligations of (the 1st one) that (settled_at is null))",
+        "gloss": "List the obligations linked to [the 1st one (by position in the previous answer)] where there is no date settled.",
+        "move": "act",
+        "hint": "what's outstanding with the first one"
+      },
+      {
+        "canonical": "show (important dates of (parties called \"Zelda\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Zelda\"] where the label contains \"Birthday\".",
+        "move": "switch",
+        "hint": "when is Zelda's birthday"
+      },
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "gloss": "List parties where the amount I owe them is set.",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      },
+      {
+        "canonical": "show (contact channels of (the 1st one) that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [the 1st one (by position in the previous answer)] where the kind is \"phone\".",
+        "move": "act",
+        "hint": "the Nth one's number"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0036",
+    "today": "Wednesday 2027-01-13",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during next wednesday) ordered by due_at asc)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's due next wednesday (open tasks)"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0435",
+    "today": "Tuesday 2027-08-31",
+    "turns": [
+      {
+        "canonical": "show (things during next week)",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) dated next week.",
+        "move": "first",
+        "hint": "what's on next week"
+      },
+      {
+        "canonical": "delete{} on (the 2nd one)",
+        "gloss": "Delete (move to trash) [the 2nd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      },
+      {
+        "canonical": "reschedule{ to: wednesday } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to wednesday.",
+        "move": "act",
+        "hint": "and push it to a day (C12: it = the row just written)"
+      },
+      {
+        "canonical": "show (members of (groups called \"hen\"))",
+        "gloss": "List the members linked to [groups named \"hen\"].",
+        "move": "new",
+        "hint": "who's in the hen group"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  }
+]

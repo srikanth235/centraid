@@ -1,0 +1,299 @@
+[
+  {
+    "id": "w23-0009",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks if they have photos of Samir", "say": ["Samir"] },
+      {
+        "hint": "follow-up: asks to delete the Przemek one",
+        "say": ["Przemek"],
+        "shown": "photo \"Redcurrant at night (01)\" Sat 2027-03-20 13:09 · album_titles=Lamow 2027, The Old Tractor favorite=false people=Samir Navbusen\nphoto \"Przemek with the ferret\" Tue 2027-02-09 07:12 · favorite=false people=Przemek Halow, Mekdes Gustafsson, Samir Navbusen\nphoto \"Bunting at sunrise\" Sun 2026-05-17 13:10 · favorite=false people=Samir Navbusen, Thavmoara Hayashi"
+      },
+      {
+        "hint": "follow-up: corrects: wrong one, they meant the fifth one",
+        "say": ["fifth"],
+        "shown": "done: media.delete_asset{} on (#6)"
+      },
+      {
+        "hint": "(new topic) asks how much they spent on boskice in total",
+        "say": ["boskice"],
+        "shown": "done: media.delete_asset{} on (#5)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w23-0011",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks to see the shots from December", "say": ["December"] },
+      {
+        "hint": "follow-up: asks for a task to call the Bergamo photo tuesday",
+        "say": ["call the Bergamo photo", "tuesday"],
+        "shown": "photo \"Honora at Cafe Bergamo\" Tue 2026-12-01 10:13 · album_titles=The Old Tractor favorite=false"
+      },
+      {
+        "hint": "follow-up: asks where it was taken",
+        "say": [],
+        "shown": "done: schedule.add_task{title: \"Call the Bergamo photo\", due_at: 2027-04-13}"
+      },
+      {
+        "hint": "(detour) hang on — asks who Fleur Bekele is",
+        "say": ["Fleur Bekele"],
+        "shown": "place \"Cafe Bergamo\""
+      },
+      {
+        "hint": "back to the December photos — asks to see the photos from there",
+        "say": [],
+        "shown": "party \"Fleur Bekele\" · role=Running club friend"
+      },
+      {
+        "hint": "(new topic) says the shed PIN is 95804 — keep it in the locker",
+        "say": ["shed PIN", "95804"],
+        "shown": "photo \"Sponge by the window\" Sat 2027-03-27 13:47 · favorite=false people=Nicanor Kingsley, Fonlean Halow\nphoto \"Bonnet by the window\" Fri 2027-03-05 17:03 · favorite=false people=Przemek Halow\nphoto \"Honora at Cafe Bergamo\" Tue 2026-12-01 10:13 · album_titles=The Old Tractor favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w23-0012",
+    "today": "Wednesday 2027-04-07",
+    "turns": [{ "hint": "asks for their latest diary entry", "say": [] }],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w23-0013",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks what they spent on Lamow (the expenses themselves)",
+        "say": ["Lamow"]
+      },
+      {
+        "hint": "follow-up: about the hire one, asks which group it's in",
+        "say": ["hire"],
+        "shown": "expense \"Lamow repair\" Thu 2027-02-18 · amount_minor=24600 paid_by=Owner\nexpense \"Lamow hire\" Mon 2027-02-15 · amount_minor=300 paid_by=Mirela Nouvani\nexpense \"Lamow subscription\" Wed 2027-02-17 · amount_minor=22259 paid_by=Owner\nexpense \"Ferry to Lamow\" Mon 2027-02-15 · amount_minor=4599 paid_by=Nerys Fourow"
+      },
+      {
+        "hint": "(new topic) asks for their most recent journal entry",
+        "say": [],
+        "shown": "group \"Lamow trip\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w23-0014",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks for the club entry in the locker (the row, not the password)",
+        "say": ["club"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w23-0015",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the club is",
+        "say": ["club", "password"]
+      },
+      {
+        "hint": "(new topic) asks to see photos of Thavmoara",
+        "say": ["Thavmoara"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks to put it in the Libor's cauldron album",
+        "say": ["Libor's cauldron", "album"],
+        "shown": "photo \"Bunting at sunrise\" Sun 2026-05-17 13:10 · favorite=false people=Samir Navbusen, Thavmoara Hayashi"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w23-0016",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks how much they spent back in June", "say": ["June"] },
+      {
+        "hint": "(new topic) asks what they have on while they're away in Locarno",
+        "say": ["Locarno"],
+        "shown": "= 0"
+      },
+      {
+        "hint": "follow-up: says scrap that, they'll check later themselves",
+        "say": [],
+        "shown": "important date \"Birthday — Przemek Halow\" Fri 2027-04-23\ntask \"Ask Wamie about the ferret\" Wed 2027-04-21 12:00 · status=needs-action\ntask \"Paint the bellows\" Thu 2027-04-22 12:00 · status=needs-action\nevent \"Locarno weekend\" Wed 2027-04-21 07:00"
+      },
+      {
+        "hint": "(new topic) asks to settle up with Drondel in boskice fund",
+        "say": ["Drondel", "boskice fund"],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w23-0017",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks when they're next seeing Przemek Halow",
+        "say": ["Przemek Halow"]
+      },
+      {
+        "hint": "follow-up: asks to move both of them to friday",
+        "say": ["friday"],
+        "shown": "event \"Toadstool fitting\" Mon 2027-04-05 11:15\nevent \"Fonlean's dovecote party\" Tue 2027-04-06 12:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w23-0018",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks if they have any photos about mothball",
+        "say": ["mothball", "photos"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w23-0019",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks who'll be at the look", "say": ["look"] },
+      {
+        "hint": "follow-up: asks who else is coming apart from Drolette",
+        "say": ["Drolette"],
+        "shown": "party \"Prouris Vlachos\" · role=Landlord\nparty \"Vearie Halow\" · role=Daughter\nparty \"Drolette Novak\" · owed_to_me_minor=2500 role=Pen pal\nparty \"Nerys Fourow\" · role=Best friend"
+      },
+      {
+        "hint": "follow-up: about the Nerys one, asks when their birthday is",
+        "say": ["Nerys"],
+        "shown": "party \"Prouris Vlachos\" · role=Landlord\nparty \"Vearie Halow\" · role=Daughter\nparty \"Nerys Fourow\" · role=Best friend"
+      },
+      {
+        "hint": "(new topic) asks to bump the repair an hour later",
+        "say": ["repair", "an hour later"],
+        "shown": "important date \"Memorial — Nerys Fourow\" Fri 2027-05-28"
+      },
+      {
+        "hint": "(new topic) asks to see the Kally holiday card entry",
+        "say": ["Kally holiday", "card"],
+        "shown": "done: reschedule{by: +1h} on (#7)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w23-0020",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks for the insurance entry in the locker (the row, not the password)",
+        "say": ["insurance"]
+      },
+      {
+        "hint": "follow-up: asks to see the password",
+        "say": ["password"],
+        "shown": "locker item \"Tusko insurance portal\" · type=login"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w23-0021",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the insurance is",
+        "say": ["insurance", "password"]
+      },
+      {
+        "hint": "(new topic) asks to see the documents they marked with a star",
+        "say": [],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      },
+      {
+        "hint": "(new topic) says the redcurrant task is done",
+        "say": ["redcurrant"],
+        "shown": "document \"Felting report\" Mon 2027-03-22 13:53 · folder=Invoices\ndocument \"Treacle quote 2025\" Sat 2026-10-31 10:39 · folder=Recipes\ndocument \"Bank statement (03)\" Fri 2026-04-03 15:04 · folder=Work"
+      },
+      {
+        "hint": "follow-up: corrects: wrong task, they meant the fix one",
+        "say": ["fix"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#12)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w23-0022",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks for the university friend's contact",
+        "say": ["university friend"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w23-0023",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks for their photos from March", "say": ["March"] },
+      {
+        "hint": "(new topic) asks to book Wengen Garden Centre on their website for tomorrow",
+        "say": ["Wengen Garden Centre", "tomorrow"],
+        "shown": "photo \"Redcurrant on the table\" Tue 2027-03-30 18:48 · album_titles=Libor's cauldron favorite=false\nphoto \"Samovar with Przemek\" Sun 2027-03-28 08:47 · favorite=false\nphoto \"Sponge by the window\" Sat 2027-03-27 13:47 · favorite=false people=Nicanor Kingsley, Fonlean Halow\nphoto \"Canary close-up\" Fri 2027-03-26 13:26 · album_titles=The Old Tractor, Lamow 2027 favorite=false\n(+9 more)"
+      },
+      {
+        "hint": "follow-up: about the first one, asks which album it's in",
+        "say": ["first"],
+        "shown": "refuse"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w23-0024",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      { "hint": "asks to delete their book task", "say": ["book", "task"] },
+      {
+        "hint": "(new topic) asks who they had dinner with last tuesday",
+        "say": ["dinner", "last tuesday"],
+        "shown": "none"
+      },
+      {
+        "hint": "(new topic) asks who Nicanor is (several people are called Nicanor)",
+        "say": ["Nicanor"],
+        "shown": "event \"Dinner with Samir\" Tue 2027-04-06 13:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  }
+]

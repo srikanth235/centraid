@@ -1,0 +1,250 @@
+[
+  {
+    "id": "w10-0033",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks which paperwork mention ballast quote",
+        "say": ["ballast quote", "paperwork"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w10-0035",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks to square up with the whole Elford group",
+        "say": ["Elford"]
+      },
+      {
+        "hint": "(new topic) asks what they have about ragwort",
+        "say": ["ragwort"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#6), amount_minor: balance of (it) in (#6)} on (#12, #13)"
+      },
+      {
+        "hint": "follow-up: asks to push the last one to wednesday",
+        "say": ["last", "wednesday"],
+        "shown": "document \"Ragwort invoice\" Sun 2026-04-12 11:03 · folder=Bank\ntask \"Check the ragwort\" Thu 2026-10-15 09:00 · status=completed effort_min=60\ntask \"Measure Kadri's ragwort\" Sat 2026-10-31 09:00 · status=completed"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w10-0036",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks to email Kadri the address of the party",
+        "say": ["Kadri"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w10-0038",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      { "hint": "asks for anything to do with dustpan", "say": ["dustpan"] },
+      {
+        "hint": "follow-up: about the night one, asks where it was taken",
+        "say": ["night"],
+        "shown": "document \"Dustpan contract 2027\" Thu 2026-09-10 22:52 · folder=Connemara flat\nphoto \"Dustpan at night\" Sat 2025-05-03 19:57 · favorite=false\ntask \"Buy the dustpan\" Tue 2026-11-24 18:00 · status=in-process"
+      },
+      {
+        "hint": "(new topic) asks which partridge crew expenses were over five",
+        "say": ["partridge crew", "five"],
+        "shown": "place \"Zyrrow Marsh\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w10-0039",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks for the home wifi entry in the locker (the row, not the password)",
+        "say": ["home wifi"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w10-0040",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the home wifi is",
+        "say": ["home wifi", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w10-0041",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks to put back the pendulum task they deleted",
+        "say": ["pendulum", "task"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w10-0042",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks which steps of the wrap the pulley at lerwick gorge job are still open",
+        "say": ["wrap the pulley at lerwick gorge"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w10-0044",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks to book a table at a restaurant for friday",
+        "say": ["friday"]
+      },
+      {
+        "hint": "(new topic) asks what they have on while they're away in Pondicherry",
+        "say": ["Pondicherry"],
+        "shown": "refuse"
+      },
+      {
+        "hint": "(new topic) asks when their dustpan thing is (no kind given)",
+        "say": ["dustpan"],
+        "shown": "important date \"Birthday — Wirra Huskani\" Tue 2026-12-08\ntask \"Label the bramble before Enzo comes\" Fri 2026-12-04 17:00 · status=needs-action effort_min=120\ntask \"Find a vellash for Kadri\" Sat 2026-12-05 12:00 · status=needs-action\ntask \"Sand the raku again\" Tue 2026-12-08 17:00 · status=needs-action effort_min=45\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w10-0045",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      { "hint": "asks to delete the chisel photo", "say": ["chisel", "photo"] },
+      {
+        "hint": "(new topic) asks to delete the locket document",
+        "say": ["locket"],
+        "shown": "none"
+      },
+      {
+        "hint": "(new topic) asks what they have on while they're away in Pondicherry",
+        "say": ["Pondicherry"],
+        "shown": "done: core.trash_document{} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w10-0046",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "says they messaged Elif Beaulieu and asks to log it",
+        "say": ["Elif Beaulieu", "messaged"]
+      },
+      {
+        "hint": "follow-up: corrects: sorry, it was Enzo, not them",
+        "say": ["Enzo"],
+        "shown": "done: people.log_interaction{kind: \"message\"} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w10-0047",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      { "hint": "asks for the spending above 40 kroner", "say": ["40 kroner"] },
+      {
+        "hint": "follow-up: asks which of those are above seventy kroner",
+        "say": ["seventy kroner"],
+        "shown": "expense \"Gooseberry deposit\" Mon 2026-11-09 · amount_minor=4851 paid_by=Owner\nexpense \"Dinner at Lerwick Gorge\" Thu 2026-11-05 · amount_minor=24061 paid_by=Greta Iqbal\nexpense \"Bramble repair\" Wed 2026-11-04 · amount_minor=23509 paid_by=Owner\nexpense \"Dinner at Gryshaven Community Hall\" Tue 2026-11-03 · amount_minor=17594 paid_by=Owner\n(+9 more)"
+      },
+      {
+        "hint": "(detour) hang on — asks where the holiday mastercard went",
+        "say": ["holiday mastercard"],
+        "shown": "expense \"Dinner at Lerwick Gorge\" Thu 2026-11-05 · amount_minor=24061 paid_by=Greta Iqbal\nexpense \"Bramble repair\" Wed 2026-11-04 · amount_minor=23509 paid_by=Owner\nexpense \"Dinner at Gryshaven Community Hall\" Tue 2026-11-03 · amount_minor=17594 paid_by=Owner\nexpense \"Clocktower\" Sun 2026-11-01 · amount_minor=9817 paid_by=Ruskine Calloway\n(+4 more)"
+      },
+      {
+        "hint": "back to the big expenses — asks which of those are above 180 kroner",
+        "say": ["180 kroner"],
+        "shown": "locker item \"Holiday Mastercard card\" · type=card"
+      },
+      {
+        "hint": "follow-up: asks how much the ferry one was",
+        "say": ["ferry"],
+        "shown": "expense \"Dinner at Lerwick Gorge\" Thu 2026-11-05 · amount_minor=24061 paid_by=Greta Iqbal\nexpense \"Bramble repair\" Wed 2026-11-04 · amount_minor=23509 paid_by=Owner\nexpense \"Bramble supplies\" Sun 2026-10-11 · amount_minor=20711 paid_by=Elif Beaulieu\nexpense \"Elford refund\" Tue 2026-09-29 · amount_minor=24183 paid_by=Leander Juarez\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w10-0048",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks if the Elif task can go to monday instead",
+        "say": ["Elif", "monday"]
+      },
+      {
+        "hint": "(new topic) asks to mark the quote to-do complete",
+        "say": ["quote"],
+        "shown": "done: reschedule{to: 2026-11-16} on (#7)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w10-0049",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      { "hint": "asks for their latest diary entry", "say": [] },
+      {
+        "hint": "(new topic) asks when they have the Freja",
+        "say": ["Freja"],
+        "shown": "journal note \"People journal · happy\" Tue 2026-11-10 12:00"
+      },
+      {
+        "hint": "follow-up: asks whether there's anything in their notes about it too",
+        "say": ["notes"],
+        "shown": "event \"Walk with Freja\" Mon 2026-11-09 17:45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w10-0050",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks which events are at Gryshaven Community Hall (by the place itself)",
+        "say": ["Gryshaven Community Hall"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  }
+]

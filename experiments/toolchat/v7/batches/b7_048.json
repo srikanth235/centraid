@@ -1,0 +1,234 @@
+[
+  {
+    "id": "w10-018",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks to find the locker entries on Pottery",
+        "say": ["Pottery"]
+      },
+      {
+        "hint": "(new topic) asks which calendar events mention Pottery club",
+        "say": ["Pottery club"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "terse"]
+  },
+  {
+    "id": "w10-019",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks what they ticked off today", "say": ["today"] },
+      {
+        "hint": "asks to move the fourth one to thursday",
+        "say": ["thursday"]
+      },
+      {
+        "hint": "(new topic) asks what paperwork is kept in House",
+        "say": ["House"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "question"]
+  },
+  {
+    "id": "w10-020",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks which tasks they have finished", "say": [] },
+      {
+        "hint": "asks for just the ones this week (this week)",
+        "say": ["week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "w10-021",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks what they last talked about with Ulysses Novak",
+        "say": ["Ulysses Novak"]
+      },
+      {
+        "hint": "(new topic) asks to delete everything in the vault",
+        "say": []
+      },
+      { "hint": "(new topic) asks for the latest football scores", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "polite"]
+  },
+  {
+    "id": "w10-022",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks to find Lark in their contacts (several people are called Lark)",
+        "say": ["Lark"]
+      },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      },
+      { "hint": "(new topic) asks to pull up Hedda", "say": ["Hedda"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w10-023",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks what paperwork is kept in Kids", "say": ["Kids"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "w10-024",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks what places they have in their photos", "say": [] },
+      {
+        "hint": "(new topic) asks what's in the vault about parts",
+        "say": ["parts"]
+      },
+      { "hint": "asks what about in their expenses", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "polite"]
+  },
+  {
+    "id": "w10-025",
+    "today": "Thursday 2026-04-09",
+    "turns": [{ "hint": "asks who they still have to pay back", "say": [] }],
+    "versions": 3,
+    "registers": ["question", "spoken", "polite"]
+  },
+  {
+    "id": "w10-026",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks to make a note called 'Names for the puppy'",
+        "say": ["Names for the puppy"]
+      },
+      {
+        "hint": "(new topic) asks how much has been spent in the Cheese kitty group",
+        "say": ["Cheese kitty"]
+      },
+      { "hint": "asks how many there are in total", "say": [] },
+      {
+        "hint": "(new topic) asks to log a call with Pascal (several people are called Pascal)",
+        "say": ["Pascal"]
+      },
+      {
+        "hint": "says it was Pascal Tolliver (the Tolliver one)",
+        "say": ["Tolliver"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "question"]
+  },
+  {
+    "id": "w10-027",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks to see their favourited pics", "say": [] },
+      { "hint": "asks which of those are about tulip", "say": ["tulip"] },
+      {
+        "hint": "(new topic) asks for their photos about stall",
+        "say": ["stall"]
+      },
+      {
+        "hint": "(new topic) asks who is in the Cheese kitty group",
+        "say": ["Cheese kitty"]
+      },
+      {
+        "hint": "(new topic) asks which documents mention quote",
+        "say": ["quote"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "spoken"]
+  },
+  {
+    "id": "w10-028",
+    "today": "Thursday 2026-04-09",
+    "turns": [{ "hint": "asks for their favourite photos", "say": [] }],
+    "versions": 3,
+    "registers": ["texting", "question", "spoken"]
+  },
+  {
+    "id": "w10-029",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks who they're seeing at the Violin workshop",
+        "say": ["Violin workshop"]
+      },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "texting"]
+  },
+  {
+    "id": "w10-030",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks which places they have exactly three photos from",
+        "say": ["three"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w10-031",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks for the notes in their Violin notebook",
+        "say": ["Violin"]
+      },
+      { "hint": "(new topic) asks for their favourite photos", "say": [] },
+      { "hint": "takes it back: never mind", "say": [] },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "(new topic) asks to pull up Ulysses Novak",
+        "say": ["Ulysses Novak"]
+      },
+      { "hint": "(new topic) asks to see their favourited pics", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "terse"]
+  },
+  {
+    "id": "w10-032",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks for everything mentioning Brigid Wetherby",
+        "say": ["Brigid Wetherby"]
+      },
+      {
+        "hint": "(new topic) asks to bin the insulation document",
+        "say": ["insulation"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  }
+]

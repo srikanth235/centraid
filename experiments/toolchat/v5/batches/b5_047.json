@@ -1,0 +1,237 @@
+[
+  {
+    "id": "a0550",
+    "today": "Saturday 2025-03-29",
+    "turns": [
+      {
+        "canonical": "show (events that (dtstart > sunday) ordered by dtstart asc)",
+        "move": "first",
+        "hint": "events after that day, soonest first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0415",
+    "today": "Wednesday 2026-06-17",
+    "turns": [
+      {
+        "canonical": "amount_minor of (expenses called \"Hedge tickets\")",
+        "move": "first",
+        "hint": "how much was the tickets expense"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Hedge tickets\"",
+        "turn": 1,
+        "say": "loose: tickets"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0284",
+    "today": "Sunday 2026-07-26",
+    "turns": [
+      {
+        "canonical": "count of (documents that (folder = \"Travel 2027\"))",
+        "move": "first",
+        "hint": "how many docs in the Travel 2027 folder"
+      }
+    ],
+    "refer": [{ "row": "folder \"Travel 2027\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0478",
+    "today": "Friday 2027-12-31",
+    "turns": [
+      {
+        "canonical": "value of (contact channels of (parties called \"Winifred\") that (kind = \"phone\"))",
+        "move": "first",
+        "hint": "what's Winifred's number/email (the value)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0498",
+    "today": "Friday 2025-07-04",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Honora Mortimer\") that (label = \"home\"))",
+        "move": "first",
+        "hint": "Honora's number/email with that label (work/home/mobile)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Honora Mortimer\"",
+        "turn": 1,
+        "say": "exact: Honora"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0367",
+    "today": "Tuesday 2027-07-27",
+    "turns": [
+      {
+        "canonical": "count of (notes that (notebooks contains \"Film\"))",
+        "move": "first",
+        "hint": "how many notes in the Film notebook"
+      }
+    ],
+    "refer": [{ "row": "notebooks \"Film\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0059",
+    "today": "Saturday 2027-12-25",
+    "turns": [
+      {
+        "canonical": "show (journal notes called \"Call with Henrike about the job\")",
+        "move": "first",
+        "hint": "find my journal entry about job"
+      }
+    ],
+    "refer": [
+      {
+        "row": "journal notes \"Call with Henrike about the job\"",
+        "turn": 1,
+        "say": "loose: job"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0030",
+    "today": "Wednesday 2028-03-29",
+    "turns": [
+      {
+        "canonical": "show (notes)",
+        "move": "first",
+        "hint": "show all my notes"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0092",
+    "today": "Sunday 2026-08-09",
+    "turns": [
+      {
+        "canonical": "show (things called \"kitchen knives\")",
+        "move": "first",
+        "hint": "what do I have about kitchen knives (anything: diary, to-dos, notes...)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0941",
+    "today": "Saturday 2028-06-17",
+    "turns": [
+      {
+        "canonical": "show (first 3 of (photos ordered by captured_at desc))",
+        "move": "first",
+        "hint": "my latest N photos"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1115",
+    "today": "Monday 2028-07-10",
+    "turns": [
+      {
+        "canonical": "show (photos that (favorite = true))",
+        "move": "first",
+        "hint": "my favourite photos"
+      },
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Cheese tasting 2020\") } on (them)",
+        "move": "act",
+        "hint": "add those to the cheese album"
+      }
+    ],
+    "refer": [
+      {
+        "row": "places \"Westerly Pier\"",
+        "turn": 1,
+        "say": "loose: westerly"
+      },
+      {
+        "row": "albums \"Cheese tasting 2020\"",
+        "turn": 2,
+        "say": "exact: cheese"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0625",
+    "today": "Thursday 2026-01-15",
+    "turns": [
+      {
+        "canonical": "show (locker items that (type = \"wifi\"))",
+        "move": "first",
+        "hint": "which locker entries are of that type"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0109",
+    "today": "Thursday 2027-09-09",
+    "turns": [
+      {
+        "canonical": "core.restore_document{} on (documents called \"energy\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "restore the binned energy document"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0494",
+    "today": "Monday 2027-03-01",
+    "turns": [
+      {
+        "canonical": "show (activities that (started_at during today))",
+        "move": "first",
+        "hint": "who did I call/see/have coffee with in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0036",
+    "today": "Friday 2028-07-21",
+    "turns": [
+      {
+        "canonical": "show (settlements)",
+        "move": "first",
+        "hint": "show all the settle-ups / payments recorded in my groups"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

@@ -1,0 +1,208 @@
+[
+  {
+    "id": "w05-003",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks whether they owe Clementine Oduya anything",
+        "say": ["Clementine Oduya"]
+      },
+      {
+        "hint": "(new topic) asks which locker entries mention password",
+        "say": ["password"]
+      },
+      { "hint": "asks what else there is apart from the second one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w05-004",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks what day the Parkrun is on", "say": ["Parkrun"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "texting"]
+  },
+  {
+    "id": "w05-005",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks for the photos in the Garden progress album",
+        "say": ["Garden progress"]
+      },
+      { "hint": "asks which albums those photos are in", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "texting"]
+  },
+  {
+    "id": "w05-006",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks what they have about Northcott", "say": ["Northcott"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "terse"]
+  },
+  {
+    "id": "w05-007",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks for the latest football scores", "say": [] },
+      {
+        "hint": "(new topic) asks to find anything to do with statement",
+        "say": ["statement"]
+      },
+      {
+        "hint": "asks the same about hire instead ('what about hire?')",
+        "say": ["hire"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "spoken"]
+  },
+  {
+    "id": "w05-008",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks what they have about Zuniga", "say": ["Zuniga"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "w05-009",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks what paperwork is kept in Energy", "say": ["Energy"] },
+      { "hint": "(new topic) asks what they still have to do", "say": [] },
+      {
+        "hint": "asks for just the ones on wednesday (wednesday)",
+        "say": ["wednesday"]
+      },
+      {
+        "hint": "(new topic) asks to see the Broadband login entry",
+        "say": ["Broadband"]
+      },
+      { "hint": "(new topic) asks what time the Rugby is", "say": ["Rugby"] },
+      {
+        "hint": "(new topic) asks what they got done recently",
+        "say": ["recently"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "texting"]
+  },
+  {
+    "id": "w05-010",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks to pull up Vivienne", "say": ["Vivienne"] },
+      {
+        "hint": "(new topic) asks to move all their open tasks due sunday to wednesday",
+        "say": ["sunday", "wednesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "terse"]
+  },
+  {
+    "id": "w05-011",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks for the Broadband account entry", "say": ["Broadband"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "polite"]
+  },
+  {
+    "id": "w05-012",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks if anything is going on next week", "say": ["next week"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "texting"]
+  },
+  {
+    "id": "w05-013",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks to find anything to do with Cheese", "say": ["Cheese"] },
+      {
+        "hint": "asks for just the ones this week (this week)",
+        "say": ["week"]
+      },
+      { "hint": "asks whether there are any photos about it too", "say": [] },
+      { "hint": "asks whether there are any notes about it too", "say": [] },
+      { "hint": "asks what about in their to-dos", "say": [] },
+      {
+        "hint": "asks the same about cleaner instead ('what about cleaner?')",
+        "say": ["cleaner"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  },
+  {
+    "id": "w05-014",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks to pull up Margit Crowther", "say": ["Margit Crowther"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "question"]
+  },
+  {
+    "id": "w05-015",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks what birthdays or anniversaries there are next week",
+        "say": ["next week"]
+      },
+      {
+        "hint": "(new topic) asks to put 'Swimming lesson' in the calendar saturday at 10:30",
+        "say": ["Swimming lesson", "saturday"]
+      },
+      {
+        "hint": "(new topic) asks who is in the Allotment weekend group",
+        "say": ["Allotment weekend"]
+      },
+      {
+        "hint": "(new topic) asks when Jessamy Varga's birthday is",
+        "say": ["Jessamy Varga"]
+      },
+      {
+        "hint": "(new topic) asks to find the expenses on Camera",
+        "say": ["Camera"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "terse"]
+  },
+  {
+    "id": "w05-016",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks for everything mentioning Print", "say": ["Print"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "question"]
+  },
+  {
+    "id": "w05-017",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks to move the Landlord appointment to saturday",
+        "say": ["Landlord", "saturday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "texting"]
+  }
+]

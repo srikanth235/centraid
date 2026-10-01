@@ -854,7 +854,8 @@ pub(crate) fn index_content_text(
            body_text = excluded.body_text,
            decoder = excluded.decoder,
            byte_size = excluded.byte_size,
-           updated_at = excluded.updated_at",
+           updated_at = excluded.updated_at,
+           row_version = core_content_text.row_version + 1",
         rusqlite::params![
             content_id,
             text,
@@ -1061,9 +1062,10 @@ pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) ->
     if let Some((content_id, deleted_at)) = existing {
         if deleted_at.is_some() {
             ctx.connection().execute(
-                "UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL
+                "UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL, updated_at = ?2,
+                        row_version = row_version + 1
                   WHERE content_id = ?1",
-                [&content_id],
+                rusqlite::params![content_id, ctx.now],
             )?;
         }
         return Ok(Minted {
@@ -1208,9 +1210,10 @@ pub(crate) fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, content_hash: &str) 
         (_, Some((content_id, byte_size, deleted_at))) => {
             if deleted_at.is_some() {
                 ctx.connection().execute(
-                    "UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL
+                    "UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL,
+                            updated_at = ?2, row_version = row_version + 1
                       WHERE content_id = ?1",
-                    [content_id],
+                    rusqlite::params![content_id, ctx.now],
                 )?;
             }
             (content_id.clone(), *byte_size, 1)
@@ -1943,9 +1946,19 @@ pub(crate) fn minted_id_is_free(
 /// document id last. A second statement would be a second `row_version` bump
 /// for one member gesture, which puts a seat's row ahead of the origin's for
 /// the same edit.
+///
+/// **EVERY `UPDATE core_document` HERE MOVES `row_version` ITSELF**, and every
+/// one has stamped `updated_at` from `ctx.now` (this statement, or the INSERT
+/// just before it). `core_document_touch_updated_at` is the
+/// fallback for a writer that did not stamp the row: it fires when the version
+/// did not move, and when `updated_at` reads back unchanged it writes the
+/// HOST's wall clock — which is also what an explicit stamp EQUAL to the old
+/// one looks like (a document filed and starred, moved or binned at one
+/// instant). Bumping the version in the statement is what the trigger would
+/// have done, so the count is the same and its `WHEN` guard stands aside.
 fn update_document(ctx: &CommandCtx<'_, '_>, sets: &[&str], binds: &[String]) -> Result<()> {
     let sql = format!(
-        "UPDATE core_document SET {} WHERE document_id = ?",
+        "UPDATE core_document SET {}, row_version = row_version + 1 WHERE document_id = ?",
         sets.join(", ")
     );
     let params: Vec<&dyn rusqlite::ToSql> = binds
@@ -2018,8 +2031,14 @@ fn add_document() -> CommandDefinition {
                 &minted.content_id,
                 None,
             )?;
+            // THE VERSION MOVES HERE, NOT IN THE TRIGGER (see
+            // `update_document`). This UPDATE leaves `updated_at` as the INSERT
+            // set it, so the trigger used to stamp every filed document with the
+            // host's wall clock (the R-1020-35 shape `knowledge.create_note`
+            // fixed).
             ctx.connection().execute(
-                "UPDATE core_document SET current_revision_id = ?1 WHERE document_id = ?2",
+                "UPDATE core_document SET current_revision_id = ?1, row_version = row_version + 1
+                  WHERE document_id = ?2",
                 rusqlite::params![revision_id, document_id],
             )?;
             if let Some(text) = extracted_text.filter(|text| !text.is_empty()) {
@@ -2151,7 +2170,8 @@ fn rename_document() -> CommandDefinition {
             let title = ctx.required_str("title")?.to_owned();
             // The WRAPPER's title only — bytes and version history untouched.
             ctx.connection().execute(
-                "UPDATE core_document SET title = ?1, updated_at = ?2 WHERE document_id = ?3",
+                "UPDATE core_document SET title = ?1, updated_at = ?2, row_version = row_version + 1
+                  WHERE document_id = ?3",
                 rusqlite::params![title, ctx.now, document_id],
             )?;
             Ok(serde_json::json!({ "document_id": document_id }))
@@ -2207,7 +2227,8 @@ fn move_document() -> CommandDefinition {
             };
             file_into(ctx, &document_id, &folder)?;
             ctx.connection().execute(
-                "UPDATE core_document SET updated_at = ?1 WHERE document_id = ?2",
+                "UPDATE core_document SET updated_at = ?1, row_version = row_version + 1
+                  WHERE document_id = ?2",
                 rusqlite::params![ctx.now, document_id],
             )?;
             Ok(serde_json::json!({ "document_id": document_id }))
@@ -2248,7 +2269,8 @@ fn trash_document() -> CommandDefinition {
             // trashes, its bytes — current AND every superseded revision — stay
             // live until the document itself purges.
             ctx.connection().execute(
-                "UPDATE core_document SET deleted_at = ?1, purge_at = ?2, updated_at = ?1
+                "UPDATE core_document SET deleted_at = ?1, purge_at = ?2, updated_at = ?1,
+                        row_version = row_version + 1
                   WHERE document_id = ?3",
                 rusqlite::params![ctx.now, until, document_id],
             )?;
@@ -2304,7 +2326,8 @@ fn restore_document() -> CommandDefinition {
             // It returns to the folder it was filed in: trash keeps the folder
             // tag (and the star), so a restored document lands where it was.
             ctx.connection().execute(
-                "UPDATE core_document SET deleted_at = NULL, purge_at = NULL, updated_at = ?1
+                "UPDATE core_document SET deleted_at = NULL, purge_at = NULL, updated_at = ?1,
+                        row_version = row_version + 1
                   WHERE document_id = ?2",
                 rusqlite::params![ctx.now, document_id],
             )?;
@@ -2355,7 +2378,8 @@ fn empty_document_trash() -> CommandDefinition {
         }],
         handler: |ctx| {
             let released = ctx.connection().execute(
-                "UPDATE core_document SET purge_at = deleted_at, updated_at = ?1
+                "UPDATE core_document SET purge_at = deleted_at, updated_at = ?1,
+                        row_version = row_version + 1
                   WHERE deleted_at IS NOT NULL",
                 [&ctx.now],
             )?;
@@ -2396,7 +2420,8 @@ fn star_document() -> CommandDefinition {
             // every other surface reads.
             set_starred(ctx, &document_id, true)?;
             ctx.connection().execute(
-                "UPDATE core_document SET updated_at = ?1 WHERE document_id = ?2",
+                "UPDATE core_document SET updated_at = ?1, row_version = row_version + 1
+                  WHERE document_id = ?2",
                 rusqlite::params![ctx.now, document_id],
             )?;
             Ok(serde_json::json!({ "document_id": document_id }))
@@ -2426,7 +2451,8 @@ fn unstar_document() -> CommandDefinition {
             let document_id = ctx.required_str("document_id")?.to_owned();
             set_starred(ctx, &document_id, false)?;
             ctx.connection().execute(
-                "UPDATE core_document SET updated_at = ?1 WHERE document_id = ?2",
+                "UPDATE core_document SET updated_at = ?1, row_version = row_version + 1
+                  WHERE document_id = ?2",
                 rusqlite::params![ctx.now, document_id],
             )?;
             Ok(serde_json::json!({ "document_id": document_id }))
@@ -2838,7 +2864,8 @@ fn restore_document_version() -> CommandDefinition {
             )?;
             ctx.connection().execute(
                 "UPDATE core_document
-                    SET current_content_id = ?1, current_revision_id = ?2, updated_at = ?3
+                    SET current_content_id = ?1, current_revision_id = ?2, updated_at = ?3,
+                        row_version = row_version + 1
                   WHERE document_id = ?4",
                 rusqlite::params![content_id, revision_id, ctx.now, document_id],
             )?;

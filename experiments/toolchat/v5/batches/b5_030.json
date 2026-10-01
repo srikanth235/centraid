@@ -1,0 +1,232 @@
+[
+  {
+    "id": "a0335",
+    "today": "Monday 2028-03-13",
+    "turns": [
+      {
+        "canonical": "count of (locker items)",
+        "move": "first",
+        "hint": "how many things are saved in my locker"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0817",
+    "today": "Wednesday 2025-10-01",
+    "turns": [
+      {
+        "canonical": "max dtstart of (events called \"Football rehearsal\")",
+        "move": "first",
+        "hint": "when is the last rehearsal (latest date)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Football rehearsal\"",
+        "turn": 1,
+        "say": "exact: rehearsal"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1078",
+    "today": "Wednesday 2025-10-08",
+    "turns": [
+      {
+        "canonical": "tally.delete_expense{} on (expenses called \"Roof repair\")",
+        "move": "first",
+        "hint": "delete the roof expense"
+      },
+      {
+        "canonical": "tally.undo_expense{} on (it)",
+        "move": "undo",
+        "hint": "oh no, put it back / undo that"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Roof repair\"", "turn": 1, "say": "exact: roof" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0637",
+    "today": "Monday 2028-11-13",
+    "turns": [
+      {
+        "canonical": "show (notes that (deleted_at is not null))",
+        "move": "first",
+        "hint": "notes I've deleted / in the bin"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0904",
+    "today": "Thursday 2026-09-17",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (notes ordered by created_at desc))",
+        "move": "first",
+        "hint": "my newest note"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0959",
+    "today": "Tuesday 2027-08-03",
+    "turns": [
+      {
+        "canonical": "show (events of (parties called \"Ysolde Larkin\"))",
+        "move": "first",
+        "hint": "what's in my calendar with Ysolde"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Ysolde Larkin\"", "turn": 1, "say": "exact: Ysolde" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0346",
+    "today": "Saturday 2028-04-22",
+    "turns": [
+      {
+        "canonical": "count of (locker items that (type = \"note\"))",
+        "move": "first",
+        "hint": "how many of that type are in my locker"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0983",
+    "today": "Sunday 2027-05-23",
+    "turns": [
+      {
+        "canonical": "show (groups of (expenses called \"Fishing licence\"))",
+        "move": "first",
+        "hint": "which group was the fishing expense in"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Fishing licence\"",
+        "turn": 1,
+        "say": "exact: fishing"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1155",
+    "today": "Thursday 2025-08-28",
+    "turns": [
+      {
+        "canonical": "show (things during monday)",
+        "move": "first",
+        "hint": "what's on in that window"
+      },
+      {
+        "canonical": "delete{} on (the 2nd one)",
+        "move": "act",
+        "hint": "get rid of one of them by position"
+      },
+      {
+        "canonical": "restore{} on (it)",
+        "move": "undo",
+        "hint": "oops, bring it back"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0219",
+    "today": "Saturday 2026-03-28",
+    "turns": [
+      {
+        "canonical": "schedule.restore_task{} on (tasks called \"loft\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "bring back the deleted loft task"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0145",
+    "today": "Saturday 2028-05-27",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"note\", title: \"Door code\", content: \"8801\" }",
+        "move": "first",
+        "hint": "save the door code 8801 in my locker (title = the words the person uses for it, content = the code)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0014",
+    "today": "Sunday 2025-03-02",
+    "turns": [
+      {
+        "canonical": "show (expenses)",
+        "move": "first",
+        "hint": "list all my expenses"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0529",
+    "today": "Friday 2025-05-02",
+    "turns": [
+      {
+        "canonical": "show (documents that (updated_at during today))",
+        "move": "first",
+        "hint": "docs changed in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0588",
+    "today": "Tuesday 2027-02-09",
+    "turns": [
+      {
+        "canonical": "show (expenses that (amount_minor < 500 and spent_on during last week))",
+        "move": "first",
+        "hint": "small expenses under that amount in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0220",
+    "today": "Saturday 2028-01-01",
+    "turns": [
+      {
+        "canonical": "schedule.restore_task{} on (tasks called \"travel\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "bring back the deleted travel task"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

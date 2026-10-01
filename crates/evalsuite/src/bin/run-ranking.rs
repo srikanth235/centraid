@@ -23,7 +23,7 @@
 //! a suite nobody should rank candidates with, and that has to be a failure
 //! rather than a paragraph.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use centraid_evalsuite::degraded::DegradedReference;
@@ -117,7 +117,7 @@ fn monotone(label: &str, rows: &[Row], what: &str, of: impl Fn(&Row) -> f64) -> 
     broken
 }
 
-fn load(path: &PathBuf, template: &WorldTemplate) -> Result<Suite, String> {
+fn load(path: &Path, template: &WorldTemplate) -> Result<Suite, String> {
     let mut suite = Suite::read(path)?;
     suite.resolve(&template.inventory)?;
     Ok(suite)

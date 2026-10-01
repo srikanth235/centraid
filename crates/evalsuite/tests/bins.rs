@@ -164,9 +164,10 @@ fn validate_suite_is_clean_on_all_three_corpora() {
 /// first request and requires the run to fail on it.
 #[test]
 fn overlap_check_fails_on_a_planted_collision() {
-    let suite: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(manifest().join("suite.json")).expect("read"))
-            .expect("suite parses");
+    let suite: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(manifest().join("suite.json")).expect("read"),
+    )
+    .expect("suite parses");
     let stolen = suite["sessions"][0]["turns"][0]["request"]
         .as_str()
         .expect("a first request")

@@ -1,0 +1,224 @@
+[
+  {
+    "id": "g0352",
+    "today": "Monday 2026-03-09",
+    "turns": [
+      {
+        "canonical": "reschedule{ by: +1h } on (events called \"tasting\")",
+        "gloss": "Shift [events named \"tasting\"] 1 hour later.",
+        "move": "first",
+        "hint": "push/move the named event"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0348",
+    "today": "Friday 2026-09-11",
+    "turns": [
+      {
+        "canonical": "show (photos called \"asleep\" that (deleted_at is not null))",
+        "gloss": "List photos named \"asleep\" where the date deleted (trash) is set.",
+        "move": "first",
+        "hint": "did I delete / bin the asleep photo"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0623",
+    "today": "Tuesday 2027-01-26",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Pascal\") that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [parties named \"Pascal\"] where the kind is \"phone\".",
+        "move": "first",
+        "hint": "what's Pascal's number"
+      },
+      {
+        "canonical": "show (contact channels of (parties called \"Imogen Gorman\") that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [parties named \"Imogen Gorman\"] where the kind is \"phone\".",
+        "move": "substitute",
+        "hint": "and Imogen Gorman's?"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0559",
+    "today": "Thursday 2025-11-20",
+    "turns": [
+      {
+        "canonical": "reschedule{ to: tomorrow } on (tasks called \"apple tree\")",
+        "gloss": "Move [tasks named \"apple tree\"] to tomorrow.",
+        "move": "first",
+        "hint": "push/move the named task"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0380",
+    "today": "Tuesday 2026-07-28",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "first",
+        "hint": "open tasks with no due date"
+      },
+      {
+        "canonical": "dtstart of (events called \"rehearsal\")",
+        "gloss": "What is the start time of [events named \"rehearsal\"]?",
+        "move": "switch",
+        "hint": "when is my rehearsal"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic: act on those rows (C10 ref)"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0647",
+    "today": "Tuesday 2027-05-11",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\"))",
+        "gloss": "List tasks where the due date falls before now (already past \u2014 overdue) and the status is not \"completed\".",
+        "move": "first",
+        "hint": "overdue (past due, not done) tasks"
+      },
+      {
+        "canonical": "schedule.delete_task{} on (the 1st one)",
+        "gloss": "Delete (move to trash) [the 1st one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "delete one of them by position"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0223",
+    "today": "Friday 2026-11-20",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Dinner with Fern\", dtstart: thursday at 10:15, dtend: thursday at 11:15 }",
+        "gloss": "Put an event titled \"Dinner with Fern\" in the calendar starting thursday at 10:15 and ending thursday at 11:15.",
+        "move": "first",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      },
+      {
+        "canonical": "reschedule{ by: +1h } on (it)",
+        "gloss": "Shift [it (the one row the previous turn is about)] 1 hour later.",
+        "move": "act",
+        "hint": "make it an hour later"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Jolene\") that (settled_at is null))",
+        "gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Jolene\"] where there is no date settled]?",
+        "move": "new",
+        "hint": "how much do I owe Jolene"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0588",
+    "today": "Sunday 2028-06-18",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Buy a birthday card for Nan\", due_at: 2028-07-07T10:30 }",
+        "gloss": "Add a task titled \"Buy a birthday card for Nan\" due Friday 2028-07-07 at 10:30.",
+        "move": "first",
+        "hint": "add a task"
+      },
+      {
+        "canonical": "schedule.delete_task{} on (it)",
+        "gloss": "Delete (move to trash) [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "scrap that, delete it"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0363",
+    "today": "Thursday 2026-06-18",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during last month))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls last month.",
+        "move": "first",
+        "hint": "tasks ticked off / done last month"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0476",
+    "today": "Sunday 2025-11-30",
+    "turns": [
+      {
+        "canonical": "reschedule{ to: next friday } on (tasks called \"update\")",
+        "gloss": "Move [tasks named \"update\"] to next friday.",
+        "move": "first",
+        "hint": "push/move the named task"
+      },
+      {
+        "canonical": "nothing",
+        "gloss": "Do nothing: the member withdraws the request.",
+        "move": "undo",
+        "hint": "actually never mind / leave it"
+      },
+      {
+        "canonical": "show (expenses that (spent_on during last weekend))",
+        "gloss": "List expenses where the date spent falls last weekend.",
+        "move": "new",
+        "hint": "what did I do/take/spend over the weekend (past tense)"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0058",
+    "today": "Sunday 2027-05-02",
+    "turns": [
+      {
+        "canonical": "show (events called \"meeting\")",
+        "gloss": "List events named \"meeting\".",
+        "move": "first",
+        "hint": "when is my meeting"
+      },
+      {
+        "canonical": "schedule.cancel_event{} on (it)",
+        "gloss": "Cancel [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "cancel it"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0159",
+    "today": "Wednesday 2025-05-07",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Lucinda\" that (role contains \"colleague\"))",
+        "gloss": "List parties named \"Lucinda\" where the role contains \"colleague\".",
+        "move": "first",
+        "hint": "the Lucinda I used to work with"
+      }
+    ],
+    "registers": ["terse", "question"]
+  }
+]

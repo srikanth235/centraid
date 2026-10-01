@@ -1,0 +1,308 @@
+[
+  {
+    "id": "h072",
+    "today": "Sunday 2026-04-19",
+    "turns": [
+      {
+        "canonical": "core.trash_document{} on (documents called \"tenancy\")",
+        "gloss": "Delete (move to trash) [documents named \"tenancy\"].",
+        "move": "first",
+        "hint": "delete/trash the tenancy documents"
+      },
+      {
+        "canonical": "dtstart of (events called \"meeting\")",
+        "gloss": "What is the start time of [events named \"meeting\"]?",
+        "move": "new",
+        "hint": "when is my meeting"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0297",
+    "today": "Monday 2027-08-30",
+    "turns": [
+      {
+        "canonical": "people.log_interaction{ kind: \"coffee\", since: today } on (parties called \"Idris\")",
+        "gloss": "Log that I had a coffee with [parties named \"Idris\"].",
+        "move": "first",
+        "hint": "log a coffee with Idris (today)"
+      },
+      {
+        "canonical": "tally.add_expense{ amount_minor: 4200, description: \"Coffee and cake\" }",
+        "gloss": "Add an expense \"Coffee and cake\" of 42.00 (4200 pence).",
+        "move": "new",
+        "hint": "log an expense of 42.00"
+      },
+      {
+        "canonical": "show (notes that (notebooks contains \"House\"))",
+        "gloss": "List notes where the notebooks it is in contains \"House\".",
+        "move": "new",
+        "hint": "what's in my House folder/notebook"
+      },
+      {
+        "canonical": "knowledge.delete_note{} on (the 2nd one)",
+        "gloss": "Delete (move to trash) [the 2nd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "delete one by position"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0607",
+    "today": "Friday 2028-10-20",
+    "turns": [
+      {
+        "canonical": "social.send_message{ body: \"Remember to bring the charger\" } on (contact channels of (parties called \"Greta Lomax\") that (kind = \"phone\"))",
+        "gloss": "",
+        "move": "first",
+        "hint": "text Greta Lomax: Remember to bring the charger"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0323",
+    "today": "Thursday 2025-11-20",
+    "turns": [
+      {
+        "canonical": "show (photos that (album_titles contains \"2026\"))",
+        "gloss": "List photos where the albums it is in contains \"2026\".",
+        "move": "first",
+        "hint": "photos in the 2026 album"
+      },
+      {
+        "canonical": "media.delete_asset{} on (the 3rd one)",
+        "gloss": "Delete (move to trash) [the 3rd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "delete one by position"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0366",
+    "today": "Tuesday 2026-12-15",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Joaquim\") that (settled_at is null))",
+        "gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Joaquim\"] where there is no date settled]?",
+        "move": "first",
+        "hint": "how much do I owe Joaquim"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Vivienne\") that (settled_at is null))",
+        "gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Vivienne\"] where there is no date settled]?",
+        "move": "substitute",
+        "hint": "and Vivienne? (after a Value)"
+      },
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during last week))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls last week.",
+        "move": "new",
+        "hint": "tasks ticked off / done last week"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0043",
+    "today": "Saturday 2028-07-15",
+    "turns": [
+      {
+        "canonical": "show (things during the 4th)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's on the 4th"
+      },
+      {
+        "canonical": "delete{} on (the 3rd one)",
+        "gloss": "Delete (move to trash) [the 3rd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      },
+      {
+        "canonical": "reschedule{ to: tuesday } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to tuesday.",
+        "move": "act",
+        "hint": "and push it to a day (C12: it = the row just written)"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0065",
+    "today": "Wednesday 2025-05-21",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Rhiannon\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Rhiannon\"], sorted by start time descending (highest/latest first)].",
+        "move": "first",
+        "hint": "when did I last see/speak to Rhiannon"
+      },
+      {
+        "canonical": "dtstart of (events called \"quarterly review\")",
+        "gloss": "What is the start time of [events named \"quarterly review\"]?",
+        "move": "switch",
+        "hint": "when is my quarterly review"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Rhiannon\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Rhiannon\"], sorted by start time descending (highest/latest first)].",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      },
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "new",
+        "hint": "open tasks with no due date"
+      },
+      {
+        "canonical": "schedule.delete_task{} on (the 1st one)",
+        "gloss": "Delete (move to trash) [the 1st one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "delete the Nth"
+      },
+      {
+        "canonical": "reschedule{ to: tomorrow } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to tomorrow.",
+        "move": "act",
+        "hint": "and push it to a day (C12: it = the row just written)"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0292",
+    "today": "Thursday 2027-08-26",
+    "turns": [
+      {
+        "canonical": "tally.add_expense{ amount_minor: 1800, description: \"Takeaway pizza\", group_id: (groups called \"tickets\"), paid_by: me }",
+        "gloss": "Add an expense \"Takeaway pizza\" of 18.00 (1800 pence), in the group [groups named \"tickets\"], paid by me (the member).",
+        "move": "first",
+        "hint": "log an expense of 18.00"
+      },
+      {
+        "canonical": "show (notes that (notebooks contains \"Medical\"))",
+        "gloss": "List notes where the notebooks it is in contains \"Medical\".",
+        "move": "new",
+        "hint": "what's in my Medical folder/notebook"
+      },
+      {
+        "canonical": "knowledge.delete_note{} on (the 2nd one)",
+        "gloss": "Delete (move to trash) [the 2nd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "delete one by position"
+      },
+      {
+        "canonical": "balance of (members called \"Esme\") in (groups called \"trip\")",
+        "gloss": "What is the balance of [members named \"Esme\"] within [groups named \"trip\"]?",
+        "move": "new",
+        "hint": "what does Esme owe me for trip"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0407",
+    "today": "Saturday 2028-04-08",
+    "turns": [
+      {
+        "canonical": "show (locker items called \"code\")",
+        "gloss": "List locker items named \"code\".",
+        "move": "first",
+        "hint": "what's the login for code"
+      },
+      {
+        "canonical": "locker.reveal_receipt{ columns: \"password\" } on (it)",
+        "gloss": "Reveal the \"password\" of [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "show me the password"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0150",
+    "today": "Sunday 2025-04-13",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Ursula\" that (role contains \"colleague\"))",
+        "gloss": "List parties named \"Ursula\" where the role contains \"colleague\".",
+        "move": "first",
+        "hint": "the Ursula I used to work with"
+      },
+      {
+        "canonical": "show (contact channels of (it) that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [it (the one row the previous turn is about)] where the kind is \"phone\".",
+        "move": "act",
+        "hint": "what's their number"
+      },
+      {
+        "canonical": "social.send_message{ body: \"Can you call me back\" } on (it)",
+        "gloss": "",
+        "move": "act",
+        "hint": "text them that"
+      },
+      {
+        "canonical": "show (expenses that (spent_on during last month))",
+        "gloss": "List expenses where the date spent falls last month.",
+        "move": "new",
+        "hint": "what did I spend last month"
+      },
+      {
+        "canonical": "show (expenses that (spent_on during last week))",
+        "gloss": "List expenses where the date spent falls last week.",
+        "move": "substitute",
+        "hint": "and last week?"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0113",
+    "today": "Saturday 2026-01-24",
+    "turns": [
+      {
+        "canonical": "show (photos called \"garden\")",
+        "gloss": "List photos named \"garden\".",
+        "move": "first",
+        "hint": "find the garden photo"
+      },
+      {
+        "canonical": "show (places of (it))",
+        "gloss": "List the places linked to [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "where was it taken"
+      },
+      {
+        "canonical": "show ((photos of (it)) except (the earlier one))",
+        "gloss": "List [the photos linked to [it (the one row the previous turn is about)]] leaving out [the earlier one (what was answered TWO turns back)].",
+        "move": "act",
+        "hint": "what else is in it/there (minus the photo from two turns back)"
+      },
+      {
+        "canonical": "show (places of (the 3rd one))",
+        "gloss": "List the places linked to [the 3rd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "where was the Nth taken"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0684",
+    "today": "Tuesday 2026-08-11",
+    "turns": [
+      {
+        "canonical": "show (important dates of (parties called \"Quentin\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Quentin\"] where the label contains \"Birthday\".",
+        "move": "first",
+        "hint": "when is Quentin's birthday"
+      }
+    ],
+    "registers": ["question", "terse"]
+  }
+]

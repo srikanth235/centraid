@@ -1,0 +1,282 @@
+[
+  {
+    "id": "w03-024",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks for Faustina's contact card", "say": ["Faustina"] },
+      {
+        "hint": "(new topic) asks to put back the draft note they deleted",
+        "say": ["draft"]
+      },
+      {
+        "hint": "(new topic) asks to move the Saskia comes task to thursday",
+        "say": ["Saskia comes", "thursday"]
+      },
+      { "hint": "corrects: no, make it monday", "say": ["monday"] },
+      {
+        "hint": "(new topic) asks what's in the Roof notebook",
+        "say": ["Roof"]
+      },
+      { "hint": "asks which of those are about plan", "say": ["plan"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w03-025",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks to add a task 'Collect the passport forms' for saturday at 17:30",
+        "say": ["Collect the passport forms", "saturday"]
+      },
+      {
+        "hint": "(new topic) asks when they were last in touch with Bettina Ormsby",
+        "say": ["Bettina Ormsby"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "polite"]
+  },
+  {
+    "id": "w03-026",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks when they need to remember Imogen's birthday",
+        "say": ["Imogen"]
+      },
+      { "hint": "(new topic) asks what's happening monday", "say": ["monday"] },
+      {
+        "hint": "(new topic) asks to add 90 (money) for firewood to the weekend group, paid by them",
+        "say": ["weekend", "firewood"]
+      },
+      { "hint": "asks for just the circle ones", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "question"]
+  },
+  {
+    "id": "w03-027",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks whether Saskia Radley's birthday is coming up",
+        "say": ["Saskia Radley"]
+      },
+      {
+        "hint": "(new topic) asks who Hedda Ulrich is",
+        "say": ["Hedda Ulrich"]
+      },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks for their photos about Kayaks",
+        "say": ["Kayaks"]
+      },
+      {
+        "hint": "(new topic) asks whether they owe Quincy Brackenholt anything",
+        "say": ["Quincy Brackenholt"]
+      },
+      { "hint": "(new topic) asks who they still have to pay back", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "polite"]
+  },
+  {
+    "id": "w03-028",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks whose birthdays are coming up this week",
+        "say": ["this week"]
+      },
+      {
+        "hint": "asks for just the ones on sunday (sunday)",
+        "say": ["sunday"]
+      },
+      {
+        "hint": "(new topic) asks where the Mobile login details are",
+        "say": ["Mobile"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "terse"]
+  },
+  {
+    "id": "w03-029",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks for their notes about budget notes",
+        "say": ["budget notes"]
+      },
+      {
+        "hint": "(new topic) asks what they have on next monday (calendar, to-dos, birthdays)",
+        "say": ["next monday"]
+      },
+      {
+        "hint": "(new topic) asks for their calendar events about maintenance",
+        "say": ["maintenance"]
+      },
+      {
+        "hint": "(new topic) asks what they have filed under School",
+        "say": ["School"]
+      },
+      {
+        "hint": "(new topic) asks what they wrote in their journal this week",
+        "say": ["this week"]
+      },
+      {
+        "hint": "(new topic) asks for their to-dos about loft",
+        "say": ["loft"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "terse"]
+  },
+  {
+    "id": "w03-030",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks if they have any photos about Kayaks",
+        "say": ["Kayaks"]
+      },
+      {
+        "hint": "(new topic) asks to find Yannick Vanstone in their contacts",
+        "say": ["Yannick Vanstone"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "texting"]
+  },
+  {
+    "id": "w03-031",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks for their pictures from Farthing Studio",
+        "say": ["Farthing Studio"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  },
+  {
+    "id": "w03-032",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks to pull up Perpetua Brackenholt",
+        "say": ["Perpetua Brackenholt"]
+      },
+      {
+        "hint": "(new topic) asks to bin the Fridge document",
+        "say": ["Fridge"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "terse"]
+  },
+  {
+    "id": "w03-033",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks to find the notes on Violin", "say": ["Violin"] },
+      {
+        "hint": "asks the same about Radiator ideas instead ('what about Radiator ideas?')",
+        "say": ["Radiator ideas"]
+      },
+      {
+        "hint": "asks the same about Allotment instead ('what about Allotment?')",
+        "say": ["Allotment"]
+      },
+      { "hint": "asks whether there are any photos about it too", "say": [] },
+      {
+        "hint": "(new topic) asks for Winifred Prescott's contact card",
+        "say": ["Winifred Prescott"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "question"]
+  },
+  {
+    "id": "w03-034",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks what the weather will be tomorrow", "say": [] },
+      {
+        "hint": "(new topic) asks to find anything to do with Kalinda",
+        "say": ["Kalinda"]
+      },
+      {
+        "hint": "(new topic) asks to delete all their shopping list notes",
+        "say": ["shopping list"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "terse"]
+  },
+  {
+    "id": "w03-035",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks for the members of the Farewell group",
+        "say": ["Farewell"]
+      },
+      { "hint": "(new topic) asks what's left on their to-do list", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "spoken"]
+  },
+  {
+    "id": "w03-036",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks to put 'Vet visit' in the calendar monday at 10:30",
+        "say": ["Vet visit", "monday"]
+      },
+      {
+        "hint": "(new topic) asks to delete all their shopping list notes",
+        "say": ["shopping list"]
+      },
+      {
+        "hint": "(new topic) asks which photos mention close-up",
+        "say": ["close-up"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w03-037",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks to move the membership task to tomorrow",
+        "say": ["membership", "tomorrow"]
+      },
+      { "hint": "corrects: no, make it thursday", "say": ["thursday"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "texting"]
+  },
+  {
+    "id": "w03-038",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks what they have already done on their list", "say": [] },
+      {
+        "hint": "asks for just the ones this week (this week)",
+        "say": ["week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  }
+]

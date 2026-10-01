@@ -1,0 +1,293 @@
+[
+  {
+    "id": "w09-0012",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks which to-dos take about thirty minute",
+        "say": ["thirty minute"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w09-0013",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      { "hint": "asks what is still due thursday", "say": ["thursday"] },
+      {
+        "hint": "follow-up: asks the same for tuesday ('and tuesday?')",
+        "say": ["tuesday"],
+        "shown": "task \"Insure the keystone this week\" Thu 2026-03-26 09:00 · status=needs-action effort_min=90"
+      },
+      {
+        "hint": "follow-up: says the sell one is done",
+        "say": ["sell"],
+        "shown": "task \"Change the bedding (wk 14)\" Tue 2026-03-31 09:00 · status=needs-action effort_min=180\ntask \"Sell the curling at Buttermere Hill\" Tue 2026-03-31 09:00 · status=needs-action effort_min=15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w09-0014",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks who is coming to the curling fair",
+        "say": ["curling fair", "who"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w09-0015",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks when the curling fair is",
+        "say": ["curling fair", "when"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w09-0017",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks to bump the Ryota a day later",
+        "say": ["Ryota", "a day later"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w09-0018",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks whether they binned the dormer document",
+        "say": ["dormer", "document"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w09-0019",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks to bring the cobbler task back from the bin",
+        "say": ["cobbler", "task"]
+      },
+      {
+        "hint": "(new topic) asks for the kabaddi fund expenses above 30 rand",
+        "say": ["kabaddi fund", "30 rand"],
+        "shown": "done: restore{} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks how much the shithum one was",
+        "say": ["shithum"],
+        "shown": "expense \"Urn supplies\" Mon 2026-03-23 · amount_minor=4823 paid_by=Hilda Kovacs\nexpense \"Kiln repair\" Wed 2026-03-18 · amount_minor=5199 paid_by=Hilda Kovacs\nexpense \"Kiln lessons\" Sun 2026-03-15 · amount_minor=4850 paid_by=Hilda Kovacs\nexpense \"Viola night repair\" Sat 2026-03-14 · amount_minor=4600 paid_by=Owner\n(+3 more)"
+      },
+      {
+        "hint": "follow-up: about the lessons one, asks which group it's in",
+        "say": ["lessons"],
+        "shown": "= 4550"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w09-0020",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      { "hint": "asks what day the joiner is on", "say": ["joiner"] },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "event \"Joiner check-up\" Sun 2026-04-05 17:45"
+      },
+      {
+        "hint": "follow-up: asks what events they're coming to",
+        "say": [],
+        "shown": "party \"Bastien Baisescu\" · role=Joiner"
+      },
+      {
+        "hint": "follow-up: asks the same about the postcard ('and the postcard?')",
+        "say": ["postcard"],
+        "shown": "event \"Joiner check-up\" Sun 2026-04-05 17:45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w09-0021",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "says they paid twenty rand for wine — put it in Vyrness trip",
+        "say": ["twenty rand", "wine", "Vyrness trip"]
+      },
+      {
+        "hint": "(new topic) asks what's in the vault about Bylford",
+        "say": ["Bylford"],
+        "shown": "done: tally.add_expense{description: \"Wine\", amount_minor: 2000, paid_by: me, group_id: (#1)}"
+      },
+      {
+        "hint": "follow-up: asks what the password on it is",
+        "say": ["password"],
+        "shown": "event \"Brunch at Bylford Food Hall\" Sun 2026-04-05 15:45\nlocker item \"Bylford Food Hall wifi\" · type=wifi\nplace \"Bylford Food Hall\"\nphoto \"Kiln at Bylford Food Hall\" Sat 2026-03-14 18:25 · album_titles=Viola night highlights favorite=false\n(+4 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w09-0022",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      { "hint": "asks who's invited to the pick", "say": ["pick"] },
+      {
+        "hint": "follow-up: asks who else is coming apart from Otieno",
+        "say": ["Otieno"],
+        "shown": "party \"Otieno Thartuak\" · role=Uncle\nparty \"Jirina Thartuak\" · role=Dad\nparty \"Fundir Lothez\" · role=Book club friend\nparty \"Xander Thartuak\" · role=Daughter"
+      },
+      {
+        "hint": "(detour) hang on — asks for their favourite photos",
+        "say": [],
+        "shown": "party \"Jirina Thartuak\" · role=Dad\nparty \"Fundir Lothez\" · role=Book club friend\nparty \"Xander Thartuak\" · role=Daughter"
+      },
+      {
+        "hint": "back to the pick — asks if they have a photo of any of them",
+        "say": [],
+        "shown": "photo \"Hiwot's urn\" Mon 2026-03-23 13:58 · album_titles=Fudge, Walks round Fawick Food Hall, Vio… favorite=true\nphoto \"Mothball at Fawick Food Hall\" Sat 2026-03-07 19:40 · album_titles=Fudge, Vyrness 2025 favorite=true\nphoto \"Mikkel's chimney\" Mon 2026-03-02 17:23 · album_titles=Best of 2025, Vyrness 2025 favorite=true\nphoto \"Ryota's urn\" Thu 2026-02-26 14:11 · favorite=true\n(+2 more)"
+      },
+      {
+        "hint": "(new topic) asks what's on thursday",
+        "say": ["thursday"],
+        "shown": "photo \"Foxglove in the garden\" Tue 2026-02-24 14:50 · album_titles=Turnstone 2024 favorite=false people=Fundir Lothez, Rereth Touvard"
+      },
+      {
+        "hint": "follow-up: asks to move the first one to monday and the third one to saturday",
+        "say": ["first", "monday", "third", "saturday"],
+        "shown": "task \"Insure the keystone this week\" Thu 2026-03-26 09:00 · status=needs-action effort_min=90\nevent \"Freediving class\" Thu 2026-03-26 13:30\nevent \"Mandolin night\" Thu 2026-03-26 16:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w09-0023",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in kabaddi fund",
+        "say": ["kabaddi fund", "how much"]
+      },
+      {
+        "hint": "(detour) hang on — asks to see the shots from February",
+        "say": ["February"],
+        "shown": "= 41675"
+      },
+      {
+        "hint": "back to that — about the first one, asks for its expenses",
+        "say": ["first"],
+        "shown": "photo \"Ryota's urn\" Thu 2026-02-26 14:11 · favorite=true\nphoto \"IMG_3876\" Thu 2026-02-26 12:53 · album_titles=Viola night highlights favorite=false\nphoto \"Foxglove in the garden\" Tue 2026-02-24 14:50 · album_titles=Turnstone 2024 favorite=false people=Fundir Lothez, Rereth Touvard\nphoto \"Lighthouse at dusk\" Sun 2026-02-22 20:17 · favorite=false people=Astrid Albrecht\n(+8 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w09-0024",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in kabaddi fund (the expenses)",
+        "say": ["kabaddi fund"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w09-0025",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks to move the Rereth task to monday",
+        "say": ["Rereth", "monday"]
+      },
+      {
+        "hint": "(new topic) asks to find the tasks on label",
+        "say": ["label", "tasks"],
+        "shown": "done: reschedule{to: 2026-03-30} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks to message Ryota the mobile account",
+        "say": ["Ryota", "mobile account"],
+        "shown": "task \"Label the ladle\" Sat 2026-03-14 12:00 · status=cancelled effort_min=15"
+      },
+      {
+        "hint": "(new topic) asks for the subtasks of the insure the keystone this week task",
+        "say": ["insure the keystone this week"],
+        "shown": "refuse"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w09-0026",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks who Ryota is (several people are called Ryota)",
+        "say": ["Ryota"]
+      },
+      {
+        "hint": "follow-up: about the Vravridge one, asks what events they're coming to",
+        "say": ["Vravridge"],
+        "shown": "party \"Ryota Vravridge\" · role=Mentor\nparty \"Ryota Papadopoulos\" · role=Landlord"
+      },
+      {
+        "hint": "(detour) hang on — asks what they have about Harriet",
+        "say": ["Harriet"],
+        "shown": "event \"Collect the postcard\" Tue 2026-03-10 14:45\nevent \"Collect the yacht\" Sat 2026-04-04 13:45"
+      },
+      {
+        "hint": "back to Ryota — asks what their photos have on it",
+        "say": ["photos"],
+        "shown": "event \"Coffee with Harriet\" Thu 2026-03-12 14:15\nnote \"Gift ideas for Harriet\" Sat 2026-01-17 08:56 · notebooks=Garden log\nparty \"Harriet Balogun\" · role=Best friend\nimportant date \"Birthday — Harriet Balogun\" Fri 2026-03-27\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w09-0027",
+    "today": "Wednesday 2026-03-25",
+    "turns": [
+      {
+        "hint": "asks for their documents about kabaddi",
+        "say": ["kabaddi", "documents"]
+      },
+      {
+        "hint": "(new topic) asks to bump the koto club back a day",
+        "say": ["koto club", "back a day"],
+        "shown": "document \"Kabaddi report\" Tue 2025-12-02 17:52 · folder=Pension"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  }
+]

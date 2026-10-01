@@ -1,0 +1,314 @@
+[
+  {
+    "id": "w32-0003",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the marimba club is",
+        "say": ["marimba club", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w32-0004",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "asks what's in the Cemzumere trips notebook",
+        "say": ["Cemzumere trips", "notebook"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w32-0008",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "asks to settle up with Mandara in Salento trip",
+        "say": ["Mandara", "Salento trip"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w32-0009",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "asks who'll be at the piano teacher",
+        "say": ["piano teacher"]
+      },
+      {
+        "hint": "follow-up: asks for a task to email Bevan sunday",
+        "say": ["email Bevan", "sunday"],
+        "shown": "party \"Aylin Bevan\" · role=Piano teacher"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w32-0010",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "asks what documents they have linked to Lunenburg Lido",
+        "say": ["Lunenburg Lido"]
+      },
+      {
+        "hint": "(new topic) asks who is coming to the viewpoint",
+        "say": ["viewpoint"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: asks for pictures with any of those people in",
+        "say": [],
+        "shown": "party \"Ludmila Soderberg\" · role=Book club friend\nparty \"Borren Gemmere\" · role=Sister"
+      },
+      {
+        "hint": "(detour) hang on — asks what the badminton expenses add up to",
+        "say": ["badminton"],
+        "shown": "photo \"Otter at sunrise\" Sun 2027-09-26 11:31 · favorite=false people=Ludmila Soderberg, Mandara Fonseca"
+      },
+      {
+        "hint": "back to the viewpoint — asks for a task to print the otter photo saturday",
+        "say": ["print the otter photo", "saturday"],
+        "shown": "= 12369"
+      },
+      {
+        "hint": "follow-up: asks who is in it",
+        "say": [],
+        "shown": "done: schedule.add_task{title: \"Print the otter photo\", due_at: 2027-10-16}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w32-0012",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      { "hint": "asks who they're in debt to", "say": [] },
+      {
+        "hint": "follow-up: asks for only those more than forty dollars",
+        "say": ["forty dollars"],
+        "shown": "party \"Milos Liang\" · owed_to_them_minor=500 role=Old school friend\nparty \"Pryndan Jovkisen\" · owed_to_them_minor=7500 role=Mum"
+      },
+      {
+        "hint": "(detour) hang on — asks what the wifi is at the studio",
+        "say": ["studio", "wifi"],
+        "shown": "party \"Pryndan Jovkisen\" · owed_to_them_minor=7500 role=Mum"
+      },
+      {
+        "hint": "back to the money — asks what events they're coming to",
+        "say": [],
+        "shown": "locker item \"Studio wifi\" · type=wifi"
+      },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "event \"Dinner with Daan\" Wed 2027-10-13 07:00"
+      },
+      {
+        "hint": "follow-up: says forget it",
+        "say": [],
+        "shown": "party \"Golnar Jovkisen\" · role=Daughter\nparty \"Pryndan Jovkisen\" · owed_to_them_minor=7500 role=Mum"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w32-0013",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "asks how many tasks due next week they have",
+        "say": ["next week", "how many"]
+      },
+      {
+        "hint": "(new topic) asks what's on tomorrow",
+        "say": ["tomorrow"],
+        "shown": "= 5"
+      },
+      {
+        "hint": "follow-up: asks to move all of them to saturday",
+        "say": ["saturday"],
+        "shown": "event \"Gamelan club with Grysien\" Sat 2027-10-16 12:45\nevent \"Handball club\" Sat 2027-10-16 15:15\nevent \"Teacake fitting\" Sat 2027-10-16 20:45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w32-0014",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "asks which tasks due next week they have",
+        "say": ["next week", "which"]
+      },
+      {
+        "hint": "(detour) hang on — asks who they're seeing at the brewing",
+        "say": ["brewing"],
+        "shown": "task \"Water the plants (wk 42)\" Tue 2027-10-19 09:00 · status=needs-action effort_min=20\ntask \"Pay for the gadget\" Wed 2027-10-20 09:00 · status=in-process\ntask \"Pay for the marmalade this week\" Fri 2027-10-22 09:00 · status=needs-action\ntask \"Cancel the gadget\" Sat 2027-10-23 17:00 · status=needs-action effort_min=30\n(+1 more)"
+      },
+      {
+        "hint": "back to that — asks to tick off the first one and delete the third one",
+        "say": ["first", "third"],
+        "shown": "party \"Seren Laidlaw\" · role=Neighbour\nparty \"Dashiell Pithow\" · role=Caretaker\nparty \"Roisin Wadsworth\" · role=Neighbour next door"
+      },
+      {
+        "hint": "(new topic) asks what's left on their to-do list",
+        "say": [],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#1) then delete{} on (#3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w32-0015",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "says they visited Roisin and asks to log it (two contacts are called Roisin; the message doesn't say which)",
+        "say": ["Roisin", "visited"]
+      },
+      {
+        "hint": "follow-up: says it was Roisin Wadsworth",
+        "say": ["Wadsworth"],
+        "shown": "asked: Which Roisin — Brisak or Wadsworth?"
+      },
+      {
+        "hint": "follow-up: asks what events they're coming to",
+        "say": [],
+        "shown": "done: people.log_interaction{kind: \"visit\"} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks to move the third one to tomorrow and cancel the fifth one",
+        "say": ["third", "tomorrow", "fifth"],
+        "shown": "event \"Bassoon club with Tuula\" Mon 2027-10-11 10:45\nevent \"Backgammon session\" Wed 2027-10-13 08:15\nevent \"Brunch at Criness Library\" Sun 2027-10-17 10:15\nevent \"Collect the steeple\" Sun 2027-10-17 13:30\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w32-0016",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "asks to reserve a table at Biarritz Lane for the weekend",
+        "say": ["Biarritz Lane", "the weekend"]
+      },
+      {
+        "hint": "(new topic) asks what pictures they have from last week",
+        "say": ["last week"],
+        "shown": "refuse"
+      },
+      {
+        "hint": "(detour) hang on — asks what the last thing they wrote in their journal was",
+        "say": [],
+        "shown": "photo \"Yoghurt after the rain\" Thu 2027-10-07 09:52 · album_titles=Walks round Criness Climbing Wall favorite=true\nphoto \"Javelin at Chepstow Dunes\" Wed 2027-10-06 18:32 · album_titles=Gadget progress favorite=false\nphoto \"Pretzel at Berholm Cove\" Wed 2027-10-06 09:31 · album_titles=Tatting session highlights favorite=false\nphoto \"Cabinet from above\" Tue 2027-10-05 12:59 · favorite=false\n(+1 more)"
+      },
+      {
+        "hint": "back to the photos from last week — about the javelin one, asks where it was taken",
+        "say": ["javelin"],
+        "shown": "journal note \"People journal · flat\" Thu 2027-10-14 12:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w32-0017",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "asks to settle up with Pryndan in badminton collective",
+        "say": ["Pryndan", "badminton collective", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks to add the chepstow dunes picture to the Salento 2027 album",
+        "say": ["chepstow dunes", "Salento 2027", "album"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#4) in (#1)} on (#4)"
+      },
+      {
+        "hint": "follow-up: asks what else is in that album",
+        "say": [],
+        "shown": "done: media.add_to_album{album_id: (#10)} on (#6)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w32-0018",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "asks to add twelve dollars for Pryndan's tickets to badminton collective, they paid",
+        "say": ["twelve dollars", "Pryndan's tickets", "badminton collective"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w32-0019",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "asks for their written notes about handball club",
+        "say": ["handball club", "notes"]
+      },
+      {
+        "hint": "(new topic) asks which expenses are in the number 19 house group",
+        "say": ["number 19 house"],
+        "shown": "note \"Handball club notes\" Sat 2027-09-25 17:09 · notebooks=Garden log"
+      },
+      {
+        "hint": "(detour) hang on — asks what the Salento expenses add up to",
+        "say": ["Salento"],
+        "shown": "expense \"Marmalade\" Tue 2027-10-12 · amount_minor=13463 paid_by=Bozena Jovkisen\nexpense \"Dinner at Biarritz Lane\" Wed 2027-09-22 · amount_minor=18017 paid_by=Owner\nexpense \"Gadget parts\" Wed 2027-09-22 · amount_minor=4850 paid_by=Bethan Oldroyd\nexpense \"Gingerbread tickets\" Mon 2027-09-20 · amount_minor=12581 paid_by=Roisin Wadsworth\n(+6 more)"
+      },
+      {
+        "hint": "back to the number 19 house expenses — asks how much the deposit one was",
+        "say": ["deposit"],
+        "shown": "= 9142"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w32-0021",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "asks who they're having lunch with on sunday",
+        "say": ["lunch", "sunday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w32-0023",
+    "today": "Friday 2027-10-15",
+    "turns": [
+      {
+        "hint": "asks who their lunch on sunday is with",
+        "say": ["lunch", "sunday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  }
+]

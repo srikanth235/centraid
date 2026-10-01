@@ -1,0 +1,177 @@
+[
+  {
+    "id": "r2_0048",
+    "prev": "NONE",
+    "target": "show obligations of (parties called \"Omar Farouk\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0049",
+    "prev": "show first 1 of (activities of (parties called \"Lina Haddad\") ordered by started_at desc)",
+    "target": "show obligations of (parties called \"Lina Haddad\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0050",
+    "prev": "show first 1 of (activities of (parties called \"Sigrun Ingvarsdottir\") ordered by started_at desc)",
+    "target": "show obligations of (parties called \"Sigrun Ingvarsdottir\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0051",
+    "prev": "show first 1 of (activities of (parties called \"Ilkka Juntunen\") ordered by started_at desc)",
+    "target": "show obligations of (parties called \"Ilkka Juntunen\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0052",
+    "prev": "show first 1 of (activities of (parties called \"Hannah\") ordered by started_at desc)",
+    "target": "show obligations of (parties called \"Hannah\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0053",
+    "prev": "show first 1 of (activities of (parties called \"Grace Mwangi\") ordered by started_at desc)",
+    "target": "show obligations of (parties called \"Grace Mwangi\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0054",
+    "prev": "show first 1 of (activities of (parties called \"Mateo Rossi\") ordered by started_at desc)",
+    "target": "show obligations of (parties called \"Mateo Rossi\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0055",
+    "prev": "show first 1 of (activities of (parties called \"Tomasz Nowak\") ordered by started_at desc)",
+    "target": "show obligations of (parties called \"Tomasz Nowak\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0056",
+    "prev": "show first 1 of (activities of (parties called \"Bronwen Aberforth\") ordered by started_at desc)",
+    "target": "show obligations of (parties called \"Bronwen Aberforth\") that (settled_at is null)"
+  },
+  {
+    "id": "r2_0057",
+    "prev": "sum amount_minor of (obligations of (parties called \"Amara\") that (settled_at is null))",
+    "target": "sum amount_minor of (obligations of (parties called \"Diego Torres\") that (settled_at is null))"
+  },
+  {
+    "id": "r2_0058",
+    "prev": "sum amount_minor of (obligations of (parties called \"Tomasz\") that (settled_at is null))",
+    "target": "sum amount_minor of (obligations of (parties called \"Thaddeus Radcliffe\") that (settled_at is null))"
+  },
+  {
+    "id": "r2_0059",
+    "prev": "sum amount_minor of (obligations of (parties called \"Mateo Rossi\") that (settled_at is null))",
+    "target": "sum amount_minor of (obligations of (parties called \"Samuel Osei\") that (settled_at is null))"
+  },
+  {
+    "id": "r2_0060",
+    "prev": "sum amount_minor of (obligations of (parties called \"Gundula Reinhardt\") that (settled_at is null))",
+    "target": "sum amount_minor of (obligations of (parties called \"Kenji Watanabe\") that (settled_at is null))"
+  },
+  {
+    "id": "r2_0061",
+    "prev": "sum amount_minor of (obligations of (parties called \"Hannah\") that (settled_at is null))",
+    "target": "sum amount_minor of (obligations of (parties called \"Pablo\") that (settled_at is null))"
+  },
+  {
+    "id": "r2_0062",
+    "prev": "sum amount_minor of (obligations of (parties called \"Grace\") that (settled_at is null))",
+    "target": "sum amount_minor of (obligations of (parties called \"Nkechi Onyekwere\") that (settled_at is null))"
+  },
+  {
+    "id": "r2_0063",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Ingrid Berg\") ordered by started_at desc)"
+  },
+  {
+    "id": "r2_0064",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Mateo\") ordered by started_at desc)"
+  },
+  {
+    "id": "r2_0065",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Sandor Karolyi\") ordered by started_at desc)"
+  },
+  {
+    "id": "r2_0066",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Jaromir Havlicek\") ordered by started_at desc)"
+  },
+  {
+    "id": "r2_0067",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Fatima Haddad\") ordered by started_at desc)"
+  },
+  {
+    "id": "r2_0068",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Maya Cohen\") ordered by started_at desc)"
+  },
+  {
+    "id": "r2_0069",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Casimir Zielinski\") ordered by started_at desc)"
+  },
+  {
+    "id": "r2_0071",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Elena\") ordered by started_at desc)"
+  },
+  {
+    "id": "r2_0073",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Obinna Nwachukwu\") ordered by started_at desc)"
+  },
+  {
+    "id": "r2_0074",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Tamsin Penhallow\") ordered by started_at desc)"
+  },
+  {
+    "id": "r2_0075",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Eamonn Donnelly\") ordered by started_at desc)"
+  },
+  {
+    "id": "r2_0076",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Leila Karimi\") ordered by started_at desc)"
+  },
+  {
+    "id": "r2_0077",
+    "prev": "NONE",
+    "target": "show first 1 of (activities of (parties called \"Hugo Martin\") ordered by started_at desc)"
+  },
+  {
+    "id": "r2_0078",
+    "prev": "NONE",
+    "target": "show parties called \"Maya\""
+  },
+  {
+    "id": "r2_0079",
+    "prev": "NONE",
+    "target": "show parties called \"Tamsin Penhallow\""
+  },
+  {
+    "id": "r2_0080",
+    "prev": "NONE",
+    "target": "show parties called \"Diego\""
+  },
+  {
+    "id": "r2_0081",
+    "prev": "NONE",
+    "target": "show parties called \"Casimir Zielinski\""
+  },
+  {
+    "id": "r2_0082",
+    "prev": "NONE",
+    "target": "show parties called \"Petronella Vandermeer\""
+  },
+  {
+    "id": "r2_0084",
+    "prev": "NONE",
+    "target": "show parties called \"Keturah Massoud\""
+  },
+  {
+    "id": "r2_0085",
+    "prev": "NONE",
+    "target": "show parties called \"Mei Lin\""
+  }
+]

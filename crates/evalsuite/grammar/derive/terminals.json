@@ -58,7 +58,9 @@
     "member_party_ids": "manifest",
     "next_occurrence": "manifest",
     "owed_to_me": "manifest",
-    "owed_to_them": "manifest"
+    "owed_to_me_minor": "manifest",
+    "owed_to_them": "manifest",
+    "owed_to_them_minor": "manifest"
   },
 
   "$verbClassesNote": "The CLASS NAME a member says, mapped onto the effect `derive_grammar.py` found in each command's handler SQL. `emit.py` refuses a member that is not a registered command. The entity spellings are the grammar's; where they differ from the one the derivation files the command under, DIFF.md section C says so (`media.delete_asset` takes an `asset_id`).",
@@ -118,6 +120,16 @@
     "next month",
     "before now",
     "recently"
+  ],
+  "$relativeDaysNote": "The weekday words of a relative date (GRAMMAR.md 1.3, `RelDate`). The executor resolves them against the session's today before execution; the model never computes a date from them.",
+  "relativeDays": [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday"
   ],
   "declineReasons": [
     "out_of_ontology",

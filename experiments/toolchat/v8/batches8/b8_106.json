@@ -1,0 +1,306 @@
+[
+  {
+    "id": "w30-0055",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the library portal is",
+        "say": ["library portal", "password"]
+      },
+      {
+        "hint": "(new topic) asks to get rid of every leisure appointment",
+        "say": ["leisure", "appointment"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w30-0056",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "says the locker combination is 41539 — keep it in the locker",
+        "say": ["locker combination", "41539"]
+      },
+      {
+        "hint": "(new topic) asks what is still due this weekend",
+        "say": ["this weekend"],
+        "shown": "done: locker.add_item{type: \"note\", title: \"Locker combination\", content: \"41539\"}"
+      },
+      {
+        "hint": "(new topic) asks whose birthdays are coming up next two months",
+        "say": ["next two months", "months"],
+        "shown": "task \"Check the Oban ferry\" Sun 2027-10-31 12:00 · status=needs-action effort_min=15"
+      },
+      {
+        "hint": "follow-up: asks to see just the third one",
+        "say": ["third"],
+        "shown": "important date \"Birthday — Tresto Juarez\" Fri 2027-10-29\nimportant date \"Birthday — Bhavna Mahony\" Sat 2027-11-20\nimportant date \"Birthday — Dimitri Navow\" Thu 2027-11-04"
+      },
+      {
+        "hint": "(new topic) asks what they have 10 days from now",
+        "say": ["10", "days"],
+        "shown": "important date \"Birthday — Dimitri Navow\" Thu 2027-11-04"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w30-0057",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks how many events tomorrow they have",
+        "say": ["tomorrow", "how many"]
+      },
+      {
+        "hint": "follow-up: says scrap that, they'll check later themselves",
+        "say": [],
+        "shown": "= 2"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w30-0058",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks which events tomorrow they have",
+        "say": ["tomorrow", "which"]
+      },
+      {
+        "hint": "(new topic) asks what time the elbow repair is",
+        "say": ["elbow repair"],
+        "shown": "event \"Rummy session with Moan\" Thu 2027-10-28 12:15\nevent \"Call Gresten about the pearl\" Thu 2027-10-28 16:30"
+      },
+      {
+        "hint": "follow-up: asks for a task to print the elbow booking tuesday",
+        "say": ["print the elbow booking", "tuesday"],
+        "shown": "event \"Elbow repair\" Sat 2027-10-23 15:45"
+      },
+      {
+        "hint": "(new topic) asks when they last spoke to Sefo Wanjala",
+        "say": ["Sefo Wanjala"],
+        "shown": "done: schedule.add_task{title: \"Print the elbow booking\", due_at: 2027-11-02}"
+      },
+      {
+        "hint": "(new topic) asks for any Vaivio entries in their locker",
+        "say": ["Vaivio", "locker"],
+        "shown": "activity \"interaction — Sefo Wanjala\" Tue 2027-10-26 13:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w30-0059",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks when the meadowsweet party is",
+        "say": ["meadowsweet party"]
+      },
+      {
+        "hint": "follow-up: asks the same about the look ('and the look?')",
+        "say": ["look"],
+        "shown": "event \"Thandiwe's meadowsweet party\" Sun 2027-10-10 19:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w30-0060",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks what their spending came to last week",
+        "say": ["last week"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w31-0001",
+    "today": "Thursday 2026-06-11",
+    "turns": [
+      { "hint": "asks what's planned for wednesday", "say": ["wednesday"] },
+      {
+        "hint": "follow-up: asks the same for the 14th ('and the 14th?')",
+        "say": ["the 14th"],
+        "shown": "event \"Walk with Losa\" Wed 2026-06-17 10:45\nevent \"Oud club at Crusaness Tearooms\" Wed 2026-06-17 12:30\nevent \"Flagpole repair\" Wed 2026-06-17 15:00\nevent \"Rudder fair\" Wed 2026-06-17 16:15"
+      },
+      {
+        "hint": "follow-up: asks to make the first one an hour later",
+        "say": ["first"],
+        "shown": "event \"Bridle fitting\" Sun 2026-06-14 12:15\nevent \"Brass band (week 24)\" Sun 2026-06-14 14:00\nevent \"Ukulele class with Esteban\" Sun 2026-06-14 19:30"
+      },
+      {
+        "hint": "follow-up: corrects: wrong one, they meant the second one",
+        "say": ["second"],
+        "shown": "done: reschedule{by: +1h} on (#5)"
+      },
+      {
+        "hint": "(new topic) asks which expenses are in the rudder club group",
+        "say": ["rudder club"],
+        "shown": "done: reschedule{by: +1h} on (#6)"
+      },
+      {
+        "hint": "(new topic) asks what's left on their to-do list",
+        "say": [],
+        "shown": "expense \"Pizza night (wk 24)\" Thu 2026-06-11 · amount_minor=3576 paid_by=Owner\nexpense \"Sherbet fee\" Thu 2026-06-04 · amount_minor=5450 paid_by=Owner\nexpense \"Rudder subscription\" Wed 2026-05-20 · amount_minor=3200 paid_by=Chetan Odhiambo\nexpense \"Bodyboarding supplies\" Sat 2026-05-16 · amount_minor=2215 paid_by=Owner\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w31-0002",
+    "today": "Thursday 2026-06-11",
+    "turns": [
+      { "hint": "asks for pictures with Magda in them", "say": ["Magda"] }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w31-0003",
+    "today": "Thursday 2026-06-11",
+    "turns": [
+      {
+        "hint": "asks to save the locker combination 21254 in the locker",
+        "say": ["locker combination", "21254"]
+      },
+      {
+        "hint": "(new topic) asks to settle up with everyone in rudder club",
+        "say": ["rudder club"],
+        "shown": "done: locker.add_item{type: \"note\", title: \"Locker combination\", content: \"21254\"}"
+      },
+      {
+        "hint": "(new topic) says they texted Chetan and asks to log it (two contacts are called Chetan; the message doesn't say which)",
+        "say": ["Chetan", "texted"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (it) in (#1)} on (#3, #4)"
+      },
+      {
+        "hint": "follow-up: says it was Chetan Hynmere",
+        "say": ["Hynmere"],
+        "shown": "asked: Which Chetan — Odhiambo or Hynmere?"
+      },
+      {
+        "hint": "(new topic) asks what the rudder expenses add up to",
+        "say": ["rudder"],
+        "shown": "done: people.log_interaction{kind: \"message\"} on (#5)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w31-0004",
+    "today": "Thursday 2026-06-11",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in rudder club",
+        "say": ["rudder club", "how much"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w31-0005",
+    "today": "Thursday 2026-06-11",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in rudder club (the expenses)",
+        "say": ["rudder club"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w31-0007",
+    "today": "Thursday 2026-06-11",
+    "turns": [
+      {
+        "hint": "asks who they're seeing at the paperweight",
+        "say": ["paperweight"]
+      },
+      {
+        "hint": "follow-up: asks who else is coming apart from Vrilie",
+        "say": ["Vrilie"],
+        "shown": "party \"Esteban Svoboda\" · role=Dentist\nparty \"Vrilie Synacre\" · role=Landlord"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w31-0009",
+    "today": "Thursday 2026-06-11",
+    "turns": [
+      {
+        "hint": "asks to square their origami pot balance with Crolkuwyn",
+        "say": ["Crolkuwyn", "origami pot"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w31-0011",
+    "today": "Thursday 2026-06-11",
+    "turns": [
+      {
+        "hint": "asks how much they spent on rudder in total",
+        "say": ["rudder"]
+      },
+      {
+        "hint": "(new topic) asks who they owe money to",
+        "say": [],
+        "shown": "= 18353"
+      },
+      {
+        "hint": "(detour) hang on — asks for the notes in their Ideas notebook",
+        "say": ["Ideas", "notebook"],
+        "shown": "party \"Omkar Rahman\" · owed_to_them_minor=3500 role=Director\nparty \"Emeka Termere\" · owed_to_them_minor=1200 role=Sister\nparty \"Chetan Odhiambo\" · owed_to_them_minor=1200 role=Friend from antenatal\nparty \"Crolkuwyn Dillova\" · owed_to_them_minor=2000 role=Running club friend\n(+1 more)"
+      },
+      {
+        "hint": "back to the money — asks which of those are above twelve euros",
+        "say": ["twelve euros"],
+        "shown": "note \"Things to ask Egle\" Sun 2026-04-12 19:44 · notebooks=Ideas\nnote \"Ukulele class contacts\" Wed 2026-04-01 22:57 · notebooks=Ideas\nnote \"Things to ask Wasis\" Sun 2026-03-08 09:42 · notebooks=Ideas\nnote \"Emeka's charcoal packing list\" Sat 2026-02-21 19:23 · notebooks=Ideas"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w31-0012",
+    "today": "Thursday 2026-06-11",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in origami pot",
+        "say": ["origami pot", "how much"]
+      },
+      {
+        "hint": "(new topic) asks to log that they went round to visit Deepika today",
+        "say": ["Deepika", "visit"],
+        "shown": "= 61729"
+      },
+      {
+        "hint": "(new topic) asks which task is roughly a forty five minute job",
+        "say": ["forty five minute"],
+        "shown": "done: people.log_interaction{kind: \"visit\"} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  }
+]

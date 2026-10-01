@@ -1,0 +1,243 @@
+[
+  {
+    "id": "a0453",
+    "today": "Monday 2028-08-28",
+    "turns": [
+      {
+        "canonical": "next_occurrence of (important dates of (parties called \"Yannick Quayle\") that (label contains \"Birthday\"))",
+        "move": "first",
+        "hint": "when is Yannick's next birthday (date)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Yannick Quayle\"",
+        "turn": 1,
+        "say": "exact: Yannick"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0945",
+    "today": "Sunday 2028-08-06",
+    "turns": [
+      {
+        "canonical": "show (albums of (photos called \"Harvest table\"))",
+        "move": "first",
+        "hint": "which album is the table photo in"
+      }
+    ],
+    "refer": [
+      { "row": "photos \"Harvest table\"", "turn": 1, "say": "exact: table" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0669",
+    "today": "Monday 2026-11-16",
+    "turns": [
+      {
+        "canonical": "show (obligations that (from_party = me and settled_at is null))",
+        "move": "first",
+        "hint": "the debts I still owe"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0413",
+    "today": "Thursday 2025-09-25",
+    "turns": [
+      {
+        "canonical": "count of (places)",
+        "move": "first",
+        "hint": "how many places are saved in my photos"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1028",
+    "today": "Saturday 2026-09-19",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"Linnet Cafe\"))",
+        "move": "first",
+        "hint": "photos from / taken at linnet"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Linnet Cafe\"", "turn": 1, "say": "loose: linnet" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0084",
+    "today": "Thursday 2027-06-03",
+    "turns": [
+      {
+        "canonical": "show (things called \"measurements\")",
+        "move": "first",
+        "hint": "what do I have about measurements (anything: diary, to-dos, notes...)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0207",
+    "today": "Thursday 2028-09-28",
+    "turns": [
+      {
+        "canonical": "schedule.cancel_event{} on (events called \"Parkrun\")",
+        "move": "first",
+        "hint": "cancel the parkrun"
+      }
+    ],
+    "refer": [
+      { "row": "events \"Parkrun\"", "turn": 1, "say": "exact: parkrun" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0474",
+    "today": "Friday 2026-01-23",
+    "turns": [
+      {
+        "canonical": "value of (contact channels of (parties called \"Leocadia Ashdown\") that (kind = \"email\"))",
+        "move": "first",
+        "hint": "what's Leocadia's number/email (the value)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Leocadia Ashdown\"",
+        "turn": 1,
+        "say": "exact: Leocadia"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0505",
+    "today": "Sunday 2026-03-08",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties called \"Nerys Gallagher\") that (label = \"work\"))",
+        "move": "first",
+        "hint": "Nerys's number/email with that label (work/home/mobile)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Nerys Gallagher\"", "turn": 1, "say": "exact: Nerys" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0466",
+    "today": "Saturday 2027-08-14",
+    "turns": [
+      {
+        "canonical": "spent_on of (expenses called \"Boat licence fee\")",
+        "move": "first",
+        "hint": "when did I pay for the boat"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Boat licence fee\"",
+        "turn": 1,
+        "say": "exact: boat"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0763",
+    "today": "Thursday 2025-10-16",
+    "turns": [
+      {
+        "canonical": "show (places that (kind = \"venue\"))",
+        "move": "first",
+        "hint": "places of that kind"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1055",
+    "today": "Wednesday 2026-11-04",
+    "turns": [
+      {
+        "canonical": "show (settlements of (groups called \"Tennis doubles\"))",
+        "move": "first",
+        "hint": "show the settle-ups/payments made in the doubles group"
+      }
+    ],
+    "refer": [
+      { "row": "groups \"Tennis doubles\"", "turn": 1, "say": "exact: doubles" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0518",
+    "today": "Thursday 2028-02-24",
+    "turns": [
+      {
+        "canonical": "show (documents that (starred = true))",
+        "move": "first",
+        "hint": "my starred documents"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0818",
+    "today": "Tuesday 2028-10-03",
+    "turns": [
+      {
+        "canonical": "max dtstart of (events of (parties called \"Jasper Jessop\"))",
+        "move": "first",
+        "hint": "the last date in my calendar with Jasper"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Jasper Jessop\"", "turn": 1, "say": "exact: Jasper" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0196",
+    "today": "Saturday 2027-05-08",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Honora Whitlock\")",
+        "move": "first",
+        "hint": "delete Honora from my contacts"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Honora Whitlock\"",
+        "turn": 1,
+        "say": "exact: Honora"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

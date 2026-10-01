@@ -1,0 +1,17 @@
+{
+  "distinct_keywords": 2620,
+  "max_worlds": 3,
+  "worlds_histogram": {
+    "1": 1135,
+    "2": 1170,
+    "3": 315
+  },
+  "over_3": [],
+  "categories": {
+    "real": 1272,
+    "noun": 525,
+    "rare": 125,
+    "made": 698
+  },
+  "allocator_overflow": []
+}

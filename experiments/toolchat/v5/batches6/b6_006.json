@@ -1,0 +1,251 @@
+[
+  {
+    "id": "c0102",
+    "today": "Wednesday 2027-02-17",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses called \"Tulip bulbs\")",
+        "move": "first",
+        "hint": "what did the bulbs come to / cost"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Tulip bulbs\"", "turn": 1, "say": "loose: bulbs" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0249",
+    "today": "Sunday 2025-09-21",
+    "turns": [
+      {
+        "canonical": "delete{} on (things called \"padlock\")",
+        "move": "first",
+        "hint": "delete / get rid of all my padlock stuff"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0108",
+    "today": "Tuesday 2026-07-28",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Jessamy Treverrow\")",
+        "move": "first",
+        "hint": "look up Jessamy"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (it) that (settled_at is null))",
+        "move": "act",
+        "hint": "how much is outstanding with them / what do they still owe (pronoun, no name)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (it))",
+        "move": "act",
+        "hint": "pay it off / settle up with them (pronoun)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Jessamy Treverrow\"",
+        "turn": 1,
+        "say": "exact: Jessamy"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0066",
+    "today": "Saturday 2025-11-29",
+    "turns": [
+      {
+        "canonical": "show (parties that (role = \"Tutor\"))",
+        "move": "first",
+        "hint": "who's my tutor (the person with that role)"
+      }
+    ],
+    "refer": [{ "row": "role \"Tutor\"", "turn": 1, "say": "exact: tutor" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0204",
+    "today": "Sunday 2026-01-04",
+    "turns": [
+      {
+        "canonical": "refuse: out_of_ontology",
+        "move": "first",
+        "hint": "book a table at the Italian place on their website / online for me (the app cannot browse or book)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0070",
+    "today": "Saturday 2025-08-30",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations of (parties that (role = \"Landlord\")) that (settled_at is null))",
+        "move": "first",
+        "hint": "how much do I still owe the landlord"
+      }
+    ],
+    "refer": [
+      { "row": "role \"Landlord\"", "turn": 1, "say": "exact: landlord" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0071",
+    "today": "Friday 2025-06-27",
+    "turns": [
+      {
+        "canonical": "show (contact channels of (parties that (role = \"Coach\")) that (kind = \"phone\"))",
+        "move": "first",
+        "hint": "what's my coach's number"
+      }
+    ],
+    "refer": [{ "row": "role \"Coach\"", "turn": 1, "say": "exact: coach" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0145",
+    "today": "Sunday 2028-01-16",
+    "turns": [
+      {
+        "canonical": "count of (tasks that (due_at during before now and status != \"completed\"))",
+        "move": "first",
+        "hint": "how many things are overdue"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0074",
+    "today": "Thursday 2027-12-16",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations of (parties that (role = \"Mechanic\")) that (settled_at is null))",
+        "move": "first",
+        "hint": "how much do I still owe the mechanic"
+      }
+    ],
+    "refer": [
+      { "row": "role \"Mechanic\"", "turn": 1, "say": "exact: mechanic" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0154",
+    "today": "Wednesday 2028-02-02",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during this week))",
+        "move": "first",
+        "hint": "what tasks are due in that window"
+      },
+      {
+        "canonical": "show (them that (title contains \"again\"))",
+        "move": "refine",
+        "hint": "just the again ones (narrow those by a word)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0198",
+    "today": "Saturday 2026-08-08",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Send Emrys the forms\", due_at: tuesday }",
+        "move": "first",
+        "hint": "add a to-do to send Emrys the forms by tuesday"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0272",
+    "today": "Monday 2026-03-02",
+    "turns": [
+      {
+        "canonical": "show (events of (parties called \"Juno Whitlock\") during this week)",
+        "move": "first",
+        "hint": "when am I seeing Juno in that window"
+      },
+      {
+        "canonical": "show (events of (parties called \"Pascal Draycott\") during this week)",
+        "move": "act",
+        "hint": "and Pascal? / what about Pascal? (just the new name)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Juno Whitlock\"", "turn": 1, "say": "exact: Juno" },
+      {
+        "row": "parties \"Pascal Draycott\"",
+        "turn": 2,
+        "say": "exact: Pascal"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0228",
+    "today": "Thursday 2025-08-14",
+    "turns": [
+      {
+        "canonical": "show (events called \"Charity quiz\" during this month)",
+        "move": "first",
+        "hint": "is the charity on in that window"
+      },
+      {
+        "canonical": "show (parties of (it))",
+        "move": "act",
+        "hint": "who is that with / which person is that (pronoun)"
+      }
+    ],
+    "refer": [
+      { "row": "events \"Charity quiz\"", "turn": 1, "say": "exact: charity" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0046",
+    "today": "Tuesday 2027-09-28",
+    "turns": [
+      {
+        "canonical": "show (things called \"cheese\")",
+        "move": "first",
+        "hint": "what do I have about cheese (anything at all, no app named)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0135",
+    "today": "Wednesday 2026-01-07",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status != \"completed\"))",
+        "move": "first",
+        "hint": "what's still on my list / what's left to do / what haven't I done yet"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

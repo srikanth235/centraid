@@ -1,0 +1,254 @@
+[
+  {
+    "id": "w08-039",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks to save the safe code 89151 in the locker",
+        "say": ["safe code", "89151"]
+      },
+      {
+        "hint": "(new topic) asks to find anything to do with Window certificate",
+        "say": ["Window certificate"]
+      },
+      { "hint": "asks if it's in their documents as well", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "texting"]
+  },
+  {
+    "id": "w08-040",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks which important dates fall this month",
+        "say": ["this month"]
+      },
+      {
+        "hint": "asks for just the ones next week (next week)",
+        "say": ["next week"]
+      },
+      {
+        "hint": "(new topic) asks to move the swimming lesson appointment to sunday",
+        "say": ["swimming lesson", "sunday"]
+      },
+      {
+        "hint": "(new topic) asks to log that they had a visit with Osric",
+        "say": ["Osric"]
+      },
+      { "hint": "(new topic) asks to delete the Choir note", "say": ["Choir"] },
+      {
+        "hint": "(new topic) asks where the Dentist account details are",
+        "say": ["Dentist"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w08-041",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      { "hint": "asks if anything is happening on the 7th", "say": ["the 7th"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w08-042",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks to save the locker combination 66311 in the locker",
+        "say": ["locker combination", "66311"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "texting"]
+  },
+  {
+    "id": "w08-043",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      { "hint": "asks for Percival's contact card", "say": ["Percival"] },
+      {
+        "hint": "asks what events they're coming to (the one person just shown)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "polite"]
+  },
+  {
+    "id": "w08-044",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      { "hint": "asks what the School code is", "say": ["School"] },
+      {
+        "hint": "asks the same about account instead ('what about account?')",
+        "say": ["account"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "terse"]
+  },
+  {
+    "id": "w08-045",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks what debts there are between them and Zacharias Underhill",
+        "say": ["Zacharias Underhill"]
+      },
+      {
+        "hint": "(new topic) asks what they have on today (calendar, to-dos, birthdays)",
+        "say": ["today"]
+      },
+      {
+        "hint": "(new topic) asks what they have to get done monday",
+        "say": ["monday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "question"]
+  },
+  {
+    "id": "w08-046",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      { "hint": "asks what's in the vault about Payslip", "say": ["Payslip"] },
+      {
+        "hint": "asks the same about Pinecrest Lodge instead ('what about Pinecrest Lodge?')",
+        "say": ["Pinecrest Lodge"]
+      },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      { "hint": "asks if it's in their calendar events as well", "say": [] },
+      {
+        "hint": "asks the same about drawing instead ('what about drawing?')",
+        "say": ["drawing"]
+      },
+      { "hint": "asks who's coming to it", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "w08-047",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks to put back the Mattress document they deleted",
+        "say": ["Mattress"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "terse"]
+  },
+  {
+    "id": "w08-048",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks what album has the Barbecue picture",
+        "say": ["Barbecue"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w08-049",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks which calendar events mention Running club",
+        "say": ["Running club"]
+      },
+      {
+        "hint": "asks for just the ones tomorrow (tomorrow)",
+        "say": ["tomorrow"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "terse"]
+  },
+  {
+    "id": "w08-050",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks to find the locker entries on Choir club",
+        "say": ["Choir club"]
+      },
+      {
+        "hint": "(new topic) asks to see the Dentist account login entry",
+        "say": ["Dentist account"]
+      },
+      {
+        "hint": "asks the same about code instead ('what about code?')",
+        "say": ["code"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "question"]
+  },
+  {
+    "id": "w08-051",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks when they need to remember Teodora Prescott's birthday",
+        "say": ["Teodora Prescott"]
+      },
+      { "hint": "(new topic) asks what is due tuesday", "say": ["tuesday"] },
+      {
+        "hint": "(new topic) asks what paperwork is kept in Car",
+        "say": ["Car"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "texting"]
+  },
+  {
+    "id": "w08-052",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      {
+        "hint": "asks to put back the Choir note they deleted",
+        "say": ["Choir"]
+      },
+      { "hint": "takes it back: never mind", "say": [] },
+      { "hint": "(new topic) asks who Pascal is", "say": ["Pascal"] },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks when they have the drawing",
+        "say": ["drawing"]
+      },
+      {
+        "hint": "asks the same about appointment instead ('what about appointment?')",
+        "say": ["appointment"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "question"]
+  },
+  {
+    "id": "w08-053",
+    "today": "Tuesday 2027-10-05",
+    "turns": [
+      { "hint": "asks what Teodora's email is", "say": ["Teodora"] },
+      {
+        "hint": "(new topic) asks to log that they had a visit with Keziah",
+        "say": ["Keziah"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  }
+]

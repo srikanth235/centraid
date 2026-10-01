@@ -1,0 +1,248 @@
+[
+  {
+    "id": "w13-0004",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      { "hint": "asks what's planned for next friday", "say": ["next friday"] },
+      {
+        "hint": "follow-up: asks to make the windsurfing one an hour later",
+        "say": ["windsurfing"],
+        "shown": "event \"Windsurfing night\" Fri 2027-09-03 07:15\nevent \"Spinning club at Dreford Pavilion\" Fri 2027-09-03 19:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w13-0005",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      { "hint": "asks what tasks fall due wednesday", "say": ["wednesday"] },
+      {
+        "hint": "(new topic) asks what's still on their list",
+        "say": [],
+        "shown": "task \"Borrow the ramekin this week\" Wed 2027-09-01 17:00 · status=needs-action effort_min=90"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w13-0006",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks how many tasks due last week they have",
+        "say": ["last week", "how many"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w13-0007",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks which tasks due last week they have",
+        "say": ["last week", "which"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w13-0008",
+    "today": "Sunday 2027-08-29",
+    "turns": [{ "hint": "asks for their favourite photos", "say": [] }],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w13-0010",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks for the photos they took last month",
+        "say": ["last month"]
+      },
+      {
+        "hint": "(new topic) asks what paperwork is kept in Dental",
+        "say": ["Dental"],
+        "shown": "photo \"IMG_9558\" Wed 2027-07-28 15:05 · album_titles=Seswick 2027 favorite=false\nphoto \"Tuba and mango\" Sat 2027-07-24 07:11 · album_titles=Flamenco meetup highlights, Best of 2027 favorite=false\nphoto \"Armoire at Dreford Pavilion\" Thu 2027-07-22 09:45 · favorite=false\nphoto \"Tuba in the snow\" Wed 2027-07-21 09:37 · album_titles=Wicker favorite=false\n(+3 more)"
+      },
+      {
+        "hint": "(new topic) asks to find the notes on badminton",
+        "say": ["badminton", "notes"],
+        "shown": "document \"Bank statement (01)\" Wed 2026-12-02 08:05 · folder=Dental\ndocument \"Wasoe Bridge permit\" Thu 2026-10-01 21:15 · folder=Dental\ndocument \"Shorfoly gym certificate\" Sat 2026-09-26 19:28 · folder=Dental"
+      },
+      {
+        "hint": "follow-up: asks what about in their pictures",
+        "say": ["pictures"],
+        "shown": "note \"Badminton tips\" Tue 2027-08-10 09:30 · notebooks=Garden log"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w13-0012",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      { "hint": "asks who still has to pay them back", "say": [] },
+      {
+        "hint": "follow-up: asks for only those more than twenty five",
+        "say": ["twenty five"],
+        "shown": "party \"Vaimir Sorham\" · owed_to_me_minor=4800 role=Friend from the allotment\nparty \"Losuan Colombo\" · owed_to_me_minor=500 role=Friend"
+      },
+      {
+        "hint": "(new topic) asks what they have got friday",
+        "say": ["friday"],
+        "shown": "party \"Vaimir Sorham\" · owed_to_me_minor=4800 role=Friend from the allotment"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w13-0013",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks how many notes they have in Garden log",
+        "say": ["Garden log", "notebook"]
+      },
+      {
+        "hint": "(new topic) asks which written notes mention xylophone",
+        "say": ["xylophone", "notes"],
+        "shown": "= 4"
+      },
+      {
+        "hint": "follow-up: asks what their calendar have on it",
+        "say": ["calendar"],
+        "shown": "note \"Xylophone notes\" Sun 2027-06-06 20:05"
+      },
+      {
+        "hint": "follow-up: asks to move both of them to friday",
+        "say": ["friday"],
+        "shown": "event \"Xylophone delivery\" Sun 2027-08-29 14:45\nevent \"Collect the xylophone\" Mon 2027-08-09 14:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w13-0014",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks for the documents in the Subscriptions folder",
+        "say": ["Subscriptions"]
+      },
+      {
+        "hint": "follow-up: asks to star the Laex one",
+        "say": ["Laex"],
+        "shown": "document \"Ystad Green booking\" Sun 2027-06-13 11:16 · folder=Subscriptions\ndocument \"Armoire quote\" Fri 2027-05-07 21:34 · folder=Subscriptions\ndocument \"Tuba bill 2024\" Sat 2027-04-24 10:21 · folder=Subscriptions\ndocument \"Laex bank permit\" Sat 2027-04-24 09:35 · folder=Subscriptions"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w13-0015",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks for the centre wifi entry in the locker (the row, not the password)",
+        "say": ["centre wifi"]
+      },
+      {
+        "hint": "(new topic) asks to find the documents on Salcombe",
+        "say": ["Salcombe", "documents"],
+        "shown": "locker item \"Dreford Garden Centre wifi\" · type=wifi"
+      },
+      {
+        "hint": "follow-up: says nah, leave it",
+        "say": [],
+        "shown": "document \"Salcombe booking confirmation\" Thu 2027-07-29 07:50"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w13-0016",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the centre wifi is",
+        "say": ["centre wifi", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w13-0017",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks what pictures are in the Ardnamurchan Deli album",
+        "say": ["Ardnamurchan Deli", "album"]
+      },
+      {
+        "hint": "follow-up: asks for just the ones from last week",
+        "say": ["last week"],
+        "shown": "photo \"Archery at Dreford Garden Centre\" Fri 2027-08-27 12:04 · album_titles=Ardnamurchan Deli favorite=false\nphoto \"Oven in the garden\" Wed 2027-08-18 15:01 · album_titles=Ardnamurchan Deli, Best of 2027, Wicker favorite=true people=Crendia Ortega\nphoto \"IMG_4932\" Sat 2027-08-07 18:19 · album_titles=Ardnamurchan Deli, Flamenco meetup highl… favorite=true\nphoto \"Vaimir at Ardnamurchan Deli\" Thu 2027-08-05 19:11 · album_titles=Ardnamurchan Deli, Flamenco meetup highl… favorite=false\n(+3 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w13-0018",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks to reveal the password for the Craly tax",
+        "say": ["Craly tax", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w13-0019",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "says they visited Dreford and asks to log it",
+        "say": ["Dreford", "visited"]
+      },
+      {
+        "hint": "follow-up: asks for their contact details",
+        "say": [],
+        "shown": "done: people.log_interaction{kind: \"visit\"} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks which Seswick expenses were over one hundred pesos",
+        "say": ["Seswick", "one hundred pesos"],
+        "shown": "contact channel \"Dreford Clinic — work\" · kind=email value=hello@drefordclinic.example\ncontact channel \"Dreford Clinic — office\" · kind=phone value=+52 55 1234 5634"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w13-0020",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks to settle up with Losuan in Wasoe",
+        "say": ["Losuan", "Wasoe", "settle up"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  }
+]

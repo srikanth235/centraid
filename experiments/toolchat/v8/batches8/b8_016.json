@@ -1,0 +1,281 @@
+[
+  {
+    "id": "w05-0051",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks what the Bellagio trip group's spending comes to",
+        "say": ["Bellagio trip"]
+      },
+      {
+        "hint": "(new topic) asks which group the moat subscription expense is in",
+        "say": ["moat subscription"],
+        "shown": "= 79524"
+      },
+      {
+        "hint": "follow-up: asks what else went into that group",
+        "say": [],
+        "shown": "group \"Lothock pot\""
+      },
+      {
+        "hint": "(detour) hang on — asks for their list items about pelican",
+        "say": ["pelican", "items"],
+        "shown": "expense \"Didgeridoo tickets\" Tue 2025-01-14 · amount_minor=18852 paid_by=Shethara Llewellyn\nexpense \"Clover\" Sat 2025-01-11 · amount_minor=23470 paid_by=Hideo Lansen\nexpense \"Coffee run (wk 02)\" Sat 2025-01-11 · amount_minor=5799 paid_by=Forrie Pralow\nexpense \"Kombucha meetup hire\" Fri 2025-01-10 · amount_minor=5050 paid_by=Hideo Lansen\n(+9 more)"
+      },
+      {
+        "hint": "back to the moat subscription group — about the didgeridoo one, asks which group it's in",
+        "say": ["didgeridoo"],
+        "shown": "task \"Return the pelican\" · status=needs-action effort_min=60"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w05-0053",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks for the parking entry in the locker (the row, not the password)",
+        "say": ["parking"]
+      },
+      {
+        "hint": "(new topic) asks which task is roughly a a quarter of an hour job",
+        "say": ["a quarter of an hour"],
+        "shown": "locker item \"Thomex parking login\" · type=login"
+      },
+      {
+        "hint": "follow-up: asks for just the ones from last week",
+        "say": ["last week"],
+        "shown": "task \"Ask Vralou about the hammock\" Mon 2024-12-23 18:00 · status=needs-action effort_min=15\ntask \"Lend the teacake\" Sun 2025-01-12 18:00 · status=needs-action effort_min=15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w05-0054",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the parking is",
+        "say": ["parking", "password"]
+      },
+      {
+        "hint": "(new topic) asks which calendar events Drennette is on",
+        "say": ["Drennette"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks to move all of them to wednesday",
+        "say": ["wednesday"],
+        "shown": "event \"Collect the scaffold\" Sun 2025-01-19 20:45\nevent \"Coffee with Nadia\" Thu 2025-01-23 10:45\nevent \"Look at the ottoman\" Thu 2025-01-23 16:15\nevent \"Call Flarel about the rosemary\" Tue 2025-01-28 13:00\n(+1 more)"
+      },
+      {
+        "hint": "(new topic) says the garage code is 59460 — keep it in the locker",
+        "say": ["garage code", "59460"],
+        "shown": "done: reschedule{to: 2025-01-22} on (#7, #8, #9, #10, #11)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w05-0055",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks which Bellagio trip expenses were over 50 zloty",
+        "say": ["Bellagio trip", "50 zloty"]
+      },
+      {
+        "hint": "(new topic) asks what is still due this week",
+        "say": ["this week"],
+        "shown": "expense \"Car hire\" Tue 2024-10-29 · amount_minor=5750 paid_by=Flarel Llewellyn\nexpense \"Bellagio fee\" Tue 2024-10-29 · amount_minor=18799 paid_by=Owner\nexpense \"Bellagio tickets\" Tue 2024-10-29 · amount_minor=10707 paid_by=Amelie Forsyth\nexpense \"Grantown Heath fee\" Tue 2024-10-29 · amount_minor=8183 paid_by=Flarel Llewellyn\n(+3 more)"
+      },
+      {
+        "hint": "follow-up: says never mind",
+        "say": [],
+        "shown": "task \"Buy the scaffold\" Mon 2025-01-13 18:00 · status=needs-action effort_min=45\ntask \"Collect the teacake\" Thu 2025-01-16 17:00 · status=needs-action"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w05-0056",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks if there's a calendar event at Vennoe Wood",
+        "say": ["Vennoe Wood"]
+      },
+      {
+        "hint": "follow-up: says scrap that, they'll check later themselves",
+        "say": [],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w05-0057",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      { "hint": "asks for their to-dos on organ", "say": ["organ", "to-dos"] }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w05-0058",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks to add Truvine Grallez to the Bellagio trip group",
+        "say": ["Truvine Grallez", "Bellagio trip"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w05-0059",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      { "hint": "asks who their pharmacist is", "say": ["pharmacist"] }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w05-0060",
+    "today": "Saturday 2025-01-18",
+    "turns": [
+      {
+        "hint": "asks which varnish tasks they haven't done yet",
+        "say": ["varnish"]
+      },
+      {
+        "hint": "(new topic) asks for Truman's birthday (two contacts are called Truman, the message doesn't say which)",
+        "say": ["Truman"],
+        "shown": "task \"Varnish the potter for Nadia\" · status=needs-action effort_min=45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w06-0001",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks to add the garden picture to the Hurling lesson highlights album",
+        "say": ["garden", "Hurling lesson highlights", "album"]
+      },
+      {
+        "hint": "follow-up: corrects: wrong photo, they meant the shovel one",
+        "say": ["shovel"],
+        "shown": "done: media.add_to_album{album_id: (#2)} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w06-0002",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks what's in the Work notebook",
+        "say": ["Work", "notebook"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w06-0003",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks to find Vesna Castellano in their contacts",
+        "say": ["Vesna Castellano"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w06-0004",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks how many files they have under Renovation",
+        "say": ["Renovation"]
+      },
+      {
+        "hint": "(new topic) asks if they have photos of Vesna Castellano",
+        "say": ["Vesna Castellano"],
+        "shown": "= 5"
+      },
+      {
+        "hint": "follow-up: asks for a task to check the batik photo",
+        "say": ["check the batik photo"],
+        "shown": "photo \"Batik club 2025\" Mon 2026-10-19 11:12 · album_titles=Paragliding night highlights favorite=false people=Vesna Castellano, Teodor Revlowick"
+      },
+      {
+        "hint": "follow-up: asks which album it's in",
+        "say": [],
+        "shown": "done: schedule.add_task{title: \"Check the batik photo\"}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w06-0005",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks when they're next seeing Renata Mansour",
+        "say": ["Renata Mansour"]
+      },
+      {
+        "hint": "follow-up: asks for just the ones next week",
+        "say": ["next week"],
+        "shown": "event \"Glove sale at Kampot Deli\" Thu 2026-11-05 13:30\nevent \"Guitar repair\" Mon 2026-11-16 20:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w06-0006",
+    "today": "Sunday 2026-11-15",
+    "turns": [
+      {
+        "hint": "asks to settle up with Vesna in Crycombe trip",
+        "say": ["Vesna", "Crycombe trip", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks what pictures are in the Birding 2026 album",
+        "say": ["Birding 2026", "album"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#2), amount_minor: balance of (#4) in (#2)} on (#4)"
+      },
+      {
+        "hint": "follow-up: asks to delete the pantry one",
+        "say": ["pantry"],
+        "shown": "photo \"Pantry close-up (02)\" Sat 2026-11-14 13:28 · album_titles=Birding 2026, Hurling lesson highlights,… favorite=false\nphoto \"Bollard and rockpool\" Sun 2026-11-01 14:13 · album_titles=Birding 2026 favorite=false\nphoto \"Esie's quince\" Tue 2026-10-27 20:30 · album_titles=Fencing lesson, Birding 2026 favorite=false"
+      },
+      {
+        "hint": "follow-up: corrects: wrong one, they meant the fourth one",
+        "say": ["fourth"],
+        "shown": "done: media.delete_asset{} on (#9)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  }
+]

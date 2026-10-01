@@ -1,0 +1,234 @@
+[
+  {
+    "id": "a0082",
+    "today": "Sunday 2026-01-11",
+    "turns": [
+      {
+        "canonical": "show (things called \"school\")",
+        "move": "first",
+        "hint": "what do I have about school (anything: diary, to-dos, notes...)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1100",
+    "today": "Friday 2028-04-14",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Yannick Everard\")",
+        "move": "first",
+        "hint": "delete Yannick from my contacts"
+      },
+      {
+        "canonical": "people.undo_person{} on (it)",
+        "move": "undo",
+        "hint": "wait, put them back / undo that"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Yannick Everard\"",
+        "turn": 1,
+        "say": "exact: Yannick"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0689",
+    "today": "Monday 2027-12-13",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Thibault Oyelowo\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete Thibault from my contacts"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Thibault Oyelowo\"",
+        "turn": 1,
+        "say": "exact: Thibault"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0328",
+    "today": "Monday 2026-03-09",
+    "turns": [
+      {
+        "canonical": "count of (important dates that (next_occurrence during next week))",
+        "move": "first",
+        "hint": "how many birthdays/anniversaries coming up in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0343",
+    "today": "Saturday 2025-08-02",
+    "turns": [
+      {
+        "canonical": "count of (locker items that (type = \"membership\"))",
+        "move": "first",
+        "hint": "how many of that type are in my locker"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0121",
+    "today": "Saturday 2027-10-02",
+    "turns": [
+      {
+        "canonical": "locker.add_item{ type: \"login\", title: \"Parking app\", content: \"Maple#2031\" }",
+        "move": "first",
+        "hint": "save a login for Parking app with password Maple#2031"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1036",
+    "today": "Friday 2027-03-12",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"Rushmere Pool\"))",
+        "move": "first",
+        "hint": "photos from / taken at Rushmere Pool"
+      }
+    ],
+    "refer": [{ "row": "places \"Rushmere Pool\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0427",
+    "today": "Monday 2026-10-26",
+    "turns": [
+      {
+        "canonical": "amount_minor of (expenses called \"Airbnb deposit\")",
+        "move": "first",
+        "hint": "how much was the deposit expense"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Airbnb deposit\"",
+        "turn": 1,
+        "say": "exact: deposit"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0681",
+    "today": "Thursday 2028-10-05",
+    "turns": [
+      {
+        "canonical": "show (obligations that (to_party = me and settled_at is null))",
+        "move": "first",
+        "hint": "money people still owe me (the debts)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0423",
+    "today": "Monday 2026-11-02",
+    "turns": [
+      {
+        "canonical": "amount_minor of (expenses called \"Chess set\")",
+        "move": "first",
+        "hint": "how much was the chess expense"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Chess set\"", "turn": 1, "say": "exact: chess" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0538",
+    "today": "Saturday 2027-09-18",
+    "turns": [
+      {
+        "canonical": "show (events called \"Quarterly review\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the review event"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Quarterly review\"",
+        "turn": 1,
+        "say": "exact: review"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0768",
+    "today": "Sunday 2028-10-15",
+    "turns": [
+      {
+        "canonical": "show (places that (kind = \"city\"))",
+        "move": "first",
+        "hint": "places of that kind"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0380",
+    "today": "Wednesday 2026-08-05",
+    "turns": [
+      {
+        "canonical": "count of (obligations that (settled_at is null))",
+        "move": "first",
+        "hint": "how many debts are still outstanding"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0031",
+    "today": "Wednesday 2027-03-03",
+    "turns": [
+      {
+        "canonical": "show (notes)",
+        "move": "first",
+        "hint": "show all my notes"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0791",
+    "today": "Tuesday 2028-03-14",
+    "turns": [
+      {
+        "canonical": "show (tasks that (priority <= 3))",
+        "move": "first",
+        "hint": "tasks with priority that number or higher-priority (lower number)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

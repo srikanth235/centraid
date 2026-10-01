@@ -95,7 +95,9 @@ fn main() -> ExitCode {
         println!("\n=== {} — {turns} turn(s)", path.display());
         println!("AGREED      {agreed}");
         println!("DISAGREED   {disagreed}   <- adjudicate every one of these");
-        println!("ABSTAINED   {abstained}   (no rule for this shape of sentence; not evidence about the case)");
+        println!(
+            "ABSTAINED   {abstained}   (no rule for this shape of sentence; not evidence about the case)"
+        );
         println!("\nDISAGREEMENT LEDGER:");
         if ledger.is_empty() {
             println!("  (none)");

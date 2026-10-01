@@ -1,0 +1,302 @@
+[
+  {
+    "id": "g0282",
+    "today": "Monday 2026-06-22",
+    "turns": [
+      {
+        "canonical": "show (notes that (notebooks contains \"Kids\"))",
+        "gloss": "List notes where the notebooks it is in contains \"Kids\".",
+        "move": "first",
+        "hint": "what's in my Kids folder/notebook"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      },
+      {
+        "canonical": "knowledge.create_note{ title: \"Nan's soup recipe\" }",
+        "gloss": "Create a note titled \"Nan's soup recipe\".",
+        "move": "new",
+        "hint": "make a note called ..."
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0388",
+    "today": "Thursday 2028-08-24",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"quiz\"))",
+        "gloss": "List the members linked to [groups named \"quiz\"].",
+        "move": "first",
+        "hint": "who's in the quiz group"
+      },
+      {
+        "canonical": "same? (members called \"Desmond\") (parties called \"Desmond Fontaine\")",
+        "gloss": "Are [members named \"Desmond\"] and [parties named \"Desmond Fontaine\"] the same (do they share a row)?",
+        "move": "new",
+        "hint": "is that Desmond the same Desmond as in my contacts (full name said)"
+      },
+      {
+        "canonical": "show (locker items called \"door code\")",
+        "gloss": "List locker items named \"door code\".",
+        "move": "switch",
+        "hint": "what's the login for door code"
+      },
+      {
+        "canonical": "show (members of (groups called \"quiz\"))",
+        "gloss": "List the members linked to [groups named \"quiz\"].",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0088",
+    "today": "Friday 2026-02-13",
+    "turns": [
+      {
+        "canonical": "show (important dates of (parties called \"Elio\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Elio\"] where the label contains \"Birthday\".",
+        "move": "first",
+        "hint": "when is Elio's birthday"
+      },
+      {
+        "canonical": "show (important dates of (parties called \"Xavier\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Xavier\"] where the label contains \"Birthday\".",
+        "move": "substitute",
+        "hint": "and Xavier?"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0004",
+    "today": "Thursday 2028-11-23",
+    "turns": [
+      {
+        "canonical": "locker.trash_item{} on (locker items called \"joint\")",
+        "gloss": "Delete (move to trash) [locker items named \"joint\"].",
+        "move": "first",
+        "hint": "delete/trash the joint locker items"
+      },
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\"))",
+        "gloss": "List tasks where the due date falls before now (already past \u2014 overdue) and the status is not \"completed\".",
+        "move": "new",
+        "hint": "overdue (past due, not done) tasks"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0702",
+    "today": "Wednesday 2025-12-10",
+    "turns": [
+      {
+        "canonical": "balance of (members called \"Dalia\") in (groups called \"house\")",
+        "gloss": "What is the balance of [members named \"Dalia\"] within [groups named \"house\"]?",
+        "move": "first",
+        "hint": "what does Dalia owe me for house"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0478",
+    "today": "Monday 2026-04-13",
+    "turns": [
+      {
+        "canonical": "show (important dates of (parties called \"Benedikt\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Benedikt\"] where the label contains \"Birthday\".",
+        "move": "first",
+        "hint": "when is Benedikt's birthday"
+      },
+      {
+        "canonical": "nothing",
+        "gloss": "Do nothing: the member withdraws the request.",
+        "move": "undo",
+        "hint": "actually never mind, forget it"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0037",
+    "today": "Tuesday 2027-06-08",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during this week) ordered by due_at asc)",
+        "gloss": "List tasks where the status is not \"completed\" and the due date falls this week, sorted by due date ascending (lowest/earliest first).",
+        "move": "first",
+        "hint": "what's due this week (open tasks)"
+      },
+      {
+        "canonical": "show (things during tomorrow)",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) dated tomorrow.",
+        "move": "new",
+        "hint": "what's on tomorrow"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many things is that"
+      },
+      {
+        "canonical": "show (contact channels of (parties called \"Emrys\") that (kind = \"email\"))",
+        "gloss": "List the contact channels linked to [parties named \"Emrys\"] where the kind is \"email\".",
+        "move": "new",
+        "hint": "what's Emrys's email"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0118",
+    "today": "Wednesday 2027-02-10",
+    "turns": [
+      {
+        "canonical": "show (photos called \"ruins\")",
+        "gloss": "List photos named \"ruins\".",
+        "move": "first",
+        "hint": "find the ruins photo"
+      },
+      {
+        "canonical": "show (places of (it))",
+        "gloss": "List the places linked to [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "where was it taken"
+      },
+      {
+        "canonical": "show ((photos of (it)) except (the earlier one))",
+        "gloss": "List [the photos linked to [it (the one row the previous turn is about)]] leaving out [the earlier one (what was answered TWO turns back)].",
+        "move": "act",
+        "hint": "what else is in it/there (minus the photo from two turns back)"
+      },
+      {
+        "canonical": "schedule.propose_event{ summary: \"Parents' evening\", dtstart: wednesday at 11:30, dtend: wednesday at 12:30 }",
+        "gloss": "Put an event titled \"Parents' evening\" in the calendar starting wednesday at 11:30 and ending wednesday at 12:30.",
+        "move": "new",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      },
+      {
+        "canonical": "reschedule{ by: +1h } on (it)",
+        "gloss": "Shift [it (the one row the previous turn is about)] 1 hour later.",
+        "move": "act",
+        "hint": "make it an hour later"
+      },
+      {
+        "canonical": "refuse: out_of_ontology",
+        "gloss": "Refuse, because the request is outside what this vault/app can do or know (out_of_ontology).",
+        "move": "new",
+        "hint": "user asks to look up the news (outside the vault)"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0541",
+    "today": "Thursday 2027-07-01",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Yoga class\", dtstart: wednesday at 12:15, dtend: wednesday at 13:15 }",
+        "gloss": "Put an event titled \"Yoga class\" in the calendar starting wednesday at 12:15 and ending wednesday at 13:15.",
+        "move": "first",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0120",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "canonical": "show (places of (photos called \"graduation\"))",
+        "gloss": "List the places linked to [photos named \"graduation\"].",
+        "move": "first",
+        "hint": "where was the graduation photo taken"
+      },
+      {
+        "canonical": "show (important dates of (parties called \"Dalia\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Dalia\"] where the label contains \"Birthday\".",
+        "move": "new",
+        "hint": "when is Dalia's birthday"
+      },
+      {
+        "canonical": "show (important dates of (parties called \"Zbigniew Underhill\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Zbigniew Underhill\"] where the label contains \"Birthday\".",
+        "move": "switch",
+        "hint": "when is Zbigniew Underhill's birthday"
+      },
+      {
+        "canonical": "show (places of (photos called \"graduation\"))",
+        "gloss": "List the places linked to [photos named \"graduation\"].",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "h033",
+    "today": "Saturday 2026-05-30",
+    "turns": [
+      {
+        "canonical": "social.send_message{ body: \"Can we move to thursday\" } on (contact channels of (parties called \"Teodora\") that (kind = \"phone\"))",
+        "gloss": "",
+        "move": "first",
+        "hint": "text Teodora: Can we move to thursday"
+      },
+      {
+        "canonical": "show (important dates of (parties called \"Esme\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Esme\"] where the label contains \"Birthday\".",
+        "move": "switch",
+        "hint": "when is Esme's birthday"
+      },
+      {
+        "canonical": "social.send_message{ body: \"Can we move to thursday\" } on (contact channels of (parties called \"Teodora\") that (kind = \"phone\"))",
+        "gloss": "",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0022",
+    "today": "Friday 2027-05-21",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during the 13th) ordered by due_at asc)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's due the 13th (open tasks)"
+      },
+      {
+        "canonical": "schedule.set_task_status{ status: \"completed\" } on (the 1st one)",
+        "gloss": "Set the status of [the 1st one (by position in the previous answer)] to \"completed\".",
+        "move": "act",
+        "hint": "tick one off by position"
+      },
+      {
+        "canonical": "reschedule{ to: next wednesday } on (the 3rd one)",
+        "gloss": "Move [the 3rd one (by position in the previous answer)] to next wednesday.",
+        "move": "act",
+        "hint": "push another to a day"
+      },
+      {
+        "canonical": "show (members of (groups called \"club\"))",
+        "gloss": "List the members linked to [groups named \"club\"].",
+        "move": "new",
+        "hint": "who's in the club group"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  }
+]

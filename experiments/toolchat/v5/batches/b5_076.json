@@ -1,0 +1,231 @@
+[
+  {
+    "id": "a0058",
+    "today": "Saturday 2025-10-04",
+    "turns": [
+      {
+        "canonical": "show (journal notes called \"Wendell\")",
+        "move": "first",
+        "hint": "find my journal entry about Wendell"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0573",
+    "today": "Wednesday 2026-04-22",
+    "turns": [
+      {
+        "canonical": "show (events that (status = \"cancelled\"))",
+        "move": "first",
+        "hint": "which events are cancelled / tentative"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0004",
+    "today": "Thursday 2027-11-25",
+    "turns": [
+      {
+        "canonical": "show (documents)",
+        "move": "first",
+        "hint": "list all my documents/files"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1025",
+    "today": "Friday 2026-06-05",
+    "turns": [
+      {
+        "canonical": "show (photos of (albums called \"Climbing highlights\"))",
+        "move": "first",
+        "hint": "show the photos in the Climbing highlights album"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"Climbing highlights\"", "turn": 1, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1138",
+    "today": "Tuesday 2025-03-11",
+    "turns": [
+      {
+        "canonical": "show (photos that (favorite = true))",
+        "move": "first",
+        "hint": "my favourite photos"
+      },
+      {
+        "canonical": "nothing",
+        "move": "undo",
+        "hint": "actually forget it / never mind (takes the request back)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0297",
+    "today": "Tuesday 2025-10-28",
+    "turns": [
+      {
+        "canonical": "count of (events during next week)",
+        "move": "first",
+        "hint": "how many things in the calendar in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0487",
+    "today": "Wednesday 2028-08-09",
+    "turns": [
+      {
+        "canonical": "show (activities that (started_at during last week))",
+        "move": "first",
+        "hint": "who did I call/see/have coffee with in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1142",
+    "today": "Sunday 2026-02-01",
+    "turns": [
+      {
+        "canonical": "show (things during tomorrow)",
+        "move": "first",
+        "hint": "what's on in that window"
+      },
+      {
+        "canonical": "delete{} on (the 1st one)",
+        "move": "act",
+        "hint": "get rid of one of them by position"
+      },
+      {
+        "canonical": "restore{} on (it)",
+        "move": "undo",
+        "hint": "oops, bring it back"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0975",
+    "today": "Wednesday 2027-09-15",
+    "turns": [
+      {
+        "canonical": "show (groups of (expenses called \"Roof rack delivery\"))",
+        "move": "first",
+        "hint": "which group was the roof rack expense in"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Roof rack delivery\"",
+        "turn": 1,
+        "say": "loose: roof rack"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0598",
+    "today": "Friday 2027-01-29",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses that (category = \"food\" and spent_on during yesterday))",
+        "move": "first",
+        "hint": "how much did I spend on that category in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0235",
+    "today": "Saturday 2028-05-20",
+    "turns": [
+      {
+        "canonical": "tally.settle_up{ group_id: (groups called \"Festival tickets\"), from_party: (parties called \"Hedda Jarrold\"), amount_minor: 950 }",
+        "move": "first",
+        "hint": "record that Hedda paid me that amount in the group"
+      }
+    ],
+    "refer": [
+      {
+        "row": "groups \"Festival tickets\"",
+        "turn": 1,
+        "say": "exact: tickets"
+      },
+      { "row": "parties \"Hedda Jarrold\"", "turn": 1, "say": "exact: Hedda" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0395",
+    "today": "Saturday 2027-10-02",
+    "turns": [
+      {
+        "canonical": "count of (parties that (role = \"Neighbour\"))",
+        "move": "first",
+        "hint": "how many neighbours have I got in my contacts"
+      }
+    ],
+    "refer": [{ "row": "role \"Neighbour\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0492",
+    "today": "Monday 2026-04-27",
+    "turns": [
+      {
+        "canonical": "show (activities that (started_at during this month))",
+        "move": "first",
+        "hint": "who did I call/see/have coffee with in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0404",
+    "today": "Tuesday 2027-02-02",
+    "turns": [
+      {
+        "canonical": "count of (photos during last month)",
+        "move": "first",
+        "hint": "how many photos did I take in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0667",
+    "today": "Sunday 2028-08-20",
+    "turns": [
+      {
+        "canonical": "show (notes that (updated_at during today))",
+        "move": "first",
+        "hint": "notes I edited in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

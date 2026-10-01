@@ -96,7 +96,10 @@ fn main() -> ExitCode {
         report.graded_score() * 100.0
     );
 
-    println!("\n{:<20} {:>10} {:>10} {:>10}", "category", "sessions", "strict", "graded");
+    println!(
+        "\n{:<20} {:>10} {:>10} {:>10}",
+        "category", "sessions", "strict", "graded"
+    );
     for (category, passed, total, grade) in report.by_category_graded() {
         println!(
             "{category:<20} {:>10} {:>9.1}% {:>9.1}%",

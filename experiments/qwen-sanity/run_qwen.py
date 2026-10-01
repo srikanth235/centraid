@@ -4,8 +4,11 @@
     python3 run_qwen.py --corpus all --out out/raw --arm knn --shots 6
 
 The model is served by `llama-server` (CPU) and constrained by the JSON schema
-`mkschema.py` derives from `frame.py`, so a malformed frame is impossible by
-construction.  The instruction block is the SAME generated `Doctrine.swift`
+`mkschema.py` derives from `frame.py`.  That makes a STRUCTURALLY malformed
+frame impossible -- wrong key, invented enum member, missing required slot,
+wrong arity -- and NOT a badly shaped string: llama.cpp's schema-to-GBNF
+converter silently ignores `pattern`, which `grammar_probe.py` demonstrates in
+one generation.  The instruction block is the SAME generated `Doctrine.swift`
 text the Apple spike uses.
 
 FREE RUNNING.  The previous turn handed to the model is the harness's OWN
@@ -42,6 +45,7 @@ import mkschema        # noqa: E402
 import frame           # noqa: E402
 import render_frames   # noqa: E402
 import knn             # noqa: E402
+import vocabblock     # noqa: E402
 
 MAP = os.path.join(mkschema.GRAMMAR, "map.json")
 ENDPOINT = "http://127.0.0.1:8080/v1/chat/completions"
@@ -61,6 +65,25 @@ def turns(corpora):
     return rows
 
 
+def slot_context():
+    """The per-slot context, READ FROM THE SERVER, not inferred from `-c`.
+
+    llama.cpp DIVIDES the `-c` total across `-np` slots, so `-c 16384 -np 4`
+    gives each turn 4096 tokens, not 16384.  The flag and the reality differ
+    by the slot count, which is exactly how a silent truncation hides: an
+    over-long prompt would be cut and its answer scored as a model failure.
+    """
+    try:
+        with urllib.request.urlopen(
+                ENDPOINT.replace("/v1/chat/completions", "/props"),
+                timeout=60) as fh:
+            props = json.load(fh)
+        return int((props.get("default_generation_settings") or {}).get("n_ctx")
+                   or 0)
+    except Exception:
+        return 0
+
+
 def post(body, timeout):
     req = urllib.request.Request(
         ENDPOINT, data=json.dumps(body).encode("utf-8"),
@@ -73,8 +96,15 @@ class Runner:
     def __init__(self, args):
         self.args = args
         self.schema = mkschema.schema()
+        # The doctrine text is BYTE-IDENTICAL across every arm; the only
+        # variables are the vocabulary block and the retrieved examples.
         self.doctrine = doctrine.text()
+        if args.block != "none":
+            self.doctrine += "\n\n" + vocabblock.block(args.block)
+        self.n_ctx = slot_context()
         self.lock = threading.Lock()
+        self.empty = 0
+        self.empty_length = 0
         self.stream = open(args.stream, "a", encoding="utf-8")
         self.rows = []
         self.shots = None
@@ -86,6 +116,55 @@ class Runner:
             self.stream.write(json.dumps(row) + "\n")
             self.stream.flush()
             self.rows.append(row)
+
+    def note_empty(self, finish):
+        """ABORT rather than report a silent zero.
+
+        A thinking-capable model streams its reasoning into
+        `reasoning_content`, which the JSON grammar does not constrain.  If
+        thinking is not actually off it spends the whole token budget there
+        and returns `content: ""` with `finish_reason: "length"` -- every
+        turn, and every one of them a legitimate failure by this harness's own
+        rules and a worthless measurement.  A near-zero score with empty
+        outputs is the dangerous outcome because it looks like a result, so a
+        run that hits it dies loudly instead.
+        """
+        with self.lock:
+            self.empty += 1
+            self.empty_length += 1 if finish == "length" else 0
+            seen, empties, truncated = len(self.rows), self.empty, self.empty_length
+        if seen >= 12 and empties > 0.25 * seen and truncated >= empties / 2:
+            sys.stderr.write(
+                "\nABORTING: %d of the first %d turns returned an EMPTY "
+                "content, %d of them cut off at the token cap.\nThis is "
+                "almost always a THINKING model whose reasoning is not off: "
+                "it fills `reasoning_content`,\nwhich the grammar does not "
+                "constrain, and never reaches the JSON. `enable_thinking: "
+                "false` is\nQwen-specific and Gemma ignores it; "
+                "`reasoning_effort: \"none\"` is llama.cpp's generic switch "
+                "and works\nfor both. Fix the request, do not report this "
+                "run.\n")
+            self.stream.flush()
+            os._exit(2)
+
+    def check_context(self, out):
+        """A prompt that will not fit is a HARNESS failure, not a model one."""
+        if not self.n_ctx:
+            return
+        needed = out["cache_n"] + out["prompt_n"] + self.args.max_tokens
+        if needed <= self.n_ctx:
+            return
+        sys.stderr.write(
+            "\nABORTING: %s/%s t%s needs %d tokens (%d cached + %d new + %d "
+            "to generate) and the\nslot holds %d. llama.cpp divides -c across "
+            "-np slots, so the per-slot budget is\n-c/-np, not -c. Raise -c "
+            "or lower -np and re-run; a truncated prompt would be\nscored as "
+            "a model failure.\n"
+            % (out["corpus"], out["session"], out["turn"], needed,
+               out["cache_n"], out["prompt_n"], self.args.max_tokens,
+               self.n_ctx))
+        self.stream.flush()
+        os._exit(3)
 
     def user_message(self, previous, request):
         head = ""
@@ -112,7 +191,15 @@ class Runner:
             "response_format": {"type": "json_schema", "json_schema": {
                 "name": "frame", "schema": self.schema, "strict": True}},
             "temperature": 0, "top_k": 1, "max_tokens": self.args.max_tokens,
+            # THINKING OFF, BOTH WAYS, because one way is not enough.
+            # Qwen honours `enable_thinking`; Gemma 4 E2B does not and instead
+            # streams its reasoning into `reasoning_content`, where the grammar
+            # does not apply -- so it spends the whole token budget thinking
+            # and returns an EMPTY `content`, which this harness would score as
+            # 145 failed turns. `reasoning_effort: "none"` is llama.cpp's own
+            # switch and turns it off for both.
             "chat_template_kwargs": {"enable_thinking": False},
+            "reasoning_effort": "none",
             "cache_prompt": True, "id_slot": slot,
         }
         started = time.time()
@@ -126,15 +213,19 @@ class Runner:
             reply = post(body, self.args.timeout)
             message = reply["choices"][0]["message"]
             out["stageB"] = message.get("content") or ""
+            finish = reply["choices"][0].get("finish_reason")
             if not out["stageB"]:
-                out["error"] = "empty content (finish_reason=%s)" % \
-                    reply["choices"][0].get("finish_reason")
+                out["error"] = "empty content (finish_reason=%s, " \
+                    "reasoning_content=%d chars)" % (
+                        finish, len(message.get("reasoning_content") or ""))
+                self.note_empty(finish)
             timings = reply.get("timings") or {}
             out["ms_a"] = round(timings.get("prompt_ms", 0.0), 1)
             out["ms_b"] = round(timings.get("predicted_ms", 0.0), 1)
             out["prompt_n"] = timings.get("prompt_n", 0)
             out["predicted_n"] = timings.get("predicted_n", 0)
             out["cache_n"] = timings.get("cache_n", 0)
+            self.check_context(out)
         except urllib.error.HTTPError as exc:
             out["error"] = "http %s: %s" % (exc.code,
                                             exc.read()[:400].decode("utf-8", "replace"))
@@ -203,18 +294,56 @@ def main():
     ap.add_argument("--slots", type=int, default=4)
     ap.add_argument("--max-tokens", type=int, default=512)
     ap.add_argument("--timeout", type=int, default=1800)
-    ap.add_argument("--limit", type=int)
+    ap.add_argument("--limit", type=int, help="the first N turns, for a smoke")
+    ap.add_argument("--sessions", type=int,
+                    help="the first N SESSIONS OF EACH CORPUS, whole -- the "
+                         "subset shape a slow model is probed on. A session "
+                         "is never cut in half, because a follow-up turn "
+                         "without its opening turn is a different question.")
+    ap.add_argument("--block", default="none",
+                    choices=list(vocabblock.BLOCKS),
+                    help="which GENERATED grammar block to append to the "
+                         "system prompt. `slots` = every board with its own "
+                         "fields plus the write registry; `contract` = the "
+                         "output form and the closed vocabularies; `spec` = "
+                         "both; `full` = `spec` plus every name behind the "
+                         "`one of N` counts `contract` abbreviates -- the 25 "
+                         "boards and all 172 columns, including the 17 the "
+                         "ontology attributes to no board and `spec` "
+                         "therefore never prints. All are derived from the "
+                         "grammar, never from "
+                         "anything we watched a model get wrong, and all are "
+                         "STATIC so they join the CACHED prefix -- unlike the "
+                         "kNN examples, which change every turn.")
+    ap.add_argument("--dev", action="store_true",
+                    help="the DEV-10 tuning sessions, proven disjoint from "
+                         "screen90 -- fast feedback, never a measurement")
+    ap.add_argument("--screen", action="store_true",
+                    help="only the 90 sessions in screen90.json -- the same "
+                         "set for every model, or the comparison is void")
     ap.add_argument("--model-name", default="qwen3.5-2b-q4_k_m")
     args = ap.parse_args()
 
     corpora = ({"suite", "blind", "holdout"} if args.corpus == "all"
                else set(args.corpus.split(",")))
     rows = turns(corpora)
+    if args.screen or args.dev:
+        import make_screen
+        wanted = make_screen.dev_keys() if args.dev else make_screen.keys()
+        rows = [r for r in rows if (r["corpus"], r["session"]) in wanted]
+    if args.sessions:
+        keep = set()
+        for corpus in sorted(corpora):
+            names = sorted({r["session"] for r in rows if r["corpus"] == corpus})
+            keep |= {(corpus, name) for name in names[:args.sessions]}
+        rows = [r for r in rows if (r["corpus"], r["session"]) in keep]
     if args.limit:
         rows = rows[:args.limit]
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     if args.stream is None:
         args.stream = "%s.stream-%s.jsonl" % (args.out, args.arm)
+    print("prompt block: %s | arm: %s | turns: %d"
+          % (args.block, args.arm, len(rows)), flush=True)
     runner = Runner(args)
     runner.run(rows)
 

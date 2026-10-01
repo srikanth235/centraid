@@ -1,0 +1,308 @@
+[
+  {
+    "id": "w11-0047",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      {
+        "hint": "asks how many tasks due last week they have",
+        "say": ["last week", "how many"]
+      },
+      {
+        "hint": "(new topic) asks what the weather will be tonight",
+        "say": ["tonight"],
+        "shown": "= 4"
+      },
+      {
+        "hint": "(new topic) asks what the number 48 flat group's spending comes to",
+        "say": ["number 48 flat"],
+        "shown": "refuse"
+      },
+      {
+        "hint": "(new topic) asks for their notes on crocus",
+        "say": ["crocus", "notes"],
+        "shown": "= 75464"
+      },
+      {
+        "hint": "(new topic) asks to order more printer ink online",
+        "say": [],
+        "shown": "no rows"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w11-0048",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      {
+        "hint": "asks which tasks due last week they have",
+        "say": ["last week", "which"]
+      },
+      {
+        "hint": "follow-up: asks to move all of them to saturday",
+        "say": ["saturday"],
+        "shown": "task \"Print the cormorant this week\" Sun 2027-12-12 18:00 · status=completed\ntask \"Ask Mads about the shogi\" Fri 2027-12-10 09:00 · status=completed effort_min=15\ntask \"Clean the fish tank (wk 49)\" Tue 2027-12-07 09:00 · status=completed effort_min=90\ntask \"Ask Myskine about the stool\" Tue 2027-12-07 17:00 · status=completed effort_min=30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w11-0050",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      {
+        "hint": "asks where they stand with Sorir Mossop in pavilion collective",
+        "say": ["Sorir Mossop", "pavilion collective"]
+      },
+      {
+        "hint": "follow-up: asks the same for Wysou ('and Wysou?')",
+        "say": ["Wysou"],
+        "shown": "= -9752"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w11-0051",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      { "hint": "asks to delete their Wystan note", "say": ["Wystan", "note"] },
+      {
+        "hint": "(new topic) asks to see the shots from Camogli Lighthouse",
+        "say": ["Camogli Lighthouse"],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: asks whether there's anything in their paperwork about it too",
+        "say": ["paperwork"],
+        "shown": "photo \"Camogli Lighthouse at dusk\" Fri 2027-10-15 08:56 · favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w11-0052",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      {
+        "hint": "asks what Arjun Fluthow's balance with them is in the number 48 flat group",
+        "say": ["Arjun Fluthow", "number 48 flat"]
+      },
+      {
+        "hint": "follow-up: asks the same for Pernille ('and Pernille?')",
+        "say": ["Pernille"],
+        "shown": "= -13386"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w11-0053",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      {
+        "hint": "says tuesday — add a task to pick up the valve",
+        "say": ["pick up the valve", "tuesday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w11-0054",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      {
+        "hint": "asks how many tasks due next week they have",
+        "say": ["next week", "how many"]
+      },
+      {
+        "hint": "(new topic) asks to delete their chaffinch photo",
+        "say": ["chaffinch", "photo"],
+        "shown": "= 3"
+      },
+      {
+        "hint": "(new topic) asks when the tynash business is",
+        "say": ["tynash"],
+        "shown": "none"
+      },
+      {
+        "hint": "(new topic) asks what their debt to Distia Ashbury is",
+        "say": ["Distia Ashbury"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: asks the same about Maricel Thithak ('and Maricel Thithak?')",
+        "say": ["Maricel Thithak"],
+        "shown": "= 1200"
+      },
+      {
+        "hint": "follow-up: asks the same about Maricel Thithak ('and Maricel Thithak?')",
+        "say": ["Maricel Thithak"],
+        "shown": "= 7500"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w11-0055",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      {
+        "hint": "asks which tasks due next week they have",
+        "say": ["next week", "which"]
+      },
+      {
+        "hint": "(new topic) asks for the total they spent this month",
+        "say": ["this month"],
+        "shown": "task \"Wrap Cemre's birdbath\" Sat 2027-12-25 12:00 · status=in-process\ntask \"Photograph the cormorant this week\" Sat 2027-12-25 18:00 · status=needs-action effort_min=45\ntask \"Ask Wysou about the granite\" Sat 2027-12-25 18:00 · status=needs-action"
+      },
+      {
+        "hint": "follow-up: says actually, don't bother",
+        "say": [],
+        "shown": "= 65060"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w11-0056",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      {
+        "hint": "asks what they still have to get done this week",
+        "say": ["this week"]
+      },
+      {
+        "hint": "follow-up: asks the same for sunday ('and sunday?')",
+        "say": ["sunday"],
+        "shown": "task \"Chase the lavender for Matteo\" Tue 2027-12-14 12:00 · status=in-process\ntask \"Post Pernille's coleslaw\" Sun 2027-12-19 09:00 · status=needs-action effort_min=10"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w11-0057",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      { "hint": "asks how many open tasks they have", "say": [] },
+      {
+        "hint": "(new topic) asks what tasks fall due this week",
+        "say": ["this week"],
+        "shown": "= 31"
+      },
+      {
+        "hint": "follow-up: asks to see just the fourth one",
+        "say": ["fourth"],
+        "shown": "task \"Chase the lavender for Matteo\" Tue 2027-12-14 12:00 · status=in-process\ntask \"Post Pernille's coleslaw\" Sun 2027-12-19 09:00 · status=needs-action effort_min=10\ntask \"Clean the fish tank (wk 50)\" Mon 2027-12-13 09:00 · status=completed\ntask \"Print the jasmine\" Sun 2027-12-19 09:00 · status=completed effort_min=10"
+      },
+      {
+        "hint": "follow-up: asks what the others are",
+        "say": [],
+        "shown": "task \"Print the jasmine\" Sun 2027-12-19 09:00 · status=completed effort_min=10"
+      },
+      {
+        "hint": "follow-up: about the post one, asks for its steps",
+        "say": ["post"],
+        "shown": "task \"Chase the lavender for Matteo\" Tue 2027-12-14 12:00 · status=in-process\ntask \"Post Pernille's coleslaw\" Sun 2027-12-19 09:00 · status=needs-action effort_min=10\ntask \"Clean the fish tank (wk 50)\" Mon 2027-12-13 09:00 · status=completed"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w11-0058",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      {
+        "hint": "asks when their Matteo thing is (no kind given)",
+        "say": ["Matteo"]
+      },
+      {
+        "hint": "follow-up: says scrap that, they'll check later themselves",
+        "say": [],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w11-0059",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      {
+        "hint": "asks when their scroll thing is (no kind given)",
+        "say": ["scroll"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w11-0060",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      { "hint": "asks what scroll things they have", "say": ["scroll"] }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w11-0061",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      {
+        "hint": "asks to settle up their debt with Malik Thithak",
+        "say": ["Malik Thithak"]
+      },
+      {
+        "hint": "(new topic) asks what photos they have from Climbing Wall",
+        "say": ["Climbing Wall"],
+        "shown": "done: people.settle_debt{} on (#2)"
+      },
+      {
+        "hint": "(detour) hang on — asks what debts there are between them and Shethie Thithak",
+        "say": ["Shethie Thithak"],
+        "shown": "photo \"Beacon from above\" Fri 2027-12-03 14:23 · album_titles=Camogli Climbing Wall favorite=false\nphoto \"Vymie at Camogli Climbing Wall\" Fri 2027-08-13 17:01 · album_titles=Camogli Climbing Wall favorite=false\nphoto \"Dumpling at dusk\" Fri 2026-07-24 20:04 · album_titles=Camogli Climbing Wall favorite=true"
+      },
+      {
+        "hint": "back to the Climbing Wall photos — asks to put the first one in the Tynash 2027 album",
+        "say": ["first", "Tynash 2027", "album"],
+        "shown": "obligation \"Hyford kit\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w11-0062",
+    "today": "Friday 2027-12-17",
+    "turns": [
+      {
+        "hint": "asks which people share pavilion collective with them",
+        "say": ["pavilion collective"]
+      },
+      {
+        "hint": "(new topic) asks for Solva Dental's email address",
+        "say": ["Solva Dental"],
+        "shown": "member \"Wysou Parata\"\nmember \"Arjun Fluthow\"\nmember \"Sorir Mossop\"\nmember \"Hiroshi Quintero\""
+      },
+      {
+        "hint": "(new topic) asks what the pavilion collective group's spending comes to",
+        "say": ["pavilion collective"],
+        "shown": "contact channel \"Solva Dental — work\" · kind=email value=hello@solvadental.example"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  }
+]

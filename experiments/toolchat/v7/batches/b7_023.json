@@ -1,0 +1,251 @@
+[
+  {
+    "id": "w05-033",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks for their expenses about parts", "say": ["parts"] },
+      { "hint": "asks for just the ones over 50 (money)", "say": ["50"] },
+      { "hint": "asks how many there are in total", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "question"]
+  },
+  {
+    "id": "w05-034",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks to pull up Quentin", "say": ["Quentin"] },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks for their documents about warranty",
+        "say": ["warranty"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "question"]
+  },
+  {
+    "id": "w05-035",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks how many events they have this weekend",
+        "say": ["this weekend"]
+      },
+      {
+        "hint": "(new topic) asks for their notes about tasting questions",
+        "say": ["tasting questions"]
+      },
+      {
+        "hint": "(new topic) asks for everything mentioning Landlord",
+        "say": ["Landlord"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  },
+  {
+    "id": "w05-036",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks who they still have to pay back", "say": [] },
+      { "hint": "asks how many there are in total", "say": [] },
+      {
+        "hint": "(new topic) asks to save the garage code 78001 in the locker",
+        "say": ["garage code", "78001"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "texting"]
+  },
+  {
+    "id": "w05-037",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks where the Card photo was taken", "say": ["Card"] },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "(new topic) asks to add 18 (money) for museum to the Allotment weekend group, paid by them",
+        "say": ["Allotment weekend", "museum"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "texting"]
+  },
+  {
+    "id": "w05-038",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks which events they have next week", "say": ["next week"] },
+      {
+        "hint": "asks for just the ones on thursday (thursday)",
+        "say": ["thursday"]
+      },
+      { "hint": "(new topic) asks which to-dos have no deadline", "say": [] },
+      { "hint": "asks which of those are about pottery", "say": ["pottery"] },
+      {
+        "hint": "(new topic) asks to log a coffee with Wherry (several people are called Wherry)",
+        "say": ["Wherry"]
+      },
+      {
+        "hint": "says it was Wherry Roofing (the Roofing one)",
+        "say": ["Roofing"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "spoken"]
+  },
+  {
+    "id": "w05-039",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks to add 120 (money) for firewood to the crew group, paid by them",
+        "say": ["crew", "firewood"]
+      },
+      { "hint": "(new topic) says the Print task is done", "say": ["Print"] },
+      {
+        "hint": "(new topic) asks what they have already done on their list",
+        "say": []
+      },
+      { "hint": "(new topic) asks when the Swimming is", "say": ["Swimming"] },
+      { "hint": "asks what about in their to-dos", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "polite"]
+  },
+  {
+    "id": "w05-040",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks who is coming to the Landlord inspection",
+        "say": ["Landlord inspection"]
+      },
+      { "hint": "asks what else there is apart from the third one", "say": [] },
+      {
+        "hint": "(new topic) asks where the beach photo was taken",
+        "say": ["beach"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w05-041",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks what's left to do on the 'Photograph the boat before Bastian comes' task",
+        "say": ["Photograph the boat before Bastian comes"]
+      },
+      {
+        "hint": "(new topic) asks to add a task 'Book the ferry tickets' for next friday at 14:00",
+        "say": ["Book the ferry tickets", "next friday"]
+      },
+      {
+        "hint": "(new topic) asks to add 60 (money) for snacks to the weekend group, paid by them",
+        "say": ["weekend", "snacks"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "spoken"]
+  },
+  {
+    "id": "w05-042",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks what's in the Allotment notebook", "say": ["Allotment"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "polite"]
+  },
+  {
+    "id": "w05-043",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks what Dagmar's mobile number is", "say": ["Dagmar"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "question"]
+  },
+  {
+    "id": "w05-044",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks to move the Gutter clean appointment to saturday",
+        "say": ["Gutter clean", "saturday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "terse"]
+  },
+  {
+    "id": "w05-045",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks to add 18 (money) for groceries to the weekend group, paid by them",
+        "say": ["weekend", "groceries"]
+      },
+      {
+        "hint": "(new topic) asks for their journal entries from last weekend",
+        "say": ["last weekend"]
+      },
+      {
+        "hint": "(new topic) asks which locker entries mention Streaming",
+        "say": ["Streaming"]
+      },
+      {
+        "hint": "(new topic) asks what day the Parkrun is on",
+        "say": ["Parkrun"]
+      },
+      {
+        "hint": "asks the same about Swimming instead ('what about Swimming?')",
+        "say": ["Swimming"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "terse"]
+  },
+  {
+    "id": "w05-046",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      {
+        "hint": "asks to move the Sell task to next friday",
+        "say": ["Sell", "next friday"]
+      },
+      { "hint": "corrects: no, make it tuesday", "say": ["tuesday"] },
+      {
+        "hint": "(new topic) asks if they have any calendar events about Choir",
+        "say": ["Choir"]
+      },
+      {
+        "hint": "asks for just the ones this week (this week)",
+        "say": ["week"]
+      },
+      { "hint": "asks who's coming to it", "say": [] },
+      {
+        "hint": "(new topic) asks what tasks are due wednesday",
+        "say": ["wednesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "polite"]
+  },
+  {
+    "id": "w05-047",
+    "today": "Saturday 2026-05-09",
+    "turns": [
+      { "hint": "asks what they're behind on", "say": [] },
+      { "hint": "asks what else there is apart from the third one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "question"]
+  }
+]

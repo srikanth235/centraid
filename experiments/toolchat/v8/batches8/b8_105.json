@@ -1,0 +1,305 @@
+[
+  {
+    "id": "w30-0039",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in conch gang",
+        "say": ["conch gang", "how much"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w30-0040",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in conch gang (the expenses)",
+        "say": ["conch gang"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w30-0041",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks to count the pictures from Pothow", "say": ["Pothow"] }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w30-0042",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks if there's a calendar event at Gitedale Pool",
+        "say": ["Gitedale Pool"]
+      },
+      {
+        "hint": "(new topic) asks to bump the meadowsweet fifteen minutes later",
+        "say": ["meadowsweet", "fifteen minutes later"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: corrects: wrong event, they meant the Moacir one",
+        "say": ["Moacir"],
+        "shown": "done: reschedule{by: +15m} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "done: reschedule{by: +15m} on (#4)"
+      },
+      {
+        "hint": "(new topic) asks to move the Oban half an hour later",
+        "say": ["Oban", "half an hour later"],
+        "shown": "party \"Taeyang Takahashi\" · role=Old flatmate\nparty \"Lionel Mahony\" · role=Brother"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w30-0043",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks when their Ghada thing is (no kind given)",
+        "say": ["Ghada"]
+      },
+      {
+        "hint": "(new topic) asks for their photos about pearl",
+        "say": ["pearl", "photos"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: says scrap that, they'll check later themselves",
+        "say": [],
+        "shown": "photo \"Ulysses's pearl\" Fri 2026-03-06 09:34 · favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w30-0044",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks what Ghada things they have", "say": ["Ghada"] },
+      {
+        "hint": "(detour) hang on — asks when the Moacir is",
+        "say": ["Moacir"],
+        "shown": "party \"Ghada Tuilagi\" · role=Tiler\nimportant date \"Engagement — Ghada Tuilagi\" Sat 2027-06-12\nphoto \"Marquee with Ghada\" Sat 2027-10-16 13:53 · album_titles=Pothow 2027 favorite=false\ntask \"Find a hyrrice for Ghada\" Thu 2027-11-18 09:00 · status=needs-action"
+      },
+      {
+        "hint": "back to that — about the first one, asks when their birthday is",
+        "say": ["first"],
+        "shown": "event \"Rummy session with Moacir\" Sat 2027-10-30 19:00"
+      },
+      {
+        "hint": "(new topic) asks to text Bronagh that they're running late",
+        "say": ["Bronagh"],
+        "shown": "important date \"Engagement — Ghada Tuilagi\" Sat 2027-06-12"
+      },
+      {
+        "hint": "(new topic) says call with the bank monday at nine — add it",
+        "say": ["call with the bank", "monday", "at nine"],
+        "shown": "refuse"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w30-0046",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks for the Vaivio router entry in the locker (the row, not the password)",
+        "say": ["Vaivio router"]
+      },
+      {
+        "hint": "(detour) hang on — asks when their knapsack thing is (no kind given)",
+        "say": ["knapsack"],
+        "shown": "locker item \"Vaivio router password\" · type=password"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w30-0047",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the Vaivio router is",
+        "say": ["Vaivio router", "password"]
+      },
+      {
+        "hint": "(new topic) asks which steps of the label job are still open",
+        "say": ["label"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks to tick off the first one and delete the third one",
+        "say": ["first", "third"],
+        "shown": "task \"Empty the pepper\" Tue 2027-11-09 09:00 · status=needs-action effort_min=120\ntask \"Collect the sapphire\" · status=needs-action\ntask \"Unpack the parsley\" · status=in-process"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w30-0048",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks who they're seeing at the falconry",
+        "say": ["falconry"]
+      },
+      {
+        "hint": "follow-up: asks for Sefo's email",
+        "say": ["Sefo"],
+        "shown": "party \"Thandiwe Abernathy\" · role=Neighbour\nparty \"Gunden Tirani\" · role=Caretaker\nparty \"Sefo Wanjala\" · role=Neighbour across the road"
+      },
+      {
+        "hint": "(new topic) asks to see the Vaivio library password itself",
+        "say": ["Vaivio library", "password"],
+        "shown": "contact channel \"Sefo Wanjala — work\" · kind=email value=sefo.wanjala@example.net"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w30-0049",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "says they've paid Pernille Linwood back, mark it settled",
+        "say": ["Pernille Linwood"]
+      },
+      {
+        "hint": "(new topic) asks how much the blanket cost",
+        "say": ["blanket"],
+        "shown": "done: people.settle_debt{} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w30-0050",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "says they had coffee with Alessandra today, log it (two contacts are called Alessandra)",
+        "say": ["Alessandra", "coffee"]
+      },
+      {
+        "hint": "follow-up: says it was the Alessandra one (mechanic)",
+        "say": ["mechanic"],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w30-0051",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "says they had coffee with Alessandra (the mechanic one) today, log it",
+        "say": ["Alessandra", "mechanic", "coffee"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w30-0052",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks what they paid for the spinnaker", "say": ["spinnaker"] },
+      {
+        "hint": "follow-up: says scrap that, they'll check later themselves",
+        "say": [],
+        "shown": "= 350"
+      },
+      {
+        "hint": "(new topic) asks what's on at Tripiholm Lighthouse",
+        "say": ["Tripiholm Lighthouse"],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: asks what their tasks have on it",
+        "say": ["tasks"],
+        "shown": "event \"Pepper sale at Tripiholm Lighthouse\" Sun 2027-11-07 07:45\nevent \"Pennant sale at Tripiholm Lighthouse\" Sun 2027-11-07 10:45\nevent \"Hammock sale at Tripiholm Lighthouse\" Sun 2027-10-31 11:30"
+      },
+      {
+        "hint": "(detour) hang on — asks what they got done this week",
+        "say": ["this week"],
+        "shown": "task \"Quote for the badger at Tripiholm Lighthouse\" Sat 2027-11-20 09:00 · status=in-process"
+      },
+      {
+        "hint": "follow-up: says never mind",
+        "say": [],
+        "shown": "task \"Paint the lamppost\" Sat 2027-10-09 09:00 · status=completed\ntask \"Recycle the hammock\" Wed 2027-10-20 09:00 · status=completed\ntask \"Tidy the pennant for Dagny\" · status=completed\ntask \"Ask Lionel about the parsley\" Thu 2027-09-30 09:00 · status=completed\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w30-0053",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      { "hint": "asks which pay jobs are still open", "say": ["pay"] },
+      {
+        "hint": "follow-up: asks how many there are in total",
+        "say": [],
+        "shown": "task \"Pay for Sipho's inglenook\" Thu 2027-11-11 09:00 · status=needs-action\ntask \"Pay for Craseth's elbow\" Thu 2027-11-25 18:00 · status=needs-action effort_min=20"
+      },
+      {
+        "hint": "follow-up: about the inglenook one, asks for its steps",
+        "say": ["inglenook"],
+        "shown": "= 2"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w30-0054",
+    "today": "Wednesday 2027-10-27",
+    "turns": [
+      {
+        "hint": "asks for the library portal entry in the locker (the row, not the password)",
+        "say": ["library portal"]
+      },
+      {
+        "hint": "follow-up: says actually, don't bother",
+        "say": [],
+        "shown": "locker item \"Vaivio library portal\" · type=login"
+      },
+      {
+        "hint": "(new topic) asks to save the safe code 57167 in the locker",
+        "say": ["safe code", "57167"],
+        "shown": "none"
+      },
+      {
+        "hint": "(new topic) asks for their notes on duffel",
+        "say": ["duffel", "notes"],
+        "shown": "done: locker.add_item{type: \"note\", title: \"Safe code\", content: \"57167\"}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  }
+]

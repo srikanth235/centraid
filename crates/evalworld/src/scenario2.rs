@@ -182,14 +182,7 @@ fn link_the_weekend(seeder: &mut Seeder) {
             "about",
         ),
     ] {
-        link(
-            seeder,
-            plan,
-            "schedule.task",
-            target,
-            target_type,
-            relation,
-        );
+        link(seeder, plan, "schedule.task", target, target_type, relation);
     }
     // THE PERMIT IS NOT LINKED, AND COULD NOT BE: `core.link_entities` has a
     // `subject_is_live` precondition, so a row already in the bin cannot be
@@ -495,7 +488,11 @@ fn people(seeder: &mut Seeder) -> Circle {
             "call",
             "Caught up about the choir tour; he wants the coast dates.",
         ),
-        ("Halla Brennan", "message", "Sent her the cottage shortlist."),
+        (
+            "Halla Brennan",
+            "message",
+            "Sent her the cottage shortlist.",
+        ),
         (
             "Tomoko Brennan",
             "message",
@@ -634,7 +631,12 @@ fn people(seeder: &mut Seeder) -> Circle {
     // channel level too rather than resolving itself by only one of them being
     // reachable.
     for (name, kind, label, value) in [
-        ("Yusuf Bergmann", "phone", "Practice line", "+44-20-7946-0142"),
+        (
+            "Yusuf Bergmann",
+            "phone",
+            "Practice line",
+            "+44-20-7946-0142",
+        ),
         ("Yusuf Castellanos", "phone", "Cell", "+44-20-7946-0197"),
         (
             "Yusuf Castellanos",
@@ -1743,9 +1745,7 @@ fn locker(seeder: &mut Seeder, key: &[u8], key_id: &str) {
                 ("password", "lens-fitting-june"),
                 ("url", "https://opticalportal.example"),
             ],
-            Some(
-                "one of several optometrist rows — and the only one the FTS plane cannot reach",
-            ),
+            Some("one of several optometrist rows — and the only one the FTS plane cannot reach"),
         ),
         (
             "card",
@@ -1761,7 +1761,10 @@ fn locker(seeder: &mut Seeder, key: &[u8], key_id: &str) {
         (
             "wifi",
             "Cottage wifi",
-            &[("network", "GlassBeachGuest"), ("password", "shoreline2026")],
+            &[
+                ("network", "GlassBeachGuest"),
+                ("password", "shoreline2026"),
+            ],
             None,
         ),
         (

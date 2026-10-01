@@ -1,0 +1,281 @@
+[
+  {
+    "id": "w18-0041",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "says the storage unit code is 56117 — keep it in the locker",
+        "say": ["storage unit code", "56117"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w18-0042",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks for the Criness Allotments entry in the locker (the row, not the password)",
+        "say": ["Criness Allotments"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w18-0043",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the Criness Allotments is",
+        "say": ["Criness Allotments", "password"]
+      },
+      {
+        "hint": "(new topic) asks when the delivery is",
+        "say": ["delivery"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w18-0045",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      { "hint": "asks to get rid of the Ignatius to-do", "say": ["Ignatius"] },
+      {
+        "hint": "follow-up: takes it back: scratch that, put it back",
+        "say": [],
+        "shown": "done: delete{} on (#4)"
+      },
+      {
+        "hint": "(new topic) asks what they have about Jessamy",
+        "say": ["Jessamy"],
+        "shown": "done: restore{} on (#4)"
+      },
+      {
+        "hint": "follow-up: asks to move the first one to saturday and the fifth one to tomorrow",
+        "say": ["first", "saturday", "fifth", "tomorrow"],
+        "shown": "event \"Jessamy's loom party\" Sat 2026-04-04 07:15\nparty \"Jessamy Fealuham\" · role=Partner\nimportant date \"Anniversary — Jessamy Fealuham\" Sun 2026-04-19\ntransaction \"Tally settlement — Jessamy Fealuham\" Tue 2026-03-24 · direction=credit\n(+1 more)"
+      },
+      {
+        "hint": "follow-up: asks if it's in their calendar as well",
+        "say": ["calendar"],
+        "shown": "done: reschedule{to: 2026-03-28} on (#5) then reschedule{to: 2026-03-28} on (#9)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w18-0046",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks how many tasks due last week they have",
+        "say": ["last week", "how many"]
+      },
+      {
+        "hint": "(new topic) asks for the colleague's contact",
+        "say": ["colleague"],
+        "shown": "= 2"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w18-0047",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks which tasks due last week they have",
+        "say": ["last week", "which"]
+      },
+      {
+        "hint": "follow-up: asks to tick off the first one and delete the second one",
+        "say": ["first", "second"],
+        "shown": "task \"Oil the porridge for Declan\" Tue 2026-03-17 09:00 · status=in-process effort_min=20\ntask \"Check the post (wk 12)\" Mon 2026-03-16 09:00 · status=completed"
+      },
+      {
+        "hint": "(new topic) asks what the weather will be tonight",
+        "say": ["tonight"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#1) then delete{} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w18-0048",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks how much the sandbank top-up was",
+        "say": ["sandbank top-up"]
+      },
+      {
+        "hint": "follow-up: says actually, don't bother",
+        "say": [],
+        "shown": "= 2434"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w18-0049",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks to open the Chess night album",
+        "say": ["Chess night", "album"]
+      },
+      {
+        "hint": "follow-up: about the Nirara one, asks which album it's in",
+        "say": ["Nirara"],
+        "shown": "photo \"Mead session 2026\" Mon 2026-02-16 17:45 · album_titles=Brewing 2026, Walks round The Old Crate,… favorite=false\nphoto \"Nirara at Piran Springs\" Sat 2025-11-01 16:05 · album_titles=Brewing 2026, Chess night, Gitedale 2025 favorite=false\nphoto \"Stagecoach on the table\" Fri 2025-03-14 10:48 · album_titles=Chess night favorite=false\nphoto \"IMG_6464\" Sun 2023-12-10 18:13 · album_titles=Brewing 2026, Chess night favorite=false"
+      },
+      {
+        "hint": "(new topic) asks to square their Gitedale trip balance with Pieter",
+        "say": ["Pieter", "Gitedale trip"],
+        "shown": "album \"Gitedale 2025\"\nalbum \"Brewing 2026\"\nalbum \"Chess night\""
+      },
+      {
+        "hint": "(new topic) asks how much Emrys Fealuham owes them in Gitedale trip",
+        "say": ["Emrys Fealuham", "Gitedale trip"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#9), amount_minor: balance of (#11) in (#9)} on (#11)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w18-0050",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks to make the hall an hour earlier",
+        "say": ["hall", "an hour earlier"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w18-0051",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks which paperwork mention aqueduct",
+        "say": ["aqueduct", "paperwork"]
+      },
+      {
+        "hint": "follow-up: asks what about in their tasks",
+        "say": ["tasks"],
+        "shown": "document \"Aqueduct report\" Tue 2025-03-18 21:20 · folder=Vehicle"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w18-0052",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      { "hint": "asks where the springs photo was taken", "say": ["springs"] },
+      {
+        "hint": "follow-up: asks to see the photos from there",
+        "say": [],
+        "shown": "place \"Piran Springs\""
+      },
+      {
+        "hint": "follow-up: asks which album it's in",
+        "say": [],
+        "shown": "photo \"Nirara at Piran Springs\" Sat 2025-11-01 16:05 · album_titles=Brewing 2026, Chess night, Gitedale 2025 favorite=false"
+      },
+      {
+        "hint": "follow-up: asks what other shots are in there",
+        "say": [],
+        "shown": "album \"Gitedale 2025\"\nalbum \"Brewing 2026\"\nalbum \"Chess night\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w18-0053",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in Zermatt",
+        "say": ["Zermatt", "how much"]
+      },
+      {
+        "hint": "(detour) hang on — asks which appointments they have tuesday",
+        "say": ["tuesday"],
+        "shown": "= 65176"
+      },
+      {
+        "hint": "back to that — asks for its expenses",
+        "say": [],
+        "shown": "event \"Call Maskan about the ferret\" Tue 2026-03-31 07:00\nevent \"Cinder viewing\" Tue 2026-03-31 09:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w18-0054",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in Zermatt (the expenses)",
+        "say": ["Zermatt"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w18-0055",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks for their pictures about Nirara",
+        "say": ["Nirara", "pictures"]
+      },
+      {
+        "hint": "follow-up: asks where it was taken",
+        "say": [],
+        "shown": "photo \"Nirara at Piran Springs\" Sat 2025-11-01 16:05 · album_titles=Brewing 2026, Chess night, Gitedale 2025 favorite=false"
+      },
+      {
+        "hint": "(new topic) asks for Jessamy Fealuham's contact card",
+        "say": ["Jessamy Fealuham"],
+        "shown": "place \"Piran Springs\""
+      },
+      {
+        "hint": "follow-up: says they texted them today, log it",
+        "say": ["texted"],
+        "shown": "party \"Jessamy Fealuham\" · role=Partner"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w18-0058",
+    "today": "Friday 2026-03-27",
+    "turns": [
+      {
+        "hint": "asks who they had dinner with last monday",
+        "say": ["dinner", "last monday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  }
+]

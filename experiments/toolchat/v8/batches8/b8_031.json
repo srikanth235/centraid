@@ -1,0 +1,318 @@
+[
+  {
+    "id": "w10-0001",
+    "today": "Thursday 2026-11-12",
+    "turns": [{ "hint": "asks for the last photo they took", "say": [] }],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w10-0002",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      { "hint": "asks to find the tasks on ferry", "say": ["ferry", "tasks"] },
+      {
+        "hint": "(new topic) asks to see the partridge crew expenses",
+        "say": ["partridge crew"],
+        "shown": "task \"Book the Pondicherry ferry\" Thu 2026-12-10 09:00 · status=needs-action"
+      },
+      {
+        "hint": "follow-up: asks for just the ones over forty kroner",
+        "say": ["forty kroner"],
+        "shown": "expense \"Gooseberry deposit\" Mon 2026-11-09 · amount_minor=4851 paid_by=Owner\nexpense \"Dinner at Lerwick Gorge\" Thu 2026-11-05 · amount_minor=24061 paid_by=Greta Iqbal\nexpense \"Bramble repair\" Wed 2026-11-04 · amount_minor=23509 paid_by=Owner\nexpense \"Dinner at Gryshaven Community Hall\" Tue 2026-11-03 · amount_minor=17594 paid_by=Owner\n(+8 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w10-0003",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks how many documents are in the Work folder",
+        "say": ["Work"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w10-0004",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks what events Leander Juarez is coming to",
+        "say": ["Leander Juarez"]
+      },
+      {
+        "hint": "(detour) hang on — asks what they have got next friday",
+        "say": ["next friday"],
+        "shown": "event \"Elford trip\" Mon 2026-09-28 08:00\nevent \"Ballast sale at Lerwick Steps\" Sun 2026-11-15 08:45\nevent \"Vellash fair\" Sun 2026-11-15 18:30\nevent \"Pondicherry trip\" Wed 2026-12-02 08:00"
+      },
+      {
+        "hint": "back to Leander Juarez's events — asks to move the first one to saturday and the fourth one to wednesday",
+        "say": ["first", "saturday", "fourth", "wednesday"],
+        "shown": "important date \"Birthday — Vaclav Tennant\" Fri 2026-11-20\nevent \"Harpsichord lesson with Jannou\" Fri 2026-11-20 12:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w10-0005",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks which expenses mention deposit",
+        "say": ["deposit", "expenses"]
+      },
+      {
+        "hint": "(new topic) says new task: buy a new ragwort",
+        "say": ["buy a new ragwort"],
+        "shown": "expense \"Gooseberry deposit\" Mon 2026-11-09 · amount_minor=4851 paid_by=Owner"
+      },
+      {
+        "hint": "(new topic) asks what's left to do about the gorge",
+        "say": ["gorge"],
+        "shown": "done: schedule.add_task{title: \"Buy a new ragwort\"}"
+      },
+      {
+        "hint": "(new topic) asks what they still have to get done next week",
+        "say": ["next week"],
+        "shown": "task \"Wrap the pulley at Lerwick Gorge\" · status=needs-action effort_min=45\ntask \"Paint the cradle at Lerwick Gorge\" Fri 2026-11-13 18:00 · status=needs-action effort_min=120"
+      },
+      {
+        "hint": "(new topic) asks for photos taken at Zyrrow Marsh",
+        "say": ["Zyrrow Marsh"],
+        "shown": "task \"Top up the lunch account (wk 47)\" Mon 2026-11-16 09:00 · status=needs-action"
+      },
+      {
+        "hint": "follow-up: asks how many that is",
+        "say": [],
+        "shown": "photo \"Oboe club 2025\" Mon 2026-11-09 19:04 · favorite=false\nphoto \"Jellyfish close-up\" Sat 2026-10-17 16:18 · album_titles=Winter 2026, Walks round Banff Climbing … favorite=false\nphoto \"Kasun at Zyrrow Marsh\" Sat 2026-08-01 17:48 · favorite=false\nphoto \"Dustpan at night\" Sat 2025-05-03 19:57 · favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w10-0006",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks when their ballast thing is (no kind given)",
+        "say": ["ballast"]
+      },
+      {
+        "hint": "(new topic) asks which album the walnut photo is in",
+        "say": ["walnut"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: asks to see the photos in it",
+        "say": [],
+        "shown": "album \"Elford 2026\""
+      },
+      {
+        "hint": "follow-up: asks to delete the Zacharias one",
+        "say": ["Zacharias"],
+        "shown": "photo \"Partridge on the table\" Sun 2026-10-11 18:14 · album_titles=Elford 2026 favorite=false\nphoto \"Zacharias at Elford Gorge\" Fri 2026-10-02 09:24 · album_titles=Winter 2025, Elford 2026 favorite=false\nphoto \"Shunwyn at Talwen Mill\" Thu 2026-10-01 14:06 · album_titles=Walks round Banff Climbing Wall, Elford … favorite=false\nphoto \"Elif's walnut\" Sat 2025-08-23 11:25 · album_titles=Elford 2026 favorite=false"
+      },
+      {
+        "hint": "(new topic) asks what tasks fall due this weekend",
+        "say": ["this weekend"],
+        "shown": "done: media.delete_asset{} on (#5)"
+      },
+      {
+        "hint": "(new topic) asks how much they owe Ursula",
+        "say": ["Ursula"],
+        "shown": "task \"Borrow the basket at Gryshaven Lido\" Sun 2026-11-15 12:00 · status=needs-action"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w10-0007",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      { "hint": "asks what ballast things they have", "say": ["ballast"] },
+      {
+        "hint": "follow-up: asks to move the collect one to thursday",
+        "say": ["collect", "thursday"],
+        "shown": "event \"Ballast delivery\" Sat 2026-11-14 12:00\nevent \"Ballast sale at Lerwick Steps\" Sun 2026-11-15 08:45\nevent \"Collect the ballast\" Fri 2026-11-27 16:30\ndocument \"Ballast quote 2025\" Mon 2025-10-27 11:42 · folder=Bank\n(+6 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w10-0008",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      { "hint": "asks who is coming to the caving", "say": ["caving"] },
+      {
+        "hint": "follow-up: says they phoned the first one, log it",
+        "say": ["first"],
+        "shown": "party \"Ewan Tedesco\" · role=Landlord\nparty \"Moan Blomqvist\" · role=Neighbour across the road\nparty \"Pietro Derino\" · role=Caretaker"
+      },
+      {
+        "hint": "follow-up: corrects: wrong one, they meant the fourth one",
+        "say": ["fourth"],
+        "shown": "done: people.log_interaction{kind: \"call\"} on (#2)"
+      },
+      {
+        "hint": "(new topic) asks what they still have to get done tomorrow",
+        "say": ["tomorrow"],
+        "shown": "done: people.log_interaction{kind: \"call\"} on (#4)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w10-0009",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks what the steps for the wrap the pulley at lerwick gorge are",
+        "say": ["wrap the pulley at lerwick gorge"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w10-0010",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks to settle up with Leander in Elford trip",
+        "say": ["Leander", "Elford trip", "settle up"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w10-0011",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks to add twenty kroner for Leander's taxi to Elford trip, they paid",
+        "say": ["twenty kroner", "Leander's taxi", "Elford trip"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w10-0012",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks to see the documents they marked with a star",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks to delete their chisel photo",
+        "say": ["chisel", "photo"],
+        "shown": "document \"Lerwick Steps receipt\" Mon 2026-11-02 11:44\ndocument \"Bank statement (02)\" Fri 2026-07-17 18:07 · folder=Bank\ndocument \"Carrom receipt\" Wed 2026-02-11 23:29 · folder=Work\ndocument \"Bank statement (01)\" Mon 2025-12-22 17:19 · folder=Energy"
+      },
+      {
+        "hint": "(new topic) asks what time the Manon is",
+        "say": ["Manon"],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: asks what else is on that day",
+        "say": [],
+        "shown": "event \"Walk with Manon\" Sat 2026-11-28 07:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w10-0013",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks how much Jannou Juarez owes them in Elford trip",
+        "say": ["Jannou Juarez", "Elford trip"]
+      },
+      {
+        "hint": "follow-up: asks the same for Leander ('and Leander?')",
+        "say": ["Leander"],
+        "shown": "= 27342"
+      },
+      {
+        "hint": "(new topic) asks what the most recent picture they took is",
+        "say": [],
+        "shown": "= 1963"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w10-0014",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks for the photos in the Summer 2026 album",
+        "say": ["Summer 2026", "album"]
+      },
+      {
+        "hint": "follow-up: asks to delete the puppet one",
+        "say": ["puppet"],
+        "shown": "photo \"Bridle at sunrise\" Sat 2026-10-31 13:12 · album_titles=Walks round Banff Climbing Wall, Summer … favorite=true people=Gaveth Juarez\nphoto \"New carrom (03)\" Sat 2026-10-24 14:33 · album_titles=Winter 2025, Vellash 2026, Summer 2026 favorite=false\nphoto \"IMG_7671\" Tue 2026-10-13 19:28 · album_titles=Summer 2026 favorite=false\nphoto \"Puppet by the window\" Fri 2026-10-02 13:28 · album_titles=Summer 2026, Winter 2026 favorite=false\n(+3 more)"
+      },
+      {
+        "hint": "follow-up: says they didn't mean that, bring it back",
+        "say": [],
+        "shown": "done: media.delete_asset{} on (#6)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w10-0015",
+    "today": "Thursday 2026-11-12",
+    "turns": [
+      {
+        "hint": "asks for the photos in the Elford 2026 album",
+        "say": ["Elford 2026", "album"]
+      },
+      {
+        "hint": "follow-up: asks to put the second one in the Walks round Banff Climbing Wall album",
+        "say": ["second", "Walks round Banff Climbing Wall", "album"],
+        "shown": "photo \"Partridge on the table\" Sun 2026-10-11 18:14 · album_titles=Elford 2026 favorite=false\nphoto \"Zacharias at Elford Gorge\" Fri 2026-10-02 09:24 · album_titles=Winter 2025, Elford 2026 favorite=false\nphoto \"Shunwyn at Talwen Mill\" Thu 2026-10-01 14:06 · album_titles=Walks round Banff Climbing Wall, Elford … favorite=false\nphoto \"Elif's walnut\" Sat 2025-08-23 11:25 · album_titles=Elford 2026 favorite=false"
+      },
+      {
+        "hint": "follow-up: corrects: wrong photo, they meant the snow one",
+        "say": ["snow"],
+        "shown": "done: media.add_to_album{album_id: (#7)} on (#4)"
+      },
+      {
+        "hint": "(new topic) asks who still has to pay them back",
+        "say": [],
+        "shown": "done: media.add_to_album{album_id: (#7)} on (#8)"
+      },
+      {
+        "hint": "(detour) hang on — asks for the bramble club login entry",
+        "say": ["bramble club", "login"],
+        "shown": "party \"Gosou Lacroix\" · owed_to_me_minor=2000 role=Client\nparty \"Tromine Bethard\" · owed_to_me_minor=2000 role=Colleague"
+      },
+      {
+        "hint": "back to the money — says they phoned the first one, log it",
+        "say": ["first"],
+        "shown": "locker item \"Bramble club login\" · type=login"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  }
+]

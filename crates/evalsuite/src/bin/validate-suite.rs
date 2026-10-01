@@ -287,7 +287,7 @@ enum Expected {
         /// HOW THIS NUMBER IS DERIVED FROM THE WORLD, when it is derived from
         /// the world rather than named by hand. See [`Recompute`].
         #[serde(default)]
-        recompute: Option<Recompute>,
+        recompute: Option<Box<Recompute>>,
     },
     /// Several writes, all of which must hold. One request, more than one row.
     WriteSet {
@@ -618,7 +618,10 @@ fn main() -> std::process::ExitCode {
             problems.push(format!("{}: no turns", session.id));
         }
         if session.notes.trim().is_empty() {
-            problems.push(format!("{}: no notes — say why the session exists", session.id));
+            problems.push(format!(
+                "{}: no notes — say why the session exists",
+                session.id
+            ));
         }
 
         for (index, turn) in session.turns.iter().enumerate() {
@@ -768,8 +771,9 @@ fn main() -> std::process::ExitCode {
                             "{}: a value with no unit is a number nobody can score",
                             at(index)
                         )),
-                        Some(unit) if !UNITS.contains(&unit.as_str()) => problems
-                            .push(format!("{}: unknown unit {unit:?}", at(index))),
+                        Some(unit) if !UNITS.contains(&unit.as_str()) => {
+                            problems.push(format!("{}: unknown unit {unit:?}", at(index)))
+                        }
                         Some(_) => {}
                     }
                     if value.as_f64().is_some_and(|number| number < 0.0) {
@@ -854,9 +858,7 @@ fn main() -> std::process::ExitCode {
     }
 
     if implied.is_empty() {
-        println!(
-            "ordering   no ids turn's request implies an order the case leaves unasserted"
-        );
+        println!("ordering   no ids turn's request implies an order the case leaves unasserted");
     } else {
         println!(
             "ordering   {} ids turn(s) whose request implies an order with `ordered` unset \
@@ -876,7 +878,11 @@ writes {writes}, write_sets {write_sets}, no_action {no_actions})",
     );
     println!(
         "apps       {}",
-        apps_touched.iter().map(String::as_str).collect::<Vec<_>>().join(" ")
+        apps_touched
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(" ")
     );
     for (category, count) in &categories {
         println!("  {category:<22} {count}");
@@ -928,7 +934,6 @@ their window, {} carry no date to check",
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // The depth check: a `deep` session that is really a list of questions.
 // ---------------------------------------------------------------------------
@@ -942,8 +947,8 @@ their window, {} carry no date to check",
 /// forgets makes a case DECLARE a topic switch it did not need to, never the
 /// other way round.
 const CONTINUATION: &[&str] = &[
-    "it", "its", "itself", "that", "this", "these", "those", "them", "they", "their", "her",
-    "him", "his", "she", "he", "there", "then", "one", "ones", "same", "else", "again", "now",
+    "it", "its", "itself", "that", "this", "these", "those", "them", "they", "their", "her", "him",
+    "his", "she", "he", "there", "then", "one", "ones", "same", "else", "again", "now",
     // AN ORDINAL IS A POINTER. "the second task" names nothing on its own —
     // it names a position in the answer the turn before it gave.
     "first", "second", "third", "fourth", "fifth", "other", "another", "both",
@@ -951,8 +956,19 @@ const CONTINUATION: &[&str] = &[
 
 /// Phrases that carry a thread without using a pronoun at all.
 const CONTINUATION_PHRASE: &[&str] = &[
-    "back to", "what about", "how about", "just the", "only the", "and ", "so what", "how much",
-    "which of", "of those", "of them", "no —", "no,",
+    "back to",
+    "what about",
+    "how about",
+    "just the",
+    "only the",
+    "and ",
+    "so what",
+    "how much",
+    "which of",
+    "of those",
+    "of them",
+    "no —",
+    "no,",
 ];
 
 #[derive(Debug, Default)]
@@ -1120,15 +1136,11 @@ fn check_openings(suite: &Suite, problems: &mut Vec<String>) -> Openings {
             }
             let next = tokens.get(index + 1).map(String::as_str).unwrap_or("");
             // "log THAT I called her" is a complementiser, not a pronoun.
-            if word == "that" && matches!(next, "i" | "we" | "he" | "she" | "they" | "you" | "it")
-            {
+            if word == "that" && matches!(next, "i" | "we" | "he" | "she" | "they" | "you" | "it") {
                 continue;
             }
             // "is IT anybody's birthday" is an expletive subject.
-            if word == "it"
-                && index > 0
-                && matches!(tokens[index - 1].as_str(), "is" | "was")
-            {
+            if word == "it" && index > 0 && matches!(tokens[index - 1].as_str(), "is" | "was") {
                 continue;
             }
             // Something in this sentence can BE the antecedent.
@@ -1420,7 +1432,15 @@ fn check_temporal(
                 // A DATE A WRITE IS ASKED TO LAND ON. "push it to tomorrow"
                 // with `to: 2026-06-18` is the same defect in write clothing.
                 Expected::Write { args, .. } => {
-                    check_temporal_args(&at, &phrase, &window, alternative.as_ref(), args, problems, &mut found);
+                    check_temporal_args(
+                        &at,
+                        &phrase,
+                        &window,
+                        alternative.as_ref(),
+                        args,
+                        problems,
+                        &mut found,
+                    );
                 }
                 Expected::WriteSet { writes, .. } => {
                     for step in writes {
@@ -1534,11 +1554,24 @@ fn report_implied_ordering(suite: &Suite) -> Vec<(String, String, String, usize)
     /// two window phrases are excluded where they are windows: "next week"
     /// and "last week" name a period, not an nth row.
     const CUES: &[&str] = &[
-        "next", "latest", "oldest", "first", "upcoming", "most recent", "soonest", "earliest",
-        "coming up", "due",
+        "next",
+        "latest",
+        "oldest",
+        "first",
+        "upcoming",
+        "most recent",
+        "soonest",
+        "earliest",
+        "coming up",
+        "due",
     ];
     const WINDOWS: &[&str] = &[
-        "next week", "last week", "next month", "last month", "next year", "next couple",
+        "next week",
+        "last week",
+        "next month",
+        "last month",
+        "next year",
+        "next couple",
         "next few",
     ];
     let mut found = Vec::new();

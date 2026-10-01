@@ -1,0 +1,278 @@
+[
+  {
+    "id": "w23-0040",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "says they messaged Fleur today, log it (two contacts are called Fleur)",
+        "say": ["Fleur", "messaged"]
+      },
+      {
+        "hint": "follow-up: says it was Fleur Bekele",
+        "say": ["Bekele"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: asks when they last spoke",
+        "say": [],
+        "shown": "done: people.log_interaction{kind: \"message\"} on (#2)"
+      },
+      {
+        "hint": "(new topic) asks to mark the debt with Drolette Novak as paid",
+        "say": ["Drolette Novak"],
+        "shown": "activity \"interaction — Fleur Bekele\" Wed 2027-04-07 15:45"
+      },
+      {
+        "hint": "(new topic) asks to clear out the dinner events",
+        "say": ["dinner", "event"],
+        "shown": "done: people.settle_debt{} on (#7)"
+      },
+      {
+        "hint": "follow-up: takes it back: scratch that, put it back",
+        "say": [],
+        "shown": "done: delete{} on (#8, #9)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w23-0041",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "says they messaged Fleur Bekele today, log it",
+        "say": ["Fleur Bekele", "messaged"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w23-0042",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks to save the locker combination 1084 in the locker",
+        "say": ["locker combination", "1084"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w23-0043",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks which photos mention Navton",
+        "say": ["Navton", "photos"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w23-0044",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks what they paid for the ferret delivery",
+        "say": ["ferret delivery"]
+      },
+      {
+        "hint": "(new topic) asks to get rid of every Wengen appointment",
+        "say": ["Wengen", "appointment"],
+        "shown": "= 2400"
+      },
+      {
+        "hint": "follow-up: says oops, undo that",
+        "say": [],
+        "shown": "done: delete{} on (#2, #3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w23-0046",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks for the photos they took yesterday",
+        "say": ["yesterday"]
+      },
+      {
+        "hint": "(new topic) asks to put Drolette Novak in Temmere house share",
+        "say": ["Drolette Novak", "Temmere house share"],
+        "shown": "photo \"The Old Tractor in winter\" Tue 2027-04-06 11:34 · album_titles=The Old Tractor favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w23-0048",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks to delete the fermenting warranty document",
+        "say": ["fermenting warranty", "document"]
+      },
+      {
+        "hint": "(new topic) asks what Przemek's balance with them is in the Temmere house share group",
+        "say": ["Przemek", "Temmere house share"],
+        "shown": "done: core.trash_document{} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w23-0049",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks to delete the agreement document",
+        "say": ["agreement", "document"]
+      },
+      {
+        "hint": "follow-up: says actually, don't bother",
+        "say": [],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w23-0051",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks what documents they have linked to Inverness Heath",
+        "say": ["Inverness Heath"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w23-0052",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks if they have any paperwork for the ferret expense",
+        "say": ["ferret", "expense"]
+      },
+      {
+        "hint": "(new topic) asks to show the bellows tasks, tick off the first and delete the second",
+        "say": ["bellows"],
+        "shown": "document \"Ferret contract\" Thu 2026-05-28 07:07 · folder=Invoices"
+      },
+      {
+        "hint": "(new topic) asks when they have the turnstone party",
+        "say": ["turnstone party"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#2) then delete{} on (#3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w23-0053",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks what Mirela Nouvani's balance with them is in the Lamow trip group",
+        "say": ["Mirela Nouvani", "Lamow trip"]
+      },
+      {
+        "hint": "follow-up: asks the same for Dostir ('and Dostir?')",
+        "say": ["Dostir"],
+        "shown": "= 23750"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w23-0054",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks what Kally entries they have in the locker",
+        "say": ["Kally", "locker"]
+      },
+      {
+        "hint": "follow-up: asks if it's in their paperwork as well",
+        "say": ["paperwork"],
+        "shown": "locker item \"Kally credit card\" · type=card\nlocker item \"Kally holiday card\" · type=card"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w23-0055",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks which catapult tasks they haven't done yet",
+        "say": ["catapult"]
+      },
+      {
+        "hint": "follow-up: asks what about in their paperwork",
+        "say": ["paperwork"],
+        "shown": "task \"Move Dariush's catapult\" Sun 2027-03-14 09:00 · status=in-process effort_min=30\ntask \"Quote for Yoshiko's catapult\" · status=needs-action"
+      },
+      {
+        "hint": "(new topic) asks to square their boskice fund balance with Drondel Nair",
+        "say": ["Drondel Nair", "boskice fund"],
+        "shown": "document \"Catapult warranty 2026\" Wed 2026-06-10 15:34"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w23-0056",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks for the total they spent this month",
+        "say": ["this month"]
+      },
+      {
+        "hint": "follow-up: asks the same for last week ('and last week?')",
+        "say": ["last week"],
+        "shown": "= 18795"
+      },
+      { "hint": "follow-up: says nah, leave it", "say": [], "shown": "= 28244" }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w23-0057",
+    "today": "Wednesday 2027-04-07",
+    "turns": [
+      {
+        "hint": "asks for their pictures from Tripiholm Viewpoint",
+        "say": ["Tripiholm Viewpoint"]
+      },
+      {
+        "hint": "(detour) hang on — asks what else is going on while they're in Locarno",
+        "say": ["Locarno"],
+        "shown": "photo \"Tripiholm Viewpoint in the mist\" Thu 2027-02-18 08:42 · album_titles=Libor's cauldron, Lamow 2027 favorite=false\nphoto \"Vearie at Tripiholm Viewpoint\" Thu 2027-02-18 07:35 · album_titles=Ferret, Lamow 2027 favorite=false"
+      },
+      {
+        "hint": "back to the Tripiholm Viewpoint photos — asks to delete the second one",
+        "say": ["second"],
+        "shown": "important date \"Birthday — Przemek Halow\" Fri 2027-04-23\ntask \"Ask Wamie about the ferret\" Wed 2027-04-21 12:00 · status=needs-action\ntask \"Paint the bellows\" Thu 2027-04-22 12:00 · status=needs-action\nevent \"Locarno weekend\" Wed 2027-04-21 07:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  }
+]

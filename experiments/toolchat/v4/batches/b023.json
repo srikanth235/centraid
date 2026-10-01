@@ -1,0 +1,242 @@
+[
+  {
+    "id": "g0531",
+    "today": "Saturday 2026-01-17",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Winifred\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Winifred\"], sorted by start time descending (highest/latest first)].",
+        "move": "first",
+        "hint": "when did I last see/speak to Winifred"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Thibault\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Thibault\"], sorted by start time descending (highest/latest first)].",
+        "move": "substitute",
+        "hint": "and Thibault?"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0690",
+    "today": "Tuesday 2027-02-16",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"clean\" that (deleted_at is not null))",
+        "gloss": "List tasks named \"clean\" where the date deleted (trash) is set.",
+        "move": "first",
+        "hint": "did I delete / bin the clean task"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0474",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "canonical": "reschedule{ to: in 9 days } on (tasks called \"passport\")",
+        "gloss": "Move [tasks named \"passport\"] to in 9 days.",
+        "move": "first",
+        "hint": "push/move the named task"
+      },
+      {
+        "canonical": "nothing",
+        "gloss": "Do nothing: the member withdraws the request.",
+        "move": "undo",
+        "hint": "actually never mind / leave it"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0680",
+    "today": "Wednesday 2027-05-19",
+    "turns": [
+      {
+        "canonical": "show (members of (groups called \"club\"))",
+        "gloss": "List the members linked to [groups named \"club\"].",
+        "move": "first",
+        "hint": "who's in the club group"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0134",
+    "today": "Sunday 2025-03-23",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Pascal\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Pascal\"], sorted by start time descending (highest/latest first)].",
+        "move": "first",
+        "hint": "when did I last see/speak to Pascal"
+      },
+      {
+        "canonical": "show (parties that (role = \"Dentist\"))",
+        "gloss": "List parties where the role is \"Dentist\".",
+        "move": "new",
+        "hint": "who's my dentist"
+      },
+      {
+        "canonical": "show (contact channels of (it) that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [it (the one row the previous turn is about)] where the kind is \"phone\".",
+        "move": "act",
+        "hint": "what's their number"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0648",
+    "today": "Thursday 2027-02-11",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Call with Agnieszka\", dtstart: monday at 14:00, dtend: monday at 15:00 }",
+        "gloss": "Put an event titled \"Call with Agnieszka\" in the calendar starting monday at 14:00 and ending monday at 15:00.",
+        "move": "first",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0332",
+    "today": "Friday 2027-07-02",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (journal notes ordered by created_at desc))",
+        "gloss": "List the first 1 of [journal notes, sorted by date created descending (highest/latest first)].",
+        "move": "first",
+        "hint": "my last journal entry"
+      },
+      {
+        "canonical": "knowledge.create_note{ title: \"Boiler error codes\" }",
+        "gloss": "Create a note titled \"Boiler error codes\".",
+        "move": "new",
+        "hint": "make a note called ..."
+      },
+      {
+        "canonical": "knowledge.delete_note{} on (it)",
+        "gloss": "Delete (move to trash) [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "delete it again"
+      },
+      {
+        "canonical": "schedule.propose_event{ summary: \"Wedding rehearsal\", dtstart: 2027-09-28T14:15, dtend: 2027-09-28T15:15 }",
+        "gloss": "Put an event titled \"Wedding rehearsal\" in the calendar starting Tuesday 2027-09-28 at 14:15 and ending Tuesday 2027-09-28 at 15:15.",
+        "move": "new",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0336",
+    "today": "Saturday 2028-10-07",
+    "turns": [
+      {
+        "canonical": "social.send_message{ body: \"On my way\" } on (contact channels of (parties called \"Cormac Eklund\") that (kind = \"phone\"))",
+        "gloss": "",
+        "move": "first",
+        "hint": "text Cormac Eklund: On my way"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0198",
+    "today": "Thursday 2026-01-01",
+    "turns": [
+      {
+        "canonical": "show (circles that (count of groups = 2))",
+        "gloss": "List circles where the number of their groups is 2.",
+        "move": "first",
+        "hint": ""
+      },
+      {
+        "canonical": "people.log_interaction{ kind: \"coffee\", since: today } on (parties called \"Tove\")",
+        "gloss": "Log that I had a coffee with [parties named \"Tove\"].",
+        "move": "new",
+        "hint": "log a coffee with Tove (today)"
+      },
+      {
+        "canonical": "sum amount_minor of (expenses that (spent_on during last month))",
+        "gloss": "What is the total amount (in pence) of [expenses where the date spent falls last month]?",
+        "move": "switch",
+        "hint": "what did I spend last month"
+      },
+      {
+        "canonical": "show (circles that (count of groups = 2))",
+        "gloss": "List circles where the number of their groups is 2.",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      },
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "gloss": "List parties where the amount I owe them is set.",
+        "move": "new",
+        "hint": "who do I owe money to"
+      },
+      {
+        "canonical": "sum owed_to_them of (them)",
+        "gloss": "What is the total amount I owe them of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how much in total"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0238",
+    "today": "Tuesday 2027-06-15",
+    "turns": [
+      {
+        "canonical": "balance of (members called \"Wren\") in (groups called \"long\")",
+        "gloss": "What is the balance of [members named \"Wren\"] within [groups named \"long\"]?",
+        "move": "first",
+        "hint": "what does Wren owe me for long"
+      },
+      {
+        "canonical": "schedule.propose_event{ summary: \"Quarterly review\", dtstart: wednesday at 13:00, dtend: wednesday at 14:00 }",
+        "gloss": "Put an event titled \"Quarterly review\" in the calendar starting wednesday at 13:00 and ending wednesday at 14:00.",
+        "move": "new",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0594",
+    "today": "Sunday 2025-11-02",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"printer\" that (deleted_at is not null))",
+        "gloss": "List tasks named \"printer\" where the date deleted (trash) is set.",
+        "move": "first",
+        "hint": "did I delete / bin the printer task"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0160",
+    "today": "Wednesday 2028-01-05",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Soraya\" that (role contains \"colleague\"))",
+        "gloss": "List parties named \"Soraya\" where the role contains \"colleague\".",
+        "move": "first",
+        "hint": "the Soraya I used to work with"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (the 2nd one) ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [the 2nd one (by position in the previous answer)], sorted by start time descending (highest/latest first)].",
+        "move": "act",
+        "hint": "when did I last talk to the Nth one"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  }
+]

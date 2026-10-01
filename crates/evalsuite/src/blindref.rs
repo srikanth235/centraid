@@ -170,7 +170,9 @@ fn expense_total(ctx: &Context<'_>, keep: impl Fn(&VaultRow) -> bool) -> (f64, f
         if row.entity != "tally.expense" || extra(&row, "deleted") == "true" || !keep(&row) {
             continue;
         }
-        total += extra(&row, "amount_minor").parse::<i64>().unwrap_or_default();
+        total += extra(&row, "amount_minor")
+            .parse::<i64>()
+            .unwrap_or_default();
         count += 1;
     }
     #[expect(clippy::cast_precision_loss, reason = "minor units and row counts")]
@@ -226,9 +228,7 @@ impl Candidate for BlindTurn {
                 like(ctx, App::Agenda, "core.event", "check-")
             }
             // OVERDUE IS THE OPEN PAST, read off the board's own status.
-            "is anything overdue?" | "anything overdue?" => {
-                tasks_due(ctx, "0000-00-00", &day(-1))
-            }
+            "is anything overdue?" | "anything overdue?" => tasks_due(ctx, "0000-00-00", &day(-1)),
             "what's due this week?" => tasks_due(ctx, &day(0), &day(6)),
             "what's due on the 18th?" => tasks_due(ctx, &day(3), &day(3)),
             "did I do the grocery run?" => like(ctx, App::Tasks, "schedule.task", "grocery run"),
@@ -364,7 +364,11 @@ impl Candidate for BlindTurn {
                         Plan::Ids(ids) => ids.first().cloned(),
                         _ => None,
                     })
-                    .and_then(|id| ctx.field("tally.obligation", &id, "amount_minor").ok().flatten())
+                    .and_then(|id| {
+                        ctx.field("tally.obligation", &id, "amount_minor")
+                            .ok()
+                            .flatten()
+                    })
                     .and_then(|text| text.parse::<f64>().ok())
                     .unwrap_or_default();
                 Plan::Value(amount)
@@ -389,11 +393,13 @@ impl Candidate for BlindTurn {
             // because this reference resolves the group by name every time.
             "what has the Tahoe trip cost us so far?"
             | "what have we spent on the Tahoe trip so far?" => {
-                let group = one_of(ctx, App::Tally, "tally.group", "Tahoe Trip").unwrap_or_default();
+                let group =
+                    one_of(ctx, App::Tally, "tally.group", "Tahoe Trip").unwrap_or_default();
                 Plan::Value(expense_total(ctx, |row| extra(row, "group_id") == group).0)
             }
             "how much of that did I pay for myself?" => {
-                let group = one_of(ctx, App::Tally, "tally.group", "Tahoe Trip").unwrap_or_default();
+                let group =
+                    one_of(ctx, App::Tally, "tally.group", "Tahoe Trip").unwrap_or_default();
                 let me = ctx.me().to_owned();
                 Plan::Value(
                     expense_total(ctx, |row| {
@@ -404,9 +410,16 @@ impl Candidate for BlindTurn {
             }
             // WHO PAID IS A FACT ON THE ROW, and the friend the sentence
             // names is a row of its own.
-            "what did Marco pay for on the trip?" | "and Marco?" | "what did Neha pay for on the trip?" => {
-                let who = if request.contains("Neha") { "Neha" } else { "Marco" };
-                let group = one_of(ctx, App::Tally, "tally.group", "Tahoe Trip").unwrap_or_default();
+            "what did Marco pay for on the trip?"
+            | "and Marco?"
+            | "what did Neha pay for on the trip?" => {
+                let who = if request.contains("Neha") {
+                    "Neha"
+                } else {
+                    "Marco"
+                };
+                let group =
+                    one_of(ctx, App::Tally, "tally.group", "Tahoe Trip").unwrap_or_default();
                 let payer = one_of(ctx, App::Tally, "core.party", who).unwrap_or_default();
                 Plan::Ids(
                     board(ctx, App::Tally)
@@ -419,7 +432,8 @@ impl Candidate for BlindTurn {
                 )
             }
             "list the trip expenses" => {
-                let group = one_of(ctx, App::Tally, "tally.group", "Tahoe Trip").unwrap_or_default();
+                let group =
+                    one_of(ctx, App::Tally, "tally.group", "Tahoe Trip").unwrap_or_default();
                 Plan::Ids(
                     board(ctx, App::Tally)
                         .into_iter()
@@ -436,7 +450,8 @@ impl Candidate for BlindTurn {
                 Plan::Value(expense_total(ctx, |row| row.label.starts_with("Blue Bottle")).1)
             }
             "add $42.50 to the Tahoe trip for 'Firewood' — I paid it" => {
-                let group = one_of(ctx, App::Tally, "tally.group", "Tahoe Trip").unwrap_or_default();
+                let group =
+                    one_of(ctx, App::Tally, "tally.group", "Tahoe Trip").unwrap_or_default();
                 let me = ctx.me().to_owned();
                 wrote(
                     ctx,
@@ -452,7 +467,8 @@ impl Candidate for BlindTurn {
                 )
             }
             "Marco just sent me twenty dollars towards the gas — record it" => {
-                let group = one_of(ctx, App::Tally, "tally.group", "Tahoe Trip").unwrap_or_default();
+                let group =
+                    one_of(ctx, App::Tally, "tally.group", "Tahoe Trip").unwrap_or_default();
                 let marco = one_of(ctx, App::Tally, "core.party", "Marco").unwrap_or_default();
                 let me = ctx.me().to_owned();
                 wrote(
@@ -499,9 +515,13 @@ impl Candidate for BlindTurn {
                 like(ctx, App::Docs, "core.document", "rental agreement")
             }
             "star it" => {
-                let document = one(ctx, App::Docs, "Cabin rental agreement (sample)")
-                    .unwrap_or_default();
-                wrote(ctx, "core.star_document", json!({ "document_id": document }))
+                let document =
+                    one(ctx, App::Docs, "Cabin rental agreement (sample)").unwrap_or_default();
+                wrote(
+                    ctx,
+                    "core.star_document",
+                    json!({ "document_id": document }),
+                )
             }
             "what's filed in Travel?" => {
                 let rows = board(ctx, App::Docs);
@@ -516,7 +536,11 @@ impl Candidate for BlindTurn {
             "bin the renters insurance policy" => {
                 let document =
                     one(ctx, App::Docs, "Renters insurance policy (sample)").unwrap_or_default();
-                wrote(ctx, "core.trash_document", json!({ "document_id": document }))
+                wrote(
+                    ctx,
+                    "core.trash_document",
+                    json!({ "document_id": document }),
+                )
             }
             "which documents have I starred?" => {
                 let rows = board(ctx, App::Docs);
@@ -581,10 +605,15 @@ impl Candidate for BlindTurn {
                 )
             }
             "put the trailhead shot of Ana in the scouting album" => {
-                let album = one_of(ctx, App::Photos, "media.album", "Tahoe scouting")
-                    .unwrap_or_default();
-                let asset = one_of(ctx, App::Photos, "core.content_item", "Ana at the trailhead")
-                    .unwrap_or_default();
+                let album =
+                    one_of(ctx, App::Photos, "media.album", "Tahoe scouting").unwrap_or_default();
+                let asset = one_of(
+                    ctx,
+                    App::Photos,
+                    "core.content_item",
+                    "Ana at the trailhead",
+                )
+                .unwrap_or_default();
                 wrote(
                     ctx,
                     "media.add_to_album",
@@ -643,7 +672,10 @@ impl Candidate for BlindTurn {
 
             // ---- Writes, multi-turn and declining ---------------------------
             "push both dentist tasks to Friday" => {
-                for title in ["Book dentist appointment", "Call the dentist about the invoice"] {
+                for title in [
+                    "Book dentist appointment",
+                    "Call the dentist about the invoice",
+                ] {
                     if let Some(task) = one(ctx, App::Tasks, title) {
                         let _ = ctx.write(
                             "schedule.edit_task",
@@ -690,12 +722,14 @@ impl Candidate for BlindTurn {
                     }),
                 )
             }
-            "add a task called 'Buy tire chains' — no date on it" => {
-                wrote(ctx, "schedule.add_task", json!({ "title": "Buy tire chains" }))
-            }
+            "add a task called 'Buy tire chains' — no date on it" => wrote(
+                ctx,
+                "schedule.add_task",
+                json!({ "title": "Buy tire chains" }),
+            ),
             "tick off 'Rotate the tires before the drive'" => {
-                let task = one(ctx, App::Tasks, "Rotate the tires before the drive")
-                    .unwrap_or_default();
+                let task =
+                    one(ctx, App::Tasks, "Rotate the tires before the drive").unwrap_or_default();
                 wrote(
                     ctx,
                     "schedule.set_task_status",
@@ -703,8 +737,8 @@ impl Candidate for BlindTurn {
                 )
             }
             "push it to tomorrow" => {
-                let task = one(ctx, App::Tasks, "Rotate the tires before the drive")
-                    .unwrap_or_default();
+                let task =
+                    one(ctx, App::Tasks, "Rotate the tires before the drive").unwrap_or_default();
                 wrote(
                     ctx,
                     "schedule.edit_task",

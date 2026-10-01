@@ -1,0 +1,228 @@
+[
+  {
+    "id": "a0765",
+    "today": "Thursday 2027-04-29",
+    "turns": [
+      {
+        "canonical": "show (places that (kind = \"work\"))",
+        "move": "first",
+        "hint": "places of that kind"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0595",
+    "today": "Monday 2028-04-17",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses that (category = \"food\" and spent_on during this month))",
+        "move": "first",
+        "hint": "how much did I spend on that category in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1145",
+    "today": "Saturday 2025-05-31",
+    "turns": [
+      {
+        "canonical": "show (things during next week)",
+        "move": "first",
+        "hint": "what's on in that window"
+      },
+      {
+        "canonical": "delete{} on (the 2nd one)",
+        "move": "act",
+        "hint": "get rid of one of them by position"
+      },
+      {
+        "canonical": "restore{} on (it)",
+        "move": "undo",
+        "hint": "oops, bring it back"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1110",
+    "today": "Sunday 2025-03-30",
+    "turns": [
+      {
+        "canonical": "show (photos during last month)",
+        "move": "first",
+        "hint": "photos from that window"
+      },
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Hiking\") } on (them)",
+        "move": "act",
+        "hint": "add those to the Hiking album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Hiking\"", "turn": 2, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0015",
+    "today": "Monday 2027-03-01",
+    "turns": [
+      {
+        "canonical": "show (expenses)",
+        "move": "first",
+        "hint": "list all my expenses"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0263",
+    "today": "Thursday 2026-02-05",
+    "turns": [
+      {
+        "canonical": "count of (contact channels of (parties called \"Percival\"))",
+        "move": "first",
+        "hint": "how many numbers/emails do I have for Percival"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0682",
+    "today": "Thursday 2025-03-20",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations that (to_party = me and settled_at is null))",
+        "move": "first",
+        "hint": "how much am I owed in total"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0988",
+    "today": "Sunday 2025-09-14",
+    "turns": [
+      {
+        "canonical": "show (parties of (events called \"Landlord inspection\"))",
+        "move": "first",
+        "hint": "who's coming to / invited to the landlord"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Landlord inspection\"",
+        "turn": 1,
+        "say": "exact: landlord"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0677",
+    "today": "Wednesday 2028-05-24",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (obligations that (to_party = me and settled_at is null))",
+        "move": "first",
+        "hint": "how much am I owed in total"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0303",
+    "today": "Monday 2027-10-18",
+    "turns": [
+      {
+        "canonical": "count of (expenses that (spent_on during last month))",
+        "move": "first",
+        "hint": "how many expenses did I log in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0275",
+    "today": "Wednesday 2028-06-07",
+    "turns": [
+      {
+        "canonical": "count of (documents)",
+        "move": "first",
+        "hint": "how many documents do I have"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0572",
+    "today": "Saturday 2025-07-26",
+    "turns": [
+      {
+        "canonical": "show (events that (status = \"tentative\"))",
+        "move": "first",
+        "hint": "which events are cancelled / tentative"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0166",
+    "today": "Saturday 2027-08-28",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Sports day\") } on (photos called \"cake\")",
+        "move": "first",
+        "hint": "add the cake photo to the album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Sports day\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0107",
+    "today": "Monday 2027-04-26",
+    "turns": [
+      {
+        "canonical": "core.restore_document{} on (documents called \"birth\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "restore the binned birth document"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0187",
+    "today": "Monday 2025-03-31",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Kalinda Northcott\")",
+        "move": "first",
+        "hint": "delete Kalinda from my contacts"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Kalinda Northcott\"",
+        "turn": 1,
+        "say": "exact: Kalinda"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

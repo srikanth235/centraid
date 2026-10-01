@@ -1,0 +1,258 @@
+[
+  {
+    "id": "w35-0035",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      {
+        "hint": "asks to move the sculling task to wednesday and the wharf to next monday",
+        "say": ["sculling", "wednesday", "wharf", "next monday"]
+      },
+      {
+        "hint": "follow-up: asks who else will be there",
+        "say": [],
+        "shown": "done: reschedule{to: 2027-11-10} on (#1) then reschedule{to: 2027-11-15} on (#2)"
+      },
+      {
+        "hint": "(new topic) asks if they have any documents about hinge",
+        "say": ["hinge", "documents"],
+        "shown": "party \"Theodosia Rautio\" · owed_to_them_minor=2500 role=Son"
+      },
+      {
+        "hint": "(new topic) asks what documents they have linked to Chamonix Downs",
+        "say": ["Chamonix Downs"],
+        "shown": "no rows"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w35-0036",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      {
+        "hint": "asks when their Wouter thing is (no kind given)",
+        "say": ["Wouter"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w35-0037",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      { "hint": "asks what Wouter things they have", "say": ["Wouter"] }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w35-0038",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      {
+        "hint": "asks to book The Old Maple on their website for the weekend",
+        "say": ["The Old Maple", "the weekend"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w35-0041",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      {
+        "hint": "asks how much they spent back in January",
+        "say": ["January"]
+      },
+      {
+        "hint": "(new topic) asks what their first appointment is today",
+        "say": ["today"],
+        "shown": "= 0"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w35-0042",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      {
+        "hint": "asks if they have photos of Polie Blomqvist",
+        "say": ["Polie Blomqvist"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w35-0043",
+    "today": "Monday 2027-11-08",
+    "turns": [{ "hint": "asks to see photos of Seama", "say": ["Seama"] }],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w35-0045",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      {
+        "hint": "asks what their most recent contact with Cealou was",
+        "say": ["Cealou"]
+      },
+      {
+        "hint": "(new topic) asks what's gone into canoe gang",
+        "say": ["canoe gang"],
+        "shown": "activity \"interaction — Cealou Moyo\" Tue 2027-11-02 10:00"
+      },
+      {
+        "hint": "(detour) hang on — asks for photos taken at Ferrara Green",
+        "say": ["Ferrara Green"],
+        "shown": "expense \"Sculling tickets\" Fri 2027-11-05 · amount_minor=21238 paid_by=Owner\nexpense \"Groceries (wk 44)\" Fri 2027-11-05 · amount_minor=24786 paid_by=Thelel Ashby\nexpense \"Dinner at The Old Maple\" Sat 2027-10-23 · amount_minor=2782 paid_by=Owner\nexpense \"Groceries (wk 42)\" Sat 2027-10-23 · amount_minor=3299 paid_by=Hattie Behzadi\n(+6 more)"
+      },
+      {
+        "hint": "back to the canoe gang expenses — asks for just the ones from last week",
+        "say": ["last week"],
+        "shown": "photo \"IMG_7695\" Wed 2027-10-27 13:53 · favorite=false\nphoto \"Paddle at dusk\" Wed 2027-10-20 13:29 · favorite=false\nphoto \"Penfuan at Ferrara Green\" Sun 2027-06-20 17:36 · favorite=false people=Maskan Treverrow, Penfuan Osdale, Seama Rautio"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w35-0046",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      {
+        "hint": "asks what else is going on while they're in Besness",
+        "say": ["Besness"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w35-0047",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      {
+        "hint": "asks to be reminded to pay the poppy bill monday at six",
+        "say": ["pay the poppy bill", "monday", "at six"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w35-0048",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      {
+        "hint": "asks to settle up with Anya in Chamonix house share",
+        "say": ["Anya", "Chamonix house share"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w35-0049",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      { "hint": "asks to see photos of Seama", "say": ["Seama"] },
+      {
+        "hint": "(new topic) asks when the limestone business is",
+        "say": ["limestone"],
+        "shown": "photo \"Penfuan at Ferrara Green\" Sun 2027-06-20 17:36 · favorite=false people=Maskan Treverrow, Penfuan Osdale, Seama Rautio"
+      },
+      {
+        "hint": "follow-up: asks who is in it",
+        "say": [],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: asks for pictures with any of those people in",
+        "say": [],
+        "shown": "party \"Maskan Treverrow\" · role=Sister\nparty \"Penfuan Osdale\" · role=Former colleague\nparty \"Seama Rautio\" · role=Son"
+      },
+      {
+        "hint": "(new topic) asks to square up with all the canoe gang members who owe them",
+        "say": ["canoe gang"],
+        "shown": "photo \"New komling (01)\" Wed 2027-10-20 10:39 · favorite=false people=Maskan Treverrow\nphoto \"Saoirse's kettledrum\" Mon 2027-10-18 09:21 · album_titles=Cuenca Garden Centre 2027 favorite=false people=Saoirse Chevalier, Maskan Treverrow\nphoto \"Penfuan at Ferrara Green\" Sun 2027-06-20 17:36 · favorite=false people=Maskan Treverrow, Penfuan Osdale, Seama Rautio"
+      },
+      {
+        "hint": "(new topic) asks who their team lead is",
+        "say": ["team lead"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#7), amount_minor: balance of (it) in (#7)} on (#9, #12)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w35-0050",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      {
+        "hint": "asks to note down: ideas for the poppy",
+        "say": ["ideas for the poppy"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w35-0051",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      {
+        "hint": "asks what paperwork is kept in Receipts",
+        "say": ["Receipts"]
+      },
+      {
+        "hint": "follow-up: asks what the second one is",
+        "say": ["second"],
+        "shown": "document \"Hutch contract\" Thu 2027-11-04 22:40 · folder=Receipts\ndocument \"Komling permit\" Mon 2027-09-27 20:43 · folder=Receipts\ndocument \"Cravix water receipt\" Mon 2027-07-05 12:06 · folder=Receipts\ndocument \"Limestone scan\" Thu 2027-04-22 17:46 · folder=Receipts\n(+1 more)"
+      },
+      {
+        "hint": "follow-up: asks the same for the Ferrara flat folder ('and Ferrara flat?')",
+        "say": ["Ferrara flat"],
+        "shown": "document \"Komling permit\" Mon 2027-09-27 20:43 · folder=Receipts"
+      },
+      {
+        "hint": "(new topic) asks what they still have to get done monday",
+        "say": ["monday"],
+        "shown": "document \"Ivy renewal\" Mon 2027-10-04 17:14 · folder=Ferrara flat\ndocument \"Sculling scan\" Mon 2027-08-09 11:31 · folder=Ferrara flat\ndocument \"Raku statement\" Fri 2027-05-07 20:19 · folder=Ferrara flat\ndocument \"Bank statement (03)\" Sat 2027-05-01 21:50 · folder=Ferrara flat\n(+3 more)"
+      },
+      {
+        "hint": "follow-up: asks for its steps",
+        "say": [],
+        "shown": "task \"Top up the lunch account (wk 46)\" Mon 2027-11-15 09:00 · status=needs-action effort_min=15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w35-0052",
+    "today": "Monday 2027-11-08",
+    "turns": [
+      { "hint": "asks what's in the vault about canoe", "say": ["canoe"] },
+      {
+        "hint": "follow-up: asks for just the ones next week",
+        "say": ["next week"],
+        "shown": "event \"Canoe club\" Fri 2027-11-19 18:15\ndocument \"Canoe manual\" Mon 2026-11-09 15:21 · folder=Council\nnote \"Canoe ideas\" Tue 2027-11-02 09:04\nphoto \"Canoe close-up\" Thu 2027-10-28 19:37 · album_titles=Mosaic 2024 favorite=false\n(+5 more)"
+      },
+      {
+        "hint": "follow-up: says nah, leave it",
+        "say": [],
+        "shown": "event \"Canoe club\" Fri 2027-11-19 18:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  }
+]

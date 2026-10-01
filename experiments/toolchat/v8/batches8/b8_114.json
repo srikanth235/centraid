@@ -1,0 +1,288 @@
+[
+  {
+    "id": "w33-0019",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "hint": "asks to log five pounds of bike hire in beekeeping pot, paid by them",
+        "say": ["five pounds", "bike hire", "beekeeping pot"]
+      },
+      {
+        "hint": "follow-up: about the first one, asks for its expenses",
+        "say": ["first"],
+        "shown": "done: tally.add_expense{description: \"Bike hire\", amount_minor: 500, paid_by: me, group_id: (#1)}"
+      },
+      {
+        "hint": "follow-up: asks what the coffee came to",
+        "say": ["coffee"],
+        "shown": "expense \"Bike hire\" Sat 2027-05-29 · amount_minor=500 paid_by=Owner\nexpense \"Coffee run (wk 21)\" Fri 2027-05-28 · amount_minor=1700 paid_by=Gresten Mwangi\nexpense \"Dinner at Moseness Dunes\" Sun 2027-05-16 · amount_minor=799 paid_by=Ragnhild Rousseau\nexpense \"Sparrow\" Sat 2027-05-15 · amount_minor=14680 paid_by=Abebe Danak\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w33-0020",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in Zibocombe trip",
+        "say": ["Zibocombe trip", "how much"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w33-0021",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in Zibocombe trip (the expenses)",
+        "say": ["Zibocombe trip"]
+      },
+      {
+        "hint": "follow-up: asks to delete the Zibocombe one",
+        "say": ["Zibocombe"],
+        "shown": "expense \"Car hire\" Wed 2027-02-03 · amount_minor=5950 paid_by=Owner\nexpense \"Zibocombe refund\" Tue 2027-02-02 · amount_minor=1400 paid_by=Shethie Venkatesan\nexpense \"Dinner on the last night\" Tue 2027-02-02 · amount_minor=699 paid_by=Owner"
+      },
+      {
+        "hint": "follow-up: says no wait, undo that",
+        "say": [],
+        "shown": "done: tally.delete_expense{} on (#5)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w33-0023",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "hint": "asks to add the Ilkley picture to the Radish progress album",
+        "say": ["Ilkley", "Radish progress", "album"]
+      },
+      {
+        "hint": "follow-up: asks what else is in that album",
+        "say": [],
+        "shown": "done: media.add_to_album{album_id: (#2)} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w33-0024",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "hint": "asks for the studio wifi entry in the locker (the row, not the password)",
+        "say": ["studio wifi"]
+      },
+      {
+        "hint": "follow-up: asks to see the password",
+        "say": ["password"],
+        "shown": "locker item \"Studio wifi\" · type=wifi"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w33-0025",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the studio wifi is",
+        "say": ["studio wifi", "password"]
+      },
+      {
+        "hint": "(new topic) asks to find the expenses on beekeeping",
+        "say": ["beekeeping", "expenses"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w33-0026",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      { "hint": "asks who they're seeing at the basin", "say": ["basin"] },
+      {
+        "hint": "follow-up: about the Wambui one, asks for their contact details",
+        "say": ["Wambui"],
+        "shown": "party \"Fosbaen Halvorsen\" · role=Neighbour upstairs\nparty \"Wambui Lehtonen\" · role=Landlord\nparty \"Yesenia Bomkimere\" · role=Landlord\nparty \"Filippa Valente\" · role=Landlord"
+      },
+      {
+        "hint": "(new topic) asks which to-dos are due sunday",
+        "say": ["sunday"],
+        "shown": "contact channel \"Wambui Lehtonen — personal\" · kind=email value=wambui.lehtonen@example.com"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w33-0027",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "hint": "asks which spending entries mention Brecon",
+        "say": ["Brecon", "entries"]
+      },
+      {
+        "hint": "(new topic) asks to erase every contact they have",
+        "say": [],
+        "shown": "expense \"Dinner at Brecon Food Hall\" Fri 2027-05-07 · amount_minor=4300 paid_by=Owner"
+      },
+      {
+        "hint": "follow-up: asks which group it's in",
+        "say": [],
+        "shown": "refuse"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w33-0028",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "hint": "asks to make a note: ideas for the tambourine",
+        "say": ["ideas for the tambourine"]
+      },
+      {
+        "hint": "(new topic) says the lugano ferry task is done",
+        "say": ["lugano ferry"],
+        "shown": "done: knowledge.create_note{title: \"Ideas for the tambourine\"}"
+      },
+      {
+        "hint": "(new topic) asks to find the craly water",
+        "say": ["craly water"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks to move the arts task to next monday and the knysna community to monday",
+        "say": ["arts", "next monday", "knysna community", "monday"],
+        "shown": "locker item \"Craly water account\" · type=login"
+      },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "done: reschedule{to: 2027-05-31} on (#3) then reschedule{to: 2027-05-31} on (#4)"
+      },
+      {
+        "hint": "(new topic) asks to star the booking voucher document",
+        "say": ["booking voucher"],
+        "shown": "party \"Drinine Shackleton\" · role=Business partner"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w33-0029",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      { "hint": "asks for their most recent journal entry", "say": [] },
+      {
+        "hint": "(new topic) asks what day the astrophotography lesson is on",
+        "say": ["astrophotography lesson"],
+        "shown": "journal note \"People journal · good\" Fri 2027-05-28 12:00"
+      },
+      {
+        "hint": "(new topic) asks to invent a PIN for their new card",
+        "say": [],
+        "shown": "event \"Astrophotography lesson\" Sat 2027-06-05 07:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w33-0030",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "hint": "says they messaged Fosbaen today, log it (two contacts are called Fosbaen)",
+        "say": ["Fosbaen", "messaged"]
+      },
+      {
+        "hint": "follow-up: says it was Fosbaen Halvorsen",
+        "say": ["Halvorsen"],
+        "shown": "asked: Which Fosbaen — Halvorsen or Jayasuriya?"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w33-0031",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "hint": "says they messaged Fosbaen (the neighbour upstairs one) today, log it",
+        "say": ["Fosbaen", "upstairs", "messaged"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w33-0032",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "hint": "asks to move the knysna community an hour earlier",
+        "say": ["knysna community", "an hour earlier"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w33-0033",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "hint": "asks which steps of the chase job are still open",
+        "say": ["chase"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w33-0034",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      { "hint": "asks when they have the sale", "say": ["sale"] },
+      {
+        "hint": "(detour) hang on — asks for the photos from the Zibocombe trip",
+        "say": ["Zibocombe"],
+        "shown": "event \"Oatmeal sale at Ilkley Quarry\" Thu 2027-06-24 16:30"
+      },
+      {
+        "hint": "follow-up: asks what else is on that day",
+        "say": [],
+        "shown": "photo \"Zibocombe Meadows at sunrise\" Tue 2027-02-02 15:42 · album_titles=Zibocombe 2027 favorite=false\nphoto \"Aspen Downs from the boat\" Mon 2027-02-01 16:17 · album_titles=Zibocombe 2027 favorite=false\nphoto \"Corduroy at Zibocombe Meadows\" Sun 2027-01-31 10:39 · album_titles=Zibocombe 2027 favorite=false"
+      },
+      {
+        "hint": "follow-up: asks to call off the oatmeal one",
+        "say": ["oatmeal"],
+        "shown": "event \"Goblet delivery\" Thu 2027-06-24 13:45\nevent \"Oatmeal sale at Ilkley Quarry\" Thu 2027-06-24 16:30"
+      },
+      {
+        "hint": "follow-up: corrects: wrong one, they meant the first one",
+        "say": ["first"],
+        "shown": "done: cancel{} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  }
+]

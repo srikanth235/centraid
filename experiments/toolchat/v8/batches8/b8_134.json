@@ -1,0 +1,323 @@
+[
+  {
+    "id": "w38-0046",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks to reveal the password for the wall wifi",
+        "say": ["wall wifi", "password"]
+      },
+      {
+        "hint": "(new topic) asks to get rid of every gift note",
+        "say": ["gift", "note"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w38-0047",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks to book in call with the bank wednesday at half nine",
+        "say": ["call with the bank", "wednesday", "at half nine"]
+      },
+      {
+        "hint": "(new topic) asks to save the locker combination 93956 in the locker",
+        "say": ["locker combination", "93956"],
+        "shown": "done: schedule.propose_event{summary: \"Call with the bank\", dtstart: 2026-07-29T09:30}"
+      },
+      {
+        "hint": "(new topic) asks what the actual password for the euphonium is",
+        "say": ["euphonium", "password"],
+        "shown": "done: locker.add_item{type: \"note\", title: \"Locker combination\", content: \"93956\"}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w38-0048",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks to make the hastings holiday an hour earlier",
+        "say": ["hastings holiday", "an hour earlier"]
+      },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "done: reschedule{by: -1h} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w38-0049",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      { "hint": "asks to list the albums", "say": [] },
+      {
+        "hint": "follow-up: about the summer one, asks to see the photos in it",
+        "say": ["summer"],
+        "shown": "album \"Barge progress\"\nalbum \"Walks round Josford Garden Centre\"\nalbum \"Hurling\"\nalbum \"Summer 2026\"\n(+5 more)"
+      },
+      {
+        "hint": "follow-up: asks to delete the first one",
+        "say": ["first"],
+        "shown": "photo \"Lagoon at night (03)\" Thu 2026-07-16 17:12 · album_titles=Summer 2026 favorite=false\nphoto \"Grindeth with the cherrywood\" Mon 2026-07-13 07:37 · album_titles=Summer 2026 favorite=false\nphoto \"Mortar in the snow\" Sat 2026-07-04 09:24 · album_titles=Summer 2026 favorite=false\nphoto \"Thierry at Hawes Cove\" Sat 2026-04-11 14:26 · album_titles=Summer 2026 favorite=false people=Thierry Garside, Sorir Lavby\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w38-0050",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks what pictures they have from this week",
+        "say": ["this week"]
+      },
+      {
+        "hint": "follow-up: says forget it",
+        "say": [],
+        "shown": "photo \"Flask and flask\" Wed 2026-07-22 10:17 · favorite=false\nphoto \"Philately meetup 2025\" Mon 2026-07-20 20:54 · favorite=true"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w38-0051",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks which people share Hastings trip with them",
+        "say": ["Hastings trip"]
+      },
+      {
+        "hint": "(new topic) asks who's in the hawes cove picture",
+        "say": ["hawes cove"],
+        "shown": "member \"Cedric Aimani\"\nmember \"Dythine Girma\"\nmember \"Drondel Greenhalgh\"\nmember \"Mayumi Ibarra\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w38-0052",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      { "hint": "asks for Kerem's email address", "say": ["Kerem"] },
+      {
+        "hint": "(new topic) asks who their daughter is",
+        "say": ["daughter"],
+        "shown": "contact channel \"Kerem Tadesse — personal\" · kind=email value=kerem.tadesse@inbox.example"
+      },
+      {
+        "hint": "(new topic) asks if anything is happening sunday",
+        "say": ["sunday"],
+        "shown": "party \"Malgorzata Gradwell\" · role=Daughter"
+      },
+      {
+        "hint": "(new topic) asks how many things they have saved in the locker",
+        "say": [],
+        "shown": "event \"Coffee with Tealine\" Sun 2026-07-26 10:00\nevent \"Plover sale at Josford Garden Centre\" Sun 2026-07-26 13:00\nevent \"Geocaching night\" Sun 2026-07-26 15:30\nevent \"Chamomile repair\" Sun 2026-07-26 16:15"
+      },
+      {
+        "hint": "follow-up: asks to move the chamomile one to next monday",
+        "say": ["chamomile", "next monday"],
+        "shown": "= 13"
+      },
+      {
+        "hint": "(new topic) asks to put 'return Javier's cherrywood' on the list for next monday",
+        "say": ["return Javier's cherrywood", "next monday"],
+        "shown": "done: reschedule{to: 2026-07-27} on (#7)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w38-0053",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks to settle up with Drondel in Hastings",
+        "say": ["Drondel", "Hastings", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks which people share capoeira syndicate with them",
+        "say": ["capoeira syndicate"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#6), amount_minor: balance of (#19) in (#6)} on (#19)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w38-0054",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks to add twenty dollars for Drondel's taxi to Hastings, they paid",
+        "say": ["twenty dollars", "Drondel's taxi", "Hastings"]
+      },
+      {
+        "hint": "(new topic) asks to put Alessia Lovelock in capoeira syndicate",
+        "say": ["Alessia Lovelock", "capoeira syndicate"],
+        "shown": "done: tally.add_expense{description: \"Drondel's taxi\", amount_minor: 2000, paid_by: me, group_id: (#6)}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w38-0055",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks whose birthdays are coming up next two weeks",
+        "say": ["next two weeks", "weeks"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w38-0056",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks to bump the Cobohaven a day later",
+        "say": ["Cobohaven", "a day later"]
+      },
+      {
+        "hint": "(new topic) asks when they need to remember Dythine Girma's birthday",
+        "say": ["Dythine Girma", "birthday"],
+        "shown": "done: reschedule{by: +1d} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks who's invited to the cabinet",
+        "say": ["cabinet"],
+        "shown": "important date \"Birthday — Dythine Girma\" Sun 2026-12-13"
+      },
+      {
+        "hint": "(detour) hang on — asks what they have about Cobohaven",
+        "say": ["Cobohaven"],
+        "shown": "party \"Cedric Aimani\" · role=Friend from yoga"
+      },
+      {
+        "hint": "back to the cabinet — asks for a task to visit Aimani",
+        "say": ["visit Aimani"],
+        "shown": "event \"Cobohaven trip\" Mon 2026-08-10 10:00\ndocument \"Cobohaven booking confirmation\" Wed 2026-04-01 17:23 · folder=Capoeira\nlocker item \"Cobohaven villa gate code\" · type=note\nnotebook \"Cobohaven trips\"\n(+4 more)"
+      },
+      {
+        "hint": "follow-up: asks for their contact details",
+        "say": [],
+        "shown": "done: schedule.add_task{title: \"Visit Aimani\"}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w38-0057",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks to square up with all the Hastings trip members who owe them",
+        "say": ["Hastings trip"]
+      },
+      {
+        "hint": "(new topic) asks when the Emiliano is",
+        "say": ["Emiliano"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (it) in (#1)} on (#4, #5)"
+      },
+      {
+        "hint": "(new topic) asks what's in the vault about Xochitl",
+        "say": ["Xochitl"],
+        "shown": "event \"Walk with Emiliano\" Sat 2026-07-25 10:15"
+      },
+      {
+        "hint": "follow-up: asks to delete the second one",
+        "say": ["second"],
+        "shown": "note \"Gift ideas for Xochitl\" Sat 2026-07-18 08:34 · notebooks=Cobohaven trips\nnote \"Xochitl's bunting budget\" Wed 2026-06-03 13:25\nparty \"Xochitl Coskez\" · role=Supplier"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w38-0058",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks for the Mellex rail entry in the locker (the row, not the password)",
+        "say": ["Mellex rail"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w38-0059",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the Mellex rail is",
+        "say": ["Mellex rail", "password"]
+      },
+      {
+        "hint": "(new topic) asks to see the documents they marked with a star",
+        "say": [],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks what the second one is",
+        "say": ["second"],
+        "shown": "document \"Council tax bill (01)\" Mon 2026-06-08 10:17 · folder=Recipes\ndocument \"Capoeira voucher\" Sat 2026-04-11 16:51 · folder=Capoeira\ndocument \"Postup mortgage voucher\" Mon 2026-04-13 09:31 · folder=Capoeira\ndocument \"Temmere Leisure Centre permit\" Wed 2025-07-23 14:28 · folder=Recipes"
+      },
+      {
+        "hint": "follow-up: asks what else there is besides that one",
+        "say": [],
+        "shown": "document \"Capoeira voucher\" Sat 2026-04-11 16:51 · folder=Capoeira"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w38-0060",
+    "today": "Thursday 2026-07-23",
+    "turns": [
+      { "hint": "asks to find the shots on flask", "say": ["flask", "shots"] },
+      {
+        "hint": "(detour) hang on — asks when the buckle is",
+        "say": ["buckle"],
+        "shown": "photo \"Flask and flask\" Wed 2026-07-22 10:17 · favorite=false"
+      },
+      {
+        "hint": "back to the flask shots — asks what their tasks have on it",
+        "say": ["tasks"],
+        "shown": "event \"Buckle fitting\" Thu 2026-07-23 12:45"
+      },
+      {
+        "hint": "(new topic) asks for their documents about denim statement",
+        "say": ["denim statement", "documents"],
+        "shown": "task \"Wrap the flask for Tealine\" Sun 2026-07-12 09:00 · status=needs-action"
+      },
+      {
+        "hint": "(new topic) asks to count the pictures from Hastings",
+        "say": ["Hastings"],
+        "shown": "document \"Denim statement 2027\" Thu 2025-12-25 11:29 · folder=Car"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  }
+]

@@ -1,0 +1,290 @@
+[
+  {
+    "id": "w34-0040",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks to show the avocado tasks, tick off the first and delete the second",
+        "say": ["avocado"]
+      },
+      {
+        "hint": "(new topic) asks where they stand with Libor in harpoon share",
+        "say": ["Libor", "harpoon share"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#1) then delete{} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks the same for Tonu ('and Tonu?')",
+        "say": ["Tonu"],
+        "shown": "= -19500"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w34-0043",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks how much Panagiota Figueroa owes them in Madeira house share",
+        "say": ["Panagiota Figueroa", "Madeira house share"]
+      },
+      {
+        "hint": "(new topic) asks when they're next seeing Cosima",
+        "say": ["Cosima"],
+        "shown": "= 11441"
+      },
+      {
+        "hint": "follow-up: asks to move the first one to thursday and cancel the second one",
+        "say": ["first", "thursday", "second"],
+        "shown": "event \"Batik meetup\" Thu 2026-12-10 14:00\nevent \"Call Vrovsais about the ginger\" Sun 2027-01-03 09:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w34-0044",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks for the Haivex council entry in the locker (the row, not the password)",
+        "say": ["Haivex council"]
+      },
+      {
+        "hint": "(new topic) asks to save the gate code 84383 in the locker",
+        "say": ["gate code", "84383"],
+        "shown": "locker item \"Haivex council portal\" · type=login"
+      },
+      {
+        "hint": "(new topic) asks to square up with the whole Akureyri trip group",
+        "say": ["Akureyri trip"],
+        "shown": "done: locker.add_item{type: \"note\", title: \"Gate code\", content: \"84383\"}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w34-0045",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the Haivex council is",
+        "say": ["Haivex council", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w34-0047",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks to clear out the Thagewen events",
+        "say": ["Thagewen", "event"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w34-0048",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks when their Lars thing is (no kind given)",
+        "say": ["Lars"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w34-0049",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      { "hint": "asks what Lars things they have", "say": ["Lars"] },
+      {
+        "hint": "(detour) hang on — asks which chalk tasks they haven't done yet",
+        "say": ["chalk"],
+        "shown": "party \"Lars Cordero\" · role=Dentist\nparty \"Lars Bethard\" · role=Dog-walking friend\ncontact channel \"Lars Cordero — work\" · kind=phone value=+1 317 555 0818\ncontact channel \"Lars Cordero — personal\" · kind=email value=lars.cordero@example.org\n(+3 more)"
+      },
+      {
+        "hint": "back to that — asks to see just the third one",
+        "say": ["third"],
+        "shown": "task \"Book the chalk\" · status=in-process\ntask \"Order the chalk\" · status=in-process\ntask \"Clean Farhan's chalk\" · status=cancelled"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w34-0050",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks when their gargoyle thing is (no kind given)",
+        "say": ["gargoyle"]
+      },
+      {
+        "hint": "(new topic) asks to delete everything in the vault",
+        "say": [],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w34-0051",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks to see the diary entries they made recently",
+        "say": ["recently", "journal"]
+      },
+      {
+        "hint": "follow-up: asks how many there are in total",
+        "say": [],
+        "shown": "journal note \"People journal · hopeful\" Sat 2026-12-12 12:00\njournal note \"People journal · low\" Fri 2026-12-11 12:00\njournal note \"People journal · happy\" Thu 2026-12-10 12:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w34-0052",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      { "hint": "asks to delete the ferry task", "say": ["ferry", "task"] },
+      {
+        "hint": "(new topic) asks how much Vrilie owes them",
+        "say": ["Vrilie"],
+        "shown": "done: delete{} on (#1)"
+      },
+      {
+        "hint": "follow-up: says they called them today, log it",
+        "say": ["called"],
+        "shown": "= 15000"
+      },
+      {
+        "hint": "follow-up: corrects: sorry, it was Flendie, not them",
+        "say": ["Flendie"],
+        "shown": "done: people.log_interaction{kind: \"call\"} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w34-0053",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      { "hint": "asks to delete the damson task", "say": ["damson", "task"] },
+      {
+        "hint": "(new topic) asks to look up Shora",
+        "say": ["Shora"],
+        "shown": "none"
+      },
+      {
+        "hint": "(new topic) asks to settle up with Vrovsais in Akureyri trip",
+        "say": ["Vrovsais", "Akureyri trip"],
+        "shown": "party \"Shora Opticians\" · role=Optician"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w34-0054",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks when Bastien's birthday is",
+        "say": ["Bastien", "birthday"]
+      },
+      {
+        "hint": "(new topic) asks how many tasks are due next week",
+        "say": ["next week"],
+        "shown": "important date \"Birthday — Bastien Trujillo\" Mon 2026-11-02"
+      },
+      {
+        "hint": "(new topic) asks what they have filed under Energy",
+        "say": ["Energy"],
+        "shown": "= 4"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w34-0055",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks when their dinner with Bastien is",
+        "say": ["Bastien", "dinner"]
+      },
+      {
+        "hint": "(detour) hang on — asks when the coral business is",
+        "say": ["coral"],
+        "shown": "event \"Dinner with Bastien\" Sat 2026-12-19 13:15"
+      },
+      {
+        "hint": "follow-up: says nah, leave it",
+        "say": [],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: says they phoned Panagiota, log it",
+        "say": ["Panagiota", "phoned"],
+        "shown": "party \"Rhodora Varrova\" · role=Caretaker\nparty \"Panagiota Figueroa\" · role=Caretaker"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w34-0056",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "hint": "asks to delete the ask flendie task",
+        "say": ["ask flendie", "task"]
+      },
+      {
+        "hint": "(new topic) asks what their first appointment is tuesday",
+        "say": ["tuesday"],
+        "shown": "done: delete{} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks for a task to check the Kanya booking",
+        "say": ["check the Kanya booking"],
+        "shown": "event \"Call Kanya about the fern\" Tue 2026-12-15 16:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w34-0057",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      { "hint": "asks to delete the damson task", "say": ["damson", "task"] },
+      {
+        "hint": "(new topic) says they had coffee with Lars and asks to log it (two contacts are called Lars; the message doesn't say which)",
+        "say": ["Lars", "coffee"],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  }
+]

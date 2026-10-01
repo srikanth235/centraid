@@ -1,0 +1,218 @@
+[
+  {
+    "id": "w15-048",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks what's in the vault about Ingram", "say": ["Ingram"] },
+      {
+        "hint": "(new topic) asks to find the expenses on Groceries",
+        "say": ["Groceries"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "spoken"]
+  },
+  {
+    "id": "w15-049",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks what they have filed under Work", "say": ["Work"] },
+      { "hint": "asks which of those are starred", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "spoken"]
+  },
+  {
+    "id": "w15-050",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks for the Insurance backup codes entry",
+        "say": ["Insurance"]
+      },
+      {
+        "hint": "(new topic) asks what the login for Library is (not the password)",
+        "say": ["Library"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "texting"]
+  },
+  {
+    "id": "w15-051",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks what they ticked off recently", "say": ["recently"] },
+      { "hint": "asks for just the ones due this week", "say": ["this week"] },
+      { "hint": "asks for just the ones due today", "say": ["today"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "texting"]
+  },
+  {
+    "id": "w15-052",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks to find anything to do with mobile", "say": ["mobile"] },
+      { "hint": "(new topic) asks what's left on their to-do list", "say": [] },
+      {
+        "hint": "(new topic) asks to tick off the Order task",
+        "say": ["Order"]
+      },
+      { "hint": "(new topic) asks what time the Tennis is", "say": ["Tennis"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "polite"]
+  },
+  {
+    "id": "w15-053",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks for Dorian Lomax's contact card",
+        "say": ["Dorian Lomax"]
+      },
+      {
+        "hint": "(new topic) asks which expenses were over 50 (money)",
+        "say": ["50"]
+      },
+      {
+        "hint": "(new topic) asks where the choir photo was taken",
+        "say": ["choir"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "terse"]
+  },
+  {
+    "id": "w15-054",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks who they're seeing at the Fern", "say": ["Fern"] },
+      {
+        "hint": "asks what events they're coming to (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks what day the Physio rehearsal is on",
+        "say": ["Physio rehearsal"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "spoken"]
+  },
+  {
+    "id": "w15-055",
+    "today": "Tuesday 2026-04-07",
+    "turns": [{ "hint": "asks what they haven't done yet", "say": [] }],
+    "versions": 3,
+    "registers": ["texting", "question", "terse"]
+  },
+  {
+    "id": "w15-056",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks what photos they have from Foxglove Farm",
+        "say": ["Foxglove Farm"]
+      },
+      { "hint": "asks for just the line ones among those", "say": ["line"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w15-057",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks what paperwork is kept in Pet records",
+        "say": ["Pet records"]
+      },
+      { "hint": "asks which of those are starred", "say": [] },
+      {
+        "hint": "(new topic) asks to wipe all their photos and notes at once",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks which expenses mention supper",
+        "say": ["supper"]
+      },
+      {
+        "hint": "(new topic) asks which expenses were over 100 (money)",
+        "say": ["100"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "spoken"]
+  },
+  {
+    "id": "w15-058",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks for the Choir club account entry",
+        "say": ["Choir club"]
+      },
+      {
+        "hint": "asks the same about Insurance instead ('what about Insurance?')",
+        "say": ["Insurance"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w15-059",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks to tick off the Repaint task", "say": ["Repaint"] },
+      {
+        "hint": "(new topic) asks for Vesna Lovelock's contact card",
+        "say": ["Vesna Lovelock"]
+      },
+      { "hint": "(new topic) asks for their favourite photos", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "terse"]
+  },
+  {
+    "id": "w15-060",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      { "hint": "asks what they got done this week", "say": ["this week"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "spoken"]
+  },
+  {
+    "id": "w15-061",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks to find the calendar events on Harvest",
+        "say": ["Harvest"]
+      },
+      { "hint": "(new topic) asks who owes them money", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "w15-062",
+    "today": "Tuesday 2026-04-07",
+    "turns": [
+      {
+        "hint": "asks where they took the finish line picture",
+        "say": ["finish line"]
+      },
+      { "hint": "asks to see the photos from that place", "say": [] },
+      {
+        "hint": "(new topic) asks which to-dos they checked off this week",
+        "say": ["this week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "texting"]
+  }
+]

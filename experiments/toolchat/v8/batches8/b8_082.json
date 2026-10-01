@@ -1,0 +1,278 @@
+[
+  {
+    "id": "w24-0018",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      { "hint": "asks to find the lacrosse list", "say": ["lacrosse list"] },
+      {
+        "hint": "(new topic) asks for their photos from February",
+        "say": ["February"],
+        "shown": "note \"Lacrosse list\" Wed 2025-04-30 10:56 · notebooks=Lacrosse"
+      },
+      {
+        "hint": "follow-up: asks how many there are in total",
+        "say": [],
+        "shown": "photo \"Carran at Nyvoe Allotments\" Thu 2025-02-20 11:07 · favorite=false\nphoto \"Tuomas at Nyvoe Steps\" Tue 2025-02-18 18:32 · favorite=false"
+      },
+      {
+        "hint": "(new topic) asks when the parasol business is",
+        "say": ["parasol"],
+        "shown": "= 2"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w24-0019",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks to put Tuomas in thuvum gang",
+        "say": ["Tuomas", "thuvum gang"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w24-0020",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks for the guest entry in the locker (the row, not the password)",
+        "say": ["guest"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w24-0021",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the guest is",
+        "say": ["guest", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w24-0022",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      { "hint": "asks to see photos of Akiko", "say": ["Akiko"] },
+      {
+        "hint": "follow-up: asks which album it's in",
+        "say": [],
+        "shown": "photo \"Kairel at Flemness Fields\" Tue 2025-04-15 09:55 · album_titles=Flemness 2025 favorite=false people=Kairel Lavby, Akiko Lindemann, Antoine Farahani"
+      },
+      {
+        "hint": "follow-up: asks to see the photos in it",
+        "say": [],
+        "shown": "album \"Flemness 2025\""
+      },
+      {
+        "hint": "follow-up: asks what else is in that album",
+        "say": [],
+        "shown": "photo \"The thuvum at dusk (01)\" Mon 2025-07-07 10:14 · album_titles=Flemness 2025 favorite=false\nphoto \"IMG_8249\" Tue 2025-06-17 07:59 · album_titles=Flemness 2025, Meringue, Woodturning wor… favorite=false\nphoto \"Flemness Orchard at sunrise\" Fri 2025-04-18 19:06 · album_titles=Flemness 2025 favorite=false\nphoto \"Margarethe at Flemness Fields\" Thu 2025-04-17 16:08 · album_titles=Flemness 2025, Woodturning workshop high… favorite=false\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w24-0023",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks which thuvum gang expenses were over forty",
+        "say": ["thuvum gang", "forty"]
+      },
+      {
+        "hint": "(new topic) asks to log that they messaged Fermin today",
+        "say": ["Fermin", "messaged"],
+        "shown": "expense \"Woodturning workshop parts\" Mon 2025-07-21 · amount_minor=4799 paid_by=Ysolde Flillez\nexpense \"Croquet class repair\" Thu 2025-07-17 · amount_minor=5199 paid_by=Owner\nexpense \"Flamenco class lessons\" Tue 2025-07-15 · amount_minor=6000 paid_by=Owner\nexpense \"Chickpea refund\" Mon 2025-07-14 · amount_minor=10607 paid_by=Ysolde Flillez\n(+4 more)"
+      },
+      {
+        "hint": "(new topic) asks for the photos they took last month",
+        "say": ["last month"],
+        "shown": "done: people.log_interaction{kind: \"message\"} on (#10)"
+      },
+      {
+        "hint": "(new topic) asks to mark the find to-do complete",
+        "say": ["find"],
+        "shown": "photo \"Pickle at Siargao Tearooms\" Wed 2025-06-18 11:04 · album_titles=Summer 2026, Meringue favorite=false\nphoto \"IMG_8249\" Tue 2025-06-17 07:59 · album_titles=Flemness 2025, Meringue, Woodturning wor… favorite=false\nphoto \"Walnut on the table\" Sun 2025-06-15 09:35 · album_titles=Meringue, Woodturning workshop highlight… favorite=false\nphoto \"Tapestry in the garden\" Sat 2025-06-14 15:04 · album_titles=Woodturning workshop highlights, Meringu… favorite=false people=Margarethe Sinclair, Jiwoo Amino\n(+7 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w24-0025",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks when Ysolde's birthday is",
+        "say": ["Ysolde", "birthday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w24-0026",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks when their dinner with Ysolde is",
+        "say": ["Ysolde", "dinner"]
+      },
+      {
+        "hint": "(detour) hang on — asks what time the quilting is",
+        "say": ["quilting"],
+        "shown": "event \"Dinner with Ysolde\" Mon 2025-07-21 15:30"
+      },
+      {
+        "hint": "back to that — asks who's coming to it",
+        "say": [],
+        "shown": "event \"Quilting session\" Sat 2025-07-26 14:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w24-0027",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks for their pictures from Fomocombe Library",
+        "say": ["Fomocombe Library"]
+      },
+      {
+        "hint": "follow-up: about the path one, asks which album it's in",
+        "say": ["path"],
+        "shown": "photo \"Swallow at sunrise\" Mon 2025-07-21 09:15 · album_titles=Fomocombe Library favorite=false\nphoto \"Lacrosse at Nyvoe Allotments\" Fri 2025-06-06 10:04 · album_titles=Fomocombe Library favorite=true\nphoto \"Fomocombe Library from the path\" Sun 2025-01-12 20:05 · album_titles=Fomocombe Library, Summer 2026 favorite=false people=Sunen Lindemann, Arnel Lindemann"
+      },
+      {
+        "hint": "follow-up: asks what else is in that album",
+        "say": [],
+        "shown": "album \"Fomocombe Library\"\nalbum \"Summer 2026\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w24-0028",
+    "today": "Thursday 2025-07-24",
+    "turns": [{ "hint": "asks if anyone owes them cash", "say": [] }],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w24-0029",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      { "hint": "asks where the hilup garage went", "say": ["hilup garage"] },
+      {
+        "hint": "(detour) hang on — asks for anything to do with Temitope",
+        "say": ["Temitope"],
+        "shown": "document \"Hilup garage booking\" Mon 2024-07-22 07:21 · folder=Letters"
+      },
+      {
+        "hint": "(new topic) asks for their starred files",
+        "say": [],
+        "shown": "note \"Temitope's corkscrew draft\" Sat 2025-06-21 22:53 · notebooks=Money\nparty \"Temitope Paredes\" · role=Partner\nimportant date \"Anniversary — Temitope Paredes\" Fri 2025-06-27\nimportant date \"Birthday — Temitope Paredes\" Sun 2025-02-16\n(+6 more)"
+      },
+      {
+        "hint": "(new topic) says they paid 14 dollars for breakfast — put it in thuvum gang",
+        "say": ["14 dollars", "breakfast", "thuvum gang"],
+        "shown": "document \"Energy bill (01)\" Thu 2025-07-24 16:09\ndocument \"Tapestry voucher 2027\" Wed 2025-03-26 19:52 · folder=Letters\ndocument \"Scullery invoice 2026\" Wed 2025-03-05 16:12 · folder=Manuals\ndocument \"Ubud booking receipt\" Sat 2024-10-12 10:05\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w24-0030",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks if they have any appointments about holiday",
+        "say": ["holiday", "appointments"]
+      },
+      {
+        "hint": "follow-up: asks the same about kabaddi instead ('what about kabaddi?')",
+        "say": ["kabaddi"],
+        "shown": "event \"Ubud holiday\" Thu 2025-08-14 08:00"
+      },
+      {
+        "hint": "follow-up: asks the same about Seojun instead ('what about Seojun?')",
+        "say": ["Seojun"],
+        "shown": "event \"Kabaddi lesson at Siargao Tearooms\" Tue 2025-07-29 08:30\nevent \"Kabaddi lesson at Nyvoe Allotments\" Mon 2025-07-21 17:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w24-0031",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks to settle up with Vrovsais in thuvum gang",
+        "say": ["Vrovsais", "thuvum gang", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks to clear out the shopping notes",
+        "say": ["shopping", "note"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#3) in (#1)} on (#3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w24-0032",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks to add nine dollars for Vrovsais's tickets to thuvum gang, they paid",
+        "say": ["nine dollars", "Vrovsais's tickets", "thuvum gang"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w24-0033",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "hint": "asks for the Gryllo savings card details entry",
+        "say": ["Gryllo savings", "card"]
+      },
+      {
+        "hint": "follow-up: asks what the password on it is",
+        "say": ["password"],
+        "shown": "locker item \"Gryllo savings card\" · type=card"
+      },
+      {
+        "hint": "(new topic) asks to settle up with everyone in Flemness",
+        "say": ["Flemness"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks what they still have to get done sunday",
+        "say": ["sunday"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#2), amount_minor: balance of (it) in (#2)} on (#3, #4)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  }
+]

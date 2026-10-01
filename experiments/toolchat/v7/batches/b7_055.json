@@ -1,0 +1,220 @@
+[
+  {
+    "id": "w11-045",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks to text the alarm code to the neighbour", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "w11-046",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to add a task 'Collect the car service' for sunday",
+        "say": ["Collect the car service", "sunday"]
+      },
+      {
+        "hint": "(new topic) asks which places they have exactly one photo from",
+        "say": ["one"]
+      },
+      { "hint": "asks to see the photos from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks which expenses were over 150 (money)",
+        "say": ["150"]
+      },
+      { "hint": "asks which of those are about watch", "say": ["watch"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w11-047",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to find Nils in their contacts (several people are called Nils)",
+        "say": ["Nils"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks for the pictures they marked as favourites",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "spoken"]
+  },
+  {
+    "id": "w11-048",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks to email their bank password to a friend", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "polite"]
+  },
+  {
+    "id": "w11-049",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks who they're seeing at the quiz", "say": ["quiz"] },
+      { "hint": "asks what else there is apart from the third one", "say": [] },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks which album the Kayaks photo is in",
+        "say": ["Kayaks"]
+      },
+      { "hint": "asks what else is in that album", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "question"]
+  },
+  {
+    "id": "w11-050",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to move the roof appointment to next friday",
+        "say": ["roof", "next friday"]
+      },
+      { "hint": "asks who else will be there", "say": [] },
+      {
+        "hint": "(new topic) asks which tasks take about 60 minutes",
+        "say": ["60"]
+      },
+      { "hint": "asks which of those are still to do", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w11-051",
+    "today": "Friday 2026-06-12",
+    "turns": [{ "hint": "asks to pull up Zeno", "say": ["Zeno"] }],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  },
+  {
+    "id": "w11-052",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to add 18 (money) for firewood to the Violin group, paid by them",
+        "say": ["Violin", "firewood"]
+      },
+      {
+        "hint": "asks to add a task for tuesday to deal with 'Look at the violin'",
+        "say": ["tuesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "terse", "texting"]
+  },
+  {
+    "id": "w11-053",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks what Arvid's phone number is", "say": ["Arvid"] },
+      {
+        "hint": "(new topic) asks what time the Netball is",
+        "say": ["Netball"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "texting"]
+  },
+  {
+    "id": "w11-054",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks what day the talk is on", "say": ["talk"] },
+      {
+        "hint": "asks to add a task for saturday to deal with 'Library talk'",
+        "say": ["saturday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "question"]
+  },
+  {
+    "id": "w11-055",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks for everything mentioning policy", "say": ["policy"] },
+      {
+        "hint": "asks to add a task for wednesday to deal with 'Monitor policy'",
+        "say": ["wednesday"]
+      },
+      {
+        "hint": "asks to add a task for saturday to deal with 'Monitor policy'",
+        "say": ["saturday"]
+      },
+      {
+        "hint": "asks the same about interaction instead ('what about interaction?')",
+        "say": ["interaction"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w11-056",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks for their pictures from Hollin Station",
+        "say": ["Hollin Station"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w11-057",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to put 'Vet visit' in the calendar friday at 16:30",
+        "say": ["Vet visit", "friday"]
+      },
+      {
+        "hint": "(new topic) asks when the fitting catch-up is",
+        "say": ["fitting catch-up"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w11-058",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks which open tasks aren't scheduled for any date",
+        "say": []
+      },
+      { "hint": "asks for just the kettle ones among those", "say": ["kettle"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "question"]
+  },
+  {
+    "id": "w11-059",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks when Henrike's birthday is", "say": ["Henrike"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "polite"]
+  }
+]

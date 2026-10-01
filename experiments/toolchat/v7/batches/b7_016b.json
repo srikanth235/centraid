@@ -1,0 +1,256 @@
+[
+  {
+    "id": "w04-007",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks for their pictures from Umber Quay",
+        "say": ["Umber Quay"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "terse"]
+  },
+  {
+    "id": "w04-008",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks for Leopold Tolliver's contact card",
+        "say": ["Leopold Tolliver"]
+      },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "terse"]
+  },
+  {
+    "id": "w04-009",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks to move the Replace task to friday",
+        "say": ["Replace", "friday"]
+      },
+      { "hint": "(new topic) asks what day the Quiz is on", "say": ["Quiz"] },
+      {
+        "hint": "asks the same about Violin instead ('what about Violin?')",
+        "say": ["Violin"]
+      },
+      { "hint": "asks what else they have that day", "say": [] },
+      { "hint": "asks how many there are in total", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "w04-010",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks if they have any locker entries about wifi",
+        "say": ["wifi"]
+      },
+      {
+        "hint": "(new topic) asks for their documents about Water",
+        "say": ["Water"]
+      },
+      {
+        "hint": "(new topic) asks which album the cabin photo is in",
+        "say": ["cabin"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "texting"]
+  },
+  {
+    "id": "w04-011",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks whether they binned the Cabin document",
+        "say": ["Cabin"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "spoken"]
+  },
+  {
+    "id": "w04-012",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks for their calendar events about Pilates",
+        "say": ["Pilates"]
+      },
+      {
+        "hint": "(new topic) asks to see the Council login login entry",
+        "say": ["Council login"]
+      },
+      {
+        "hint": "(new topic) asks to put 'Parents evening' in the calendar next friday at 10:30",
+        "say": ["Parents evening", "next friday"]
+      },
+      { "hint": "(new topic) says the Cancel task is done", "say": ["Cancel"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "polite"]
+  },
+  {
+    "id": "w04-013",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks to move the Choir appointment to tuesday",
+        "say": ["Choir", "tuesday"]
+      },
+      { "hint": "corrects: no, make it monday", "say": ["monday"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "polite"]
+  },
+  {
+    "id": "w04-014",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks to delete all their meal plan notes",
+        "say": ["meal plan"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "spoken"]
+  },
+  {
+    "id": "w04-015",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks for Jolene Wetherby's contact card",
+        "say": ["Jolene Wetherby"]
+      },
+      {
+        "hint": "(new topic) asks what their plan for tomorrow looks like, earliest first",
+        "say": ["tomorrow"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "question"]
+  },
+  {
+    "id": "w04-016",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks what they last talked about with Niamh Oyelowo",
+        "say": ["Niamh Oyelowo"]
+      },
+      {
+        "hint": "(new topic) asks for everything mentioning Oduya",
+        "say": ["Oduya"]
+      },
+      {
+        "hint": "(new topic) asks which to-dos are due this week",
+        "say": ["this week"]
+      },
+      {
+        "hint": "asks for just the weekend ones (this weekend)",
+        "say": ["weekend"]
+      },
+      {
+        "hint": "(new topic) asks to move the watch task to sunday",
+        "say": ["watch", "sunday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "spoken"]
+  },
+  {
+    "id": "w04-017",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks to find the to-dos on Quote", "say": ["Quote"] },
+      {
+        "hint": "(new topic) asks which events they have next week",
+        "say": ["next week"]
+      },
+      {
+        "hint": "(new topic) asks for their to-dos about passport",
+        "say": ["passport"]
+      },
+      {
+        "hint": "(new topic) asks what's in the vault about Graduation",
+        "say": ["Graduation"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "polite"]
+  },
+  {
+    "id": "w04-018",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks which open tasks aren't scheduled for any date",
+        "say": []
+      },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "(new topic) asks whether they owe Nerys Pritchard anything",
+        "say": ["Nerys Pritchard"]
+      },
+      {
+        "hint": "(new topic) asks which expenses were over 100 (money)",
+        "say": ["100"]
+      },
+      {
+        "hint": "asks for just the deposit ones among those",
+        "say": ["deposit"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "w04-019",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      { "hint": "asks which expenses were over 50 (money)", "say": ["50"] },
+      { "hint": "asks for just the ones over 100 (money)", "say": ["100"] },
+      {
+        "hint": "(new topic) asks to find anything to do with Garage",
+        "say": ["Garage"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "question"]
+  },
+  {
+    "id": "w04-020",
+    "today": "Friday 2027-10-29",
+    "turns": [
+      {
+        "hint": "asks to run through their day this weekend in time order",
+        "say": ["this weekend"]
+      },
+      {
+        "hint": "(new topic) asks for their pictures from Hollin Common",
+        "say": ["Hollin Common"]
+      },
+      {
+        "hint": "(new topic) asks to save the alarm code 3838 in the locker",
+        "say": ["alarm code", "3838"]
+      },
+      {
+        "hint": "(new topic) asks what the steps under 'Sell the optician' are",
+        "say": ["Sell the optician"]
+      },
+      { "hint": "asks how many there are in total", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "polite"]
+  }
+]

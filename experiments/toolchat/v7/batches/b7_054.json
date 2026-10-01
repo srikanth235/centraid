@@ -1,0 +1,253 @@
+[
+  {
+    "id": "w11-030",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to find the expenses on centre plants",
+        "say": ["centre plants"]
+      },
+      {
+        "hint": "(new topic) asks what tasks are due this week",
+        "say": ["this week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w11-031",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks what's in the vault about Ashgrove", "say": ["Ashgrove"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "texting"]
+  },
+  {
+    "id": "w11-032",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks which album the Roof rack photo is in",
+        "say": ["Roof rack"]
+      },
+      { "hint": "asks to see the photos in it", "say": [] },
+      { "hint": "asks what else there is apart from the second one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "texting"]
+  },
+  {
+    "id": "w11-033",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks what the Violin fund group's spending comes to",
+        "say": ["Violin fund"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks what's in the vault about Wetherby",
+        "say": ["Wetherby"]
+      },
+      {
+        "hint": "asks the same about Henrike instead ('what about Henrike?')",
+        "say": ["Henrike"]
+      },
+      {
+        "hint": "asks the same about Keziah Gunnarsson instead ('what about Keziah Gunnarsson?')",
+        "say": ["Keziah Gunnarsson"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "terse"]
+  },
+  {
+    "id": "w11-034",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks what's left to do on the 'Cancel the gym membership' task",
+        "say": ["Cancel the gym membership"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks who they're seeing at the class session",
+        "say": ["class session"]
+      },
+      {
+        "hint": "(new topic) asks to put back the Violin note they deleted",
+        "say": ["Violin"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "spoken"]
+  },
+  {
+    "id": "w11-035",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks whose birthdays are coming up this month",
+        "say": ["this month"]
+      },
+      {
+        "hint": "asks for just the ones this week (this week)",
+        "say": ["week"]
+      },
+      {
+        "hint": "(new topic) asks where the Streaming app details are",
+        "say": ["Streaming"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "polite"]
+  },
+  {
+    "id": "w11-036",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks where the Council account details are",
+        "say": ["Council"]
+      },
+      {
+        "hint": "(new topic) asks who they're seeing at the Wine",
+        "say": ["Wine"]
+      },
+      {
+        "hint": "(new topic) asks what Henrike's email is",
+        "say": ["Henrike"]
+      },
+      {
+        "hint": "(new topic) asks who'll be at the class session",
+        "say": ["class session"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  },
+  {
+    "id": "w11-037",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks what is in their Warranty folder", "say": ["Warranty"] },
+      {
+        "hint": "(new topic) asks for the 15-minute jobs on their list",
+        "say": ["15"]
+      },
+      { "hint": "asks which of those are still to do", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "w11-038",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks for everything mentioning suitcase",
+        "say": ["suitcase"]
+      },
+      {
+        "hint": "(new topic) asks to put 'Dentist check-up' in the calendar tuesday at 13:00",
+        "say": ["Dentist check-up", "tuesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "polite"]
+  },
+  {
+    "id": "w11-039",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks for photos taken at Station", "say": ["Station"] },
+      { "hint": "asks how many there are in total", "say": [] },
+      { "hint": "asks what else there is apart from the first one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "w11-040",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "says the desk task is done", "say": ["desk"] },
+      {
+        "hint": "(new topic) asks for their calendar events about studio",
+        "say": ["studio"]
+      },
+      { "hint": "asks who's coming to it", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "spoken"]
+  },
+  {
+    "id": "w11-041",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to add a task 'Collect the car service'",
+        "say": ["Collect the car service"]
+      },
+      {
+        "hint": "(new topic) asks to add a task 'Book the library books'",
+        "say": ["Book the library books"]
+      },
+      {
+        "hint": "(new topic) asks if they have any to-dos about fence",
+        "say": ["fence"]
+      },
+      {
+        "hint": "(new topic) asks what's in the vault about Graduation",
+        "say": ["Graduation"]
+      },
+      { "hint": "asks for just the important date ones", "say": [] },
+      { "hint": "asks if it's in their notes as well", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "question"]
+  },
+  {
+    "id": "w11-042",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      { "hint": "asks when the Bike is", "say": ["Bike"] },
+      {
+        "hint": "(new topic) asks what's in the vault about Horatio",
+        "say": ["Horatio"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "polite"]
+  },
+  {
+    "id": "w11-043",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks to save the garage code 69097 in the locker",
+        "say": ["garage code", "69097"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "polite"]
+  },
+  {
+    "id": "w11-044",
+    "today": "Friday 2026-06-12",
+    "turns": [
+      {
+        "hint": "asks whether they binned the etiquette note",
+        "say": ["etiquette"]
+      },
+      {
+        "hint": "(new topic) asks for their calendar events about lesson",
+        "say": ["lesson"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "texting"]
+  }
+]

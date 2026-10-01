@@ -79,9 +79,29 @@ fn four_grams(text: &str) -> BTreeSet<String> {
 /// keeps the days and months out: "Friday" is a leak of nothing.
 fn proper_nouns(text: &str) -> BTreeSet<String> {
     const NOT_A_NAME: &[&str] = &[
-        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "january",
-        "february", "march", "april", "may", "june", "july", "august", "september", "october",
-        "november", "december", "i", "i'm", "i've", "the",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+        "i",
+        "i'm",
+        "i've",
+        "the",
     ];
     let mut found = BTreeSet::new();
     for (index, word) in text.split_whitespace().enumerate() {
@@ -95,11 +115,7 @@ fn proper_nouns(text: &str) -> BTreeSet<String> {
         if NOT_A_NAME.contains(&trimmed.to_lowercase().as_str()) {
             continue;
         }
-        if trimmed
-            .chars()
-            .next()
-            .is_some_and(char::is_uppercase)
-        {
+        if trimmed.chars().next().is_some_and(char::is_uppercase) {
             found.insert(trimmed.to_lowercase());
         }
     }
@@ -114,7 +130,8 @@ struct Corpus {
 }
 
 fn read_corpus(path: &Path) -> Result<Corpus, String> {
-    let text = std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let text =
+        std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
     let json: serde_json::Value =
         serde_json::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))?;
     let mut requests = Vec::new();
@@ -155,9 +172,10 @@ fn read_corpus(path: &Path) -> Result<Corpus, String> {
         }
     }
     Ok(Corpus {
-        name: path
-            .file_name()
-            .map_or_else(|| path.display().to_string(), |name| name.to_string_lossy().into_owned()),
+        name: path.file_name().map_or_else(
+            || path.display().to_string(),
+            |name| name.to_string_lossy().into_owned(),
+        ),
         requests,
         names,
     })
@@ -169,7 +187,8 @@ struct Rows {
 }
 
 fn read_jsonl(path: &Path) -> Result<Rows, String> {
-    let text = std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let text =
+        std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
     let mut requests = Vec::new();
     let mut templates = BTreeSet::new();
     for (number, line) in text.lines().enumerate() {
@@ -244,7 +263,11 @@ fn main() -> ExitCode {
 
     let mut fatal = 0usize;
     for corpus in &corpora {
-        println!("\n== {} — {} request(s) ==", corpus.name, corpus.requests.len());
+        println!(
+            "\n== {} — {} request(s) ==",
+            corpus.name,
+            corpus.requests.len()
+        );
 
         // 1. EXACT COLLISIONS. Fatal.
         let collisions: Vec<&(String, String)> = corpus
@@ -366,8 +389,6 @@ fn main() -> ExitCode {
         println!("\nNo exact collision and no shared template.");
         return ExitCode::SUCCESS;
     }
-    println!(
-        "\nFAIL — {fatal} exact request collision(s), {shared_templates} shared template(s)."
-    );
+    println!("\nFAIL — {fatal} exact request collision(s), {shared_templates} shared template(s).");
     ExitCode::FAILURE
 }

@@ -1,0 +1,252 @@
+[
+  {
+    "id": "a0428",
+    "today": "Wednesday 2027-11-03",
+    "turns": [
+      {
+        "canonical": "due_at of (tasks called \"Clean the boiler this month\")",
+        "move": "first",
+        "hint": "when is the boiler task due"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Clean the boiler this month\"",
+        "turn": 1,
+        "say": "exact: boiler"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1021",
+    "today": "Tuesday 2028-08-08",
+    "turns": [
+      {
+        "canonical": "show (photos of (albums called \"Pottery\"))",
+        "move": "first",
+        "hint": "show the photos in the Pottery album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Pottery\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0222",
+    "today": "Wednesday 2025-12-31",
+    "turns": [
+      {
+        "canonical": "schedule.restore_task{} on (tasks called \"Book the pottery before winter\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "bring back the deleted pottery task"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Book the pottery before winter\"",
+        "turn": 1,
+        "say": "exact: pottery"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0390",
+    "today": "Wednesday 2027-11-24",
+    "turns": [
+      {
+        "canonical": "count of (parties that (role = \"Dentist\"))",
+        "move": "first",
+        "hint": "how many dentists have I got in my contacts"
+      }
+    ],
+    "refer": [{ "row": "role \"Dentist\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0225",
+    "today": "Thursday 2025-07-24",
+    "turns": [
+      {
+        "canonical": "schedule.restore_task{} on (tasks called \"Book the piano tuner\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "bring back the deleted tuner task"
+      }
+    ],
+    "refer": [
+      {
+        "row": "tasks \"Book the piano tuner\"",
+        "turn": 1,
+        "say": "loose: tuner"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0908",
+    "today": "Monday 2027-09-13",
+    "turns": [
+      {
+        "canonical": "show (notes ordered by updated_at desc)",
+        "move": "first",
+        "hint": "notes, most recently edited first"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0750",
+    "today": "Sunday 2026-01-11",
+    "turns": [
+      {
+        "canonical": "show (photos that (place = \"Northgate Pool\"))",
+        "move": "first",
+        "hint": "photos whose place is Pool"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Northgate Pool\"", "turn": 1, "say": "exact: Pool" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1125",
+    "today": "Monday 2026-11-30",
+    "turns": [
+      {
+        "canonical": "show (events that (status = \"cancelled\") during this week)",
+        "move": "first",
+        "hint": "cancelled events in that window"
+      },
+      {
+        "canonical": "nothing",
+        "move": "undo",
+        "hint": "actually forget it / never mind (takes the request back)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0542",
+    "today": "Sunday 2026-05-10",
+    "turns": [
+      {
+        "canonical": "show (events called \"Wine tasting with Dagmar\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the wine event"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Wine tasting with Dagmar\"",
+        "turn": 1,
+        "say": "loose: wine"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0744",
+    "today": "Sunday 2028-07-30",
+    "turns": [
+      {
+        "canonical": "show (photos that (place = \"Umber Street\"))",
+        "move": "first",
+        "hint": "photos whose place is umber"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Umber Street\"", "turn": 1, "say": "exact: umber" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0647",
+    "today": "Thursday 2026-10-15",
+    "turns": [
+      {
+        "canonical": "show (notes called \"Recipe for lemon drizzle\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the Recipe for lemon drizzle note"
+      }
+    ],
+    "refer": [
+      { "row": "notes \"Recipe for lemon drizzle\"", "turn": 1, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0564",
+    "today": "Monday 2025-07-07",
+    "turns": [
+      {
+        "canonical": "show (events that (status = \"cancelled\"))",
+        "move": "first",
+        "hint": "which events are cancelled / tentative"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0270",
+    "today": "Monday 2027-11-22",
+    "turns": [
+      {
+        "canonical": "count of (contact channels of (parties called \"Horatio Kerrigan\"))",
+        "move": "first",
+        "hint": "how many numbers/emails do I have for Horatio"
+      }
+    ],
+    "refer": [
+      {
+        "row": "parties \"Horatio Kerrigan\"",
+        "turn": 1,
+        "say": "exact: Horatio"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0029",
+    "today": "Monday 2028-08-07",
+    "turns": [
+      {
+        "canonical": "show (notes)",
+        "move": "first",
+        "hint": "show all my notes"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0158",
+    "today": "Sunday 2025-11-02",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Wedding\") } on (photos called \"Castle ruins\")",
+        "move": "first",
+        "hint": "add the ruins photo to the album"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"Wedding\"", "turn": 1, "say": "full" },
+      { "row": "photos \"Castle ruins\"", "turn": 1, "say": "exact: ruins" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

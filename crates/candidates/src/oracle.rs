@@ -75,7 +75,7 @@ impl Candidate for OracleSession {
                 reason: "unhandled: the grammar does not cover this turn".to_owned(),
             };
         }
-        match crate::canon::parse(&mapped.canonical) {
+        match crate::canon::parse_for_execution(&mapped.canonical, ctx.today()) {
             Ok(tree) => execute(&tree, &mut self.state, ctx),
             Err(complaint) => Plan::Declined {
                 reason: format!("unhandled: the canonical does not parse: {complaint}"),

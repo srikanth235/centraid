@@ -1,0 +1,327 @@
+[
+  {
+    "id": "w26-0050",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      { "hint": "asks to find the shots on bocce", "say": ["bocce", "shots"] },
+      {
+        "hint": "follow-up: asks the same about capoeira instead ('what about capoeira?')",
+        "say": ["capoeira"],
+        "shown": "photo \"Bocce close-up\" Sun 2025-02-02 18:37 · album_titles=Aviemore Arts Centre 2025 favorite=false"
+      },
+      {
+        "hint": "follow-up: asks the same about washboard instead ('what about washboard?')",
+        "say": ["washboard"],
+        "shown": "photo \"Capoeira close-up\" Mon 2025-01-20 10:01 · album_titles=Fireplace progress favorite=false"
+      },
+      {
+        "hint": "(detour) hang on — asks for pictures with Wulan Faimere in them",
+        "say": ["Wulan Faimere"],
+        "shown": "photo \"Washboard at Vrimford Cove\" Sun 2024-12-29 15:31 · album_titles=Dalat 2024 favorite=false people=Wulan Faimere, Wusia Shamow"
+      },
+      {
+        "hint": "back to the washboard photos — asks whether there's anything in their to-do list about it too",
+        "say": ["to-do list"],
+        "shown": "photo \"Washboard at Vrimford Cove\" Sun 2024-12-29 15:31 · album_titles=Dalat 2024 favorite=false people=Wulan Faimere, Wusia Shamow"
+      },
+      {
+        "hint": "(new topic) says the boat shed PIN is 20134 — keep it in the locker",
+        "say": ["boat shed PIN", "20134"],
+        "shown": "task \"Ask Priziel about the washboard\" Thu 2025-02-27 17:00 · status=completed"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w26-0051",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "asks to list the people in the Norhaven house share group",
+        "say": ["Norhaven house share"]
+      },
+      {
+        "hint": "(new topic) asks what tasks have no due date",
+        "say": [],
+        "shown": "member \"Shomen Gokhale\"\nmember \"Carmen Varga\""
+      },
+      {
+        "hint": "follow-up: asks to move the second one to monday",
+        "say": ["second", "monday"],
+        "shown": "task \"Chase the hoop\" · status=needs-action effort_min=90\ntask \"Research the organ\" · status=needs-action effort_min=120\ntask \"Ask Minseo about the kipper\" · status=needs-action effort_min=90\ntask \"Post Seama's trumpet\" · status=needs-action effort_min=15\n(+6 more)"
+      },
+      {
+        "hint": "(new topic) asks what else is on during the Genholm trip",
+        "say": ["Genholm"],
+        "shown": "done: reschedule{to: 2025-03-03} on (#5)"
+      },
+      {
+        "hint": "(detour) hang on — asks which places they have exactly one photo from",
+        "say": ["one"],
+        "shown": "important date \"Birthday — Tanvi Gillespie\" Wed 2025-03-19\nevent \"Trip to Genholm\" Wed 2025-03-19 09:00"
+      },
+      {
+        "hint": "back to the Genholm trip — about the trip one, asks who else will be there",
+        "say": ["trip"],
+        "shown": "place \"Eilean Dunes\"\nplace \"Lucca Lane\"\nplace \"Margaret Yard\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w26-0052",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      { "hint": "asks to pull up Castie Loani", "say": ["Castie Loani"] },
+      {
+        "hint": "follow-up: asks the same about Adebayo Canby ('and Adebayo Canby?')",
+        "say": ["Adebayo Canby"],
+        "shown": "party \"Castie Loani\" · role=Old school friend"
+      },
+      {
+        "hint": "follow-up: asks the same about Jonas Borkowski ('and Jonas Borkowski?')",
+        "say": ["Jonas Borkowski"],
+        "shown": "party \"Adebayo Canby\" · role=Neighbour next door"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w26-0053",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "asks to put Novo Tyres in Dalat trip",
+        "say": ["Novo Tyres", "Dalat trip"]
+      },
+      {
+        "hint": "(new topic) asks to move the post task to friday and the Lakshmi to next monday",
+        "say": ["post", "friday", "Lakshmi", "next monday"],
+        "shown": "done: tally.add_group_member{group_id: (#2)} on (#4)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w26-0056",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "says they phoned Selim today, log it (two contacts are called Selim)",
+        "say": ["Selim", "phoned"]
+      },
+      {
+        "hint": "follow-up: says it was the Selim one (plumber)",
+        "say": ["plumber"],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w26-0057",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "says they phoned Selim (the plumber one) today, log it",
+        "say": ["Selim", "plumber", "phoned"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w26-0058",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "asks what group the dalat top-up went into",
+        "say": ["dalat top-up"]
+      },
+      {
+        "hint": "follow-up: asks for the other expenses in that group",
+        "say": [],
+        "shown": "group \"Dalat trip\""
+      },
+      {
+        "hint": "follow-up: asks what the subscription came to",
+        "say": ["subscription"],
+        "shown": "expense \"Dinner on the last night\" Wed 2025-01-01 · amount_minor=5458 paid_by=Anjali Rowntree\nexpense \"Car hire\" Wed 2025-01-01 · amount_minor=12499 paid_by=Wusia Shamow\nexpense \"Stoat lessons\" Mon 2024-12-30 · amount_minor=21242 paid_by=Anjali Rowntree\nexpense \"Dalat repair\" Mon 2024-12-30 · amount_minor=24640 paid_by=Anjali Rowntree\n(+4 more)"
+      },
+      { "hint": "follow-up: says forget it", "say": [], "shown": "= 17738" },
+      {
+        "hint": "(new topic) asks to be reminded to email Minseo about the trumpet saturday",
+        "say": ["email Minseo about the trumpet", "saturday"],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: about the car one, asks which group it's in",
+        "say": ["car"],
+        "shown": "done: schedule.add_task{title: \"Email Minseo about the trumpet\", due_at: 2025-03-08}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w26-0060",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "asks to move both bocce things (the task and the calendar entry) to tomorrow",
+        "say": ["bocce", "tomorrow"]
+      },
+      {
+        "hint": "(new topic) asks to add 25 reais for petrol to the Norhaven house share group, they paid",
+        "say": ["25 reais", "petrol", "Norhaven house share"],
+        "shown": "done: reschedule{to: 2025-03-02} on (#1, #7)"
+      },
+      {
+        "hint": "(new topic) asks to jot down a note that says books to read this summer",
+        "say": ["books to read this summer"],
+        "shown": "done: tally.add_expense{description: \"Petrol\", amount_minor: 2500, paid_by: me, group_id: (#8)}"
+      },
+      {
+        "hint": "follow-up: about the first one, asks for its expenses",
+        "say": ["first"],
+        "shown": "done: knowledge.create_note{title: \"Books to read this summer\"}"
+      },
+      {
+        "hint": "(new topic) asks to log sixteen reais of taxi in flint fund, paid by them",
+        "say": ["sixteen reais", "taxi", "flint fund"],
+        "shown": "expense \"Petrol\" Sat 2025-03-01 · amount_minor=2500 paid_by=Owner\nexpense \"Fireplace repair\" Fri 2025-02-21 · amount_minor=5600 paid_by=Owner\nexpense \"Organ\" Sat 2025-02-08 · amount_minor=4654 paid_by=Owner\nexpense \"Flint subscription\" Sun 2025-01-26 · amount_minor=24230 paid_by=Carmen Varga\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w26-0061",
+    "today": "Saturday 2025-03-01",
+    "turns": [
+      {
+        "hint": "asks if the quartzite sale appointment can go to tomorrow instead",
+        "say": ["quartzite sale", "tomorrow"]
+      },
+      {
+        "hint": "follow-up: corrects: wrong event, they meant the daffodil repair one",
+        "say": ["daffodil repair"],
+        "shown": "done: reschedule{to: 2025-03-02} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w27-0001",
+    "today": "Sunday 2025-01-26",
+    "turns": [{ "hint": "asks which tasks are still open", "say": [] }],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w27-0003",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks to make the teacher an hour earlier",
+        "say": ["teacher", "an hour earlier"]
+      },
+      {
+        "hint": "(new topic) asks to mark the jamjar to-do complete",
+        "say": ["jamjar"],
+        "shown": "done: reschedule{by: -1h} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks if they have photos of Grolou Montague",
+        "say": ["Grolou Montague"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w27-0004",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks to push the ferry task to sunday",
+        "say": ["ferry", "sunday"]
+      },
+      {
+        "hint": "(new topic) asks if anything is happening today",
+        "say": ["today"],
+        "shown": "done: reschedule{to: 2025-02-02} on (#2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w27-0005",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks what they still have to get done next week",
+        "say": ["next week"]
+      },
+      {
+        "hint": "follow-up: asks to move the second one to friday",
+        "say": ["second", "friday"],
+        "shown": "task \"Pay the cleaner (wk 05)\" Tue 2025-01-28 09:00 · status=needs-action\ntask \"Replace the awning\" Tue 2025-01-28 17:00 · status=needs-action effort_min=120"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w27-0006",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks for their files about grapefruit",
+        "say": ["grapefruit", "files"]
+      },
+      {
+        "hint": "follow-up: asks the same about pizaum instead ('what about pizaum?')",
+        "say": ["pizaum"],
+        "shown": "document \"Grapefruit agreement 2024\" Sun 2024-11-10 20:44 · folder=Pavilion"
+      },
+      {
+        "hint": "(new topic) asks if they have any notes about blackbird",
+        "say": ["blackbird", "notes"],
+        "shown": "document \"Pizaum letter\" Sat 2024-01-06 09:45 · folder=Taxes"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w27-0007",
+    "today": "Sunday 2025-01-26",
+    "turns": [
+      {
+        "hint": "asks how many notes are in the Dulcimer notebook",
+        "say": ["Dulcimer", "notebook"]
+      },
+      {
+        "hint": "(new topic) asks to settle up their debt with Grolou Montague",
+        "say": ["Grolou Montague"],
+        "shown": "= 5"
+      },
+      {
+        "hint": "(new topic) asks how many notes they have in Dulcimer",
+        "say": ["Dulcimer", "notebook"],
+        "shown": "done: people.settle_debt{} on (#5)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  }
+]

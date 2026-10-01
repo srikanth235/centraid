@@ -1,0 +1,254 @@
+[
+  {
+    "id": "g0151",
+    "today": "Sunday 2028-11-05",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (journal notes ordered by created_at desc))",
+        "gloss": "List the first 1 of [journal notes, sorted by date created descending (highest/latest first)].",
+        "move": "first",
+        "hint": "my last journal entry"
+      },
+      {
+        "canonical": "knowledge.delete_note{} on (it)",
+        "gloss": "Delete (move to trash) [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "delete it"
+      },
+      {
+        "canonical": "show (parties called \"Mauricio\" that (role contains \"colleague\"))",
+        "gloss": "List parties named \"Mauricio\" where the role contains \"colleague\".",
+        "move": "new",
+        "hint": "the Mauricio I used to work with"
+      },
+      {
+        "canonical": "show (contact channels of (it) that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [it (the one row the previous turn is about)] where the kind is \"phone\".",
+        "move": "act",
+        "hint": "what's their number"
+      },
+      {
+        "canonical": "show (locker items called \"gym\")",
+        "gloss": "List locker items named \"gym\".",
+        "move": "new",
+        "hint": "what's the login for gym"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0525",
+    "today": "Wednesday 2028-03-01",
+    "turns": [
+      {
+        "canonical": "reschedule{ to: sunday } on (tasks called \"submit\")",
+        "gloss": "Move [tasks named \"submit\"] to sunday.",
+        "move": "first",
+        "hint": "push/move the named task"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0224",
+    "today": "Sunday 2025-07-20",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (journal notes ordered by created_at desc))",
+        "gloss": "List the first 1 of [journal notes, sorted by date created descending (highest/latest first)].",
+        "move": "first",
+        "hint": "my last journal entry"
+      },
+      {
+        "canonical": "knowledge.delete_note{} on (it)",
+        "gloss": "Delete (move to trash) [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "delete it"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Saskia\") that (settled_at is null))",
+        "gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Saskia\"] where there is no date settled]?",
+        "move": "new",
+        "hint": "how much do I owe Saskia"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0137",
+    "today": "Sunday 2027-08-08",
+    "turns": [
+      {
+        "canonical": "show (parties that (role = \"Physio\"))",
+        "gloss": "List parties where the role is \"Physio\".",
+        "move": "first",
+        "hint": "who's my physio"
+      },
+      {
+        "canonical": "reschedule{ by: +1h } on (events called \"housewarming\")",
+        "gloss": "Shift [events named \"housewarming\"] 1 hour later.",
+        "move": "new",
+        "hint": "push/move the named event"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0613",
+    "today": "Monday 2025-04-21",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status != \"completed\" and due_at during next week) ordered by due_at asc)",
+        "gloss": "List tasks where the status is not \"completed\" and the due date falls next week, sorted by due date ascending (lowest/earliest first).",
+        "move": "first",
+        "hint": "what's due next week (open tasks)"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many is that"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0379",
+    "today": "Saturday 2026-05-16",
+    "turns": [
+      {
+        "canonical": "people.log_interaction{ kind: \"call\", since: today } on (parties called \"Quentin Kerrigan\")",
+        "gloss": "Log that I had a call with [parties named \"Quentin Kerrigan\"].",
+        "move": "first",
+        "hint": "log a call with Quentin Kerrigan (today)"
+      },
+      {
+        "canonical": "show (things during next tuesday)",
+        "gloss": "",
+        "move": "switch",
+        "hint": "what's on next tuesday"
+      },
+      {
+        "canonical": "people.log_interaction{ kind: \"call\", since: today } on (parties called \"Quentin Kerrigan\")",
+        "gloss": "Log that I had a call with [parties named \"Quentin Kerrigan\"].",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      },
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "new",
+        "hint": "open tasks with no due date"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0265",
+    "today": "Tuesday 2028-07-11",
+    "turns": [
+      {
+        "canonical": "show (documents that (folder = \"Taxes\"))",
+        "gloss": "List documents where the folder is \"Taxes\".",
+        "move": "first",
+        "hint": "what's in my Taxes folder/notebook"
+      },
+      {
+        "canonical": "core.star_document{} on (the 1st one)",
+        "gloss": "Star [the 1st one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "star one by position"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0687",
+    "today": "Wednesday 2027-06-16",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Reply to the landlord\" }",
+        "gloss": "Add a task titled \"Reply to the landlord\".",
+        "move": "first",
+        "hint": "add a task"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0196",
+    "today": "Saturday 2027-06-12",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "gloss": "List parties where the amount I owe them is set.",
+        "move": "first",
+        "hint": "who do I owe money to"
+      },
+      {
+        "canonical": "sum owed_to_them of (them)",
+        "gloss": "What is the total amount I owe them of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how much in total"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0639",
+    "today": "Tuesday 2028-11-07",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Dinner with Nils\", dtstart: 2029-01-03T12:30, dtend: 2029-01-03T13:30 }",
+        "gloss": "Put an event titled \"Dinner with Nils\" in the calendar starting Wednesday 2029-01-03 at 12:30 and ending Wednesday 2029-01-03 at 13:30.",
+        "move": "first",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0378",
+    "today": "Tuesday 2028-11-07",
+    "turns": [
+      {
+        "canonical": "reschedule{ to: monday } on (events called \"session\")",
+        "gloss": "Move [events named \"session\"] to monday.",
+        "move": "first",
+        "hint": "push/move the named event"
+      },
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "new",
+        "hint": "open tasks with no due date"
+      },
+      {
+        "canonical": "reschedule{ to: monday } on (the 1st one)",
+        "gloss": "Move [the 1st one (by position in the previous answer)] to monday.",
+        "move": "act",
+        "hint": "give one a date"
+      },
+      {
+        "canonical": "show (important dates of (parties called \"Thibault Upton\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Thibault Upton\"] where the label contains \"Birthday\".",
+        "move": "new",
+        "hint": "when is Thibault Upton's birthday"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0610",
+    "today": "Thursday 2027-06-24",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Pay the window cleaner\", due_at: 2027-07-18T11:45 }",
+        "gloss": "Add a task titled \"Pay the window cleaner\" due Sunday 2027-07-18 at 11:45.",
+        "move": "first",
+        "hint": "add a task"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  }
+]

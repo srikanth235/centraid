@@ -1,0 +1,302 @@
+[
+  {
+    "id": "w21-0048",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks to record that they called Aurora",
+        "say": ["Aurora", "called"]
+      },
+      {
+        "hint": "follow-up: asks when they last spoke",
+        "say": [],
+        "shown": "done: people.log_interaction{kind: \"call\"} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks for the photos they took recently",
+        "say": ["recently"],
+        "shown": "activity \"interaction — Aurora Lorwick\" Mon 2026-12-21 13:10"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w21-0049",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks to see photos of Orsolya Goodenough",
+        "say": ["Orsolya Goodenough"]
+      },
+      {
+        "hint": "follow-up: asks for a task to call the Yealmpton photo",
+        "say": ["call the Yealmpton photo"],
+        "shown": "photo \"Drawbridge at Yealmpton Fields\" Sat 2026-07-11 16:35 · album_titles=Cello club, Enow 2026 favorite=false people=Orsolya Goodenough, Owyn Brarett"
+      },
+      {
+        "hint": "(new topic) asks to get rid of every doorbell photo",
+        "say": ["doorbell", "photo"],
+        "shown": "done: schedule.add_task{title: \"Call the Yealmpton photo\"}"
+      },
+      {
+        "hint": "follow-up: says no wait, undo that",
+        "say": [],
+        "shown": "done: media.delete_asset{} on (#7, #8, #9)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w21-0050",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks to settle up with Tonu in number 88 flat",
+        "say": ["Tonu", "number 88 flat", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks for the subtasks of the replace the woodpecker this week task",
+        "say": ["replace the woodpecker this week"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#3) in (#1)} on (#3)"
+      },
+      {
+        "hint": "(new topic) asks what they paid for the enow deposit",
+        "say": ["enow deposit"],
+        "shown": "task \"Label the doorbell\" Mon 2026-12-07 17:00 · status=in-process\ntask \"Paint the lilac\" Tue 2026-12-22 17:00 · status=needs-action effort_min=90"
+      },
+      {
+        "hint": "(new topic) asks if they have any documents about footbridge",
+        "say": ["footbridge", "documents"],
+        "shown": "= 1972"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w21-0051",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks to add thirteen kroner for Tonu's taxi to number 88 flat, they paid",
+        "say": ["thirteen kroner", "Tonu's taxi", "number 88 flat"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w21-0053",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      { "hint": "asks to tick off the giraffe task", "say": ["giraffe"] },
+      {
+        "hint": "(new topic) asks what they've written in the Kazbegi trips notebook",
+        "say": ["Kazbegi trips", "notebook"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#3)"
+      },
+      {
+        "hint": "follow-up: asks how many of them there are",
+        "say": [],
+        "shown": "note \"Longboarding draft\" Fri 2026-11-27 12:55 · notebooks=Kazbegi trips\nnote \"Efe's telescope questions\" Sat 2026-10-17 23:36 · notebooks=Kazbegi trips\nnote \"Clocktower shopping list\" Fri 2026-09-11 09:41 · notebooks=Kazbegi trips\nnote \"Daskery checklist\" Sat 2026-08-29 09:14 · notebooks=Kazbegi trips\n(+2 more)"
+      },
+      {
+        "hint": "follow-up: asks the same for the Paragliding notebook ('and Paragliding?')",
+        "say": ["Paragliding"],
+        "shown": "= 6"
+      },
+      {
+        "hint": "(new topic) asks how much the cedar cost",
+        "say": ["cedar"],
+        "shown": "note \"Moorhen measurements\" Sun 2026-12-06 17:58 · notebooks=Paragliding\nnote \"Weekly review (wk 50)\" Sun 2026-12-06 10:37 · notebooks=Paragliding\nnote \"Gift ideas for Gristine\" Sun 2026-11-15 18:31 · notebooks=Paragliding\nnote \"Notes from Tharroe Viewpoint\" Sat 2026-09-05 08:17 · notebooks=Paragliding\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w21-0054",
+    "today": "Monday 2026-12-21",
+    "turns": [{ "hint": "asks what their debt to Goran is", "say": ["Goran"] }],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w21-0055",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks whose birthdays are coming up next two months",
+        "say": ["next two months", "months"]
+      },
+      {
+        "hint": "(new topic) asks to clear out the list notes",
+        "say": ["list", "note"],
+        "shown": "important date \"Birthday — Orsolya Goodenough\" Wed 2026-12-23\nimportant date \"Birthday — Sathette Crastino\" Sun 2026-12-27\nimportant date \"Anniversary — Flarel Aalto\" Mon 2026-12-28"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w21-0056",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks to clear what's owed between them and Sathette",
+        "say": ["Sathette"]
+      },
+      {
+        "hint": "(new topic) asks what time the Arcachon thing is (no kind said)",
+        "say": ["Arcachon"],
+        "shown": "done: people.settle_debt{} on (#2)"
+      },
+      {
+        "hint": "follow-up: says never mind",
+        "say": [],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w21-0057",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks how much Tonu Zaki owes them in number 88 flat",
+        "say": ["Tonu Zaki", "number 88 flat"]
+      },
+      { "hint": "follow-up: says forget it", "say": [], "shown": "= 4846" }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w21-0058",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks for pictures with Flolara Zaki in them",
+        "say": ["Flolara Zaki"]
+      },
+      {
+        "hint": "follow-up: says forget it",
+        "say": [],
+        "shown": "photo \"Barley in the snow\" Wed 2026-11-25 12:41 · favorite=false people=Flolara Zaki, Esme Zaki"
+      },
+      {
+        "hint": "(new topic) asks when the Widad business is",
+        "say": ["Widad"],
+        "shown": "none"
+      },
+      {
+        "hint": "(new topic) asks for the number 88 flat expenses above 130 kroner",
+        "say": ["number 88 flat", "130 kroner"],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w21-0059",
+    "today": "Monday 2026-12-21",
+    "turns": [
+      {
+        "hint": "asks to square their Enow trip balance with Gristine",
+        "say": ["Gristine", "Enow trip"]
+      },
+      {
+        "hint": "(new topic) asks what date Bethan's birthday falls on",
+        "say": ["Bethan", "birthday"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#3) in (#1)} on (#3)"
+      },
+      {
+        "hint": "follow-up: says forget it",
+        "say": [],
+        "shown": "important date \"Birthday — Bethan Zaki\" Thu 2026-07-16"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w22-0001",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks to see photos of Fionnuala Rivas",
+        "say": ["Fionnuala Rivas"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w22-0002",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks when Halima's birthday is",
+        "say": ["Halima", "birthday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w22-0003",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      {
+        "hint": "asks when their walk with Halima is",
+        "say": ["Halima", "walk"]
+      },
+      {
+        "hint": "(new topic) asks when they have the call aylin",
+        "say": ["call aylin"],
+        "shown": "event \"Walk with Halima\" Sun 2025-05-25 13:15"
+      },
+      {
+        "hint": "follow-up: asks the same about the cresvaet ('and the cresvaet?')",
+        "say": ["cresvaet"],
+        "shown": "event \"Call Aylin about the flagstone\" Mon 2025-05-12 15:30"
+      },
+      {
+        "hint": "follow-up: asks whether there's anything in their expenses about it too",
+        "say": ["expenses"],
+        "shown": "event \"Cresvaet viewing\" Wed 2025-05-21 07:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w22-0004",
+    "today": "Tuesday 2025-05-13",
+    "turns": [
+      { "hint": "asks if anything is happening tomorrow", "say": ["tomorrow"] },
+      {
+        "hint": "follow-up: asks to move the first one to next friday",
+        "say": ["first", "next friday"],
+        "shown": "event \"Linen fitting\" Wed 2025-05-14 07:00\nevent \"Tutor check-up\" Wed 2025-05-14 20:30"
+      },
+      {
+        "hint": "(new topic) asks what's on tuesday",
+        "say": ["tuesday"],
+        "shown": "done: reschedule{to: 2025-05-23} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks to shift the hurling one to wednesday",
+        "say": ["hurling", "wednesday"],
+        "shown": "event \"Hurling meetup at Growen Bakery\" Tue 2025-05-20 15:45\ntask \"Book the cushion\" Tue 2025-05-20 18:00 · status=needs-action effort_min=180"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  }
+]

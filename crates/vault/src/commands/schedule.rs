@@ -650,14 +650,15 @@ fn propose_event() -> CommandDefinition {
             ctx.connection().execute(
                 "INSERT INTO schedule_event_ext
                    (event_ext_id, event_id, calendar_id, busy, conferencing_uri,
-                    reminders_json, travel_buffer_min)
-                 VALUES (?1, ?2, ?3, 'busy', ?4, ?5, NULL)",
+                    reminders_json, travel_buffer_min, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, 'busy', ?4, ?5, NULL, ?6, ?6)",
                 rusqlite::params![
                     event_ext_id,
                     event_id,
                     calendar_id,
                     ctx.optional_str("conferencing_uri"),
                     reminders,
+                    ctx.now,
                 ],
             )?;
             let attendees = attendee_party_ids(ctx);
@@ -665,9 +666,10 @@ fn propose_event() -> CommandDefinition {
                 let attendee_id = ctx.next_id();
                 ctx.connection().execute(
                     "INSERT INTO schedule_attendee
-                       (attendee_id, event_id, party_id, role, partstat, responded_at)
-                     VALUES (?1, ?2, ?3, 'required', 'needs-action', NULL)",
-                    rusqlite::params![attendee_id, event_id, party_id],
+                       (attendee_id, event_id, party_id, role, partstat, responded_at,
+                        created_at, updated_at)
+                     VALUES (?1, ?2, ?3, 'required', 'needs-action', NULL, ?4, ?4)",
+                    rusqlite::params![attendee_id, event_id, party_id, ctx.now],
                 )?;
             }
             Ok(serde_json::json!({
@@ -777,7 +779,7 @@ fn reschedule_event() -> CommandDefinition {
             let dtend = ctx.required_str("dtend")?.to_owned();
             let sequence = bump_sequence(ctx, &event_id)?;
             ctx.connection().execute(
-                "UPDATE core_event SET dtstart = ?1, dtend = ?2, sequence = ?3, updated_at = ?4
+                "UPDATE core_event SET dtstart = ?1, dtend = ?2, sequence = ?3, updated_at = ?4, row_version = row_version + 1
                   WHERE event_id = ?5",
                 rusqlite::params![dtstart, dtend, sequence, ctx.now, event_id],
             )?;
@@ -906,7 +908,7 @@ fn cancel_event() -> CommandDefinition {
             let event_id = ctx.required_str("event_id")?.to_owned();
             let sequence = bump_sequence(ctx, &event_id)?;
             ctx.connection().execute(
-                "UPDATE core_event SET status = 'cancelled', sequence = ?1, updated_at = ?2
+                "UPDATE core_event SET status = 'cancelled', sequence = ?1, updated_at = ?2, row_version = row_version + 1
                   WHERE event_id = ?3",
                 rusqlite::params![sequence, ctx.now, event_id],
             )?;
@@ -956,7 +958,7 @@ fn delete_event() -> CommandDefinition {
             let event_id = ctx.required_str("event_id")?.to_owned();
             let purge = purge_at(&ctx.now)?;
             ctx.connection().execute(
-                "UPDATE core_event SET deleted_at = ?1, purge_at = ?2, updated_at = ?1
+                "UPDATE core_event SET deleted_at = ?1, purge_at = ?2, updated_at = ?1, row_version = row_version + 1
                   WHERE event_id = ?3",
                 rusqlite::params![ctx.now, purge, event_id],
             )?;
@@ -1010,7 +1012,7 @@ fn restore_event() -> CommandDefinition {
         |ctx| {
             let event_id = ctx.required_str("event_id")?.to_owned();
             ctx.connection().execute(
-                "UPDATE core_event SET deleted_at = NULL, purge_at = NULL, updated_at = ?1
+                "UPDATE core_event SET deleted_at = NULL, purge_at = NULL, updated_at = ?1, row_version = row_version + 1
                   WHERE event_id = ?2",
                 rusqlite::params![ctx.now, event_id],
             )?;
@@ -1193,6 +1195,7 @@ fn edit_event() -> CommandDefinition {
             values.push(sequence.into());
             sets.push("updated_at = ?".to_owned());
             values.push(ctx.now.clone().into());
+            sets.push("row_version = row_version + 1".to_owned());
             values.push(event_id.clone().into());
             ctx.connection().execute(
                 &format!(
@@ -1407,7 +1410,7 @@ fn edit_series(
         }
         let sequence = bump_sequence(ctx, event_id)?;
         ctx.connection().execute(
-            "UPDATE core_event SET status = 'cancelled', sequence = ?1, updated_at = ?2
+            "UPDATE core_event SET status = 'cancelled', sequence = ?1, updated_at = ?2, row_version = row_version + 1
               WHERE event_id = ?3",
             rusqlite::params![sequence, ctx.now, event_id],
         )?;
@@ -1437,7 +1440,9 @@ fn edit_series(
     values.push(event_id.to_owned().into());
     ctx.connection().execute(
         &format!(
-            "UPDATE core_event SET {}, sequence = sequence + 1, updated_at = ? WHERE event_id = ?",
+            "UPDATE core_event SET {}, sequence = sequence + 1, updated_at = ?,
+                    row_version = row_version + 1
+              WHERE event_id = ?",
             sets.join(", ")
         ),
         rusqlite::params_from_iter(values),
@@ -2035,6 +2040,12 @@ fn edit_task() -> CommandDefinition {
                 }
             }
             if !sets.is_empty() {
+                // THE VERSION MOVES HERE, NOT IN THE TRIGGER:
+                // `schedule_task_touch_updated_at` stamps the HOST's wall clock
+                // over an update that leaves `updated_at` alone.
+                sets.push("updated_at = ?".to_owned());
+                values.push(ctx.now.clone().into());
+                sets.push("row_version = row_version + 1".to_owned());
                 values.push(task_id.clone().into());
                 ctx.connection().execute(
                     &format!(
@@ -2084,7 +2095,8 @@ fn delete_task() -> CommandDefinition {
             // an annotation on a trashed task must come back with it, or
             // restore means nothing.
             let removed = ctx.connection().execute(
-                "UPDATE schedule_task SET deleted_at = ?1, purge_at = ?2
+                "UPDATE schedule_task SET deleted_at = ?1, purge_at = ?2, updated_at = ?1,
+                        row_version = row_version + 1
                   WHERE (task_id = ?3 OR parent_task_id = ?3) AND deleted_at IS NULL",
                 rusqlite::params![ctx.now, purge, task_id],
             )?;
@@ -2138,9 +2150,10 @@ fn restore_task() -> CommandDefinition {
             // Subtasks trashed WITH the parent come back with it; one trashed
             // on its own does not — restore undoes the gesture that was made.
             let restored = ctx.connection().execute(
-                "UPDATE schedule_task SET deleted_at = NULL, purge_at = NULL
+                "UPDATE schedule_task SET deleted_at = NULL, purge_at = NULL, updated_at = ?2,
+                        row_version = row_version + 1
                   WHERE (task_id = ?1 OR parent_task_id = ?1) AND deleted_at IS NOT NULL",
-                [&task_id],
+                rusqlite::params![task_id, ctx.now],
             )?;
             Ok(serde_json::json!({ "task_id": task_id, "restored": restored }))
         },

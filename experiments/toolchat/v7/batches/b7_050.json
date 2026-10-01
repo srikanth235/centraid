@@ -1,0 +1,278 @@
+[
+  {
+    "id": "w10-048",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks for the latest football scores", "say": [] },
+      {
+        "hint": "(new topic) asks to make a note called 'Recipes to try'",
+        "say": ["Recipes to try"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "terse"]
+  },
+  {
+    "id": "w10-049",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks where the Reunion photo was taken", "say": ["Reunion"] },
+      { "hint": "(new topic) asks when they have the quiz", "say": ["quiz"] },
+      {
+        "hint": "asks the same about supper instead ('what about supper?')",
+        "say": ["supper"]
+      },
+      { "hint": "asks if it's in their expenses as well", "say": [] },
+      {
+        "hint": "(new topic) asks for their calendar events about Allotment",
+        "say": ["Allotment"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "w10-050",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks to find anything to do with Stannard",
+        "say": ["Stannard"]
+      },
+      {
+        "hint": "(new topic) asks which steps of 'Recycle the rent next week' are still open",
+        "say": ["Recycle the rent next week"]
+      },
+      { "hint": "asks which of those are still to do", "say": [] },
+      {
+        "hint": "asks to move the first one to wednesday",
+        "say": ["wednesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "polite"]
+  },
+  {
+    "id": "w10-051",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks for their journal entries from this month",
+        "say": ["this month"]
+      },
+      {
+        "hint": "asks for just the ones this week (this week)",
+        "say": ["week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "spoken"]
+  },
+  {
+    "id": "w10-052",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks for everything mentioning dentist", "say": ["dentist"] },
+      { "hint": "asks for just the ones on friday (friday)", "say": ["friday"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "polite"]
+  },
+  {
+    "id": "w10-053",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks to add a task 'Fix the council tax' for next friday at 09:00",
+        "say": ["Fix the council tax", "next friday"]
+      },
+      {
+        "hint": "(new topic) asks what's on their list with no date set",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "polite"]
+  },
+  {
+    "id": "w10-054",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks how many events they have this week",
+        "say": ["this week"]
+      },
+      {
+        "hint": "(new topic) asks for the 90-minute jobs on their list",
+        "say": ["90"]
+      },
+      {
+        "hint": "(new topic) asks to wipe all their photos and notes at once",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "polite"]
+  },
+  {
+    "id": "w10-055",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks whose birthdays are coming up next week",
+        "say": ["next week"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "texting"]
+  },
+  {
+    "id": "w10-056",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks what the wifi is at the Kayak club",
+        "say": ["Kayak club"]
+      },
+      {
+        "hint": "(new topic) asks for Nils Tennant's contact card",
+        "say": ["Nils Tennant"]
+      },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks who Pascal Tolliver is",
+        "say": ["Pascal Tolliver"]
+      },
+      {
+        "hint": "(new topic) asks which expenses were over 75 (money)",
+        "say": ["75"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "question"]
+  },
+  {
+    "id": "w10-057",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      { "hint": "asks where the Uriel photo was taken", "say": ["Uriel"] },
+      {
+        "hint": "(new topic) asks what Yara's email address is",
+        "say": ["Yara"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  },
+  {
+    "id": "w10-058",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks if they have any documents about Water",
+        "say": ["Water"]
+      },
+      {
+        "hint": "(new topic) asks for everything mentioning Roof rack",
+        "say": ["Roof rack"]
+      },
+      {
+        "hint": "asks the same about Mabel instead ('what about Mabel?')",
+        "say": ["Mabel"]
+      },
+      {
+        "hint": "asks the same about Library instead ('what about Library?')",
+        "say": ["Library"]
+      },
+      { "hint": "asks how many that is", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "spoken"]
+  },
+  {
+    "id": "w10-059",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks which steps of 'Order the freezer with Niamh' are still open",
+        "say": ["Order the freezer with Niamh"]
+      },
+      {
+        "hint": "(new topic) asks what they have to get done sunday",
+        "say": ["sunday"]
+      },
+      {
+        "hint": "(new topic) asks for everything mentioning Gorsley Farm",
+        "say": ["Gorsley Farm"]
+      },
+      {
+        "hint": "(new topic) asks if they have any documents about quote",
+        "say": ["quote"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "spoken"]
+  },
+  {
+    "id": "w10-060",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks which open tasks aren't scheduled for any date",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks to run through their day today in time order",
+        "say": ["today"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      { "hint": "asks who else will be there", "say": [] },
+      {
+        "hint": "asks when their birthdays are (all of those people)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "question"]
+  },
+  {
+    "id": "w10-061",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks for Kestrel Vets's contact card",
+        "say": ["Kestrel Vets"]
+      },
+      {
+        "hint": "(new topic) asks what's in the vault about Draycott",
+        "say": ["Draycott"]
+      },
+      {
+        "hint": "asks for their phone number (the one person just shown)",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "spoken"]
+  },
+  {
+    "id": "w10-062",
+    "today": "Thursday 2026-04-09",
+    "turns": [
+      {
+        "hint": "asks whose birthdays are coming up next month",
+        "say": ["next month"]
+      },
+      {
+        "hint": "(new topic) asks what photos they have from Aldermoor Park",
+        "say": ["Aldermoor Park"]
+      },
+      { "hint": "(new topic) asks what is due this week", "say": ["this week"] }
+    ],
+    "versions": 3,
+    "registers": ["question", "polite", "texting"]
+  }
+]

@@ -1,0 +1,271 @@
+[
+  {
+    "id": "w28-0029",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      {
+        "hint": "asks to delete the Fleva document",
+        "say": ["Fleva", "document"]
+      },
+      {
+        "hint": "(new topic) asks what's on tuesday",
+        "say": ["tuesday"],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: about the glassblowing one, asks who else will be there",
+        "say": ["glassblowing"],
+        "shown": "task \"Post the satchel this week\" Tue 2025-10-28 09:00 · status=needs-action effort_min=20\nevent \"Glassblowing session at Yarmouth Downs\" Tue 2025-10-28 14:45"
+      },
+      {
+        "hint": "follow-up: asks when they last spoke",
+        "say": [],
+        "shown": "party \"Jirleo Hynmere\" · role=Niece"
+      },
+      {
+        "hint": "(new topic) asks when the Elodie business is",
+        "say": ["Elodie"],
+        "shown": "activity \"interaction — Jirleo Hynmere\" Tue 2025-10-21 10:15"
+      },
+      {
+        "hint": "(new topic) asks to put back the wicker photo they deleted",
+        "say": ["wicker", "photo"],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w28-0030",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      {
+        "hint": "asks to add the Nyvoe picture to the Winter 2024 album",
+        "say": ["Nyvoe", "Winter 2024", "album"]
+      },
+      {
+        "hint": "follow-up: corrects: wrong photo, they meant the window one",
+        "say": ["window"],
+        "shown": "done: media.add_to_album{album_id: (#5)} on (#3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w28-0031",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the raku club is",
+        "say": ["raku club", "password"]
+      },
+      {
+        "hint": "(new topic) asks to add Shethie to the glassblowing share group",
+        "say": ["Shethie", "glassblowing share"],
+        "shown": "done: locker.reveal_receipt{columns: \"password\"} on (#1)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w28-0032",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      {
+        "hint": "asks what their spending came to last week",
+        "say": ["last week"]
+      },
+      {
+        "hint": "follow-up: asks the same for recently ('and recently?')",
+        "say": ["recently"],
+        "shown": "= 7150"
+      },
+      {
+        "hint": "(new topic) asks to put the Nyvoe photo in the Winter 2024 album",
+        "say": ["Nyvoe", "Winter 2024", "album"],
+        "shown": "= 7150"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w28-0034",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      {
+        "hint": "asks for their calendar events on anvil",
+        "say": ["anvil", "events"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w28-0035",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      {
+        "hint": "asks what they've written in the Jevkimere house notebook",
+        "say": ["Jevkimere house", "notebook"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w28-0037",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      {
+        "hint": "asks when their glassblowing thing is (no kind given)",
+        "say": ["glassblowing"]
+      },
+      {
+        "hint": "(new topic) asks to call off the broom",
+        "say": ["broom"],
+        "shown": "(the assistant asked which one was meant)"
+      },
+      {
+        "hint": "follow-up: corrects: wrong event, they meant the Hideo one",
+        "say": ["Hideo"],
+        "shown": "done: cancel{} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks which expenses were over thirty five dollars",
+        "say": ["thirty five dollars"],
+        "shown": "done: cancel{} on (#4)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w28-0038",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      {
+        "hint": "asks what glassblowing things they have",
+        "say": ["glassblowing"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w28-0039",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      {
+        "hint": "asks what they have four days from now",
+        "say": ["four", "days"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w28-0040",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      {
+        "hint": "asks what Morwenna Guo's balance with them is in the glassblowing share group",
+        "say": ["Morwenna Guo", "glassblowing share"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w28-0042",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      {
+        "hint": "asks when their Arjun thing is (no kind given)",
+        "say": ["Arjun"]
+      },
+      {
+        "hint": "(new topic) asks if there's a calendar event at Zymaness Meadows",
+        "say": ["Zymaness Meadows"],
+        "shown": "(the assistant asked which one was meant)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w28-0043",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      { "hint": "asks what Arjun things they have", "say": ["Arjun"] },
+      {
+        "hint": "follow-up: about the second one, asks for their contact details",
+        "say": ["second"],
+        "shown": "event \"Glassblowing session with Arjun\" Tue 2025-10-14 15:45\nparty \"Arjun Nillak\" · role=Client\nparty \"Arjun Nakamura\" · role=Tutor\ncontact channel \"Arjun Nillak — work\" · kind=email value=arjun.nillak@inbox.example\n(+5 more)"
+      },
+      {
+        "hint": "(detour) hang on — asks how much the night cost",
+        "say": ["night"],
+        "shown": "contact channel \"Arjun Nillak — work\" · kind=email value=arjun.nillak@inbox.example\ncontact channel \"Arjun Nillak — home\" · kind=phone value=+65 8123 4534"
+      },
+      {
+        "hint": "(detour) hang on — asks which group the whisk deposit expense is in",
+        "say": ["whisk deposit"],
+        "shown": "= 24934"
+      },
+      {
+        "hint": "follow-up: asks how many that is",
+        "say": [],
+        "shown": "group \"Primrose kitty\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w28-0044",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      {
+        "hint": "says they paid thirteen dollars for bike hire — put it in primrose kitty",
+        "say": ["thirteen dollars", "bike hire", "primrose kitty"]
+      },
+      {
+        "hint": "(new topic) says note to self: the plumber prefers texts",
+        "say": ["the plumber prefers texts"],
+        "shown": "done: tally.add_expense{description: \"Bike hire\", amount_minor: 1300, paid_by: me, group_id: (#1)}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w28-0045",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      {
+        "hint": "asks which documents mention broom",
+        "say": ["broom", "documents"]
+      },
+      {
+        "hint": "follow-up: asks to star the second one",
+        "say": ["second"],
+        "shown": "document \"Broom report\" Wed 2025-05-21 11:00 · folder=Renovation\ndocument \"Broom receipt 2024\" Thu 2025-03-20 15:55"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w28-0046",
+    "today": "Monday 2025-10-27",
+    "turns": [
+      { "hint": "asks for the photos from the Mompox trip", "say": ["Mompox"] }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  }
+]

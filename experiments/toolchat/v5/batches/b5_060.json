@@ -1,0 +1,224 @@
+[
+  {
+    "id": "a1013",
+    "today": "Tuesday 2026-03-17",
+    "turns": [
+      {
+        "canonical": "show (parties of (obligations that (amount_minor > 5000)))",
+        "move": "first",
+        "hint": "who are the debts over that amount with"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0807",
+    "today": "Sunday 2026-08-23",
+    "turns": [
+      {
+        "canonical": "max amount_minor of (expenses that (spent_on during yesterday))",
+        "move": "first",
+        "hint": "biggest single expense in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0414",
+    "today": "Sunday 2025-04-06",
+    "turns": [
+      {
+        "canonical": "amount_minor of (expenses called \"Tyre change\")",
+        "move": "first",
+        "hint": "how much was the Tyre change expense"
+      }
+    ],
+    "refer": [{ "row": "expenses \"Tyre change\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a1099",
+    "today": "Thursday 2026-07-30",
+    "turns": [
+      {
+        "canonical": "people.trash_person{} on (parties called \"Wystan Underhill\")",
+        "move": "first",
+        "hint": "delete Wystan Underhill from my contacts"
+      },
+      {
+        "canonical": "people.undo_person{} on (it)",
+        "move": "undo",
+        "hint": "wait, put them back / undo that"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Wystan Underhill\"", "turn": 1, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0152",
+    "today": "Wednesday 2027-03-10",
+    "turns": [
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Kayaking\") } on (photos called \"Boat in the lock\")",
+        "move": "first",
+        "hint": "add the lock photo to the album"
+      }
+    ],
+    "refer": [
+      { "row": "albums \"Kayaking\"", "turn": 1, "say": "full" },
+      { "row": "photos \"Boat in the lock\"", "turn": 1, "say": "loose: lock" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0968",
+    "today": "Sunday 2026-11-08",
+    "turns": [
+      {
+        "canonical": "show (events of (parties called \"Nadia\"))",
+        "move": "first",
+        "hint": "what's in my calendar with Nadia"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0766",
+    "today": "Friday 2027-09-17",
+    "turns": [
+      {
+        "canonical": "show (places that (kind = \"venue\"))",
+        "move": "first",
+        "hint": "places of that kind"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0460",
+    "today": "Monday 2025-11-24",
+    "turns": [
+      {
+        "canonical": "spent_on of (expenses called \"Violin strings\")",
+        "move": "first",
+        "hint": "when did I pay for the violin strings"
+      }
+    ],
+    "refer": [
+      {
+        "row": "expenses \"Violin strings\"",
+        "turn": 1,
+        "say": "exact: violin strings"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0048",
+    "today": "Friday 2025-11-21",
+    "turns": [
+      {
+        "canonical": "show (albums called \"Kayaking\")",
+        "move": "first",
+        "hint": "find the Kayaking album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Kayaking\"", "turn": 1, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0005",
+    "today": "Sunday 2028-08-20",
+    "turns": [
+      {
+        "canonical": "show (documents)",
+        "move": "first",
+        "hint": "list all my documents/files"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0869",
+    "today": "Monday 2026-06-01",
+    "turns": [
+      {
+        "canonical": "show (first 3 of (documents ordered by created_at desc))",
+        "move": "first",
+        "hint": "the newest N documents"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0754",
+    "today": "Saturday 2028-05-13",
+    "turns": [
+      {
+        "canonical": "show (photos that (place = \"Thistle Pool\"))",
+        "move": "first",
+        "hint": "photos whose place is thistle"
+      }
+    ],
+    "refer": [
+      { "row": "places \"Thistle Pool\"", "turn": 1, "say": "exact: thistle" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0635",
+    "today": "Thursday 2028-06-15",
+    "turns": [
+      {
+        "canonical": "show (locker items that (type = \"identity\"))",
+        "move": "first",
+        "hint": "which locker entries are of that type"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0662",
+    "today": "Tuesday 2026-07-28",
+    "turns": [
+      {
+        "canonical": "show (notes that (updated_at during last week))",
+        "move": "first",
+        "hint": "notes I edited in that window"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "a0464",
+    "today": "Saturday 2028-04-29",
+    "turns": [
+      {
+        "canonical": "spent_on of (expenses called \"Chess set\")",
+        "move": "first",
+        "hint": "when did I pay for the set"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Chess set\"", "turn": 1, "say": "exact: set" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

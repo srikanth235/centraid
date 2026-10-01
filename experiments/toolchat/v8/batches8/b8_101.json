@@ -1,0 +1,326 @@
+[
+  {
+    "id": "w29-0034",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      { "hint": "asks if anyone owes them cash", "say": [] },
+      {
+        "hint": "(new topic) says they've finished the ask stellan job",
+        "say": ["ask stellan"],
+        "shown": "party \"Konrad Urquhart\" · owed_to_me_minor=4800 role=Nephew\nparty \"Kjell Brulpiham\" · owed_to_me_minor=4800 role=Colleague"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w29-0035",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      {
+        "hint": "asks to bump the porridge half an hour later",
+        "say": ["porridge", "half an hour later"]
+      },
+      {
+        "hint": "(new topic) asks what's left to do on the clean the abacus this week plan",
+        "say": ["clean the abacus this week"],
+        "shown": "done: reschedule{by: +30m} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks to narrow that to anything about paint",
+        "say": ["paint"],
+        "shown": "task \"Paint the whirligig\" Tue 2025-01-07 18:00 · status=in-process\ntask \"Weigh the zeppelin\" Thu 2025-01-09 12:00 · status=needs-action effort_min=90\ntask \"Buy the medallion\" Wed 2025-01-22 12:00 · status=needs-action"
+      },
+      {
+        "hint": "(new topic) asks if they have any appointments about rake",
+        "say": ["rake", "appointments"],
+        "shown": "task \"Paint the whirligig\" Tue 2025-01-07 18:00 · status=in-process"
+      },
+      {
+        "hint": "follow-up: asks the same about zeppelin instead ('what about zeppelin?')",
+        "say": ["zeppelin"],
+        "shown": "event \"Rake repair\" Mon 2025-02-10 19:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w29-0036",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      {
+        "hint": "asks what they have five days from now",
+        "say": ["five", "days"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w29-0037",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      {
+        "hint": "asks to show the bakery tasks, tick off the first and delete the second",
+        "say": ["bakery"]
+      },
+      {
+        "hint": "(new topic) asks which group the yarn fee expense is in",
+        "say": ["yarn fee"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#1) then delete{} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks for its expenses",
+        "say": [],
+        "shown": "group \"Hamper collective\""
+      },
+      {
+        "hint": "(new topic) asks how much has been spent in the juggling fund group",
+        "say": ["juggling fund"],
+        "shown": "expense \"Bakery run (wk 04)\" Tue 2025-01-21 · amount_minor=3150 paid_by=Owner\nexpense \"Bakery run (wk 03)\" Fri 2025-01-17 · amount_minor=4050 paid_by=Noor Wustow\nexpense \"Croquet workshop deposit\" Mon 2025-01-13 · amount_minor=450 paid_by=Owner\nexpense \"Yarn fee\" Mon 2025-01-13 · amount_minor=1150 paid_by=Owner\n(+5 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w29-0040",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      {
+        "hint": "asks what's in the vault about Essaouira",
+        "say": ["Essaouira"]
+      },
+      {
+        "hint": "follow-up: asks what about in their pictures",
+        "say": ["pictures"],
+        "shown": "event \"Mandolin club at Essaouira Gorge\" Tue 2025-01-21 12:45\ndocument \"Essaouira Gorge membership form\" Thu 2024-06-20 08:56 · folder=Jinnow flat\nnote \"Notes from Essaouira Gorge\" Sun 2024-11-24 16:03\nplace \"Essaouira Gorge\"\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "w29-0041",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      {
+        "hint": "asks what the Pusa library login details are",
+        "say": ["Pusa library", "login"]
+      },
+      {
+        "hint": "(new topic) asks when the essaouira gorge is",
+        "say": ["essaouira gorge"],
+        "shown": "locker item \"Pusa library login\" · type=login"
+      },
+      {
+        "hint": "follow-up: asks the same about the crossbow repair ('and the crossbow repair?')",
+        "say": ["crossbow repair"],
+        "shown": "event \"Mandolin club at Essaouira Gorge\" Tue 2025-01-21 12:45"
+      },
+      {
+        "hint": "follow-up: asks who's coming to it",
+        "say": [],
+        "shown": "event \"Crossbow repair\" Thu 2025-02-13 16:30"
+      },
+      {
+        "hint": "follow-up: asks the same about the whirligig fitting ('and the whirligig fitting?')",
+        "say": ["whirligig fitting"],
+        "shown": "party \"Yvette Granridge\" · role=Old flatmate\nparty \"Elif Gemmere\" · role=Sister\nparty \"Dalia Magnusson\" · role=Friend"
+      },
+      {
+        "hint": "follow-up: asks the same about the crossbow repair ('and the crossbow repair?')",
+        "say": ["crossbow repair"],
+        "shown": "event \"Whirligig fitting\" Thu 2025-01-30 13:30"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w29-0042",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      {
+        "hint": "asks what the wifi is at the Holwen Lido",
+        "say": ["Holwen Lido", "wifi"]
+      },
+      {
+        "hint": "(new topic) asks to email Thaskoan the travel card",
+        "say": ["Thaskoan", "travel card"],
+        "shown": "locker item \"Holwen Lido wifi\" · type=wifi"
+      },
+      { "hint": "follow-up: says nah, leave it", "say": [], "shown": "refuse" }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w29-0043",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      {
+        "hint": "asks to push the whirligig task to tomorrow",
+        "say": ["whirligig", "tomorrow"]
+      },
+      {
+        "hint": "follow-up: corrects: wrong task, they meant the buy one",
+        "say": ["buy"],
+        "shown": "done: reschedule{to: 2025-01-22} on (#1)"
+      },
+      {
+        "hint": "(new topic) asks what's on the 26th",
+        "say": ["the 26th"],
+        "shown": "done: reschedule{to: 2025-01-22} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks the same for friday ('and friday?')",
+        "say": ["friday"],
+        "shown": "event \"Horseshoe fitting\" Sun 2025-01-26 08:30\nevent \"Whirligig viewing\" Sun 2025-01-26 10:45\nevent \"Chess club (week 04)\" Sun 2025-01-26 12:00\nevent \"Collect the raven\" Sun 2025-01-26 17:00\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "w29-0044",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      {
+        "hint": "asks what pictures they have from last week",
+        "say": ["last week"]
+      },
+      {
+        "hint": "follow-up: about the fifth one, asks which album it's in",
+        "say": ["fifth"],
+        "shown": "photo \"Wisteria and sledge\" Sun 2025-01-19 08:25 · album_titles=Best of 2025 favorite=false\nphoto \"Zeppelin in the garden\" Sat 2025-01-18 10:19 · album_titles=Best of 2025, Embroidery session highlig… favorite=false\nphoto \"Yvette at Sedbergh Gardens (03)\" Thu 2025-01-16 16:25 · album_titles=Best of 2025, Winter 2025, Merida 2024 favorite=false people=Yvette Granridge\nphoto \"Yvette at Sedbergh Gardens (02)\" Thu 2025-01-16 16:24 · album_titles=Best of 2025, Merida 2024, Embroidery se… favorite=false\n(+1 more)"
+      },
+      {
+        "hint": "follow-up: asks what else is in that album",
+        "say": [],
+        "shown": "album \"Winter 2025\"\nalbum \"Merida 2024\""
+      },
+      {
+        "hint": "follow-up: asks to delete the third one",
+        "say": ["third"],
+        "shown": "photo \"Yvette at Sedbergh Gardens (03)\" Thu 2025-01-16 16:25 · album_titles=Best of 2025, Winter 2025, Merida 2024 favorite=false people=Yvette Granridge\nphoto \"Adriana's caramel\" Tue 2025-01-07 15:37 · album_titles=Winter 2025 favorite=false\nphoto \"Whirligig and sledge\" Mon 2024-12-09 19:10 · album_titles=Winter 2025 favorite=false\nphoto \"Thaskoan at Sedbergh Island\" Thu 2024-09-12 09:58 · album_titles=Winter 2025, Merida 2024, Embroidery ses… favorite=false\n(+1 more)"
+      },
+      {
+        "hint": "follow-up: asks what else is in that album",
+        "say": [],
+        "shown": "done: media.delete_asset{} on (#9)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w29-0045",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      {
+        "hint": "asks to delete all their whirligig notes",
+        "say": ["whirligig", "note"]
+      },
+      {
+        "hint": "follow-up: says they didn't mean that, bring it back",
+        "say": [],
+        "shown": "done: delete{} on (#1, #2)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w29-0046",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      { "hint": "asks how many tasks are due next week", "say": ["next week"] }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w29-0047",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      {
+        "hint": "asks to move the Flethan task to friday and the Stellan to sunday",
+        "say": ["Flethan", "friday", "Stellan", "sunday"]
+      },
+      {
+        "hint": "follow-up: asks who else will be there",
+        "say": [],
+        "shown": "done: reschedule{to: 2025-01-24} on (#1) then reschedule{to: 2025-01-26} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks for pictures with any of those people in",
+        "say": [],
+        "shown": "party \"Adriana Urquhart\" · role=Son\nparty \"Dalia Magnusson\" · role=Friend"
+      },
+      {
+        "hint": "(new topic) asks to message Noor the library login",
+        "say": ["Noor", "library login"],
+        "shown": "photo \"The yarn at dusk\" Fri 2024-12-13 16:30 · favorite=false people=Dalia Magnusson, Einar Urquhart"
+      },
+      {
+        "hint": "(new topic) asks to move the Flovie task to next monday and the Thaskoan to monday",
+        "say": ["Flovie", "next monday", "Thaskoan", "monday"],
+        "shown": "refuse"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w29-0048",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      {
+        "hint": "asks when their Wedoholm thing is (no kind given)",
+        "say": ["Wedoholm"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w29-0049",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      { "hint": "asks what Wedoholm things they have", "say": ["Wedoholm"] }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w29-0050",
+    "today": "Tuesday 2025-01-21",
+    "turns": [
+      { "hint": "asks what they have about Konrad", "say": ["Konrad"] },
+      {
+        "hint": "follow-up: asks which of those are about tuba",
+        "say": ["tuba"],
+        "shown": "note \"Gift ideas for Konrad\" Fri 2024-09-27 09:29 · notebooks=Wurford house\nparty \"Konrad Urquhart\" · owed_to_me_minor=4800 role=Nephew\nimportant date \"Birthday — Konrad Urquhart\" Thu 2025-01-23\ncontact channel \"Konrad Urquhart — work\" · kind=email value=konrad.urquhart@post.example\n(+2 more)"
+      },
+      {
+        "hint": "follow-up: says nah, leave it",
+        "say": [],
+        "shown": "task \"Quote for Konrad's tuba\" Sun 2025-01-19 09:00 · status=completed"
+      },
+      {
+        "hint": "(new topic) asks which steps of the lend job are still open",
+        "say": ["lend"],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: asks to tick off the borrow one",
+        "say": ["borrow"],
+        "shown": "task \"Oil the snorkel\" Thu 2025-01-30 17:00 · status=needs-action effort_min=20\ntask \"Borrow the snorkel\" · status=in-process"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  }
+]

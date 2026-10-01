@@ -1,0 +1,285 @@
+[
+  {
+    "id": "w14-0012",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks for the darts lesson membership entry",
+        "say": ["darts lesson", "membership"]
+      },
+      {
+        "hint": "(new topic) asks how much they spent back in August",
+        "say": ["August"],
+        "shown": "locker item \"Darts lesson membership\" · type=membership"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w14-0013",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      { "hint": "asks who they're in debt to", "say": [] },
+      {
+        "hint": "follow-up: about the Belnoan one, asks for their contact details",
+        "say": ["Belnoan"],
+        "shown": "party \"Dagmar Danak\" · owed_to_them_minor=15000 role=Friend from the gym\nparty \"Belnoan Jousova\" · owed_to_them_minor=4800 role=Best friend\nparty \"Wolfgang Tawfik\" · owed_to_them_minor=4800 role=Old school friend"
+      },
+      {
+        "hint": "(new topic) asks to move the session an hour earlier",
+        "say": ["session", "an hour earlier"],
+        "shown": "contact channel \"Belnoan Jousova — work\" · kind=phone value=+64 21 555 263\ncontact channel \"Belnoan Jousova — work\" · kind=email value=belnoan.jousova@example.org"
+      },
+      {
+        "hint": "(new topic) asks how much has been spent in the juggling club group",
+        "say": ["juggling club"],
+        "shown": "done: reschedule{by: -1h} on (#6)"
+      },
+      {
+        "hint": "(new topic) asks what is in their Norhaven trip folder",
+        "say": ["Norhaven trip"],
+        "shown": "= 79471"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w14-0014",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      { "hint": "asks if anything is happening the 7th", "say": ["the 7th"] },
+      {
+        "hint": "follow-up: about the satchel one, asks who's coming to it",
+        "say": ["satchel"],
+        "shown": "event \"Satchel fitting\" Mon 2027-06-07 10:00\nevent \"Look at the snooker\" Mon 2027-06-07 14:45\nevent \"Brewing club\" Mon 2027-06-07 20:45"
+      },
+      {
+        "hint": "follow-up: asks the same for friday ('and friday?')",
+        "say": ["friday"],
+        "shown": "party \"Themba Pillai\" · role=Sister"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w14-0015",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      { "hint": "asks where the table photo was taken", "say": ["table"] },
+      {
+        "hint": "follow-up: asks to see the photos from there",
+        "say": [],
+        "shown": "place \"Oaxaca Library\""
+      },
+      {
+        "hint": "(new topic) asks to reveal the password for the Juva parking",
+        "say": ["Juva parking", "password"],
+        "shown": "photo \"Riddle on the table\" Sat 2027-05-22 20:54 · album_titles=Oaxaca Library favorite=false people=Tamati Reawick, Belnoan Jousova\nphoto \"Rake at dusk\" Wed 2027-04-21 16:39 · album_titles=Oaxaca Library favorite=true\nphoto \"Harshita at Oaxaca Library\" Sun 2026-11-15 16:31 · album_titles=Best of 2027, Oaxaca Library, Antibes 20… favorite=false\nphoto \"Pancake with Mereana\" Sat 2025-06-28 12:31 · album_titles=Oaxaca Library favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w14-0016",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks when Wolfgang's birthday is",
+        "say": ["Wolfgang", "birthday"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w14-0017",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks when their walk with Wolfgang is",
+        "say": ["Wolfgang", "walk"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w14-0018",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks to log five dollars of wine in Antibes, paid by them",
+        "say": ["five dollars", "wine", "Antibes"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "polite"]
+  },
+  {
+    "id": "w14-0019",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks what pictures are in the Snooker album",
+        "say": ["Snooker", "album"]
+      },
+      {
+        "hint": "(new topic) asks if the peacock document is in the trash",
+        "say": ["peacock", "document"],
+        "shown": "photo \"Wigwam in the snow (01)\" Fri 2027-05-28 11:01 · album_titles=Snooker favorite=false\nphoto \"Drawbridge at dusk\" Thu 2027-05-20 17:44 · album_titles=Snooker favorite=false\nphoto \"Weathervane close-up\" Sat 2027-05-08 18:57 · album_titles=Best of 2027, Snooker favorite=false people=Ganesh Medina\nphoto \"The sparrow at dusk\" Tue 2027-05-04 07:58 · album_titles=Best of 2027, Snooker favorite=false people=Sandrine Maisen, Isidore Basard\n(+1 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w14-0020",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks to log that they visited Eino today",
+        "say": ["Eino", "visited"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w14-0021",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks for the darts lesson membership entry",
+        "say": ["darts lesson", "membership"]
+      },
+      {
+        "hint": "follow-up: asks whether there's anything in their expenses about it too",
+        "say": ["expenses"],
+        "shown": "locker item \"Darts lesson membership\" · type=membership"
+      },
+      {
+        "hint": "follow-up: asks how much",
+        "say": [],
+        "shown": "expense \"Darts lesson top-up\" Mon 2027-05-10 · amount_minor=6378 paid_by=Owner"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w14-0023",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks for the Juva parking entry in the locker (the row, not the password)",
+        "say": ["Juva parking"]
+      },
+      {
+        "hint": "(new topic) asks for pictures with Padraig in them",
+        "say": ["Padraig"],
+        "shown": "locker item \"Juva parking portal\" · type=login"
+      },
+      {
+        "hint": "follow-up: asks for a task to read the conservatory photo",
+        "say": ["read the conservatory photo"],
+        "shown": "photo \"Conservatory with Kesan\" Wed 2024-08-14 15:46 · album_titles=Winter 2024 favorite=false people=Padraig Nomwick, Kesan Basard"
+      },
+      {
+        "hint": "follow-up: asks who is in it",
+        "say": [],
+        "shown": "done: schedule.add_task{title: \"Read the conservatory photo\"}"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w14-0024",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks what the actual password for the Juva parking is",
+        "say": ["Juva parking", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w14-0025",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks to see the guest password itself",
+        "say": ["guest", "password"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w14-0027",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks for everything mentioning drawbridge",
+        "say": ["drawbridge"]
+      },
+      {
+        "hint": "follow-up: asks to put the first one in the Best of 2027 album",
+        "say": ["first", "Best of 2027", "album"],
+        "shown": "photo \"Drawbridge at dusk\" Thu 2027-05-20 17:44 · album_titles=Snooker favorite=false\ntask \"Lend the drawbridge at Oaxaca Terrace\" Sat 2027-05-08 17:00 · status=completed effort_min=30"
+      },
+      {
+        "hint": "follow-up: corrects: wrong photo, they meant the cumuford viewpoint one",
+        "say": ["cumuford viewpoint"],
+        "shown": "done: media.add_to_album{album_id: (#3)} on (#1)"
+      },
+      {
+        "hint": "follow-up: asks what other shots are in there",
+        "say": [],
+        "shown": "done: media.add_to_album{album_id: (#3)} on (#4)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w14-0028",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      { "hint": "asks to delete the shelf photo", "say": ["shelf", "photo"] },
+      {
+        "hint": "(new topic) asks to find the expenses on antibes terrace",
+        "say": ["antibes terrace", "expenses"],
+        "shown": "none"
+      },
+      {
+        "hint": "follow-up: asks which group it's in",
+        "say": [],
+        "shown": "expense \"Antibes Terrace parts\" Wed 2027-02-10 · amount_minor=4700 paid_by=Themba Pillai"
+      },
+      {
+        "hint": "follow-up: asks who's in it",
+        "say": [],
+        "shown": "group \"Antibes trip\""
+      },
+      {
+        "hint": "follow-up: asks the same about Cumuford instead ('what about Cumuford?')",
+        "say": ["Cumuford"],
+        "shown": "member \"Themba Pillai\"\nmember \"Dagmar Danak\""
+      },
+      {
+        "hint": "(new topic) asks if there's a calendar event at Antibes Terrace",
+        "say": ["Antibes Terrace"],
+        "shown": "expense \"Dinner at Cumuford Viewpoint\" Wed 2027-05-12 · amount_minor=10431 paid_by=Harshita Rocha"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  }
+]

@@ -1,0 +1,600 @@
+[
+  {
+    "id": "b0000",
+    "today": "Saturday 2027-05-29",
+    "turns": [
+      {
+        "canonical": "show (parties of (obligations that (settled_at is null and from_party = me)))",
+        "move": "first",
+        "hint": "who are the people I still owe money to (via the debts)"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (the 1st one) ordered by started_at desc))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      },
+      {
+        "canonical": "show (obligations of (the 3rd one) that (settled_at is null))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "b0001",
+    "today": "Saturday 2026-07-18",
+    "turns": [
+      {
+        "canonical": "show (obligations that (from_party = me and settled_at is null))",
+        "move": "first",
+        "hint": "the debts I still owe"
+      },
+      {
+        "canonical": "people.settle_debt{} on (the 1st one)",
+        "move": "act",
+        "hint": "act on the rows just answered (people.settle_debt)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "polite"]
+  },
+  {
+    "id": "b0002",
+    "today": "Wednesday 2027-10-20",
+    "turns": [
+      {
+        "canonical": "show (settlements)",
+        "move": "first",
+        "hint": "show all the settle-ups / payments recorded in my groups"
+      },
+      {
+        "canonical": "count of (them)",
+        "move": "act",
+        "hint": "act on the rows just answered (count of)"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "act on the rows just answered (sum amount_minor of)"
+      },
+      {
+        "canonical": "count of (them)",
+        "move": "act",
+        "hint": "act on the rows just answered (count of)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["question", "texting"]
+  },
+  {
+    "id": "b0003",
+    "today": "Monday 2025-04-07",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_them is not null))",
+        "move": "first",
+        "hint": "who do I owe money to"
+      },
+      {
+        "canonical": "show (obligations of (the 3rd one) that (settled_at is null))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "b0004",
+    "today": "Saturday 2028-02-19",
+    "turns": [
+      {
+        "canonical": "show (important dates that (next_occurrence during this month))",
+        "move": "first",
+        "hint": "which birthdays/anniversaries are coming up in that window"
+      },
+      {
+        "canonical": "count of (them)",
+        "move": "act",
+        "hint": "act on the rows just answered (count of)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "b0005",
+    "today": "Monday 2027-01-18",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (notes ordered by created_at desc))",
+        "move": "first",
+        "hint": "my newest note"
+      },
+      {
+        "canonical": "count of (them)",
+        "move": "act",
+        "hint": "act on the rows just answered (count of)"
+      },
+      {
+        "canonical": "knowledge.delete_note{} on (the 3rd one)",
+        "move": "act",
+        "hint": "act on the rows just answered (knowledge.delete_note)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "b0006",
+    "today": "Sunday 2027-04-04",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (events of (parties called \"Orla Ashcombe\") ordered by dtstart desc))",
+        "move": "first",
+        "hint": "the latest event with Orla"
+      },
+      {
+        "canonical": "schedule.cancel_event{} on (the 2nd one)",
+        "move": "act",
+        "hint": "act on the rows just answered (schedule.cancel_event)"
+      },
+      {
+        "canonical": "schedule.cancel_event{} on (the 1st one)",
+        "move": "act",
+        "hint": "act on the rows just answered (schedule.cancel_event)"
+      },
+      {
+        "canonical": "show (parties of (the 3rd one))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Orla Ashcombe\"", "turn": 1, "say": "exact: Orla" }
+    ],
+    "versions": 2,
+    "registers": ["polite", "terse"]
+  },
+  {
+    "id": "b0007",
+    "today": "Thursday 2026-01-01",
+    "turns": [
+      {
+        "canonical": "show (parties of (obligations that (amount_minor > 10000)))",
+        "move": "first",
+        "hint": "who are the debts over that amount with"
+      },
+      {
+        "canonical": "show (obligations of (the 3rd one) that (settled_at is null))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "b0008",
+    "today": "Thursday 2027-07-01",
+    "turns": [
+      {
+        "canonical": "show (places that (kind = \"city\"))",
+        "move": "first",
+        "hint": "places of that kind"
+      },
+      {
+        "canonical": "show (photos of (the 1st one))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      },
+      {
+        "canonical": "show (photos of (the 2nd one))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "b0009",
+    "today": "Wednesday 2028-01-19",
+    "turns": [
+      {
+        "canonical": "show (events)",
+        "move": "first",
+        "hint": "list everything in my calendar"
+      },
+      {
+        "canonical": "show (parties of (the 3rd one))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      },
+      {
+        "canonical": "count of (them)",
+        "move": "act",
+        "hint": "act on the rows just answered (count of)"
+      },
+      {
+        "canonical": "schedule.cancel_event{} on (the 2nd one)",
+        "move": "act",
+        "hint": "act on the rows just answered (schedule.cancel_event)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "b0010",
+    "today": "Friday 2027-08-27",
+    "turns": [
+      {
+        "canonical": "show (obligations)",
+        "move": "first",
+        "hint": "list all the debts between me and people (IOUs)"
+      },
+      {
+        "canonical": "show (parties of (the 1st one))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "act on the rows just answered (sum amount_minor of)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["question", "polite"]
+  },
+  {
+    "id": "b0011",
+    "today": "Sunday 2028-02-13",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"Sedgefield Gardens\"))",
+        "move": "first",
+        "hint": "photos from / taken at sedgefield"
+      },
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Physio highlights\") } on (them)",
+        "move": "act",
+        "hint": "act on the rows just answered (media.add_to_album)"
+      },
+      {
+        "canonical": "media.delete_asset{} on (the 3rd one)",
+        "move": "act",
+        "hint": "act on the rows just answered (media.delete_asset)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "places \"Sedgefield Gardens\"",
+        "turn": 1,
+        "say": "exact: sedgefield"
+      },
+      { "row": "albums \"Physio highlights\"", "turn": 2, "say": "full" }
+    ],
+    "versions": 2,
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "b0012",
+    "today": "Tuesday 2025-11-25",
+    "turns": [
+      {
+        "canonical": "show (parties called \"Wilhelmina\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete Wilhelmina from my contacts"
+      },
+      {
+        "canonical": "show (obligations of (the 2nd one) that (settled_at is null))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      },
+      {
+        "canonical": "show (obligations of (the 3rd one) that (settled_at is null))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      },
+      {
+        "canonical": "nothing",
+        "move": "undo",
+        "hint": "actually never mind / forget it"
+      }
+    ],
+    "versions": 2,
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "b0013",
+    "today": "Sunday 2027-05-30",
+    "turns": [
+      {
+        "canonical": "show (documents that (deleted_at is not null))",
+        "move": "first",
+        "hint": "documents I binned"
+      },
+      {
+        "canonical": "core.star_document{} on (the 3rd one)",
+        "move": "act",
+        "hint": "act on the rows just answered (core.star_document)"
+      },
+      {
+        "canonical": "core.trash_document{} on (it)",
+        "move": "act",
+        "hint": "undo/act on the row just written (it)"
+      },
+      {
+        "canonical": "core.trash_document{} on (the 3rd one)",
+        "move": "act",
+        "hint": "act on the rows just answered (core.trash_document)"
+      },
+      {
+        "canonical": "core.restore_document{} on (it)",
+        "move": "act",
+        "hint": "undo/act on the row just written (it)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "b0014",
+    "today": "Saturday 2025-06-14",
+    "turns": [
+      {
+        "canonical": "show (events that (dtstart > the 3rd) ordered by dtstart asc)",
+        "move": "first",
+        "hint": "events after that day, soonest first"
+      },
+      {
+        "canonical": "schedule.cancel_event{} on (the 2nd one)",
+        "move": "act",
+        "hint": "act on the rows just answered (schedule.cancel_event)"
+      },
+      {
+        "canonical": "schedule.cancel_event{} on (the 1st one)",
+        "move": "act",
+        "hint": "act on the rows just answered (schedule.cancel_event)"
+      },
+      {
+        "canonical": "count of (them)",
+        "move": "act",
+        "hint": "act on the rows just answered (count of)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "b0015",
+    "today": "Friday 2028-04-14",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_me is not null))",
+        "move": "first",
+        "hint": "who owes me money"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (the 2nd one) ordered by started_at desc))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      },
+      {
+        "canonical": "people.trash_person{} on (the 3rd one)",
+        "move": "act",
+        "hint": "act on the rows just answered (people.trash_person)"
+      },
+      {
+        "canonical": "people.undo_person{} on (it)",
+        "move": "act",
+        "hint": "undo/act on the row just written (it)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "b0016",
+    "today": "Wednesday 2026-03-11",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"Bramley Station\"))",
+        "move": "first",
+        "hint": "photos from / taken at Station"
+      },
+      {
+        "canonical": "show (places of (the 1st one))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      },
+      {
+        "canonical": "show (albums of (the 3rd one))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "places \"Bramley Station\"",
+        "turn": 1,
+        "say": "loose: Station"
+      }
+    ],
+    "versions": 2,
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "b0017",
+    "today": "Monday 2027-01-11",
+    "turns": [
+      {
+        "canonical": "show (events called \"Allotment open day\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the open event"
+      },
+      {
+        "canonical": "reschedule{ by: +1h } on (the 2nd one)",
+        "move": "act",
+        "hint": "act on the rows just answered (reschedule)"
+      },
+      {
+        "canonical": "nothing",
+        "move": "undo",
+        "hint": "actually never mind / forget it"
+      }
+    ],
+    "refer": [
+      {
+        "row": "events \"Allotment open day\"",
+        "turn": 1,
+        "say": "loose: open"
+      }
+    ],
+    "versions": 2,
+    "registers": ["question", "polite"]
+  },
+  {
+    "id": "b0018",
+    "today": "Thursday 2028-04-27",
+    "turns": [
+      {
+        "canonical": "show (documents ordered by updated_at desc)",
+        "move": "first",
+        "hint": "documents, most recently changed first"
+      },
+      {
+        "canonical": "core.trash_document{} on (the 1st one)",
+        "move": "act",
+        "hint": "act on the rows just answered (core.trash_document)"
+      },
+      {
+        "canonical": "core.restore_document{} on (it)",
+        "move": "act",
+        "hint": "undo/act on the row just written (it)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "b0019",
+    "today": "Tuesday 2026-10-27",
+    "turns": [
+      {
+        "canonical": "show (events that (deleted_at is not null))",
+        "move": "first",
+        "hint": "which events have I deleted"
+      },
+      {
+        "canonical": "count of (them)",
+        "move": "act",
+        "hint": "act on the rows just answered (count of)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "b0020",
+    "today": "Sunday 2028-11-19",
+    "turns": [
+      {
+        "canonical": "show (events that (dtstart < the 28th))",
+        "move": "first",
+        "hint": "events before that day"
+      },
+      {
+        "canonical": "reschedule{ by: +1h } on (the 3rd one)",
+        "move": "act",
+        "hint": "act on the rows just answered (reschedule)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "question"]
+  },
+  {
+    "id": "b0021",
+    "today": "Saturday 2026-07-18",
+    "turns": [
+      {
+        "canonical": "show (tasks called \"Update the CV\" that (deleted_at is not null))",
+        "move": "first",
+        "hint": "did I delete the Update the CV task"
+      },
+      {
+        "canonical": "count of (them)",
+        "move": "act",
+        "hint": "act on the rows just answered (count of)"
+      },
+      {
+        "canonical": "reschedule{ to: friday } on (the 2nd one)",
+        "move": "act",
+        "hint": "act on the rows just answered (reschedule)"
+      }
+    ],
+    "refer": [{ "row": "tasks \"Update the CV\"", "turn": 1, "say": "full" }],
+    "versions": 2,
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "b0022",
+    "today": "Wednesday 2025-09-03",
+    "turns": [
+      {
+        "canonical": "show (expenses)",
+        "move": "first",
+        "hint": "list all my expenses"
+      },
+      {
+        "canonical": "show (groups of (the 3rd one))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "act on the rows just answered (sum amount_minor of)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "question"]
+  },
+  {
+    "id": "b0023",
+    "today": "Sunday 2027-11-21",
+    "turns": [
+      {
+        "canonical": "show (obligations that (to_party = me and settled_at is null))",
+        "move": "first",
+        "hint": "money people still owe me (the debts)"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "act on the rows just answered (sum amount_minor of)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (the 3rd one)",
+        "move": "act",
+        "hint": "act on the rows just answered (people.settle_debt)"
+      },
+      {
+        "canonical": "show (parties of (the 2nd one))",
+        "move": "act",
+        "hint": "act on the rows just answered (show)"
+      },
+      {
+        "canonical": "people.settle_debt{} on (the 1st one)",
+        "move": "act",
+        "hint": "act on the rows just answered (people.settle_debt)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["question", "polite"]
+  }
+]

@@ -1,0 +1,253 @@
+[
+  {
+    "id": "h0094",
+    "today": "Wednesday 2028-03-08",
+    "prev": "NONE",
+    "target": "show important dates of (members that (created_at during this weekend))",
+    "gloss": "List the important dates linked to [members where the date created falls this weekend].",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "h0114",
+    "today": "Tuesday 2025-12-23",
+    "prev": "show notebooks called \"Garden log\" and notebooks called \"Ideas\"",
+    "prev_gloss": "List [notebooks named \"Garden log\"] together with [notebooks named \"Ideas\"].",
+    "target": "parent_collection_id of the other one",
+    "gloss": "What is the parent collection of [the other one (of the two rows the previous turn answered)]?",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "h0084",
+    "today": "Saturday 2027-04-03",
+    "prev": "NONE",
+    "target": "show important dates ordered by deleted_at desc",
+    "gloss": "List important dates, sorted by date deleted (trash) descending (highest/latest first).",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "h0048",
+    "today": "Sunday 2028-02-13",
+    "prev": "show tasks called \"Submit expenses\" and tasks called \"Collect dry cleaning\"",
+    "prev_gloss": "List [tasks named \"Submit expenses\"] together with [tasks named \"Collect dry cleaning\"].",
+    "target": "sum effort_min of (them during last week)",
+    "gloss": "What is the total effort estimate in minutes of [them (the rows the previous turn answered) dated last week]?",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "h0076",
+    "today": "Wednesday 2028-02-02",
+    "prev": "NONE",
+    "target": "show notebooks called \"Reading\"",
+    "gloss": "List notebooks named \"Reading\".",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "h0097",
+    "today": "Monday 2027-11-29",
+    "prev": "show journal notes called \"coffee with Lark\"",
+    "prev_gloss": "List journal notes named \"coffee with Lark\".",
+    "target": "pinned of it",
+    "gloss": "What is the pinned flag of [it (the one row the previous turn is about)]?",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "h0081",
+    "today": "Friday 2026-09-04",
+    "prev": "NONE",
+    "target": "count of documents",
+    "gloss": "What is the number of [documents]?",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "h0067",
+    "today": "Saturday 2025-08-09",
+    "prev": "NONE",
+    "target": "knowledge.delete_note{} on (notes called \"gift ideas\")",
+    "gloss": "Delete (move to trash) [notes named \"gift ideas\"].",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "h0116",
+    "today": "Monday 2026-08-31",
+    "prev": "NONE",
+    "target": "show albums called \"Summer 2026\"",
+    "gloss": "List albums named \"Summer 2026\".",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "h0050",
+    "today": "Saturday 2026-03-28",
+    "prev": "NONE",
+    "target": "sum amount_minor of settlements",
+    "gloss": "What is the total amount (in pence) of [settlements]?",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "h0057",
+    "today": "Thursday 2027-11-18",
+    "prev": "NONE",
+    "target": "show first 1 of (expenses ordered by spent_on asc)",
+    "gloss": "List the first 1 of [expenses, sorted by date spent ascending (lowest/earliest first)].",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "h0086",
+    "today": "Monday 2026-10-19",
+    "prev": "NONE",
+    "target": "show first 5 of (expenses during 2026-09-06 ordered by rate_date desc)",
+    "gloss": "List the first 5 of [expenses dated on Sunday 2026-09-06, sorted by exchange-rate date descending (highest/latest first)].",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "h0134",
+    "today": "Wednesday 2025-09-17",
+    "prev": "show expenses called \"parking\" and expenses called \"train tickets\"",
+    "prev_gloss": "List [expenses named \"parking\"] together with [expenses named \"train tickets\"].",
+    "target": "tally.delete_expense{} on the other one",
+    "gloss": "Delete (move to trash) [the other one (of the two rows the previous turn answered)].",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "h0103",
+    "today": "Wednesday 2027-07-07",
+    "prev": "count of (notes during last weekend)",
+    "prev_gloss": "What is the number of [notes dated last weekend]?",
+    "target": "knowledge.delete_note{} on (them during this month)",
+    "gloss": "Delete (move to trash) [them (the rows the previous turn answered) dated this month].",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "h0006",
+    "today": "Thursday 2027-02-04",
+    "prev": "show important dates ordered by deleted_at asc",
+    "prev_gloss": "List important dates, sorted by date deleted (trash) ascending (lowest/earliest first).",
+    "target": "next_occurrence of the other one",
+    "gloss": "What is the next date it comes round of [the other one (of the two rows the previous turn answered)]?",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "h0141",
+    "today": "Friday 2027-02-05",
+    "prev": "NONE",
+    "target": "show obligations that (settled_at during yesterday)",
+    "gloss": "List obligations where the date settled falls yesterday.",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "h0074",
+    "today": "Monday 2028-09-11",
+    "prev": "NONE",
+    "target": "same? (parties of (events called \"Eye test\")) (parties called \"Arvid\")",
+    "gloss": "Are [the parties linked to [events named \"Eye test\"]] and [parties named \"Arvid\"] the same (do they share a row)?",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "h0062",
+    "today": "Thursday 2025-11-20",
+    "prev": "NONE",
+    "target": "geo_lng of (places called \"Juniper Bakery\")",
+    "gloss": "What is the longitude of [places named \"Juniper Bakery\"]?",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "h0029",
+    "today": "Monday 2028-11-27",
+    "prev": "NONE",
+    "target": "show photos during from (dtstart of (events called \"Wine tasting\")) to (dtstart of (events called \"Eye test\"))",
+    "gloss": "List photos dated between the start time of [events named \"Wine tasting\"] and the start time of [events named \"Eye test\"].",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "h0080",
+    "today": "Thursday 2028-08-10",
+    "prev": "count of (locker items called \"Garage door code\")",
+    "prev_gloss": "What is the number of [locker items named \"Garage door code\"]?",
+    "target": "show them that (username contains \"@gmail\")",
+    "gloss": "List them (the rows the previous turn answered) where the username contains \"@gmail\".",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "h0101",
+    "today": "Monday 2026-06-01",
+    "prev": "NONE",
+    "target": "reschedule{ by: +1h } on (events during next month)",
+    "gloss": "Shift [events dated next month] 1 hour later.",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "h0024",
+    "today": "Saturday 2026-12-26",
+    "prev": "show activities of it",
+    "prev_gloss": "List the activities linked to [it (the one row the previous turn is about)].",
+    "target": "show activities of the earlier one except them",
+    "gloss": "List [the activities linked to [the earlier one (what was answered TWO turns back)]] leaving out [them (the rows the previous turn answered)].",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "h0100",
+    "today": "Wednesday 2026-06-03",
+    "prev": "NONE",
+    "target": "max spent_on of expenses",
+    "gloss": "What is the highest / latest date spent of [expenses]?",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "h0106",
+    "today": "Friday 2026-12-11",
+    "prev": "count of (tasks that (due_at during tomorrow and status != \"completed\"))",
+    "prev_gloss": "What is the number of [tasks where the due date falls tomorrow and the status is not \"completed\"]?",
+    "target": "show them that (not (created_at >= 2026-10-26))",
+    "gloss": "List them (the rows the previous turn answered) where NOT (the date created is at least / on or after Monday 2026-10-26).",
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "h0040",
+    "today": "Monday 2026-10-19",
+    "prev": "NONE",
+    "target": "show settlements that (amount_minor around 20000)",
+    "gloss": "List settlements where the amount (in pence) is around 20000.",
+    "registers": ["terse", "question", "spoken"]
+  },
+  {
+    "id": "h0058",
+    "today": "Tuesday 2027-09-14",
+    "prev": "count of (tasks of (members that (owed_to_them > 1000 and sort_name is not null)))",
+    "prev_gloss": "What is the number of [the tasks linked to [members where the amount I owe them is more than / after 1000 and the sort name is set]]?",
+    "target": "reschedule{ to: 2027-09-17 } on (them that (due_at during next week and status != \"completed\"))",
+    "gloss": "Move [them (the rows the previous turn answered) where the due date falls next week and the status is not \"completed\"] to Friday 2027-09-17.",
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "h0055",
+    "today": "Sunday 2026-06-28",
+    "prev": "NONE",
+    "target": "min owed_to_me of parties",
+    "gloss": "What is the lowest / earliest amount they owe me of [parties]?",
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "h0088",
+    "today": "Tuesday 2027-05-18",
+    "prev": "NONE",
+    "target": "count of locker items",
+    "gloss": "What is the number of [locker items]?",
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "h0001",
+    "today": "Sunday 2026-08-16",
+    "prev": "show parties ordered by birth_date desc",
+    "prev_gloss": "List parties, sorted by date of birth descending (highest/latest first).",
+    "target": "show important dates of the 2nd one",
+    "gloss": "List the important dates linked to [the 2nd one (by position in the previous answer)].",
+    "registers": ["spoken", "terse", "question"]
+  },
+  {
+    "id": "h0060",
+    "today": "Monday 2025-09-08",
+    "prev": "NONE",
+    "target": "locker.trash_item{} on (locker items that (brand is not null))",
+    "gloss": "Delete (move to trash) [locker items where the brand is set].",
+    "registers": ["spoken", "question", "terse"]
+  }
+]

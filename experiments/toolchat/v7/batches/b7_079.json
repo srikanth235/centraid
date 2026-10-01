@@ -1,0 +1,248 @@
+[
+  {
+    "id": "w16-015",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks which tasks they finished this week",
+        "say": ["this week"]
+      },
+      { "hint": "asks for just the ones due this week", "say": ["this week"] },
+      { "hint": "(new topic) asks what's still on their list", "say": [] },
+      {
+        "hint": "(new topic) asks what they wrote in their journal last week",
+        "say": ["last week"]
+      },
+      {
+        "hint": "(new topic) asks to delete everything in the vault",
+        "say": []
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "spoken", "question"]
+  },
+  {
+    "id": "w16-016",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks when they have the rehearsal", "say": ["rehearsal"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "question"]
+  },
+  {
+    "id": "w16-017",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks what is overdue", "say": [] },
+      {
+        "hint": "(new topic) asks to log a call with Bastian (several people are called Bastian)",
+        "say": ["Bastian"]
+      },
+      {
+        "hint": "says it was Bastian Yardley (the Yardley one)",
+        "say": ["Yardley"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "terse"]
+  },
+  {
+    "id": "w16-018",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks which to-dos are due monday", "say": ["monday"] },
+      {
+        "hint": "(new topic) asks what they've written in the Work notebook",
+        "say": ["Work"]
+      },
+      { "hint": "asks how many there are in total", "say": [] },
+      {
+        "hint": "(new topic) asks to save the garage code 14534 in the locker",
+        "say": ["garage code", "14534"]
+      },
+      {
+        "hint": "(new topic) asks which album the Street mural photo is in",
+        "say": ["Street mural"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "spoken", "terse"]
+  },
+  {
+    "id": "w16-019",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks which documents they starred", "say": [] },
+      {
+        "hint": "asks what else there is apart from the second one",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks what places they have in their photos",
+        "say": []
+      },
+      { "hint": "asks which of those are about quillon", "say": ["quillon"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "terse", "spoken"]
+  },
+  {
+    "id": "w16-020",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks for their notes about Shopping list",
+        "say": ["Shopping list"]
+      },
+      {
+        "hint": "(new topic) asks what the last thing they wrote in their journal was",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks what's happening next monday",
+        "say": ["next monday"]
+      },
+      { "hint": "(new topic) asks to bin the Hall document", "say": ["Hall"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "spoken"]
+  },
+  {
+    "id": "w16-021",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks what they have on the 12th", "say": ["the 12th"] },
+      {
+        "hint": "(new topic) asks which album the Carpet samples photo is in",
+        "say": ["Carpet samples"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "polite"]
+  },
+  {
+    "id": "w16-022",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks what Orchard Opticians's phone number is",
+        "say": ["Orchard Opticians"]
+      },
+      {
+        "hint": "(new topic) asks to find Bastian in their contacts (several people are called Bastian)",
+        "say": ["Bastian"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "question"]
+  },
+  {
+    "id": "w16-023",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks which expenses were over 150 (money)", "say": ["150"] },
+      {
+        "hint": "(new topic) asks what the weather will be tomorrow",
+        "say": []
+      },
+      { "hint": "takes it back: never mind", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "spoken"]
+  },
+  {
+    "id": "w16-024",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks where the Mountain photo was taken",
+        "say": ["Mountain"]
+      },
+      {
+        "hint": "(new topic) asks when they have the Haircut",
+        "say": ["Haircut"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "polite"]
+  },
+  {
+    "id": "w16-025",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks what they have filed under Energy", "say": ["Energy"] }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "question"]
+  },
+  {
+    "id": "w16-026",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks what they have filed under Taxes", "say": ["Taxes"] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "polite", "texting"]
+  },
+  {
+    "id": "w16-027",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      {
+        "hint": "asks what's in the vault about Nettlebed Dental",
+        "say": ["Nettlebed Dental"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "terse"]
+  },
+  {
+    "id": "w16-028",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks what's in the vault about Florian", "say": ["Florian"] },
+      {
+        "hint": "asks the same about Valdes instead ('what about Valdes?')",
+        "say": ["Valdes"]
+      },
+      {
+        "hint": "asks for just the birthday ones among those",
+        "say": ["birthday"]
+      },
+      {
+        "hint": "asks the same about year instead ('what about year?')",
+        "say": ["year"]
+      },
+      {
+        "hint": "(new topic) asks what's in the vault about Bastian Moreau",
+        "say": ["Bastian Moreau"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "question", "terse"]
+  },
+  {
+    "id": "w16-029",
+    "today": "Wednesday 2027-01-06",
+    "turns": [
+      { "hint": "asks what's in the vault about rain", "say": ["rain"] },
+      {
+        "hint": "(new topic) asks what their plan for sunday looks like, earliest first",
+        "say": ["sunday"]
+      },
+      { "hint": "asks how many that is", "say": [] },
+      {
+        "hint": "(new topic) asks what the login for Loft club is (not the password)",
+        "say": ["Loft club"]
+      },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "asks the same about Alarm instead ('what about Alarm?')",
+        "say": ["Alarm"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "polite", "spoken"]
+  }
+]

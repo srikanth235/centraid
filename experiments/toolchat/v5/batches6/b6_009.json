@@ -1,0 +1,248 @@
+[
+  {
+    "id": "c0127",
+    "today": "Monday 2027-09-27",
+    "turns": [
+      {
+        "canonical": "show (parties that (owed_to_me is not null))",
+        "move": "first",
+        "hint": "who owes me money / who do I owe money to"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (them) that (settled_at is null))",
+        "move": "act",
+        "hint": "what's that altogether / how much in total (no names)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0143",
+    "today": "Saturday 2027-08-07",
+    "turns": [
+      {
+        "canonical": "show (tasks that (status != \"completed\"))",
+        "move": "first",
+        "hint": "what's still on my list / what's left to do / what haven't I done yet"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0091",
+    "today": "Saturday 2025-03-22",
+    "turns": [
+      {
+        "canonical": "show (obligations that (settled_at is null and from_party = me))",
+        "move": "first",
+        "hint": "what debts do I still owe"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "what's that come to / how much is that altogether / total? (short follow-up, no names)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0088",
+    "today": "Sunday 2026-12-13",
+    "turns": [
+      {
+        "canonical": "show (expenses called \"dog\")",
+        "move": "first",
+        "hint": "show the dog expenses"
+      },
+      {
+        "canonical": "sum amount_minor of (them)",
+        "move": "act",
+        "hint": "what's that come to / how much is that altogether / total? (short follow-up, no names)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0175",
+    "today": "Sunday 2025-06-08",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Boiler service\", dtstart: monday at 16:00, dtend: monday at 17:00 }",
+        "move": "first",
+        "hint": "put a Boiler service in the diary/calendar monday at four (a one-hour appointment; say the time like 'four')"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0013",
+    "today": "Saturday 2027-06-12",
+    "turns": [
+      {
+        "canonical": "show (notes called \"ideas\")",
+        "move": "first",
+        "hint": "find my notes about ideas / what did I write down about ideas (any note whose title mentions it; NOT a notebook)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0195",
+    "today": "Sunday 2025-11-30",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Book the MOT\", due_at: sunday }",
+        "move": "first",
+        "hint": "add a to-do to book the MOT by sunday"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0277",
+    "today": "Saturday 2027-11-20",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Oriane Everly\") ordered by started_at desc))",
+        "move": "first",
+        "hint": "when did I last speak to Oriane Everly"
+      },
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Henrike Hendricks\") ordered by started_at desc))",
+        "move": "act",
+        "hint": "and Henrike Hendricks? / what about Henrike Hendricks? (just the new name)"
+      }
+    ],
+    "refer": [
+      { "row": "parties \"Oriane Everly\"", "turn": 1, "say": "full" },
+      { "row": "parties \"Henrike Hendricks\"", "turn": 2, "say": "full" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0210",
+    "today": "Monday 2026-08-31",
+    "turns": [
+      {
+        "canonical": "show (photos of (places called \"nettlebed\"))",
+        "move": "first",
+        "hint": "photos taken at nettlebed"
+      },
+      {
+        "canonical": "media.add_to_album{ album_id: (albums called \"Porto trip\") } on (them that (label contains \"Mabel\"))",
+        "move": "act",
+        "hint": "put the one with Mabel in it into the Porto trip album"
+      }
+    ],
+    "refer": [{ "row": "albums \"Porto trip\"", "turn": 2, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0043",
+    "today": "Saturday 2027-03-27",
+    "turns": [
+      {
+        "canonical": "show (things called \"bill\")",
+        "move": "first",
+        "hint": "what do I have about bill (anything at all, no app named)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0161",
+    "today": "Saturday 2028-06-10",
+    "turns": [
+      {
+        "canonical": "tally.add_expense{ description: \"Petrol\", amount_minor: 3500, paid_by: me, group_id: (groups called \"Porthcurl Cove holiday\") }",
+        "move": "first",
+        "hint": "add thirty five (SAY THE AMOUNT IN WORDS: 'thirty five' dollars/pounds/quid) of petrol to the holiday group, I paid (description = that word)"
+      }
+    ],
+    "refer": [
+      {
+        "row": "groups \"Porthcurl Cove holiday\"",
+        "turn": 1,
+        "say": "exact: holiday"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0018",
+    "today": "Thursday 2025-10-09",
+    "turns": [
+      {
+        "canonical": "show (notes called \"comparison\")",
+        "move": "first",
+        "hint": "what notes have I got about comparison"
+      },
+      {
+        "canonical": "show (notes that (notebooks contains \"Health\"))",
+        "move": "act",
+        "hint": "correction: no, I meant the Health NOTEBOOK (the person says the word notebook)"
+      }
+    ],
+    "refer": [{ "row": "notebooks \"Health\"", "turn": 2, "say": "full" }],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0151",
+    "today": "Monday 2027-01-25",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during this weekend))",
+        "move": "first",
+        "hint": "what tasks are due in that window"
+      },
+      {
+        "canonical": "show (them that (title contains \"piano\"))",
+        "move": "refine",
+        "hint": "just the piano ones (narrow those by a word)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0003",
+    "today": "Thursday 2026-10-15",
+    "turns": [
+      {
+        "canonical": "show (notes called \"clear\")",
+        "move": "first",
+        "hint": "find my notes about clear / what did I write down about clear (any note whose title mentions it; NOT a notebook)"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  },
+  {
+    "id": "c0097",
+    "today": "Sunday 2026-12-06",
+    "turns": [
+      {
+        "canonical": "sum amount_minor of (expenses called \"Bike repair\")",
+        "move": "first",
+        "hint": "what did the bike come to / cost"
+      }
+    ],
+    "refer": [
+      { "row": "expenses \"Bike repair\"", "turn": 1, "say": "exact: bike" }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

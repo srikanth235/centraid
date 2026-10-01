@@ -37,7 +37,7 @@
     "verbClassDerivability": 1.0,
     "declaredEffects": 26,
     "egressVerbs": 2,
-    "derivedFields": 5
+    "derivedFields": 7
   },
   "kinds": [
     {
@@ -178443,6 +178443,22 @@
       "entity": "core.party",
       "computedBy": null,
       "gap": "As `owed_to_me`, the other direction. No shipped reader (DIFF.md B7).",
+      "inputs": ["tally.obligation", "core.party"],
+      "door": "people"
+    },
+    "owed_to_me_minor": {
+      "field": "owed_to_me_minor",
+      "entity": "core.party",
+      "computedBy": null,
+      "gap": "What the open debts in `owed_to_me` come to, in minor units — the amount as a field of its own, beside the ids that are the link. No shipped reader (DIFF.md B6).",
+      "inputs": ["tally.obligation", "core.party"],
+      "door": "people"
+    },
+    "owed_to_them_minor": {
+      "field": "owed_to_them_minor",
+      "entity": "core.party",
+      "computedBy": null,
+      "gap": "As `owed_to_me_minor`, the other direction. No shipped reader (DIFF.md B7).",
       "inputs": ["tally.obligation", "core.party"],
       "door": "people"
     },

@@ -33,12 +33,19 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut corpora: Vec<String> = Vec::new();
     let mut outputs: Option<String> = None;
+    // `--turns F`: one JSON line per turn (verdict and complaint) for miss
+    // analysis. The headline report is unchanged.
+    let mut turns_out: Option<String> = None;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
             "--outputs" => {
                 index += 1;
                 outputs = args.get(index).cloned();
+            }
+            "--turns" => {
+                index += 1;
+                turns_out = args.get(index).cloned();
             }
             "--corpus" => {
                 index += 1;
@@ -77,6 +84,26 @@ fn main() -> ExitCode {
             }
         };
         print_report(corpus, &report);
+        if let Some(path) = &turns_out {
+            let mut lines = String::new();
+            for session in &report.sessions {
+                for (at, turn) in session.turns.iter().enumerate() {
+                    lines.push_str(
+                        &serde_json::json!({
+                            "corpus": corpus, "session": session.id,
+                            "category": session.category, "turn": at,
+                            "passed": turn.passed, "complaint": turn.complaint,
+                        })
+                        .to_string(),
+                    );
+                    lines.push('\n');
+                }
+            }
+            if let Err(err) = std::fs::write(path, lines) {
+                eprintln!("--turns {path}: {err}");
+                return ExitCode::FAILURE;
+            }
+        }
     }
     ExitCode::SUCCESS
 }

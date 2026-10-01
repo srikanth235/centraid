@@ -1,0 +1,308 @@
+[
+  {
+    "id": "g0277",
+    "today": "Saturday 2026-05-23",
+    "turns": [
+      {
+        "canonical": "show (documents that (folder = \"Insurance\"))",
+        "gloss": "List documents where the folder is \"Insurance\".",
+        "move": "first",
+        "hint": "what's in my Insurance folder/notebook"
+      },
+      {
+        "canonical": "core.star_document{} on (the 2nd one)",
+        "gloss": "Star [the 2nd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "star one by position"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0374",
+    "today": "Wednesday 2025-12-24",
+    "turns": [
+      {
+        "canonical": "show (first 1 of (activities of (parties called \"Wendell\") ordered by started_at desc))",
+        "gloss": "List the first 1 of [the activities linked to [parties named \"Wendell\"], sorted by start time descending (highest/latest first)].",
+        "move": "first",
+        "hint": "when did I last see/speak to Wendell"
+      },
+      {
+        "canonical": "show (tasks that (due_at is null and status != \"completed\"))",
+        "gloss": "List tasks where there is no due date and the status is not \"completed\".",
+        "move": "new",
+        "hint": "open tasks with no due date"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "h007",
+    "today": "Saturday 2027-06-26",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Update the CV\" }",
+        "gloss": "Add a task titled \"Update the CV\".",
+        "move": "first",
+        "hint": "add a task"
+      },
+      {
+        "canonical": "reschedule{ to: tomorrow } on (the last thing I added)",
+        "gloss": "Move [the last thing I added] to tomorrow.",
+        "move": "act",
+        "hint": "move the thing I just added"
+      },
+      {
+        "canonical": "show (parties that (role = \"Personal trainer\"))",
+        "gloss": "List parties where the role is \"Personal trainer\".",
+        "move": "new",
+        "hint": "who's my personal trainer"
+      },
+      {
+        "canonical": "show (contact channels of (the 1st one) that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [the 1st one (by position in the previous answer)] where the kind is \"phone\".",
+        "move": "act",
+        "hint": "the Nth one's number"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0133",
+    "today": "Saturday 2028-10-07",
+    "turns": [
+      {
+        "canonical": "show (parties that (role = \"Mechanic\"))",
+        "gloss": "List parties where the role is \"Mechanic\".",
+        "move": "first",
+        "hint": "who's my mechanic"
+      },
+      {
+        "canonical": "show (things during thursday)",
+        "gloss": "",
+        "move": "switch",
+        "hint": "what's on thursday"
+      },
+      {
+        "canonical": "show (parties that (role = \"Mechanic\"))",
+        "gloss": "List parties where the role is \"Mechanic\".",
+        "move": "backtrack",
+        "hint": "back to the earlier topic, re-asked (re-names it)"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "h019",
+    "today": "Wednesday 2028-10-04",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Measure the alcove for shelves\", due_at: next saturday }",
+        "gloss": "Add a task titled \"Measure the alcove for shelves\" due next saturday.",
+        "move": "first",
+        "hint": "add a task"
+      },
+      {
+        "canonical": "people.settle_debt{} on (obligations of (parties called \"Coral\") that (settled_at is null))",
+        "gloss": "Mark [the obligations linked to [parties named \"Coral\"] where there is no date settled] as settled / paid off.",
+        "move": "new",
+        "hint": "pay off / settle what I owe Coral"
+      },
+      {
+        "canonical": "show (documents that (folder = \"Medical\"))",
+        "gloss": "List documents where the folder is \"Medical\".",
+        "move": "new",
+        "hint": "what's in my Medical folder/notebook"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0650",
+    "today": "Friday 2027-09-24",
+    "turns": [
+      {
+        "canonical": "people.log_interaction{ kind: \"coffee\", since: today } on (parties called \"Percival\")",
+        "gloss": "Log that I had a coffee with [parties named \"Percival\"].",
+        "move": "first",
+        "hint": "log a coffee with Percival (today)"
+      },
+      {
+        "canonical": "show (tasks that (status = \"completed\" and completed_at during last month))",
+        "gloss": "List tasks where the status is \"completed\" and the completion date falls last month.",
+        "move": "new",
+        "hint": "tasks ticked off / done last month"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0521",
+    "today": "Thursday 2027-12-09",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Q3 budget review\" }",
+        "gloss": "Add a task titled \"Q3 budget review\".",
+        "move": "first",
+        "hint": "add a task"
+      },
+      {
+        "canonical": "schedule.delete_task{} on (it)",
+        "gloss": "Delete (move to trash) [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "scrap that, delete it"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "h006",
+    "today": "Thursday 2027-11-25",
+    "turns": [
+      {
+        "canonical": "show (places of (photos called \"birthday cake\"))",
+        "gloss": "List the places linked to [photos named \"birthday cake\"].",
+        "move": "first",
+        "hint": "where was the birthday cake photo taken"
+      },
+      {
+        "canonical": "show ((photos of (it)) except (photos called \"birthday cake\"))",
+        "gloss": "List [the photos linked to [it (the one row the previous turn is about)]] leaving out [photos named \"birthday cake\"].",
+        "move": "act",
+        "hint": "what else did I take there (the excluded photo is the one the SENTENCE named: C13 names it)"
+      },
+      {
+        "canonical": "media.delete_asset{} on (the 3rd one)",
+        "gloss": "Delete (move to trash) [the 3rd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "delete the Nth"
+      },
+      {
+        "canonical": "show (contact channels of (parties called \"Rhiannon\") that (kind = \"email\"))",
+        "gloss": "List the contact channels linked to [parties named \"Rhiannon\"] where the kind is \"email\".",
+        "move": "new",
+        "hint": "what's Rhiannon's email"
+      },
+      {
+        "canonical": "people.log_interaction{ kind: \"call\", since: today } on (parties called \"Rhiannon\")",
+        "gloss": "Log that I had a call with [parties named \"Rhiannon\"].",
+        "move": "act",
+        "hint": "log that I called him/her today (pronoun -> the name, C14)"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0434",
+    "today": "Thursday 2026-07-16",
+    "turns": [
+      {
+        "canonical": "show (things during thursday)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's on thursday"
+      },
+      {
+        "canonical": "delete{} on (the 3rd one)",
+        "gloss": "Delete (move to trash) [the 3rd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      },
+      {
+        "canonical": "reschedule{ to: the 24th } on (it)",
+        "gloss": "Move [it (the one row the previous turn is about)] to the 24th.",
+        "move": "act",
+        "hint": "and push it to a day (C12: it = the row just written)"
+      },
+      {
+        "canonical": "show (things during this weekend)",
+        "gloss": "List anything at all (events, open tasks, important dates, \u2026) dated this weekend.",
+        "move": "new",
+        "hint": "what's on this weekend"
+      }
+    ],
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "g0597",
+    "today": "Friday 2028-07-07",
+    "turns": [
+      {
+        "canonical": "schedule.propose_event{ summary: \"Housewarming\", dtstart: friday at 19:00, dtend: friday at 20:00 }",
+        "gloss": "Put an event titled \"Housewarming\" in the calendar starting friday at 19:00 and ending friday at 20:00.",
+        "move": "first",
+        "hint": "put an event in the diary (no end said -> one hour)"
+      }
+    ],
+    "registers": ["question", "spoken"]
+  },
+  {
+    "id": "g0299",
+    "today": "Sunday 2027-05-23",
+    "turns": [
+      {
+        "canonical": "show (parties that (role = \"Mechanic\"))",
+        "gloss": "List parties where the role is \"Mechanic\".",
+        "move": "first",
+        "hint": "who's my mechanic"
+      },
+      {
+        "canonical": "show (contact channels of (it) that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [it (the one row the previous turn is about)] where the kind is \"phone\".",
+        "move": "act",
+        "hint": "what's their number"
+      },
+      {
+        "canonical": "social.send_message{ body: \"Thanks again\" } on (it)",
+        "gloss": "",
+        "move": "act",
+        "hint": "text them that"
+      },
+      {
+        "canonical": "show (notes that (notebooks contains \"Garden\"))",
+        "gloss": "List notes where the notebooks it is in contains \"Garden\".",
+        "move": "new",
+        "hint": "what's in my Garden folder/notebook"
+      },
+      {
+        "canonical": "knowledge.delete_note{} on (the 1st one)",
+        "gloss": "Delete (move to trash) [the 1st one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "delete one by position"
+      },
+      {
+        "canonical": "schedule.add_task{ title: \"Hang the bathroom mirror\" }",
+        "gloss": "Add a task titled \"Hang the bathroom mirror\".",
+        "move": "new",
+        "hint": "add a task"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0487",
+    "today": "Thursday 2028-06-22",
+    "turns": [
+      {
+        "canonical": "show (tasks that (due_at during before now and status != \"completed\"))",
+        "gloss": "List tasks where the due date falls before now (already past \u2014 overdue) and the status is not \"completed\".",
+        "move": "first",
+        "hint": "overdue (past due, not done) tasks"
+      },
+      {
+        "canonical": "show (them that (due_at during last week))",
+        "gloss": "List them (the rows the previous turn answered) where the due date falls last week.",
+        "move": "refine",
+        "hint": "just the ones that were due last week"
+      },
+      {
+        "canonical": "reschedule{ to: the 16th } on (them)",
+        "gloss": "Move [them (the rows the previous turn answered)] to the 16th.",
+        "move": "act",
+        "hint": "move them all to a day"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  }
+]

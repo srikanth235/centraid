@@ -7,6 +7,10 @@
 //! ```text
 //! cargo run -p centraid-candidates --bin dump-board -- people [second]
 //! ```
+//!
+//! `json` in place of an app prints every app's rows, one JSON object per
+//! line (`app`, `entity`, `live`, `label`, `extra`), for tooling that needs
+//! the world's labels.
 
 use std::process::ExitCode;
 
@@ -71,6 +75,21 @@ impl Candidate for DumpSession {
                     u8::from(row.live),
                     row.label
                 );
+            }
+            return Plan::Ids(Vec::new());
+        }
+        if self.which == "json" {
+            for app in App::all() {
+                for row in ctx.open(app).unwrap_or_default() {
+                    let line = serde_json::json!({
+                        "app": app.id(),
+                        "entity": row.entity,
+                        "live": row.live,
+                        "label": row.label,
+                        "extra": row.extra,
+                    });
+                    println!("{line}");
+                }
             }
             return Plan::Ids(Vec::new());
         }

@@ -1,0 +1,15 @@
+[
+  {
+    "id": "a0517",
+    "today": "Friday 2027-08-27",
+    "turns": [
+      {
+        "canonical": "show (documents that (starred = true))",
+        "move": "first",
+        "hint": "my starred documents"
+      }
+    ],
+    "versions": 5,
+    "registers": ["terse", "question", "spoken", "texting", "polite"]
+  }
+]

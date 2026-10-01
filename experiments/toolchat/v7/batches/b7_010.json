@@ -1,0 +1,249 @@
+[
+  {
+    "id": "w02-072",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks whether Thibault Zuniga's birthday is coming up",
+        "say": ["Thibault Zuniga"]
+      },
+      { "hint": "(new topic) asks for Wystan's number", "say": ["Wystan"] },
+      {
+        "hint": "(new topic) asks for their expenses about repair",
+        "say": ["repair"]
+      },
+      {
+        "hint": "(new topic) asks for the members of the watch group",
+        "say": ["watch"]
+      },
+      {
+        "hint": "asks how much Jasper owes them in that group",
+        "say": ["Jasper"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["terse", "texting", "spoken"]
+  },
+  {
+    "id": "w02-073",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      { "hint": "asks what they have about Saskia", "say": ["Saskia"] },
+      {
+        "hint": "(new topic) asks for their locker entries about Payroll",
+        "say": ["Payroll"]
+      },
+      {
+        "hint": "asks the same about Energy password instead ('what about Energy password?')",
+        "say": ["Energy password"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["question", "terse", "spoken"]
+  },
+  {
+    "id": "w02-074",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks to find Zacharias in their contacts (several people are called Zacharias)",
+        "say": ["Zacharias"]
+      },
+      { "hint": "asks what else there is apart from the first one", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "spoken", "terse"]
+  },
+  {
+    "id": "w02-075",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      { "hint": "asks what's on their list with no date set", "say": [] },
+      { "hint": "asks what else there is apart from the first one", "say": [] },
+      {
+        "hint": "(new topic) asks how much has been spent in the club fund group",
+        "say": ["club fund"]
+      },
+      { "hint": "(new topic) asks which to-dos have no deadline", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "question", "terse"]
+  },
+  {
+    "id": "w02-076",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      { "hint": "asks for Elderberry's email", "say": ["Elderberry"] },
+      {
+        "hint": "(new topic) asks to log a visit with Yara (several people are called Yara)",
+        "say": ["Yara"]
+      },
+      { "hint": "takes it back: never mind", "say": [] },
+      { "hint": "(new topic) asks what's left on their to-do list", "say": [] },
+      { "hint": "asks for just the ones due next week", "say": ["next week"] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "question", "texting"]
+  },
+  {
+    "id": "w02-077",
+    "today": "Wednesday 2025-06-18",
+    "turns": [
+      {
+        "hint": "asks when the Photography walk is",
+        "say": ["Photography walk"]
+      },
+      {
+        "hint": "asks the same about Quiz night instead ('what about Quiz night?')",
+        "say": ["Quiz night"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "question", "spoken"]
+  },
+  {
+    "id": "w03-000",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks to wipe all their photos and notes at once", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["question", "texting", "spoken"]
+  },
+  {
+    "id": "w03-001",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks what the steps under 'Move the piano next week' are",
+        "say": ["Move the piano next week"]
+      },
+      { "hint": "asks which of those are still to do", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["terse", "polite", "question"]
+  },
+  {
+    "id": "w03-002",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks to find the notes on plan", "say": ["plan"] },
+      {
+        "hint": "(new topic) asks to find Vesna Castell in their contacts",
+        "say": ["Vesna Castell"]
+      },
+      {
+        "hint": "asks what events they're coming to (the one person just shown)",
+        "say": []
+      },
+      {
+        "hint": "asks the same about test instead ('what about test?')",
+        "say": ["test"]
+      },
+      {
+        "hint": "asks to add a task for wednesday to deal with 'Eye test'",
+        "say": ["wednesday"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "texting"]
+  },
+  {
+    "id": "w03-003",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks what the login for Council is (not the password)",
+        "say": ["Council"]
+      },
+      {
+        "hint": "asks the same about Chess club instead ('what about Chess club?')",
+        "say": ["Chess club"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["spoken", "texting", "question"]
+  },
+  {
+    "id": "w03-004",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks to add a task 'Collect the library books' for friday",
+        "say": ["Collect the library books", "friday"]
+      },
+      { "hint": "(new topic) asks who they still have to pay back", "say": [] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "spoken"]
+  },
+  {
+    "id": "w03-005",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks what the login for Council portal is (not the password)",
+        "say": ["Council portal"]
+      },
+      {
+        "hint": "(new topic) asks to move the boots task to wednesday",
+        "say": ["boots", "wednesday"]
+      },
+      { "hint": "corrects: no, make it wednesday", "say": ["wednesday"] },
+      {
+        "hint": "(new topic) asks to pull up Stellan Brackenholt",
+        "say": ["Stellan Brackenholt"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "texting", "terse"]
+  },
+  {
+    "id": "w03-006",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks how many open tasks they have", "say": [] },
+      {
+        "hint": "(new topic) asks to find Zacharias Merriweather in their contacts",
+        "say": ["Zacharias Merriweather"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["texting", "terse", "question"]
+  },
+  {
+    "id": "w03-007",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      { "hint": "asks which to-dos are due tomorrow", "say": ["tomorrow"] }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "terse"]
+  },
+  {
+    "id": "w03-008",
+    "today": "Thursday 2025-05-08",
+    "turns": [
+      {
+        "hint": "asks which to-dos are estimated at 30 minutes",
+        "say": ["30"]
+      },
+      { "hint": "takes it back: never mind", "say": [] },
+      {
+        "hint": "(new topic) asks to star the Fence document",
+        "say": ["Fence"]
+      },
+      { "hint": "(new topic) asks what they're behind on", "say": [] },
+      {
+        "hint": "(new topic) asks which places their photos were taken at",
+        "say": []
+      },
+      {
+        "hint": "(new topic) asks for Rhiannon Rookwood's contact card",
+        "say": ["Rhiannon Rookwood"]
+      }
+    ],
+    "versions": 3,
+    "registers": ["polite", "spoken", "texting"]
+  }
+]

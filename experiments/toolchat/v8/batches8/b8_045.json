@@ -1,0 +1,292 @@
+[
+  {
+    "id": "w13-0055",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "says they've paid Nour Ortega back, mark it settled",
+        "say": ["Nour Ortega"]
+      },
+      {
+        "hint": "(new topic) asks to look up Ambrose",
+        "say": ["Ambrose"],
+        "shown": "done: people.settle_debt{} on (#2)"
+      },
+      {
+        "hint": "follow-up: asks for a task to visit Umarov thursday",
+        "say": ["visit Umarov", "thursday"],
+        "shown": "party \"Ambrose Umarov\" · role=Former colleague"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w13-0056",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks whether they owe Zbigniew Ortega anything",
+        "say": ["Zbigniew Ortega"]
+      },
+      {
+        "hint": "(new topic) asks which calendar events Sorrine Vavow is on",
+        "say": ["Sorrine Vavow"],
+        "shown": "obligation \"Cashew refund\""
+      },
+      {
+        "hint": "follow-up: asks to narrow that to anything about Somchai",
+        "say": ["Somchai"],
+        "shown": "event \"Dinner with Somchai\" Fri 2027-08-06 10:15\nevent \"Coding club (week 33)\" Tue 2027-08-17 18:00\nevent \"Coding club (week 34)\" Tue 2027-08-24 19:30\nevent \"Dinner with Angharad\" Thu 2027-08-26 07:00\n(+5 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w13-0057",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks for the badminton club login entry",
+        "say": ["badminton club", "login"]
+      },
+      {
+        "hint": "(new topic) asks where the shopping list went",
+        "say": ["shopping list"],
+        "shown": "locker item \"Badminton club login\" · type=login"
+      },
+      {
+        "hint": "follow-up: says actually, don't bother",
+        "say": [],
+        "shown": "note \"Lattice shopping list\" Wed 2027-08-11 21:28 · notebooks=Garden log"
+      },
+      {
+        "hint": "follow-up: asks what else is in that notebook",
+        "say": [],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  },
+  {
+    "id": "w13-0058",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks to add Fleavis Fitzgerald to the Seswick trip group",
+        "say": ["Fleavis Fitzgerald", "Seswick trip"]
+      },
+      {
+        "hint": "(new topic) asks what Losuan's balance with them is in the Wasoe group",
+        "say": ["Losuan", "Wasoe"],
+        "shown": "done: tally.add_group_member{group_id: (#1)} on (#3)"
+      },
+      {
+        "hint": "(new topic) asks what's on at Dreford Pavilion",
+        "say": ["Dreford Pavilion"],
+        "shown": "= 9002"
+      },
+      {
+        "hint": "(detour) hang on — asks what birthdays or anniversaries there are next two months",
+        "say": ["next two months", "months"],
+        "shown": "event \"Spinning club at Dreford Pavilion\" Fri 2027-09-03 19:00"
+      },
+      {
+        "hint": "back to the Dreford Pavilion events — asks what about in their to-do list",
+        "say": ["to-do list"],
+        "shown": "important date \"Birthday — Crendia Ortega\" Sat 2027-09-18\nimportant date \"Birthday — Flennir Abdi\" Wed 2027-09-15\nimportant date \"Birthday — Laszlo Synacre\" Tue 2027-08-31\nimportant date \"Birthday — Losuan Colombo\" Wed 2027-09-08"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w13-0059",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      { "hint": "asks how much they spent recently", "say": ["recently"] }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w13-0060",
+    "today": "Sunday 2027-08-29",
+    "turns": [
+      {
+        "hint": "asks for the documents that go with the wicker expense",
+        "say": ["wicker", "expense"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "rambling"]
+  },
+  {
+    "id": "w14-0002",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      { "hint": "asks what tasks fall due next week", "say": ["next week"] },
+      {
+        "hint": "follow-up: about the return one, asks for its steps",
+        "say": ["return"],
+        "shown": "task \"Clean the fish tank (wk 23)\" Tue 2027-06-08 09:00 · status=needs-action effort_min=180\ntask \"Return the fountain\" Sun 2027-06-13 17:00 · status=needs-action effort_min=10\ntask \"Ask Tonda about the clipboard\" Fri 2027-06-11 18:00 · status=completed effort_min=45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "terse"]
+  },
+  {
+    "id": "w14-0003",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "says felting lesson next monday at quarter past eleven — add it",
+        "say": ["felting lesson", "next monday", "at quarter past eleven"]
+      },
+      {
+        "hint": "(new topic) asks what pictures they have from yesterday",
+        "say": ["yesterday"],
+        "shown": "done: schedule.propose_event{summary: \"Felting lesson\", dtstart: 2027-06-07T11:15}"
+      },
+      {
+        "hint": "(new topic) asks for their favourite photos",
+        "say": [],
+        "shown": "photo \"IMG_8180\" Sun 2027-05-30 11:29 · favorite=false"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w14-0004",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks for the total they spent last month",
+        "say": ["last month"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "terse"]
+  },
+  {
+    "id": "w14-0005",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      { "hint": "asks which to-dos are due next week", "say": ["next week"] },
+      {
+        "hint": "(new topic) asks what they have filed under Wedding",
+        "say": ["Wedding"],
+        "shown": "task \"Clean the fish tank (wk 23)\" Tue 2027-06-08 09:00 · status=needs-action effort_min=180\ntask \"Return the fountain\" Sun 2027-06-13 17:00 · status=needs-action effort_min=10\ntask \"Ask Tonda about the clipboard\" Fri 2027-06-11 18:00 · status=completed effort_min=45"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "rambling"]
+  },
+  {
+    "id": "w14-0006",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      { "hint": "asks what they still have to do", "say": [] },
+      {
+        "hint": "(detour) hang on — asks for the settlements in the juggling club group",
+        "say": ["juggling club"],
+        "shown": "task \"Ask Wolfgang about the marmalade\" Sun 2027-05-02 09:00 · status=needs-action\ntask \"Unpack the biscuit at Cumuford Viewpoint\" Sun 2027-05-02 17:00 · status=in-process effort_min=45\ntask \"Clean the fish tank (wk 22)\" Tue 2027-06-01 09:00 · status=needs-action\ntask \"Photograph the pancake\" · status=needs-action effort_min=15\n(+9 more)"
+      },
+      {
+        "hint": "back to the open tasks — asks for just the ones this month",
+        "say": ["this month"],
+        "shown": "settlement \"settlement 1500\" Wed 2027-05-26 · amount_minor=1500"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w14-0007",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks to settle up with Dagmar in Antibes",
+        "say": ["Dagmar", "Antibes", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks if anyone owes them cash",
+        "say": [],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#9), amount_minor: balance of (#14) in (#9)} on (#14)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "spoken"]
+  },
+  {
+    "id": "w14-0008",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks to add five dollars for Dagmar's lunch to Antibes, they paid",
+        "say": ["five dollars", "Dagmar's lunch", "Antibes"]
+      },
+      {
+        "hint": "follow-up: asks who's in it",
+        "say": [],
+        "shown": "done: tally.add_expense{description: \"Dagmar's lunch\", amount_minor: 500, paid_by: me, group_id: (#1)}"
+      },
+      {
+        "hint": "(new topic) asks what the login for the brewing club membership is (not the password)",
+        "say": ["brewing club", "membership"],
+        "shown": "member \"Themba Pillai\"\nmember \"Dagmar Danak\""
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w14-0009",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      { "hint": "asks to see the Antibes expenses", "say": ["Antibes"] },
+      {
+        "hint": "follow-up: about the ferry one, asks which group it's in",
+        "say": ["ferry"],
+        "shown": "expense \"Antibes Terrace parts\" Wed 2027-02-10 · amount_minor=4700 paid_by=Themba Pillai\nexpense \"Turnip delivery\" Mon 2027-02-08 · amount_minor=13785 paid_by=Themba Pillai\nexpense \"Ferry to Antibes\" Mon 2027-02-08 · amount_minor=4229 paid_by=Owner\nexpense \"Car hire\" Mon 2027-02-08 · amount_minor=1141 paid_by=Themba Pillai\n(+1 more)"
+      },
+      {
+        "hint": "(new topic) asks what's planned for tuesday",
+        "say": ["tuesday"],
+        "shown": "group \"Antibes trip\""
+      },
+      {
+        "hint": "follow-up: asks the same for saturday ('and saturday?')",
+        "say": ["saturday"],
+        "shown": "task \"Clean the fish tank (wk 22)\" Tue 2027-06-01 09:00 · status=needs-action\nevent \"Dinner with Uchenna\" Tue 2027-06-01 10:00\nevent \"Riddle club\" Tue 2027-06-01 12:15\nevent \"Surveyor call\" Tue 2027-06-01 13:45\n(+2 more)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w14-0011",
+    "today": "Monday 2027-05-31",
+    "turns": [
+      {
+        "hint": "asks to save the storage unit code 71017 in the locker",
+        "say": ["storage unit code", "71017"]
+      },
+      {
+        "hint": "(new topic) asks what is in their Wedding folder",
+        "say": ["Wedding"],
+        "shown": "done: locker.add_item{type: \"note\", title: \"Storage unit code\", content: \"71017\"}"
+      },
+      {
+        "hint": "follow-up: asks to star all of them",
+        "say": [],
+        "shown": "document \"Buttercup warranty\" Thu 2027-02-11 08:58 · folder=Wedding\ndocument \"Manling invoice\" Thu 2026-12-10 10:32 · folder=Wedding\ndocument \"Oaxaca Terrace booking\" Mon 2026-05-04 21:32 · folder=Wedding"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  }
+]

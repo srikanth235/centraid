@@ -1,0 +1,278 @@
+[
+  {
+    "id": "g0656",
+    "today": "Thursday 2027-12-23",
+    "turns": [
+      {
+        "canonical": "show (parties that (role = \"Dentist\"))",
+        "gloss": "List parties where the role is \"Dentist\".",
+        "move": "first",
+        "hint": "who's my dentist"
+      },
+      {
+        "canonical": "show (contact channels of (it) that (kind = \"phone\"))",
+        "gloss": "List the contact channels linked to [it (the one row the previous turn is about)] where the kind is \"phone\".",
+        "move": "act",
+        "hint": "what's their number"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0050",
+    "today": "Saturday 2028-10-28",
+    "turns": [
+      {
+        "canonical": "show (things during friday)",
+        "gloss": "",
+        "move": "first",
+        "hint": "what's on friday"
+      },
+      {
+        "canonical": "delete{} on (the 3rd one)",
+        "gloss": "Delete (move to trash) [the 3rd one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "get rid of one of them by position (kind unknown -> class delete)"
+      },
+      {
+        "canonical": "show (notes that (notebooks contains \"Warranty\"))",
+        "gloss": "List notes where the notebooks it is in contains \"Warranty\".",
+        "move": "new",
+        "hint": "what's in my Warranty folder/notebook"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0606",
+    "today": "Saturday 2025-12-27",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Reply to the landlord\", due_at: tomorrow }",
+        "gloss": "Add a task titled \"Reply to the landlord\" due tomorrow.",
+        "move": "first",
+        "hint": "add a task"
+      },
+      {
+        "canonical": "reschedule{ to: next tuesday } on (the last thing I added)",
+        "gloss": "Move [the last thing I added] to next tuesday.",
+        "move": "act",
+        "hint": "move the thing I just added"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0526",
+    "today": "Sunday 2027-05-23",
+    "turns": [
+      {
+        "canonical": "schedule.add_task{ title: \"Wash the car\", due_at: friday }",
+        "gloss": "Add a task titled \"Wash the car\" due friday.",
+        "move": "first",
+        "hint": "add a task"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0464",
+    "today": "Saturday 2028-05-27",
+    "turns": [
+      {
+        "canonical": "balance of (members called \"Jasper\") in (groups called \"allotment crew\")",
+        "gloss": "What is the balance of [members named \"Jasper\"] within [groups named \"allotment crew\"]?",
+        "move": "first",
+        "hint": "what does Jasper owe me for allotment crew"
+      },
+      {
+        "canonical": "balance of (members called \"Birgit\") in (groups called \"allotment crew\")",
+        "gloss": "What is the balance of [members named \"Birgit\"] within [groups named \"allotment crew\"]?",
+        "move": "substitute",
+        "hint": "and Birgit?"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0177",
+    "today": "Friday 2026-10-23",
+    "turns": [
+      {
+        "canonical": "social.send_message{ body: \"Remember to bring the charger\" } on (contact channels of (parties called \"Ilse\") that (kind = \"phone\"))",
+        "gloss": "",
+        "move": "first",
+        "hint": "text Ilse: Remember to bring the charger"
+      },
+      {
+        "canonical": "show (parties that (owed_to_me is not null))",
+        "gloss": "List parties where the amount they owe me is set.",
+        "move": "new",
+        "hint": "who owes me money"
+      },
+      {
+        "canonical": "show (notes that (notebooks contains \"Receipts\"))",
+        "gloss": "List notes where the notebooks it is in contains \"Receipts\".",
+        "move": "new",
+        "hint": "what's in my Receipts folder/notebook"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0057",
+    "today": "Sunday 2027-07-11",
+    "turns": [
+      {
+        "canonical": "dtstart of (events called \"vet appointment\")",
+        "gloss": "What is the start time of [events named \"vet appointment\"]?",
+        "move": "first",
+        "hint": "when is my vet appointment"
+      }
+    ],
+    "registers": ["terse", "question"]
+  },
+  {
+    "id": "g0142",
+    "today": "Friday 2026-06-19",
+    "turns": [
+      {
+        "canonical": "show (parties that (role = \"Plumber\"))",
+        "gloss": "List parties where the role is \"Plumber\".",
+        "move": "first",
+        "hint": "who's my plumber"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0226",
+    "today": "Wednesday 2025-04-02",
+    "turns": [
+      {
+        "canonical": "social.send_message{ body: \"Got the tickets\" } on (contact channels of (parties called \"Zbigniew\") that (kind = \"phone\"))",
+        "gloss": "",
+        "move": "first",
+        "hint": "text Zbigniew: Got the tickets"
+      },
+      {
+        "canonical": "sum byte_size of photos",
+        "gloss": "What is the total file size in bytes of [photos]?",
+        "move": "new",
+        "hint": ""
+      },
+      {
+        "canonical": "show (things during in 4 days)",
+        "gloss": "",
+        "move": "new",
+        "hint": "what's on in 4 days"
+      },
+      {
+        "canonical": "reschedule{ to: saturday } on (events called \"session\")",
+        "gloss": "Move [events named \"session\"] to saturday.",
+        "move": "act",
+        "hint": "move the session one (named) to another day"
+      },
+      {
+        "canonical": "sum amount_minor of (obligations of (parties called \"Orla\") that (settled_at is null))",
+        "gloss": "What is the total amount (in pence) of [the obligations linked to [parties named \"Orla\"] where there is no date settled]?",
+        "move": "new",
+        "hint": "how much do I owe Orla"
+      }
+    ],
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "g0122",
+    "today": "Friday 2028-07-07",
+    "turns": [
+      {
+        "canonical": "show (photos that (album_titles contains \"hiking\"))",
+        "gloss": "List photos where the albums it is in contains \"hiking\".",
+        "move": "first",
+        "hint": "photos in the hiking album"
+      },
+      {
+        "canonical": "count of (them)",
+        "gloss": "What is the number of [them (the rows the previous turn answered)]?",
+        "move": "act",
+        "hint": "how many"
+      },
+      {
+        "canonical": "media.delete_asset{} on (photos called \"frosty\")",
+        "gloss": "Delete (move to trash) [photos named \"frosty\"].",
+        "move": "new",
+        "hint": "delete/trash the frosty photos"
+      },
+      {
+        "canonical": "media.restore_asset{} on (it)",
+        "gloss": "Restore [it (the one row the previous turn is about)] from the trash.",
+        "move": "act",
+        "hint": "oh no, undo that / bring it back"
+      },
+      {
+        "canonical": "show (photos called \"dog\")",
+        "gloss": "List photos named \"dog\".",
+        "move": "new",
+        "hint": "find the dog photo"
+      },
+      {
+        "canonical": "show (places of (it))",
+        "gloss": "List the places linked to [it (the one row the previous turn is about)].",
+        "move": "act",
+        "hint": "where was it taken"
+      }
+    ],
+    "registers": ["question", "terse"]
+  },
+  {
+    "id": "g0078",
+    "today": "Tuesday 2028-08-01",
+    "turns": [
+      {
+        "canonical": "show (important dates of (parties called \"Vivienne\") that (label contains \"Birthday\"))",
+        "gloss": "List the important dates linked to [parties named \"Vivienne\"] where the label contains \"Birthday\".",
+        "move": "first",
+        "hint": "when is Vivienne's birthday"
+      },
+      {
+        "canonical": "schedule.add_task{ title: \"Buy a present for Vivienne\", due_at: next saturday }",
+        "gloss": "Add a task titled \"Buy a present for Vivienne\" due next saturday.",
+        "move": "new",
+        "hint": "add a task to buy her/him a present (title uses the name the user says)"
+      },
+      {
+        "canonical": "show (documents that (folder = \"House\"))",
+        "gloss": "List documents where the folder is \"House\".",
+        "move": "new",
+        "hint": "what's in my House folder/notebook"
+      },
+      {
+        "canonical": "core.star_document{} on (the 1st one)",
+        "gloss": "Star [the 1st one (by position in the previous answer)].",
+        "move": "act",
+        "hint": "star one by position"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  },
+  {
+    "id": "g0472",
+    "today": "Friday 2026-01-02",
+    "turns": [
+      {
+        "canonical": "reschedule{ to: thursday } on (tasks called \"jabs\")",
+        "gloss": "Move [tasks named \"jabs\"] to thursday.",
+        "move": "first",
+        "hint": "push/move the named task"
+      },
+      {
+        "canonical": "nothing",
+        "gloss": "Do nothing: the member withdraws the request.",
+        "move": "undo",
+        "hint": "actually never mind / leave it"
+      }
+    ],
+    "registers": ["spoken", "question"]
+  }
+]

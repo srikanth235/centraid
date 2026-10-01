@@ -1,0 +1,309 @@
+[
+  {
+    "id": "w07-0033",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks who they're seeing at the workshop",
+        "say": ["workshop"]
+      },
+      {
+        "hint": "follow-up: asks if they have a photo of any of them",
+        "say": [],
+        "shown": "party \"Thavmoara Venkatesan\" · role=Niece\nparty \"Eilidh Nillez\" · owed_to_them_minor=2500 role=University friend"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w07-0034",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks what the sitar kitty total is so far",
+        "say": ["sitar kitty"]
+      },
+      {
+        "hint": "(detour) hang on — asks if they have any documents about Bromow",
+        "say": ["Bromow", "documents"],
+        "shown": "= 66544"
+      },
+      {
+        "hint": "back to the sitar kitty group — about the first one, asks who's in it",
+        "say": ["first"],
+        "shown": "document \"Bromow Fields permit\" Tue 2027-10-05 18:28 · folder=Insurance"
+      },
+      {
+        "hint": "(new topic) asks when the bonnet is",
+        "say": ["bonnet"],
+        "shown": "member \"Drinine Granridge\"\nmember \"Jelena Wakefield\"\nmember \"You\""
+      },
+      {
+        "hint": "follow-up: asks the same about the Drinine ('and the Drinine?')",
+        "say": ["Drinine"],
+        "shown": "event \"Bonnet viewing\" Mon 2027-11-22 19:45"
+      },
+      {
+        "hint": "follow-up: asks the same about the sycamore delivery ('and the sycamore delivery?')",
+        "say": ["sycamore delivery"],
+        "shown": "event \"Geocaching club with Drinine\" Sat 2027-11-06 09:15"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "terse"]
+  },
+  {
+    "id": "w07-0035",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks to send Thavmoara a message saying happy birthday",
+        "say": ["Thavmoara"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "spoken"]
+  },
+  {
+    "id": "w07-0036",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks what they paid for the bobcat parts",
+        "say": ["bobcat parts"]
+      },
+      {
+        "hint": "(new topic) asks how much they spent on Bromow in total",
+        "say": ["Bromow"],
+        "shown": "= 5299"
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "texting"]
+  },
+  {
+    "id": "w07-0037",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks how much they've spent in lacemaking share",
+        "say": ["lacemaking share", "how much"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "texting"]
+  },
+  {
+    "id": "w07-0038",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks what they've spent on in lacemaking share (the expenses)",
+        "say": ["lacemaking share"]
+      },
+      {
+        "hint": "follow-up: asks how much the damson one was",
+        "say": ["damson"],
+        "shown": "expense \"Octopus refund\" Sun 2027-10-31 · amount_minor=499 paid_by=Mura Trellova\nexpense \"Dinner at Hydra Island\" Mon 2027-10-25 · amount_minor=16470 paid_by=Owner\nexpense \"Lemonade\" Mon 2027-10-25 · amount_minor=399 paid_by=Almudena Kymham\nexpense \"Samovar\" Sun 2027-10-24 · amount_minor=8623 paid_by=Dariusz Lavby\n(+5 more)"
+      },
+      {
+        "hint": "follow-up: about the dinner one, asks which group it's in",
+        "say": ["dinner"],
+        "shown": "= 21120"
+      },
+      {
+        "hint": "(new topic) asks for the last photo they took",
+        "say": [],
+        "shown": "group \"Lacemaking share\""
+      },
+      {
+        "hint": "follow-up: asks who is in it",
+        "say": [],
+        "shown": "photo \"Linen at Ravello Deli\" Sat 2027-10-30 19:25 · album_titles=Premow 2027 favorite=false people=Drinine Granridge, Selam Clough"
+      },
+      {
+        "hint": "follow-up: asks for pictures with any of those people in",
+        "say": [],
+        "shown": "party \"Drinine Granridge\" · role=Daughter\nparty \"Selam Clough\" · owed_to_me_minor=2000 role=Running club friend"
+      }
+    ],
+    "versions": 2,
+    "registers": ["terse", "texting"]
+  },
+  {
+    "id": "w07-0039",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks what pictures are in the Ravello Leisure Centre album",
+        "say": ["Ravello Leisure Centre", "album"]
+      },
+      {
+        "hint": "(new topic) asks who is coming to the hollyhock",
+        "say": ["hollyhock"],
+        "shown": "photo \"Bromow Fields in winter\" Sat 2027-10-09 07:51 · album_titles=Ravello Leisure Centre, Keanery progress favorite=false\nphoto \"Crayon in the garden\" Mon 2027-09-20 20:48 · album_titles=Ravello Leisure Centre favorite=false\nphoto \"Lintel at dusk\" Fri 2027-09-17 16:33 · album_titles=Ravello Leisure Centre, Premow 2027 favorite=false\nphoto \"Accordion at Bromow Fields\" Fri 2027-09-10 20:20 · album_titles=Premow 2027, Ravello Leisure Centre, Kea… favorite=false\n(+3 more)"
+      },
+      {
+        "hint": "follow-up: asks for their contact details",
+        "say": [],
+        "shown": "party \"Zeynep Antonopoulos\" · role=Friend from the allotment"
+      },
+      {
+        "hint": "(new topic) says the boat shed PIN is 68393 — keep it in the locker",
+        "say": ["boat shed PIN", "68393"],
+        "shown": "contact channel \"Zeynep Antonopoulos — mobile\" · kind=phone value=+41 79 123 4891"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "spoken"]
+  },
+  {
+    "id": "w07-0040",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks to settle up with Thavmoara in Premow trip",
+        "say": ["Thavmoara", "Premow trip", "settle up"]
+      },
+      {
+        "hint": "(new topic) asks how much Dariusz owes them in lacemaking share",
+        "say": ["Dariusz", "lacemaking share"],
+        "shown": "done: tally.settle_up{to_party: me, group_id: (#1), amount_minor: balance of (#3) in (#1)} on (#3)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "texting"]
+  },
+  {
+    "id": "w07-0041",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks to add thirty francs for Thavmoara's lunch to Premow trip, they paid",
+        "say": ["thirty francs", "Thavmoara's lunch", "Premow trip"]
+      },
+      {
+        "hint": "(new topic) asks how many photos they took on the Premow trip",
+        "say": ["Premow"],
+        "shown": "done: tally.add_expense{description: \"Thavmoara's lunch\", amount_minor: 3000, paid_by: me, group_id: (#2)}"
+      },
+      {
+        "hint": "follow-up: about the third one, asks to see the photos in it",
+        "say": ["third"],
+        "shown": "= 6"
+      },
+      {
+        "hint": "(new topic) asks what they have filed under Legal",
+        "say": ["Legal"],
+        "shown": "photo \"Linen at Ravello Deli\" Sat 2027-10-30 19:25 · album_titles=Premow 2027 favorite=false people=Drinine Granridge, Selam Clough\nphoto \"Jackdaw and whistle\" Fri 2027-10-22 17:48 · album_titles=Premow 2027 favorite=false\nphoto \"Lintel at dusk\" Fri 2027-09-17 16:33 · album_titles=Ravello Leisure Centre, Premow 2027 favorite=false\nphoto \"Accordion at Bromow Fields\" Fri 2027-09-10 20:20 · album_titles=Premow 2027, Ravello Leisure Centre, Kea… favorite=false\n(+7 more)"
+      },
+      {
+        "hint": "follow-up: asks what the third one is",
+        "say": ["third"],
+        "shown": "document \"Glenfinnan booking voucher\" Thu 2027-10-28 19:06 · folder=Legal\ndocument \"Jackdaw quote\" Wed 2026-12-16 08:38 · folder=Legal\ndocument \"Council tax bill (02)\" Sat 2026-12-12 14:06 · folder=Legal"
+      },
+      {
+        "hint": "follow-up: asks the same for the Dubrovnik flat folder ('and Dubrovnik flat?')",
+        "say": ["Dubrovnik flat"],
+        "shown": "document \"Council tax bill (02)\" Sat 2026-12-12 14:06 · folder=Legal"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w07-0042",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks if they have any photos about cardamom",
+        "say": ["cardamom", "photos"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w07-0043",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      { "hint": "asks to delete the pestle photo", "say": ["pestle", "photo"] },
+      {
+        "hint": "(new topic) asks to settle up their debt with Selam",
+        "say": ["Selam"],
+        "shown": "none"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "polite"]
+  },
+  {
+    "id": "w07-0044",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks what the steps for the pay for the knapsack are",
+        "say": ["pay for the knapsack"]
+      },
+      {
+        "hint": "follow-up: asks to tick off the first one and delete the second one",
+        "say": ["first", "second"],
+        "shown": "task \"Sharpen the prism\" · status=needs-action\ntask \"Fix the whistle\" · status=needs-action effort_min=120"
+      },
+      {
+        "hint": "(new topic) asks to delete the lacemaking viewing appointment",
+        "say": ["lacemaking viewing"],
+        "shown": "done: schedule.set_task_status{status: \"completed\"} on (#2) then delete{} on (#3)"
+      },
+      {
+        "hint": "follow-up: corrects: wrong event, they meant the coach call one",
+        "say": ["coach call"],
+        "shown": "done: delete{} on (#4)"
+      }
+    ],
+    "versions": 2,
+    "registers": ["texting", "spoken"]
+  },
+  {
+    "id": "w07-0045",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks when they were last in touch with Jelena Wakefield",
+        "say": ["Jelena Wakefield"]
+      },
+      {
+        "hint": "(new topic) asks which task is roughly a ten minute job",
+        "say": ["ten minute"],
+        "shown": "activity \"interaction — Jelena Wakefield\" Mon 2027-11-01 10:00"
+      }
+    ],
+    "versions": 2,
+    "registers": ["spoken", "rambling"]
+  },
+  {
+    "id": "w07-0046",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks to settle up with Thavmoara in lacemaking share",
+        "say": ["Thavmoara", "lacemaking share", "settle up"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["rambling", "polite"]
+  },
+  {
+    "id": "w07-0047",
+    "today": "Monday 2027-11-01",
+    "turns": [
+      {
+        "hint": "asks to add thirteen francs for Thavmoara's petrol to lacemaking share, they paid",
+        "say": ["thirteen francs", "Thavmoara's petrol", "lacemaking share"]
+      }
+    ],
+    "versions": 2,
+    "registers": ["polite", "rambling"]
+  }
+]

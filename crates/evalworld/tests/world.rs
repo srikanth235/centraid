@@ -400,7 +400,9 @@ fn the_grace_windows_are_not_on_a_knife_edge() {
             let door = TestDoor::new(connection);
             let (drive, _denial) = centraid_apps_docs::queries::load_drive(
                 &door,
-                centraid_apps_docs::queries::DriveInput { limit: Some(100_000) },
+                centraid_apps_docs::queries::DriveInput {
+                    limit: Some(100_000),
+                },
                 &world.inventory.now,
             )
             .expect("the drive loads");
