@@ -387,3 +387,42 @@ test("a skipped job is still a live lane, and an empty newest run judges every l
   const all = new Map([["old", 1]]);
   assert.equal(onlyLive(all, null), all);
 });
+
+test("a cancelled newest run (no jobs) does not switch the filter off", () => {
+  const runs = [
+    run(1, "2026-10-02T00:00:00Z", []),
+    run(1, "2026-10-01T00:00:00Z", [job("rung1-on-main", "success")]),
+    run(1, "2026-09-30T00:00:00Z", [job("web-e2e", "failure")]),
+  ];
+  assert.deepEqual([...liveLanes(runs)], ["rung1-on-main"]);
+});
+
+test("the scorer is never judged by its own history", () => {
+  // lane-health is red because park-required fired; its streak can only break
+  // on a green lane-health, which cannot happen while the streak stands.
+  const runs = [
+    run(1, "2026-10-03T00:00:00Z", [
+      job("rung1-on-main", "success"),
+      job("lane-health", "failure"),
+    ]),
+    run(1, "2026-10-02T00:00:00Z", [job("lane-health", "failure")]),
+    run(1, "2026-10-01T00:00:00Z", [job("lane-health", "failure")]),
+  ];
+  const live = liveLanes(runs, ["lane-health"]);
+  assert.deepEqual([...live], ["rung1-on-main"]);
+  const streaks = onlyLive(redStreaks(runs, "2026-10-03T00:00:00Z"), live);
+  const findings = applyLaneRules({
+    rates: new Map(),
+    streaks,
+    durations: new Map(),
+    escapes: new Map(),
+    quarantine: {},
+    rung: 3,
+    today: "2026-10-03",
+  });
+  assert.deepEqual(findings, []);
+  assert.ok(
+    liveLanes(runs).has("lane-health"),
+    "without the exclusion it is judged"
+  );
+});

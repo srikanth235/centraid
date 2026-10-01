@@ -35,7 +35,7 @@
  * Usage:
  *   node scripts/ci/lane-health.mjs --repo owner/name [--workflow ci.yml]
  *        [--rung 2] [--escape-workflow ci.yml]
- *        [--runs 40] [--chronic-red-days 3] [--out artifacts/lane-health/summary.json]
+ *        [--runs 40] [--exclude-lane <scorer job>] [--chronic-red-days 3] [--out artifacts/lane-health/summary.json]
  */
 import {
   mkdirSync,
@@ -137,24 +137,39 @@ export function redStreaks(runsNewestFirst, now) {
 }
 
 /**
- * The lanes the workflow still runs: the jobs of its newest completed run.
+ * The lanes the workflow still runs: the jobs of its newest completed run that
+ * has any, less the lanes the caller says are the scorer itself.
  *
  * Every rule below reads a trailing window, and a window outlives the lanes in
  * it: a job a refactor deleted keeps its last red streak and its last slow
  * samples until the window rolls past them, so a lane nobody can fix or park
  * fires for weeks. A lane is judged only while the workflow still carries it
- * (#1075). A SKIPPED job is still a job the workflow carries, so path-gating
- * never hides a lane. A newest run with no jobs at all (the workflow failed
- * before scheduling any) names no live lanes; the filter then stands down
- * rather than judge nothing, because "nothing is red" is the one wrong answer.
+ * (#1075).
+ *
+ * THE SCORER IS NOT A LANE. The job that runs this script lives in the workflow
+ * it scores, and its red IS "a rule fired", which the findings already carry.
+ * Judged by its own history it could never clear: its streak only breaks on a
+ * green run of itself, and it is red for as long as the streak stands. `exclude`
+ * names it (`--exclude-lane`), so the exemption is explicit in the workflow.
+ *
+ * A run that was cancelled before scheduling anything has no jobs and says
+ * nothing about which lanes exist, so the newest run WITH jobs decides. A
+ * lane skipped at job level is still listed by the jobs API under its own name;
+ * a matrix or reusable-workflow job skipped as a whole is listed under the
+ * caller's name only, so its expanded lanes read as absent. When no run has any
+ * job the filter stands down and every lane is judged, because "nothing is red"
+ * is the one wrong answer.
  *
  * @param {{jobs: {name: string}[]}[]} runsNewestFirst completed runs, newest first
+ * @param {string[]} [exclude] lane names that are the scorer, never judged
  * @returns {Set<string>|null} live lane names, or null to judge every lane in the window
  */
-export function liveLanes(runsNewestFirst) {
-  const newest = runsNewestFirst[0];
-  if (!newest || newest.jobs.length === 0) return null;
-  return new Set(newest.jobs.map((job) => job.name));
+export function liveLanes(runsNewestFirst, exclude = []) {
+  const newest = runsNewestFirst.find((run) => run.jobs.length > 0);
+  if (!newest) return null;
+  return new Set(
+    newest.jobs.map((job) => job.name).filter((name) => !exclude.includes(name))
+  );
 }
 
 /**
@@ -310,6 +325,7 @@ function parseArgs(argv) {
     out: null,
     rung: null,
     escapeWorkflow: null,
+    excludeLanes: [],
   };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--repo" && argv[i + 1]) out.repo = argv[++i];
@@ -323,6 +339,8 @@ function parseArgs(argv) {
     else if (argv[i] === "--rung" && argv[i + 1]) out.rung = Number(argv[++i]);
     else if (argv[i] === "--escape-workflow" && argv[i + 1])
       out.escapeWorkflow = argv[++i];
+    else if (argv[i] === "--exclude-lane" && argv[i + 1])
+      out.excludeLanes.push(argv[++i]);
   }
   // A workflow this repo knows about implies its rung; an unknown one must say.
   if (out.rung == null) out.rung = WORKFLOW_RUNG[out.workflow] ?? null;
@@ -342,7 +360,7 @@ async function main() {
     args.runs,
     process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN
   );
-  const live = liveLanes(runs);
+  const live = liveLanes(runs, args.excludeLanes);
   const rates = onlyLive(firstAttemptRates(runs), live);
   const streaks = onlyLive(redStreaks(runs, new Date().toISOString()), live);
   const report = renderLaneHealth(rates, streaks, args.floor);
