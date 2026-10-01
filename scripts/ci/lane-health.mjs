@@ -137,6 +137,40 @@ export function redStreaks(runsNewestFirst, now) {
 }
 
 /**
+ * The lanes the workflow still runs: the jobs of its newest completed run.
+ *
+ * Every rule below reads a trailing window, and a window outlives the lanes in
+ * it: a job a refactor deleted keeps its last red streak and its last slow
+ * samples until the window rolls past them, so a lane nobody can fix or park
+ * fires for weeks. A lane is judged only while the workflow still carries it
+ * (#1075). A SKIPPED job is still a job the workflow carries, so path-gating
+ * never hides a lane. A newest run with no jobs at all (the workflow failed
+ * before scheduling any) names no live lanes; the filter then stands down
+ * rather than judge nothing, because "nothing is red" is the one wrong answer.
+ *
+ * @param {{jobs: {name: string}[]}[]} runsNewestFirst completed runs, newest first
+ * @returns {Set<string>|null} live lane names, or null to judge every lane in the window
+ */
+export function liveLanes(runsNewestFirst) {
+  const newest = runsNewestFirst[0];
+  if (!newest || newest.jobs.length === 0) return null;
+  return new Set(newest.jobs.map((job) => job.name));
+}
+
+/**
+ * A lane-keyed map reduced to the live lanes.
+ *
+ * @template T
+ * @param {Map<string, T>} byLane any per-lane map
+ * @param {Set<string>|null} live from `liveLanes`; null keeps every lane
+ * @returns {Map<string, T>} the same entries for live lanes only
+ */
+export function onlyLive(byLane, live) {
+  if (live === null) return byLane;
+  return new Map([...byLane].filter(([lane]) => live.has(lane)));
+}
+
+/**
  * Lanes that have been red longer than the rule allows and are not quarantined.
  *
  * @param {Map<string, {since: string, days: number, runs: number}>} streaks current red streaks, from `redStreaks`
@@ -308,8 +342,9 @@ async function main() {
     args.runs,
     process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN
   );
-  const rates = firstAttemptRates(runs);
-  const streaks = redStreaks(runs, new Date().toISOString());
+  const live = liveLanes(runs);
+  const rates = onlyLive(firstAttemptRates(runs), live);
+  const streaks = onlyLive(redStreaks(runs, new Date().toISOString()), live);
   const report = renderLaneHealth(rates, streaks, args.floor);
   console.log(report);
   if (process.env.GITHUB_STEP_SUMMARY) {
@@ -335,7 +370,7 @@ async function main() {
         args.runs,
         process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN
       );
-      escapes = countEscapes(runs, greenShas(gateRuns));
+      escapes = onlyLive(countEscapes(runs, greenShas(gateRuns)), live);
     } catch (error) {
       console.error(
         `::warning title=Escapes unmeasured::could not read ${args.escapeWorkflow} runs (${error.message}); the escape column is empty this run rather than zero`
@@ -343,7 +378,7 @@ async function main() {
     }
   }
 
-  const durations = laneDurations(runs);
+  const durations = onlyLive(laneDurations(runs), live);
   const findings =
     args.rung == null
       ? []

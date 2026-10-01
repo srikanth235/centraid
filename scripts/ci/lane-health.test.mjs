@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   chronicRed,
   firstAttemptRates,
+  liveLanes,
+  onlyLive,
   redStreaks,
   renderFindings,
   renderLaneHealth,
@@ -321,4 +323,67 @@ test("renderFindings names the verdict and every rule that fired", () => {
     renderFindings([], { verdict: "OK", reasons: [] }, 3),
     /No rule fired/u
   );
+});
+
+test("a lane the workflow no longer runs is not judged on its old window (#1075)", () => {
+  const runs = [
+    run(1, "2026-10-01T00:00:00Z", [job("rung1-on-main", "success")]),
+    run(1, "2026-09-30T00:00:00Z", [
+      job("rung1-on-main", "failure"),
+      job("web-e2e", "failure"),
+    ]),
+    run(1, "2026-09-29T00:00:00Z", [
+      job("rung1-on-main", "failure"),
+      job("web-e2e", "failure"),
+    ]),
+  ];
+  const live = liveLanes(runs);
+  assert.deepEqual([...live], ["rung1-on-main"]);
+  const streaks = onlyLive(redStreaks(runs, "2026-10-01T00:00:00Z"), live);
+  assert.equal(streaks.has("web-e2e"), false);
+  assert.equal(streaks.has("rung1-on-main"), false, "newest run is green");
+  const durations = onlyLive(
+    new Map([
+      ["web-e2e", [1]],
+      ["rung1-on-main", [1]],
+    ]),
+    live
+  );
+  assert.deepEqual([...durations.keys()], ["rung1-on-main"]);
+});
+
+test("a live lane that is red still fires every rule it fired before", () => {
+  const runs = [
+    run(1, "2026-10-01T00:00:00Z", [job("rung1-on-main", "failure")]),
+    run(1, "2026-09-30T00:00:00Z", [job("rung1-on-main", "failure")]),
+    run(1, "2026-09-29T00:00:00Z", [job("rung1-on-main", "failure")]),
+  ];
+  const streaks = onlyLive(
+    redStreaks(runs, "2026-10-01T00:00:00Z"),
+    liveLanes(runs)
+  );
+  const findings = applyLaneRules({
+    rates: new Map(),
+    streaks,
+    durations: new Map(),
+    escapes: new Map(),
+    quarantine: {},
+    rung: 3,
+    today: "2026-10-01",
+  });
+  assert.deepEqual(
+    findings.map((finding) => finding.kind),
+    ["park-required"]
+  );
+});
+
+test("a skipped job is still a live lane, and an empty newest run judges every lane", () => {
+  assert.deepEqual(
+    [...liveLanes([run(1, "2026-10-01T00:00:00Z", [job("docs", "skipped")])])],
+    ["docs"]
+  );
+  assert.equal(liveLanes([run(1, "2026-10-01T00:00:00Z", [])]), null);
+  assert.equal(liveLanes([]), null);
+  const all = new Map([["old", 1]]);
+  assert.equal(onlyLive(all, null), all);
 });
