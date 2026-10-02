@@ -50,6 +50,34 @@ message FoundRequest {
   // for the gateway plane). A display name is what the owner is called on their
   // own device.
   string owner_name = 2;
+  // WHAT THE NEW VAULT HOLDS WHEN THE FOUND ANSWERS. Rows are written through
+  // the command plane after the found's own commit, never by the found itself.
+  FoundContent content = 3;
+}
+
+// WHAT A FOUND FILLS THE NEW VAULT WITH.
+//
+// A first vault that opens onto nothing is a blank wall, so a phone founding a
+// member's first vault asks for two STARTER rows in it and, separately, founds
+// a SAMPLE vault beside it to look around in. The sample is its own vault —
+// never rows mixed into the member's — so removing it is forgetting one
+// directory, and nothing of the member's goes with it.
+enum FoundContent {
+  // Nothing but what founding always writes: the vault row, the owner, the
+  // relation vocabulary and the default calendar.
+  FOUND_CONTENT_EMPTY = 0;
+  // A note and a task in the member's own vault. Best-effort: a refused
+  // starter row leaves the vault founded and empty rather than refusing it.
+  FOUND_CONTENT_STARTERS = 1;
+  // THE SAMPLE VAULT: founded with `core_vault.settings_json`'s `sample` mark
+  // at `seeding` in the found's own commit, seeded with the Tahoe scenario
+  // across seven apps (agenda, docs, notes, people, photos, tally, tasks),
+  // then five fake Locker items sealed under the vault's own keys when the
+  // core was opened with the member's seed (never the public demo words; a
+  // core with no seed founds it without Locker), and marked `ready` last. Any
+  // refusal fails the whole found, and the shell deletes the directory. A
+  // sample vault never pairs and never drains: the core refuses both.
+  FOUND_CONTENT_SAMPLE = 2;
 }
 
 // The vault that now exists in this file.

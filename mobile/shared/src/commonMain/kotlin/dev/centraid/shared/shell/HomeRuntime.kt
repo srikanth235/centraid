@@ -164,7 +164,7 @@ public class HomeRuntime(
         limit: Int,
     ): Read {
         val handle = core()
-            ?: return Read.Refused(Reads.refused("No vault is open on this device."))
+            ?: return Read.Refused(Reads.noVault())
         val request = Envelope(
             request_id = 0,
             request = Request(page = PageRequest(query = query, limit = limit)),

@@ -1,0 +1,442 @@
+{
+  "version": 1,
+  "scenario": "the sample vault: one weekend at Tahoe (crates/core/src/sample.rs)",
+  "cases": [
+    {
+      "id": "agenda-today",
+      "question": "What's on my calendar today?",
+      "expect": { "tool": "agenda.upcoming", "args": { "range": "today" } },
+      "cards": { "min": 1, "titles": ["Pick up the dry cleaning"] }
+    },
+    {
+      "id": "agenda-tomorrow",
+      "question": "Anything on tomorrow?",
+      "expect": { "tool": "agenda.upcoming", "args": { "range": "tomorrow" } },
+      "cards": { "min": 1, "titles": ["Morning run"] }
+    },
+    {
+      "id": "agenda-week",
+      "question": "What does my week look like?",
+      "expect": { "tool": "agenda.upcoming", "args": { "range": "week" } },
+      "cards": { "min": 3, "titles": ["Dinner with Maya", "Book the Tahoe cabin"] }
+    },
+    {
+      "id": "agenda-default",
+      "question": "What's on my calendar?",
+      "expect": { "tool": "agenda.upcoming", "args": {} },
+      "cards": { "min": 3 }
+    },
+    {
+      "id": "agenda-search-dentist",
+      "question": "When is my dentist appointment?",
+      "expect": { "tool": "agenda.search", "args": { "term": "dentist" } },
+      "cards": { "min": 1, "titles": ["Dentist"] }
+    },
+    {
+      "id": "agenda-search-dinner",
+      "question": "When am I having dinner with Maya?",
+      "expect": { "tool": "agenda.search", "args": { "term": "dinner with Maya" } },
+      "cards": { "min": 1, "titles": ["Dinner with Maya"] }
+    },
+    {
+      "id": "agenda-scoped-next",
+      "scope": "agenda",
+      "question": "What's next?",
+      "expect": { "tool": "agenda.upcoming", "args": {} },
+      "cards": { "min": 1 }
+    },
+    {
+      "id": "tasks-today",
+      "question": "What's due today?",
+      "expect": { "tool": "tasks.list", "args": { "view": "today" } },
+      "cards": { "min": 1, "titles": ["Pick up the dry cleaning"] }
+    },
+    {
+      "id": "tasks-overdue",
+      "question": "What tasks are overdue?",
+      "expect": { "tool": "tasks.list", "args": { "view": "overdue" } },
+      "cards": { "min": 1, "titles": ["Rotate the tires"] }
+    },
+    {
+      "id": "tasks-upcoming",
+      "question": "Show me what's coming up on my to-do list",
+      "expect": { "tool": "tasks.list", "args": { "view": "upcoming" } },
+      "cards": { "min": 2, "titles": ["Book dentist appointment"] }
+    },
+    {
+      "id": "tasks-inbox",
+      "question": "What's in my inbox?",
+      "expect": { "tool": "tasks.list", "args": { "view": "inbox" } },
+      "cards": { "min": 1 }
+    },
+    {
+      "id": "tasks-done",
+      "question": "What have I finished recently?",
+      "expect": { "tool": "tasks.list", "args": { "view": "done" } },
+      "cards": { "min": 1, "titles": ["Weekly grocery run"] }
+    },
+    {
+      "id": "tasks-project",
+      "question": "What's left on the Tahoe trip?",
+      "expect": { "tool": "tasks.list", "args": { "project": "Tahoe trip" } },
+      "cards": { "min": 1, "titles": ["Buy lift tickets online"] }
+    },
+    {
+      "id": "tasks-search-cabin",
+      "question": "Find my task about the cabin",
+      "expect": { "tool": "tasks.search", "args": { "term": "cabin" } },
+      "cards": { "min": 1, "titles": ["Book the Tahoe cabin"] }
+    },
+    {
+      "id": "tasks-search-tires",
+      "question": "When do I need to rotate the tires?",
+      "expect": { "tool": "tasks.search", "args": { "term": "tires" } },
+      "cards": { "min": 1, "titles": ["Rotate the tires"] }
+    },
+    {
+      "id": "tasks-projects",
+      "question": "Which projects do I have?",
+      "expect": { "tool": "tasks.projects", "args": {} },
+      "cards": { "min": 1, "titles": ["Tahoe trip"] }
+    },
+    {
+      "id": "tasks-scoped-plate",
+      "scope": "tasks",
+      "question": "What's on my plate today?",
+      "expect": { "tool": "tasks.list", "args": { "view": "today" } },
+      "cards": { "min": 1 }
+    },
+    {
+      "id": "docs-recent",
+      "question": "Show my recent documents",
+      "expect": { "tool": "docs.list", "args": {} },
+      "cards": { "min": 3 }
+    },
+    {
+      "id": "docs-starred",
+      "question": "Which documents have I starred?",
+      "expect": { "tool": "docs.list", "args": { "shelf": "starred" } },
+      "cards": { "min": 1, "titles": ["Tahoe packing list"] }
+    },
+    {
+      "id": "docs-search-cabin",
+      "question": "Find the cabin rental agreement",
+      "expect": { "tool": "docs.search", "args": { "term": "cabin rental agreement" } },
+      "cards": { "min": 1, "titles": ["Cabin rental agreement"] }
+    },
+    {
+      "id": "docs-search-insurance",
+      "question": "Where's my insurance policy?",
+      "expect": { "tool": "docs.search", "args": { "term": "insurance policy" } },
+      "cards": { "min": 1, "titles": ["Renters insurance policy"] }
+    },
+    {
+      "id": "docs-pdf",
+      "question": "Do I have any PDFs?",
+      "expect": { "tool": "docs.list", "args": { "type": "pdf" } },
+      "cards": { "max": 0 }
+    },
+    {
+      "id": "docs-scoped-packing",
+      "scope": "docs",
+      "question": "Where's the packing list?",
+      "expect": { "tool": "docs.search", "args": { "term": "packing list" } },
+      "cards": { "min": 1, "titles": ["Tahoe packing list"] }
+    },
+    {
+      "id": "notes-recent",
+      "question": "What have I written lately?",
+      "expect": { "tool": "notes.list", "args": {} },
+      "cards": { "min": 3 }
+    },
+    {
+      "id": "notes-recipes",
+      "question": "Show me my recipes",
+      "expect": { "tool": "notes.list", "args": { "notebook": "Recipes" } },
+      "cards": { "min": 2, "titles": ["Mom's chili"] }
+    },
+    {
+      "id": "notes-travel",
+      "question": "What's in my Travel notebook?",
+      "expect": { "tool": "notes.list", "args": { "notebook": "Travel" } },
+      "cards": { "min": 2, "titles": ["Drive vs fly"] }
+    },
+    {
+      "id": "notes-search-chili",
+      "question": "Find my note on chili",
+      "expect": { "tool": "notes.search", "args": { "term": "chili" } },
+      "cards": { "min": 1, "titles": ["chili"] }
+    },
+    {
+      "id": "notes-search-reno",
+      "question": "What did I note about Reno?",
+      "expect": { "tool": "notes.search", "args": { "term": "Reno" } },
+      "cards": { "min": 1, "titles": ["Drive vs fly"] }
+    },
+    {
+      "id": "notes-search-books",
+      "question": "Which books were people recommending?",
+      "expect": { "tool": "notes.search", "args": { "term": "books" } },
+      "cards": { "min": 1, "titles": ["books people keep recommending"] }
+    },
+    {
+      "id": "notes-scoped-chili",
+      "scope": "notes",
+      "question": "Anything about chili?",
+      "expect": { "tool": "notes.search", "args": { "term": "chili" } },
+      "cards": { "min": 1 }
+    },
+    {
+      "id": "people-all",
+      "question": "Who's in my circle?",
+      "expect": { "tool": "people.list", "args": {} },
+      "cards": { "min": 4 }
+    },
+    {
+      "id": "people-reconnect",
+      "question": "Who should I get in touch with?",
+      "expect": { "tool": "people.reconnect", "args": {} }
+    },
+    {
+      "id": "people-due",
+      "question": "Who am I overdue to catch up with?",
+      "expect": { "tool": "people.list", "args": { "filter": "due" } }
+    },
+    {
+      "id": "people-search-maya",
+      "question": "What do I know about Maya?",
+      "expect": { "tool": "people.search", "args": { "term": "Maya" } },
+      "cards": { "min": 1, "titles": ["Maya Alvarez"] }
+    },
+    {
+      "id": "people-search-jake",
+      "question": "How do I know Jake?",
+      "expect": { "tool": "people.search", "args": { "term": "Jake" } },
+      "cards": { "min": 1, "titles": ["Jake Bennett"] }
+    },
+    {
+      "id": "people-birthdays",
+      "question": "Whose birthday is coming up?",
+      "expect": { "tool": "people.reconnect", "args": {} }
+    },
+    {
+      "id": "people-search-chris",
+      "question": "Find Chris",
+      "expect": { "tool": "people.search", "args": { "term": "Chris" } },
+      "cards": { "min": 1, "titles": ["Chris Okafor"] }
+    },
+    {
+      "id": "people-scoped-ray",
+      "scope": "people",
+      "question": "Who is Grandpa Ray?",
+      "expect": { "tool": "people.search", "args": { "term": "Grandpa Ray" } },
+      "cards": { "min": 1, "titles": ["Grandpa Ray"] }
+    },
+    {
+      "id": "photos-latest",
+      "question": "Show me my latest photos",
+      "expect": { "tool": "photos.recent", "args": {} },
+      "cards": { "min": 3 }
+    },
+    {
+      "id": "photos-ana",
+      "question": "Photos of Ana",
+      "expect": { "tool": "photos.search", "args": { "term": "Ana" } },
+      "cards": { "min": 4, "titles": ["Ana on the porch"] }
+    },
+    {
+      "id": "photos-sand-harbor",
+      "question": "Pictures from Sand Harbor",
+      "expect": { "tool": "photos.search", "args": { "term": "Sand Harbor" } },
+      "cards": { "min": 1, "titles": ["Sand Harbor at dawn"] }
+    },
+    {
+      "id": "photos-album",
+      "question": "What's in the Tahoe scouting album?",
+      "expect": { "tool": "photos.search", "args": { "term": "Tahoe scouting" } },
+      "cards": { "min": 3, "titles": ["Emerald Bay overlook"] }
+    },
+    {
+      "id": "photos-none",
+      "question": "Show me photos of the Eiffel Tower",
+      "expect": { "tool": "photos.search", "args": { "term": "Eiffel Tower" } },
+      "cards": { "max": 0 }
+    },
+    {
+      "id": "photos-scoped-trailhead",
+      "scope": "photos",
+      "question": "Show me the ones from the trailhead",
+      "expect": { "tool": "photos.search", "args": { "term": "trailhead" } },
+      "cards": { "min": 1, "titles": ["Trailhead before the climb"] }
+    },
+    {
+      "id": "tally-owed",
+      "question": "Who owes me money?",
+      "expect": { "tool": "tally.balances", "args": {} },
+      "cards": { "min": 2, "titles": ["Maya Alvarez"] }
+    },
+    {
+      "id": "tally-owe",
+      "question": "Do I owe anyone?",
+      "expect": { "tool": "tally.balances", "args": {} },
+      "cards": { "min": 2, "titles": ["Jake Bennett"] }
+    },
+    {
+      "id": "tally-recent",
+      "question": "What were the latest expenses?",
+      "expect": { "tool": "tally.recent", "args": {} },
+      "cards": { "min": 3, "titles": ["Lift tickets"] }
+    },
+    {
+      "id": "tally-search-deposit",
+      "question": "How much was the cabin deposit?",
+      "expect": { "tool": "tally.search", "args": { "term": "cabin deposit" } },
+      "cards": { "min": 1, "titles": ["Cabin deposit"] }
+    },
+    {
+      "id": "tally-search-ski",
+      "question": "Show me the ski rentals",
+      "expect": { "tool": "tally.search", "args": { "term": "ski rentals" } },
+      "cards": { "min": 1, "titles": ["Ski rentals"] }
+    },
+    {
+      "id": "tally-spending-this",
+      "question": "How much did we spend this month?",
+      "expect": { "tool": "tally.spending", "args": { "month": "this" } }
+    },
+    {
+      "id": "tally-spending-last",
+      "question": "What did we spend last month?",
+      "expect": { "tool": "tally.spending", "args": { "month": "last" } }
+    },
+    {
+      "id": "tally-scoped-gas",
+      "scope": "tally",
+      "question": "What did we spend on gas?",
+      "expect": { "tool": "tally.search", "args": { "term": "gas" } },
+      "cards": { "min": 1, "titles": ["Gas for the drive up"] }
+    },
+    {
+      "id": "none-weather",
+      "question": "What's the weather in Tahoe?",
+      "expect": { "tool": "none" },
+      "cards": { "max": 0 }
+    },
+    {
+      "id": "none-write-task",
+      "question": "Add a task to buy milk",
+      "expect": { "tool": "none" },
+      "cards": { "max": 0 }
+    },
+    {
+      "id": "none-locker",
+      "question": "What's my wifi password?",
+      "expect": { "tool": "none" },
+      "cards": { "max": 0 }
+    },
+    {
+      "id": "none-delete",
+      "question": "Delete all my notes",
+      "expect": { "tool": "none" },
+      "cards": { "max": 0 }
+    },
+    {
+      "id": "none-joke",
+      "question": "Tell me a joke",
+      "expect": { "tool": "none" },
+      "cards": { "max": 0 }
+    },
+    {
+      "id": "none-scoped",
+      "scope": "agenda",
+      "question": "Book me a flight to Reno",
+      "expect": { "tool": "none" },
+      "cards": { "max": 0 }
+    },
+    {
+      "id": "answer-hi",
+      "question": "Hi",
+      "expect": {
+        "answer": "Hi. Ask me about your tasks, notes, calendar, photos, people or expenses."
+      },
+      "cards": { "max": 0 }
+    },
+    {
+      "id": "answer-capabilities",
+      "question": "What can you do?",
+      "expect": {
+        "answer": "I can look things up in your tasks, notes, documents, calendar, people, photos and expenses."
+      },
+      "cards": { "max": 0 }
+    },
+    {
+      "id": "follow-agenda-tomorrow",
+      "question": "And tomorrow?",
+      "history": [
+        {
+          "user": "What's on my calendar today?",
+          "call": { "tool": "agenda.upcoming", "args": { "range": "today" } },
+          "headline": "1 event today",
+          "answer": "You have one event today: picking up the dry cleaning."
+        }
+      ],
+      "expect": { "tool": "agenda.upcoming", "args": { "range": "tomorrow" } },
+      "cards": { "min": 1 }
+    },
+    {
+      "id": "follow-tasks-overdue",
+      "question": "What about the overdue ones?",
+      "history": [
+        {
+          "user": "What's due today?",
+          "call": { "tool": "tasks.list", "args": { "view": "today" } },
+          "headline": "2 tasks to do today, 1 overdue",
+          "answer": "Two tasks, and one of them is overdue."
+        }
+      ],
+      "expect": { "tool": "tasks.list", "args": { "view": "overdue" } },
+      "cards": { "min": 1, "titles": ["Rotate the tires"] }
+    },
+    {
+      "id": "follow-people-jake",
+      "question": "And Jake?",
+      "history": [
+        {
+          "user": "What do I know about Maya?",
+          "call": { "tool": "people.search", "args": { "term": "Maya" } },
+          "headline": "1 person matching \"Maya\"",
+          "answer": "Maya Alvarez is a college friend."
+        }
+      ],
+      "expect": { "tool": "people.search", "args": { "term": "Jake" } },
+      "cards": { "min": 1, "titles": ["Jake Bennett"] }
+    },
+    {
+      "id": "follow-photos-refine",
+      "question": "Only the ones at the trailhead",
+      "history": [
+        {
+          "user": "Photos of Ana",
+          "call": { "tool": "photos.search", "args": { "term": "Ana" } },
+          "headline": "4 photographs matching \"Ana\"",
+          "answer": "There are four photographs of Ana."
+        }
+      ],
+      "expect": { "tool": "photos.search", "args": { "term": "Ana trailhead" } },
+      "cards": { "min": 1, "titles": ["Ana at the trailhead"] }
+    },
+    {
+      "id": "follow-after-refusal",
+      "question": "Then show me my tasks for today",
+      "history": [
+        {
+          "user": "What's the weather in Tahoe?",
+          "call": { "tool": "none" },
+          "answer": ""
+        }
+      ],
+      "expect": { "tool": "tasks.list", "args": { "view": "today" } },
+      "cards": { "min": 1 }
+    }
+  ]
+}

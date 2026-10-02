@@ -24,6 +24,7 @@ import dev.centraid.android.screens.people.PeopleRoutes
 import dev.centraid.android.screens.photos.PhotosRoutes
 import dev.centraid.android.screens.tally.TallyRoutes
 import dev.centraid.android.screens.tasks.TasksRoutes
+import dev.centraid.android.screens.words.FirstLaunchScreen
 import dev.centraid.android.screens.words.WordsSheets
 import androidx.compose.runtime.key
 import dev.centraid.android.theme.centraidColor
@@ -93,6 +94,14 @@ public class MainActivity : FragmentActivity() {
      */
     private val fallbackHome =
         kotlinx.coroutines.flow.MutableStateFlow(HomeMachine.initial()).asStateFlow()
+
+    /**
+     * What the first-launch gate reads while the core is opening: not read yet.
+     * Null is neither "none" nor "some" (`Shelf.holdsNoVault`), so a phone that
+     * holds a vault never flashes the gate on its way up.
+     */
+    private val shelfUnread =
+        kotlinx.coroutines.flow.MutableStateFlow<Boolean?>(null).asStateFlow()
     /**
      * EVERY APP'S ROUTES, ONE LINE EACH (K5). Each holds its own bridges for
      * the activity's life — `ChangeStream.route` is registration with no
@@ -322,6 +331,19 @@ public class MainActivity : FragmentActivity() {
                     val current = stack
                     stack = routes.firstNotNullOfOrNull { it.back(current, scope) } ?: current.pop()
                 }
+                // THE FIRST-LAUNCH GATE: the shelf's one answer to "does this
+                // device hold no vault", read here and nowhere else.
+                val holdsNoVault by (homeSession?.shelf?.holdsNoVault ?: shelfUnread)
+                    .collectAsStateWithLifecycle()
+                // ENGAGING IT LEAVES NOTHING OF HOME STANDING: an app screen
+                // pushed over it, and the switcher the last Forget was made
+                // from, would each come back with Home once a vault is made.
+                LaunchedEffect(holdsNoVault) {
+                    if (holdsNoVault == true) {
+                        stack = NavStack()
+                        homeSession?.send(HomeEvent(vault_picked = HomeEvent.VaultPicked(vault_id = "")))
+                    }
+                }
                 // THE GROUND IS PAINTED HERE, under the insets: the window's own
                 // background is transparent, and a screen that paints none (the
                 // Photos pages) would otherwise sit on black. A photograph's
@@ -355,6 +377,14 @@ public class MainActivity : FragmentActivity() {
                     // KEYED ON THE APP, so one app's effects never carry
                     // into another's at this one call site.
                     key(route) { route.Routes(stack.current, nav) }
+                } else if (holdsNoVault == true) {
+                    // A DEVICE THAT HOLDS NO VAULT opens onto the way to make
+                    // one, not onto a Home with nothing to read. The words
+                    // sheet below rises over it, so a cancel lands back here.
+                    FirstLaunchScreen(
+                        onMake = { words.makeVault() },
+                        onRestore = { words.openRestore() },
+                    )
                 } else {
                     // HOME IS THE FLOOR, and it is a real screen now: the
                     // graded springboard over `HomeMachine`, not a list of
@@ -442,7 +472,6 @@ public class MainActivity : FragmentActivity() {
                             }
                         },
                         onMakeVault = { vaultSheetOpen = true },
-                        onRestore = { words.openRestore() },
                         // THE MORE SHEET'S CUSTODY ROWS (#1047 E6). Whether
                         // this phone has a camera is the one fact pair.laptop
                         // is told; without one it is paste-only.

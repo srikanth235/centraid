@@ -614,8 +614,17 @@ public class AndroidSecureRandom : SecureRandom {
  * or changes it in Settings, and a captured value would answer the old one.
  */
 public class AndroidDeviceClock : DeviceClock {
-    override fun read(): DeviceClock.Reading = DeviceClock.Reading(
-        zone = java.util.TimeZone.getDefault().id,
-        epochMillis = System.currentTimeMillis(),
-    )
+    override fun read(): DeviceClock.Reading {
+        val zone = java.util.TimeZone.getDefault()
+        val now = System.currentTimeMillis()
+        return DeviceClock.Reading(
+            zone = zone.id,
+            epochMillis = now,
+            utcOffsetMinutes = zone.getOffset(now) / MILLIS_PER_MINUTE,
+        )
+    }
+
+    private companion object {
+        const val MILLIS_PER_MINUTE: Int = 60_000
+    }
 }

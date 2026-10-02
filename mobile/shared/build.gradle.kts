@@ -97,7 +97,27 @@ kotlin {
             // It was invisible for the same reason every other Gate 0 defect
             // was: the link succeeded, the app built, the app ran, and nothing
             // called the core until this wave wired a read.
-            linkerOpts("-force_load", "$slice/libcentraid_core_ffi.a")
+            //
+            // **`-u` ON EACH OF THE FIVE, NOT `-force_load` OF THE ARCHIVE**
+            // (the on-device chat's engine, `crates/assist-llama`). `-force_load`
+            // loads EVERY member, and the archive now carries llama.cpp's
+            // `common` library — which the binding builds unconditionally and
+            // whose downloader references `httplib::*`, a library the archive
+            // does not bundle — so a force-loaded link failed with twelve
+            // undefined `httplib` symbols, in a dynamic (debug) framework even
+            // under `-dead_strip`, since a dylib's exports are all live. `-u`
+            // makes the five symbols the references the linker was missing,
+            // which is the whole of what `-force_load` was for: the members
+            // that define them are loaded, with what they reach, and the
+            // downloader is not among it. The archive is then a plain input.
+            linkerOpts(
+                "-Wl,-u,_centraid_open",
+                "-Wl,-u,_centraid_call",
+                "-Wl,-u,_centraid_next_event",
+                "-Wl,-u,_centraid_free",
+                "-Wl,-u,_centraid_close",
+                "$slice/libcentraid_core_ffi.a",
+            )
             // THE FRAMEWORKS IROH NEEDS (#1020, D-1020-B7).
             //
             // The core gained an endpoint, and `netwatch` — iroh's interface
@@ -116,6 +136,22 @@ kotlin {
                 "-framework", "SystemConfiguration",
                 "-framework", "Network",
                 "-framework", "Security",
+            )
+            // THE FRAMEWORKS AND THE C++ RUNTIME llama.cpp NEEDS (the on-device
+            // chat's engine, `crates/assist-llama`, is linked into the core).
+            //
+            // `libcentraid_core_ffi.a` carries ggml's Metal backend, which
+            // calls `MTL*` and `MTK*`, and a C++ runtime user (libc++), none of
+            // which the Rust staticlib records for its consumer: the list is
+            // what `rustc --print native-static-libs` prints for the crate.
+            // `Accelerate` is on that list too. Without them the link fails
+            // with undefined `_OBJC_CLASS_$_MTL*` and `std::__1::*` symbols.
+            linkerOpts(
+                "-framework", "Metal",
+                "-framework", "MetalKit",
+                "-framework", "Foundation",
+                "-framework", "Accelerate",
+                "-lc++",
             )
             // DYNAMIC IN DEBUG, STATIC IN RELEASE (#1020 Tooling coverage).
             //

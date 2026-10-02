@@ -678,6 +678,7 @@ public class IosMediaLibrary : MediaLibrary {
                 if (continuation.isActive) continuation.resume(answer)
             }
         }
+        registerObserverIfAllowed()
         return when (status) {
             PHAuthorizationStatusAuthorized -> MediaPermission.MEDIA_PERMISSION_GRANTED
             PHAuthorizationStatusLimited -> MediaPermission.MEDIA_PERMISSION_LIMITED
@@ -879,11 +880,26 @@ public class IosMediaLibrary : MediaLibrary {
      */
     override fun onLibraryChanged(listener: () -> Unit) {
         libraryListeners += listener
-        if (observer == null) {
-            val watcher = LibraryWatcher { libraryListeners.forEach { it() } }
-            observer = watcher
-            PHPhotoLibrary.sharedPhotoLibrary().registerChangeObserver(watcher)
-        }
+        registerObserverIfAllowed()
+    }
+
+    /**
+     * **REGISTERING AN OBSERVER IS AN ACCESS, NOT A SUBSCRIPTION.** With the
+     * status still `notDetermined`, `registerChangeObserver` presents the
+     * system's photo prompt itself — which is how a phone with no vault yet
+     * asked for the camera roll at first launch, over the screen that exists to
+     * make one. The observer therefore waits for an answer that lets the app
+     * read: it is registered here when one is already held, and again from
+     * [requestPermission] when the member grants it from the Photos screen's
+     * own button. A grant given in Settings restarts the app, which lands here.
+     */
+    private fun registerObserverIfAllowed() {
+        if (observer != null) return
+        val status = PHPhotoLibrary.authorizationStatusForAccessLevel(PHAccessLevelReadWrite)
+        if (status != PHAuthorizationStatusAuthorized && status != PHAuthorizationStatusLimited) return
+        val watcher = LibraryWatcher { libraryListeners.forEach { it() } }
+        observer = watcher
+        PHPhotoLibrary.sharedPhotoLibrary().registerChangeObserver(watcher)
     }
 
     private val libraryListeners = mutableListOf<() -> Unit>()
@@ -1146,5 +1162,6 @@ public class IosDeviceClock : DeviceClock {
     override fun read(): DeviceClock.Reading = DeviceClock.Reading(
         zone = NSTimeZone.localTimeZone.name,
         epochMillis = (NSDate().timeIntervalSince1970 * 1_000.0).toLong(),
+        utcOffsetMinutes = (NSTimeZone.localTimeZone.secondsFromGMTForDate(NSDate()) / 60L).toInt(),
     )
 }

@@ -174,6 +174,15 @@ public sealed interface ScreenEffect {
     public data class SwitchVault(public val vaultId: String) : ScreenEffect
 
     /**
+     * KEEP THE MEMBER'S "NO BACKUP YET" DISMISSAL, for this vault.
+     *
+     * An effect because remembering is I/O on the platform's store, and by id
+     * because the dismissal is a fact about ONE vault: putting the line away
+     * on a vault with no backup must not hide it on the next one made.
+     */
+    public data class DismissBackupNudge(public val vaultId: String) : ScreenEffect
+
+    /**
      * FETCH ONE ORIGINAL THE MEMBER TAPPED (#1025 S5, D-1025-S7-63).
      *
      * WhatsApp's download arrow. An effect and not a write: it commits
@@ -254,6 +263,18 @@ public object Reads {
         kind = ReadFailureKind.READ_FAILURE_KIND_REFUSED,
         sentence = sentence,
     )
+
+    /**
+     * THE SENTENCE FOR A DEVICE THAT HOLDS NO VAULT, said once.
+     *
+     * Home, every app screen's read and a write's settle all reach this
+     * state, and a member who sees "No vault yet" on Home and then something
+     * else in an app is being told two things about one fact.
+     */
+    public const val NO_VAULT: String = "No vault is open on this device."
+
+    /** There is no vault to read. Not a fault, and never an empty `data`. */
+    public fun noVault(): ReadFailure = refused(NO_VAULT)
 
     /** This seat has no copy yet. A first sync, not a refusal. */
     public fun noCopyYet(): ReadFailure = ReadFailure(

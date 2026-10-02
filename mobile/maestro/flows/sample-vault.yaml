@@ -1,0 +1,131 @@
+# The sample vault (R-SAMPLE-1): a member's first vault comes with a separate
+# "Sample" vault beside it, and removing it leaves their own in front.
+#
+# THE POINT OF THIS FLOW is the one thing the shared specs cannot see: that
+# Home draws ONE notice line (R-SAMPLE-8) — the sample line on the day the
+# member's vault was founded, and on the sample vault always; the backup nudge
+# in its place once the sample is removed — that "Remove sample" asks first,
+# and that the member's own vault is what Home reads afterwards.
+#
+# A FRESH INSTALL WITH NO WORDS HELD. `clearState` does not clear the
+# simulator keychain, and a phone that already holds a seed skips the words
+# and the check (it makes the next vault from the seed it has). Reset it first:
+#   xcrun simctl keychain <udid> reset
+# The check asks for three random positions, so the flow reads all 24 words
+# off the screen and answers from them.
+appId: dev.centraid.Centraid
+name: sample-vault
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    id: "first-launch"
+- tapOn:
+    id: "first-launch-skip"
+- tapOn:
+    id: "first-launch-primary"
+# "Before your words" -> the 24 words.
+- tapOn:
+    id: "words-make-primary"
+- assertVisible: "Your 24 words"
+# READ THE WORDS. Each cell's text is "Word <n>, <word>".
+- evalScript: ${output.words = {}; output.i = 0}
+- repeat:
+    times: 24
+    commands:
+      - copyTextFrom:
+          id: "words-shown"
+          index: ${output.i}
+      - evalScript: ${var m = maestro.copiedText.match(/Word (\d+), (\S+)/); output.words[m[1]] = m[2]; output.i = output.i + 1}
+- tapOn:
+    id: "words-make-primary"
+# THE CHECK: "Type words 6, 12, 15 from what you wrote down."
+- copyTextFrom: "Type words.*"
+- evalScript: ${var p = maestro.copiedText.match(/\d+/g); output.p1 = p[0]; output.p2 = p[1]; output.p3 = p[2]}
+- tapOn:
+    id: "words-ask-${output.p1}"
+- inputText: ${output.words[output.p1]}
+- tapOn:
+    id: "words-ask-${output.p2}"
+- inputText: ${output.words[output.p2]}
+- tapOn:
+    id: "words-ask-${output.p3}"
+- inputText: ${output.words[output.p3]}
+- tapOn:
+    id: "words-make-primary"
+- extendedWaitUntil:
+    visible: "Your vault is ready"
+    timeout: 30000
+- tapOn:
+    id: "words-make-primary"
+
+# THE SAMPLE NOTICE, once the sample has seeded beside the member's vault. The
+# vault was founded this minute, so the sample line holds the one slot and the
+# backup nudge waits for its turn rather than stacking.
+- extendedWaitUntil:
+    visible:
+      id: "home-sample-notice"
+    timeout: 60000
+- assertNotVisible:
+    id: "home-backup-nudge"
+# The member's own vault is in front, with its starter rows.
+- assertVisible: "My vault"
+
+# REMOVE ASKS FIRST, and Cancel keeps it.
+- tapOn:
+    id: "home-sample-remove"
+- assertVisible: "This deletes the sample vault and leaves your own vault as it is."
+- tapOn: "Cancel"
+- assertVisible:
+    id: "home-sample-notice"
+
+# REMOVE -> confirm -> the sample notice is gone, the member's vault is in
+# front, and the slot is the backup nudge's (the starter rows are content and
+# no laptop is paired).
+- tapOn:
+    id: "home-sample-remove"
+- tapOn: "Remove"
+- extendedWaitUntil:
+    notVisible:
+      id: "home-sample-notice"
+    timeout: 10000
+- assertVisible: "My vault"
+- extendedWaitUntil:
+    visible:
+      id: "home-backup-nudge"
+    timeout: 10000
+
+# SETTINGS BRINGS IT BACK, and the member's vault stays in front.
+- tapOn:
+    id: "home-settings"
+- tapOn:
+    id: "vault-sample-add"
+- extendedWaitUntil:
+    visible:
+      id: "vault-sample-remove"
+    timeout: 60000
+- tapOn:
+    id: "vault-done"
+- assertVisible:
+    id: "home-sample-notice"
+- assertNotVisible:
+    id: "home-backup-nudge"
+- assertVisible: "My vault"
+
+# THE SAMPLE VAULT ITSELF: the switcher lists it, its notice holds the slot,
+# the backup nudge never shows there, and no move offers a Locker it does not
+# have. The vault's name already says "Sample", so the row carries no second mark.
+- tapOn:
+    id: "home-vault-switch"
+- assertVisible:
+    id: "home-vault-sheet"
+- assertNotVisible:
+    id: "vault-sample-mark"
+- tapOn: "Sample"
+- extendedWaitUntil:
+    visible:
+      id: "home-sample-notice"
+    timeout: 10000
+- assertNotVisible:
+    id: "home-backup-nudge"
+- assertNotVisible: "Save a secret"

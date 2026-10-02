@@ -54,16 +54,70 @@ class VaultWordsSpec : StringSpec({
     val primary = view(VaultWordsEvent(primary = VaultWordsEvent.Primary()))
     val secondary = view(VaultWordsEvent(secondary = VaultWordsEvent.Secondary()))
 
-    fun typed(position: Int, text: String) =
-        view(VaultWordsEvent(typed = VaultWordsEvent.WordTyped(position = position, text = text)))
-
-    /** Opened, no seed, minted, asking 2, 9 and 20. */
-    fun shown(): Words {
+    /** Opened, and a phone with no seed: the framing, before any word is minted. */
+    fun framed(): Words {
         val open = reduce(VaultWordsMachine.initial(), opened)
         open.effects shouldBe listOf(WordsEffect.Assess)
         val assessed = reduce(open.model, WordsInput.Standing(Enrollment.Standing.NO_SEED, "Only on this iPhone."))
-        assessed.effects shouldBe listOf(WordsEffect.Mint)
-        return reduce(assessed.model, WordsInput.Minted(minted, listOf(2, 9, 20))).model
+        assessed.effects.shouldBeEmpty()
+        return assessed.model
+    }
+
+    fun typed(position: Int, text: String) =
+        view(VaultWordsEvent(typed = VaultWordsEvent.WordTyped(position = position, text = text)))
+
+    /** Opened, no seed, framed, continued, minted, asking 2, 9 and 20. */
+    fun shown(): Words {
+        val continued = reduce(framed(), primary)
+        continued.effects shouldBe listOf(WordsEffect.Mint)
+        return reduce(continued.model, WordsInput.Minted(minted, listOf(2, 9, 20))).model
+    }
+
+    "a phone with no seed is FRAMED first: one sentence and Continue, no word minted, nothing secret" {
+        val framing = framed()
+        framing.state.phase shouldBe VaultWordsState.Phase.PHASE_FRAMING
+        framing.state.title shouldBe WordsCopy.FRAMING_TITLE
+        framing.state.body shouldBe WordsCopy.FRAMING_BODY
+        framing.state.primary_label shouldBe WordsCopy.FRAMING_PRIMARY
+        framing.state.primary_enabled shouldBe true
+        framing.state.secondary_label shouldBe WordsCopy.CANCEL
+        // NO WORD EXISTS YET: the mint waits for Continue, and nothing on the
+        // screen needs the capture shield.
+        framing.holdsWords shouldBe false
+        framing.state.secure shouldBe false
+        framing.state.words.shouldBeEmpty()
+        framing.state.asks.shouldBeEmpty()
+        // THE CUSTODY SENTENCE IS KEPT for the show that follows, and not drawn here.
+        framing.state.custody shouldBe ""
+
+        // CONTINUE MINTS, and the words then show with the sentence read before.
+        val continued = reduce(framing, primary)
+        continued.effects shouldBe listOf(WordsEffect.Mint)
+        continued.model.state.phase shouldBe VaultWordsState.Phase.PHASE_CHECKING
+        val show = reduce(continued.model, WordsInput.Minted(minted, listOf(2, 9, 20))).model.state
+        show.phase shouldBe VaultWordsState.Phase.PHASE_SHOW
+        show.custody shouldBe "Only on this iPhone."
+    }
+
+    "cancelling or swiping away the framing closes the flow with nothing minted or kept" {
+        val cancelled = reduce(framed(), secondary)
+        cancelled.effects.shouldBeEmpty()
+        cancelled.model.state.phase shouldBe VaultWordsState.Phase.PHASE_CLOSED
+        cancelled.model.holdsWords shouldBe false
+
+        val dismissed = reduce(framed(), view(VaultWordsEvent(dismissed = VaultWordsEvent.Dismissed())))
+        dismissed.effects.shouldBeEmpty()
+        dismissed.model.state.phase shouldBe VaultWordsState.Phase.PHASE_CLOSED
+        // A MINT THAT ANSWERS AFTER THE MEMBER LEFT changes nothing.
+        reduce(dismissed.model, WordsInput.Minted(minted, listOf(2, 9, 20))).model.holdsWords shouldBe false
+    }
+
+    "the framing is for NEW words only: a settled or unsettled seed never sees it" {
+        val open = reduce(VaultWordsMachine.initial(), opened).model
+        reduce(open, WordsInput.Standing(Enrollment.Standing.SETTLED, "")).model.state.phase shouldBe
+            VaultWordsState.Phase.PHASE_MAKING
+        reduce(open, WordsInput.Standing(Enrollment.Standing.UNSETTLED, "")).model.state.phase shouldBe
+            VaultWordsState.Phase.PHASE_RESTORE_FIRST
     }
 
     "the words are shown once, on a SECURE screen, with the custody sentence" {
@@ -154,8 +208,8 @@ class VaultWordsSpec : StringSpec({
     }
 
     "a refused mint and a refused keep each say so and offer the right retry" {
-        val open = reduce(VaultWordsMachine.initial(), opened).model
-        val noMint = reduce(reduce(open, WordsInput.Standing(Enrollment.Standing.NO_SEED, "")).model, WordsInput.Minted(null, emptyList()))
+        val minting = reduce(framed(), primary).model
+        val noMint = reduce(minting, WordsInput.Minted(null, emptyList()))
         noMint.model.state.phase shouldBe VaultWordsState.Phase.PHASE_FAILED
         noMint.model.state.notice shouldBe WordsCopy.MINT_FAILED
         reduce(noMint.model, primary).effects shouldBe listOf(WordsEffect.Assess)
@@ -177,7 +231,7 @@ class VaultWordsSpec : StringSpec({
 
     // --- the flow over an enrollment -----------------------------------------
 
-    "running: mint, show, check, then the seed is stored and settled BEFORE the vault is founded" {
+    "running: frame, mint, show, check, then the seed is stored and settled BEFORE the vault is founded" {
         runTest {
             val services = FakePlatformServices()
             val secrets = VaultSecrets(services.secureStore, services.syncedSecrets)
@@ -210,6 +264,10 @@ class VaultWordsSpec : StringSpec({
             )
             val flow = VaultWordsFlow({ enrollment }, services, CoroutineScope(Dispatchers.Unconfined))
             flow.reduce(opened)
+            // THE FRAMING WAITS FOR CONTINUE: the core has minted nothing.
+            flow.state.value.phase shouldBe VaultWordsState.Phase.PHASE_FRAMING
+            order.shouldBeEmpty()
+            flow.reduce(primary)
             flow.state.value.phase shouldBe VaultWordsState.Phase.PHASE_SHOW
             val asked = flow.current.asking
             asked shouldHaveSize 3

@@ -308,6 +308,238 @@ impl Vault {
     }
 }
 
+/// The largest text document the chat will read, in bytes. A text body lives in
+/// its row (64 KiB inline ceiling), so this is a backstop for a row that is
+/// somehow larger, not a limit a member meets.
+pub const ATTACH_TEXT_MAX_BYTES: usize = 1024 * 1024;
+
+/// The largest original the chat will decode when a photograph has no preview
+/// to read instead, in bytes.
+pub const ATTACH_ORIGINAL_MAX_BYTES: i64 = 40 * 1024 * 1024;
+
+/// The media types of a document whose text the chat will read.
+pub const ATTACH_TEXT_TYPES: [&str; 3] = ["text/plain", "text/markdown", "text/x-markdown"];
+
+/// Where the bytes of a photograph are, for the chat to read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PhotoSource {
+    /// A file this device holds.
+    Held {
+        path: std::path::PathBuf,
+        /// `preview`, `original` or `thumb`: which of the asset's bytes this is.
+        variant: &'static str,
+        /// The owner's caption, if they wrote one.
+        title: Option<String>,
+    },
+    /// The asset is a video or an audio file, which the chat does not read.
+    NotAnImage,
+    /// The row is here and none of its bytes are on this device yet.
+    NotHeld,
+    /// No such asset, or it is in the trash.
+    Missing,
+}
+
+/// A document, for the chat to read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DocumentSource {
+    Text { title: String, text: String },
+    /// A document whose type the chat does not read (a PDF, a Word file).
+    Unsupported { media_type: String },
+    /// Bigger than [`ATTACH_TEXT_MAX_BYTES`].
+    TooLarge,
+    /// No such document, it is in the trash, or its text is not in the vault.
+    Missing,
+}
+
+/// One document the chat can read, for the picker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttachableDocument {
+    pub document_id: String,
+    pub title: String,
+    pub media_type: String,
+    /// The document's last edit, as the vault stamps it.
+    pub updated_at: String,
+}
+
+impl Vault {
+    /// The documents the chat can read (`text/plain`, `text/markdown`), newest
+    /// edit first, at most `limit`. A PDF or a Word file is not offered: the
+    /// picker lists only what an attach would not refuse.
+    ///
+    /// # Errors
+    /// [`crate::error::VaultError`] when the vault itself is unreadable.
+    pub fn attachable_documents(&self, limit: usize) -> Result<Vec<AttachableDocument>> {
+        // Newest first, and read wide: the type filter is applied in Rust (a
+        // media type carries parameters), so the page is not exactly `limit`.
+        let rows: Vec<AttachableDocument> = self.read(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT d.document_id, d.title, r.media_type, d.updated_at
+                   FROM core_document d
+                   JOIN core_content_representation r
+                     ON r.owner_type = 'core.document'
+                    AND r.owner_id = d.document_id
+                    AND r.content_id = d.current_content_id
+                  WHERE d.deleted_at IS NULL
+                  ORDER BY d.updated_at DESC, d.document_id
+                  LIMIT 500",
+            )?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok(AttachableDocument {
+                        document_id: row.get(0)?,
+                        title: row.get(1)?,
+                        media_type: row.get(2)?,
+                        updated_at: row.get(3)?,
+                    })
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })?;
+        Ok(rows
+            .into_iter()
+            .filter(|document| {
+                ATTACH_TEXT_TYPES.contains(&base_media_type(&document.media_type).as_str())
+            })
+            .take(limit)
+            .collect())
+    }
+
+    /// Locate a photograph's bytes for the chat: the `preview` derivative (a
+    /// 2048-pixel JPEG, which is what a phone can afford to decode), else the
+    /// original when it is not enormous, else the `thumb`. Only files this
+    /// device holds count, and the owner's own reading is the asset row — an
+    /// asset that is not a photograph or a scan is not an image to read.
+    ///
+    /// # Errors
+    /// [`crate::error::VaultError`] when the vault itself is unreadable.
+    pub fn attachment_photo(&self, asset_id: &str) -> Result<PhotoSource> {
+        type AssetRow = (String, String, Option<String>);
+        let asset: Option<AssetRow> = self.read(|connection| {
+            Ok(connection
+                .query_row(
+                    "SELECT content_id, kind, title FROM media_asset
+                      WHERE asset_id = ?1 AND deleted_at IS NULL",
+                    [asset_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .ok())
+        })?;
+        let Some((content_id, kind, title)) = asset else {
+            return Ok(PhotoSource::Missing);
+        };
+        if kind != "photo" && kind != "scan" {
+            return Ok(PhotoSource::NotAnImage);
+        }
+        let derivatives: Vec<(String, String)> = self.read(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT variant, content_hash FROM core_content_derivative
+                  WHERE content_id = ?1 AND variant IN ('preview', 'thumb')
+                    AND content_hash IS NOT NULL",
+            )?;
+            let rows = statement
+                .query_map([&content_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })?;
+        let original: Option<(String, i64)> = self.read(|connection| {
+            Ok(connection
+                .query_row(
+                    "SELECT content_uri, byte_size FROM core_content_item
+                      WHERE content_id = ?1 AND deleted_at IS NULL",
+                    [&content_id],
+                    |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<i64>>(1)?)),
+                )
+                .ok()
+                .and_then(|(uri, size)| Some((uri?, size.unwrap_or_default()))))
+        })?;
+        let Some(blobs) = self.blobs() else {
+            return Ok(PhotoSource::NotHeld);
+        };
+        let derivative = |variant: &str| {
+            derivatives
+                .iter()
+                .find(|(held, _)| held == variant)
+                .map(|(_, hash)| hash.as_str())
+        };
+        let original_hash = original
+            .as_ref()
+            .filter(|(_, size)| *size <= ATTACH_ORIGINAL_MAX_BYTES)
+            .and_then(|(uri, _)| uri.strip_prefix(BLOB_URI_PREFIX));
+        let candidates = [
+            ("preview", derivative("preview")),
+            ("original", original_hash),
+            ("thumb", derivative("thumb")),
+        ];
+        for (variant, hash) in candidates {
+            let Some(hash) = hash else { continue };
+            match blobs.path_of(hash) {
+                Ok(Some(path)) => {
+                    return Ok(PhotoSource::Held {
+                        path,
+                        variant,
+                        title,
+                    });
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    tracing::warn!("the content store could not answer for {asset_id}: {error}");
+                }
+            }
+        }
+        Ok(PhotoSource::NotHeld)
+    }
+
+    /// Read a document's text for the chat: its current revision's decoded
+    /// body, when the document is `text/plain` or `text/markdown`.
+    ///
+    /// # Errors
+    /// [`crate::error::VaultError`] when the vault itself is unreadable.
+    pub fn attachment_document(&self, document_id: &str) -> Result<DocumentSource> {
+        type DocRow = (String, Option<String>);
+        let document: Option<DocRow> = self.read(|connection| {
+            Ok(connection
+                .query_row(
+                    "SELECT title, current_content_id FROM core_document
+                      WHERE document_id = ?1 AND deleted_at IS NULL",
+                    [document_id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .ok())
+        })?;
+        let Some((title, Some(content_id))) = document else {
+            return Ok(DocumentSource::Missing);
+        };
+        let media_type: Option<String> = self.read(|connection| {
+            Ok(connection
+                .query_row(
+                    "SELECT media_type FROM core_content_representation
+                      WHERE owner_type = 'core.document' AND owner_id = ?1 AND content_id = ?2",
+                    rusqlite::params![document_id, content_id],
+                    |row| row.get(0),
+                )
+                .ok())
+        })?;
+        let media_type = media_type.map(|held| base_media_type(&held)).unwrap_or_default();
+        if !ATTACH_TEXT_TYPES.contains(&media_type.as_str()) {
+            return Ok(DocumentSource::Unsupported { media_type });
+        }
+        let text: Option<String> = self.read(|connection| {
+            Ok(connection
+                .query_row(
+                    "SELECT body_text FROM core_content_text WHERE content_id = ?1",
+                    [&content_id],
+                    |row| row.get(0),
+                )
+                .ok())
+        })?;
+        Ok(match text {
+            None => DocumentSource::Missing,
+            Some(text) if text.len() > ATTACH_TEXT_MAX_BYTES => DocumentSource::TooLarge,
+            Some(text) => DocumentSource::Text { title, text },
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -85,6 +85,48 @@ public class HomeBridge {
     }
 
     /**
+     * WHETHER THIS DEVICE HOLDS NO VAULT, as it changes — the first-launch
+     * gate's one input ([Shelf.holdsNoVault]).
+     *
+     * Silent until the shelf has read its directory, so a phone that holds a
+     * vault never reports "none" on its way up; then true for a fresh install
+     * or once the last vault is forgotten, and false once one is made or
+     * restored. [onChange] fires on the main dispatcher, like [observe]'s.
+     */
+    public fun observeHoldsNoVault(onChange: (Boolean) -> Unit) {
+        onSession { opened ->
+            scope.launch { opened.shelf.holdsNoVault.collect { if (it != null) onChange(it) } }
+        }
+    }
+
+    /**
+     * WHETHER THIS DEVICE HOLDS THE SAMPLE VAULT, as it changes
+     * ([Shelf.hasSample]) — "Remove sample" when true, "Add sample" when
+     * false. Fires once with the current answer and again on every change, on
+     * the main dispatcher.
+     */
+    public fun observeHasSample(onChange: (Boolean) -> Unit) {
+        onSession { opened ->
+            scope.launch { opened.shelf.hasSample.collect { onChange(it) } }
+        }
+    }
+
+    /** "Add sample": [HomeSession.addSample]. [onDone] says whether one is held after. */
+    public fun addSample(onDone: (Boolean) -> Unit = {}) {
+        val session = this.session ?: return onDone(false)
+        scope.launch { onDone(session.addSample()) }
+    }
+
+    /** "Remove sample": [HomeSession.removeSample]. [onDone] fires once it is gone. */
+    public fun removeSample(onDone: () -> Unit = {}) {
+        val session = this.session ?: return onDone()
+        scope.launch {
+            session.removeSample()
+            onDone()
+        }
+    }
+
+    /**
      * OPEN THIS DEVICE'S VAULTS, AND START PUBLISHING.
      *
      * Not in the constructor: opening a core is I/O that asserts it is not on
@@ -104,7 +146,11 @@ public class HomeBridge {
             val opened = HomeSession.open(
                 vaultDir = vaultDir,
                 services = platformServices(),
-                dispatcher = Dispatchers.Default,
+                // A DEDICATED POOL OF AT LEAST THREE THREADS (the reader, a
+                // running chat send, and the cancel that must overtake it) —
+                // not `Dispatchers.Default`, which the rest of the app shares.
+                // See [CoreDispatcher].
+                dispatcher = CoreDispatcher.dispatcher,
                 uiThreadName = "main",
                 // DEBUG BUILDS ONLY pass anything here (`#if DEBUG` in
                 // `ShellModel.swift`); a release build passes nil. See `DevSeed`.

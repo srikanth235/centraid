@@ -43,10 +43,27 @@ struct CentraidApp: App {
         BackgroundPasses.register()
     }
 
+    /// The navigation root: bare paper until the shelf has answered, then the
+    /// gate or Home. Its own property so the stack's modifier chain stays small
+    /// enough for the type checker.
+    @ViewBuilder private var root: some View {
+        switch shell.holdsNoVault {
+        case .some(true):
+            FirstLaunchView(shell: shell)
+        case .some(false):
+            HomeView(shell: shell)
+        case .none:
+            BarePaper()
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             NavigationStack(path: $shell.path) {
-                HomeView(shell: shell)
+                // THE FIRST-LAUNCH GATE: a device that holds no vault opens
+                // onto the way to make one, not onto a Home with nothing to
+                // read. The shelf's answer, never a count taken here.
+                root
                     .navigationDestination(for: ShellModel.Route.self) { route in
                         Group {
                             switch route {
@@ -270,6 +287,12 @@ struct CentraidApp: App {
                     shell.mask()
                 }
             }
+        }
+        // THE CHAT MODEL'S DOWNLOAD FINISHES WITHOUT THE APP (it is a background
+        // `URLSession`): iOS relaunches the app to deliver it, and the session
+        // has to exist for the delegate to hear it. `ChatModelDownloader`.
+        .backgroundTask(.urlSession(ChatModelDownloader.identifier)) {
+            ChatModelDownloader.shared.reconnect()
         }
     }
 }

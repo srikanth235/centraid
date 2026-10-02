@@ -126,6 +126,14 @@ pub const LOCKER_NO_MATCH_POLICY_SQL: &str =
 /// trigger, view or foreign key names the table.
 pub const NO_NOTICES_SQL: &str = include_str!("../../../contracts/migrations/009_no_notices.sql");
 
+/// Rung ten: the on-device chat keeps its history in the vault (R-CHAT-1).
+///
+/// The `chat` schema: `chat_thread` (an entity), `chat_message` (a projection
+/// of its thread) and the card and attachment projections of a message. A card
+/// is a snapshot with no foreign key to its row; an attachment is a typed
+/// reference. The file states each choice.
+pub const CHAT_SQL: &str = include_str!("../../../contracts/migrations/010_chat.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -176,6 +184,11 @@ pub const LADDER: &[Migration] = &[
         version: 9,
         name: "no-notices",
         sql: NO_NOTICES_SQL,
+    },
+    Migration {
+        version: 10,
+        name: "chat",
+        sql: CHAT_SQL,
     },
 ];
 

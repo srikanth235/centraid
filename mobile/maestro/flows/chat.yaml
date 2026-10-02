@@ -1,0 +1,61 @@
+# Chat: the third place on the band, and what it shows before a model is ready.
+#
+# THE POINT: Chat is a band place, not an app, and its first screen depends on
+# the phone — no model file (the download step), a core with no engine (the
+# unavailable line), or a ready model (an empty thread with suggestions). The
+# flow asserts the tab opens and that one of those three draws, never a blank.
+#
+# Needs a vault-holding install (the sample vault, `sample-vault.yaml`). For the
+# ready branch launch a DEBUG build with
+# `SIMCTL_CHILD_CENTRAID_DEV_MODEL=<path to the .gguf>` so no download happens.
+appId: dev.centraid.Centraid
+name: chat
+---
+- launchApp
+- assertVisible:
+    id: "home-band-chat"
+- tapOn:
+    id: "home-band-chat"
+- assertVisible:
+    id: "chat"
+- assertVisible: "On this phone"
+
+# THE MODEL STEP: the size, the one note, and the one action.
+- runFlow:
+    when:
+      visible:
+        id: "chat-download"
+    commands:
+      - assertVisible:
+          id: "chat-model-note"
+      - assertVisible: "This is the only time Centraid fetches anything."
+      - assertVisible: "Download model"
+
+# NOT AVAILABLE HERE: a state to draw, not a download problem.
+- runFlow:
+    when:
+      visible: "Chat is not available here."
+    commands:
+      - assertNotVisible:
+          id: "chat-download"
+
+# READY: the one line, three questions, and the composer.
+- runFlow:
+    when:
+      visible:
+        id: "chat-field"
+    commands:
+      - assertVisible:
+          id: "chat-empty"
+      - assertVisible:
+          id: "chat-suggestion-0"
+      - assertVisible:
+          id: "chat-suggestion-2"
+      - assertVisible:
+          id: "chat-send"
+
+# BACK TO HOME: the band's Home place returns the springboard.
+- tapOn:
+    id: "home-band-home"
+- assertVisible:
+    id: "home-grid"

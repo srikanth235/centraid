@@ -24,12 +24,20 @@ import kotlinx.coroutines.sync.withLock
  * MAKE A VAULT, AND ITS 24 WORDS (#1047 E1, R-1047-E1/E2) — as a pure machine.
  *
  * `words.make`. The order is [Enrollment]'s: what this phone already holds is
- * read first; a phone with no seed MINTS the words (the core's CSPRNG), SHOWS
+ * read first; a phone with no seed FRAMES the words (one sentence to have
+ * paper ready, and Continue), MINTS them (the core's CSPRNG), SHOWS
  * them once on a secure screen, asks three back, and only then has the core
  * turn them into the seed that is stored and settled; the vault is founded
  * after that, keyed from its first commit. A phone whose seed is its own makes
  * the vault at the next index with no words at all. A phone holding a seed
  * that arrived from elsewhere is sent to restore first.
+ *
+ * **The framing comes before the mint, so no word exists while it is up**, and
+ * it is only for NEW words: a phone that makes its vault from a seed it already
+ * holds shows no words and no framing, and restoring and showing the words
+ * again are other machines (`WordsEntryMachine`, `WordsShowMachine`) whose
+ * members already know what the words are. It is no step of [Enrollment]'s
+ * order — nothing is stored or founded by it (R-1047-E1's order is untouched).
  *
  * **The words live in [Words.phrase] from the mint until the seed is kept**,
  * and in the drawn state only while [VaultWordsState.Phase.PHASE_SHOW] is up.
@@ -82,6 +90,12 @@ public object VaultWordsMachine {
     }
 
     private fun primary(model: Words): WordsStep = when (model.phase) {
+        // CONTINUE: only now are the words minted. Back to CHECKING, which is
+        // the phase `minted` answers in, with the custody sentence kept.
+        VaultWordsState.Phase.PHASE_FRAMING -> WordsStep(
+            render(model.copy(phase = VaultWordsState.Phase.PHASE_CHECKING)),
+            listOf(WordsEffect.Mint),
+        )
         VaultWordsState.Phase.PHASE_SHOW -> WordsStep(
             render(model.copy(phase = VaultWordsState.Phase.PHASE_CONFIRM, typed = emptyMap(), marks = emptyMap(), notice = "")),
         )
@@ -120,6 +134,7 @@ public object VaultWordsMachine {
         VaultWordsState.Phase.PHASE_CONFIRM -> WordsStep(
             render(model.copy(phase = VaultWordsState.Phase.PHASE_SHOW, typed = emptyMap(), marks = emptyMap(), notice = "")),
         )
+        VaultWordsState.Phase.PHASE_FRAMING,
         VaultWordsState.Phase.PHASE_SHOW,
         VaultWordsState.Phase.PHASE_FAILED,
         VaultWordsState.Phase.PHASE_RESTORE_FIRST,
@@ -130,7 +145,10 @@ public object VaultWordsMachine {
     private fun standing(model: Words, input: WordsInput.Standing): WordsStep {
         if (model.phase != VaultWordsState.Phase.PHASE_CHECKING) return WordsStep(model)
         return when (input.standing) {
-            Enrollment.Standing.NO_SEED -> WordsStep(render(model.copy(custody = input.custody)), listOf(WordsEffect.Mint))
+            // NO WORDS YET: frame them first, and mint when the member says
+            // Continue (see the header).
+            Enrollment.Standing.NO_SEED ->
+                WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_FRAMING, custody = input.custody)))
             // THE WORDS ALREADY ROOT THIS PHONE'S VAULTS: the next index, no words.
             Enrollment.Standing.SETTLED ->
                 WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_MAKING)), listOf(WordsEffect.Make))
@@ -178,6 +196,7 @@ public object VaultWordsMachine {
         val phase = model.phase
         val secure = phase == VaultWordsState.Phase.PHASE_SHOW || phase == VaultWordsState.Phase.PHASE_CONFIRM
         val title = when (phase) {
+            VaultWordsState.Phase.PHASE_FRAMING -> WordsCopy.FRAMING_TITLE
             VaultWordsState.Phase.PHASE_SHOW -> WordsCopy.SHOW_TITLE
             VaultWordsState.Phase.PHASE_CONFIRM -> WordsCopy.CHECK_TITLE
             VaultWordsState.Phase.PHASE_MADE -> WordsCopy.MADE_TITLE
@@ -187,6 +206,7 @@ public object VaultWordsMachine {
             else -> WordsCopy.MAKING_TITLE
         }
         val body = when (phase) {
+            VaultWordsState.Phase.PHASE_FRAMING -> WordsCopy.FRAMING_BODY
             VaultWordsState.Phase.PHASE_SHOW -> WordsCopy.SHOW_BODY
             VaultWordsState.Phase.PHASE_CONFIRM ->
                 WordsCopy.CHECK_BODY.replace("{positions}", model.asking.joinToString(", "))
@@ -196,6 +216,7 @@ public object VaultWordsMachine {
             else -> ""
         }
         val primary = when (phase) {
+            VaultWordsState.Phase.PHASE_FRAMING -> WordsCopy.FRAMING_PRIMARY
             VaultWordsState.Phase.PHASE_SHOW -> WordsCopy.SHOW_PRIMARY
             VaultWordsState.Phase.PHASE_CONFIRM -> WordsCopy.CHECK_PRIMARY
             VaultWordsState.Phase.PHASE_MADE -> WordsCopy.DONE
@@ -203,6 +224,7 @@ public object VaultWordsMachine {
             else -> ""
         }
         val secondary = when (phase) {
+            VaultWordsState.Phase.PHASE_FRAMING,
             VaultWordsState.Phase.PHASE_SHOW,
             VaultWordsState.Phase.PHASE_RESTORE_FIRST,
             -> WordsCopy.CANCEL
@@ -239,6 +261,7 @@ public object VaultWordsMachine {
         }
         val accessibility = when (phase) {
             VaultWordsState.Phase.PHASE_SHOW -> WordsCopy.SHOW_A11Y
+            VaultWordsState.Phase.PHASE_FRAMING -> listOf(title, body).joinToString(". ")
             else -> listOf(title, model.notice).filter { it.isNotEmpty() }.joinToString(". ")
         }
         return model.copy(

@@ -197,7 +197,7 @@ internal suspend fun askCore(
     handle: CentraidCore?,
     requests: List<AppQueryRequest>,
 ): AppQueryOutcome {
-    if (handle == null) return AppQueryOutcome.Refused(Reads.refused(NO_VAULT))
+    if (handle == null) return AppQueryOutcome.Refused(Reads.noVault())
     if (requests.any { it.zone()?.isBlank() == true }) {
         return AppQueryOutcome.Refused(Reads.refused(NO_ZONE))
     }
@@ -246,7 +246,6 @@ internal fun AppQueryRequest.zone(): String? =
         ?: locker_items?.tz ?: locker_item?.tz ?: locker_search?.tz ?: locker_review?.tz ?: locker_access?.tz
 
 private const val NOTHING_TO_READ = "Centraid does not know what to read here."
-private const val NO_VAULT = "No vault is open on this device."
 private const val NO_ZONE = "This device did not say which time zone it is in."
 private const val NEITHER = "The vault answered with neither an answer nor a reason."
 private const val DENIED = "You do not have access to this."

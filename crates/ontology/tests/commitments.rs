@@ -28,6 +28,12 @@ use centraid_ontology::registries::{sealed_physical_columns, v0_registries};
 /// rung ten DROPs it, so it is in the pre-migration corpus and in no registry.
 const RETIRED_IN_CORPUS: &[&str] = &["replica_change"];
 
+/// Entity tables a rung ABOVE the corpus founds. The subject of this file is the
+/// frozen v0 corpus, so a table the v1 ladder added is in the registry and not
+/// in the file by construction; it is held at the ladder head instead, against a
+/// founded vault (`crates/vault/tests/chat_schema.rs`, rung ten's chat).
+const ADDED_AFTER_THE_CORPUS: &[&str] = &["chat_thread"];
+
 fn golden_vault() -> (centraid_ontology::golden::InflatedGolden, Vault) {
     let golden = open_golden().expect("the corpus inflates");
     let vault = Vault::open(golden.db_path()).expect("the corpus opens");
@@ -163,6 +169,9 @@ fn every_ontology_entity_table_carries_its_membership_triggers() {
             continue;
         };
         if !packs.contains(pack) || entity.projection_of.is_some() {
+            continue;
+        }
+        if ADDED_AFTER_THE_CORPUS.contains(&entity.table.as_str()) {
             continue;
         }
         if !tables.contains(&entity.table) {

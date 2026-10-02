@@ -45,6 +45,10 @@
 #![forbid(unsafe_code)]
 
 pub mod api;
+/// THE ON-DEVICE CHAT'S DOOR: sessions in memory, the reads each tool runs
+/// through the query path, and `Request::Assist`'s arm. The plane itself is
+/// `centraid-assist`.
+pub mod assist;
 /// AN APP'S OWN QUERY, RUN IN THE CORE (#1046): the page door an app crate
 /// reads through, and Agenda's answers as `agenda.proto` spells them.
 pub mod app_query;
@@ -61,6 +65,10 @@ pub mod originals;
 /// THE PHONE'S TWO FLOWS (#1029 W15): drain, restore, and the pairing and
 /// backup status the shell draws beside them. See `phone.proto`.
 pub mod phone;
+/// THE SAMPLE SCENARIO (the sample vault): one weekend at Tahoe across seven
+/// apps, seeded through the command plane, and five fake Locker items sealed
+/// under the member's own keys when the core holds them (never the demo words).
+pub mod sample;
 pub mod stage;
 
 /// Lane C's generated types, re-exported so a consumer needs one dependency.

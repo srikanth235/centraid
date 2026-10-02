@@ -1,6 +1,7 @@
 package dev.centraid.shared.shell
 
 import centraid.screen.v1.HomeTile
+import centraid.screen.v1.LaptopPairing
 import centraid.screen.v1.Springboard
 import centraid.screen.v1.ThingCount
 import centraid.screen.v1.TileBody
@@ -241,6 +242,30 @@ public object SpringboardPolicy {
         }
         return ThingCount(total = total, capped = capped, settled = settled)
     }
+
+    /**
+     * Whether Home shows its one "no backup yet" line.
+     *
+     * Three facts must all hold, and each answers a different way of being
+     * wrong:
+     *
+     *  - **A tile has CONTENT** — not "the springboard is content": that verdict
+     *    is also `CONTENT` when every tile is `UNKNOWN`, which is a Home that
+     *    could not read, and a vault nobody has read is not a vault with
+     *    something to lose. An empty vault has nothing to back up yet.
+     *  - **The core said there is NO laptop.** `UNSPECIFIED` — not asked, or
+     *    the read failed — never nudges: a line that fired on a failed read
+     *    would tell a member with a working backup that they have none.
+     *  - **The member has not put it away.**
+     */
+    public fun showsBackupNudge(
+        tiles: List<HomeTile>,
+        laptop: LaptopPairing,
+        dismissed: Boolean,
+    ): Boolean =
+        !dismissed &&
+            laptop == LaptopPairing.LAPTOP_PAIRING_NONE &&
+            tiles.any { it.status == TileStatus.TILE_STATUS_CONTENT }
 
     /**
      * Which of the three Homes this is.

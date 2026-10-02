@@ -76,6 +76,29 @@ final class ShellModel: ObservableObject {
     @Published var path: [Route] = []
     @Published var masked = false
 
+    /// WHICH PLACE THE BAND'S ROOT IS SHOWING: Home's springboard, or the Chat
+    /// tab drawn in its place. Apps are covers pushed over either, so this is
+    /// never part of `path`. Chat is a band place and not an app: it has no
+    /// tile, no route and no catalogue row.
+    enum Tab: Hashable {
+        case home, chat
+    }
+
+    @Published var tab: Tab = .home
+
+    /// THE ON-DEVICE CHAT, with its own observable (see `ChatModel`): a state
+    /// per streamed token must not re-evaluate Home.
+    let chat = ChatModel()
+
+    /// The app the member last had open and has not yet carried into Chat. The
+    /// next time the tab opens on an empty thread it is the scope, so asking
+    /// "what did we spend" right after Tally is about Tally. The member clears
+    /// it with the chip.
+    private var lastVisitedApp = ""
+    /// The scope the chat is in now. Kept so a tab switch re-opens the same
+    /// scope, which is what keeps the thread.
+    private var chatScope = ""
+
     /// PAINT THE SWITCHER MASK, and take it down: on `.background`, so the
     /// snapshot iOS keeps for the app switcher shows no rows (`CentraidApp`).
     ///
@@ -109,6 +132,24 @@ final class ShellModel: ObservableObject {
         home.becameActive(onDone: { _ in })
         #endif
     }
+    /// THE FIRST-LAUNCH GATE: true once the shelf has read its directory and
+    /// the device holds no vault — a fresh install, or the last vault
+    /// forgotten. `CentraidApp` draws `FirstLaunchView` instead of Home while
+    /// it holds. **Nil until the read lands**, and the root draws bare paper
+    /// for that moment — neither the gate on a phone that holds a vault nor Home
+    /// (a loading grid, or "No vault is open") on one that holds none. The
+    /// answer is the shared shelf's (`Shelf.holdsNoVault`), and this is only
+    /// where SwiftUI hears it.
+    @Published var holdsNoVault: Bool?
+    /// WHETHER THIS DEVICE HOLDS THE SAMPLE VAULT (`Shelf.hasSample`,
+    /// R-SAMPLE-1): Home's one notice line and Settings' "Remove sample" while
+    /// true, Settings' "Add sample" while false. False until the shelf says.
+    @Published var hasSample = false
+    /// "ADD SAMPLE" IS SEEDING: founding and filling the sample is seconds of
+    /// work, and Settings' row says so quietly (disabled, "Adding sample")
+    /// instead of looking like a tap that did nothing. Cleared when the shelf
+    /// answers, whether or not it now holds one.
+    @Published var addingSample = false
     /// Whether the vault sheet is up.
     @Published var vaultSheetOpen = false
     /// Whether the transfer-rules sheet is up (#1025 S4).
@@ -245,6 +286,8 @@ final class ShellModel: ObservableObject {
             self?.homeState = bytes.data
         }
         photos.observe { [weak self] bytes in self?.photosState = bytes.data }
+        home.observeHoldsNoVault { [weak self] none in self?.holdsNoVaultChanged(none.boolValue) }
+        home.observeHasSample { [weak self] held in self?.hasSample = held.boolValue }
         vaultWords.observe { [weak self] bytes in self?.vaultWordsChanged(bytes.data) }
         wordsEntry.observe { [weak self] bytes in self?.wordsEntryChanged(bytes.data) }
         wordsShow.observe { [weak self] bytes in self?.wordsShowChanged(bytes.data) }
@@ -306,6 +349,7 @@ final class ShellModel: ObservableObject {
             self.duplicateReview.attach(session: session)
             self.photosMemories.attach(session: session)
             self.photoEditor.attach(session: session)
+            self.chat.attach(session: session)
             // THE BACKGROUND WINDOWS NOW HAVE SOMETHING TO RUN (#1029 W18-6).
             //
             // `BackgroundPasses` registered both handlers at launch — it has to,
@@ -427,6 +471,83 @@ final class ShellModel: ObservableObject {
     }
 
     #endif
+
+    /// THE SHELF'S ANSWER TO "DOES THIS DEVICE HOLD NO VAULT?" (`Shelf.holdsNoVault`).
+    ///
+    /// Engaging the gate leaves nothing of Home standing: a route pushed over
+    /// it, the switcher the last Forget was made from, and the vault sheet
+    /// would each come back the moment a vault is made and Home returns. The
+    /// words sheet is deliberately left alone — it is the gate's own door, and
+    /// it closes itself on its machine's `CLOSED`.
+    private func holdsNoVaultChanged(_ none: Bool) {
+        if none {
+            path = []
+            tab = .home
+            vaultSheetOpen = false
+            transferRulesOpen = false
+            // A DISMISSAL, as the switcher's own swipe sends it: shut the
+            // machine's sheet flag, change no vault.
+            send(screen: "home", event: HomeEvents.vaultPicked(""))
+        }
+        holdsNoVault = none
+    }
+
+    // MARK: Chat
+
+    /// THE CHAT TAB WAS PRESSED. It opens scoped to the app the member last
+    /// had open — but only onto an empty thread: a conversation in progress is
+    /// never re-scoped by a glance at an app.
+    func openChatTab() {
+        tab = .chat
+        if !lastVisitedApp.isEmpty, chat.state.messages.isEmpty {
+            chatScope = lastVisitedApp
+        }
+        lastVisitedApp = ""
+        chat.open(app: chatScope, vaultName: foregroundVaultName)
+    }
+
+    /// The foreground vault's name, for the chat's header.
+    var foregroundVaultName: String {
+        (try? Centraid_Screen_V1_HomeState(serializedBytes: homeState))?.vault.vaultName ?? ""
+    }
+
+    func openHomeTab() {
+        tab = .home
+        // Chat keeps its thread, but not an open drawer: coming back to a
+        // drawer left open would read as the app having forgotten the chat.
+        chat.toggleDrawer(false)
+    }
+
+    /// THE COMPOSER'S SCOPE MENU: the chat opens on `app`, or on every app when
+    /// it is empty. A different scope starts a new thread (the machine's
+    /// `Opened` rule), exactly as clearing the old chip did.
+    func setChatScope(_ app: String) {
+        chatScope = app
+        chat.open(app: app, vaultName: foregroundVaultName, scopeChosen: true)
+    }
+
+    /// The foreground vault changed. The chat belongs to the one that was in
+    /// front, so it starts over; if it is showing, it opens again at once.
+    func vaultChanged(to id: String) {
+        let hadChat = chat.opened
+        chat.vaultChanged(to: id)
+        if hadChat, !chat.opened, tab == .chat { chat.open(app: chatScope, vaultName: foregroundVaultName) }
+    }
+
+    /// A RESULT CARD WAS TAPPED: push the real row's route over the thread.
+    func openChatCard(
+        _ card: Centraid_Screen_V1_ChatCard,
+        among cards: [Centraid_Screen_V1_ChatCard]
+    ) {
+        guard let route = ChatRouting.route(for: card, among: cards) else { return }
+        path.append(route)
+    }
+
+    /// Remember the app a route belongs to, for the Chat tab's scope.
+    private func noteVisit(_ route: Route) {
+        guard let app = ChatRouting.app(of: route), ChatRouting.scopes(app) else { return }
+        lastVisitedApp = app
+    }
 
     // MARK: The 24 words (#1047 E2)
 
@@ -637,6 +758,31 @@ final class ShellModel: ObservableObject {
         gatewayStatus = ""
         #else
         gatewayStatus = "This build has no core."
+        #endif
+    }
+
+    // MARK: The sample vault (R-SAMPLE-1)
+
+    /// REMOVE THE SAMPLE VAULT, once the member confirmed. `Shelf.forget` on
+    /// its holding: its directory goes whole and the member's own vault is in
+    /// front afterwards, through the ordinary roster and lockup streams. A
+    /// route pushed inside the sample would be drawing a vault that is gone,
+    /// so the stack goes first.
+    func removeSample() {
+        path = []
+        gatewayStatus = ""
+        #if canImport(CentraidShared)
+        home.removeSample {}
+        #endif
+    }
+
+    /// "Add sample": found and seed a fresh one beside whatever is in front,
+    /// which stays in front. `hasSample` flips when the shelf holds it.
+    func addSample() {
+        #if canImport(CentraidShared)
+        guard !addingSample else { return }
+        addingSample = true
+        home.addSample { [weak self] _ in self?.addingSample = false }
         #endif
     }
 
@@ -895,6 +1041,7 @@ final class ShellModel: ObservableObject {
     /// opened without one reads nothing rather than reading whichever note
     /// sorted first.
     func opened(_ route: Route) {
+        noteVisit(route)
         #if canImport(CentraidShared)
         switch route {
         case let .screen(identifier, parameter):

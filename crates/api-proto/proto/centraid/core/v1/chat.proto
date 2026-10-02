@@ -1,0 +1,131 @@
+// THE CHAT'S HISTORY, AS THE CORE ANSWERS IT (R-CHAT-1).
+//
+// A member's conversations with the on-device assistant live in the vault (the
+// `chat` schema, rung ten): a thread, its messages, and each message's cards
+// and attachments. These are the READS. They ride `app_query.proto` at numbers
+// 70-72, the way every app's phone queries do; the WRITES are registered
+// commands (`chat.save_turn`, `chat.rename_thread`, `chat.delete_thread`,
+// `chat.clear`) that the core runs itself at the end of a turn or a shell sends
+// through `Request::Command`. Nothing here writes.
+//
+// A CARD IS A SNAPSHOT, NOT A REFERENCE (R-CHAT-3). `ChatStoredCard` is what the
+// answer said; the row it names may be gone. `chat_card` is the question a
+// shell asks at the moment of a tap.
+//
+// AN ATTACHMENT IS A TYPED REFERENCE (R-CHAT-4). `asset_id` and `document_id`
+// are present only while the photograph or the document is still in the vault;
+// `thumbnail_path` is a file the shell can draw when this device holds one.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/assist.proto";
+
+// `chat.threads`: the drawer's list, newest activity first.
+message ChatThreadsRequest {
+  // At most this many; 0 is 100.
+  uint32 limit = 1;
+}
+
+message ChatThreads {
+  repeated ChatThreadRow threads = 1;
+}
+
+message ChatThreadRow {
+  string thread_id = 1;
+  // The first question, trimmed, or what the member renamed it to.
+  string title = 2;
+  // The app the chat was opened from, or empty for every app.
+  string scope_app = 3;
+  string created_at = 4;
+  string updated_at = 5;
+  // `updated_at` as epoch milliseconds, so a shell says "5 min ago" without
+  // parsing a date.
+  int64 updated_ms = 6;
+}
+
+// `chat.thread`: one thread's messages, oldest first.
+message ChatThreadRequest {
+  string thread_id = 1;
+}
+
+message ChatThread {
+  // False when there is no such thread (deleted elsewhere): the other fields
+  // are then empty.
+  bool found = 1;
+  ChatThreadRow thread = 2;
+  repeated ChatStoredMessage messages = 3;
+}
+
+enum ChatStoredOutcome {
+  CHAT_STORED_OUTCOME_UNSPECIFIED = 0;
+  // A member's question.
+  CHAT_STORED_OUTCOME_SENT = 1;
+  CHAT_STORED_OUTCOME_ANSWERED = 2;
+  // The member stopped the turn: `text` and `cards` are what was drawn.
+  CHAT_STORED_OUTCOME_STOPPED = 3;
+  // The turn did not answer: `refusal` says why, `text` and `cards` are
+  // whatever was drawn before it ended.
+  CHAT_STORED_OUTCOME_REFUSED = 4;
+}
+
+message ChatStoredMessage {
+  uint64 ordinal = 1;
+  // A member's question (true) or an assistant's turn (false).
+  bool from_member = 2;
+  string text = 3;
+  ChatStoredOutcome outcome = 4;
+  // Set when `outcome` is REFUSED.
+  AssistRefusalReason refusal = 5;
+  // What the member was told beside the answer.
+  repeated AssistNotice notices = 6;
+  repeated ChatStoredCard cards = 7;
+  repeated ChatStoredAttachment attachments = 8;
+}
+
+// A card as it was said: `app` and `entity` name the kind of row, `id` the row,
+// and nothing holds the row in place.
+message ChatStoredCard {
+  string app = 1;
+  string entity = 2;
+  string id = 3;
+  string qualifier = 4;
+  string title = 5;
+  string subtitle = 6;
+  string meta = 7;
+}
+
+enum ChatStoredAttachmentKind {
+  CHAT_STORED_ATTACHMENT_KIND_UNSPECIFIED = 0;
+  // A photograph in the vault.
+  CHAT_STORED_ATTACHMENT_KIND_PHOTO = 1;
+  // A text document in the vault.
+  CHAT_STORED_ATTACHMENT_KIND_DOCUMENT = 2;
+  // A camera-roll image: only its small thumbnail was kept.
+  CHAT_STORED_ATTACHMENT_KIND_IMAGE = 3;
+}
+
+message ChatStoredAttachment {
+  ChatStoredAttachmentKind kind = 1;
+  // What the chip said. May be empty: a shell draws its own word for the kind.
+  string label = 2;
+  // Present only while the photograph is in the vault.
+  string asset_id = 3;
+  // Present only while the document is in the vault.
+  string document_id = 4;
+  // A file to draw as the chip's thumbnail, when this device holds one.
+  string thumbnail_path = 5;
+}
+
+// `chat.card`: whether the row a card names is still in the vault, asked when
+// the card is tapped.
+message ChatCardRequest {
+  string app = 1;
+  string entity = 2;
+  string id = 3;
+}
+
+message ChatCardLive {
+  bool exists = 1;
+}

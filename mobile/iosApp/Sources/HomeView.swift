@@ -17,6 +17,8 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject var shell: ShellModel
     @Environment(\.colorScheme) private var scheme
+    /// The Chat composer has the keyboard (`ChatView` reports it).
+    @State private var chatTyping = false
 
     private var state: Centraid_Screen_V1_HomeState {
         (try? Centraid_Screen_V1_HomeState(serializedBytes: shell.homeState)) ?? .init()
@@ -25,36 +27,44 @@ struct HomeView: View {
     var body: some View {
         let home = state
         VStack(alignment: .leading, spacing: 0) {
-            // THE LOCKUP FIRST, ALWAYS. It is chrome for every route, and it is
-            // drawn above the three-branch switch on purpose: a Home that
-            // failed to read still has to say which vault failed.
-            VaultHeader(vault: home.vault, shell: shell)
-            HomeTitleRow { shell.vaultSheetOpen = true }
-            StatusRibbon(status: home.data.status, shell: shell)
-
-            // THREE BRANCHES, NEVER TWO. A Home that could not load renders its
-            // sentence; it does NOT render an empty springboard, which would be
-            // eight empty apps invented out of one failure.
-            switch home.content {
-            case .loading, .none:
-                Springboard(data: home.data, shell: shell)
-            case let .failure(failure):
-                FailureBody(failure: failure)
-            case let .data(data):
-                if data.springboard == .firstRun {
-                    DayOne(data: data, shell: shell)
-                } else {
-                    Springboard(data: data, shell: shell)
-                }
+            // THE CHAT TAB DRAWS IN PLACE OF THE SPRINGBOARD, with a header of
+            // its own: the drawer, the chat's title with the vault named beside
+            // it ("<vault> · on this phone", so which vault the chat reads is
+            // still the one fact it keeps saying), and a menu. Switching the
+            // vault is Home's. While the composer has the keyboard the band
+            // steps aside, so the field sits on the keyboard's edge; dragging
+            // the thread or tapping outside the composer brings it back.
+            if shell.tab == .chat {
+                ChatView(
+                    chat: shell.chat,
+                    typing: $chatTyping,
+                    onOpenCard: { card, among in shell.openChatCard(card, among: among) },
+                    onSetScope: { shell.setChatScope($0) }
+                )
+            } else {
+                homeContent(home)
             }
+
             // A SIBLING OF THE PAGE, NEVER INSIDE IT: the band is never
             // scrolled away, so it cannot live in the scroll view, and nothing
             // subtracts its height from the page because it is a flex peer.
-            HomeBand(active: "home") { target in
-                // Every band press but Home's lands in a place this wave has
-                // not built. `more` opens the one thing that does exist.
-                if target == "more" {
-                    shell.send(screen: "home", event: HomeEvents.allApps(open: true))
+            if !(shell.tab == .chat && chatTyping) {
+                HomeBand(active: shell.tab == .chat ? "chat" : "home") { target in
+                    switch target {
+                    case "home": shell.openHomeTab()
+                    // PRESSED WHILE CHAT IS SHOWING it only shuts the drawer: it
+                    // is already where it was asked to go, and starting over
+                    // here would be harm no member asked for.
+                    case "chat":
+                        if shell.tab == .chat {
+                            shell.chat.toggleDrawer(false)
+                        } else {
+                            shell.openChatTab()
+                        }
+                    // `more` opens the one other thing that exists.
+                    case "more": shell.send(screen: "home", event: HomeEvents.allApps(open: true))
+                    default: break
+                    }
                 }
             }
         }
@@ -63,6 +73,11 @@ struct HomeView: View {
         // at the notch and the home indicator and the window's own black shows
         // through — which reads as the app sitting in a letterbox.
         .background(Theme.color("bg", scheme).ignoresSafeArea())
+        // THE CHAT BELONGS TO THE VAULT IN FRONT: when it changes the thread,
+        // its session and its cards are the old vault's and are dropped.
+        .onChange(of: home.vault.vaultID, initial: true) { _, id in
+            shell.vaultChanged(to: id)
+        }
         .sheet(isPresented: $shell.vaultSheetOpen) {
             MakeVaultSheet(shell: shell)
         }
@@ -102,6 +117,50 @@ struct HomeView: View {
         ) {
             VaultSheet(vaults: home.vaults, active: home.vault, shell: shell)
         }
+    }
+
+    /// HOME'S OWN PLACE: the lockup, the title row, the ribbon and the three
+    /// branches. Chat takes the place of all but the lockup.
+    @ViewBuilder
+    private func homeContent(_ home: Centraid_Screen_V1_HomeState) -> some View {
+            // THE LOCKUP FIRST, ALWAYS. It is chrome for every route, and it is
+            // drawn above the three-branch switch on purpose: a Home that
+            // failed to read still has to say which vault failed.
+            VaultHeader(vault: home.vault, shell: shell)
+            HomeTitleRow { shell.vaultSheetOpen = true }
+            StatusRibbon(status: home.data.status, shell: shell)
+
+            // THREE BRANCHES, NEVER TWO. A Home that could not load renders its
+            // sentence; it does NOT render an empty springboard, which would be
+            // eight empty apps invented out of one failure.
+            switch home.content {
+            case .loading, .none:
+                Springboard(data: home.data, shell: shell)
+            case let .failure(failure):
+                FailureBody(failure: failure)
+            case let .data(data):
+                VStack(alignment: .leading, spacing: 0) {
+                    // ONE NOTICE SLOT, SETTLED BY THE MACHINE (R-SAMPLE-8).
+                    // The sample line has it on the sample vault, and on the
+                    // member's own vault for the day it was founded; the
+                    // backup nudge has it after that. This view reads one
+                    // flag and one message and decides neither — the machine
+                    // never sets both.
+                    if data.sampleNotice {
+                        SampleNoticeRow(shell: shell)
+                    } else if data.hasBackupNudge, data.springboard != .firstRun {
+                        // PRESENT ONLY WHEN THE MACHINE SAYS SO (content, no
+                        // laptop, not put away): this view owns none of the
+                        // conditions and none of the words.
+                        BackupNudgeRow(nudge: data.backupNudge, shell: shell)
+                    }
+                    if data.springboard == .firstRun {
+                        DayOne(data: data, shell: shell)
+                    } else {
+                        Springboard(data: data, shell: shell)
+                    }
+                }
+            }
     }
 }
 
@@ -171,7 +230,10 @@ private struct StatusRibbon: View {
     @ObservedObject var shell: ShellModel
     @Environment(\.colorScheme) private var scheme
 
-    private var loud: Bool { status.tone != .quiet }
+    // ONLY THE TWO TONES THAT EARN A RULE. `!= .quiet` was true for
+    // `.unspecified`, which is what a Home with no `data` hands this view: the
+    // no-vault branch drew a 2pt attention rule over nothing at all.
+    private var loud: Bool { status.tone == .attention || status.tone == .urgent }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -219,6 +281,93 @@ private struct StatusRibbon: View {
         .accessibilityLabel(
             [status.copy, status.action].filter { !$0.isEmpty }.joined(separator: ". ")
         )
+    }
+}
+
+/// The one persistent line on a vault that has content and no backup: a
+/// sentence, ONE action (it opens the pairing screen, the same one the All apps
+/// sheet reaches) and a way to put it away. Everything it says arrives on the
+/// message.
+private struct BackupNudgeRow: View {
+    let nudge: Centraid_Screen_V1_BackupNudge
+    @ObservedObject var shell: ShellModel
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(nudge.copy)
+                .centraidType("small")
+                .foregroundStyle(Theme.color("text", scheme))
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                shell.openPairLaptop()
+            } label: {
+                Text(nudge.action)
+                    .centraidType("control")
+                    .foregroundStyle(Theme.color("link", scheme))
+                    .underline()
+                    .frame(minHeight: CentraidGeometry.targetMinCoarse)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("home-backup-nudge-action")
+            Button {
+                shell.send(screen: "home", event: HomeEvents.backupNudgeDismissed())
+            } label: {
+                CentraidIconView(iconKey: "X", tint: Theme.color("textSoft", scheme), size: 14)
+                    .frame(
+                        width: CentraidGeometry.targetMinCoarse,
+                        height: CentraidGeometry.targetMinCoarse
+                    )
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(nudge.dismissLabel)
+            .accessibilityIdentifier("home-backup-nudge-dismiss")
+        }
+        .padding(.leading, pageMargin)
+        .padding(.trailing, pageMargin - 12)
+        .accessibilityIdentifier("home-backup-nudge")
+    }
+}
+
+/// THE SAMPLE VAULT'S ONE LINE (R-SAMPLE-1): a sentence and one secondary
+/// action, outlined and never filled — the springboard below keeps the view's
+/// one ink element. Removing deletes a vault, so the action asks first.
+private struct SampleNoticeRow: View {
+    @ObservedObject var shell: ShellModel
+    @Environment(\.colorScheme) private var scheme
+    @State private var asking = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(ShellWords.sampleLine)
+                .centraidType("small")
+                .foregroundStyle(Theme.color("text", scheme))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            KitOutlineButton(label: ShellWords.sampleRemove) { asking = true }
+                .accessibilityIdentifier("home-sample-remove")
+        }
+        .padding(.horizontal, pageMargin)
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("home-sample-notice")
+        .sampleRemoveConfirm(isPresented: $asking, shell: shell)
+    }
+}
+
+extension View {
+    /// "Remove sample"'s confirmation, the one both doors raise (Home's notice
+    /// and Settings): the destructive verb, Cancel, and one sentence.
+    func sampleRemoveConfirm(isPresented: Binding<Bool>, shell: ShellModel) -> some View {
+        alert(ShellWords.sampleRemove, isPresented: isPresented) {
+            Button(ShellWords.sampleRemoveConfirm, role: .destructive) { shell.removeSample() }
+                .accessibilityIdentifier("sample-remove-confirm")
+            Button(ShellWords.cancel, role: .cancel) {}
+        } message: {
+            Text(ShellWords.sampleRemoveBody)
+        }
     }
 }
 
@@ -612,14 +761,18 @@ private struct ContentBody: View {
 
         case let .tally(tally):
             VStack(alignment: .leading, spacing: 4) {
-                Text(Money.render(tally.figure))
-                    .centraidType("display")
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .lineLimit(1)
+                // NO FIGURE IS A REAL STATE: Home does not project a balance
+                // yet, so the body is the count's own sentence alone.
+                if tally.hasFigure {
+                    Text(Money.render(tally.figure))
+                        .centraidType("display")
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .lineLimit(1)
+                }
                 Text(tally.caption)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .centraidType(tally.hasFigure ? "small" : "smallStrong")
+                    .foregroundStyle(Theme.color(tally.hasFigure ? "textSoft" : "text", scheme))
                 // Rendered only when the caller has something true to say.
                 if !tally.after.isEmpty {
                     Spacer(minLength: 0)
@@ -665,8 +818,9 @@ private struct ContentBody: View {
 
 /// The mosaic bleeds to the card's edge: the CELLS are the mosaic, so there is
 /// no ground and no min height, and the negative inset cancels `tilePad`
-/// exactly. A cell with no addressable bytes is STILL A CELL — dropping it
-/// reflows ten photographs as one blank under a "10".
+/// exactly. Which assets fill the cells is the machine's (`HomeReads`): it
+/// steps over an asset with no thumbnail, and keeps the newest four as grey
+/// cells only when none of the window can be drawn.
 private struct PhotoMosaic: View {
     let photos: Centraid_Screen_V1_TileBody.Photos
     @Environment(\.colorScheme) private var scheme
@@ -1027,60 +1181,20 @@ private struct VaultSheet: View {
                 .padding(.top, 20)
                 .padding(.bottom, 12)
 
-            // ZERO IS NOT ONE (R-SHELL-3). An empty device is an onboarding
-            // surface and must offer a way out of it; one vault keeps the
-            // existing sentence (switching is not a choice of one, but Forget
-            // still is). The way out was PAIR and is now MAKE — the phone is
-            // the vault (#1029 §1), so there is nothing to pair with.
-            if vaults.isEmpty {
-                Text(ShellWords.vaultsNone)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                Button {
-                    // ONE SHEET AT A TIME: dismiss the switcher first, then open
-                    // the vault sheet on the next turn — iOS drops a second
-                    // present over a sheet that is still up (same rule as
-                    // openTransferRules).
-                    shell.send(screen: "home", event: HomeEvents.vaultPicked(""))
-                    DispatchQueue.main.async {
-                        shell.vaultSheetOpen = true
-                    }
-                } label: {
-                    Text(ShellWords.vaultsMake)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("link", scheme))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                        .padding(.vertical, 12)
-                        .frame(minHeight: 44)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(ShellWords.vaultsMakeSpoken)
-                .accessibilityIdentifier("vault-sheet-make")
-                // AND THE WAY BACK: a fresh install's vaults come home from
-                // the 24 words (#1047 E2), the switcher shut first.
-                Button {
-                    shell.send(screen: "home", event: HomeEvents.vaultPicked(""))
-                    DispatchQueue.main.async { shell.openRestore() }
-                } label: {
-                    Text(ShellWords.wordsRestore)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("link", scheme))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                        .padding(.vertical, 12)
-                        .frame(minHeight: 44)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("vault-sheet-restore")
-            } else if vaults.count == 1 {
+            // ZERO VAULTS NEVER REACHES THIS SHEET: a device that holds none
+            // opens onto `FirstLaunchView` instead of Home (`CentraidApp`),
+            // which is where "make" and "restore" live now. One vault keeps
+            // the existing sentence (switching is not a choice of one, but
+            // Forget still is).
+            if vaults.count == 1 {
                 Text(ShellWords.vaultsOne)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .padding(.horizontal, CentraidGeometry.pageMargin)
             }
 
+            // THE ROSTER IS DRAWN AS THE SHELF LISTS IT, the sample last
+            // (R-SAMPLE-1): the order is `Shelf`'s, and this view sorts nothing.
             List(vaults, id: \.vaultID) { vault in
                 Button {
                     if vault.vaultID != active.vaultID {
@@ -1101,9 +1215,21 @@ private struct VaultSheet: View {
                                 in: RoundedRectangle(cornerRadius: 7)
                             )
                         VStack(alignment: .leading, spacing: 0) {
-                            Text(ShellWords.vaultName(vault.vaultName))
-                                .centraidType("smallStrong")
-                                .foregroundStyle(Theme.color("text", scheme))
+                            HStack(spacing: 8) {
+                                Text(ShellWords.vaultName(vault.vaultName))
+                                    .centraidType("smallStrong")
+                                    .foregroundStyle(Theme.color("text", scheme))
+                                // THE SAMPLE'S MARK, from the lockup's own
+                                // `sample` and never from its name: a member
+                                // may call a vault of their own "Sample". It
+                                // is dropped while the vault's name already
+                                // says it ("Sample [Sample]" is one word
+                                // twice) and kept once the member renamed it.
+                                if vault.sample, vault.vaultName != ShellWords.sampleMark {
+                                    StatusChipView(.with { $0.label = ShellWords.sampleMark; $0.tone = .neutral })
+                                        .accessibilityIdentifier("vault-sample-mark")
+                                }
+                            }
                             // THE SAME SECOND LINE THE HEADER DRAWS, from the
                             // same `stateLine` and the same `RosterChanged`
                             // stream (#1025 S7-9). A switcher that showed only
@@ -1209,6 +1335,14 @@ enum HomeEvents {
     static func vaultPicked(_ id: String) -> Data {
         var event = Centraid_Screen_V1_HomeEvent()
         event.vaultPicked = .with { $0.vaultID = id }
+        return (try? event.serializedBytes()) ?? Data()
+    }
+
+    /// The member put the "no backup yet" line away; the session keeps it for
+    /// this vault.
+    static func backupNudgeDismissed() -> Data {
+        var event = Centraid_Screen_V1_HomeEvent()
+        event.backupNudgeDismissed = .init()
         return (try? event.serializedBytes()) ?? Data()
     }
 

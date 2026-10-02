@@ -24,14 +24,17 @@ import dev.centraid.shared.shell.Shelf
  * first vault would leave a second vault permanently unbacked-up on a phone
  * that never gets a long window.
  *
- * ## TWO HOLDINGS ARE SKIPPED, AND NEITHER IS A FAILURE
+ * ## THREE HOLDINGS ARE SKIPPED, AND NONE IS A FAILURE
  *
  * A **resting** holding has no core (the OS asked for memory back) and waking
  * one is a suspending act that opens SQLite — a background window is the worst
  * moment to do it, and the vault is drained on the next window after the member
  * touches it. A **frozen** holding has moved to another phone (F1): it is
  * read-only, the gateway would refuse its next put with `VAULT_MOVED`, and
- * draining it would be this phone arguing with a decision already made.
+ * draining it would be this phone arguing with a decision already made. The
+ * **sample** vault never drains at all: its rows are a scenario to look around
+ * in and must never reach the member's laptop, and the core would refuse the
+ * pass anyway (`CoreError::SampleVault`).
  *
  * ## THE DEBOUNCE IS ON COMMITS AND IT IS NOT A POLL
  *
@@ -80,7 +83,7 @@ public class ShelfDrain(
      */
     public suspend fun run(deadlineMs: Long): List<Outcome> {
         lastRunAtMs = nowMs()
-        val drainable = holdings().filter { it.core != null && it.moved == null }
+        val drainable = holdings().filter { it.core != null && it.moved == null && !it.sample }
         if (drainable.isEmpty()) return emptyList()
         val each = if (deadlineMs <= 0L) 0L else deadlineMs / drainable.size
         return drainable.map { holding ->

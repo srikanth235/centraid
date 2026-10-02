@@ -37,6 +37,7 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/agenda.proto";
+import "centraid/core/v1/chat.proto";
 import "centraid/core/v1/docs.proto";
 import "centraid/core/v1/locker.proto";
 import "centraid/core/v1/notes.proto";
@@ -90,6 +91,10 @@ message AppQueryRequest {
     LockerSearchRequest locker_search = 62;
     LockerReviewRequest locker_review = 63;
     LockerAccessRequest locker_access = 64;
+    // Chat history (R-CHAT-1): 70-79. Reads only; the writes are `chat.*` commands.
+    ChatThreadsRequest chat_threads = 70;
+    ChatThreadRequest chat_thread = 71;
+    ChatCardRequest chat_card = 72;
   }
 }
 
@@ -139,6 +144,9 @@ message AppQueryResponse {
     LockerSearch locker_search = 62;
     LockerReview locker_review = 63;
     LockerAccess locker_access = 64;
+    ChatThreads chat_threads = 70;
+    ChatThread chat_thread = 71;
+    ChatCardLive chat_card = 72;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

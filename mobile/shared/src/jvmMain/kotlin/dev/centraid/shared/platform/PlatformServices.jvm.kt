@@ -234,6 +234,8 @@ public class FakeDeviceClock(
     public var zone: String = "Europe/London",
     /** 2026-06-15T09:00:00Z, a Monday. */
     public var epochMillis: Long = 1_781_514_000_000L,
+    /** Fixed for the same reason [zone] is: the JVM's own offset is where the spec ran. */
+    public var utcOffsetMinutes: Int = 0,
 ) : DeviceClock {
-    override fun read(): DeviceClock.Reading = DeviceClock.Reading(zone, epochMillis)
+    override fun read(): DeviceClock.Reading = DeviceClock.Reading(zone, epochMillis, utcOffsetMinutes)
 }

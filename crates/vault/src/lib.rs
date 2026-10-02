@@ -45,6 +45,7 @@ pub mod audit;
 pub mod backup;
 pub mod bootstrap;
 pub mod canonical;
+pub mod chat;
 pub mod clock;
 pub mod commands;
 pub mod content;

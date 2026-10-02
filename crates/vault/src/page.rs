@@ -159,7 +159,8 @@ pub fn apply_field_mask(rows: Vec<RowImage>, decision: &Decision) -> Vec<RowImag
         .collect()
 }
 
-/// ONE PROJECTED COLUMN: a name, quoted — or a sealed cell's PRESENCE.
+/// ONE PROJECTED COLUMN: a name, quoted — a sealed cell's PRESENCE — or one
+/// key out of a JSON cell.
 ///
 /// The kit's grammar admits exactly one expression in a projection, `<cell> IS
 /// NOT NULL AS <name>` (D-1020-CL5): whether a sealed cell holds anything, so a
@@ -168,7 +169,19 @@ pub fn apply_field_mask(rows: Vec<RowImage>, decision: &Decision) -> Vec<RowImag
 /// into a string literal named after itself (#1047, found by Locker's item
 /// read). Both names are checked as plain identifiers before they are quoted,
 /// so nothing but a presence test is spelled here.
+///
+/// **And `json_extract(<cell>, '<$.path>') AS <name>`**, the second shape the
+/// kit's grammar already admits (`json_extract` is in its word list). A shell
+/// has no JSON parser in `commonMain`, so a key inside a JSON cell is read by
+/// the vault — a vault's sample mark out of `core_vault.settings_json`, a
+/// place's gazetteer name out of `core_place.address_json`. It was quoted whole
+/// like the presence test was, so it answered a string literal and every such
+/// column read NULL. The cell and the name are checked as identifiers and the
+/// path as `$` and dotted identifier characters before anything is spelled.
 fn projected(column: &str) -> String {
+    if let Some(extracted) = json_key(column) {
+        return extracted;
+    }
     let words: Vec<&str> = column.split_whitespace().collect();
     let identifier = |word: &str| {
         !word.is_empty()
@@ -192,6 +205,48 @@ fn projected(column: &str) -> String {
             )
         }
         _ => crate::log::quoted(column),
+    }
+}
+
+/// `json_extract(<cell>, '<$.path>') AS <name>`, spelled with the cell and the
+/// name quoted, or `None` for any other entry. See [`projected`].
+fn json_key(column: &str) -> Option<String> {
+    let identifier = |word: &str| {
+        !word.is_empty()
+            && word
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    };
+    let trimmed = column.trim();
+    let open = "json_extract(";
+    if trimmed.len() <= open.len() || !trimmed[..open.len()].eq_ignore_ascii_case(open) {
+        return None;
+    }
+    let rest = &trimmed[open.len()..];
+    let close = rest.find(')')?;
+    let (arguments, tail) = (&rest[..close], &rest[close + 1..]);
+    let (cell, path) = arguments.split_once(',')?;
+    let (cell, path) = (cell.trim(), path.trim());
+    let path = path.strip_prefix('\'')?.strip_suffix('\'')?;
+    let path_ok = path.starts_with('$')
+        && path[1..]
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'.');
+    let words: Vec<&str> = tail.split_whitespace().collect();
+    match words.as_slice() {
+        [r#as, name]
+            if r#as.eq_ignore_ascii_case("AS")
+                && identifier(cell)
+                && identifier(name)
+                && path_ok =>
+        {
+            Some(format!(
+                "json_extract({}, '{path}') AS {}",
+                crate::log::quoted(cell),
+                crate::log::quoted(name)
+            ))
+        }
+        _ => None,
     }
 }
 
@@ -1535,5 +1590,65 @@ mod keyset_tests {
             projected("x; IS NOT NULL AS y"),
             crate::log::quoted("x; IS NOT NULL AS y")
         );
+    }
+
+    /// ONE KEY OUT OF A JSON CELL is spelled as SQL, and nothing near it is: a
+    /// path with a quote, a second statement or a non-identifier name is quoted
+    /// whole and reads as a name that does not exist.
+    #[test]
+    fn a_json_key_is_projected_as_one_and_a_near_miss_as_a_name() {
+        assert_eq!(
+            projected("json_extract(settings_json, '$.sample') AS sample"),
+            "json_extract(\"settings_json\", '$.sample') AS \"sample\""
+        );
+        assert_eq!(
+            projected("json_extract(address_json, '$.gazetteer.name') AS gazetteer"),
+            "json_extract(\"address_json\", '$.gazetteer.name') AS \"gazetteer\""
+        );
+        for near_miss in [
+            "json_extract(settings_json, '$.a'') AS b",
+            "json_extract(settings_json, '$.a') AS b; DROP",
+            "json_extract(settings_json, 'a') AS b",
+            "json_extract(settings json, '$.a') AS b",
+            "json_extract(settings_json, '$.a')",
+        ] {
+            assert_eq!(
+                projected(near_miss),
+                crate::log::quoted(near_miss),
+                "{near_miss}"
+            );
+        }
+    }
+
+    /// AND THE VAULT READS IT: the sample mark comes back as its word.
+    #[test]
+    fn a_json_key_reads_back_through_the_page_door() {
+        let dir = std::env::temp_dir().join(format!("centraid-json-key-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("the scratch dir is made");
+        let vault = Vault::create(dir.join("vault.db")).expect("a vault");
+        vault.found_sample("Sample", "Me").expect("founded");
+        let page = vault
+            .keyset_page(&KeysetPage {
+                name: "test.mark".to_owned(),
+                select: vec![
+                    "vault_id".to_owned(),
+                    "json_extract(settings_json, '$.sample') AS sample".to_owned(),
+                ],
+                from: "core_vault".to_owned(),
+                predicate: None,
+                binds: Vec::new(),
+                sort_column: "vault_id".to_owned(),
+                pk_column: "vault_id".to_owned(),
+                descending: false,
+                limit: 1,
+                after: None,
+                held_thumbnail: false,
+                note_body: false,
+                document_size: false,
+            })
+            .expect("the page reads");
+        let row = page.rows.first().expect("one vault row");
+        assert_eq!(row.get("sample"), Some(&Value::Text("seeding".to_owned())));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

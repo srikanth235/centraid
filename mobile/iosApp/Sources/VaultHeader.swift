@@ -142,8 +142,6 @@ struct VaultHeader: View {
 
             // BOUNDED, never borderless.
             HeaderAction(iconKey: "Search", spoken: "Search everything")
-            // Outlined here; filled only inside the band.
-            HeaderAction(iconKey: "NewChat", spoken: "New chat")
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.top, 12)

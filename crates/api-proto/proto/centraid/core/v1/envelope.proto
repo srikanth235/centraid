@@ -19,6 +19,7 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/app_query.proto";
+import "centraid/core/v1/assist.proto";
 import "centraid/core/v1/change.proto";
 import "centraid/core/v1/command.proto";
 import "centraid/core/v1/content.proto";
@@ -94,6 +95,9 @@ message Request {
     // THE 24 WORDS (#1047 E1): minted, judged and turned into a seed in Rust,
     // with no vault. See `phone.proto`.
     PhraseRequest phrase = 22;
+    // THE ON-DEVICE CHAT: a session, a question, and the model's file. Reads
+    // only; nothing a turn does is written. See `assist.proto`.
+    AssistRequest assist = 23;
   }
 }
 
@@ -120,6 +124,7 @@ message Response {
     AppQueryResponse app_query = 20;
     LockerSessionResponse locker = 21;
     PhraseResponse phrase = 22;
+    AssistResponse assist = 23;
   }
 }
 
@@ -128,6 +133,8 @@ message Event {
     ChangeEvent change = 1;
     HealthEvent health = 2;
     ConnectivityEvent connectivity = 3;
+    // A running chat turn: its activity, cards, sentence and outcome.
+    AssistEvent assist = 4;
   }
 }
 

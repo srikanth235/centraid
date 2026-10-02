@@ -36,6 +36,7 @@
 //! A duplicate delivery therefore **executes once** and the second delivery is
 //! answered from the ledger.
 
+pub mod chat;
 pub mod core;
 pub mod core_links;
 mod event_time;
@@ -262,6 +263,9 @@ impl Registry {
     /// The registry the gateway serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
+        for definition in chat::definitions() {
+            registry.register(definition)?;
+        }
         for definition in core::definitions() {
             registry.register(definition)?;
         }
