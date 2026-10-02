@@ -18,7 +18,10 @@
       "id": "agenda-week",
       "question": "What does my week look like?",
       "expect": { "tool": "agenda.upcoming", "args": { "range": "week" } },
-      "cards": { "min": 3, "titles": ["Dinner with Maya", "Book the Tahoe cabin"] }
+      "cards": {
+        "min": 3,
+        "titles": ["Dinner with Maya", "Book the Tahoe cabin"]
+      }
     },
     {
       "id": "agenda-default",
@@ -35,7 +38,10 @@
     {
       "id": "agenda-search-dinner",
       "question": "When am I having dinner with Maya?",
-      "expect": { "tool": "agenda.search", "args": { "term": "dinner with Maya" } },
+      "expect": {
+        "tool": "agenda.search",
+        "args": { "term": "dinner with Maya" }
+      },
       "cards": { "min": 1, "titles": ["Dinner with Maya"] }
     },
     {
@@ -121,13 +127,19 @@
     {
       "id": "docs-search-cabin",
       "question": "Find the cabin rental agreement",
-      "expect": { "tool": "docs.search", "args": { "term": "cabin rental agreement" } },
+      "expect": {
+        "tool": "docs.search",
+        "args": { "term": "cabin rental agreement" }
+      },
       "cards": { "min": 1, "titles": ["Cabin rental agreement"] }
     },
     {
       "id": "docs-search-insurance",
       "question": "Where's my insurance policy?",
-      "expect": { "tool": "docs.search", "args": { "term": "insurance policy" } },
+      "expect": {
+        "tool": "docs.search",
+        "args": { "term": "insurance policy" }
+      },
       "cards": { "min": 1, "titles": ["Renters insurance policy"] }
     },
     {
@@ -253,7 +265,10 @@
     {
       "id": "photos-album",
       "question": "What's in the Tahoe scouting album?",
-      "expect": { "tool": "photos.search", "args": { "term": "Tahoe scouting" } },
+      "expect": {
+        "tool": "photos.search",
+        "args": { "term": "Tahoe scouting" }
+      },
       "cards": { "min": 3, "titles": ["Emerald Bay overlook"] }
     },
     {
@@ -422,7 +437,10 @@
           "answer": "There are four photographs of Ana."
         }
       ],
-      "expect": { "tool": "photos.search", "args": { "term": "Ana trailhead" } },
+      "expect": {
+        "tool": "photos.search",
+        "args": { "term": "Ana trailhead" }
+      },
       "cards": { "min": 1, "titles": ["Ana at the trailhead"] }
     },
     {
