@@ -404,8 +404,11 @@ impl<S: State> Gateway<S> {
 
     /// `GET` and `HEAD /v2/v/{vault}/o/{name}`: the object to serve.
     ///
-    /// A tombstoned object is still served until the purge takes its bytes;
-    /// that is what the grace is for.
+    /// A tombstoned object is still served until the purge takes its bytes:
+    /// that is what the grace is for — a restore that began from a snapshot
+    /// keeps reading it even when retention drops that snapshot meanwhile. A
+    /// damaged object is not served: the scrub found its bytes are not its
+    /// digest, and it reads as missing until the phone sends it again.
     ///
     /// # Errors
     ///
@@ -420,6 +423,7 @@ impl<S: State> Gateway<S> {
         Ok(self
             .state
             .object(vault, name)?
+            .filter(|object| object.damaged_at_ms.is_none())
             .ok_or(Refusal::NotFound { name: Some(*name) })?)
     }
 
@@ -449,8 +453,9 @@ impl<S: State> Gateway<S> {
     }
 
     /// `POST /v2/v/{vault}/fetch`: the objects to stream back, in the order
-    /// asked, each once. A name the gateway has no row for is left out — the
-    /// phone sees which came back — and the whole answer must fit one bundle.
+    /// asked, each once. A name [`Self::object`] would not serve is left out
+    /// — the phone sees which came back — and the whole answer must fit one
+    /// bundle.
     ///
     /// # Errors
     ///
@@ -466,7 +471,11 @@ impl<S: State> Gateway<S> {
         let mut plan = Vec::new();
         let mut total = 0_u64;
         for name in distinct(names) {
-            if let Some(object) = self.state.object(vault, &name)? {
+            if let Some(object) = self
+                .state
+                .object(vault, &name)?
+                .filter(|object| object.damaged_at_ms.is_none())
+            {
                 total = total
                     .saturating_add(crate::rules::bundle::HEADER_LEN as u64)
                     .saturating_add(object.size);
@@ -485,7 +494,10 @@ impl<S: State> Gateway<S> {
     /// `POST /v2/v/{vault}/delete`: tombstone each name with a grace of
     /// [`GRACE_MS`]. The head's manifest is refused `HEAD_IN_USE`; a
     /// tombstoned manifest deregisters its snapshot; a name already
-    /// tombstoned is deleted again without moving its grace.
+    /// tombstoned is deleted again without moving its grace; a name the
+    /// gateway does not hold — never stored, or purged — is deleted with
+    /// nothing to do. Deleting is idempotent (#1080, the root's ruling A15):
+    /// a phone retrying a delete whose answer it lost is never refused.
     ///
     /// A partial delete is reported, not rolled back: the honest answer to a
     /// batch is which names went and why the rest did not.
@@ -515,10 +527,7 @@ impl<S: State> Gateway<S> {
                     continue;
                 }
                 let Some(mut object) = state.object(vault, &name)? else {
-                    answer.refused.push(NameRefusal {
-                        name,
-                        code: Code::NotFound,
-                    });
+                    answer.deleted.push(name);
                     continue;
                 };
                 if object.tombstone.is_none() {

@@ -12,7 +12,9 @@
 //!
 //! It proves the rules: pairing by secret, claim and read grant; tenancy and
 //! the epoch fence; write-once admission; the head's compare-and-set and the
-//! snapshot history; tombstones, their grace and the purge; the blind scrub;
+//! snapshot history; tombstones, their grace and the purge; the store
+//! semantics a phone's store relies on (the `store/` cases, the root's ruling
+//! A15, which the vault's `MemoryStore` models in memory); the blind scrub;
 //! the bundle both ways; and the two canaries. It cannot prove three things:
 //!
 //! 1. **That `atomically` is atomic under concurrency.** The cases drive two
@@ -213,7 +215,7 @@ pub trait Target {
 
 /// Every case, by name, in the order [`run`] runs them. A target's test
 /// asserts its report names exactly these, so a dropped case is a failure.
-pub const CASES: [&str; 24] = [
+pub const CASES: [&str; 30] = [
     "info/answers-before-anything-is-paired",
     "pair/a-secret-admits-one-new-vault-once",
     "pair/a-known-vault-is-refused-and-the-secret-is-not-spent",
@@ -226,11 +228,17 @@ pub const CASES: [&str; 24] = [
     "objects/exists-names-what-is-missing",
     "objects/get-serves-bytes-ranges-and-a-digest",
     "objects/the-listing-is-sorted-and-pages",
-    "bundle/each-frame-is-stored-or-refused-on-its-own",
+    "bundle/each-frame-is-answered-as-its-own-put-would-be",
     "fetch/answers-the-bundle-framing-for-what-is-held",
     "head/moves-only-by-compare-and-set-and-registers-snapshots",
     "delete/a-tombstone-keeps-its-bytes-until-the-grace-ends",
     "delete/the-head-is-in-use-and-a-tombstone-can-be-stored-again",
+    "store/exists-reads-a-tombstoned-name-as-missing",
+    "store/a-put-over-a-tombstone-brings-the-name-back",
+    "store/a-head-naming-a-manifest-not-held-is-not-found",
+    "store/deleting-an-absent-name-succeeds",
+    "store/the-listing-leaves-tombstones-out",
+    "store/name-taken-is-a-conflict-carrying-the-held-digest",
     "scrub/rot-is-found-without-a-key-and-the-name-reads-missing",
     "claim/a-bad-signature-a-wrong-epoch-or-an-unknown-vault-moves-nothing",
     "read/a-read-grant-reads-and-never-writes",
@@ -261,13 +269,19 @@ pub async fn run<T: Target>(target: &mut T) -> Report {
     report.record(CASES[14], head(target).await);
     report.record(CASES[15], grace(target).await);
     report.record(CASES[16], head_in_use(target).await);
-    report.record(CASES[17], scrub(target).await);
-    report.record(CASES[18], claim_refusals(target).await);
-    report.record(CASES[19], read_grant(target).await);
-    report.record(CASES[20], fence(target).await);
-    report.record(CASES[21], stale_claim(target).await);
-    report.record(CASES[22], blindness_canary(target).await);
-    report.record(CASES[23], credential_canary(target).await);
+    report.record(CASES[17], exists_skips_tombstones(target).await);
+    report.record(CASES[18], put_revives_tombstone(target).await);
+    report.record(CASES[19], head_needs_held_manifest(target).await);
+    report.record(CASES[20], delete_absent(target).await);
+    report.record(CASES[21], listing_skips_tombstones(target).await);
+    report.record(CASES[22], name_taken(target).await);
+    report.record(CASES[23], scrub(target).await);
+    report.record(CASES[24], claim_refusals(target).await);
+    report.record(CASES[25], read_grant(target).await);
+    report.record(CASES[26], fence(target).await);
+    report.record(CASES[27], stale_claim(target).await);
+    report.record(CASES[28], blindness_canary(target).await);
+    report.record(CASES[29], credential_canary(target).await);
     report
 }
 
@@ -849,8 +863,17 @@ async fn bundle<T: Target>(target: &mut T) -> Outcome {
         Frame::of(taken.0, taken.1.clone()),
     ];
     let answer = ok(target.bundle(&phone.token, &vault, &frames).await, "bundle")?;
-    ensure(answer.stored == vec![good.0, taken.0], || {
-        format!("stored {:?}", answer.stored)
+    ensure(answer.stored == vec![good.0], || {
+        format!(
+            "only new bytes are stored, as a PUT's 201: {:?}",
+            answer.stored
+        )
+    })?;
+    ensure(answer.already == vec![taken.0], || {
+        format!(
+            "held bytes are already, as a PUT's 200: {:?}",
+            answer.already
+        )
     })?;
     let refused_codes: Vec<(Name, Code)> = answer
         .refused
@@ -860,6 +883,10 @@ async fn bundle<T: Target>(target: &mut T) -> Outcome {
     ensure(
         refused_codes == vec![(lying.0, Code::DigestMismatch), (taken.0, Code::NameTaken)],
         || format!("refused {refused_codes:?}"),
+    )?;
+    ensure(
+        answer.acknowledged() == vec![good.0, taken.0, taken.0],
+        || format!("acknowledged {:?}", answer.acknowledged()),
     )?;
     let back = ok(target.get(&phone.token, &vault, &good.0, None).await, "get")?;
     ensure(back == good.1, || {
@@ -1003,10 +1030,7 @@ async fn grace<T: Target>(target: &mut T) -> Outcome {
         "delete",
     )?;
     ensure(
-        answer.deleted == vec![old.0]
-            && answer.refused.len() == 1
-            && answer.refused[0].name == absent
-            && answer.refused[0].code == Code::NotFound,
+        answer.deleted == vec![old.0, absent] && answer.refused.is_empty(),
         || format!("{answer:?}"),
     )?;
     let snapshots = ok(target.snapshots(&phone.token, &vault).await, "snapshots")?;
@@ -1110,6 +1134,242 @@ async fn head_in_use<T: Target>(target: &mut T) -> Outcome {
     })
 }
 
+/// Tombstone `names` and expect every one deleted.
+async fn tombstone<T: Target>(
+    target: &mut T,
+    phone: &Paired,
+    vault: &VaultId,
+    names: &[Name],
+) -> Outcome {
+    let answer = ok(target.delete(&phone.token, vault, names).await, "delete")?;
+    ensure(answer.deleted == names && answer.refused.is_empty(), || {
+        format!("deleting {names:?} answered {answer:?}")
+    })
+}
+
+async fn exists_skips_tombstones<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let (kept, dropped) = (object("kept"), object("dropped"));
+    store(target, &phone, &vault, &kept).await?;
+    store(target, &phone, &vault, &dropped).await?;
+    tombstone(target, &phone, &vault, &[dropped.0]).await?;
+    let missing = ok(
+        target
+            .exists(&phone.token, &vault, &[kept.0, dropped.0])
+            .await,
+        "exists",
+    )?;
+    ensure(missing == vec![dropped.0], || {
+        format!("a tombstoned name must read as missing, so the phone sends it again: {missing:?}")
+    })
+}
+
+async fn put_revives_tombstone<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let part = object("purged in grace, then sent again");
+    store(target, &phone, &vault, &part).await?;
+    tombstone(target, &phone, &vault, &[part.0]).await?;
+    let resealed = object("the same part, sealed again").1;
+    let answer = ok(
+        target
+            .put(
+                &phone.token,
+                &vault,
+                &part.0,
+                &Digest::of(&resealed),
+                &resealed,
+            )
+            .await,
+        "storing the tombstoned name again",
+    )?;
+    ensure(
+        matches!(answer, PutAnswer::Stored(entry) if entry.digest == Digest::of(&resealed)),
+        || format!("a PUT over a tombstone must store the new bytes: {answer:?}"),
+    )?;
+    let missing = ok(
+        target.exists(&phone.token, &vault, &[part.0]).await,
+        "exists",
+    )?;
+    ensure(missing.is_empty(), || {
+        "a name stored again reads as missing".to_owned()
+    })?;
+    let listed = ok(target.objects(&phone.token, &vault, None, 10).await, "list")?;
+    ensure(
+        listed.iter().map(|entry| entry.name).collect::<Vec<_>>() == vec![part.0],
+        || format!("a name stored again must be listed: {listed:?}"),
+    )?;
+    // The tombstone is gone, not shadowed: the purge after its grace leaves
+    // the new bytes alone.
+    target.advance(GRACE_MS).await;
+    let purged = target.purge().await?;
+    ensure(purged == 0, || {
+        format!("the purge took {purged} object(s) a PUT had brought back")
+    })?;
+    let back = ok(
+        target.get(&phone.token, &vault, &part.0, None).await,
+        "reading it back after the grace",
+    )?;
+    ensure(back == resealed, || {
+        "the bytes a PUT brought back changed".to_owned()
+    })
+}
+
+async fn head_needs_held_manifest<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let (first, dropped) = (object("a manifest"), object("a dropped manifest"));
+    store(target, &phone, &vault, &first).await?;
+    store(target, &phone, &vault, &dropped).await?;
+    let head = ok(
+        target
+            .set_head(
+                &phone.token,
+                &vault,
+                &SetHead {
+                    name: first.0,
+                    prev: None,
+                    taken_at_ms: 1,
+                },
+            )
+            .await,
+        "the head",
+    )?;
+    tombstone(target, &phone, &vault, &[dropped.0]).await?;
+    for (name, what) in [
+        (object("never uploaded").0, "a manifest never uploaded"),
+        (dropped.0, "a tombstoned manifest"),
+    ] {
+        let refusal = refused(
+            target
+                .set_head(
+                    &phone.token,
+                    &vault,
+                    &SetHead {
+                        name,
+                        prev: Some(first.0),
+                        taken_at_ms: 2,
+                    },
+                )
+                .await,
+            Code::NotFound,
+            what,
+        )?;
+        ensure(refusal == Refusal::NotFound { name: Some(name) }, || {
+            format!("NOT_FOUND must name the manifest: {refusal:?}")
+        })?;
+    }
+    let now = ok(target.head(&phone.token, &vault).await, "the head")?;
+    ensure(now == head, || format!("a refused head moved it: {now:?}"))
+}
+
+async fn delete_absent<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let never = object("never stored").0;
+    tombstone(target, &phone, &vault, &[never]).await?;
+    let purged = object("stored, deleted and purged");
+    store(target, &phone, &vault, &purged).await?;
+    tombstone(target, &phone, &vault, &[purged.0]).await?;
+    tombstone(target, &phone, &vault, &[purged.0]).await?;
+    target.advance(GRACE_MS).await;
+    let swept = target.purge().await?;
+    ensure(swept == 1, || format!("purged {swept}"))?;
+    // A phone retrying a delete whose answer it lost: never refused.
+    tombstone(target, &phone, &vault, &[purged.0, never]).await
+}
+
+async fn listing_skips_tombstones<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let mut stored: Vec<(Name, Vec<u8>)> = (0..4)
+        .map(|index| object(&format!("listed or not {index}")))
+        .collect();
+    stored.sort_by_key(|(name, _)| *name);
+    for part in &stored {
+        store(target, &phone, &vault, part).await?;
+    }
+    // Drop the second in name order, so a page boundary falls on it.
+    tombstone(target, &phone, &vault, &[stored[1].0]).await?;
+    let mut seen = Vec::new();
+    let mut after = None;
+    loop {
+        let page = ok(
+            target
+                .objects(&phone.token, &vault, after.as_ref(), 1)
+                .await,
+            "a page",
+        )?;
+        let Some(last) = page.last() else { break };
+        after = Some(last.name);
+        seen.extend(page.iter().map(|entry| entry.name));
+    }
+    let expected = vec![stored[0].0, stored[2].0, stored[3].0];
+    ensure(seen == expected, || {
+        format!("the listing must leave tombstones out: {seen:?}, expected {expected:?}")
+    })
+}
+
+async fn name_taken<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let held = object("sealed once");
+    store(target, &phone, &vault, &held).await?;
+    let resealed = object("sealed twice").1;
+    let refusal = refused(
+        target
+            .put(
+                &phone.token,
+                &vault,
+                &held.0,
+                &Digest::of(&resealed),
+                &resealed,
+            )
+            .await,
+        Code::NameTaken,
+        "the same name under another digest",
+    )?;
+    ensure(
+        refusal
+            == Refusal::NameTaken {
+                digest: Digest::of(&held.1),
+            },
+        || format!("NAME_TAKEN must carry the held digest: {refusal:?}"),
+    )?;
+    ensure(Code::NameTaken.status() == 409, || {
+        format!("NAME_TAKEN is a {}", Code::NameTaken.status())
+    })?;
+    let answer = ok(
+        target
+            .bundle(&phone.token, &vault, &[Frame::of(held.0, resealed.clone())])
+            .await,
+        "the same name under another digest, bundled",
+    )?;
+    ensure(
+        answer.acknowledged() == vec![held.0]
+            && answer.refused.len() == 1
+            && answer.refused[0].code == Code::NameTaken,
+        || format!("a bundled NAME_TAKEN is refused and acknowledged: {answer:?}"),
+    )?;
+    let back = ok(target.get(&phone.token, &vault, &held.0, None).await, "get")?;
+    ensure(back == held.1, || {
+        "NAME_TAKEN must leave the held bytes alone".to_owned()
+    })
+}
+
 async fn scrub<T: Target>(target: &mut T) -> Outcome {
     target.reset().await?;
     let key = identity(1);
@@ -1141,6 +1401,20 @@ async fn scrub<T: Target>(target: &mut T) -> Outcome {
     )?;
     ensure(missing == vec![rotting.0], || {
         format!("a rotten object must read as missing so the phone resends it: {missing:?}")
+    })?;
+    refused(
+        target.get(&phone.token, &vault, &rotting.0, None).await,
+        Code::NotFound,
+        "reading a rotten object",
+    )?;
+    let fetched = ok(
+        target
+            .fetch(&phone.token, &vault, &[rotting.0, sound.0])
+            .await,
+        "fetching around a rotten object",
+    )?;
+    ensure(fetched == vec![Frame::of(sound.0, sound.1.clone())], || {
+        format!("a fetch must leave a rotten object out, not fail on it: {fetched:?}")
     })?;
     let resealed = object("rotting, sealed again").1;
     ok(

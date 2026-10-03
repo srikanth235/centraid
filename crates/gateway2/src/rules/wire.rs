@@ -164,19 +164,48 @@ pub struct NameRefusal {
     pub code: Code,
 }
 
-/// What `POST bundle` answers: every name the gateway now holds with the
-/// frame's digest, and every frame it refused.
+/// What `POST bundle` answers: each frame exactly as a `PUT` of that frame
+/// alone would have been answered. `stored` is a `PUT`'s `201`, `already` its
+/// `200`, and `refused` carries every other answer's code, `NAME_TAKEN`
+/// included.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BundleAnswer {
+    /// New bytes, now held.
     pub stored: Vec<Name>,
+    /// Held already with the frame's digest: nothing moved.
+    pub already: Vec<Name>,
     pub refused: Vec<NameRefusal>,
+}
+
+impl BundleAnswer {
+    /// Every name the gateway now holds a sealing of, in the order the
+    /// answer lists them: `stored`, `already`, and each `NAME_TAKEN`. A name
+    /// is a function of the plaintext, so another digest under it is the
+    /// same bytes sealed again (#1080, the root's ruling A15). These are the
+    /// names a phone may record as acknowledged.
+    #[must_use]
+    pub fn acknowledged(&self) -> Vec<Name> {
+        self.stored
+            .iter()
+            .chain(&self.already)
+            .copied()
+            .chain(
+                self.refused
+                    .iter()
+                    .filter(|refusal| refusal.code == Code::NameTaken)
+                    .map(|refusal| refusal.name),
+            )
+            .collect()
+    }
 }
 
 /// What `POST delete` answers.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeleteAnswer {
-    /// Tombstoned now, or already tombstoned: either way, deleted.
+    /// Tombstoned now, tombstoned before, or never held: either way, deleted.
+    /// Deleting is idempotent (#1080, the root's ruling A15).
     pub deleted: Vec<Name>,
+    /// Only `HEAD_IN_USE`: the head's own manifest.
     pub refused: Vec<NameRefusal>,
 }
 

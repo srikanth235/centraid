@@ -9,10 +9,10 @@
 
 use std::path::{Path, PathBuf};
 
-use centraid_gateway2::client::{Client, ClientError, Destination};
+use centraid_gateway2::client::{Client, ClientError, Destination, Put};
 use centraid_gateway2::rules::bundle::Frame;
+use centraid_gateway2::rules::code::Refusal;
 use centraid_gateway2::rules::conformance::{self, CASES, Failure, PutAnswer, ScrubCounts, Target};
-use centraid_gateway2::rules::engine::PutOutcome;
 use centraid_gateway2::rules::ids::{Digest, GatewayId, Name, Secret, Token, VaultId};
 use centraid_gateway2::rules::range::ByteRange;
 use centraid_gateway2::rules::wire::{
@@ -181,14 +181,18 @@ impl Target for WireTarget {
         digest: &Digest,
         bytes: &[u8],
     ) -> Result<PutAnswer, Failure> {
+        // The client counts NAME_TAKEN as an acknowledgement; the suite
+        // judges the protocol, where it is a 409 refusal carrying the held
+        // digest, so it is turned back into one here.
         match self
             .phone(token)
             .put(vault, name, digest, bytes.to_vec())
             .await
             .map_err(failure)?
         {
-            PutOutcome::Stored(entry) => Ok(PutAnswer::Stored(entry)),
-            PutOutcome::AlreadyStored(entry) => Ok(PutAnswer::AlreadyStored(entry)),
+            Put::Stored(entry) => Ok(PutAnswer::Stored(entry)),
+            Put::AlreadyStored(entry) => Ok(PutAnswer::AlreadyStored(entry)),
+            Put::NameTaken { held } => Err(Failure::Refused(Refusal::NameTaken { digest: held })),
         }
     }
 
