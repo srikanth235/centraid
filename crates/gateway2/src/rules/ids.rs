@@ -325,8 +325,8 @@ mod tests {
         assert_eq!(Digest::from_header(&format!(" {header} ")), Ok(digest));
         assert!(Digest::from_header(&digest.hex()).is_err(), "no prefix");
         assert!(
-            Digest::from_header(&format!("sha-256={}", digest.hex())).is_err(),
-            "one hash"
+            Digest::from_header(&format!("blake2b={}", digest.hex())).is_err(),
+            "another algorithm under the same hex"
         );
     }
 
