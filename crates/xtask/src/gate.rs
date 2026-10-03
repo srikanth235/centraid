@@ -699,8 +699,12 @@ fn line(name: &str, elapsed: Duration, outcome: &Outcome) -> String {
 ///
 /// The acceptance box is *"the restore drill runs in CI"*, and this is the step
 /// that makes it true. It runs every integration test named `restore_drill` in
-/// the workspace — today `centraid-vault`'s, which drives `backup::drill`
-/// against the in-memory store:
+/// the workspace, and there are two, because the promise has two halves and
+/// each is meaningless alone.
+///
+/// ### 1. The plane — `centraid-vault`'s `restore_drill`
+///
+/// `backup::drill` against the in-memory store:
 ///
 /// - founds a vault with rows and content, takes a page-identical snapshot,
 ///   seals its 64 KiB ranges and every content file, and uploads them;
@@ -710,6 +714,22 @@ fn line(name: &str, elapsed: Duration, outcome: &Outcome) -> String {
 /// - restores from the store, and proves `integrity_check`, the manifest's
 ///   census and `db_hash`, the ladder, a full row dump equal to the lost
 ///   vault's, and that every content hash's names are confirmed.
+///
+/// ### 2. The product — `centraid`'s `restore_drill`
+///
+/// The phone's core, through its own doors, against the gateway a member runs
+/// (`centraid_gateway::server::harness`, TLS and SQLite and object files on
+/// `127.0.0.1:0`):
+///
+/// - pairs, and backs up a real JPEG the core derives its tiers from, the
+///   shell's own derivatives, a library photograph and a film above 64 MiB;
+///   every name is confirmed in the ledger and held by the gateway, and the
+///   gateway's directory holds no plaintext, plaintext hash or key;
+/// - takes 50 more commits and a second snapshot;
+/// - a phone holding nothing restores from the 24 words and the pairing
+///   payload, claiming writer epoch 2; every row equals the lost vault's,
+///   every derivative is back, and the film fetched by name verifies;
+/// - the lost phone's next pass is refused `VAULT_MOVED`.
 ///
 /// It is a `cargo test` invocation rather than logic in this file on purpose:
 /// the drill needs the vault crate, and this runner is on the edit-run loop
@@ -763,8 +783,9 @@ fn run_restore_drill(ctx: &Ctx) -> Result<Outcome> {
     )?;
     Ok(Outcome::Ok(format!(
         "back a vault up, lose it with its ledger and spool, and restore it \
-         row for row from the snapshot, in {seconds:.1}s (no budget slot by \
-         ruling) — evidence: {}",
+         row for row; then lose the PHONE, restore from 24 words across the \
+         real gateway, and freeze the old one, in {seconds:.1}s (no budget \
+         slot by ruling) — evidence: {}",
         display_relative(&ctx.root, &dir)
     )))
 }

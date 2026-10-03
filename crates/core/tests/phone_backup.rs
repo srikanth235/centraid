@@ -240,6 +240,7 @@ fn at_home() -> wire::DrainRequest {
         charging: true,
         wants_snapshot: true,
         exclude_videos: false,
+        asked: false,
     }
 }
 

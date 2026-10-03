@@ -31,6 +31,16 @@ tracing-subscriber.workspace = true
 [dev-dependencies]
 # `tests/derive_sweep.rs` builds a `data:` URI.
 base64.workspace = true
+# THE RESTORE DRILL ACROSS THE REAL GATEWAY (#1080). `tests/restore_drill.rs`
+# drives the phone's core against `centraid_gateway::server::harness` — the
+# gateway a member runs, TLS and SQLite and object files, on `127.0.0.1:0` —
+# so the claim "lose the phone, type 24 words, get the vault back, and the old
+# phone freezes" is proved over a socket. Dev-only: this binary is not a
+# gateway. `image` writes the real JPEG the core derives its tiers from;
+# `blake3` checks a restored original against its hash.
+blake3.workspace = true
+centraid-gateway = { path = "../gateway" }
+image.workspace = true
 centraid-ontology = { path = "../ontology" }
 hex.workspace = true
 rusqlite.workspace = true

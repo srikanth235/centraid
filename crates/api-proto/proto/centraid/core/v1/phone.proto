@@ -100,12 +100,20 @@ message DrainRequest {
   bool charging = 4;
   // TAKE A SNAPSHOT OF THE VAULT NOW, whether or not one is due: "Back up
   // now", and the app leaving the screen. Without it a snapshot is taken only
-  // when the schedule says one is due.
+  // when the schedule says one is due. It decides the snapshot's TIMING and
+  // nothing else: it is not the member asking (`asked`, below).
   bool wants_snapshot = 5;
   // LEAVE VIDEOS OUT of this pass's originals (#1080). False is the complete
   // backup, so a shell that never sets it backs everything up; "include
   // videos" on the backup screen is this negated.
   bool exclude_videos = 6;
+  // THE MEMBER TAPPED "BACK UP NOW" IN THIS PASS (#1080, the root's ruling
+  // A24), and nothing else sets it: not the app leaving the screen, not a
+  // background window. Under `TRANSFER_RULE_MANUAL` it is what lets originals
+  // be sealed, and on any rule it lets a video's original be sealed off the
+  // charger. A shell that sent `wants_snapshot` for both meant two things by
+  // one bit, and MANUAL means the member's own tap.
+  bool asked = 7;
 }
 
 // Why the pass stopped. Every arm is a fact about the spool or the gateway, and

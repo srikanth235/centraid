@@ -32,8 +32,10 @@
 //! | a photograph's original | not under `MANUAL` unless the member asked | under `WIFI_AND_CELLULAR_PHOTOS` |
 //! | a video's original | on a charger, or when the member asked; never when videos are left out | never |
 //!
-//! "The member asked" is `wants_snapshot`: "Back up now", or the app leaving
-//! the screen. The rule and the link a pass was told are remembered in the
+//! "The member asked" is `DrainRequest.asked`: the "Back up now" tap and
+//! nothing else (the root's ruling A24). `wants_snapshot`, which the shell
+//! also sends when the app leaves the screen, decides only when the snapshot
+//! is taken. The rule and the link a pass was told are remembered in the
 //! ledger, because `handoff` — which hands parts to an operating system that
 //! moves them while this core is suspended — is not told them again, and
 //! `allows_cellular` is how the rule survives the hand-off.
@@ -160,9 +162,14 @@ pub struct Conditions {
     pub metered: bool,
     pub charging: bool,
     pub exclude_videos: bool,
-    /// The member asked for this pass: "Back up now", or the app leaving the
-    /// screen (`wants_snapshot`).
+    /// The member tapped "Back up now" in this pass (`DrainRequest.asked`,
+    /// the root's ruling A24): under `MANUAL` it lets originals be sealed, and
+    /// it lets a video's original be sealed off the charger.
     pub asked: bool,
+    /// The shell asked for a snapshot now (`wants_snapshot`): "Back up now",
+    /// or the app leaving the screen. It decides the snapshot's timing and
+    /// nothing else.
+    pub snapshot: bool,
 }
 
 fn rule_of(value: i32) -> wire::TransferRule {
@@ -182,7 +189,8 @@ impl Conditions {
             metered: request.metered,
             charging: request.charging,
             exclude_videos: request.exclude_videos,
-            asked: request.wants_snapshot,
+            asked: request.asked,
+            snapshot: request.wants_snapshot,
         }
     }
 
@@ -203,6 +211,7 @@ impl Conditions {
             charging: read(CHARGING_KEY)?.is_some_and(|text| text == "1"),
             exclude_videos: read(EXCLUDE_VIDEOS_KEY)?.is_some_and(|text| text == "1"),
             asked: false,
+            snapshot: false,
         })
     }
 
@@ -439,7 +448,7 @@ fn pass_over(
 
     // 1. THE RECORDS, when the link may carry them.
     if conditions.may_move(Kind::Records) {
-        if snapshot_due(ledger, store.gateway_id(), conditions.asked)? {
+        if snapshot_due(ledger, store.gateway_id(), conditions.snapshot)? {
             take_snapshot(handle, keyring, plane, ledger, spool, store, budget)?;
         }
         let moved =
@@ -513,11 +522,12 @@ fn names_of_snapshot(snapshot: &LedgerSnapshot) -> Result<BTreeSet<Name>> {
     Ok(names)
 }
 
-/// Whether a snapshot is due. One the member asked for always is; otherwise
+/// Whether a snapshot is due. One the shell asked for (`wants_snapshot`)
+/// always is; otherwise
 /// one is due an hour after the newest a head named, and not while a younger
 /// one is still on its way whole — every part of it queued or held.
-fn snapshot_due(ledger: &Ledger, gateway_id: &str, asked: bool) -> Result<bool> {
-    if asked {
+fn snapshot_due(ledger: &Ledger, gateway_id: &str, wanted: bool) -> Result<bool> {
+    if wanted {
         return Ok(true);
     }
     let now = now_ms();
@@ -1259,6 +1269,7 @@ mod tests {
             charging: false,
             exclude_videos: false,
             asked: false,
+            snapshot: false,
         }
     }
 
@@ -1339,6 +1350,30 @@ mod tests {
         );
     }
 
+    /// THE MEMBER'S TAP AND THE SNAPSHOT'S TIMING ARE TWO BITS (the root's
+    /// ruling A24). The shell sends `wants_snapshot` when the app leaves the
+    /// screen too, and under `MANUAL` that must not let an original through:
+    /// only `asked`, the "Back up now" tap, does.
+    #[test]
+    fn under_manual_only_the_members_tap_lets_an_original_through() {
+        let leaving = Conditions::of(&wire::DrainRequest {
+            rule: wire::TransferRule::Manual as i32,
+            wants_snapshot: true,
+            asked: false,
+            ..wire::DrainRequest::default()
+        });
+        assert!(leaving.snapshot, "the snapshot is still taken now");
+        assert!(!leaving.may_prepare(Kind::Original { video: false }));
+        assert!(leaving.may_prepare(Kind::Derivative));
+        let tapped = Conditions::of(&wire::DrainRequest {
+            rule: wire::TransferRule::Manual as i32,
+            wants_snapshot: true,
+            asked: true,
+            ..wire::DrainRequest::default()
+        });
+        assert!(tapped.may_prepare(Kind::Original { video: false }));
+    }
+
     /// An unspecified rule is `WIFI_ONLY`, and what a pass was told is what
     /// a handoff reads back.
     #[test]
@@ -1361,6 +1396,7 @@ mod tests {
             back,
             Conditions {
                 asked: false,
+                snapshot: false,
                 ..told
             }
         );
