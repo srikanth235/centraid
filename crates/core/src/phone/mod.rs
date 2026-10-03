@@ -269,6 +269,11 @@ pub fn backup_status(vault_file: &Path) -> Result<wire::BackupStatusResponse> {
         acked_at_ms: laptop.as_ref().and_then(|one| one.last_acked_at_ms),
         pending_bytes: local.pending_bytes,
         laptop_paired: laptop.is_some(),
+        // THE #1080 FIELDS — destinations, snapshots, content counts, the
+        // spool, what waits and whether this phone is frozen — are the new
+        // plane's ledger's to answer, and stay at their defaults until the
+        // cut-over replaces this status.
+        ..wire::BackupStatusResponse::default()
     })
 }
 
@@ -430,6 +435,9 @@ pub fn pair(
         record_published: false,
         // HANDED OVER EXACTLY ONCE. See `phone.proto` and `link`'s header.
         device_secret: device.key.to_secret_bytes().to_vec(),
+        // A #1080 DESTINATION is a gateway reached over HTTPS under a pinned
+        // certificate; this pairing is the iroh one, and names none.
+        destination: None,
     })
 }
 
@@ -524,6 +532,7 @@ mod tests {
                 direct_addrs: Vec::new(),
                 seed: None,
                 indices: Vec::new(),
+                payload: String::new(),
             },
             runtime.handle(),
         )
@@ -563,6 +572,7 @@ mod tests {
                     direct_addrs: Vec::new(),
                     seed,
                     indices: Vec::new(),
+                    payload: String::new(),
                 },
                 runtime.handle(),
             )
