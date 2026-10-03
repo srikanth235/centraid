@@ -29,7 +29,7 @@ import kotlinx.coroutines.test.runTest
 /**
  * `VAULT_MOVED` IS COOPERATION, NOT ENFORCEMENT (#1029 F1).
  *
- * Both phones hold the same seed, so no lease and no lock can DECIDE who owns a
+ * Both phones hold the same seed, so no epoch and no lock can DECIDE who owns a
  * vault — either phone could ignore any answer it is given and go on writing.
  * What supersession buys is an ORDER (F3): the restored phone claims the next
  * epoch, and the phone that learns it has been superseded stops writing because
@@ -40,17 +40,17 @@ import kotlinx.coroutines.test.runTest
  *
  * 1. **Writes refuse, reads do not.** Freezing the whole vault would take away
  *    everything the member still has on a phone they are still holding.
- * 2. **The spool is SHOWN and KEPT** — "N changes since <date>". Wiping would
+ * 2. **What no gateway acknowledged is SHOWN and KEPT** — "N changes since
+ *    <date>". Wiping would
  *    destroy the only copy of whatever this phone wrote last, and saying
  *    nothing would let the member discover it after they wiped the phone
  *    themselves.
  * 3. **Nothing takes the vault back on its own.** Two phones claiming one
  *    authority automatically is a loop with the member watching it flip.
  *
- * The state has no producer in this shell yet and says so where it is defined:
- * `error.proto` has no `ERROR_CODE_VAULT_MOVED`, `crates/api-proto` is another
- * lane's, and the lease that hears the supersession is #1029 W5's. These pin
- * the behaviour that call will get.
+ * Its producers are `freezeFor` and `movedFrom` in `sync/ReadFailures.kt`
+ * (#1080), pinned by `VaultMovedProducerSpec`; these pin the behaviour they
+ * drive.
  */
 class VaultMovedSpec : StringSpec({
 

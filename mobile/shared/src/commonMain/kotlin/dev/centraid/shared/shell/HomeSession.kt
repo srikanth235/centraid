@@ -559,14 +559,13 @@ public class HomeSession private constructor(
      * The session republishes so the frozen holding's line is on screen without
      * waiting for the next touch.
      *
-     * ## Its one caller
+     * ## Who calls it
      *
-     * Whatever learns the vault moved, which is the gateway client: it holds
-     * the lease and hears the supersession. **The typed error exists now**
-     * (#1029 W5, hand-off 2) — `ERROR_CODE_VAULT_MOVED = 25`, with
-     * `lease.proto`'s `VaultMoved` riding beside it — and
-     * `dev.centraid.shared.sync.movedFrom` is the ONE place that reads a
-     * refusal and answers these two arguments. [Shelf.freeze] has the note.
+     * `freezeIfMoved`, when a pass stops `MOVED` or the core's `backup_status`
+     * says the vault is frozen (#1080): `dev.centraid.shared.sync.freezeFor`
+     * answers these two arguments, as `movedFrom` does for a refusal carrying
+     * `ERROR_CODE_VAULT_MOVED` and `error.proto`'s `VaultMoved`. [Shelf.freeze]
+     * has the note.
      */
     public suspend fun vaultMoved(vaultId: String, atIso: String, unacked: Long) {
         shelf.freeze(vaultId, atIso, unacked)

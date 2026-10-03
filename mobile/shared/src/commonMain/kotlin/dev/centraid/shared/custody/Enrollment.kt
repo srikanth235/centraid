@@ -109,7 +109,7 @@ public class Enrollment(
 
         /**
          * What the laptop sent did not pass this phone's check (#1047 R3).
-         * Nothing was stored, nothing laid down, and the lease did not move.
+         * Nothing was stored, nothing laid down, and nothing was claimed.
          */
         public data object DidNotCheck : Restored
 

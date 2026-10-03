@@ -271,23 +271,25 @@ public class Shelf(
      *
      * ## Cooperation, not enforcement
      *
-     * Both phones hold the same seed, so no lease and no lock can DECIDE who
+     * Both phones hold the same seed, so no epoch and no lock can DECIDE who
      * owns a vault — either phone could ignore any answer it is given and go on
      * writing. What supersession buys is an ORDER (F3): the restored phone
-     * claims the next lease epoch, and a phone that learns its own epoch has
-     * been superseded stops writing because that is the cooperative thing to
-     * do, not because something stopped it.
+     * claims the gateway's next writer epoch (#1080), and a phone that learns
+     * its own epoch has been superseded stops writing because that is the
+     * cooperative thing to do, not because something stopped it.
      *
      * So this state does three things and no more: writes are refused
-     * ([Holding.readOnly]), the unacked spool is SHOWN ([Holding.frozenLine]),
+     * ([Holding.readOnly]), what no gateway acknowledged is SHOWN ([Holding.frozenLine]),
      * and it is KEPT. **Never wipe, never auto-take-back.** Wiping would
      * destroy a member's only copy of whatever this phone wrote last; taking
      * the vault back automatically would be two phones claiming one authority
      * in a loop, with the member watching it flip.
      *
-     * @property atIso when the other phone claimed the vault, RFC 3339.
-     * @property unacked how many changes this phone holds that the vault it
-     *   moved to has not seen. A count and never a deletion.
+     * @property atIso the instant the line dates from, RFC 3339: the last
+     *   acknowledgement on the gateway's clock, else the move's own time
+     *   (`freezeFor`, `movedFrom` in `sync/ReadFailures.kt`).
+     * @property unacked how many items this phone holds that no gateway
+     *   acknowledged. A count and never a deletion.
      */
     public data class Moved(
         public val atIso: String,
@@ -741,19 +743,16 @@ public class Shelf(
      * **The only way in, and there is no way out.** Taking a vault back is a
      * deliberate act and never an automatic one, so there is no `thaw` here:
      * the act that would undo this is a member choosing to make THIS phone the
-     * authority again, which claims the next lease epoch — and the lease is
-     * #1029 W5's, with the restore it belongs to.
+     * authority again, which is a restore's claim at the gateway's next writer
+     * epoch (#1080).
      *
      * ## Who calls this
      *
-     * Whatever learns the vault moved, which is W5's restore client: it holds
-     * the lease and hears the supersession. **There is no typed error to key
-     * this on yet** — `error.proto` has no `ERROR_CODE_VAULT_MOVED`,
-     * `crates/api-proto` is another lane's, and inventing a code number here
-     * would be a second mechanism that disagreed with the first one minted.
-     * When that code lands, the mapping goes beside the others in
-     * `sync/ReadFailures.kt` and calls THIS function; the state, the refusal
-     * and the line do not move.
+     * `HomeSession.vaultMoved`, when a pass stops `MOVED` or `backup_status`
+     * says the vault is frozen (`freezeFor`), or when a refusal carries
+     * `ERROR_CODE_VAULT_MOVED` (`movedFrom`); both readers are in
+     * `sync/ReadFailures.kt`. The state, the refusal and the line are this
+     * class's alone.
      *
      * Deletes nothing, closes nothing and keeps the core open: a frozen vault
      * is fully readable, which is the point of freezing rather than forgetting.
@@ -1049,8 +1048,8 @@ public class Shelf(
          *
          * A display name on a `core_party` of kind `person`, and the only party
          * in a fresh vault. There is no email address, no phone number and no
-         * account here and nowhere for one to arrive — the same rule
-         * `lease.proto` states for the gateway plane.
+         * account here and nowhere for one to arrive: a gateway, too, knows a
+         * vault by its id and a phone by a token (`docs/gateway.md`).
          */
         public const val DEFAULT_OWNER_NAME: String = "Me"
 

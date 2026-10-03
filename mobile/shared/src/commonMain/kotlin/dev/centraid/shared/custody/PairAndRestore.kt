@@ -68,7 +68,7 @@ public enum class PairRefusal {
 /**
  * W15's `Restore` request. It answers [RestoreResult.Restored], or
  * [RestoreResult.Refused] with WHICH refusal — never a bare null (#1047 R3),
- * for [PairDoor]'s reason: a generation this phone refused to lay down is not
+ * for [PairDoor]'s reason: a snapshot this phone refused to lay down is not
  * a laptop that did not answer, and "could not reach your laptop" sends a
  * member to wake a laptop that is awake.
  *
@@ -118,13 +118,14 @@ public enum class RestoreRefusal {
     /** `PEER_UNREACHABLE`, no core, and everything unrecognised: the laptop did not answer. */
     UNREACHABLE,
 
-    /** `UNAUTHORIZED`: the laptop answered and would not grant this phone the vault's lease. */
+    /** `UNAUTHORIZED`: the gateway answered and would not take this phone's claim on the vault. */
     NOT_TAKEN,
 
     /**
-     * `INTERNAL`: what the laptop sent did not open, or failed `integrity_check`
-     * or the census. Nothing was laid down and the lease did not move, so the
-     * old phone still backs up (#1047 R3).
+     * `INTERNAL`: what the gateway sent did not open, or failed `integrity_check`
+     * or the census. Nothing was laid down and nothing was claimed — a restore
+     * claims only after the snapshot passed its checks (#1080) — so the old
+     * phone still backs up (#1047 R3).
      */
     DID_NOT_CHECK,
 }
@@ -132,9 +133,9 @@ public enum class RestoreRefusal {
 /**
  * What a `Pair` answered (`phone.proto`'s `PairResponse`, #1080).
  *
- * **The safety number is the core's** (seam contract A7):
- * `centraid_identity::pairing_safety_number` over the vault's identity key and
- * the gateway certificate's BLAKE3 fingerprint — the digits the gateway prints
+ * **The safety number is the core's** (#1080 A7, A17):
+ * `centraid_identity::safety_number_of_bytes` over the vault's identity public
+ * key and the gateway certificate's BLAKE3 fingerprint — the digits the gateway prints
  * when the pairing lands and beside it in `centraid-gateway pairings`. This
  * shell computes no number of its own: a second renderer would be a second
  * answer to "who did I pair with".
@@ -161,14 +162,14 @@ public class RestoreAnswer(
     /**
      * Every vault the restore checked and could not claim
      * (`RestoreResponse.unclaimed`, R-1047-R5): a claim failed after another
-     * landed, so this vault's file was removed and its lease is still the old
-     * phone's. Empty is the ordinary answer; [vaults] is never empty beside
+     * landed, so this vault's file was removed and its writer epoch is still
+     * the old phone's. Empty is the ordinary answer; [vaults] is never empty beside
      * it, because a restore where no claim landed is refused instead.
      */
     public val unclaimed: List<UnclaimedVaultAt> = emptyList(),
 ) {
     /**
-     * Rows the restored generations' censuses promised, summed — what makes
+     * Rows the restored snapshots' censuses promised, summed — what makes
      * "your vault is back" a claim rather than a hope (#1029 §2).
      */
     public val rows: Long get() = vaults.sumOf { it.rows }

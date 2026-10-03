@@ -11150,8 +11150,10 @@ message WordsEntryState {
   repeated WordEntry cells = 6;
   // The pairing code of the gateway to restore from, and what it is for: the
   // text its `centraid-gateway pair` printed (`RestoreRequest.payload`, #1080
-  // A1). Drawn for every purpose but PURPOSE_REKEY; the core refuses a
-  // restore that names no gateway.
+  // A1). Drawn wherever the primary restores — every purpose but
+  // PURPOSE_REKEY, and a re-key that offers the restore — and
+  // `primary_enabled` waits for it, because the core refuses a restore that
+  // names no gateway (#1080 A23).
   string endpoint_label = 7;
   string endpoint = 8;
   // The phrase's verdict or the refusal, as a sentence; empty for none.
