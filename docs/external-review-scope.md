@@ -13,11 +13,12 @@ An external reviewer's time is worth more than re-running gates. These already e
 | Covered | Where |
 | --- | --- |
 | Locker cell AEAD with the `rowId‖keyId` AAD, and the structural ciphertext predicate | [`crates/vault/src/custody/locker_key.rs`](../crates/vault/src/custody/locker_key.rs) and its tests; [custody README](../crates/vault/src/custody/README.md) |
-| No Locker plaintext leaves the vault: every byte-returning door, the snapshot, the backup base (sealed and opened) and the vault file searched for planted plaintext; `K` is the seed's leaf and never on disk | [`crates/vault/tests/locker_plaintext_gate.rs`](../crates/vault/tests/locker_plaintext_gate.rs); `crates/core/src/app_query/locker_tests.rs` |
+| No Locker plaintext leaves the vault: every byte-returning door, the backup's snapshot ranges (sealed and opened) and the vault file searched for planted plaintext; `K` is the seed's leaf and never on disk | [`crates/vault/tests/locker_plaintext_gate.rs`](../crates/vault/tests/locker_plaintext_gate.rs); `crates/core/src/app_query/locker_tests.rs` |
 | The authority plane: deny as an outcome, enrollment as full trust, unknown and revoked as one refusal | [`crates/vault/src/access.rs`](../crates/vault/src/access.rs) |
-| No TCP listener on the gateway process | [`crates/centraid/tests/no_listener.rs`](../crates/centraid/tests/no_listener.rs) |
-| The seat's local socket: mode 0600, a peer-uid check, an instance nonce | [`crates/centraid/tests/seat_socket.rs`](../crates/centraid/tests/seat_socket.rs) |
-| Committed-secret scan, prompt-injection corpus, fault injection through the call boundary | the `secrets`, `prompt-injection` and `fault-door` steps of `cargo xtask gate --profile pr`, [TESTING.md](../TESTING.md) |
+| No listener anywhere but a gateway's one serve file | `no-listening-socket` in `cargo xtask rules` — a static scan; nothing checks the kernel's socket table at runtime |
+| A gateway holds no plaintext, plaintext hash, key, token or pairing secret at rest; it acknowledges only bytes that hash to their digest; its head moves only by compare-and-set; a superseded writer is refused | `crates/gateway`'s conformance suite (the blindness and credential canaries, the fence), run in memory and over the wire |
+| The sealed part format: keys, names, framing and refusals | `contracts/crypto/sealed-vectors.json` and the tests in `crates/media/src/sealed.rs` |
+| Committed-secret scan and fault injection through the call boundary | the `secrets` and `fault-door` steps of `cargo xtask gate --profile pr`, [TESTING.md](../TESTING.md) |
 
 ## Review A — cryptography and peer protocol
 
@@ -27,10 +28,11 @@ An external reviewer's time is worth more than re-running gates. These already e
 
 - The sealed-column construction end to end: key derivation, the AAD binding (`seal_aad(physical, column, row_id)`), nonce discipline and reuse resistance under row updates and restores, and whether the AAD binding actually prevents cross-row and cross-column ciphertext substitution.
 - Key custody: the 24 words as the root of every vault key (identity, box, root and the Locker `K`, [D-6](decisions.md#the-owners-rulings-of-2026-09-28-1047)), held in the synced keychain and in the core's memory and never in a key file; what a backup or a restore moves and what it deliberately does not, and the failure mode when the seed and the database disagree.
-- The peer plane: iroh `EndpointId` binding, the pairing ticket (one-shot, hash-only at rest, 15-minute lifetime) and replay, the provisional connection a redeeming device gets, and what a malicious peer can cause a host to do.
+- The backup's sealed part format, `centraid-sealed/2` ([`crates/media/src/sealed.rs`](../crates/media/src/sealed.rs)): the salt-derived part key, the keyed names, the chunk AAD and framing, and what a gateway learns from sizes, part indexes and timing.
+- The gateway plane ([gateway.md](gateway.md)): the self-signed certificate the phone pins and what a phone does when an address answers with another; the pairing secret (one use, 24 hours, hash-only at rest) and the bearer token; the writer epoch and the claim signed by the vault's identity key; and what a malicious gateway can cause a phone to do.
 - Share-grant revocation as a _security_ property rather than a liveness one, including the pinned defect D1 (see [decisions.md](decisions.md#adversary-lanes-and-provisional-evidence-839)).
 
-**Questions the engagement must answer in writing.** Can a nonce repeat under any sequence of updates, restores and merges? Does the AAD binding survive a schema migration that renames an entity or column? Can a paired peer that is later revoked recover any plaintext it did not already hold? Is there any construction here that would fail a standard misuse-resistance review, independent of whether an exploit is demonstrated?
+**Questions the engagement must answer in writing.** Can a nonce repeat under any sequence of updates, restores and merges? Does the AAD binding survive a schema migration that renames an entity or column? Can a gateway, or anyone holding a gateway's whole data directory, learn which file a part is — beyond its size — or recover any plaintext? Is there any construction here that would fail a standard misuse-resistance review, independent of whether an exploit is demonstrated?
 
 **Out of scope.** Reviewing the choice of primitives if they are standard, UI, and anything covered by the table above.
 
@@ -48,12 +50,12 @@ An external reviewer's time is worth more than re-running gates. These already e
 
 ## Review C — privacy and egress
 
-**Why.** This is the review that maps to the product's actual promise. The sovereign-vault claim is not a cryptographic claim; it is a claim about where bytes go. The surfaces that can move bytes off-device — the enrichment cascade's `provider` egress class, an assistant turn routed to a third-party harness, and the relay a paired device dials through — are each governed by different machinery. Nobody outside this repo has checked that those stories add up to the one sentence the product tells users.
+**Why.** This is the review that maps to the product's actual promise. The sovereign-vault claim is not a cryptographic claim; it is a claim about where bytes go. The surfaces that can move bytes off-device — the enrichment cascade's `provider` egress class, an assistant turn routed to a third-party harness, and the gateways a phone uploads its sealed backup to — are each governed by different machinery. Nobody outside this repo has checked that those stories add up to the one sentence the product tells users.
 
 **Scope.**
 
 - The egress cascade: whether the E-ceiling rule (only the vault-default layer sets the ceiling; no rule, profile or per-item choice can widen it) actually holds in the implementation, and whether the consent receipts are what a data-protection reviewer would accept as a record.
-- Derivative renditions: that `thumb` and `preview` carry no EXIF, XMP or ICC ([`crates/media/src/renditions.rs`](../crates/media/src/renditions.rs)), since `thumb` is the rendition that travels first to every admitted device.
+- Derivative renditions: that `thumb` and `preview` carry no EXIF, XMP or ICC — the vault's own ([`crates/media/src/renditions.rs`](../crates/media/src/renditions.rs)) and the ones the phone's platform decoder renders — since `thumb` is the rendition that is backed up and restored first.
 - The Assist OAuth worker's Analytics Engine dataset and the surrounding "keep logs off" rules in [logs.md](logs.md), which are operational discipline rather than an enforced property.
 - Store-facing privacy declarations for iOS and Android against what the app actually does.
 

@@ -837,12 +837,10 @@ internal fun PhotosSheets(
                         // answer.
                         Text(text = backup.paused_reason)
                     }
-                    // REPORTED, NEVER CLAIMED. Which transport the product
-                    // ships is decided by the overnight experiment in
-                    // `mobile/maestro/ios-transfer-experiment.md`; until it has
-                    // run this is a diagnostics line and not a sentence in a
-                    // document.
-                    Text(text = "Transport: ${transportLabel(state)}")
+                    // AN IMPORT, AND ONLY THAT (#1080). No transport row and no
+                    // gateway: where the backup stands is the Backup screen's,
+                    // read from `backup_status`, and this sheet never claims a
+                    // gateway holds anything.
                     Button(
                         onClick = onBackUpNow,
                         enabled = backup?.phase != BackupState.Phase.PHASE_TRANSFERRING &&
@@ -854,11 +852,3 @@ internal fun PhotosSheets(
         else -> Unit
     }
 }
-
-private fun transportLabel(state: PhotosGridState): String =
-    when (state.backup?.transport) {
-        BackupState.Transport.TRANSPORT_IROH_BLOBS -> "Direct"
-        BackupState.Transport.TRANSPORT_HTTPS_BLOB_DOOR -> "HTTPS"
-        // AN HONEST "NOTHING HAS MOVED YET" and not a default.
-        else -> "Nothing carried yet"
-    }
