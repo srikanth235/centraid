@@ -6,6 +6,7 @@
 //! | Module | What it holds |
 //! | --- | --- |
 //! | [`object`] | **`centraid-object/1`** — the one format every object wears (#1029 §4) |
+//! | [`sealed`] | **`centraid-sealed/2`** — the backup plane's part format, named and keyed from the vault's root key (#1080) |
 //! | [`format`] | canonical JSON, BLAKE3 derivation, and the v0-derived seals `crates/vault/src/backup` has not been moved off yet |
 //! | [`models`] | the media model lock's verify-then-fetch |
 //! | [`renditions`] | JPEG derivatives |
@@ -42,3 +43,4 @@ pub mod models;
 pub mod object;
 pub mod phash;
 pub mod renditions;
+pub mod sealed;
