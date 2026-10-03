@@ -3,7 +3,6 @@ package dev.centraid.shared.custody
 import centraid.screen.v1.PairLaptopEvent
 import centraid.screen.v1.PairLaptopState
 import dev.centraid.design.copy.WordsCopy
-import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.sync.CorePairDoor
 import kotlinx.coroutines.CoroutineScope
@@ -17,21 +16,21 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * PAIR THIS PHONE'S VAULT WITH THE MEMBER'S LAPTOP (#1047 E4) — as a pure
- * machine.
+ * PAIR THIS PHONE'S VAULT WITH ONE OF THE MEMBER'S GATEWAYS (#1080; #1047 E4)
+ * — as a pure machine.
  *
- * `pair.laptop`. The laptop prints a pairing ticket (`centraid-gateway
- * invite`): a square to scan and the same text to paste. The core redeems its
- * invite, claims the lease, mints and certifies this device's key, and
- * answers with the pairing's safety number; the shell stores the device secret
- * for the foreground vault and reopens its core so the next drain signs with
- * it. The paired screen shows the safety number — 60 digits in 12 groups of
- * 5, the digits `centraid-gateway serve` prints once the invite is redeemed —
- * and the comparison is the member's (W15-D5).
+ * `pair.laptop`. The gateway prints a pairing payload (`centraid-gateway
+ * pair`): a square to scan and the same text to paste, carrying its addresses,
+ * its certificate's fingerprint and a one-use secret. The core connects with
+ * that pin, pairs, and keeps the gateway as one more backup destination; the
+ * screen shows the gateway's label and address and the pairing's safety
+ * number — 60 digits in 12 groups of 5, the digits the gateway prints when the
+ * pairing lands — and the comparison is the member's (seam contract A7). A
+ * second gateway pairs the same way.
  *
- * **Only a KEYED vault can pair.** A pair signs the device certificate with
- * the vault's identity key, which only a core opened with the seed and the
- * vault's index holds; an unkeyed vault is sent to its words first
+ * **Only a KEYED vault can pair.** A pairing is signed for by the vault's
+ * identity key, which only a core opened with the seed and the vault's index
+ * holds; an unkeyed vault is sent to its words first
  * ([PairLaptopState.Phase.PHASE_NEEDS_WORDS], with `words_label` — the intent
  * `WordsTapped` the shell routes to words.enter's re-key) rather than refused
  * by a core error a member cannot act on.
@@ -258,8 +257,8 @@ public data class PairStep(public val model: Pairing, public val effects: List<P
 
 /**
  * THE MACHINE, RUNNING: [readiness] answers Assess; [door] pairs; [after]
- * runs once a pair answered with something to compare — the shell stores the
- * device secret inside the door and reopens the vault's core in [after].
+ * runs once a pair answered with something to compare — the session re-reads
+ * the backup status, so the new destination is on the backup line at once.
  */
 public class PairLaptopFlow(
     private val readiness: suspend () -> Readiness,
@@ -295,7 +294,7 @@ public class PairLaptopFlow(
             PairEffect.Assess -> PairInput.Readiness(readiness())
             is PairEffect.Pair -> {
                 val result = door()?.pair(effect.ticket) ?: PairResult.Refused(PairRefusal.UNREACHABLE)
-                if (result is PairResult.Paired && result.answer.gatewayEndpoint.isNotBlank()) runCatching { after() }
+                if (result is PairResult.Paired && result.answer.safetyNumber.isNotBlank()) runCatching { after() }
                 PairInput.Answered(result)
             }
         }
@@ -335,22 +334,9 @@ public class PairLaptopBridge {
             },
             door = {
                 val open = session
-                val vaultId = open?.shelf?.foregroundHolding()?.vaultId
-                if (open == null || vaultId == null) {
-                    null
-                } else {
-                    // THE DEVICE SECRET IS KEPT BEFORE ANYTHING ELSE: the core
-                    // hands it over once, and the certificate it wrote names
-                    // that key and no other (R-1047-E4).
-                    val secrets = VaultSecrets(platformServices().secureStore, platformServices().syncedSecrets)
-                    CorePairDoor({ open.shelf.core() }) { secret -> secrets.rememberDeviceSecret(vaultId, secret) }
-                }
+                if (open?.shelf?.foregroundHolding() == null) null else CorePairDoor({ open.shelf.core() })
             },
-            after = {
-                val open = session
-                val vaultId = open?.shelf?.foregroundHolding()?.vaultId
-                if (open != null && vaultId != null) open.paired(vaultId)
-            },
+            after = { session?.backupStatus?.refreshForeground() },
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
         )
     }
