@@ -54,7 +54,7 @@ fn samples() -> Vec<(&'static str, bool, Vec<u8>)> {
         (
             "a database range, compressed",
             true,
-            b"CREATE TABLE core_party (party_id TEXT PRIMARY KEY);\n".repeat(40),
+            b"SQLite format 3\0 page after page of core_party rows. ".repeat(40),
         ),
         (
             "a snapshot manifest, compressed",
