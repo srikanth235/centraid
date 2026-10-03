@@ -26,7 +26,7 @@ use std::collections::BTreeSet;
 
 use crate::rules::claim::{READ_EPOCH, verify_claim};
 use crate::rules::code::{Code, Refusal};
-use crate::rules::ids::{Digest, GatewayId, Name, Secret, Token, VaultId};
+use crate::rules::ids::{Digest, GatewayId, Name, Secret, Token, TokenHash, VaultId};
 use crate::rules::limits::{
     GRACE_MS, LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_LABEL_BYTES, MAX_NAMES, MAX_OBJECT_BYTES, PROTOCOL,
     SECRET_TTL_MS,
@@ -636,6 +636,42 @@ impl<S: State> Gateway<S> {
     /// A store fault.
     pub fn secrets(&self) -> Result<Vec<SecretRecord>, Fault> {
         Ok(self.state.secrets()?)
+    }
+
+    /// `POST /v2/v/{vault}/revoke`: the calling token revokes ITSELF.
+    ///
+    /// A phone that forgets a gateway, or a member who forgets one on the
+    /// phone, ends the token's life at the gateway too: a forgotten pairing
+    /// that could still read every later snapshot would make "forget" a word
+    /// on the phone only. Any token of the vault may revoke itself, a
+    /// superseded writer's included — reading is what it still could do, and
+    /// that is what it gives up. The token is forgotten, so every route after
+    /// answers it `UNAUTHORIZED`, as it answers a stranger.
+    ///
+    /// # Errors
+    ///
+    /// `UNAUTHORIZED` (a token already revoked included), or a store fault.
+    pub fn revoke(&mut self, vault: &VaultId, token: &Token) -> Result<(), Fault> {
+        let vault = *vault;
+        let token = *token;
+        self.state.atomically(|state| {
+            authorize(state, &vault, &token, Access::Read)?;
+            state.remove_token(&token.hash())?;
+            Ok(())
+        })
+    }
+
+    /// The operator's `pairings revoke`: revoke a token by its hash, for the
+    /// phone that is lost and cannot revoke itself. Answers whether a token
+    /// was held under that hash.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    pub fn revoke_hash(&mut self, hash: &TokenHash) -> Result<bool, Fault> {
+        let hash = *hash;
+        self.state
+            .atomically(|state| Ok(state.remove_token(&hash)?))
     }
 
     /// Every paired vault, its head and its tokens, for `pairings`.

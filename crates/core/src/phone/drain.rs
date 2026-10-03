@@ -27,7 +27,7 @@
 //!
 //! | What | May be sealed | May cross a metered link |
 //! |---|---|---|
-//! | the vault's snapshot | always | under `WIFI_AND_CELLULAR_PHOTOS` |
+//! | the vault's snapshot | always | under `WIFI_AND_CELLULAR_PHOTOS`, or under any rule when the member asked (R-1080-C38) |
 //! | a thumbnail, a preview, a poster | always | always |
 //! | a photograph's original | not under `MANUAL` unless the member asked | under `WIFI_AND_CELLULAR_PHOTOS` |
 //! | a video's original | on a charger, or when the member asked; never when videos are left out | never |
@@ -64,7 +64,7 @@ use centraid_vault::backup::spool::Spool;
 use centraid_vault::backup::store::{self as plane_store, Store};
 use centraid_vault::clock::SystemClock;
 
-use super::link::{self, GatewayStore, Reached};
+use super::link::{self, GatewayStore, Reached, Unreached};
 use super::{Keyring, Plane, now_ms, plane_error, store_error};
 use crate::error::{CoreError, Result};
 use crate::handle::Handle;
@@ -163,8 +163,9 @@ pub struct Conditions {
     pub charging: bool,
     pub exclude_videos: bool,
     /// The member tapped "Back up now" in this pass (`DrainRequest.asked`,
-    /// the root's ruling A24): under `MANUAL` it lets originals be sealed, and
-    /// it lets a video's original be sealed off the charger.
+    /// the root's ruling A24): under `MANUAL` it lets originals be sealed, it
+    /// lets a video's original be sealed off the charger, and on a metered
+    /// link it lets the snapshot cross under any rule (R-1080-C38).
     pub asked: bool,
     /// The shell asked for a snapshot now (`wants_snapshot`): "Back up now",
     /// or the app leaving the screen. It decides the snapshot's timing and
@@ -235,10 +236,15 @@ impl Conditions {
         !(matches!(kind, Kind::Original { video: true }) && self.exclude_videos)
     }
 
-    /// Whether a part of this kind may cross the link this pass is on.
+    /// Whether a part of this kind may cross the link this pass is on. The
+    /// member's tap sends the records over a metered link under any rule
+    /// (R-1080-C38): a snapshot is a few MB, and the tap is consent.
     #[must_use]
     pub fn may_move(&self, kind: Kind) -> bool {
-        self.counts(kind) && (!self.metered || allows_cellular(kind, self.rule))
+        self.counts(kind)
+            && (!self.metered
+                || allows_cellular(kind, self.rule)
+                || (self.asked && kind == Kind::Records))
     }
 
     /// Whether a file of this kind may be sealed into the spool now.
@@ -266,7 +272,14 @@ impl Conditions {
             };
         }
         if !self.may_prepare(kind) {
-            return if matches!(kind, Kind::Original { video: true }) && !self.charging {
+            // `MANUAL` first: the tap lets a video through off the charger
+            // too, so it is the one act that moves either.
+            return if matches!(kind, Kind::Original { .. })
+                && self.rule == wire::TransferRule::Manual
+                && !self.asked
+            {
+                wire::WaitReason::Ask
+            } else if matches!(kind, Kind::Original { video: true }) && !self.charging {
                 wire::WaitReason::Charger
             } else {
                 wire::WaitReason::Window
@@ -280,17 +293,28 @@ impl Conditions {
     }
 }
 
-/// Whether the last pass reached a gateway. Unknown is "yes": a phone that
-/// has not run a pass yet is not blamed on its gateway.
+/// What the last pass found at the gateway, as the reason everything waits:
+/// `None` when it reached one, or when no pass has run yet — a phone that has
+/// not tried is not blamed on its gateway; `GATEWAY` when none answered;
+/// `UNTRUSTED` when the machine that answered is not the pinned gateway,
+/// whether at the start of the pass or part-way through it.
 ///
 /// # Errors
 /// The ledger's refusal.
-pub fn last_reach(ledger: &Ledger) -> Result<bool> {
-    Ok(ledger
-        .meta(REACHABLE_KEY)
-        .map_err(plane_error)?
-        .is_none_or(|text| text == "1"))
+pub fn last_reach(ledger: &Ledger) -> Result<Option<wire::WaitReason>> {
+    Ok(
+        match ledger.meta(REACHABLE_KEY).map_err(plane_error)?.as_deref() {
+            Some(REACH_SILENT) => Some(wire::WaitReason::Gateway),
+            Some(REACH_UNTRUSTED) => Some(wire::WaitReason::Untrusted),
+            _ => None,
+        },
+    )
 }
+
+/// `REACHABLE_KEY`'s three values.
+const REACH_ANSWERED: &str = "1";
+const REACH_SILENT: &str = "0";
+const REACH_UNTRUSTED: &str = "untrusted";
 
 // ─── the pass ───────────────────────────────────────────────────────────────
 
@@ -343,6 +367,10 @@ fn stop_of(stop: &Stop) -> Result<Option<wire::DrainStop>> {
             tracing::debug!(%reason, "the gateway stopped answering mid-pass");
             Ok(Some(wire::DrainStop::Unreachable))
         }
+        Stop::Untrusted(reason) => {
+            tracing::warn!(%reason, "the machine that answered is not the pinned gateway");
+            Ok(Some(wire::DrainStop::Untrusted))
+        }
         Stop::Refused(refusal) => {
             tracing::warn!(code = %refusal, "the gateway refused a part; the pass stops");
             Ok(Some(wire::DrainStop::Unreachable))
@@ -382,25 +410,34 @@ pub fn run(
     let mut pass = Pass::new();
     let destinations = ledger.destinations().map_err(plane_error)?;
     let reached = if destinations.is_empty() {
-        None
+        Err(Unreached::Silent)
     } else {
         link::reach(&destinations, &ledger, keyring.vault_id(), runtime)?
     };
     ledger
         .set_meta(
             REACHABLE_KEY,
-            if reached.is_some() || destinations.is_empty() {
-                "1"
-            } else {
-                "0"
+            match &reached {
+                Ok(_) => REACH_ANSWERED,
+                // Nothing paired is not a gateway to blame.
+                Err(_) if destinations.is_empty() => REACH_ANSWERED,
+                Err(Unreached::Silent) => REACH_SILENT,
+                Err(Unreached::Untrusted) => REACH_UNTRUSTED,
             },
         )
         .map_err(plane_error)?;
-    let Some(reached) = reached else {
-        // NOTHING PAIRED, OR NOTHING ANSWERED: nothing is sealed for nobody,
-        // and the spool is left exactly as it was.
-        pass.stopped = wire::DrainStop::Unreachable;
-        return answer(&spool, pass);
+    let reached = match reached {
+        Ok(reached) => reached,
+        Err(unreached) => {
+            // NOTHING PAIRED, NOTHING ANSWERED, OR NOT THE PINNED GATEWAY:
+            // nothing is sealed for nobody, and the spool is left exactly as
+            // it was.
+            pass.stopped = match unreached {
+                Unreached::Silent => wire::DrainStop::Unreachable,
+                Unreached::Untrusted => wire::DrainStop::Untrusted,
+            };
+            return answer(&spool, pass);
+        }
     };
     let outcome = pass_over(
         handle,
@@ -414,7 +451,16 @@ pub fn run(
         &mut pass,
     );
     match outcome {
-        Ok(()) => answer(&spool, pass),
+        Ok(()) => {
+            if pass.stopped == wire::DrainStop::Untrusted {
+                // PART-WAY THROUGH, ANOTHER MACHINE ANSWERED: status says so
+                // until a pass reaches the pinned gateway again.
+                ledger
+                    .set_meta(REACHABLE_KEY, REACH_UNTRUSTED)
+                    .map_err(plane_error)?;
+            }
+            answer(&spool, pass)
+        }
         Err(CoreError::VaultMoved { current_epoch, .. }) => {
             // FROZEN, AND REMEMBERED: the ledger keeps the refusal, so status
             // draws the phone read-only and every pass refuses at once.
@@ -1197,7 +1243,7 @@ pub fn reconcile(
         return Ok(unreachable);
     }
     let destinations = ledger.destinations().map_err(plane_error)?;
-    let Some(reached) = link::reach(&destinations, &ledger, keyring.vault_id(), runtime)? else {
+    let Ok(reached) = link::reach(&destinations, &ledger, keyring.vault_id(), runtime)? else {
         return Ok(unreachable);
     };
     let reconciled = if full {
@@ -1303,6 +1349,37 @@ mod tests {
         }
     }
 
+    /// **A TAP SENDS THE RECORDS OVER A METERED LINK, UNDER ANY RULE**
+    /// (R-1080-C38, superseding C14): the snapshot is a few MB and the tap is
+    /// consent. Originals still follow the rule, and without the tap the
+    /// records do too.
+    #[test]
+    fn a_tap_sends_the_records_over_a_metered_link_under_any_rule() {
+        for rule in RULES {
+            let paid = conditions(rule, true);
+            let tapped = Conditions {
+                asked: true,
+                ..paid
+            };
+            assert!(tapped.may_move(Kind::Records), "{rule:?}");
+            assert_eq!(
+                paid.may_move(Kind::Records),
+                allows_cellular(Kind::Records, rule),
+                "{rule:?}: no tap, the rule alone"
+            );
+            for original in [
+                Kind::Original { video: false },
+                Kind::Original { video: true },
+            ] {
+                assert_eq!(
+                    tapped.may_move(original),
+                    allows_cellular(original, rule),
+                    "{rule:?} {original:?}: an original follows the rule"
+                );
+            }
+        }
+    }
+
     /// A video's original waits for a charger unless the member asked, and
     /// under `MANUAL` no original is sealed unless the member asked.
     #[test]
@@ -1347,6 +1424,32 @@ mod tests {
         assert_eq!(
             wifi.waits_for(Kind::Original { video: false }, false, true),
             wire::WaitReason::Bytes
+        );
+    }
+
+    /// **AN ORIGINAL `MANUAL` HOLDS WAITS FOR THE TAP, NOT FOR TIME** (the
+    /// audit's finding 4): no pass moves it until the member taps Back up now,
+    /// so its reason is `ASK` — a video off the charger included, since the
+    /// tap lets that through too, and a library item whose bytes the shell
+    /// would stream only once it may be sealed.
+    #[test]
+    fn an_original_manual_holds_waits_for_the_members_tap() {
+        let manual = conditions(wire::TransferRule::Manual, false);
+        for (kind, library) in [
+            (Kind::Original { video: false }, false),
+            (Kind::Original { video: false }, true),
+            (Kind::Original { video: true }, false),
+        ] {
+            assert_eq!(
+                manual.waits_for(kind, false, library),
+                wire::WaitReason::Ask,
+                "{kind:?} library {library}"
+            );
+        }
+        assert_eq!(
+            manual.waits_for(Kind::Derivative, false, false),
+            wire::WaitReason::Window,
+            "a derivative is not held by the rule"
         );
     }
 

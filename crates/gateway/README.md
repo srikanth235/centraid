@@ -28,6 +28,7 @@ HTTPS with HTTP/1.1, straight from the phone to the gateway. JSON for small bodi
 | `POST /v2/v/{vault}/fetch` | bearer | `{names}` → the held objects in the same framing, in the order asked |
 | `GET /v2/v/{vault}/objects?after=&limit=` | bearer | `[{name, size, digest, stored_at_ms}]` sorted by name, at most 1000 a page |
 | `POST /v2/v/{vault}/delete` | bearer, write | `{names}` → `{deleted, refused}`: tombstones with a 7-day grace; the head's manifest is refused `HEAD_IN_USE` |
+| `POST /v2/v/{vault}/revoke` | bearer | no body → `{revoked: true}`: the calling token is forgotten and is `UNAUTHORIZED` on every route after; any token of the vault may revoke itself |
 
 **Auth.** `Authorization: Bearer <token>`: 32 random bytes in hex, minted at `pair`; the gateway keeps only their BLAKE3. The vault in the path must be the token's. A stranger, a token for another vault and an unknown vault get the same `UNAUTHORIZED`, so none is an oracle. A write with a token below the vault's writer epoch is refused `MOVED` with the epoch that superseded it; reads still answer, so a superseded phone can freeze read-only.
 
@@ -104,7 +105,7 @@ Each is due one interval after it last finished, by the gateway's clock, as `swe
 ```text
 centraid-gateway serve    --data-dir DIR [--bind 0.0.0.0:8443] [--no-mdns]
 centraid-gateway pair     --data-dir DIR [--port 8443]
-centraid-gateway pairings --data-dir DIR
+centraid-gateway pairings --data-dir DIR [revoke <token id>]
 centraid-gateway scrub    --data-dir DIR
 centraid-gateway health   [--data-dir DIR] [--addr HOST:PORT] [--pin HEX]
 centraid-gateway install  --data-dir DIR [--bind 0.0.0.0:8443] [--dry-run] [--label dev.centraid.gateway]
@@ -114,7 +115,7 @@ centraid-gateway install  --data-dir DIR [--bind 0.0.0.0:8443] [--dry-run] [--la
 
 - **`serve`** runs with no vault. On an empty directory it mints the identity, listens, and prints the gateway id, the pin and the first pairing QR; nothing is stored until a phone pairs. It advertises `_centraid-gateway._tcp` on the LAN (TXT `gw`, `v=2`) unless told `--no-mdns`, runs the sweeps, and stops on Ctrl-C or `SIGTERM`.
 - **`pair`** prints a fresh payload and QR beside a running `serve`, listing this machine's addresses on the port `serve` bound.
-- **`pairings`** lists each vault: its writer epoch, safety number, head and tokens, and how many pairing secrets wait, were spent or expired.
+- **`pairings`** lists each vault: its writer epoch, safety number, head and tokens — each with its id, the first 12 hex characters of its BLAKE3 — and how many pairing secrets wait, were spent or expired. **`pairings revoke <token id>`** forgets one token, for a phone that is lost and cannot revoke itself.
 - **`scrub`** runs the scrub now.
 - **`health`** asks a running gateway for `GET /v2/info`, trusting the certificate in the data directory and dialling where its `serve` listens, or another gateway's `--addr` and `--pin`. It exits non-zero when the gateway is down or not the pinned one.
 - **`install`** writes a **user** systemd unit or a launchd agent and never enables it; `--dry-run` prints it and touches nothing. The systemd unit hides the home directory and binds back only the data directory and the binary, so a data directory under `~` works; `install` creates a missing data directory, mode 0700, first.
@@ -123,9 +124,9 @@ The container image is [`deploy/gateway/Dockerfile`](../../deploy/gateway/Docker
 
 ## For the crates that talk to a gateway
 
-- **`client::Client`**: `first_contact(addrs, pin)` from a scanned payload, then `pair`, then `destination()` — the addresses, the certificate's DER and the token, which is what a phone's ledger keeps — and `Client::new(&destination)` for every later contact. One kept connection; addresses are tried in order from the one that answered last; `Unreachable` is a phone away from home and `Untrusted` is a different machine where the gateway should be. `presign_put` prepares a `PUT` for the platform's background uploader to perform. The client never says something is backed up; it returns what the gateway acknowledged.
+- **`client::Client`**: `first_contact(addrs, pin)` from a scanned payload, then `pair`, then `destination()` — the addresses, the certificate's DER and the token, which is what a phone's ledger keeps — and `Client::new(&destination)` for every later contact. One kept connection; addresses are tried in order from the one that answered last; `Unreachable` is a phone away from home, `Untrusted` is a different machine where the gateway should be, and `Damaged` is bytes that do not hash to the digest they came with. `presign_put` prepares a `PUT` for the platform's background uploader to perform. The client never says something is backed up; it returns what the gateway acknowledged.
 - **`server::harness::spawn(dir)`** starts a real gateway on `127.0.0.1:0` on the caller's tokio runtime, for tests in any crate: mint a pairing secret or a payload, get a client, move the gateway's clock, run a sweep now, flip a stored bit. Nothing below the socket is faked.
-- **`rules::conformance::run(&mut target)`** is the suite every gateway must pass: 30 named cases over a `Target`, run in memory by `tests/conformance.rs` and over the wire through the real client by `tests/conformance_wire.rs`. The canary cases scan everything at rest for planted plaintexts, their BLAKE3, the keys that would open them, every token and every pairing secret.
+- **`rules::conformance::run(&mut target)`** is the suite every gateway must pass: 31 named cases over a `Target`, run in memory by `tests/conformance.rs` and over the wire through the real client by `tests/conformance_wire.rs`. The canary cases scan everything at rest for planted plaintexts, their BLAKE3, the keys that would open them, every token and every pairing secret.
 
 ## The tests
 
@@ -137,3 +138,4 @@ The container image is [`deploy/gateway/Dockerfile`](../../deploy/gateway/Docker
 | `tests/tls.rs` | a P-256 certificate naming the gateway; TLS 1.2 and 1.3; the pin trusted and any other refused; the pinned certificate without its key refused |
 | `tests/pair_from_payload.rs` | a phone pairing from the text of a QR and handing an upload to a client that is not ours; the safety line printed when a pairing lands |
 | `tests/store_client.rs` | `Put`'s three acknowledgements; a bundle frame held before its body ends; a quarter-gibibyte up and back in a few MiB |
+| `tests/revoke.rs` | a phone revoking its own token, and the operator revoking a lost phone's by the id `pairings` prints: the token's `PUT` and `GET` are refused `UNAUTHORIZED` after |

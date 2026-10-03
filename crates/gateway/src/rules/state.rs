@@ -187,6 +187,14 @@ pub trait State {
     /// A store fault.
     fn put_token(&mut self, record: &TokenRecord) -> Result<(), StoreFault>;
 
+    /// Forget a token: a revoked token is an unknown one, so it is
+    /// `UNAUTHORIZED` everywhere after. Answers whether it was held.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    fn remove_token(&mut self, hash: &TokenHash) -> Result<bool, StoreFault>;
+
     /// Every token, ordered by vault then creation.
     ///
     /// # Errors

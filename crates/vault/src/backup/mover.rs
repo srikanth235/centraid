@@ -46,6 +46,9 @@ pub enum Stop {
     Deadline,
     /// The destination could not be reached; nothing is assumed stored.
     Unreachable(String),
+    /// The machine that answered is not the paired destination; nothing is
+    /// sent to it.
+    Untrusted(String),
     /// A newer writer claimed the vault: this device stops writing.
     Moved { epoch: u64 },
     /// The destination refused for a reason that stops the pass.
@@ -144,7 +147,11 @@ impl Pass<'_> {
                 for part in parts {
                     self.ledger.record_attempt(&part.name, &detail)?;
                 }
-                Stop::Unreachable(detail)
+                if matches!(error, StoreError::Untrusted(_)) {
+                    Stop::Untrusted(detail)
+                } else {
+                    Stop::Unreachable(detail)
+                }
             }
         })
     }
@@ -492,6 +499,92 @@ mod tests {
             move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
         assert_eq!(moved.confirmed, vec![original]);
         assert_eq!(rig.store.bundles(), 1, "an original goes as its own put");
+    }
+
+    /// A destination whose certificate is not the pinned one: every call is
+    /// [`StoreError::Untrusted`], and nothing reaches it.
+    struct Impostor;
+
+    fn untrusted<T>() -> std::result::Result<T, StoreError> {
+        Err(StoreError::Untrusted("another certificate".to_owned()))
+    }
+
+    impl Store for Impostor {
+        fn gateway_id(&self) -> &'static str {
+            "gw"
+        }
+        fn exists(&self, _: &[Name]) -> std::result::Result<Vec<Name>, StoreError> {
+            untrusted()
+        }
+        fn put(
+            &self,
+            _: &Name,
+            _: &Digest,
+            _: u64,
+            _: &mut dyn std::io::Read,
+        ) -> std::result::Result<store::Put, StoreError> {
+            untrusted()
+        }
+        fn get(
+            &self,
+            _: &Name,
+            _: &mut dyn std::io::Write,
+        ) -> std::result::Result<u64, StoreError> {
+            untrusted()
+        }
+        fn head(&self) -> std::result::Result<Option<store::Head>, StoreError> {
+            untrusted()
+        }
+        fn set_head(
+            &self,
+            _: &Name,
+            _: Option<&Name>,
+            _: u64,
+        ) -> std::result::Result<store::Head, StoreError> {
+            untrusted()
+        }
+        fn snapshots(&self) -> std::result::Result<Vec<store::SnapshotEntry>, StoreError> {
+            untrusted()
+        }
+        fn list(
+            &self,
+            _: Option<&Name>,
+            _: usize,
+        ) -> std::result::Result<Vec<store::ObjectEntry>, StoreError> {
+            untrusted()
+        }
+        fn delete(&self, _: &[Name]) -> std::result::Result<store::Deleted, StoreError> {
+            untrusted()
+        }
+    }
+
+    /// **NOT THE PINNED DESTINATION IS NOT AN ABSENT ONE** (#1080, the
+    /// audit's finding 5): the pass stops `Untrusted`, and every part stays
+    /// queued and spooled for the destination that is.
+    #[test]
+    fn a_machine_that_is_not_the_destination_stops_the_pass_untrusted() {
+        let rig = rig();
+        let range = queue(&rig, "range", PartKind::Range);
+        let original = queue(&rig, "original", PartKind::Original);
+        for only in [PartKind::Range, PartKind::Original] {
+            let moved = move_queue_where(
+                &rig.ledger,
+                &rig.spool,
+                &Impostor,
+                far(),
+                &rig.clock,
+                &|part| part.kind == only,
+            )
+            .expect("a pass");
+            assert!(
+                matches!(moved.stopped, Stop::Untrusted(_)),
+                "{only:?}: {:?}",
+                moved.stopped
+            );
+            assert!(moved.confirmed.is_empty());
+        }
+        assert_eq!(rig.ledger.queued().expect("reads").len(), 2);
+        assert!(rig.spool.contains(&range) && rig.spool.contains(&original));
     }
 
     /// A part the pass does not admit stays queued and untouched.

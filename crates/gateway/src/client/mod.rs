@@ -68,7 +68,7 @@ use crate::rules::limits::{MAX_BUNDLE_BYTES, MAX_OBJECT_BYTES};
 use crate::rules::range::ByteRange;
 use crate::rules::wire::{
     BundleAnswer, CODE_HEADER, DIGEST_HEADER, DeleteAnswer, HeadView, Info, Missing, Names,
-    ObjectEntry, PairRequest, Paired, SetHead, SnapshotView,
+    ObjectEntry, PairRequest, Paired, Revoked, SetHead, SnapshotView,
 };
 
 /// How long one address gets to accept a TCP connection.
@@ -124,6 +124,10 @@ pub enum ClientError {
     /// An answer that does not parse or breaks the protocol.
     #[error("the gateway's answer broke the protocol: {0}")]
     Protocol(String),
+    /// Bytes that do not hash to the digest they came with: the copy the
+    /// gateway holds, or the bytes on the way, are damaged.
+    #[error("the gateway's copy is damaged: {0}")]
+    Damaged(String),
     /// A route that needs a token, on a client that has none.
     #[error("this client has no token")]
     NoToken,
@@ -476,7 +480,7 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// [`ClientError`]; [`ClientError::Protocol`] when the bytes do not hash
+    /// [`ClientError`]; [`ClientError::Damaged`] when the bytes do not hash
     /// to their digest.
     pub async fn get(
         &self,
@@ -507,7 +511,7 @@ impl Client {
             && let Some(declared) = declared
             && Digest::of(&bytes) != declared
         {
-            return Err(ClientError::Protocol(format!(
+            return Err(ClientError::Damaged(format!(
                 "{name} does not hash to the digest it came with"
             )));
         }
@@ -645,9 +649,9 @@ impl Client {
     /// # Errors
     ///
     /// [`ClientError`]; [`ClientError::Protocol`] for an answer that is not a
-    /// bundle, a frame over [`MAX_OBJECT_BYTES`], or a frame that does not
-    /// hash to its digest; [`ClientError::Io`] for an error `each` returns,
-    /// which ends the fetch.
+    /// bundle or a frame over [`MAX_OBJECT_BYTES`]; [`ClientError::Damaged`]
+    /// for a frame that does not hash to its digest; [`ClientError::Io`] for
+    /// an error `each` returns, which ends the fetch.
     pub async fn fetch_each(
         &self,
         vault: &VaultId,
@@ -726,6 +730,17 @@ impl Client {
             true,
         )
         .await
+    }
+
+    /// `POST revoke`: this client's token revokes itself, and every route
+    /// answers it `UNAUTHORIZED` after.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`].
+    pub async fn revoke(&self, vault: &VaultId) -> Result<Revoked, ClientError> {
+        self.call(Method::POST, &route(vault, "revoke"), None::<&()>, true)
+            .await
     }
 
     /// A `PUT` for the platform to perform: no network here, only the URL and
@@ -1007,7 +1022,7 @@ fn take(
                 return Ok(false);
             };
             if Digest::of(&frame.bytes) != frame.digest {
-                return Err(ClientError::Protocol(format!(
+                return Err(ClientError::Damaged(format!(
                     "{} does not hash to its digest",
                     frame.name
                 )));

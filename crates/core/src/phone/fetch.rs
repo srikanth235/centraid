@@ -39,6 +39,13 @@ pub(crate) enum Assembled {
     Missing,
     /// The gateway did not answer.
     Unreachable,
+    /// The machine that answered is not the pinned gateway; nothing was
+    /// taken from it.
+    Untrusted,
+    /// The copy on the gateway did not open: bytes off their digest, a part
+    /// that does not open under the vault's key, or parts that are not the
+    /// file they are named for. Nothing landed.
+    Damaged,
 }
 
 /// A byte store's write, wearing `std::io::Write` for the assembler.
@@ -78,17 +85,25 @@ pub(crate) fn assemble_into(
                 tracing::debug!(%reason, "the gateway stopped answering mid-fetch");
                 return Ok(Assembled::Unreachable);
             }
+            Err(StoreError::Untrusted(reason)) => {
+                tracing::warn!(%reason, "a fetch reached a machine that is not the pinned gateway");
+                return Ok(Assembled::Untrusted);
+            }
+            Err(StoreError::Damaged(reason)) => {
+                tracing::warn!(%reason, "a fetched part is off its digest");
+                return Ok(Assembled::Damaged);
+            }
             Err(error) => return Err(store_error(error)),
         }
-        assembler
-            .part(keys, sealed_bytes.as_slice(), &mut Into(&mut writer))
-            .map_err(|error| CoreError::Invariant {
-                context: format!("a part of {h} the gateway answered would not open: {error}"),
-            })?;
+        if let Err(error) = assembler.part(keys, sealed_bytes.as_slice(), &mut Into(&mut writer)) {
+            tracing::warn!(%error, "a part of {h} the gateway answered would not open");
+            return Ok(Assembled::Damaged);
+        }
     }
-    assembler.finish().map_err(|error| CoreError::Invariant {
-        context: format!("the parts of {h} are not the file it names: {error}"),
-    })?;
+    if let Err(error) = assembler.finish() {
+        tracing::warn!(%error, "the parts of {h} are not the file it names");
+        return Ok(Assembled::Damaged);
+    }
     let stored = writer.finish().map_err(|error| CoreError::Invariant {
         context: format!("the content store would not keep {h}: {error}"),
     })?;
@@ -192,7 +207,8 @@ pub(crate) fn fetch_all(
 /// # Errors
 /// [`CoreError::InvalidRequest`] for a hash that is not 32 bytes or that the
 /// vault does not name; [`CoreError::Unavailable`] for a core with no content
-/// store; a file a gateway answered that is not the file it names.
+/// store. A copy that did not open is `FETCH_OUTCOME_DAMAGED`, an answer and
+/// not an error, and lands nothing.
 pub fn fetch_original(
     handle: &Handle,
     keyring: &Keyring,
@@ -236,10 +252,19 @@ pub fn fetch_original(
         .ok_or_else(|| CoreError::InvalidRequest {
             detail: "this vault names no content with that hash".to_owned(),
         })?;
-    let mut answered = false;
+    // WHEN NONE LANDS, the gateway that said the most is answered: a copy that
+    // would not open, then one that does not hold it, then a machine that is
+    // not the pinned gateway, then silence.
+    let mut outcome = wire::FetchOutcome::Unreachable;
+    let rank = |outcome: wire::FetchOutcome| match outcome {
+        wire::FetchOutcome::Damaged => 3,
+        wire::FetchOutcome::NotInBackup => 2,
+        wire::FetchOutcome::Untrusted => 1,
+        _ => 0,
+    };
     for destination in ledger.destinations().map_err(plane_error)? {
         let store = GatewayStore::for_destination(&destination, keyring.vault_id(), runtime)?;
-        match assemble_into(&store, &keyring.backup, &h, file.len, bytes)? {
+        let heard = match assemble_into(&store, &keyring.backup, &h, file.len, bytes)? {
             Assembled::Landed(path) => {
                 let assets = handle.with_vault(|vault| {
                     centraid_vault::originals::assets_for_hashes(vault, &[h.to_hex()])
@@ -248,16 +273,14 @@ pub fn fetch_original(
                 crate::events::ChangeFeed::new(handle.events()).blobs_arrived(&assets);
                 return Ok(answer(wire::FetchOutcome::Landed, Some(path)));
             }
-            Assembled::Missing => answered = true,
-            Assembled::Unreachable => {}
+            Assembled::Missing => wire::FetchOutcome::NotInBackup,
+            Assembled::Untrusted => wire::FetchOutcome::Untrusted,
+            Assembled::Damaged => wire::FetchOutcome::Damaged,
+            Assembled::Unreachable => wire::FetchOutcome::Unreachable,
+        };
+        if rank(heard) > rank(outcome) {
+            outcome = heard;
         }
     }
-    Ok(answer(
-        if answered {
-            wire::FetchOutcome::NotInBackup
-        } else {
-            wire::FetchOutcome::Unreachable
-        },
-        None,
-    ))
+    Ok(answer(outcome, None))
 }

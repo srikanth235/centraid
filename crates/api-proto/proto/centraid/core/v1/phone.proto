@@ -110,9 +110,11 @@ message DrainRequest {
   // THE MEMBER TAPPED "BACK UP NOW" IN THIS PASS (#1080, the root's ruling
   // A24), and nothing else sets it: not the app leaving the screen, not a
   // background window. Under `TRANSFER_RULE_MANUAL` it is what lets originals
-  // be sealed, and on any rule it lets a video's original be sealed off the
-  // charger. A shell that sent `wants_snapshot` for both meant two things by
-  // one bit, and MANUAL means the member's own tap.
+  // be sealed; on any rule it lets a video's original be sealed off the
+  // charger, and on a metered link it sends the snapshot — the records, a few
+  // MB — whatever the rule, while originals still follow it (R-1080-C38). A
+  // shell that sent `wants_snapshot` for both meant two things by one bit,
+  // and MANUAL means the member's own tap.
   bool asked = 7;
 }
 
@@ -131,6 +133,11 @@ enum DrainStop {
   // No paired gateway answered, or none is paired. Nothing was lost — the
   // spool is intact and the next pass starts where this one did.
   DRAIN_STOP_UNREACHABLE = 3;
+  // The machine that answered is not the pinned gateway: its certificate is
+  // not the one this phone paired with, or it answered as another gateway
+  // (#1080, the audit's finding 5). Nothing was sent to it, and the spool is
+  // intact.
+  DRAIN_STOP_UNTRUSTED = 4;
 }
 
 message DrainResponse {
@@ -407,6 +414,13 @@ enum WaitReason {
   // Nothing but time: the next pass, or the next background window the
   // operating system grants, reaches it.
   WAIT_REASON_WINDOW = 6;
+  // An original the MANUAL rule holds until the member taps Back up now
+  // (`DrainRequest.asked`); no pass on its own moves it.
+  WAIT_REASON_ASK = 7;
+  // The last pass stopped because the machine that answered is not the
+  // pinned gateway (`DRAIN_STOP_UNTRUSTED`). Not time but the member: the
+  // gateway was replaced or something else answers at its address.
+  WAIT_REASON_UNTRUSTED = 8;
 }
 
 // ----------------------------------------------------------- destinations --
@@ -441,6 +455,10 @@ message Destination {
 // FORGET ONE GATEWAY (#1080). The destination and every confirmation it gave
 // leave the device's ledger. What that gateway stores is left as it is: this
 // phone stops writing to it, and the member's disk is the member's to clear.
+// First, best-effort, the core asks the gateway to revoke this phone's token
+// (`POST /v2/v/{vault}/revoke`, the audit's finding 2), so a forgotten
+// gateway stops answering this phone; a gateway that cannot be reached does
+// not keep its row, and says so in `revoked`.
 message ForgetDestinationRequest {
   // `Destination.gateway_id`.
   string gateway_id = 1;
@@ -450,6 +468,12 @@ message ForgetDestinationResponse {
   // False when the ledger held no such gateway, which is an answer and not a
   // refusal.
   bool forgotten = 1;
+  // True when the gateway answered that this phone's token opens nothing
+  // there any more. False when it could not be reached, answered as another
+  // machine, or the core holds no vault keys to name the vault with: the row
+  // is forgotten all the same, and the token stays live on that gateway until
+  // its operator runs `centraid-gateway pairings revoke <token id>`.
+  bool revoked = 2;
 }
 
 // ---------------------------------------------------------------- handoff --
@@ -614,6 +638,13 @@ enum FetchOutcome {
   FETCH_OUTCOME_UNREACHABLE = 3;
   // A gateway answered and does not hold it whole: it has not been backed up.
   FETCH_OUTCOME_NOT_IN_BACKUP = 4;
+  // The machine that answered is not the pinned gateway. Nothing was taken
+  // from it (#1080, the audit's finding 5).
+  FETCH_OUTCOME_UNTRUSTED = 5;
+  // The copy on the gateway did not open: its bytes do not hash to their
+  // digest, a part does not open under this vault's key, or the parts are not
+  // the file their names derive from. Nothing landed.
+  FETCH_OUTCOME_DAMAGED = 6;
 }
 
 message FetchOriginalResponse {

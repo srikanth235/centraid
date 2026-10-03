@@ -51,7 +51,8 @@ use crate::rules::limits::{LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_JSON_BYTES, MAX_OBJ
 use crate::rules::range::resolve;
 use crate::rules::state::{Fault, ObjectRecord};
 use crate::rules::wire::{
-    BundleAnswer, CODE_HEADER, DIGEST_HEADER, Missing, NameRefusal, Names, PairRequest, SetHead,
+    BundleAnswer, CODE_HEADER, DIGEST_HEADER, Missing, NameRefusal, Names, PairRequest, Revoked,
+    SetHead,
 };
 use crate::server::store::{Staged, StagedFile};
 use crate::server::{Event, Handle, Shared};
@@ -72,6 +73,7 @@ pub fn router(shared: Handle) -> Router {
         .route("/v2/v/{vault}/fetch", post(fetch))
         .route("/v2/v/{vault}/objects", get(objects))
         .route("/v2/v/{vault}/delete", post(delete))
+        .route("/v2/v/{vault}/revoke", post(revoke))
         .fallback(no_route)
         .method_not_allowed_fallback(wrong_method)
         .with_state(shared)
@@ -751,6 +753,26 @@ async fn delete(
         &shared,
         StatusCode::OK,
         shared.rules(|gateway| gateway.delete(&vault, &token, &names.names, now)),
+    )
+}
+
+/// `POST revoke`: the bearer token revokes itself. No body.
+async fn revoke(
+    State(shared): State<Handle>,
+    path: Result<Path<String>, PathRejection>,
+    headers: HeaderMap,
+) -> Response {
+    let parsed = (|| Ok::<_, Refusal>((vault_of(path)?, bearer(&headers)?)))();
+    let (vault, token) = match parsed {
+        Ok(parsed) => parsed,
+        Err(refusal) => return refused(&refusal, shared.now()),
+    };
+    answer(
+        &shared,
+        StatusCode::OK,
+        shared
+            .rules(|gateway| gateway.revoke(&vault, &token))
+            .map(|()| Revoked { revoked: true }),
     )
 }
 

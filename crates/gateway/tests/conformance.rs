@@ -178,6 +178,9 @@ fn the_suite_catches_a_target_that_lies() {
         ) -> Result<DeleteAnswer, Failure> {
             self.0.delete(token, vault, names).await
         }
+        async fn revoke(&mut self, token: &Token, vault: &VaultId) -> Result<(), Failure> {
+            self.0.revoke(token, vault).await
+        }
     }
 
     let report = drive(conformance::run(&mut Careless(MemoryTarget::new())));

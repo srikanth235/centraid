@@ -211,11 +211,13 @@ pub trait Target {
         vault: &VaultId,
         names: &[Name],
     ) -> Result<DeleteAnswer, Failure>;
+    /// `POST /v2/v/{vault}/revoke`: the calling token revokes itself.
+    async fn revoke(&mut self, token: &Token, vault: &VaultId) -> Result<(), Failure>;
 }
 
 /// Every case, by name, in the order [`run`] runs them. A target's test
 /// asserts its report names exactly these, so a dropped case is a failure.
-pub const CASES: [&str; 30] = [
+pub const CASES: [&str; 31] = [
     "info/answers-before-anything-is-paired",
     "pair/a-secret-admits-one-new-vault-once",
     "pair/a-known-vault-is-refused-and-the-secret-is-not-spent",
@@ -246,6 +248,7 @@ pub const CASES: [&str; 30] = [
     "fence/a-stale-head-seen-moves-nothing",
     "canary/no-plaintext-plaintext-hash-or-key-is-at-rest",
     "canary/no-token-or-pairing-secret-is-at-rest",
+    "auth/a-revoked-token-is-unauthorized-everywhere",
 ];
 
 /// Run every case. The result is a [`Report`], never a panic, so one run
@@ -282,6 +285,7 @@ pub async fn run<T: Target>(target: &mut T) -> Report {
     report.record(CASES[27], stale_claim(target).await);
     report.record(CASES[28], blindness_canary(target).await);
     report.record(CASES[29], credential_canary(target).await);
+    report.record(CASES[30], revoked(target).await);
     report
 }
 
@@ -296,6 +300,79 @@ fn identity(seed: u8) -> SigningKey {
 
 fn vault_of(key: &SigningKey) -> VaultId {
     VaultId::from_bytes(key.verifying_key().to_bytes())
+}
+
+/// A REVOKED TOKEN IS A STRANGER (#1080, the audit's finding 2). A phone that
+/// forgets a gateway revokes its own token; after that every route answers
+/// it `UNAUTHORIZED`, its writes and its reads alike, and so does a second
+/// revoke. Another token of the same vault keeps working, and a token cannot
+/// revoke on another vault's path.
+async fn revoked<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let (one, two) = (identity(1), identity(2));
+    let phone = paired(target, &one).await?;
+    let other = paired(target, &two).await?;
+    let vault = vault_of(&one);
+    let blob = object("revoked");
+    store(target, &phone, &vault, &blob).await?;
+    let reader = ok(
+        target.pair(&read_request(&one, &target.gateway_id())).await,
+        "a read grant beside the phone",
+    )?;
+    refused(
+        target.revoke(&phone.token, &vault_of(&two)).await,
+        Code::Unauthorized,
+        "revoking on another vault's path",
+    )?;
+    ok(target.revoke(&phone.token, &vault).await, "revoking itself")?;
+
+    let late = object("after the revoke");
+    refused(
+        target
+            .put(&phone.token, &vault, &late.0, &Digest::of(&late.1), &late.1)
+            .await,
+        Code::Unauthorized,
+        "a revoked token's put",
+    )?;
+    refused(
+        target.get(&phone.token, &vault, &blob.0, None).await,
+        Code::Unauthorized,
+        "a revoked token's get",
+    )?;
+    refused(
+        target.head(&phone.token, &vault).await,
+        Code::Unauthorized,
+        "a revoked token's head",
+    )?;
+    refused(
+        target.exists(&phone.token, &vault, &[blob.0]).await,
+        Code::Unauthorized,
+        "a revoked token's exists",
+    )?;
+    refused(
+        target.fetch(&phone.token, &vault, &[blob.0]).await,
+        Code::Unauthorized,
+        "a revoked token's fetch",
+    )?;
+    refused(
+        target.revoke(&phone.token, &vault).await,
+        Code::Unauthorized,
+        "a second revoke",
+    )?;
+    let held = ok(
+        target.get(&reader.token, &vault, &blob.0, None).await,
+        "another token of the vault reads on",
+    )?;
+    ensure(held == blob.1, || {
+        "the other token read other bytes".to_owned()
+    })?;
+    ok(
+        target
+            .objects(&other.token, &vault_of(&two), None, 10)
+            .await,
+        "another vault's phone is untouched",
+    )?;
+    Ok(())
 }
 
 /// A stand-in for one sealed part: bytes nobody here can open, under a name

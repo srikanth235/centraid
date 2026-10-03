@@ -263,6 +263,15 @@ impl State for SqliteState {
         Ok(())
     }
 
+    fn remove_token(&mut self, hash: &TokenHash) -> Result<bool, StoreFault> {
+        let removed = self
+            .connection
+            .prepare_cached(sql::TOKEN_DELETE)
+            .and_then(|mut statement| statement.execute(params![hash.as_bytes()]))
+            .map_err(fault)?;
+        Ok(removed > 0)
+    }
+
     fn tokens(&self) -> Result<Vec<TokenRecord>, StoreFault> {
         rows(&self.connection, sql::TOKENS_SELECT, [], token_record)
     }
