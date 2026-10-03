@@ -15,20 +15,20 @@ Form factor says how wide the window is. The byte seat says where bytes live. Th
 
 ## The byte seats
 
-> **Superseded, 2026-09-21.** The `origin` / `custodian` split described two devices — a phone where bytes are born and a desktop beside the gateway that holds them. The [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795) leaves **one device**: the phone is the vault, it owns its bytes with eviction, and the laptop holds sealed parts it cannot open. There is no custodian console and no viewer. What survives is the shared machinery below, read as the phone's.
+> **Superseded, 2026-09-21.** The `origin` / `custodian` split described two devices — a phone where bytes are born and a desktop beside the gateway that holds them. The [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795) leaves **one device**: the phone is the vault, it owns its bytes with eviction, and each gateway the member pairs holds sealed parts it cannot open ([#1080](https://github.com/srikanth235/centraid/issues/1080)). There is no custodian console and no viewer. What survives is the shared machinery below, read as the phone's.
 
 |  | **Mobile (KMP: `mobile/`)** — the only seat |
 | --- | --- |
-| Byte flow | up, when a drain runs; down on demand for an original the member asks for |
-| Danger state | bytes the spool still holds that the laptop has not acked |
+| Byte flow | up when a pass runs — from the operating system's library or the app's own store — to a paired gateway; down on demand for an original the member asks for, and in bundles at a restore |
+| Danger state | an original or a snapshot range no gateway has acknowledged |
 | Offline means | everything reads and writes; bytes cross later |
-| "Free up space" | core feature — release originals with a proved copy on the laptop |
+| "Free up space" | core feature — release originals a gateway acknowledged and no kept album holds, deleted from the operating system's library behind the system's own confirmation ([photos/README.md](photos/README.md#keeping-originals-and-freeing-space)) |
 
 ## Shared machinery (build once, per-app never)
 
 1. **One transfer rule per device.** `TransferRule` (`mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/TransferRule.kt`) is the member's one setting, because what it governs is a data plan and a phone has one. What each rule admits is `centraid_blobs::Budget::admits_original` (`crates/blobs/src/plan.rs`) and nowhere else; no shell computes any part of it ([mobile-offline.md](mobile-offline.md#background-work-and-push-privacy)).
-2. **One byte store per vault, and pins are structural.** `ByteStore::sweep` (`crates/blobs/src/store.rs`) subtracts the bytes a pending upload still needs **before** it orders anything, so a pin is never an eviction candidate, and a store over budget _because of_ pins reports `over_budget_by` instead of breaking the promise.
-3. **One durability state.** A surface reads connectivity, durability and pending work from the core's own events, never from a poll ([mobile-offline.md](mobile-offline.md#one-stream-three-occasions)).
+2. **One content store per vault, and pins are structural.** The store is a plain directory of files named by their BLAKE3 (`<stem>.bytes/`, `crates/blobs`), read in place. `ByteStore::sweep` (`crates/blobs/src/store.rs`) subtracts the bytes no gateway has acknowledged yet **before** it orders anything, so a pin is never an eviction candidate, and a store over budget _because of_ pins reports `over_budget_by` instead of breaking the promise; an owned original is evictable only once acknowledged and in no kept album ([R-1080-6](decisions.md#backups-from-first-principles-1080)).
+3. **One durability state.** Every surface that says how safe the vault is reads the core's backup status, and none says more than a gateway acknowledged ([mobile-offline.md](mobile-offline.md#the-pass)).
 4. **Origin acts live on the frame; apps register targets.** The camera roll is `mobile/shared/.../shell/CameraRoll.kt`, and bytes enter the core only through the staging door (`Staging.kt`), so the core names them. Camera, scanner, share-sheet-in and notifications are frame capabilities an app declares in `seats.originActs` — one door for every app.
 5. **The refusal grammar.** Outcomes go to the one status line in the member sentence the producer built ([protocol.md](protocol.md#the-member-sentence-and-its-detail-1015-r-ny-10)); disabled controls are visible, inert at the handler, and explained inline (never a tooltip).
 6. **One read path.** Every read is a page (#996, R8), defined once in `crates/apps/kit/src/page.rs`: `PageRequest.limit` is required, the answer carries a `(sort_key, pk)` cursor rather than a `truncated` flag, and `page_statement` (`statement.rs`) is the only assembler, so no two callers can drift into two keyset dialects. A window past the ceiling is clamped, and the clamp is a work-counter fact, never a message.
@@ -40,7 +40,7 @@ Form factor says how wide the window is. The byte seat says where bytes live. Th
 An app is admitted by these claims, each held by a check rather than by review:
 
 1. **A valid manifest.** `crates/apps/kit/src/manifest.rs` is the one parser: `manifestVersion` is checked first, `_`-prefixed and duplicate handler names are refused, `writes` is required on every action (`[]` still means "no database writes"), and the [designed-states](#designed-states) partition is closed. Each app's own `src/manifest.rs` parses its manifest under it and pins its `seats` block.
-2. **No SQL outside the confined crates.** `cargo xtask rules`' `sql-confinement` refuses a SQL literal outside `crates/{ontology,vault,seat,search}` and `crates/apps/kit`, tests included.
+2. **No SQL outside the confined crates.** `cargo xtask rules`' `sql-confinement` refuses a SQL literal outside `crates/{ontology,vault,search}` and `crates/apps/kit`, tests included.
 3. **Parity with the recorded behaviour.** Each app's `crates/apps/<app>/tests/parity.rs` runs its queries against the fixture bundle in `contracts/apps/<app>/` through `contract_vault::open_contract_vault`.
 
 ## Enrichment doctrine

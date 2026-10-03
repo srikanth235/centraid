@@ -350,107 +350,201 @@ public class AndroidMediaLibrary(private val context: Context) : MediaLibrary {
      */
     override suspend fun requestPermission(): MediaPermission = permission()
 
+    /**
+     * ONE PAGE OF THE ROLL: PHOTOGRAPHS AND VIDEOS (#1025 S6; #1080, the walker).
+     *
+     * One keyset over `MediaStore.Files` for both media types, on `_ID`.
+     * MediaProvider allots `_ID` with `AUTOINCREMENT`, so the keyset finds every
+     * item ADDED since the last walk whatever its capture date — the question a
+     * change token answers on iOS — and never re-offers one. **The cursor
+     * carries the MediaStore version** (API 29+): a rebuilt database numbers its
+     * rows again, so a cursor written against another version starts the walk
+     * over, and `already_held` makes that walk cheap to the gateway. A cursor a
+     * v0 build wrote (a bare `_ID`, over images only) starts over too: the
+     * videos below it were never offered.
+     *
+     * No `LIMIT` in the sort order — Android 11 refuses the token there — so the
+     * walk reads one row past the page to learn whether the roll is exhausted.
+     */
     override suspend fun page(afterCursor: String?, limit: Int): MediaLibrary.Page {
+        val version = storeVersion()
+        val after = afterOf(afterCursor, version)
         val projection = arrayOf(
-            MediaStore.Images.Media._ID,
-            MediaStore.Images.Media.SIZE,
-            MediaStore.Images.Media.DATE_TAKEN,
+            MediaStore.Files.FileColumns._ID,
+            MediaStore.Files.FileColumns.MEDIA_TYPE,
+            MediaStore.MediaColumns.SIZE,
+            DATE_TAKEN,
+            MediaStore.MediaColumns.DATE_ADDED,
         )
+        val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN " +
+            "(${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}, ${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO})" +
+            " AND ${MediaStore.Files.FileColumns._ID} > ?"
         val assets = mutableListOf<MediaLibrary.Asset>()
-        // KEYSET, NOT OFFSET: a camera roll grows while it is being read, and
-        // an offset page boundary silently repeats or drops.
-        val selection = afterCursor?.let { "${MediaStore.Images.Media._ID} > ?" }
+        var more = false
         context.contentResolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            MediaStore.Files.getContentUri(EXTERNAL),
             projection,
             selection,
-            afterCursor?.let { arrayOf(it) },
-            "${MediaStore.Images.Media._ID} ASC LIMIT $limit",
+            arrayOf(after.toString()),
+            "${MediaStore.Files.FileColumns._ID} ASC",
         )?.use { cursor ->
             while (cursor.moveToNext()) {
-                val id = cursor.getLong(0).toString()
+                if (assets.size == limit) {
+                    more = true
+                    break
+                }
+                val id = cursor.getLong(0)
+                val video = cursor.getInt(1) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
+                // DATE_TAKEN is the camera's; an item that never had one (a
+                // screenshot on some builds) falls back to when it was added.
+                val taken = cursor.getLong(3).takeIf { it > 0L } ?: (cursor.getLong(4) * 1_000L)
+                val ref = (if (video) VIDEO_REF else IMAGE_REF) + id
                 assets += MediaLibrary.Asset(
-                    localId = id,
-                    // NO DIGEST HERE (#1025 S4): the core names the bytes. See
-                    // `MediaLibrary.Asset`.
-                    bytes = cursor.getLong(1),
-                    capturedAtIso = java.time.Instant.ofEpochMilli(cursor.getLong(2)).toString(),
+                    localId = ref,
+                    // NO DIGEST HERE (#1025 S4): the core names the bytes.
+                    bytes = cursor.getLong(2),
+                    capturedAtIso = java.time.Instant.ofEpochMilli(taken).toString(),
                     capturedUtcOffsetMinutes = 0,
-                    // A `MediaStore.Images` query returns images and nothing
-                    // else, so the kind is not a guess here.
-                    kind = MediaLibrary.Kind.PHOTO,
+                    kind = if (video) MediaLibrary.Kind.VIDEO else MediaLibrary.Kind.PHOTO,
                     // NO INFERRED GROUPING for motion photos, RAW or burst
                     // members (`NATIVE_V0.md:11-19`): they pass through as
                     // original bytes, and a guess here would invent a
                     // relationship the owner never made.
                     captureGroupId = null,
+                    after = cursorOf(version, id),
                 )
             }
         }
-        return MediaLibrary.Page(assets, assets.lastOrNull()?.localId)
+        return MediaLibrary.Page(
+            assets = assets,
+            nextCursor = assets.lastOrNull()?.after ?: afterCursor,
+            exhausted = !more,
+        )
     }
 
     /**
-     * The original's bytes, from `ContentResolver` (#1025 S6, D-1025-S7-71).
+     * One original's bytes, from `ContentResolver` (#1025 S6; #1080, the walker).
      *
-     * `openInputStream` and not `openFileDescriptor`: the resolver is what
-     * applies the grant, so an asset outside Android 14's partial selection
-     * refuses HERE rather than handing back a descriptor that reads zero bytes.
+     * **The size is the descriptor's** (`statSize`), never `available()`, which
+     * is only what can be read without blocking. **The location is kept**: with
+     * `ACCESS_MEDIA_LOCATION` granted (API 29+) the uri asks for the ORIGINAL,
+     * so the GPS tags the camera wrote reach the vault byte for byte; without
+     * it Android redacts them, and the bytes are still the member's photograph.
      *
-     * A refusal answers NULL. `SecurityException` is the revoked or partial
-     * grant, `FileNotFoundException` is a row whose file the member deleted
-     * between the page and this call, and `IOException` covers a
-     * cloud-backed provider that could not produce the file — all three are
-     * "this one photograph is not available", which is an ordinary event in a
-     * roll that changes under an enumeration and never a reason to end a pass.
+     * Android's media store holds what is on the device, so [allowNetwork] has
+     * nothing to say here. A refusal is [MediaLibrary.Opened.Gone]:
+     * `SecurityException` is the revoked or partial grant, `FileNotFoundException`
+     * a row whose file was deleted between the page and this call, and
+     * `IOException` a provider that could not produce it — "this one item is
+     * not available", never a reason to end a pass.
      */
-    override suspend fun open(localId: String): MediaLibrary.Original? {
-        val uri = android.content.ContentUris.withAppendedId(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            localId.toLongOrNull() ?: return null,
-        )
+    override suspend fun open(ref: String, allowNetwork: Boolean): MediaLibrary.Opened {
+        val uri = uriOf(ref) ?: return MediaLibrary.Opened.Gone
         // THE RESOLVER'S OWN TYPE, not a guess off the name: the core has no
         // sniffer (`Staging`), so what travels with the bytes has to be the
         // platform's answer.
         val type = context.contentResolver.getType(uri) ?: "application/octet-stream"
-        val stream = try {
-            context.contentResolver.openInputStream(uri)
+        val readable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && keepsLocation()) {
+            MediaStore.setRequireOriginal(uri)
+        } else {
+            uri
+        }
+        val descriptor = try {
+            context.contentResolver.openFileDescriptor(readable, "r")
         } catch (refused: SecurityException) {
+            null
+        } catch (unsupported: UnsupportedOperationException) {
             null
         } catch (missing: java.io.FileNotFoundException) {
             null
         } catch (failed: java.io.IOException) {
             null
-        } ?: return null
-        val size = try {
-            stream.available().toLong()
-        } catch (failed: java.io.IOException) {
-            0L
-        }
-        return object : MediaLibrary.Original {
-            override val mediaType: String = type
-            override val bytes: Long = size
+        } ?: return MediaLibrary.Opened.Gone
+        // `statSize` IS -1 for a pipe or a socket; zero is "unknown" to the stage door.
+        val size = descriptor.statSize.coerceAtLeast(0L)
+        val stream = android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor)
+        return MediaLibrary.Opened.Ready(
+            object : MediaLibrary.Original {
+                override val mediaType: String = type
+                override val bytes: Long = size
 
-            override suspend fun read(max: Int): ByteArray {
-                val buffer = ByteArray(max)
-                // `read` MAY SHORT-READ WITHOUT BEING AT THE END, so a single
-                // call whose result is smaller than `max` is not a terminator —
-                // only `-1` is. Treating a short read as the end would stage a
-                // truncated photograph under a hash the core would then
-                // faithfully commit.
-                var filled = 0
-                while (filled < max) {
-                    val read = stream.read(buffer, filled, max - filled)
-                    if (read < 0) break
-                    filled += read
+                override suspend fun read(max: Int): ByteArray {
+                    val buffer = ByteArray(max)
+                    // `read` MAY SHORT-READ WITHOUT BEING AT THE END, so a
+                    // single call whose result is smaller than `max` is not a
+                    // terminator — only `-1` is.
+                    var filled = 0
+                    while (filled < max) {
+                        val read = stream.read(buffer, filled, max - filled)
+                        if (read < 0) break
+                        filled += read
+                    }
+                    return if (filled == 0) ByteArray(0) else buffer.copyOf(filled)
                 }
-                return if (filled == 0) ByteArray(0) else buffer.copyOf(filled)
-            }
 
-            override suspend fun close() {
-                stream.close()
-            }
+                override suspend fun close() {
+                    runCatching { stream.close() }
+                }
+            },
+        )
+    }
+
+    /**
+     * A derivative drawn by the platform (#1080): `loadThumbnail` (API 29+),
+     * upright, scaled to fit the tier's edge, written as JPEG 80 with no
+     * metadata. Null below API 29, where the walker stages the original alone.
+     */
+    override suspend fun render(ref: String, tier: MediaLibrary.Tier): ByteArray? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        val uri = uriOf(ref) ?: return null
+        val drawn = try {
+            context.contentResolver.loadThumbnail(uri, android.util.Size(tier.longEdge, tier.longEdge), null)
+        } catch (failed: java.io.IOException) {
+            null
+        } catch (refused: SecurityException) {
+            null
+        } ?: return null
+        val longest = maxOf(drawn.width, drawn.height)
+        // "CLOSE TO THE REQUESTED SIZE, BUT MAY BE LARGER": fitted here.
+        val fitted = if (longest <= tier.longEdge) {
+            drawn
+        } else {
+            val scale = tier.longEdge.toDouble() / longest
+            android.graphics.Bitmap.createScaledBitmap(
+                drawn,
+                (drawn.width * scale).toInt().coerceAtLeast(1),
+                (drawn.height * scale).toInt().coerceAtLeast(1),
+                true,
+            )
         }
+        val out = java.io.ByteArrayOutputStream()
+        fitted.compress(android.graphics.Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+        return out.toByteArray()
+    }
+
+    /** The content uri a ref names; a v0 ref (a bare `_ID`) was always an image. */
+    private fun uriOf(ref: String): android.net.Uri? {
+        val video = ref.startsWith(VIDEO_REF)
+        val id = ref.removePrefix(VIDEO_REF).removePrefix(IMAGE_REF).toLongOrNull() ?: return null
+        val base = if (video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        return android.content.ContentUris.withAppendedId(base, id)
+    }
+
+    /** Whether the member let Centraid read where a photograph was taken. */
+    private fun keepsLocation(): Boolean =
+        context.checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    /** MediaStore's version (API 29+); empty below, where no rebuild can be told apart. */
+    private fun storeVersion(): String =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.getVersion(context) else ""
+
+    private fun cursorOf(version: String, id: Long): String = "$VERSIONED|$version|$id"
+
+    /** The `_ID` to walk after: 0 for no cursor, a v0 cursor, or one from another MediaStore version. */
+    private fun afterOf(cursor: String?, version: String): Long {
+        val parts = cursor?.takeIf { it.startsWith("$VERSIONED|") }?.split('|') ?: return 0L
+        if (parts.size != 3 || parts[1] != version) return 0L
+        return parts[2].toLongOrNull() ?: 0L
     }
 
     /**
@@ -463,6 +557,18 @@ public class AndroidMediaLibrary(private val context: Context) : MediaLibrary {
      * captures on this platform, and it finds them exactly once.
      */
     override fun onLibraryChanged(listener: () -> Unit): Unit = Unit
+
+    private companion object {
+        /** `MediaStore.MediaColumns.DATE_TAKEN`, spelled out: the constant is API 29's. */
+        const val DATE_TAKEN = "datetaken"
+        const val EXTERNAL = "external"
+        const val IMAGE_REF = "image:"
+        const val VIDEO_REF = "video:"
+        const val VERSIONED = "v"
+
+        /** `crates/media/src/renditions.rs`' quality. */
+        const val JPEG_QUALITY = 80
+    }
 }
 
 /** Wave 4. ML Kit is not a dependency yet, and saying so beats a stub. */

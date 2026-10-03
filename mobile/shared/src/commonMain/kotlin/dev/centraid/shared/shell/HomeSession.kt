@@ -31,6 +31,7 @@ import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.sync.StrandedWrites
 import dev.centraid.shared.sync.UploadLoop
 import dev.centraid.shared.sync.UploadPin
+import dev.centraid.shared.sync.LibraryDeleter
 import dev.centraid.shared.sync.freezeFor
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -138,8 +139,15 @@ public class HomeSession private constructor(
         nowMs = { sinceOpen.elapsedNow().inWholeMilliseconds },
         conditions = { PassConditions.read(services) },
         reschedule = DrainPass.Rescheduler { services.backgroundTasks.resubmit() },
+        // WHAT THE SPOOL HAD NO ROOM FOR AT IMPORT, streamed from the library
+        // again when the core asks (`need_bytes`).
+        feed = { vaultId, needs -> libraryFeed.feed(vaultId, needs) },
         onOutcome = { outcome -> settle(outcome) },
     )
+
+    private val libraryFeed: LibraryFeed = LibraryFeed(services) { vaultId ->
+        shelf.all().firstOrNull { it.vaultId == vaultId && it.moved == null }?.core
+    }
 
     /**
      * WHAT THE OS SAID WHEN THIS LAUNCH REGISTERED ITS WINDOWS, or null before
@@ -201,6 +209,23 @@ public class HomeSession private constructor(
     private var uploads: UploadLoop? = null
 
     /**
+     * THE SHELL'S HAND ON THE OS LIBRARY, or null (#1080 A20). Free up space
+     * reads it at each use: Android installs one when its activity is created
+     * and clears it when the activity is destroyed, because the deleter holds
+     * that activity's launcher for the system's confirmation, and a rotation
+     * must not leave a destroyed activity here. iOS installs one, once,
+     * through `HomeBridge`.
+     */
+    public val libraryDeleter: LibraryDeleter? get() = deleter
+
+    private var deleter: LibraryDeleter? = null
+
+    /** Install the shell's deleter, or clear it with null. See [libraryDeleter]. */
+    public fun installLibraryDeleter(deleter: LibraryDeleter?) {
+        this.deleter = deleter
+    }
+
+    /**
      * Bind the iOS mover's loop to this session's vaults (`HomeBridge`). A
      * frozen vault hands nothing off: the gateway would refuse its writes.
      */
@@ -255,9 +280,14 @@ public class HomeSession private constructor(
         return forgotten
     }
 
-    /** The member changed the rule: the windows' constraints follow it. */
+    /**
+     * The member changed the rule: the windows' constraints follow it, and on
+     * iOS every upload the OS holds is cancelled, because each keeps the
+     * cellular flag of the rule it was handed off under ([UploadLoop.cancelAll]).
+     */
     public fun ruleChanged() {
         services.backgroundTasks.resubmit()
+        uploads?.cancelAll()
     }
 
     /**

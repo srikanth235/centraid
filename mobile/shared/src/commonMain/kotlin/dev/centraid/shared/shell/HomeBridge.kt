@@ -5,6 +5,7 @@ import centraid.screen.v1.HomeState
 import dev.centraid.shared.custody.DevSeed
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.sync.BackgroundUploads
+import dev.centraid.shared.sync.LibraryDeleter
 import dev.centraid.shared.sync.ShelfDrain
 import dev.centraid.shared.sync.TransferRule
 import dev.centraid.shared.sync.UploadEvents
@@ -119,6 +120,7 @@ public class HomeBridge {
             )
             this@HomeBridge.session = session
             uploadLoop?.let { session.attachUploads(it) }
+            deleter?.let { session.installLibraryDeleter(it) }
             opened.complete(session)
             // THE WAITERS BEFORE THE COLLECT, because `collect` on a
             // `StateFlow` never returns: a screen attached after this line
@@ -225,6 +227,19 @@ public class HomeBridge {
     }
 
     private var uploadLoop: UploadLoop? = null
+
+    /**
+     * THE iOS LIBRARY DELETER, INSTALLED (#1080 A20): free up space's one hand
+     * on the photo library, behind the system's own confirmation. Installed
+     * once, before or after the session opens, and handed on to it
+     * ([HomeSession.installLibraryDeleter]) as [installUploads] hands its loop.
+     */
+    public fun installLibraryDeleter(deleter: LibraryDeleter) {
+        this.deleter = deleter
+        session?.installLibraryDeleter(deleter)
+    }
+
+    private var deleter: LibraryDeleter? = null
 
     /**
      * THE CERTIFICATES THE SHELL'S OWN TLS PINS, by DER equality (`pins`).

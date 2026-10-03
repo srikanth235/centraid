@@ -72,17 +72,8 @@ import platform.Security.kSecValueData
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
 import platform.Foundation.NSData
-import platform.Foundation.NSFileHandle
-import platform.Foundation.NSFileManager
-import platform.Foundation.NSFileSize
-import platform.Foundation.NSNumber
-import platform.Foundation.NSTemporaryDirectory
-import platform.Foundation.NSURL
-import platform.Foundation.NSUUID
 import platform.Foundation.setHTTPMethod
 import platform.Foundation.setValue
-import platform.Foundation.closeFile
-import platform.Foundation.fileHandleForReadingAtPath
 import platform.Foundation.NSDateFormatter
 import platform.Foundation.NSLocale
 import platform.Foundation.NSPredicate
@@ -99,8 +90,6 @@ import platform.Photos.PHAsset
 import platform.Photos.PHAssetMediaSubtypePhotoLive
 import platform.Photos.PHAssetMediaTypeVideo
 import platform.Photos.PHAssetResource
-import platform.Photos.PHAssetResourceManager
-import platform.Photos.PHAssetResourceRequestOptions
 import platform.Photos.PHAssetResourceTypeFullSizePairedVideo
 import platform.Photos.PHAssetResourceTypeFullSizePhoto
 import platform.Photos.PHAssetResourceTypeFullSizeVideo
@@ -739,56 +728,61 @@ public class IosMediaLibrary : MediaLibrary {
     }
 
     /**
-     * ONE PAGE OF THE CAMERA ROLL, KEYSET ON `creationDate` (#1025 S6,
-     * D-1025-S7-70).
+     * ONE PAGE OF THE CAMERA ROLL (#1025 S6, D-1025-S7-70; #1080, the walker).
      *
-     * This threw `"not implemented"` and a phone could therefore never upload a
-     * photograph: the product was read-only on iPhone, which is the wrong way
-     * round for the device photographs come FROM.
+     * ## Two walks, one cursor
      *
-     * ## The cursor, and the two things that make it not an offset
+     * **The first walk is a keyset on `creationDate`**, from the oldest
+     * photograph up, and it carries the change token taken when it STARTED
+     * (`k|<token>|<millis>|<localIdentifier>`). **Every walk after it is that
+     * token's**: the assets ADDED since, in the order Photos recorded them
+     * (`t|<token>|<offered>`). A keyset alone missed every asset that arrives
+     * with an old capture date — an AirDropped photograph from last year sorts
+     * behind the cursor and was never offered — and the token is what Photos
+     * keeps for exactly this question. An edit after the walk is not
+     * re-offered: the asset is backed up as it was, and marked edited only if
+     * it already was. A token Photos
+     * will no longer answer for (it expired while the app was not opened)
+     * starts the first walk again, and `already_held` makes that walk cheap to
+     * the gateway.
      *
-     * `<creationDate as epoch milliseconds>|<localIdentifier>`. The date alone
-     * is not unique — a burst fires ten frames inside one second and the
-     * simulator's seeded library gives several assets the SAME instant — so the
-     * identifier is the tiebreak, and without it a page boundary that landed
-     * inside a burst would repeat or drop its members for ever.
+     * A cursor a v0 build wrote (`<millis>|<localIdentifier>`, no token)
+     * finishes its keyset and then takes the token of that moment.
      *
-     * **The predicate is `>=`, not `>`, and the overlap is skipped in Kotlin.**
-     * `NSPredicate` over `PHAsset` supports a small, fixed set of keys and
-     * `localIdentifier` is NOT one of them — Photos raises rather than
-     * answering — so the second half of the keyset cannot be expressed to the
-     * fetch at all. Asking for `>=` and dropping everything up to and including
-     * the cursor's identifier is the same walk with the tiebreak applied one
-     * layer out. The cost is bounded by the size of one same-instant group.
+     * ## The keyset, and the two things that make it not an offset
      *
-     * **An asset with NO `creationDate` reads as `distantPast`.** Photos sorts
-     * nil first under an ascending sort, so that is where the epoch floor puts
-     * it too and the walk agrees with the fetch. It is a fixed set — a new
-     * capture always carries a date — so it is offered on the first pass and
-     * then sits behind the cursor like anything else. A keyset that ignored the
-     * nil would silently drop every undated asset, which is the trap
-     * `docs/photos/README.md` records the vault library hitting from the other
-     * side.
+     * The date alone is not unique — a burst fires ten frames inside one
+     * second — so the identifier is the tiebreak. **The predicate is `>=`, not
+     * `>`, and the overlap is skipped in Kotlin**: `localIdentifier` is not a
+     * key `NSPredicate` over `PHAsset` accepts, so the second half of the
+     * keyset is applied one layer out. **An asset with NO `creationDate` reads
+     * as `distantPast`**, where Photos' ascending sort puts it too.
      *
-     * ## A Live Photo is TWO assets here
+     * ## One asset, its resources
      *
-     * `PHAssetMediaSubtypePhotoLive` is one `PHAsset` carrying two resources.
-     * The interface's own rule is that a pair is "one thing to a grid and two
-     * things to an uploader", so both are emitted, sharing one
-     * [MediaLibrary.Asset.captureGroupId] — and the movie's [localId] carries
-     * the [PAIRED_VIDEO] suffix, which is what [open] reads to know WHICH
-     * resource of the asset it was asked for.
-     *
-     * **Burst members and RAW get no grouping.** A burst member is its own
-     * `PHAsset` and `burstIdentifier` is deliberately not read: grouping on it
-     * would invent a relationship the owner never made (`NATIVE_V0.md:11-19`).
-     * A RAW+JPEG capture is one asset with two resources and only the PRIMARY
-     * one is staged — the RAW itself for a ProRAW capture, because that is what
-     * `PHAssetResourceTypePhoto` is on such an asset.
+     * A Live Photo is ONE asset with two resources: the still and its paired
+     * movie, whose ref carries the [PAIRED_VIDEO] suffix. Burst members
+     * and RAW get no grouping: grouping on `burstIdentifier` would invent a
+     * relationship the owner never made (`NATIVE_V0.md:11-19`).
      */
     override suspend fun page(afterCursor: String?, limit: Int): MediaLibrary.Page {
-        val from = Cursor.parse(afterCursor)
+        val tokenWalk = afterCursor?.takeIf { it.startsWith(TOKEN_WALK + FIELD) }?.split(FIELD)
+        if (tokenWalk != null && tokenWalk.size == 3) {
+            val offered = tokenWalk[2].toIntOrNull() ?: 0
+            return changedPage(tokenWalk[1], offered, limit) ?: keysetPage(null, ChangeTokens.current(), limit)
+        }
+        val keyset = afterCursor?.takeIf { it.startsWith(KEYSET_WALK + FIELD) }?.split(FIELD, limit = 4)
+        if (keyset != null && keyset.size == 4) {
+            val from = keyset[2].toLongOrNull()?.let { Cursor(it, keyset[3]) }
+            return keysetPage(from, keyset[1].ifEmpty { null }, limit)
+        }
+        // A v0 CURSOR, or none: the first walk, from its start or from where v0 was.
+        val legacy = Cursor.parse(afterCursor)
+        return keysetPage(legacy, if (legacy == null) ChangeTokens.current() else null, limit)
+    }
+
+    /** The first walk: `creationDate` keyset, carrying the token it started under. */
+    private fun keysetPage(from: Cursor?, token: String?, limit: Int): MediaLibrary.Page {
         val options = PHFetchOptions()
         options.sortDescriptors = listOf(
             NSSortDescriptor.sortDescriptorWithKey(CREATION_DATE, ascending = true),
@@ -807,7 +801,6 @@ public class IosMediaLibrary : MediaLibrary {
         val assets = mutableListOf<MediaLibrary.Asset>()
         var index = 0
         var passed = from == null
-        var last: Cursor? = null
         while (index < total && assets.size < limit) {
             val asset = fetched.objectAtIndex(index.convert()) as? PHAsset
             index += 1
@@ -819,99 +812,78 @@ public class IosMediaLibrary : MediaLibrary {
                 if (cursor.localId == from?.localId) passed = true
                 continue
             }
-            assets += describe(asset, cursor)
-            last = cursor
+            assets += describe(asset, cursor, after = keysetCursor(token, cursor))
         }
+        val exhausted = index >= total
         return MediaLibrary.Page(
             assets = assets,
-            // NULL AT THE END OF THE ROLL, and that is what stops the walk. A
-            // cursor handed back on an exhausted fetch would make every
-            // subsequent pass re-fetch the tail to learn the same thing.
-            nextCursor = if (index < total) last?.encode() else null,
+            // THE END OF THE FIRST WALK HANDS OVER TO ITS TOKEN, taken when it
+            // started, so nothing added during the walk is missed.
+            nextCursor = if (exhausted) {
+                (token ?: ChangeTokens.current())?.let { "$TOKEN_WALK$FIELD$it${FIELD}0" }
+                    ?: assets.lastOrNull()?.after
+            } else {
+                assets.lastOrNull()?.after
+            },
+            exhausted = exhausted,
         )
     }
 
+    /** Every walk after the first: the assets added since [token], [offered] of them already offered. */
+    private fun changedPage(token: String, offered: Int, limit: Int): MediaLibrary.Page? {
+        val (added, newest) = ChangeTokens.insertedSince(token) ?: return null
+        val window = added.drop(offered).take(limit)
+        val found = PHAsset.fetchAssetsWithLocalIdentifiers(window, null)
+        val byId = (0 until found.count.toInt())
+            .mapNotNull { found.objectAtIndex(it.convert()) as? PHAsset }
+            .associateBy { it.localIdentifier }
+        val assets = window.mapIndexedNotNull { at, id ->
+            // ADDED, THEN DELETED inside the window: nothing to offer.
+            val asset = byId[id] ?: return@mapIndexedNotNull null
+            describe(
+                asset,
+                Cursor(epochMillisOf(asset), id),
+                after = "$TOKEN_WALK$FIELD$token$FIELD${offered + at + 1}",
+            )
+        }
+        val exhausted = offered + window.size >= added.size
+        return MediaLibrary.Page(
+            assets = assets,
+            // CAUGHT UP: the next walk is from the newest change seen.
+            nextCursor = if (exhausted) {
+                "$TOKEN_WALK$FIELD${newest ?: token}${FIELD}0"
+            } else {
+                "$TOKEN_WALK$FIELD$token$FIELD${offered + window.size}"
+            },
+            exhausted = exhausted,
+        )
+    }
+
+    private fun keysetCursor(token: String?, cursor: Cursor): String =
+        if (token == null) cursor.encode() else "$KEYSET_WALK$FIELD$token$FIELD${cursor.encode()}"
+
     /**
-     * The bytes of one original, streamed (#1025 S6, D-1025-S7-71).
-     *
-     * ## Why this goes through a temporary FILE, and not a channel
-     *
-     * The first version piped `PHAssetResourceManager.requestDataForAssetResource`
-     * — a PUSH api — into a rendezvous `Channel` and declared
-     * `byteSize = 0`, because **`PHAssetResource` publishes no size**. On the
-     * simulator, every single photograph was then refused with "Centraid could
-     * not read its own request", and the reason is in `Staging`'s own comment,
-     * which the first version had misread: the declared length is "the
-     * allocation AND the BOUND". `Staging.begin(0)` makes the core reserve
-     * nothing and refuse the first chunk that arrives — `the chunks carry more
-     * bytes than the 0 declared` — so a zero declaration is not "unknown", it
-     * is "empty", and the whole upload path was dead on arrival.
-     *
-     * The declared size therefore has to be REAL, and Photos will not state one.
-     * `writeData(for:toFile:options:)` is the documented way to get the
-     * resource's bytes somewhere they can be measured: the file is written once,
-     * `NSFileManager` states its exact length, and the stream is an
-     * `NSFileHandle` read a chunk at a time. That also deletes the backpressure
-     * problem rather than solving it — there is no second thread to throttle,
-     * no `runBlocking` inside a Photos callback, and nothing to leak if a stage
-     * refuses half way.
-     *
-     * The cost is one temporary copy of the original on disk, which is what
-     * every uploader on this platform pays; it lives in `NSTemporaryDirectory`
-     * and [Original.close] removes it on every path.
-     *
-     * **`networkAccessAllowed`**, so an asset whose original lives in iCloud is
-     * downloaded rather than refused. That is the ordinary state of a roll on a
-     * phone with Optimise Storage on, and without it the backup would silently
-     * only ever carry what happened to be resident.
-     *
-     * Null when Photos has no resource to give, or will not write one: an
-     * identifier the member deleted between the page and here, one outside a
-     * LIMITED selection, or an iCloud original with no network. **Not an
-     * error** — a roll changes under an enumeration.
+     * One resource's bytes, streamed from Photos (#1080 ruling 6; see
+     * [streamResource]). [ref] is an asset's local identifier for its ORIGINAL,
+     * or with the [PAIRED_VIDEO] suffix for a Live Photo's movie.
      */
-    override suspend fun open(localId: String): MediaLibrary.Original? {
-        val paired = localId.endsWith(PAIRED_VIDEO)
-        val identifier = if (paired) localId.removeSuffix(PAIRED_VIDEO) else localId
+    override suspend fun open(ref: String, allowNetwork: Boolean): MediaLibrary.Opened {
+        val paired = ref.endsWith(PAIRED_VIDEO)
+        val identifier = if (paired) ref.removeSuffix(PAIRED_VIDEO) else ref
         val asset = PHAsset.fetchAssetsWithLocalIdentifiers(listOf(identifier), null)
-            .firstObject as? PHAsset ?: return null
+            .firstObject as? PHAsset ?: return MediaLibrary.Opened.Gone
         val resources = PHAssetResource.assetResourcesForAsset(asset)
             .filterIsInstance<PHAssetResource>()
-        val resource = (if (paired) resources.firstOrNull(::isPairedVideo) else primaryOf(resources))
-            ?: return null
+        val resource = (if (paired) pairedVideoOf(resources) else originalOf(resources))
+            ?: return MediaLibrary.Opened.Gone
+        return streamResource(resource, mimeOf(resource.uniformTypeIdentifier), allowNetwork)
+    }
 
-        // A PATH NOBODY ELSE CAN COLLIDE WITH. Two passes must never share one,
-        // and `localIdentifier` carries slashes, so it is not a file name.
-        val path = NSTemporaryDirectory() + "centraid-stage-" + NSUUID().UUIDString()
-        val options = PHAssetResourceRequestOptions()
-        options.networkAccessAllowed = true
-        val failure = suspendCancellableCoroutine { continuation ->
-            PHAssetResourceManager.defaultManager().writeDataForAssetResource(
-                resource,
-                NSURL.fileURLWithPath(path),
-                options,
-            ) { error ->
-                if (continuation.isActive) continuation.resume(error?.localizedDescription)
-            }
-        }
-        if (failure != null) {
-            NSFileManager.defaultManager.removeItemAtPath(path, null)
-            return null
-        }
-        val handle = NSFileHandle.fileHandleForReadingAtPath(path) ?: run {
-            NSFileManager.defaultManager.removeItemAtPath(path, null)
-            return null
-        }
-        val size = (
-            NSFileManager.defaultManager.attributesOfItemAtPath(path, null)
-                ?.get(NSFileSize) as? NSNumber
-            )?.longLongValue ?: 0L
-        return ResourceStream(
-            mediaType = mimeOf(resource.uniformTypeIdentifier),
-            bytes = size,
-            handle = handle,
-            path = path,
-        )
+    /** A derivative of [ref]'s asset, drawn by Photos from the current edit. See [renderAsset]. */
+    override suspend fun render(ref: String, tier: MediaLibrary.Tier): ByteArray? {
+        val asset = PHAsset.fetchAssetsWithLocalIdentifiers(listOf(ref.removeSuffix(PAIRED_VIDEO)), null)
+            .firstObject as? PHAsset ?: return null
+        return renderAsset(asset, tier.longEdge)
     }
 
     /**
@@ -922,10 +894,9 @@ public class IosMediaLibrary : MediaLibrary {
      * unregistering is the app's to do at teardown; one observer per listener
      * would be one retained object per screen that ever opened.
      *
-     * It reports THAT the library changed and never what changed. A
-     * `PHChange` can say which assets moved, and reading it would be a second
-     * opinion about what is new — the cursor is the first and the durable one,
-     * so this is a nudge to run the pass and nothing more.
+     * It reports THAT the library changed and never what changed: the cursor —
+     * the change token, after the first walk — is the durable answer, so this
+     * is a nudge to run the pass and nothing more.
      */
     override fun onLibraryChanged(listener: () -> Unit) {
         libraryListeners += listener
@@ -947,11 +918,8 @@ public class IosMediaLibrary : MediaLibrary {
         }
     }
 
-    /**
-     * One `PHAsset` as this interface describes it, plus its paired movie when
-     * it has one. See [page] for why a Live Photo is two rows.
-     */
-    private fun describe(asset: PHAsset, cursor: Cursor): MediaLibrary.Asset {
+    /** One `PHAsset` as this interface describes it, with its resources. See [page]. */
+    private fun describe(asset: PHAsset, cursor: Cursor, after: String): MediaLibrary.Asset {
         val live = (asset.mediaSubtypes and PHAssetMediaSubtypePhotoLive) != 0uL
         return MediaLibrary.Asset(
             localId = asset.localIdentifier,
@@ -965,36 +933,46 @@ public class IosMediaLibrary : MediaLibrary {
             },
             // NO dHASH ON THIS SIDE. The field is a duplicates hint and
             // computing one means decoding every original on the phone to
-            // produce a value that never merges anything — the gateway derives
-            // it at commit, where the bytes already are (D-1025-S7-50).
+            // produce a value that never merges anything (D-1025-S7-50).
             perceptualHash = null,
             // ONLY A LIVE PHOTO. Burst members, motion photos and RAW pairs get
             // null, which is the interface's own rule.
             captureGroupId = if (live) asset.localIdentifier else null,
+            resources = buildList {
+                add(MediaLibrary.Resource(MediaLibrary.Resource.Role.ORIGINAL, asset.localIdentifier))
+                if (live) {
+                    add(MediaLibrary.Resource(MediaLibrary.Resource.Role.PAIRED_VIDEO, asset.localIdentifier + PAIRED_VIDEO))
+                }
+            },
+            after = after,
+            // THE NEXT EDIT REPLACES AN EDITED ASSET'S BYTES (A20).
+            edited = asset.hasAdjustments,
         )
     }
 
     /**
-     * The resource whose bytes ARE the original.
+     * THE CURRENT RENDITION (#1080 A20, the ruling for v1).
      *
-     * `PHAssetResourceTypePhoto` and `…Video` are the originals;
      * `…FullSizePhoto` and `…FullSizeVideo` are what an EDIT produces and are
-     * preferred when present, because on an edited asset the original is the
-     * pre-edit frame and the member's photograph is the rendered one. Anything
-     * else — adjustment data, a paired video, a thumbnail — is not an original
-     * and is never the answer here.
+     * preferred when present: on an edited asset the member's photograph is
+     * the rendered one. Otherwise `PHAssetResourceTypePhoto` and `…Video` —
+     * what the camera wrote, the RAW itself for a ProRAW capture. An edited
+     * asset is marked ([MediaLibrary.Asset.edited], `StageBegin.os_edited`),
+     * because the next edit replaces these bytes: the core never offers it for
+     * deletion, so nothing is lost. Backing up the camera original and the
+     * edit's adjustment data beside it is an owner question.
      */
-    private fun primaryOf(resources: List<PHAssetResource>): PHAssetResource? =
+    private fun originalOf(resources: List<PHAssetResource>): PHAssetResource? =
         resources.firstOrNull {
-            it.type == PHAssetResourceTypeFullSizePhoto ||
-                it.type == PHAssetResourceTypeFullSizeVideo
+            it.type == PHAssetResourceTypeFullSizePhoto || it.type == PHAssetResourceTypeFullSizeVideo
         } ?: resources.firstOrNull {
             it.type == PHAssetResourceTypePhoto || it.type == PHAssetResourceTypeVideo
         }
 
-    private fun isPairedVideo(resource: PHAssetResource): Boolean =
-        resource.type == PHAssetResourceTypePairedVideo ||
-            resource.type == PHAssetResourceTypeFullSizePairedVideo
+    /** A Live Photo's movie half, as rendered when the asset was edited. */
+    private fun pairedVideoOf(resources: List<PHAssetResource>): PHAssetResource? =
+        resources.firstOrNull { it.type == PHAssetResourceTypeFullSizePairedVideo }
+            ?: resources.firstOrNull { it.type == PHAssetResourceTypePairedVideo }
 
     /** `creationDate` as epoch milliseconds, with nil reading as the floor. */
     private fun epochMillisOf(asset: PHAsset): Long {
@@ -1008,20 +986,12 @@ public class IosMediaLibrary : MediaLibrary {
     /**
      * The capture-local offset, in minutes — and it is ALWAYS ZERO here.
      *
-     * **`PHAsset` publishes no capture time zone.** There is no `timeZone`
-     * property on it at any deployment target; the shutter's own offset lives
-     * in the EXIF `OffsetTimeOriginal` tag inside the original's bytes, which
-     * is on the gateway's side of the staging door and not the phone's.
-     *
-     * Zero, and never the READER'S current offset. A phone that stamped
-     * `NSTimeZone.local` onto an import would move every photograph in the roll
-     * into whatever zone the member happened to be standing in when they
-     * paired — a whole library re-dated by where it was uploaded. Zero means
-     * "UTC, and nobody has said otherwise", which `captured_at` already is.
-     *
-     * Filed rather than papered over: reading the tag off the staged bytes is
-     * the gateway's to do, beside the orientation it already reads
-     * (D-1025-S7-51), and it is an owner question on #1025.
+     * **`PHAsset` publishes no capture time zone.** The shutter's own offset
+     * lives in the EXIF `OffsetTimeOriginal` tag inside the original's bytes.
+     * Zero, and never the READER'S current offset: a phone that stamped
+     * `NSTimeZone.local` onto an import would move every photograph in the
+     * roll into whatever zone the member happened to be standing in. Filed as
+     * an owner question on #1025.
      */
     private fun offsetMinutesOf(asset: PHAsset): Int = 0
 
@@ -1031,8 +1001,7 @@ public class IosMediaLibrary : MediaLibrary {
         formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
         formatter.timeZone = NSTimeZone.timeZoneForSecondsFromGMT(0)
         // POSIX, NOT THE MEMBER'S LOCALE. A device set to a Buddhist or Islamic
-        // calendar formats `yyyy` as 2568 or 1447, and the row would carry a
-        // timestamp no parser on the gateway accepts.
+        // calendar formats `yyyy` as 2568 or 1447.
         formatter.locale = NSLocale.localeWithLocaleIdentifier("en_US_POSIX")
         return formatter.stringFromDate(
             NSDate.dateWithTimeIntervalSince1970(epochMillis.toDouble() / 1_000.0),
@@ -1043,8 +1012,6 @@ public class IosMediaLibrary : MediaLibrary {
      * `<epoch millis>|<localIdentifier>`; see [page].
      *
      * `internal` rather than `private` so `iosTest` can drive the round trip.
-     * The durable cursor is the one piece of this class a relaunch depends on,
-     * and it is the one piece that can be proved without a photo library.
      */
     internal data class Cursor(val epochMillis: Long, val localId: String) {
         fun encode(): String = "$epochMillis$SEPARATOR$localId"
@@ -1059,74 +1026,39 @@ public class IosMediaLibrary : MediaLibrary {
                 // A CURSOR THIS CLASS DID NOT WRITE STARTS THE WALK AGAIN
                 // rather than being guessed at. Starting again re-offers
                 // photographs the core already holds, which `already_held`
-                // makes cheap; a guessed date would SKIP them, which nothing
-                // makes cheap.
+                // makes cheap; a guessed date would SKIP them.
                 val millis = encoded.substring(0, at).toLongOrNull() ?: return null
                 return Cursor(millis, encoded.substring(at + 1))
             }
         }
     }
 
-    /**
-     * One original, open as a file. See [open] for why it is a file.
-     */
-    private class ResourceStream(
-        override val mediaType: String,
-        /**
-         * THE EXACT LENGTH, off the filesystem, and it is load-bearing.
-         *
-         * `Staging` takes this as the core's allocation AND its bound: a chunk
-         * that would carry the running total past it is refused. A zero here is
-         * what made every upload fail before the temp file existed.
-         */
-        override val bytes: Long,
-        private val handle: NSFileHandle,
-        private val path: String,
-    ) : MediaLibrary.Original {
-        override suspend fun read(max: Int): ByteArray {
-            // `readDataUpToLength` ANSWERS SHORT AT THE END and empty past it,
-            // which is exactly the contract `Staging` reads against.
-            val data = handle.readDataUpToLength(max.convert(), null) ?: return ByteArray(0)
-            return data.toByteArray()
-        }
-
-        /**
-         * CLOSE CANNOT THROW, and an earlier version of this class crashed the
-         * app because it did.
-         *
-         * `close()` is called from the `finally` of `CameraRoll.offer`, so
-         * anything it raises escapes the pass, escapes the coroutine and takes
-         * the process down — which is what happened the first time a member
-         * pressed "Import now" on a real device.
-         *
-         * **The file is removed on every path.** A pass over a roll that left
-         * its temporaries behind would fill a member's disk with a second copy
-         * of their camera roll, and the screen would then honestly report that
-         * the device is out of space.
-         */
-        override suspend fun close() {
-            runCatching { handle.closeFile() }
-            runCatching { NSFileManager.defaultManager.removeItemAtPath(path, null) }
-        }
-    }
-
     internal companion object Types {
-        /** See [ResourceStream]. `internal` so `iosTest` can prove the table. */
+        /** A resource's uniform type as a MIME type. `internal` so `iosTest` can prove the table. */
         internal fun mimeOf(identifier: String?): String {
-                val uti = identifier ?: return "application/octet-stream"
-                UTType.typeWithIdentifier(uti)?.preferredMIMEType()?.let { return it }
-                return when (uti) {
-                    "public.heic", "public.heif" -> "image/heic"
-                    "public.jpeg" -> "image/jpeg"
-                    "public.png" -> "image/png"
-                    "com.compuserve.gif" -> "image/gif"
-                    "com.apple.quicktime-movie" -> "video/quicktime"
-                    "public.mpeg-4" -> "video/mp4"
-                    else -> "application/octet-stream"
-                }
+            val uti = identifier ?: return "application/octet-stream"
+            UTType.typeWithIdentifier(uti)?.preferredMIMEType()?.let { return it }
+            return when (uti) {
+                "public.heic", "public.heif" -> "image/heic"
+                "public.jpeg" -> "image/jpeg"
+                "public.png" -> "image/png"
+                "com.compuserve.gif" -> "image/gif"
+                "com.apple.quicktime-movie" -> "video/quicktime"
+                "public.mpeg-4" -> "video/mp4"
+                else -> "application/octet-stream"
+            }
         }
 
         const val CREATION_DATE = "creationDate"
+
+        /** The cursor's field separator. */
+        const val FIELD = "|"
+
+        /** A cursor of the first walk, carrying the token it started under. */
+        const val KEYSET_WALK = "k"
+
+        /** A cursor of every walk after: the token, and how many of its additions were offered. */
+        const val TOKEN_WALK = "t"
 
         /**
          * The suffix that names a Live Photo's MOVIE half.
@@ -1148,7 +1080,7 @@ public class IosMediaLibrary : MediaLibrary {
  * there next — which for a staged photograph is a hash of somebody else's
  * bytes, committed as the member's.
  */
-private fun NSData.toByteArray(): ByteArray {
+internal fun NSData.toByteArray(): ByteArray {
     val size = length.toInt()
     if (size == 0) return ByteArray(0)
     val out = ByteArray(size)

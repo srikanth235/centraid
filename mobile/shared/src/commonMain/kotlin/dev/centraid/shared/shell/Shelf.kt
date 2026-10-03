@@ -533,12 +533,12 @@ public class Shelf(
      * holding drops off the shelf, and the file, its byte store and its SQLite
      * sidecars are deleted.
      *
-     * **This is the one thing on this class that destroys a member's rows.** On
-     * a phone that IS the vault there is no copy anywhere else to fall back to:
-     * `forget` used to mean "this phone is not holding that gateway's vault any
-     * more", and it now means the vault is gone. Whatever calls it owes the
-     * member a confirmation and a backup; this function is not the place for
-     * either, and #1029 W5 owns the restore that makes the trade survivable.
+     * **This is the one thing on this class that destroys a member's rows.**
+     * The phone IS the vault: what survives is a paired gateway's sealed copy,
+     * which the 24 words and that gateway's pairing payload restore (#1080),
+     * and a vault never backed up has no copy anywhere else. The vault's
+     * directory goes whole — its backup ledger and spool with it. Whatever
+     * calls this owes the member a confirmation that says so.
      *
      * The next foreground is the first remaining holding, or none — a device
      * holding zero vaults is a state of the device and shows the empty shelf.
