@@ -623,6 +623,33 @@ bash .governance/run.sh < /dev/null
 - `bash .governance/run.sh < /dev/null` — all 6 directives pass.
 - Red first: with the runtime's new branch disabled and the two machines as at `511a20ee`, the grid case, the lightbox re-read case and the runtime case failed; restored, they pass.
 
+### Round six — lane C's names, typed, and what a forget and a stop say
+
+On the umbrella at `02081b55` (lane C's audit fix round), which fast-forwarded this branch. Kotlin only, no cargo command.
+
+| File | Change |
+| --- | --- |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/CoreBackupDoors.kt` | Typed, exhaustive arms for `WAIT_REASON_ASK`, `WAIT_REASON_UNTRUSTED`, `FETCH_OUTCOME_UNTRUSTED` and `FETCH_OUTCOME_DAMAGED`, replacing round five's by-name match; `forget` answers a `ForgetAnswer(forgotten, revoked)` from `ForgetDestinationResponse.revoked`. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/{CoreDoors,DrainPass,DrainCopy}.kt` | `DRAIN_STOP_UNTRUSTED` reads as `DrainAnswer.Stopped.UNTRUSTED` in an exhaustive `when`, with its sentence: the machine that answered is not your laptop, it was sent nothing, nothing was lost. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/BackupLines.kt` | A line with anything waiting on an untrusted machine takes the attention tone. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/{BackupScreen,BackupBridge}.kt`, `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeSession.kt` | The forget answer reaches the screen; its notice says whether the laptop will refuse this phone from now on, or that it could not be told and how to revoke the phone there. |
+| `copy/shared.json`, `mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/SharedCopy.kt` | `BACKUP_FORGOTTEN` is replaced by `BACKUP_FORGOTTEN_REVOKED` and `BACKUP_FORGOTTEN_NOT_REVOKED`. |
+| `mobile/README.md` | The Backup screen's forget, and the line's tone. |
+| `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/{CoreBackupDoorsSpec,BackupScreenSpec,BackupStatusSpec,DrainPassSpec,PhotoLightboxSpec}.kt` | The four wire values round five left pending; every `FetchOutcome` on the wire; the untrusted and unspecified stops; forget revoked and not; both notices, through the flow; the tone; the lightbox's untrusted and damaged lines. |
+
+#### Verification, round six
+
+```sh
+mobile/gradlew -p mobile :shared:jvmTest --rerun
+bun run format && bun run format:check
+bash .governance/run.sh < /dev/null
+```
+
+- `:shared:jvmTest` — 1,112 tests in 75 suites, 0 failures (three added).
+- `bun run format:check` — clean.
+- `bash .governance/run.sh < /dev/null` — all 6 directives pass.
+- Red first: with `DRAIN_STOP_UNTRUSTED` read as unreachable and the tone rule disabled, the stop case and the wait-row case failed; restored, they pass.
+
 ### Lane A — the gateway v2 (`crates/gateway2`, renamed `crates/gateway` at the cut-over)
 
 Branch `worktree-agent-ad02a969bfe46e45e`, from `23e46810`; merged as `bccf0763`. Eight commits: `ceae39b71` the protocol v2 rules and their conformance suite; `9b8b25479` the HTTPS gateway, pinned client and wire suite; `d29922f4d` the CLI, pairing QR and safety line; `6a46b349d` store semantics for the phone and streamed bundles (A14, A15); `f999ef590` a user unit that can start with its data at home; `46bb10dee` sweeps paced by the clock and kept on disk; `c1d3760ff` the README and the container image; `f21084b0a` no other hash named in the digest-header test.

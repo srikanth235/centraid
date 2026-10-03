@@ -150,10 +150,14 @@ class DrainPassSpec : StringSpec({
             "Your laptop has everything this phone had ready to send."
         DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNREACHABLE)) shouldBe
             "Your laptop didn't answer. Nothing was lost; we'll pick up where we left off."
+        // A MACHINE THAT IS NOT THE GATEWAY (#1080): it was sent nothing.
+        DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNTRUSTED)) shouldBe
+            "The machine that answered is not your laptop, so this phone sent it nothing. Nothing was lost."
         listOf(
             DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.DEADLINE)),
             DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNREACHABLE)),
             DrainCopy.stoppedSentence(DrainAnswer(0, DrainAnswer.Stopped.MOVED)),
+            DrainCopy.stoppedSentence(DrainAnswer(0, DrainAnswer.Stopped.UNTRUSTED)),
         ).forEach { it.contains("failed") shouldBe false }
     }
 

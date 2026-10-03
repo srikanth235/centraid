@@ -54,13 +54,16 @@ public object BackupScreenMachine {
                 model.copy(backingUpNow = input.backingUp),
                 if (model.backingUpNow && !input.backingUp) listOf(BackupEffect.Read) else emptyList(),
             )
+            // WHETHER THE GATEWAY WILL REFUSE THIS PHONE NOW is said either
+            // way (#1080): a token the gateway was not told about stays live
+            // there until its operator revokes it.
             is BackupInput.Forgot -> step(
                 model.copy(
-                    notice = if (input.forgotten) {
-                        SharedCopy.BACKUP_FORGOTTEN.replace("{name}", input.label)
-                    } else {
-                        SharedCopy.BACKUP_FORGET_FAILED.replace("{name}", input.label)
-                    },
+                    notice = when {
+                        !input.forgotten -> SharedCopy.BACKUP_FORGET_FAILED
+                        input.revoked -> SharedCopy.BACKUP_FORGOTTEN_REVOKED
+                        else -> SharedCopy.BACKUP_FORGOTTEN_NOT_REVOKED
+                    }.replace("{name}", input.label),
                 ),
                 listOf(BackupEffect.Read),
             )
@@ -210,7 +213,13 @@ public sealed interface BackupInput {
     /** A "Back up now" run started or ended, wherever it was asked for. */
     public data class Running(public val backingUp: Boolean) : BackupInput
 
-    public data class Forgot(public val gatewayId: String, public val label: String, public val forgotten: Boolean) : BackupInput
+    public data class Forgot(
+        public val gatewayId: String,
+        public val label: String,
+        public val forgotten: Boolean,
+        /** The gateway confirmed this phone's token opens nothing there any more. */
+        public val revoked: Boolean = false,
+    ) : BackupInput
 }
 
 public sealed interface BackupEffect {
@@ -246,8 +255,8 @@ public interface BackupScreenDoors {
 
     public val backingUp: StateFlow<Boolean>
 
-    /** True when forgotten, false when the core refused, null when there was no core to ask. */
-    public suspend fun forget(gatewayId: String): Boolean?
+    /** What forgetting came to; null when there was no core to ask, or it refused. */
+    public suspend fun forget(gatewayId: String): ForgetAnswer?
 
     public fun nowMs(): Long
 }
@@ -306,10 +315,14 @@ public class BackupScreenFlow(
             doors.writeIncludeVideos(effect.include)
             null
         }
-        is BackupEffect.Forget -> BackupInput.Forgot(
-            effect.gatewayId,
-            effect.label,
-            forgotten = doors.forget(effect.gatewayId) == true,
-        )
+        is BackupEffect.Forget -> {
+            val answer = doors.forget(effect.gatewayId)
+            BackupInput.Forgot(
+                effect.gatewayId,
+                effect.label,
+                forgotten = answer?.forgotten == true,
+                revoked = answer?.revoked == true,
+            )
+        }
     }
 }

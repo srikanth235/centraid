@@ -21,17 +21,18 @@ import dev.centraid.shared.sync.CoreBackupStatus
 import dev.centraid.shared.sync.CoreDrainDoor
 import dev.centraid.shared.sync.DrainAnswer
 import dev.centraid.shared.sync.DrainPass
+import dev.centraid.shared.sync.ForgetAnswer
+import dev.centraid.shared.sync.LibraryDeleter
 import dev.centraid.shared.sync.PassConditions
-import dev.centraid.shared.sync.ShelfDrain
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenQueryRuntime
 import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenRuntime
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.sync.ShelfDrain
 import dev.centraid.shared.sync.StrandedWrites
 import dev.centraid.shared.sync.UploadLoop
 import dev.centraid.shared.sync.UploadPin
-import dev.centraid.shared.sync.LibraryDeleter
 import dev.centraid.shared.sync.freezeFor
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -274,7 +275,7 @@ public class HomeSession private constructor(
      * and what that gateway holds stays there. True when forgotten, false when
      * the core knew no such destination, null when there was no core to ask.
      */
-    public suspend fun forgetDestination(gatewayId: String): Boolean? {
+    public suspend fun forgetDestination(gatewayId: String): ForgetAnswer? {
         val forgotten = CoreBackupDoors { shelf.core() }.forget(gatewayId)
         backupStatus.refreshForeground()
         return forgotten
