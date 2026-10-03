@@ -8,7 +8,7 @@ A gateway is any machine the member controls that runs `centraid-gateway` — th
 centraid-gateway serve --data-dir ~/centraid-gateway
 ```
 
-The first `serve` mints the gateway's identity, listens on `0.0.0.0:8443`, advertises itself on the LAN, and prints a pairing QR. Scan it from the phone — **Pair with your laptop** on the More sheet, or **Add a gateway** on the Backup screen — and compare the safety number the phone shows with the `safety` line `serve` prints when the pairing lands. A QR admits one phone's vault, once, within a day; `centraid-gateway pair --data-dir ~/centraid-gateway` prints another.
+The first `serve` mints the gateway's identity, listens on `0.0.0.0:8443`, advertises itself on the LAN, and prints a pairing QR. Scan it from the phone — **Pair with your laptop** on the More sheet, or **Add a gateway** on the Backup screen — and compare the safety number the phone shows with the `safety` line `serve` prints when the pairing lands. A QR admits one phone's vault, once, within a day; `centraid-gateway pair --data-dir ~/centraid-gateway` prints another, and `centraid-gateway health --data-dir ~/centraid-gateway` answers whether it is up.
 
 **Until a phone pairs, the gateway holds nothing** — no vault, no account and no key — which is not a limitation to work around. It is the point.
 
@@ -36,14 +36,14 @@ centraid-gateway install --data-dir ~/centraid-gateway             # writes it, 
 ## A container
 
 ```sh
+docker build -f deploy/gateway/Dockerfile -t centraid-gateway .
 docker run -d --name centraid-gateway --network host \
-  -v centraid-gateway:/data \
-  -e CENTRAID_GATEWAY_DATA_DIR=/data \
-  <image> serve
-docker exec centraid-gateway centraid-gateway pair
+  -v centraid-gateway:/var/lib/centraid centraid-gateway
+docker logs centraid-gateway        # the first pairing QR
+docker exec centraid-gateway centraid-gateway pair --data-dir /var/lib/centraid
 ```
 
-Host networking, because the phone dials the addresses `pair` lists and a container's own network is not one a phone can reach. The volume, because the data directory is the whole gateway: a container removed without one takes the gateway's identity with it, and every paired phone refuses the one that replaces it.
+Host networking, because the phone dials the addresses `pair` lists and Bonjour advertises from the same view, and a container's own network is not one a phone can reach. The volume, because the data directory is the whole gateway: a container removed without one takes the gateway's identity with it, and every paired phone refuses the one that replaces it.
 
 ## Backing up the box that holds the backups
 
