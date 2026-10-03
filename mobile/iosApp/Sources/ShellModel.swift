@@ -34,6 +34,17 @@ import CentraidShared
 /// well-meaning `.task { }` and a frozen app (census §E seam 10).
 @MainActor
 final class ShellModel: ObservableObject {
+    /// ONE PER PROCESS, AND REACHABLE WITHOUT A SCENE (#1080).
+    ///
+    /// The core is one handle per vault file per process (R-1020-24), and this
+    /// is what opens it. A background relaunch — a `BGProcessingTask`, or iOS
+    /// waking the app to report finished uploads — may never connect a scene,
+    /// so the app delegate and `BackgroundPasses` reach the shell here rather
+    /// than through SwiftUI's `@StateObject`, which `CentraidApp` points at
+    /// this same instance. Two `ShellModel`s would be two `HomeSession`s and
+    /// the second would be refused every file the first holds.
+    static let shared = ShellModel()
+
     enum Route: Hashable {
         /// A REGISTERED SCREEN, by its machine's `SCREEN_ID`, with its
         /// parameter as bytes (K5). Every app registered through
@@ -103,12 +114,41 @@ final class ShellModel: ObservableObject {
     ///
     /// Fire-and-forget. A member who has just opened Centraid is looking at
     /// their vault, not at a progress bar for a pass they did not ask for; the
-    /// backup row updates from the claim when the answer lands.
+    /// backup line updates from `backup_status` when the answer lands.
+    ///
+    /// **HELD UNDER A GRACE** (#1080): if the member leaves while the pass is
+    /// running, iOS gives it the background task's seconds to finish its
+    /// current part instead of suspending it mid-part.
     func becameActive() {
         #if canImport(CentraidShared)
-        home.becameActive(onDone: { _ in })
+        let grace = ForegroundGrace(name: "dev.centraid.pass.active")
+        home.becameActive(onDone: { _ in grace.end() })
         #endif
     }
+
+    /// THE APP WENT TO THE BACKGROUND (#1080, the shells).
+    ///
+    /// Three things, in this order. The night's windows are asked for first —
+    /// leaving the app is what arms them, and a one-shot request that was only
+    /// ever resubmitted from inside a handler never ran at all. Then one pass
+    /// under the background task's grace, bounded by [backgroundPassSeconds],
+    /// so what is sealed can be handed to the OS to carry while the app is
+    /// suspended. The vault directory's backup exclusion is swept by the
+    /// `didEnterBackground` observer below, not here.
+    func wentToBackground() {
+        BackgroundPasses.resubmitAll()
+        #if canImport(CentraidShared)
+        let grace = ForegroundGrace(name: "dev.centraid.pass.background")
+        home.drain(
+            deadlineMs: Int64(Self.backgroundPassSeconds * 1000),
+            onDone: { _ in grace.end() }
+        )
+        #endif
+    }
+
+    /// Under the ~30 seconds iOS grants a background task, with room for the
+    /// part in flight to finish after the deadline is read.
+    static let backgroundPassSeconds: TimeInterval = 20
     /// Whether the vault sheet is up.
     @Published var vaultSheetOpen = false
     /// Whether the transfer-rules sheet is up (#1025 S4).
@@ -311,9 +351,9 @@ final class ShellModel: ObservableObject {
             // `BackgroundPasses` registered both handlers at launch — it has to,
             // before the app finishes launching — but what a pass IS belongs to
             // `commonMain`, and there was no shelf to drain until this moment.
-            // So the handler is installed here, when the session exists, and a
-            // window that opens before it completes honestly rather than
-            // claiming a drain ran.
+            // So the handler is installed here, when the session exists; a
+            // window that opens first waits a bounded time for it and then
+            // completes honestly rather than claiming a pass ran.
             //
             // `Bool` in, `Bool` out: the answer is handed straight to
             // `setTaskCompleted(success:)`.
@@ -325,12 +365,18 @@ final class ShellModel: ObservableObject {
                     )
                 }
             }
+            // THE PINS, NOW THAT THE CORE CAN ANSWER `pins` (#1080).
+            self.refreshUploadPins()
             // AND THE FIRST FOREGROUND PASS. `becameActive` below runs on every
             // later activation; this is the one at launch, which would otherwise
             // be missed because the session did not exist when the scene became
-            // active.
-            self.home.becameActive(onDone: { _ in })
+            // active. Held under a grace like every foreground pass.
+            let grace = ForegroundGrace(name: "dev.centraid.pass.launch")
+            self.home.becameActive(onDone: { _ in grace.end() })
         }
+        // THE BACKGROUND MOVER'S SEAM (#1080 §2), before the core opens, so a
+        // relaunch's reports have somewhere to wait.
+        wireUploads()
         // THE DEVICE MAKES ITS OWN VAULT (#1025 S5; #1029 §1).
         //
         // This used to hand over every `.db` file that had been PLACED in the
@@ -344,10 +390,10 @@ final class ShellModel: ObservableObject {
         // **NOTHING UNDER THIS DIRECTORY GOES INTO iCLOUD BACKUP** (#1029 line
         // 84, F5). Once before the core opens, so the directory itself carries
         // the attribute, and once after, so the vault file, its `-wal` and
-        // `-shm`, its `.bytes` store and the backup home the core just made
-        // carry it too — iOS does not inherit `isExcludedFromBackup`, so each
-        // item needs it in its own right. `VaultFileProtection` says why this
-        // is the layer that can do it.
+        // `-shm`, its `.bytes` store, the backup ledger and the spool the core
+        // just made carry it too — iOS does not inherit `isExcludedFromBackup`,
+        // so each item needs it in its own right. `VaultFileProtection` names
+        // every one (R-1029-8) and says why this is the layer that can do it.
         VaultFileProtection.secure(directory: Self.vaultDirectory)
         home.open(vaultDir: Self.vaultDirectory, devSeedHex: Self.devSeedHex)
         VaultFileProtection.secure(directory: Self.vaultDirectory)
@@ -386,6 +432,45 @@ final class ShellModel: ObservableObject {
         }
         if let enteredBackground {
             NotificationCenter.default.removeObserver(enteredBackground)
+        }
+    }
+
+    // MARK: The background mover's seam (#1080 §2, A6)
+    //
+    // EVERY KOTLIN NAME THE MOVER NEEDS BEYOND THE SEAM CONTRACT IS IN THESE
+    // TWO FUNCTIONS, so reconciling them with `commonMain` is one edit here.
+    // The contract names the two interfaces — `BackgroundUploads`, which
+    // `BackgroundUploader` implements, and `UploadEvents`, which the core's
+    // side implements — but not how each side is handed the other, nor how
+    // the pinned certificates reach a shell that must answer a server-trust
+    // challenge before any vault is open. The two `HomeBridge` doors below
+    // are this lane's assumption (lane E report, E-A1 and E-A2).
+
+    /// Hand the core this shell's mover, and take the core's sink for what
+    /// the mover reports. Called at construction, before the core opens.
+    private func wireUploads() {
+        // E-A1: `HomeBridge.installUploads(uploads: BackgroundUploads): UploadEvents`.
+        let events = home.installUploads(uploads: BackgroundUploader.shared)
+        UploadSettlement.shared.attach(CoreUploadSink(events))
+    }
+
+    /// Re-read the pinned certificates from the core and keep them where a
+    /// cold background launch can read them (`UploadPins`). Called when the
+    /// session opens, when a pairing closes and when a destination is
+    /// forgotten — the three moments the core's answer to `pins` changes.
+    func refreshUploadPins() {
+        // E-A2: `HomeBridge.uploadPins(onPins: (List<UploadPin>) -> Unit)`, where
+        // `UploadPin(gateway: String, certDer: ByteArray, addrs: List<String>)`
+        // is the core's `pins` arm's `Destination`, cut to what the mover needs.
+        home.uploadPins { pins in
+            var table: [String: UploadPins.Pin] = [:]
+            for pin in pins {
+                table[pin.gateway] = UploadPins.Pin(
+                    certificate: pin.certDer.data,
+                    hosts: pin.addrs.map { UploadPins.host(of: $0) }
+                )
+            }
+            BackgroundUploader.shared.pins.replace(with: table)
         }
     }
 
@@ -582,8 +667,15 @@ final class ShellModel: ObservableObject {
     }
 
     private func pairLaptopChanged(_ data: Data) {
+        let before = ((try? Centraid_Screen_V1_PairLaptopState(serializedBytes: pairLaptopState)) ?? .init()).phase
         pairLaptopState = data
         let state = (try? Centraid_Screen_V1_PairLaptopState(serializedBytes: data)) ?? .init()
+        // A NEW DESTINATION IS A NEW PIN (#1080): the mover must hold its
+        // certificate before the next batch is handed to the OS, which may be
+        // the moment this app goes to the background.
+        #if canImport(CentraidShared)
+        if state.phase == .paired, before != .paired { refreshUploadPins() }
+        #endif
         if state.phase == .closed, wordsSheet == .pair { wordsSheet = nil }
     }
 
