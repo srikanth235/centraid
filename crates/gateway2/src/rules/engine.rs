@@ -98,6 +98,14 @@ pub enum Finding {
     Missing,
 }
 
+/// What one scrub pass counted. Counts only: a gateway is blind.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ScrubCounts {
+    pub read: u64,
+    pub corrupt: u64,
+    pub missing: u64,
+}
+
 /// Judge one object's bytes against its digest. **No key is involved**: the
 /// digest is a hash of the ciphertext, which is the whole reason a blind
 /// gateway can scrub at all.

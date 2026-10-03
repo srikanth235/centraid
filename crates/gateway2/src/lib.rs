@@ -13,11 +13,17 @@
 //! | Module | Feature | What it is |
 //! | --- | --- | --- |
 //! | [`rules`] | always | the protocol as pure functions over a [`rules::state::State`], and the conformance suite |
-//! | `client` | `client` | the phone's HTTPS client, pinned to one certificate |
-//! | `server` | `server` | the gateway a member runs: TLS, the SQLite state, the object directory, the sweeps, the CLI's pieces |
+//! | [`client`] | `client` | the phone's HTTPS client, pinned to one certificate |
+//! | [`server`] | `server` | the gateway a member runs: TLS, the SQLite state, the object directory, the sweeps, the CLI's pieces |
 //!
 //! The rules are the reference, not the server: the conformance suite in
 //! [`rules::conformance`] runs over the in-memory state and over the real
 //! server through the real client, and the two must agree case for case.
 
 pub mod rules;
+
+#[cfg(feature = "client")]
+pub mod client;
+
+#[cfg(feature = "server")]
+pub mod server;

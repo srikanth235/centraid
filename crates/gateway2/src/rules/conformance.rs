@@ -31,6 +31,7 @@ use ed25519_dalek::SigningKey;
 use crate::rules::bundle::Frame;
 use crate::rules::claim::{sign_claim, sign_read};
 use crate::rules::code::{Code, Refusal};
+pub use crate::rules::engine::ScrubCounts;
 use crate::rules::ids::{Digest, GatewayId, Name, Secret, Token, VaultId};
 use crate::rules::limits::{GRACE_MS, MAX_NAMES, MAX_OBJECT_BYTES, PROTOCOL, SECRET_TTL_MS};
 use crate::rules::range::ByteRange;
@@ -112,14 +113,6 @@ pub enum PutAnswer {
     Stored(ObjectEntry),
     /// `200`: held already with this digest.
     AlreadyStored(ObjectEntry),
-}
-
-/// What one scrub pass counted. Counts only: a gateway is blind.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct ScrubCounts {
-    pub read: u64,
-    pub corrupt: u64,
-    pub missing: u64,
 }
 
 /// A gateway the suite can drive. The protocol methods are exactly the
