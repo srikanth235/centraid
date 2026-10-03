@@ -298,6 +298,35 @@ tokio-rustls-acme = { version = "0.9" }
 tokio-rustls = { version = "0.26", default-features = false, features = [
   "ring",
 ] }
+
+# #1080 — `crates/gateway2`, the gateway v2: direct HTTPS from the phone to a
+# gateway that mints its own certificate, which the phone pins by BLAKE3
+# fingerprint. No certificate authority, relay or DNS service is involved.
+#
+# `rcgen` mints that certificate at first `serve`: ECDSA P-256 (Apple's TLS
+# stack, which drives the iPhone's background upload session, refuses Ed25519
+# server certificates), through `ring`, the provider `tokio-rustls` above
+# already links, with `pem` for the two files an operator can read. These are
+# the crate's defaults, named so a default that moves cannot change the curve.
+rcgen = { version = "0.14", default-features = false, features = [
+  "crypto",
+  "ring",
+  "pem",
+] }
+# `serve` advertises `_centraid-gateway._tcp` so a phone at home can refresh a
+# destination's addresses without a pairing QR. Pure Rust on its own thread,
+# no async runtime; `default-features = false` drops its `log` and async
+# channel halves, which nothing here reads.
+mdns-sd = { version = "0.21", default-features = false }
+# The pairing QR lists the bound port on every non-loopback interface address.
+# This enumerates them, and `mdns-sd` already links it.
+if-addrs = "0.15"
+# And the host's own name, for the `<host>.local` address the QR carries last.
+gethostname = "1"
+# DEV-ONLY: the test that parses the minted certificate and asserts its key is
+# P-256 reads it with a real X.509 parser, not a byte search. Already in the
+# graph through `rcgen`.
+x509-parser = "0.18"
 # THE EDIT-RUN LOOP IS THE NEW HERMES (#1020) — and DWARF is what it costs on
 # disk (D-1020-G7).
 #

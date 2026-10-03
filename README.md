@@ -2,7 +2,7 @@
 
 **Personal software. Your data. Your devices.**
 
-Centraid is a personal, local-first **superapp**: one shell wrapping many first-party apps over one **vault** — a shared personal ontology where your people, money, documents and plans live once. In v0 that vault lives on your **phone**, which is its sole authority and sole writer, and your own laptop runs a **gateway** that holds an encrypted backup it cannot read. Recovery is 24 words. There is no account, no subscription and no Centraid-operated service ([#1029](https://github.com/srikanth235/centraid/issues/1029), [scope amendment 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)).
+Centraid is a personal, local-first **superapp**: one shell wrapping many first-party apps over one **vault** — a shared personal ontology where your people, money, documents and plans live once. In v0 that vault lives on your **phone**, which is its sole authority and sole writer, and a machine you control — your laptop, a VPS, a NAS — runs a **gateway** that holds an encrypted backup it cannot read. Recovery is 24 words. There is no account, no subscription and no Centraid-operated service ([#1029](https://github.com/srikanth235/centraid/issues/1029), [scope amendment 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795), [#1080](https://github.com/srikanth235/centraid/issues/1080)).
 
 [Docs](https://centraid.dev/docs/) · [Get started](https://centraid.dev/docs/start/) · [Architecture](ARCHITECTURE.md) · [Agents map](AGENTS.md) · [Contributing](CONTRIBUTING.md)
 
@@ -21,7 +21,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 
 - **First-party apps** — Docs, Photos, Notes, People, Locker, Tally, Agenda and Tasks, one crate each under [`crates/apps`](crates/apps). They ship in the release and update with it; an app holds no database of its own and reads and writes the vault through typed commands.
 - **The phone is the vault** — the Rust core on your phone holds `vault.db` and is its only writer. It works fully offline because there is nothing to be offline _from_.
-- **Backed up to hardware you own** — your laptop runs `centraid-gateway`, which holds sealed objects it cannot open: no key, no plaintext, no schema. Pair by scanning a QR the laptop prints.
+- **Backed up to hardware you own** — every gateway you pair holds a sealed copy of the vault and of every photograph, video and file in it, and can open none of it: no key, no plaintext, no schema. The phone reaches it over HTTPS straight to the machine, pinning the certificate the gateway's QR names; on an iPhone the system keeps uploading while Centraid is closed. Pair by scanning a QR the gateway prints.
 - **Recoverable from 24 words** — every key derives from one BIP39 phrase. A fresh install plus the phrase brings the vault back. There is no kit file, no password and no escrow.
 - **Nothing hosted** — no account, no subscription, no Centraid-operated service, no sharing plane. See the [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795).
 
@@ -32,36 +32,36 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
    core via core-ffi
  ┌───────────────────────── the vault, and its only writer ─────────────────────┐
  │  vault: vault.db, the one writable connection, typed commands, receipts,     │
- │         custody, and the backup plane — capture, base, segment, manifest     │
+ │         custody, and the backup plane — snapshot, ranges, ledger, spool      │
  │  apps: tally · photos · notes · docs · people · locker · agenda · tasks      │
- │  blobs: BLAKE3 byte plane        identity: 24 words → every key              │
+ │  blobs: the content store       identity: 24 words → every key               │
  └──────────────────────────────────────────────────────────────────────────────┘
-        │  drains its spool: it DIALS, and accepts nothing
-        │  HTTP/1.1 over one iroh stream, ALPN centraid-gateway/1
+        │  uploads sealed parts: it DIALS, and accepts nothing
+        │  HTTPS straight to the gateway, its certificate pinned at pairing
         ▼
- ┌──────────────── centraid-gateway, on your own laptop ────────────────┐
- │  a blind store: sealed objects, the manifest head under a            │
- │  compare-and-set, the lease, quotas, retention, purge and scrub       │
- └───────────────────────────────────────────────────────────────────────┘
+ ┌──────── centraid-gateway, on a machine you control (laptop, VPS, NAS) ───────┐
+ │  a blind store: sealed parts under names it cannot invert, the head under a  │
+ │  compare-and-set, the writer epoch, purge and scrub                          │
+ └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 - **Apps are crates**: a read plane of queries as pure folds over paged reads, and an action table whose writes are the vault's typed commands. An app crate holds no SQL and no connection; SQL is confined to the vault, ontology and search crates and the app kit by a gate rule.
-- **The gateway is a protocol, not a program**: [`crates/gateway-core`](crates/gateway-core/README.md) holds the rules with no I/O and a conformance suite, and the server is one adapter over them. See [docs/gateway.md](docs/gateway.md).
-- **The phone opens nothing**: `no-listening-socket` is a structural gate rule, and it catches an iroh endpoint that offers an ALPN as well as a `TcpListener`.
+- **The gateway is a protocol, not a program**: [`crates/gateway`](crates/gateway)'s `rules` hold every decision with no I/O, with a conformance suite that runs in memory and over the wire, and the server is one adapter over them. See [docs/gateway.md](docs/gateway.md).
+- **The phone opens nothing**: `no-listening-socket` is a structural gate rule, and it refuses a listener or an accept anywhere but the gateway's one serve file.
 
 ## Get started
 
 Prereqs: a Rust toolchain (the version is pinned in [`rust-toolchain.toml`](rust-toolchain.toml)); [Bun](https://bun.sh) for `packages/design` and repository tooling; a JDK and the Android SDK or Xcode for the mobile shells ([mobile/README.md](mobile/README.md)).
 
 ```sh
-# one terminal: the laptop's gateway
-cargo run -p centraid-gateway-server --bin centraid-gateway -- serve --data-dir ./gw-data
+# the gateway: mints its identity, listens on 8443, and prints a pairing QR
+cargo run -p centraid-gateway --bin centraid-gateway -- serve --data-dir ./gw-data
 
-# another: mint an invite, which prints a pairing QR
-cargo run -p centraid-gateway-server --bin centraid-gateway -- invite --data-dir ./gw-data --quota-gib 64
+# another QR, beside a running serve
+cargo run -p centraid-gateway --bin centraid-gateway -- pair --data-dir ./gw-data
 ```
 
-Scan the QR from a phone build, then compare the safety number the phone shows with the `safety` line `serve` prints once it pairs. An invite is one-shot, so a second device needs a second invite. Recovery from a bad pairing: [docs/recovery/pairing.md](docs/recovery/pairing.md).
+Scan the QR from a phone build, then compare the safety number the phone shows with the `safety` line `serve` prints once it pairs. A QR admits one phone's vault, once, within a day, so a second phone needs a second `pair`. Recovery from a bad pairing: [docs/recovery/pairing.md](docs/recovery/pairing.md).
 
 ## Layout
 
@@ -77,13 +77,13 @@ Scan the QR from a phone build, then compare the safety number the phone shows w
 
 ## Gateway install
 
-The gateway is the `centraid-gateway` binary; [deploy/README.md](deploy/README.md) is the whole story, and the protocol it serves is [docs/gateway.md](docs/gateway.md).
+The gateway is the `centraid-gateway` binary, on any machine you control; [deploy/README.md](deploy/README.md) is the whole story, and the protocol it serves is [docs/gateway.md](docs/gateway.md).
 
 - **VPS / Linux:** [`deploy/vps/install.sh`](deploy/vps/install.sh) verifies the release's `SHA256SUMS` and the binary's identity stamp before installing, and never installs an OS service silently (`--with-service` prints the commands; `--yes` writes the unit; enabling is left to you).
-- **Service units:** `centraid-gateway install` (or `centraid gateway install`) writes a systemd user unit or a macOS LaunchAgent and never enables it (`--dry-run` writes nothing). The templated system unit for a server is [`deploy/systemd/system/centraid-gateway@.service`](deploy/systemd/system/centraid-gateway@.service). The keystore secret is never in a unit file: the command prints the `systemd-creds` (Linux) or Keychain (macOS) step.
-- **Docker:** build from the repository root with `docker build -f deploy/gateway-server/Dockerfile -t centraid-gateway .`, and mount durable storage at `/data` — a bare run loses its state with the container. The image runs as an unprivileged uid, publishes no port under the default iroh carrier, and its health check is `centraid-gateway health`.
+- **Service units:** `centraid-gateway install` writes a systemd user unit or a macOS LaunchAgent and never enables it (`--dry-run` writes nothing). No credential goes in any unit: the gateway is blind, and its data directory holds nothing that opens a vault.
+- **Docker:** run on the host's network and mount durable storage at the data directory — a bare run loses the gateway's identity with the container, and every paired phone then refuses its replacement. The phone dials the addresses the pairing QR lists, which a container's own network would not make reachable.
 
-Under the default **iroh** carrier there is no reverse proxy, no TLS termination, no domain and no port to forward. A self-hoster who does have a domain may run the TCP carrier behind a proxy or with ACME instead — [docs/gateway.md](docs/gateway.md#self-hosting).
+**Nothing goes in front of it.** The phone opens HTTPS straight to the gateway and pins the certificate the gateway minted, so there is no reverse proxy, no TLS termination, no domain and no certificate authority; a port forward or a VPN is how a gateway away from home is reached ([docs/gateway.md](docs/gateway.md#self-hosting)).
 
 ## Build / check
 
@@ -105,17 +105,16 @@ Budgets and what each profile proves: [TESTING.md](TESTING.md#the-v1-gate-profil
 The product's binaries:
 
 ```sh
-# the laptop's gateway
-cargo run -p centraid-gateway-server --bin centraid-gateway -- serve   --data-dir ./gw-data
-cargo run -p centraid-gateway-server --bin centraid-gateway -- invite  --data-dir ./gw-data
-cargo run -p centraid-gateway-server --bin centraid-gateway -- invites --data-dir ./gw-data
-cargo run -p centraid-gateway-server --bin centraid-gateway -- scrub   --data-dir ./gw-data [--repair]
-cargo run -p centraid-gateway-server --bin centraid-gateway -- health  --url http://127.0.0.1:8443
-cargo run -p centraid-gateway-server --bin centraid-gateway -- install --data-dir ./gw-data --dry-run
+# a gateway
+cargo run -p centraid-gateway --bin centraid-gateway -- serve    --data-dir ./gw-data
+cargo run -p centraid-gateway --bin centraid-gateway -- pair     --data-dir ./gw-data
+cargo run -p centraid-gateway --bin centraid-gateway -- pairings --data-dir ./gw-data
+cargo run -p centraid-gateway --bin centraid-gateway -- scrub    --data-dir ./gw-data
+cargo run -p centraid-gateway --bin centraid-gateway -- health   --data-dir ./gw-data
+cargo run -p centraid-gateway --bin centraid-gateway -- install  --data-dir ./gw-data --dry-run
 
-# the operator's two verbs
+# the operator's binary
 cargo run -p centraid -- doctor --data-dir ./gw-data --json   # read-only, lock-free
-cargo run -p centraid -- gateway install --dry-run            # writes a unit; never enables it
 ```
 
 The vault itself has no CLI: it lives on the phone, and every verb that used to reach it — `seat`, `pair`, `backup`, `export`, `recover`, `native-host` — went with the seat plane.
@@ -143,7 +142,7 @@ The docs ([centraid.dev/docs](https://centraid.dev/docs/)) are Astro-built stati
 | [Start](https://centraid.dev/docs/start/) | Install → vault → first app → pair a phone → always-on → key backup |
 | [Data](https://centraid.dev/docs/data/) | The vault, consent & the outbox, sealed columns, connections & sync, automations, the assistant, blobs, search |
 | [Apps](https://centraid.dev/docs/apps/) | The eight first-party apps, app anatomy, the install model, attach & link, the harness surface, mobile |
-| [Devices](https://centraid.dev/docs/devices/) | Pairing, the gateway, iroh, and the mobile client |
+| [Devices](https://centraid.dev/docs/devices/) | Pairing, the gateway, and the mobile client. **Pending a rewrite for [#1080](https://github.com/srikanth235/centraid/issues/1080)** — the site still describes the iroh carrier |
 | [Ontology](https://centraid.dev/docs/ontology/) | The full logical model — schemas, entity map, ownership matrix, gateway contract, rules |
 | [Privacy](https://centraid.dev/docs/privacy/) | What Centraid holds and where. **Pending a rewrite for v0** — its Google/Assist sections describe a path this release does not offer |
 | [Terms](https://centraid.dev/docs/terms/) | Terms for Centraid. **Pending a rewrite for v0**, for the same reason |

@@ -24,7 +24,7 @@ cargo build --workspace               # the core, the gateway and the two CLI bi
 
 | Name | Command | Notes |
 | --- | --- | --- |
-| **gateway** | `cargo run -p centraid-gateway-server --bin centraid-gateway -- serve --data-dir <dir>` | The laptop's blind store. Headless, iroh by default, and it prints its `endpoint` line on every start. `centraid-gateway invite --data-dir <dir>` mints a one-shot invite and prints a pairing QR; `invites` lists what became of each ([gateway.md](gateway.md)) |
+| **gateway** | `cargo run -p centraid-gateway --bin centraid-gateway -- serve --data-dir <dir>` | A blind store for the phone's backup. Headless; it listens on 8443, advertises itself on the LAN, prints its `gateway`, `pin` and `listening` lines on every start and — until a phone pairs — a pairing QR. `centraid-gateway pair --data-dir <dir>` prints another QR; `pairings` lists what paired ([gateway.md](gateway.md)) |
 | **demo data** | `mobile/scripts/demo-vault.sh [ios\|android]` | Runs `seed-demo-vault` twice through the real command plane, places `demo-vault.sqlite3` and `work-vault.sqlite3` in the running simulator's or emulator's vault directory as `demo-vault/vault.db` and `work-vault/vault.db` (one directory per vault), and relaunches the **debug** app with the demo seed so both open keyed and the demo Locker unlocks and reveals ([mobile/README.md](../mobile/README.md#the-demo-vault-opens-keyed)). The seeder prints `CENTRAID_DEMO_WORDS` (the public all-`abandon` BIP-39 words) and `CENTRAID_DEMO_SEED` (their seed, hex) |
 | **mobile (JVM)** | `cd mobile && ./gradlew mobileJvm` | `:shared:jvmTest`, `:core:jvmTest` over the real `centraid-core-ffi` cdylib, and the kover report — the gate's `mobile-jvm` step |
 | **mobile (Android)** | `cd mobile && ./gradlew -Pcentraid.android=true :androidApp:assembleDebug` | Needs `ANDROID_HOME`; `mobile/scripts/android-core.sh` cross-compiles the core into `jniLibs` first |
@@ -35,7 +35,7 @@ cargo build --workspace               # the core, the gateway and the two CLI bi
 
 Every verb logs through `tracing` to stderr, filtered by `--log` / `CENTRAID_LOG` — where those lines end up per host is [logs.md](logs.md).
 
-Do not point two processes at one vault directory: the core holds the one writable connection and the whole pragma set depends on being the only opener ([traps/wal-checkpoint.md](traps/wal-checkpoint.md)). Two `centraid-gateway` processes over one data directory is fine and expected — `serve` and `invite` share it through the state file.
+Do not point two processes at one vault directory: the core holds the one writable connection and the whole pragma set depends on being the only opener ([traps/wal-checkpoint.md](traps/wal-checkpoint.md)). Two `centraid-gateway` processes over one data directory is fine and expected — `serve` and `pair` share it through `state.db` — but never two `serve`s.
 
 ## Worktrees
 
@@ -64,14 +64,14 @@ One command gates the tree ([#1020](https://github.com/srikanth235/centraid/issu
 
 | When | What runs | Where |
 | --- | --- | --- |
-| after an edit | `cargo xtask gate --profile local` — `fmt`, `clippy`, `test` (workspace minus `centraid-sim`), `rules`, `ledgers`. Budget 120 s on a warm tree | by hand |
-| a narrower answer | `cargo test -p <crate>`, `cargo xtask rules`, `SIM_SEED=<n> cargo test -p centraid-sim` to replay one simulation seed | by hand |
+| after an edit | `cargo xtask gate --profile local` — `fmt`, `clippy`, `test` (the whole workspace), `restore-drill`, `rules`, `ledgers`. Budget 120 s on a warm tree | by hand |
+| a narrower answer | `cargo test -p <crate>`, `cargo xtask rules`, `cargo xtask gate --profile local --lane restore-drill` for the drill alone | by hand |
 | commit | the pre-commit hook | `.githooks/pre-commit` |
 | push | the pre-push hook | `.githooks/pre-push` |
 | want CI's answer early | `cargo xtask gate --profile pr` — `local` plus supply chain, CI policy, secrets, release build, the TypeScript static tier, emitters, the call budget and the fault door | [`gate.yml`](../.github/workflows/gate.yml), required on every pull request and push to `main`, beside `dependency-review` |
 | Kotlin changed | `cargo xtask gate --profile mobile-jvm` — builds `centraid-core-ffi`, runs `./gradlew mobileJvm`, regenerates the native theme and screen fixtures and fails on drift. Budget 420 s | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml) |
 | nightly | `cargo xtask gate --profile nightly` — `pr` plus `device-lanes` and the deeper suites. One lane alone: `--lane <name>` | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml), 05:30 UTC |
-| release | `cargo xtask gate --profile release` — `nightly` plus `restore-drill`, `artifact-identity`, `prebuilt-core-required`, `vps-smoke` | [`release.yml`](../.github/workflows/release.yml)'s lanes |
+| release | `cargo xtask gate --profile release` — `nightly` plus `artifact-identity` and `prebuilt-core-required` | [`release.yml`](../.github/workflows/release.yml)'s lanes |
 
 A failing step writes its command, stdout and stderr under `target/xtask/<profile>/<step>/` and names that directory on its one line. **Every cargo and xtask command needs its own `CARGO_TARGET_DIR`** when more than one worktree is in flight — see the worktree rules above.
 
