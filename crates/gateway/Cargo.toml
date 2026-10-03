@@ -1,0 +1,133 @@
+[package]
+name = "centraid-gateway"
+description = "The gateway protocol v2: blind rules, the HTTPS gateway and the phone's pinned client (#1080)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_gateway"
+path = "src/lib.rs"
+
+# The gateway a member runs. Its `health` verb dials through the client, which
+# the `server` feature includes.
+[[bin]]
+name = "centraid-gateway"
+path = "src/bin/centraid-gateway.rs"
+required-features = ["server"]
+
+# The suites that need a real gateway on a real socket.
+[[test]]
+name = "conformance_wire"
+required-features = ["server"]
+
+[[test]]
+name = "tls"
+required-features = ["server"]
+
+[[test]]
+name = "pair_from_payload"
+required-features = ["server"]
+
+[[test]]
+name = "store_client"
+required-features = ["server"]
+
+# TWO FEATURES, SO THE PHONE LINKS NO SERVER (#1080). `rules` is always built
+# and reaches no runtime, no socket, no file and no clock; `client` adds the
+# pinned HTTPS client a phone links; `server` adds the gateway a member runs.
+# The default is the whole gateway so `cargo test --workspace` — the gate's
+# `test` step — runs the wire conformance suite; a phone depends on this crate
+# with `default-features = false, features = ["client"]`.
+[features]
+default = ["server", "client"]
+client = [
+  "dep:bytes",
+  "dep:futures",
+  "dep:http-body-util",
+  "dep:hyper",
+  "dep:hyper-util",
+  "dep:tokio",
+  "dep:tokio-rustls",
+]
+server = [
+  "client",
+  "dep:anyhow",
+  "dep:axum",
+  "dep:centraid-identity",
+  "dep:clap",
+  "dep:gethostname",
+  "dep:if-addrs",
+  "dep:jiff",
+  "dep:mdns-sd",
+  "dep:qrcode",
+  "dep:rand",
+  "dep:rcgen",
+  "dep:rusqlite",
+  "dep:tracing",
+  "dep:tracing-subscriber",
+  "tokio/signal",
+]
+
+# THE RULES' DEPENDENCIES ARE THE FIRST SIX, AND THAT IS A RULE. No tokio, no
+# rusqlite, no filesystem and no clock: `tests/pure_rules.rs` scans
+# `src/rules` for every reach, and `--no-default-features` is what proves the
+# six compile alone.
+[dependencies]
+# ONE HASH: a digest, a pin, a token's stored form and a pairing secret's.
+blake3.workspace = true
+# The claim and the read grant are signed by the vault's identity key, whose
+# public half IS the vault id.
+ed25519-dalek.workspace = true
+hex.workspace = true
+# The refusal body and every request and answer are declared once, here, for
+# both ends; `serde_json` parses the pairing payload a QR carries.
+serde = { workspace = true }
+serde_json.workspace = true
+thiserror.workspace = true
+
+# ─── client ───────────────────────────────────────────────────────────────────
+# HTTP/1.1 over TLS over TCP, and nothing else: `hyper`'s connection API with
+# `tokio-rustls` underneath and a verifier that accepts one certificate. No
+# `reqwest`: a connection pool and a CA store are what this client must not
+# have.
+bytes = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+http-body-util = { workspace = true, optional = true }
+hyper = { workspace = true, optional = true }
+hyper-util = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true, features = ["fs", "net"] }
+# TLS 1.2 beside 1.3, named here rather than inherited from a sibling crate's
+# features: an older phone's stack may offer only 1.2.
+tokio-rustls = { workspace = true, optional = true, features = ["tls12"] }
+
+# ─── server ───────────────────────────────────────────────────────────────────
+anyhow = { workspace = true, optional = true }
+# The HTTP surface over the rules. It carries no policy: every refusal it
+# renders is a `rules::code::Refusal`.
+axum = { workspace = true, optional = true }
+# `pairing_safety_number`, the one function a phone and a gateway both render
+# the digits a member compares with (#1080, the root's ruling A7).
+centraid-identity = { path = "../identity", optional = true }
+clap = { workspace = true, optional = true }
+gethostname = { workspace = true, optional = true }
+if-addrs = { workspace = true, optional = true }
+# The terminal's times, in UTC and in words a member reads.
+jiff = { workspace = true, optional = true }
+mdns-sd = { workspace = true, optional = true }
+# The pairing QR, rendered to the terminal as half blocks.
+qrcode = { workspace = true, optional = true }
+# Tokens, pairing secrets, the gateway id and staging names, from the OS.
+rand = { workspace = true, optional = true }
+rcgen = { workspace = true, optional = true }
+# `state.db`, through `.sql` files beside the adapter (`src/server/sql`).
+rusqlite = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+x509-parser.workspace = true

@@ -21,7 +21,7 @@
 //! Under the read grant the phone reads the head, fetches the snapshot it
 //! names and rebuilds the file — every range opened and checked against its
 //! name, then `db_hash`, `integrity_check` and the census, and the file opened
-//! through the forward-only ladder (`backup2::restore`). **Every vault checks
+//! through the forward-only ladder (`backup::restore`). **Every vault checks
 //! before any writer epoch moves**: one that will not refuses the restore and
 //! leaves every vault, and the new phone's directory, as it found them. Then
 //! each vault is claimed at the writer epoch plus one, **naming the head it
@@ -62,16 +62,16 @@
 use std::path::{Path, PathBuf};
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_gateway2::client::Client;
-use centraid_gateway2::rules::ids::Name as WireName;
-use centraid_gateway2::rules::payload::PairPayload;
+use centraid_gateway::client::Client;
+use centraid_gateway::rules::ids::Name as WireName;
+use centraid_gateway::rules::payload::PairPayload;
 use centraid_vault::Vault;
-use centraid_vault::backup2::PlaneError;
-use centraid_vault::backup2::files::{ContentFile, content_files};
-use centraid_vault::backup2::ledger::Destination;
-use centraid_vault::backup2::naming::Name;
-use centraid_vault::backup2::restore::{RestoreError, Restored, fetch_and_assemble};
-use centraid_vault::backup2::store::StoreError;
+use centraid_vault::backup::PlaneError;
+use centraid_vault::backup::files::{ContentFile, content_files};
+use centraid_vault::backup::ledger::Destination;
+use centraid_vault::backup::naming::Name;
+use centraid_vault::backup::restore::{RestoreError, Restored, fetch_and_assemble};
+use centraid_vault::backup::store::StoreError;
 
 use super::link::GatewayStore;
 use super::pair::{self, ClaimAnswer};
@@ -432,7 +432,7 @@ impl Scan<'_> {
     fn adopt(
         &self,
         staged: &Staged,
-        paired: &centraid_gateway2::rules::wire::Paired,
+        paired: &centraid_gateway::rules::wire::Paired,
     ) -> Result<wire::RestoredVault> {
         let gateway_id = paired.gateway_id.hex();
         let plane = Plane::of(&staged.file);

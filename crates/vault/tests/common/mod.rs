@@ -80,7 +80,7 @@ impl Scratch {
         seed: &str,
     ) -> Result<(
         Self,
-        Arc<std::sync::Mutex<centraid_vault::backup2::ledger::Ledger>>,
+        Arc<std::sync::Mutex<centraid_vault::backup::ledger::Ledger>>,
     )> {
         let dir = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&dir)?;
@@ -89,8 +89,8 @@ impl Scratch {
         let store = centraid_blobs::ByteStore::open(file.with_extension("bytes"))
             .expect("a content store opens");
         let ledger = Arc::new(std::sync::Mutex::new(
-            centraid_vault::backup2::ledger::Ledger::open(
-                centraid_vault::backup2::ledger::Ledger::path_for(&file),
+            centraid_vault::backup::ledger::Ledger::open(
+                centraid_vault::backup::ledger::Ledger::path_for(&file),
             )
             .expect("the ledger opens"),
         ));

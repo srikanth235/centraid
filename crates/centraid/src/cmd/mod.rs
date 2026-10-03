@@ -1,5 +1,7 @@
-//! The verbs this binary still has: `doctor`, `gateway install`, and the unit
-//! writer behind it (#1020, D-1020-G1).
+//! The verb this binary still has: `doctor` (#1020). `gateway install` and the
+//! unit writer behind it left at #1080's cut-over: the units it wrote ran a
+//! `centraid gateway` verb that no longer existed, and `centraid-gateway
+//! install` (`crates/gateway`) writes the gateway's own.
 //!
 //! ## `backup now`, `recover` and `export` ARE GONE (#1029 §5, Reference A)
 //!
@@ -18,7 +20,7 @@
 //!
 //! What replaces them is not another CLI verb. §1 makes **the phone the vault**:
 //! the snapshot, the spool and the upload run inside the core
-//! (`centraid_core::phone`, over `centraid_vault::backup2`, #1080), and the
+//! (`centraid_core::phone`, over `centraid_vault::backup`, #1080), and the
 //! restore a member performs is onto a new phone from the 24 words. The drill
 //! that proves the whole chain is `tests/restore_drill.rs` beside this crate.
 //!
@@ -29,8 +31,6 @@
 //! report unparseable exactly when it matters.
 
 pub mod doctor;
-pub mod gateway_install;
-pub mod units;
 
 use std::path::{Path, PathBuf};
 

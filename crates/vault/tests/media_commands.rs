@@ -1503,9 +1503,9 @@ fn an_original_the_library_holds_is_located_by_its_identifier_and_never_by_a_pat
     // THE STORE'S COPY GOES and the library is recorded as the bytes' home,
     // which is the state an original streamed from the library is in.
     std::fs::remove_file(&stored).expect("the store's copy goes");
-    let local = centraid_vault::backup2::ledger::LocalBytes {
-        hash: centraid_vault::backup2::naming::PlaintextHash::from_hex(&hash).expect("a hash"),
-        source: centraid_vault::backup2::ledger::LocalSource::Os,
+    let local = centraid_vault::backup::ledger::LocalBytes {
+        hash: centraid_vault::backup::naming::PlaintextHash::from_hex(&hash).expect("a hash"),
+        source: centraid_vault::backup::ledger::LocalSource::Os,
         os_ref: Some("library-item-1".to_owned()),
         verified_ms: Some(1),
         edited: false,

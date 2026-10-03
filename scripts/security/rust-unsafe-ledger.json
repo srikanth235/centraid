@@ -17,7 +17,7 @@
     "crates/core": 0,
     "crates/core-ffi": 97,
     "crates/design": 0,
-    "crates/gateway2": 0,
+    "crates/gateway": 0,
     "crates/identity": 0,
     "crates/media": 0,
     "crates/ontology": 0,

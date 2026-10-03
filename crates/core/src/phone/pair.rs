@@ -28,13 +28,13 @@
 //! when the pairing lands, so the two screens agree.
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_gateway2::client::{Client, ClientError};
-use centraid_gateway2::rules::claim::{sign_claim, sign_read};
-use centraid_gateway2::rules::code::Refusal;
-use centraid_gateway2::rules::ids::{GatewayId, Pin, Token};
-use centraid_gateway2::rules::payload::{PairPayload, PayloadError};
-use centraid_gateway2::rules::wire::{ClaimBody, PairKind, PairRequest, Paired, ReadBody};
-use centraid_vault::backup2::ledger::Destination;
+use centraid_gateway::client::{Client, ClientError};
+use centraid_gateway::rules::claim::{sign_claim, sign_read};
+use centraid_gateway::rules::code::Refusal;
+use centraid_gateway::rules::ids::{GatewayId, Pin, Token};
+use centraid_gateway::rules::payload::{PairPayload, PayloadError};
+use centraid_gateway::rules::wire::{ClaimBody, PairKind, PairRequest, Paired, ReadBody};
+use centraid_vault::backup::ledger::Destination;
 
 use super::{Keyring, Plane, now_ms, plane_error, wire_destination};
 use crate::error::{CoreError, Result};
@@ -157,7 +157,7 @@ pub(crate) enum ClaimAnswer {
     /// stand. Nothing moved.
     Conflict {
         epoch: u64,
-        head: Option<centraid_gateway2::rules::ids::Name>,
+        head: Option<centraid_gateway::rules::ids::Name>,
     },
 }
 
@@ -168,7 +168,7 @@ pub(crate) fn try_claim(
     keyring: &Keyring,
     gateway: &GatewayId,
     epoch: u64,
-    head_seen: Option<centraid_gateway2::rules::ids::Name>,
+    head_seen: Option<centraid_gateway::rules::ids::Name>,
     runtime: &tokio::runtime::Handle,
 ) -> Result<ClaimAnswer> {
     let request = PairRequest {

@@ -335,44 +335,6 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
             "This vault has moved to another phone. It is read-only here, and any changes made on \
              this phone since then are still on it."
         }
-        C::GatewaySignatureInvalid => {
-            "The backup service did not recognise this phone. Check it is set up for this vault."
-        }
-        // The remedy is automatic — the phone re-signs once with the server's
-        // own time — so this reaches a member only when that failed too.
-        C::GatewayClockSkew => {
-            "This phone's clock is too far from the backup service's. Check the date and time."
-        }
-        C::GatewayChecksumMissing | C::GatewayChecksumMismatch => {
-            "Some of the backup did not arrive intact, so it was not accepted. It will be sent \
-             again."
-        }
-        C::GatewayAlreadyCommitted => "That part of the backup is already saved.",
-        C::GatewayObjectUnknown => {
-            "Part of the backup was missing when it was saved, so nothing was recorded. It will \
-             be sent again."
-        }
-        C::GatewayObjectTooLarge => {
-            "That file was sent in a piece larger than the backup service accepts."
-        }
-        // The compare-and-set fence (F7). The member's action is to look at the
-        // other phone, which is the only thing that can explain it.
-        C::GatewayHeadConflict => {
-            "Another phone backed this vault up first. Nothing was overwritten; open Centraid on \
-             the other phone to see what it holds."
-        }
-        C::GatewayLeaseStale | C::GatewayNotLeaseHolder => {
-            "Another phone holds this vault now, so this one cannot back it up."
-        }
-        C::GatewayQuotaExceeded => {
-            "This vault has used all its backup space. Free some up, or raise the limit on the \
-             machine holding the backup."
-        }
-        C::GatewayDeleteRefused => {
-            "The backup service kept that rather than deleting it. Backups are held for a set \
-             time so an older one can always be restored."
-        }
-        C::GatewayCapabilityScope => "That is no longer available.",
     }
 }
 

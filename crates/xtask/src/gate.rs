@@ -215,7 +215,7 @@ pub fn steps(profile: Profile) -> Vec<Step> {
     release.extend([
         step("artifact-identity", run_artifact_identity),
         step("prebuilt-core-required", run_prebuilt_core_required),
-        // The gateway's end-to-end is `crates/gateway2`'s own wire
+        // The gateway's end-to-end is `crates/gateway`'s own wire
         // conformance suite (#1080) and the restore drill, not a container
         // smoke (D-1020-G5, superseded by #1029 §6).
     ]);

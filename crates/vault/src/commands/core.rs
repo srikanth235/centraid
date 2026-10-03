@@ -4578,7 +4578,7 @@ mod tests {
         let bytes = b"a photograph";
         assert_eq!(
             crate::content::content_digest(bytes),
-            crate::backup2::naming::PlaintextHash::of(bytes).to_string(),
+            crate::backup::naming::PlaintextHash::of(bytes).to_string(),
             "one hash names a member's bytes and the artefact that backs them up"
         );
         assert_eq!(crate::content::content_digest(bytes).len(), 64);

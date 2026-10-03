@@ -140,7 +140,7 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
          `blake3::hash` call is the door itself",
     ),
     (
-        "vault/src/backup2/files.rs",
+        "vault/src/backup/files.rs",
         "its own `#[cfg(test)]` fixture, and nothing else in the file writes a \
          row: an original and its poster seeded with `content_digest` over the \
          fixture's bytes, so the listing has a film and a picture to tell apart",
