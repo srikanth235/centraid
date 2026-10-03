@@ -1,5 +1,8 @@
 package dev.centraid.shared.sync
 
+import centraid.core.v1.ReleasableRequest
+import centraid.core.v1.ReleasedRequest
+import centraid.core.v1.Request
 import dev.centraid.core.CentraidCore
 import okio.ByteString.Companion.toByteString
 
@@ -40,7 +43,7 @@ public data class ReleasableList(
 
 /**
  * THE TWO FREE-UP DOORS (#1080 A19: `releasable = 29`, `released = 30`).
- * Null is "no answer" — no core, a refusal, or an arm not yet available — and
+ * Null is "no answer" — no core, or a refusal — and
  * never an empty list: a row offered over a list nobody produced would be a
  * verb nobody vouched for.
  */
@@ -53,17 +56,32 @@ public interface FreeUpDoors {
 }
 
 /**
- * The doors over the core's wire.
- *
- * **UNTIL THE TWO ARMS LAND** (lane C's next `envelope.proto` slice) both
- * answer null, exactly as a refused arm does, so the More sheet says it could
- * not check rather than offering to free anything. The switch to the
- * generated `ReleasableRequest` and `ReleasedRequest` is this class alone.
+ * The doors over the core's wire (`envelope.proto` arms 29 and 30). Both
+ * answer null for no core and for every refusal, so the More sheet says it
+ * could not check rather than offering to free anything.
  */
 public class CoreFreeUpDoors(private val core: () -> CentraidCore?) : FreeUpDoors {
-    override suspend fun releasable(limit: Long): ReleasableList? = null
+    /** `releasable = 29`: what a gateway holds whole, oldest first, as the core listed it. */
+    override suspend fun releasable(limit: Long): ReleasableList? {
+        val answer = askDoor(core, Request(releasable = ReleasableRequest(limit = limit)))?.releasable
+            ?: return null
+        return ReleasableList(
+            items = answer.items.map {
+                ReleasableItem(
+                    contentHash = it.content_hash.toByteArray(),
+                    osRef = it.os_ref,
+                    size = it.size,
+                    mediaType = it.media_type,
+                )
+            },
+            totalBytes = answer.total_bytes,
+        )
+    }
 
-    override suspend fun released(contentHashes: List<ByteArray>): Int? = null
+    /** `released = 30`: the raw hashes the platform deleted; how many the core recorded. */
+    override suspend fun released(contentHashes: List<ByteArray>): Int? =
+        askDoor(core, Request(released = ReleasedRequest(content_hash = contentHashes.map { it.toByteString() })))
+            ?.released?.recorded
 }
 
 /**

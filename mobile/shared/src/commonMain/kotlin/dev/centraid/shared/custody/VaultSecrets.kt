@@ -4,19 +4,18 @@ import dev.centraid.shared.platform.SecureStore
 import dev.centraid.shared.platform.SyncedSecrets
 
 /**
- * THE TWO SECRETS A CORE IS OPENED WITH, AND THEY LIVE IN DIFFERENT PLACES
+ * THE SEED A CORE IS OPENED WITH, AND WHAT THIS PHONE KEEPS BESIDE IT
  * (#1029 W18, `crates/core-ffi/CONTRACT.md` §4b).
  *
- * They look alike — both are hex strings handed to `centraid_open` — and they
- * have opposite durability rules. Storing either one where the other belongs is
- * a defect a member finds out about on the worst possible day, so they are one
- * object with the rule written on each accessor rather than two call sites a
- * shell gets right by remembering.
+ * The seed and the device-only facts about it have opposite durability rules.
+ * Storing one where the other belongs is a defect a member finds out about on
+ * the worst possible day, so they are one object with the rule written on
+ * each accessor rather than call sites a shell gets right by remembering.
  *
- * | Secret | Where | Why |
+ * | What | Where | Why |
  * |---|---|---|
  * | the vault's **seed** (128 hex) | [SyncedSecrets] — **synchronised** | it is the 24 words; iCloud Keychain carrying it to the member's next phone is the point |
- * | this device's **secret** (64 hex) | [SecureStore] — **this device only** | it identifies THIS phone; a copy on a second device would be two devices claiming to be one |
+ * | the **words**, each vault's **index**, and the seed when no synchronised store took it | [SecureStore] — **this device only** | they are facts about THIS phone's vaults; see each accessor |
  *
  * ## The seed is synchronised and that is deliberate
  *
@@ -27,31 +26,18 @@ import dev.centraid.shared.platform.SyncedSecrets
  * The written phrase stays the common path on Android, where Block Store hands
  * bytes back only inside the setup wizard.
  *
- * ## The device secret never leaves
+ * ## There is no device secret (#1080 A21)
  *
- * It goes in the ordinary [SecureStore], which both platforms pin to this
- * device. **A device secret that synchronised would enrol a member's old phone
- * and their new one as the same device**, and F1's `VAULT_MOVED` freeze — the
- * thing that stops two phones writing one vault — is keyed on exactly that
- * distinction.
+ * A gateway knows a phone by a bearer token in the core's backup ledger
+ * (#1080 ruling 1), so no device key is stored here and a core is opened
+ * with none.
  *
- * ## Absent is not an error, on either
+ * ## Absent is not an error
  *
- * A core opened with no seed reads and writes perfectly well and refuses to
- * drain, which a shell draws as "unlock to back up". A core opened with no
- * device secret can seal and cannot sign, so it drains nothing until this
- * phone has paired or restored. **Present and malformed IS an error on both**
- * (`BAD_ARGUMENT`), because carrying on would leave a shell believing it had
- * unlocked something it had not.
- *
- * ## The CORE mints the device secret, never this class (#1047 E1, R-1047-E4)
- *
- * A pair or a restore mints the key, has the vault's identity key certify it,
- * writes the certificate beside the vault and hands the secret back ONCE on
- * its answer (`crates/core/src/phone/link.rs`). This class stores that answer
- * and hands it back at every keyed open. It used to mint one of its own from
- * the platform CSPRNG, and that was a key no certificate named: a drain would
- * have signed with it and been refused by the laptop as a stranger.
+ * A core opened with no seed reads and writes perfectly well and cannot seal
+ * a backup, which a shell draws as "unlock to back up". **Present and
+ * malformed IS an error** (`BAD_ARGUMENT`), because carrying on would leave a
+ * shell believing it had unlocked something it had not.
  */
 public class VaultSecrets(
     private val store: SecureStore,
@@ -116,44 +102,13 @@ public class VaultSecrets(
         store.read(LOCAL_WORDS)?.split(' ')?.takeIf { kept -> kept.size == WORDS && kept.all { it.isWord() } }
 
     /**
-     * This device's secret for [vaultId] — the one a pair or a restore
-     * handed back — or null before either has happened. Never minted here.
-     */
-    public suspend fun deviceSecret(vaultId: String): String? =
-        store.read(deviceKey(vaultId))?.takeIf { it.isDeviceSecret() }
-
-    /**
-     * Store a device secret the CORE minted, off a pair's or a restore's answer.
-     *
-     * The answer is the only time the core hands it over; a shell that dropped
-     * it would hold a certificate for a key it does not have, and every drain
-     * would be refused.
-     */
-    public suspend fun rememberDeviceSecret(vaultId: String, secretHex: String) {
-        require(secretHex.isDeviceSecret()) {
-            "a device secret is $DEVICE_SECRET_HEX_LENGTH lowercase hex characters"
-        }
-        store.write(deviceKey(vaultId), secretHex)
-    }
-
-    /** Drop this device's secret for one vault. What unpairing calls. */
-    public suspend fun forgetDeviceSecret(vaultId: String) {
-        // AN EMPTY VALUE DELETES — `SecureStore`'s own rule, and the reason it
-        // has one: a stored empty string reads back as a credential the app
-        // believes it has.
-        store.write(deviceKey(vaultId), "")
-    }
-
-    private fun deviceKey(vaultId: String): String = DEVICE_SECRET_PREFIX + vaultId
-
-    /**
      * THE DERIVATION INDEX [vaultId] SITS AT UNDER THE SEED, or null (#1047 W2).
      *
      * The seed is one per member — "these 24 words are your vaults" — and each
      * vault is the seed's child at its own index (`seed / vault'(i)`), so a core
      * is only KEYED when the shell hands it both. The index is not a secret, but
-     * it lives beside the device secret in the device store because it is the
-     * same kind of fact: this phone's knowledge of one vault it holds. It is
+     * it lives in the device-only store because it is a fact about this phone:
+     * its knowledge of one vault it holds. It is
      * never synchronised — a restore rediscovers every index by scanning from
      * the words (`RestoreResponse.vaults[].index`), so a copy that travelled
      * would be a second answer to a question the words already answer.
@@ -247,7 +202,7 @@ public class VaultSecrets(
      * this phone through iCloud Keychain carries no record of the vaults the
      * member made with it elsewhere, and [nextVaultIndex] would answer 0 — the
      * index of a vault that already exists, so the new one would share its
-     * identity, its laptop address and its Locker `K`. So the seed is SETTLED
+     * identity, its backup keys and its Locker `K`. So the seed is SETTLED
      * here only when this phone minted it, restored from it or was re-keyed
      * with it (each calls [settleSeed]), or has recorded an index under it.
      */
@@ -269,21 +224,11 @@ public class VaultSecrets(
         /** 64 bytes, as 128 lowercase hex characters (`CONTRACT.md` §4b). */
         public const val SEED_HEX_LENGTH: Int = 128
 
-        /** 32 bytes, as 64 lowercase hex characters. */
-        public const val DEVICE_SECRET_BYTES: Int = 32
-
-        public const val DEVICE_SECRET_HEX_LENGTH: Int = DEVICE_SECRET_BYTES * 2
-
         /**
-         * Per VAULT, not per device.
-         *
-         * A device holding two vaults is two cores, two endpoints and two
-         * records (D-1025-S7-13), so it is two secrets; one shared across them
-         * would make unpairing one vault un-enrol the other.
+         * Per VAULT: `vault-index.<vaultId>`. A device holding two vaults holds
+         * two indices, and one shared across them would be two vaults at one
+         * identity.
          */
-        public const val DEVICE_SECRET_PREFIX: String = "device-secret."
-
-        /** Per vault, like the device secret: `vault-index.<vaultId>`. */
         public const val INDEX_PREFIX: String = "vault-index."
 
         /** The highest index this phone ever recorded. See [rememberVaultIndex]. */
@@ -311,8 +256,6 @@ public class VaultSecrets(
         private const val SETTLED: String = "1"
 
         internal fun String.isSeed(): Boolean = isHex(SEED_HEX_LENGTH)
-
-        internal fun String.isDeviceSecret(): Boolean = isHex(DEVICE_SECRET_HEX_LENGTH)
 
         /** A lowercase ASCII word — the shape of a BIP39 English list word, not the list. */
         private fun String.isWord(): Boolean = isNotEmpty() && all { it in 'a'..'z' }
