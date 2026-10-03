@@ -51,7 +51,7 @@ public sealed interface CoreFailure {
              */
             public const val OPEN_REFUSED: String =
                 "centraid_open refused this open (BAD_ARGUMENT): the path, the file (not a vault, " +
-                    "or migrated by a newer core), a malformed seed or device secret, or an identity " +
+                    "or migrated by a newer core), a malformed seed, or an identity " +
                     "mismatch — the core's `centraid_open refused` log line names which"
         }
     }

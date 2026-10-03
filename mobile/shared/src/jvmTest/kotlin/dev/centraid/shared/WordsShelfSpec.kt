@@ -39,24 +39,22 @@ import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
-import okio.ByteString.Companion.toByteString
 import java.io.File
 import kotlin.io.path.createTempDirectory
 
 /**
  * THE SHELF'S HALF OF THE 24 WORDS (#1047 E1, R-1047-E3…E5).
  *
- * The device secret rides every keyed open and no other; a restored vault's
- * own directory is a holding, keyed at the index the restore found and with the
- * secret it minted; handing the words back reopens what can be keyed and
- * guesses nothing; the doors carry what crosses and keep the secret the core
- * hands over once. A recording opener stands in for the ABI.
+ * A keyed open carries the seed at the vault's index and no device secret
+ * (#1080 A21); a restored vault's own directory is a holding, keyed at the
+ * index the restore found; handing the words back reopens what can be keyed
+ * and guesses nothing; the doors carry what crosses. A recording opener stands
+ * in for the ABI.
  */
 class WordsShelfSpec : StringSpec({
 
     val seed = "408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf70" +
         "5489c6fc77dbd4e3dc1dd8cc6bc9f043db8ada1e243c4a0eafb290d399480840"
-    val secret = "cd".repeat(32)
 
     class Phone {
         val dir: File = createTempDirectory("words-shelf").toFile()
@@ -100,49 +98,38 @@ class WordsShelfSpec : StringSpec({
         )
     }
 
-    "the device secret the core handed back rides a KEYED open of its vault, and no other open" {
+    "a keyed open carries the seed at its vault's index; the probe carries none" {
         runTest {
             val phone = Phone()
             val path = phone.file("a.sqlite3", "v-a")
             phone.secrets.rememberSeed(seed)
             phone.secrets.rememberVaultIndex("v-a", 0)
-            phone.secrets.rememberDeviceSecret("v-a", secret)
             phone.shelf.load()
 
             val opens = phone.opens.filter { it.databasePath == path }
-            opens.first().deviceSecretHex.shouldBeNull() // the probe asks which vault it is
-            opens.last().deviceSecretHex shouldBe secret
-            opens.last().toString() shouldNotContain secret
+            opens.first().vaultSeedHex.shouldBeNull() // the probe asks which vault it is
+            opens.last().vaultSeedHex shouldBe seed
+            opens.last().vaultIndex shouldBe 0
+            opens.last().toString() shouldNotContain seed
         }
     }
 
-    "no secret before a pair or a restore: a keyed open carries none, and nothing mints one" {
-        runTest {
-            val phone = Phone()
-            phone.file("a.sqlite3", "v-a")
-            phone.secrets.rememberSeed(seed)
-            phone.secrets.rememberVaultIndex("v-a", 0)
-            phone.shelf.load()
-            phone.opens.last().vaultSeedHex shouldBe seed
-            phone.opens.last().deviceSecretHex.shouldBeNull()
-            phone.secrets.deviceSecret("v-a").shouldBeNull()
-        }
-    }
-
-    "a restored vault's own directory is a holding: keyed at the restore's index, with its secret" {
+    "a restored vault's own directory is a holding, keyed at the restore's index, and no device key is kept" {
         runTest {
             val phone = Phone()
             phone.secrets.rememberSeed(seed)
             val restored = phone.file("0a1b2c3d4e5f6071/vault.db", "v-restored")
-            val added = phone.shelf.adoptRestored(listOf(Shelf.Restored(restored, 3)), secret)
+            val added = phone.shelf.adoptRestored(listOf(Shelf.Restored(restored, 3)))
             added shouldBe 1
 
             phone.secrets.vaultIndex("v-restored") shouldBe 3
-            phone.secrets.deviceSecret("v-restored") shouldBe secret
             val keyed = phone.opens.last()
             keyed.databasePath shouldBe restored
             keyed.vaultIndex shouldBe 3
-            keyed.deviceSecretHex shouldBe secret
+            keyed.vaultSeedHex shouldBe seed
+            // NO DEVICE KEY IS KEPT (#1080 A21): a gateway knows this phone by
+            // a token in the core's ledger, so the device store names none.
+            phone.services.secureStore.keys.none { it.startsWith("device-secret.") } shouldBe true
             phone.shelf.foregroundHolding().shouldNotBeNull().keyed shouldBe true
 
             // AND A RELAUNCH FINDS IT THERE, beside the vaults this phone founded.
@@ -211,7 +198,7 @@ class WordsShelfSpec : StringSpec({
         }
     }
 
-    "the restore door carries every vault's path and index, and the secret, redacted" {
+    "the restore door carries every vault's path and index, and nothing from the support log" {
         runTest {
             val door = CoreRestoreDoor {
                 CentraidCore.answering(Dispatchers.Unconfined) {
@@ -220,7 +207,6 @@ class WordsShelfSpec : StringSpec({
                             restore = RestoreResponse(
                                 vaults = listOf(RestoredVault(vault_id = "id", index = 2, path = "/v/x/vault.db", rows = 7, safety_number = "1 2")),
                                 gap_scanned = 20,
-                                device_secret = ByteArray(32) { 0xcd.toByte() }.toByteString(),
                                 unclaimed = listOf(UnclaimedVault(index = 3, vault_id = "ef".repeat(32), reason = "logs only")),
                             ),
                         ),
@@ -234,8 +220,7 @@ class WordsShelfSpec : StringSpec({
             answer.unclaimed shouldBe listOf(UnclaimedVaultAt(index = 3, vaultId = "ef".repeat(32)))
             answer.toString() shouldNotContain "logs only"
             answer.vaults.single().path shouldBe "/v/x/vault.db"
-            answer.deviceSecretHex shouldBe secret
-            answer.toString() shouldNotContain secret
+            answer.toString() shouldNotContain "/v/x/vault.db"
         }
     }
 
@@ -255,10 +240,8 @@ class WordsShelfSpec : StringSpec({
             asked?.indices shouldBe listOf(1, 3)
             asked?.phrase shouldBe ""
             asked?.seed?.size shouldBe 64
-            // THE PAIRING CODE CROSSES AS THE TEXT IT IS (#1080 A1); the
-            // iroh endpoint the cut-over removes is never set.
+            // THE PAIRING CODE CROSSES AS THE TEXT IT IS (#1080 A1).
             asked?.payload shouldBe code
-            asked?.endpoint shouldBe null
             // THE HELD-SEED RESTORE rides the same 64 bytes, and reached the core
             // too: a seed read as a 32-byte endpoint id never did.
             door.restoreSeed("cd".repeat(64), null).shouldBeInstanceOf<RestoreResult.Restored>()
@@ -306,9 +289,6 @@ class WordsShelfSpec : StringSpec({
                                         label = "Home laptop",
                                         addrs = listOf("192.168.1.20:7443", "10.0.0.2:7443"),
                                     ),
-                                    // THE FIELDS THAT LEAVE AT THE CUT-OVER ARE NOT READ:
-                                    // a device secret here is ignored, never stored.
-                                    device_secret = ByteArray(32) { 0xcd.toByte() }.toByteString(),
                                 ),
                             ),
                         )

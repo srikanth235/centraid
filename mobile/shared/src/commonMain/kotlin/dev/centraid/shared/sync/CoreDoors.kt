@@ -203,15 +203,12 @@ public class CoreRestoreDoor(private val core: suspend () -> CentraidCore?) : Re
                 )
             },
             gapScanned = restored.gap_scanned,
-            deviceSecretHex = restored.device_secret.takeIf { it.size == DEVICE_SECRET_BYTES }?.hex().orEmpty(),
             // A VAULT THAT STAYED WITH THE OLD PHONE (R-1047-R5), by index and
             // id. Its `reason` is the core's support log and stays there.
             unclaimed = restored.unclaimed.map { UnclaimedVaultAt(index = it.index, vaultId = it.vault_id) },
         ))
     }
 }
-
-private const val DEVICE_SECRET_BYTES: Int = 32
 
 /** What `RecoveryPhrase::seed` makes of the 24 words (`RestoreRequest.seed`). */
 private const val SEED_BYTES: Int = 64

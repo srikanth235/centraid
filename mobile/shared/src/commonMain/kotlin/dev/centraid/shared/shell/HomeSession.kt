@@ -532,8 +532,8 @@ public class HomeSession private constructor(
      * HOLD WHAT A RESTORE BROUGHT BACK, and bind Home to it (#1047 E1).
      * See [Shelf.adoptRestored]; the seed is already stored.
      */
-    public suspend fun adoptRestored(restored: List<Shelf.Restored>, deviceSecretHex: String): Int {
-        val added = shelf.adoptRestored(restored, deviceSecretHex)
+    public suspend fun adoptRestored(restored: List<Shelf.Restored>): Int {
+        val added = shelf.adoptRestored(restored)
         rebind()
         return added
     }

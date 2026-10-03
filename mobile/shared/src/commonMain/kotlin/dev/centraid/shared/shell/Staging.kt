@@ -111,13 +111,13 @@ public object Staging {
         osRef: String = "",
         /** A derivative: the content hash (hex) of the original it was rendered from. */
         forHash: String? = null,
-        /** `thumb` or `preview`, with [forHash]. */
+        /** `thumb`, `preview` or `poster` (a video's still), with [forHash]. */
         tier: String = "",
         /**
          * The library item carries an edit (A20): its bytes are the current
          * rendition, which the next edit replaces, so the core never offers it
-         * for deletion. Carried as `StageBegin.os_edited` from lane C's proto
-         * slice that adds field 7; until then the core cannot be told.
+         * for deletion (`StageBegin.os_edited`). Sent only with
+         * [Source.OS_LIBRARY]: an owned item is no library item to delete.
          */
         osEdited: Boolean = false,
         // LAST, so every caller's trailing lambda stays the reader.
@@ -133,6 +133,7 @@ public object Staging {
             os_ref = osRef,
             for_hash = forHash?.let { ContentHash.raw(it) } ?: ByteString.EMPTY,
             tier = tier,
+            os_edited = osEdited && source == Source.OS_LIBRARY,
         )
         val begun = when (val answer = core.send(StageRequest(begin = begin))) {
             is CoreOutcome.Failed -> return refusal(answer)

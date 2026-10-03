@@ -121,7 +121,6 @@ class WordsEntrySpec : StringSpec({
 
         val answer = RestoreAnswer(
             vaults = listOf(RestoredVaultAt("/v/a/vault.db", 0, rows = 1_204, safetyNumber = "12345 67890")),
-            deviceSecretHex = "cd".repeat(32),
         )
         val done = reduce(working.model, EntryInput.Restored(Enrollment.Restored.Done(answer, 1))).model
         done.state.phase shouldBe WordsEntryState.Phase.PHASE_DONE
@@ -132,7 +131,6 @@ class WordsEntrySpec : StringSpec({
         // ONE ROW IS A ROW (#1047 walk's plural sweep).
         val one = RestoreAnswer(
             vaults = listOf(RestoredVaultAt("/v/a/vault.db", 0, rows = 1, safetyNumber = "")),
-            deviceSecretHex = "cd".repeat(32),
         )
         reduce(working.model, EntryInput.Restored(Enrollment.Restored.Done(one, 1))).model.state.restored.single().line shouldBe
             "Vault 1: 1 row."
@@ -149,7 +147,6 @@ class WordsEntrySpec : StringSpec({
                 RestoredVaultAt("/v/a/vault.db", 0, rows = 3),
                 RestoredVaultAt("/v/c/vault.db", 2, rows = 1),
             ),
-            deviceSecretHex = "cd".repeat(32),
             unclaimed = listOf(UnclaimedVaultAt(index = 1, vaultId = "ab".repeat(32))),
         )
         val done = reduce(working, EntryInput.Restored(Enrollment.Restored.Done(answer, 2))).model.state
@@ -181,12 +178,12 @@ class WordsEntrySpec : StringSpec({
 
     "a retry asks for the vaults that stayed alone, keeps what came back, and a refusal leaves both lists standing" {
         // R-1047-R6: vaults 0 and 2 came back, vault 1 stayed. The retry names
-        // index 1 and the laptop address the member typed; the words are gone.
-        val typedAddress = reduce(
+        // index 1 and the pairing code the member typed; the words are gone.
+        val typedCode = reduce(
             filled(WordsEntryState.Purpose.PURPOSE_RESTORE),
             EntryInput.View(WordsEntryEvent(endpoint = WordsEntryEvent.EndpointTyped(text = "ab"))),
         ).model
-        val working = reduce(typedAddress, primary).model
+        val working = reduce(typedCode, primary).model
         val first = RestoreAnswer(
             vaults = listOf(RestoredVaultAt("/v/a/vault.db", 0, rows = 3), RestoredVaultAt("/v/c/vault.db", 2, rows = 1)),
             unclaimed = listOf(UnclaimedVaultAt(index = 1, vaultId = "ab".repeat(32))),
