@@ -14,7 +14,8 @@
 //! | `state.db` (with `-wal`, `-shm`) | vaults, hashed tokens and secrets, heads, snapshots, the object index ([`state`]) |
 //! | `objects/<vault>/<nn>/<name>` | one sealed object per file ([`store`]) |
 //! | `incoming/` | uploads being staged; emptied at start |
-//! | `serve.json` | the address `serve` last bound, which `pair` reads |
+//! | `serve.json` | the address `serve` last bound, which `pair` and `health` read |
+//! | `sweeps.json` | when the purge and the scrub last finished ([`sweeps`]) |
 //!
 //! Plain files: copying the directory anywhere — a VPS, a NAS, a disk in a
 //! drawer — copies everything a gateway has. A stolen copy yields ciphertext
