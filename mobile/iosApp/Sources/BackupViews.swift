@@ -10,9 +10,10 @@ import UIKit
 // only a platform can do: keep the screen awake while "Back up now" runs with
 // the screen up, and hand pairing a new gateway to `pair.laptop`'s scanner.
 //
-// **EVERY PROTO NAME THIS FILE READS IS IN [BackupScreenModel.init] AND
-// [BackupEvents]**, so reconciling with `screen.proto`'s `// --- Backup ---`
-// block (lane D's, A9) is an edit to those two places and nothing else. The
+// **EVERY PROTO NAME THIS FILE READS IS IN [BackupScreenModel.init],
+// [BackupLineView] AND [BackupEvents]** — and `HomeView` reads one more, the
+// `backup_line` it hands the line — so reconciling with `screen.proto`'s
+// `// --- Backup ---` block (lane D's, A9) is an edit to those places. The
 // names are seam contract §3's (`destinations`, `line`, `include_videos`,
 // `backing_up_now`, `BackUpNow`, `SetIncludeVideos`, `ForgetDestination`) plus
 // the words a view needs and §3 does not name — this lane's assumption, listed

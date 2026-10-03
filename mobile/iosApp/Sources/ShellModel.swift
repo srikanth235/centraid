@@ -128,7 +128,7 @@ final class ShellModel: ObservableObject {
 
     /// THE APP WENT TO THE BACKGROUND (#1080, the shells).
     ///
-    /// Three things, in this order. The night's windows are asked for first —
+    /// Two things, in this order. The night's windows are asked for first —
     /// leaving the app is what arms them, and a one-shot request that was only
     /// ever resubmitted from inside a handler never ran at all. Then one pass
     /// under the background task's grace, bounded by [backgroundPassSeconds],
