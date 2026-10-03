@@ -204,43 +204,36 @@ private const val DEVICE_SECRET_BYTES: Int = 32
 private const val SEED_BYTES: Int = 64
 
 /**
- * `backup_status = 18` — what the backup row draws.
+ * `backup_status = 18` — what the backup line draws.
  *
  * **It dials nothing**, which is `phone.proto`'s own rule: drawing a screen
  * must not depend on somebody else's network.
  */
-public class CoreBackupStatus(private val core: () -> CentraidCore?) {
+public class CoreBackupStatus(private val core: () -> CentraidCore?) : BackupStatusDoor {
 
-    public suspend fun read(): Reading? {
+    override suspend fun read(): BackupReading? {
         val open = core() ?: return null
         val answer = open.call(
             Envelope(request_id = 0, request = Request(backup_status = BackupStatusRequest())),
         )
         val status = (answer as? CoreOutcome.Answered)?.value?.response?.backup_status ?: return null
-        return Reading(
-            ackedTxid = status.acked_txid,
-            lastAckedAtMs = status.acked_at_ms,
+        return BackupReading(
+            // ONE UNNAMED DESTINATION FOR "A LAPTOP IS PAIRED": the wire names
+            // no gateway until `Destination` lands with the cut-over (§1).
+            destinations = if (status.laptop_paired) {
+                listOf(DestinationReading("", "", emptyList(), lastSeenMs = null, lastAckMs = status.acked_at_ms))
+            } else {
+                emptyList()
+            },
+            lastSnapshotMs = null,
+            lastAckMs = status.acked_at_ms,
+            contentTotal = 0,
+            contentConfirmed = 0,
             pendingBytes = status.pending_bytes,
-            laptopPaired = status.laptop_paired,
+            spoolBytes = status.pending_bytes,
+            waiting = emptyMap(),
+            frozen = false,
         )
-    }
-
-    /**
-     * What the core knows without asking anyone.
-     *
-     * [lastAckedAtMs] is the GATEWAY's clock and is the only moment a member may
-     * be shown as "last backed up" — which is why [BackupClaim.line] takes it
-     * and never a local one.
-     */
-    public data class Reading(
-        public val ackedTxid: Long?,
-        public val lastAckedAtMs: Long?,
-        public val pendingBytes: Long,
-        public val laptopPaired: Boolean,
-    ) {
-        /** The backup row's line, through the one fold that may say "backed up". */
-        public fun line(unacked: Int, relative: String): String =
-            BackupClaim.line(lastAckedAtMs, unacked, relative)
     }
 }
 
