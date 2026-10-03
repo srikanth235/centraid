@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! copy      sqlite3_backup of the live vault into a scratch file   (holds the vault)
-//! describe  census, 4 MiB page-aligned ranges, their names, the manifest  (does not)
+//! describe  census, 64 KiB page-aligned ranges, their names, the manifest  (does not)
 //! plan      one `exists` for every range and the manifest
 //! spool     seal only what is missing, queue it in the ledger
 //! settle    once every range and the manifest are confirmed, move the head
@@ -18,6 +18,24 @@
 //! hashing the file plus sealing the ranges that changed (#1080 ruling 5). The
 //! vault never runs `VACUUM` and keeps `auto_vacuum = NONE`, which is what
 //! keeps a page where it was (`crate::file`).
+//!
+//! ## WHY A RANGE IS 64 KiB (Q-1080-B1, the root's ruling A14)
+//!
+//! A range that holds one changed page is sealed again whole, so the range
+//! size decides what a snapshot costs. Measured on the drill's vault — 57 MiB,
+//! 14,601 pages — after fifty small notes:
+//!
+//! | Range | Pages changed | Resealed |
+//! |---|---|---|
+//! | 4 MiB | about 300, across some fifty b-trees | 52 of 57 MiB (13 of 15 ranges) |
+//! | 64 KiB | the same | about 6 MiB |
+//!
+//! Small commits land in many b-trees at once — the table, its indexes, the
+//! receipts, the full-text index — so their pages are spread across the file,
+//! and a large range almost always holds one of them. The cost of a small
+//! range is names: a snapshot of that vault is some nine hundred ranges, which
+//! `exists` asks about a thousand at a time and the mover sends in bundles
+//! (A14, A15). The manifest grows with them and its format does not change.
 //!
 //! ## THE COPY CANNOT INTERLEAVE WITH A COMMIT, BY CONSTRUCTION (R-1080-B6)
 //!
@@ -64,8 +82,9 @@ const _: fn() = || {
     let _ = <Vault as AmbiguousIfSync<_>>::some_item;
 };
 
-/// A range: 4 MiB, a whole number of pages at any page size SQLite allows.
-pub const RANGE_BYTES: u64 = 4 * 1024 * 1024;
+/// A range: 64 KiB, a whole number of pages at any page size SQLite allows
+/// (its largest page is 64 KiB). See the module header for why this size.
+pub const RANGE_BYTES: u64 = 64 * 1024;
 
 /// The manifest format this build writes and reads.
 pub const MANIFEST_VERSION: u32 = 2;

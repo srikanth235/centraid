@@ -3,12 +3,18 @@
 //!
 //! ```text
 //! fetch the manifest by the head's name   open it; its name must derive from its bytes
-//! fetch each range by name                open it; its name must derive from its bytes
-//! write it at i × 4 MiB                   truncate to db_len
+//! fetch the ranges, 1,000 names a fetch   open each; its name must derive from its bytes
+//! write it at i × 64 KiB                  truncate to db_len
 //! db_hash                                 BLAKE3 of the whole file, against the manifest
 //! integrity_check, page_size, user_version
 //! census                                  table by table, against the manifest
 //! ```
+//!
+//! The ranges come back through [`Store::get_many`], the protocol's `fetch`
+//! (the root's ruling A15): a snapshot is hundreds of 64 KiB ranges, and one
+//! request each would be hundreds of round trips. A fetch answers a name once,
+//! and two ranges with the same bytes have one name, so each answer is written
+//! at every index that names it.
 //!
 //! Every check refuses with a [`RestoreError`] naming the check or the table,
 //! and a refused restore leaves nothing at the output path: the file is built
@@ -20,17 +26,17 @@
 //! about the b-tree, and a perfect file with nobody's rows in it passes it;
 //! the census is what says the rows came back.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use centraid_media::sealed;
 
 use super::PlaneError;
 use super::naming::{BackupKeys, Name, PlaintextHash};
-use super::snapshot::{Manifest, RANGE_BYTES, census_of, read_copy};
-use super::store::{Store, StoreError};
+use super::snapshot::{Manifest, RANGE_BYTES, RangeRef, census_of, read_copy};
+use super::store::{NAMES_PER_CALL, Store, StoreError};
 use crate::migrations::APPLICATION_ID;
 
 /// Why a restore refused the file.
@@ -155,6 +161,74 @@ pub fn fetch_and_assemble(
     }
 }
 
+/// Fetch every range the manifest names and write each at `i × 64 KiB`.
+fn write_ranges(
+    store: &dyn Store,
+    keys: &BackupKeys,
+    manifest: &Manifest,
+    file: &mut File,
+) -> Result<(), RestoreError> {
+    let mut at: BTreeMap<Name, Vec<&RangeRef>> = BTreeMap::new();
+    let mut order: Vec<Name> = Vec::new();
+    for range in &manifest.ranges {
+        let indices = at.entry(range.name).or_default();
+        if indices.is_empty() {
+            order.push(range.name);
+        }
+        indices.push(range);
+    }
+    let mut written: BTreeSet<Name> = BTreeSet::new();
+    let mut refused: Option<RestoreError> = None;
+    for batch in order.chunks(NAMES_PER_CALL) {
+        let fetched = store.get_many(batch, &mut |name, sealed_bytes| {
+            let Some(ranges) = at.get(name).filter(|_| !written.contains(name)) else {
+                return Ok(());
+            };
+            let refuse = |refused: &mut Option<RestoreError>, i: u32, reason: String| {
+                *refused = Some(RestoreError::Range { i, reason });
+                std::io::Error::other("a range was refused")
+            };
+            let first = ranges.first().map_or(0, |range| range.i);
+            let plaintext = sealed::open_whole(keys, name, sealed_bytes)
+                .map_err(|error| refuse(&mut refused, first, error.to_string()))?;
+            for range in ranges {
+                if plaintext.len() as u64 != range.len {
+                    return Err(refuse(
+                        &mut refused,
+                        range.i,
+                        format!(
+                            "{} bytes where the manifest says {}",
+                            plaintext.len(),
+                            range.len
+                        ),
+                    ));
+                }
+                file.seek(SeekFrom::Start(u64::from(range.i) * RANGE_BYTES))?;
+                file.write_all(&plaintext)?;
+            }
+            written.insert(*name);
+            Ok(())
+        });
+        if let Some(error) = refused.take() {
+            return Err(error);
+        }
+        fetched?;
+    }
+    // A name the fetch did not hand back is one the destination does not
+    // hold; the lowest range it names is reported.
+    if let Some(name) = order.iter().find(|name| !written.contains(*name)) {
+        let i = at
+            .get(name)
+            .and_then(|ranges| ranges.first())
+            .map_or(0, |range| range.i);
+        return Err(RestoreError::Range {
+            i,
+            reason: format!("the destination does not hold {name}"),
+        });
+    }
+    Ok(())
+}
+
 fn rebuild(
     store: &dyn Store,
     keys: &BackupKeys,
@@ -179,32 +253,7 @@ fn rebuild(
     });
 
     let mut file = File::create(partial)?;
-    for range in &manifest.ranges {
-        let sealed = fetch(store, &range.name).map_err(|error| RestoreError::Range {
-            i: range.i,
-            reason: error.to_string(),
-        })?;
-        let plaintext = sealed::open_whole(keys, &range.name, &sealed).map_err(|error| {
-            RestoreError::Range {
-                i: range.i,
-                reason: error.to_string(),
-            }
-        })?;
-        if plaintext.len() as u64 != range.len {
-            return Err(RestoreError::Range {
-                i: range.i,
-                reason: format!(
-                    "{} bytes where the manifest says {}",
-                    plaintext.len(),
-                    range.len
-                ),
-            });
-        }
-        // The ranges tile the file in order (`Manifest::from_json`), so
-        // writing them one after another puts range i at i × 4 MiB.
-        debug_assert_eq!(u64::from(range.i) * RANGE_BYTES, file.metadata()?.len());
-        file.write_all(&plaintext)?;
-    }
+    write_ranges(store, keys, &manifest, &mut file)?;
     file.set_len(manifest.db_len)?;
     file.sync_all()?;
     drop(file);

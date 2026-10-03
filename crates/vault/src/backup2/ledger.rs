@@ -140,7 +140,7 @@ impl std::fmt::Debug for Destination {
 /// What a queued part is, which decides when it may move.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PartKind {
-    /// A 4 MiB range of a snapshot.
+    /// A 64 KiB range of a snapshot.
     Range,
     /// A snapshot's manifest.
     Manifest,

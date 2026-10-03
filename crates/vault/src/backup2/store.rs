@@ -17,12 +17,22 @@
 //! - `delete` tombstones with a grace period and never deletes the head's
 //!   manifest ([`Refusal::HeadInUse`]); a tombstoned manifest deregisters its
 //!   snapshot.
+//! - A tombstoned object is missing to `exists` and to the listing, and is
+//!   still served by `get` and `get_many` until the purge takes its bytes
+//!   (the root's ruling A16): the grace is what lets a restore keep reading a
+//!   snapshot that retention drops while it reads.
+//! - `put_many` is the protocol's `bundle` and `get_many` its `fetch`: many
+//!   parts in one request, each answered as its own `put` or `get` would be
+//!   (the root's rulings A14 and A15). 64 KiB ranges make a snapshot hundreds
+//!   of parts, and one request per part would be hundreds of round trips.
 //!
 //! [`MemoryStore`] models exactly these, in memory, so a test can count what
 //! was uploaded and read back what a destination would hold.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs::File;
 use std::io::{Read, Write};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::naming::{Digest, Name};
@@ -32,6 +42,38 @@ pub const NAMES_PER_CALL: usize = 1000;
 
 /// The most entries one `list` page carries: the protocol's cap.
 pub const LIST_PAGE: usize = 1000;
+
+/// The most bytes one `put_many` sends or one `get_many` answers, every
+/// part's frame header included: the protocol's bundle cap, 256 MiB.
+pub const BUNDLE_BYTES: u64 = 256 * 1024 * 1024;
+
+/// What one part adds to a bundle beside its bytes: its frame header, the
+/// name and the digest in hex and the length as eight bytes.
+pub const FRAME_HEADER_BYTES: u64 = 64 + 64 + 8;
+
+/// One part a `put_many` sends: a spooled file, and what it must be.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Outgoing {
+    pub name: Name,
+    /// BLAKE3 of the file's bytes, as queued.
+    pub digest: Digest,
+    /// The file's length, as queued.
+    pub len: u64,
+    /// The spool file, read as the request is sent and never held whole.
+    pub path: PathBuf,
+}
+
+impl Outgoing {
+    /// What this part costs a bundle: its bytes and its frame header.
+    #[must_use]
+    pub const fn bundle_bytes(&self) -> u64 {
+        self.len.saturating_add(FRAME_HEADER_BYTES)
+    }
+}
+
+/// The destination's answer to one part of a `put_many`: exactly what a
+/// `put` of that part alone would have answered.
+pub type PartAnswer = Result<Put, Refusal>;
 
 /// One destination's object and head routes.
 pub trait Store {
@@ -59,11 +101,73 @@ pub trait Store {
         body: &mut dyn Read,
     ) -> Result<Put, StoreError>;
 
+    /// Store several parts in one request: the protocol's `bundle`. Each is
+    /// answered as its own `put` would be, in the order sent. The parts'
+    /// [`Outgoing::bundle_bytes`] sum to at most [`BUNDLE_BYTES`].
+    ///
+    /// The default sends each part as its own `put`.
+    ///
+    /// # Errors
+    /// [`StoreError`] when the request as a whole was not answered: the
+    /// destination unreachable, the writer [`StoreError::Moved`], a spool
+    /// file that cannot be read, or the bundle refused whole
+    /// ([`Refusal::TooLarge`]). A refusal of one part is in its answer.
+    fn put_many(&self, parts: &[Outgoing]) -> Result<Vec<(Name, PartAnswer)>, StoreError> {
+        let mut answers = Vec::with_capacity(parts.len());
+        for part in parts {
+            let mut body = File::open(&part.path)?;
+            let answer = match self.put(&part.name, &part.digest, part.len, &mut body) {
+                Ok(put) => Ok(put),
+                Err(StoreError::Refused(refusal)) => Err(refusal),
+                Err(error) => return Err(error),
+            };
+            answers.push((part.name, answer));
+        }
+        Ok(answers)
+    }
+
     /// Write one object's sealed bytes into `sink`, returning their length.
+    /// A tombstoned object is served until its purge.
     ///
     /// # Errors
     /// [`StoreError::Missing`] for a name the destination does not hold.
     fn get(&self, name: &Name, sink: &mut dyn Write) -> Result<u64, StoreError>;
+
+    /// Fetch several objects in one request: the protocol's `fetch`. `each`
+    /// is handed every object the destination holds of `names` (at most
+    /// [`NAMES_PER_CALL`], whose bytes fit [`BUNDLE_BYTES`]), with its name,
+    /// in the order asked and each name once; a name it is not handed is one
+    /// the destination does not hold. One object is in memory at a time.
+    /// Answers how many were handed over.
+    ///
+    /// The default reads each name with `get`.
+    ///
+    /// # Errors
+    /// [`StoreError`] when the request was not answered, and
+    /// [`StoreError::Io`] for an error `each` returns, which ends the fetch.
+    fn get_many(
+        &self,
+        names: &[Name],
+        each: &mut dyn FnMut(&Name, &[u8]) -> std::io::Result<()>,
+    ) -> Result<usize, StoreError> {
+        let mut seen = BTreeSet::new();
+        let mut handed = 0;
+        for name in names {
+            if !seen.insert(*name) {
+                continue;
+            }
+            let mut bytes = Vec::new();
+            match self.get(name, &mut bytes) {
+                Ok(_) => {
+                    each(name, &bytes)?;
+                    handed += 1;
+                }
+                Err(StoreError::Missing(_)) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(handed)
+    }
 
     /// The vault's head, or `None` before the first snapshot is registered.
     ///
@@ -150,6 +254,13 @@ pub struct Deleted {
 
 /// A refusal code the destination answered with. The spellings are the
 /// protocol's; a code is never a sentence.
+///
+/// Five of the protocol's codes are not refusals at this trait, because the
+/// plane acts on them as answers: `MOVED` is [`StoreError::Moved`],
+/// `HEAD_CONFLICT` is [`StoreError::HeadConflict`], `NOT_FOUND` is
+/// [`StoreError::Missing`], `NO_HEAD` is a [`Store::head`] of `None`, and
+/// `INTERNAL` — the destination's own fault, retried later — is
+/// [`StoreError::Unreachable`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Refusal {
     /// The bytes sent are not the digest declared.
@@ -157,16 +268,42 @@ pub enum Refusal {
     /// The name is held under another digest. A name is a function of the
     /// plaintext, so the destination already holds a sealing of these bytes.
     NameTaken,
+    /// Over the protocol's byte cap: an object or a bundle.
     TooLarge,
+    /// Over the protocol's count cap: more than [`NAMES_PER_CALL`] names.
+    TooMany,
     DiskFull,
     Unauthorized,
     /// The head's own manifest cannot be deleted.
     HeadInUse,
+    /// A request the destination could not read: a bug at this end.
+    BadRequest,
+    /// A byte range the object cannot satisfy.
+    BadRange,
+    /// A pairing secret offered for a vault the destination already holds.
+    VaultKnown,
+    /// A claim at an epoch other than the writer epoch plus one.
+    EpochConflict,
     /// A code this build does not know, kept verbatim.
     Other(String),
 }
 
 impl Refusal {
+    /// Every code this build names, for the tests that hold the table whole.
+    pub const NAMED: [&'static str; 11] = [
+        "DIGEST_MISMATCH",
+        "NAME_TAKEN",
+        "TOO_LARGE",
+        "TOO_MANY",
+        "DISK_FULL",
+        "UNAUTHORIZED",
+        "HEAD_IN_USE",
+        "BAD_REQUEST",
+        "BAD_RANGE",
+        "VAULT_KNOWN",
+        "EPOCH_CONFLICT",
+    ];
+
     /// The protocol's spelling.
     #[must_use]
     pub fn code(&self) -> &str {
@@ -174,9 +311,14 @@ impl Refusal {
             Self::DigestMismatch => "DIGEST_MISMATCH",
             Self::NameTaken => "NAME_TAKEN",
             Self::TooLarge => "TOO_LARGE",
+            Self::TooMany => "TOO_MANY",
             Self::DiskFull => "DISK_FULL",
             Self::Unauthorized => "UNAUTHORIZED",
             Self::HeadInUse => "HEAD_IN_USE",
+            Self::BadRequest => "BAD_REQUEST",
+            Self::BadRange => "BAD_RANGE",
+            Self::VaultKnown => "VAULT_KNOWN",
+            Self::EpochConflict => "EPOCH_CONFLICT",
             Self::Other(code) => code,
         }
     }
@@ -188,9 +330,14 @@ impl Refusal {
             "DIGEST_MISMATCH" => Self::DigestMismatch,
             "NAME_TAKEN" => Self::NameTaken,
             "TOO_LARGE" => Self::TooLarge,
+            "TOO_MANY" => Self::TooMany,
             "DISK_FULL" => Self::DiskFull,
             "UNAUTHORIZED" => Self::Unauthorized,
             "HEAD_IN_USE" => Self::HeadInUse,
+            "BAD_REQUEST" => Self::BadRequest,
+            "BAD_RANGE" => Self::BadRange,
+            "VAULT_KNOWN" => Self::VaultKnown,
+            "EPOCH_CONFLICT" => Self::EpochConflict,
             other => Self::Other(other.to_owned()),
         }
     }
@@ -287,6 +434,8 @@ struct Shared {
     writer_epoch: u64,
     clock_ms: Option<u64>,
     puts: u64,
+    bundles: u64,
+    fetches: u64,
 }
 
 impl Shared {
@@ -305,6 +454,12 @@ impl Shared {
         self.objects
             .get(name)
             .filter(|held| held.tombstoned_at_ms.is_none())
+    }
+
+    /// What `get` serves: a held object, or a tombstoned one whose bytes the
+    /// purge has not taken yet (A16).
+    fn served(&self, name: &Name) -> Option<&Held> {
+        self.objects.get(name)
     }
 }
 
@@ -383,6 +538,18 @@ impl MemoryStore {
         self.lock().puts
     }
 
+    /// How many `put_many` requests were answered.
+    #[must_use]
+    pub fn bundles(&self) -> u64 {
+        self.lock().bundles
+    }
+
+    /// How many `get_many` requests were answered.
+    #[must_use]
+    pub fn fetches(&self) -> u64 {
+        self.lock().fetches
+    }
+
     /// Every held object's name and sealed bytes — what a member's copy of
     /// the destination's folder would hold.
     #[must_use]
@@ -458,11 +625,70 @@ impl Store for MemoryStore {
         Ok(Put::Stored)
     }
 
+    /// A bundle as the gateway answers one: refused whole for a superseded
+    /// writer or past [`BUNDLE_BYTES`], otherwise each part as its `put`.
+    fn put_many(&self, parts: &[Outgoing]) -> Result<Vec<(Name, PartAnswer)>, StoreError> {
+        self.writable(&self.lock())?;
+        let total = parts
+            .iter()
+            .map(Outgoing::bundle_bytes)
+            .fold(0_u64, u64::saturating_add);
+        if total > BUNDLE_BYTES {
+            return Err(StoreError::Refused(Refusal::TooLarge));
+        }
+        self.lock().bundles += 1;
+        let mut answers = Vec::with_capacity(parts.len());
+        for part in parts {
+            let mut body = File::open(&part.path)?;
+            let answer = match self.put(&part.name, &part.digest, part.len, &mut body) {
+                Ok(put) => Ok(put),
+                Err(StoreError::Refused(refusal)) => Err(refusal),
+                Err(error) => return Err(error),
+            };
+            answers.push((part.name, answer));
+        }
+        Ok(answers)
+    }
+
     fn get(&self, name: &Name, sink: &mut dyn Write) -> Result<u64, StoreError> {
         let shared = self.lock();
-        let held = shared.held(name).ok_or(StoreError::Missing(*name))?;
+        let held = shared.served(name).ok_or(StoreError::Missing(*name))?;
         sink.write_all(&held.bytes)?;
         Ok(held.bytes.len() as u64)
+    }
+
+    /// A fetch as the gateway answers one: refused past [`NAMES_PER_CALL`]
+    /// names or [`BUNDLE_BYTES`], otherwise every served object asked for, in
+    /// order, each once.
+    fn get_many(
+        &self,
+        names: &[Name],
+        each: &mut dyn FnMut(&Name, &[u8]) -> std::io::Result<()>,
+    ) -> Result<usize, StoreError> {
+        if names.len() > NAMES_PER_CALL {
+            return Err(StoreError::Refused(Refusal::TooMany));
+        }
+        let mut seen = BTreeSet::new();
+        let answer: Vec<(Name, Vec<u8>)> = {
+            let mut shared = self.lock();
+            shared.fetches += 1;
+            names
+                .iter()
+                .filter(|name| seen.insert(**name))
+                .filter_map(|name| shared.served(name).map(|held| (*name, held.bytes.clone())))
+                .collect()
+        };
+        let total = answer
+            .iter()
+            .map(|(_, bytes)| bytes.len() as u64 + FRAME_HEADER_BYTES)
+            .fold(0_u64, u64::saturating_add);
+        if total > BUNDLE_BYTES {
+            return Err(StoreError::Refused(Refusal::TooLarge));
+        }
+        for (name, bytes) in &answer {
+            each(name, bytes)?;
+        }
+        Ok(answer.len())
     }
 
     fn head(&self) -> Result<Option<Head>, StoreError> {
@@ -699,20 +925,128 @@ mod tests {
 
     #[test]
     fn a_refusal_code_round_trips_and_an_unknown_one_is_kept() {
-        for code in [
-            "DIGEST_MISMATCH",
-            "NAME_TAKEN",
-            "TOO_LARGE",
-            "DISK_FULL",
-            "UNAUTHORIZED",
-            "HEAD_IN_USE",
-            "SOMETHING_NEW",
-        ] {
-            assert_eq!(Refusal::from_code(code).code(), code);
+        for code in Refusal::NAMED {
+            let refusal = Refusal::from_code(code);
+            assert!(!matches!(refusal, Refusal::Other(_)), "{code} is named");
+            assert_eq!(refusal.code(), code);
         }
         assert_eq!(
             Refusal::from_code("SOMETHING_NEW"),
             Refusal::Other("SOMETHING_NEW".to_owned())
         );
+        assert_eq!(Refusal::from_code("SOMETHING_NEW").code(), "SOMETHING_NEW");
+    }
+
+    /// **A16.** A tombstone is missing to `exists` and the listing and is
+    /// still served by `get` and `get_many` until the purge takes its bytes,
+    /// so a restore that began from a snapshot retention drops keeps reading.
+    #[test]
+    fn a_tombstone_is_served_until_its_purge_and_missing_to_exists() {
+        let store = MemoryStore::new("gw");
+        store.set_clock_ms(1_000);
+        let name = name_of("range");
+        put(&store, &name, b"sealed range").expect("stores");
+        store.delete(&[name]).expect("tombstones");
+        assert_eq!(store.exists(&[name]).expect("asks"), vec![name]);
+        assert!(store.list(None, 10).expect("lists").is_empty());
+        assert!(store.contents().is_empty());
+        let mut back = Vec::new();
+        assert_eq!(store.get(&name, &mut back).expect("still served"), 12);
+        assert_eq!(back, b"sealed range");
+        let mut fetched = Vec::new();
+        store
+            .get_many(&[name], &mut |name, bytes| {
+                fetched.push((*name, bytes.to_vec()));
+                Ok(())
+            })
+            .expect("fetches");
+        assert_eq!(fetched, vec![(name, b"sealed range".to_vec())]);
+        assert!(
+            matches!(store.set_head(&name, None, 1), Err(StoreError::Missing(_))),
+            "a head never names a tombstone"
+        );
+
+        store.set_clock_ms(1_000 + TOMBSTONE_GRACE_MS);
+        assert_eq!(store.purge(), 1);
+        assert!(matches!(
+            store.get(&name, &mut Vec::new()),
+            Err(StoreError::Missing(_))
+        ));
+    }
+
+    fn outgoing(dir: &std::path::Path, label: &str, bytes: &[u8]) -> Outgoing {
+        let name = name_of(label);
+        let path = dir.join(name.to_hex());
+        std::fs::write(&path, bytes).expect("spools");
+        Outgoing {
+            name,
+            digest: Digest::of(bytes),
+            len: bytes.len() as u64,
+            path,
+        }
+    }
+
+    /// **A15.** A bundle is answered part by part exactly as each part's
+    /// `put` would be, and a fetch hands back what is held, in the order
+    /// asked, each name once.
+    #[test]
+    fn a_bundle_and_a_fetch_answer_each_part_as_one_call_would() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let store = MemoryStore::new("gw");
+        let held = outgoing(dir.path(), "held", b"held already");
+        put(&store, &held.name, b"held already").expect("stores");
+        let taken = outgoing(dir.path(), "taken", b"sealed again");
+        put(&store, &taken.name, b"an earlier sealing").expect("stores");
+        let fresh = outgoing(dir.path(), "fresh", b"new bytes");
+        let mut torn = outgoing(dir.path(), "torn", b"queued bytes");
+        torn.digest = Digest::of(b"other bytes");
+
+        let answers = store
+            .put_many(&[held.clone(), taken.clone(), fresh.clone(), torn.clone()])
+            .expect("a bundle");
+        assert_eq!(
+            answers,
+            vec![
+                (held.name, Ok(Put::AlreadyStored)),
+                (taken.name, Err(Refusal::NameTaken)),
+                (fresh.name, Ok(Put::Stored)),
+                (torn.name, Err(Refusal::DigestMismatch)),
+            ]
+        );
+        assert_eq!(store.bundles(), 1);
+
+        let absent = name_of("absent");
+        let mut order = Vec::new();
+        let handed = store
+            .get_many(
+                &[fresh.name, absent, held.name, fresh.name],
+                &mut |name, bytes| {
+                    order.push((*name, bytes.len()));
+                    Ok(())
+                },
+            )
+            .expect("a fetch");
+        assert_eq!(handed, 2);
+        assert_eq!(order, vec![(fresh.name, 9), (held.name, 12)]);
+        assert_eq!(store.fetches(), 1);
+
+        let too_many: Vec<Name> = (0..=NAMES_PER_CALL)
+            .map(|index| name_of(&index.to_string()))
+            .collect();
+        assert!(matches!(
+            store.get_many(&too_many, &mut |_, _| Ok(())),
+            Err(StoreError::Refused(Refusal::TooMany))
+        ));
+        let mut oversized = fresh.clone();
+        oversized.len = BUNDLE_BYTES;
+        assert!(matches!(
+            store.put_many(&[oversized]),
+            Err(StoreError::Refused(Refusal::TooLarge))
+        ));
+        let _successor = store.claim();
+        assert!(matches!(
+            store.put_many(&[fresh]),
+            Err(StoreError::Moved { epoch: 2 })
+        ));
     }
 }
