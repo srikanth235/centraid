@@ -59,37 +59,32 @@ centraid-search = { path = "../search" }
 # core is what attaches the byte door; `centraid_blobs::ContentBytes` is the
 # door and this is the crate that has both halves in scope.
 centraid-blobs = { path = "../blobs" }
-# THE 24 WORDS AND THE PAIRING CODE (#1029 W15). A restore parses the phrase
-# here and refuses a bad checksum before anything is derived from it, and a
-# pairing payload is decoded by `centraid_identity::ticket` and NOT by a second
-# parser in a shell — a ticket is the one message with no handshake in front of
-# it, so two parsers is two chances to half-accept one.
+# THE 24 WORDS AND THE KEYS (#1029 W15). A restore parses the phrase here and
+# refuses a bad checksum before anything is derived from it; the vault's
+# identity key signs a claim, and its root key is what every part is sealed
+# and named under.
 centraid-identity = { path = "../identity" }
-# THE PHONE'S HALF OF THE GATEWAY PROTOCOL (#1029 W15-2). A drain signs a
-# request, reads a refusal, and knows which refusals it may act on; that is
-# this crate and nothing above it assembles a preimage.
-centraid-gateway-client = { path = "../gateway-client" }
-# The rules' own vocabulary: `VaultId`, `ALPN`, `PROTOCOL_MIN`. Imported rather
-# than respelled so a phone and a laptop cannot disagree about whose fault a
-# mismatch is (`gateway-client`'s header).
-centraid-gateway-core = { path = "../gateway-core" }
-# `ObjectName` and `Kind`: an object's name is the BLAKE3 of its ciphertext on
-# both sides of the wire, and this is the one type that computes it.
+# THE PHONE'S HALF OF THE GATEWAY PROTOCOL v2 (#1080): the pinned HTTPS client
+# and the rules' own vocabulary — the pairing payload's parser, the claim's
+# preimage, the refusal codes — so a phone and a gateway cannot disagree about
+# either. The client feature alone: a phone links no listener, no SQLite of the
+# gateway's and no certificate minting.
+centraid-gateway2 = { path = "../gateway2", default-features = false, features = ["client"] }
+# THE SEALED FORMAT (#1080, `centraid-sealed/2`): a part is sealed straight
+# into the spool, and a fetched one opened and checked against its hash.
 centraid-media = { path = "../media" }
-# THE CARRIER (#1029 W17). Only to BIND A DIAL-ONLY ENDPOINT and name an
-# address: this crate offers no ALPN and calls no `accept`, which is what
-# `no-listening-socket` checks on every gate run.
-iroh.workspace = true
-# The laptop's endpoint id is stored as hex beside the vault; `hex` is what
-# writes and reads it.
+# A library item is hashed as it streams through the stage door; BLAKE3 is the
+# one hash (D-1025-S4-1).
+blake3.workspace = true
+# A vault id is hex in the ledger and on the wire.
 hex.workspace = true
-# THE RUNTIME THE BYTE STORE NEEDS, OWNED BY THE CORE (#1029 W6, hand-off 2).
-# `ByteStore::open` is asynchronous and `ContentBytes` holds a runtime handle,
-# so SOMEBODY has to own a runtime for the life of the core. On a phone there is
-# no longer anybody else — `SeatLink` went with the seat plane — so it is this
-# crate. The workspace entry's `rt-multi-thread` is the feature that matters:
-# see `Handle::open_own_bytes`, where a current-thread runtime is a deadlock and
-# not a preference. This crate opens no socket.
+# The spool's budget is a tenth of the free space on its volume (`statvfs`).
+rustix.workspace = true
+# THE RUNTIME THE GATEWAY CLIENT RUNS ON, OWNED BY THE CORE (#1029 W15,
+# #1080). The client is asynchronous and a phone has nobody else to own a
+# runtime for it; `Handle::runtime_handle` builds one multi-threaded runtime
+# and every flow `block_on`s it from the shell's own thread. This crate opens
+# no socket of its own and listens on none.
 tokio.workspace = true
 centraid-ontology = { path = "../ontology" }
 centraid-protocol = { path = "../protocol" }
@@ -102,6 +97,10 @@ tracing.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+# A REAL GATEWAY ON A REAL SOCKET for the phone's flows (#1080): the gateway
+# crate's own test harness, the whole server, spawned on 127.0.0.1:0.
+centraid-gateway2 = { path = "../gateway2" }
+tempfile.workspace = true
 
 [[test]]
 name = "call_budget"

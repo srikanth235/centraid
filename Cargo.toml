@@ -162,6 +162,11 @@ chacha20poly1305 = "0.11"
 ryu-js = "1.0.3"
 tempfile = "3"
 zstd = "0.13"
+# THE SPOOL'S BUDGET IS A TENTH OF THE FREE SPACE (#1080, "Ledger"), and the
+# standard library cannot say how much is free. `statvfs` is POSIX and rustix
+# answers it with no `unsafe` in this tree, on iOS and Android alike. Already
+# in the lock through `tempfile`; `fs` is the one feature this needs.
+rustix = { version = "1.1.4", features = ["fs"] }
 
 # `gateway-server`'s ACME state machine is a `Stream`; this is the crate whose
 # trait it is.

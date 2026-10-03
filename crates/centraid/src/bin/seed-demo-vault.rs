@@ -752,7 +752,7 @@ fn locker_items() -> Vec<(&'static str, Value)> {
 /// itself, against the item's id, exactly as the vault stores one. The value
 /// is a test string, not a key anybody signs with.
 fn seed_passkey(handle: &centraid_core::Handle) -> Result<(), String> {
-    let keys = centraid_core::phone::Keyring::derive(&demo_seed(), 0, None)
+    let keys = centraid_core::phone::Keyring::derive(&demo_seed(), 0)
         .map_err(|error| error.to_string())?;
     let key_id = handle
         .with_vault(|vault| {

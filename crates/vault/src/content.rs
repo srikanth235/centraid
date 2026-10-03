@@ -35,7 +35,7 @@
 //! reason it is phrased that way round.
 
 use crate::bytes::Located;
-use crate::error::Result;
+use crate::error::{Result, VaultError};
 use crate::file::Vault;
 
 /// `content_uri` scheme for CAS-backed bytes.
@@ -103,6 +103,19 @@ pub struct NeededBytes {
     pub hash: String,
     pub byte_size: i64,
     pub media_type: String,
+}
+
+/// A derivative the shell rendered and staged (`Vault::stage_derivative`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StagedDerivative {
+    /// The derivative's own content hash, 64 lowercase hex.
+    pub hash: String,
+    pub byte_size: i64,
+    pub media_type: String,
+    /// `thumb`, `preview` or `poster`.
+    pub variant: String,
+    /// The content hash of the original it was rendered from.
+    pub variant_of: String,
 }
 
 /// Where one content item's bytes are, and how this reader reads them.
@@ -217,6 +230,107 @@ impl Vault {
             Ok(())
         })?;
         Ok(written)
+    }
+
+    /// Record a DERIVATIVE the shell rendered and this device now holds: a
+    /// thumbnail, a preview or a poster of the content `variant_of` names
+    /// (#1080, the stage door's `for_hash` and `tier`).
+    ///
+    /// The platform decoder renders what the Rust fallback cannot (HEIC, RAW,
+    /// a video's poster), so the shell renders and stages the tier and the
+    /// core keeps it as its own file, sealed like any other. Two orders reach
+    /// here and both land: a derivative staged BEFORE the command that mints
+    /// its original rides in `blob_staging` beside it and is promoted with it
+    /// (`promote_staged_renditions`); one staged AFTER — a re-scan, a new
+    /// tier — is written straight to `core_content_derivative`, replacing the
+    /// tier's earlier row. Either way one tier holds one file.
+    ///
+    /// # Errors
+    /// [`VaultError::InvalidInput`] for a variant that is not `thumb`,
+    /// `preview` or `poster`, or a hash that is not 64 lowercase hex; and
+    /// whatever SQLite refused.
+    pub fn stage_derivative(&self, derivative: &StagedDerivative) -> Result<()> {
+        if !matches!(derivative.variant.as_str(), "thumb" | "preview" | "poster") {
+            return Err(VaultError::InvalidInput {
+                name: "tier".to_owned(),
+                detail: format!("`{}` is not thumb, preview or poster", derivative.variant),
+            });
+        }
+        for (name, hash) in [
+            ("content_hash", &derivative.hash),
+            ("for_hash", &derivative.variant_of),
+        ] {
+            if hash.len() != 64
+                || !hash
+                    .bytes()
+                    .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+            {
+                return Err(VaultError::InvalidInput {
+                    name: name.to_owned(),
+                    detail: "a content hash is 64 lowercase hex characters".to_owned(),
+                });
+            }
+        }
+        let now = self.clock().now_text();
+        let (staging_id, derivative_id) = (self.ids().next(), self.ids().next());
+        self.commit(|tx| {
+            tx.set_producer("phone.stage");
+            let connection = tx.connection();
+            let parent: Option<String> = connection
+                .query_row(
+                    "SELECT content_id FROM core_content_item WHERE content_hash = ?1",
+                    [&derivative.variant_of],
+                    |row| row.get(0),
+                )
+                .ok();
+            match parent {
+                Some(content_id) => {
+                    connection.execute(
+                        "DELETE FROM core_content_derivative WHERE content_id = ?1 AND variant = ?2",
+                        rusqlite::params![content_id, derivative.variant],
+                    )?;
+                    connection.execute(
+                        "INSERT INTO core_content_derivative
+                           (derivative_id, content_id, variant, content_hash, media_type,
+                            byte_size, text_content, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?7)",
+                        rusqlite::params![
+                            derivative_id,
+                            content_id,
+                            derivative.variant,
+                            derivative.hash,
+                            derivative.media_type,
+                            derivative.byte_size.max(0),
+                            now
+                        ],
+                    )?;
+                }
+                None => {
+                    connection.execute(
+                        "DELETE FROM blob_staging WHERE variant_of = ?1 AND variant = ?2",
+                        rusqlite::params![derivative.variant_of, derivative.variant],
+                    )?;
+                    connection.execute(
+                        "INSERT INTO blob_staging
+                           (staging_id, content_hash, media_type, byte_size, original_name,
+                            meta_json, staged_by, held_by_batch, variant, variant_of,
+                            inline_content, staged_at, held_by_intent)
+                         VALUES (?1, ?2, ?3, ?4, NULL, '{}', NULL, NULL, ?5, ?6, NULL, ?7, NULL)",
+                        rusqlite::params![
+                            staging_id,
+                            derivative.hash,
+                            derivative.media_type,
+                            derivative.byte_size.max(0),
+                            derivative.variant,
+                            derivative.variant_of,
+                            now
+                        ],
+                    )?;
+                }
+            }
+            Ok(())
+        })?;
+        Ok(())
     }
 
     /// Locate one content item's bytes for the owner that is reading them.

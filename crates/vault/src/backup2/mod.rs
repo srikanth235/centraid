@@ -12,6 +12,7 @@
 //! | Module | What it owns |
 //! |---|---|
 //! | [`naming`] | the keys from the root key, and the names the vault's content implies |
+//! | [`files`] | every file the vault knows by hash, with what a pass decides by |
 //! | [`snapshot`] | the page-identical copy, its ranges and manifest; plan, spool, settle |
 //! | [`store`] | the [`store::Store`] trait one destination answers, and [`store::MemoryStore`] |
 //! | [`ledger`] | `<stem>.backup.db`: destinations, the queue, confirmations, snapshots |
@@ -37,6 +38,7 @@
 //! deletes that plane and takes this one's name.
 
 pub mod drill;
+pub mod files;
 pub mod ledger;
 pub mod mover;
 pub mod naming;

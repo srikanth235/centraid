@@ -18,7 +18,14 @@
 //! store, and the byte door answers a read of it with that identifier for the
 //! shell to resolve. It is device-local twice over — an identifier means
 //! nothing on another phone — which is why it is a ledger table and never a
-//! vault row.
+//! vault row. `edited` marks a library item the member edited in the library
+//! itself: the phone backs up the rendition it was handed, so such an item is
+//! never offered for deletion from the library (the root's ruling A20).
+//!
+//! A queued part carries the media type of the file it belongs to, so a pass
+//! can hold a video's original back from a metered link even after it was
+//! sealed on an unmetered one, and can tell the operating system as much when
+//! it hands the part over (the root's ruling A10).
 //!
 //! **Acknowledgement is the `PUT`'s success** (#1080 ruling 7), recorded here
 //! and reconciled against the gateway's own `exists` on every launch, so the
@@ -63,6 +70,7 @@ CREATE TABLE queue (
   size          INTEGER NOT NULL CHECK (size >= 0),
   digest        TEXT NOT NULL CHECK (length(digest) = 64 AND digest NOT GLOB '*[^0-9a-f]*'),
   kind          TEXT NOT NULL CHECK (kind IN ('range', 'manifest', 'original', 'derivative')),
+  media_type    TEXT CHECK ((kind IN ('original', 'derivative')) = (media_type IS NOT NULL)),
   created_ms    INTEGER NOT NULL CHECK (created_ms >= 0),
   handed_off_ms INTEGER CHECK (handed_off_ms IS NULL OR handed_off_ms >= 0),
   attempts      INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
@@ -92,7 +100,8 @@ CREATE TABLE local_bytes (
   hash        TEXT PRIMARY KEY CHECK (length(hash) = 64 AND hash NOT GLOB '*[^0-9a-f]*'),
   source      TEXT NOT NULL CHECK (source IN ('os', 'store')),
   ref         TEXT CHECK ((source = 'os') = (ref IS NOT NULL AND ref <> '')),
-  verified_ms INTEGER CHECK (verified_ms IS NULL OR verified_ms >= 0)
+  verified_ms INTEGER CHECK (verified_ms IS NULL OR verified_ms >= 0),
+  edited      INTEGER NOT NULL DEFAULT 0 CHECK (edited IN (0, 1) AND (edited = 0 OR source = 'os'))
 ) STRICT;
 
 CREATE TABLE meta (
@@ -181,6 +190,9 @@ pub struct Queued {
     pub size: u64,
     pub digest: Digest,
     pub kind: PartKind,
+    /// The media type of the file an original's or a derivative's part
+    /// belongs to; `None` for a range and a manifest, which are the vault's.
+    pub media_type: Option<String>,
     pub created_ms: u64,
     /// When it was handed to the OS to move, on a platform that does.
     pub handed_off_ms: Option<u64>,
@@ -237,6 +249,21 @@ pub struct LocalBytes {
     pub os_ref: Option<String>,
     /// When this device last read the bytes and found they hash to `hash`.
     pub verified_ms: Option<u64>,
+    /// The member edited the item in the library: the bytes backed up are its
+    /// current rendition, not the camera's original, so it is never offered
+    /// for deletion from the library (A20). Only a library row is edited.
+    pub edited: bool,
+}
+
+impl Queued {
+    /// The part belongs to a moving image: an original or a derivative whose
+    /// media type is a video's.
+    #[must_use]
+    pub fn is_video(&self) -> bool {
+        self.media_type
+            .as_deref()
+            .is_some_and(|media_type| media_type.trim().to_ascii_lowercase().starts_with("video/"))
+    }
 }
 
 /// The ledger file and its one connection.
@@ -435,8 +462,47 @@ impl Ledger {
             params![gateway_id],
         )?;
         self.connection.execute(
+            "DELETE FROM meta WHERE k IN (?1, ?2, ?3)",
+            params![
+                head_key(gateway_id),
+                moved_key(gateway_id),
+                head_acked_key(gateway_id)
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// `gateway_id` answered `MOVED`: a writer at `epoch` holds the vault
+    /// there now, and this device's writes to it are refused.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn set_moved(&self, gateway_id: &str, epoch: u64) -> Result<()> {
+        self.set_meta(&moved_key(gateway_id), &epoch.to_string())
+    }
+
+    /// The epoch that superseded this device at `gateway_id`, when one did.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a value that is not a number.
+    pub fn moved(&self, gateway_id: &str) -> Result<Option<u64>> {
+        self.meta(&moved_key(gateway_id))?
+            .map(|text| {
+                text.parse::<u64>()
+                    .map_err(|_| invariant(format!("`{text}` is not an epoch")))
+            })
+            .transpose()
+    }
+
+    /// This device holds the writer epoch at `gateway_id` again: a pairing or
+    /// a restore claimed it.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn clear_moved(&self, gateway_id: &str) -> Result<()> {
+        self.connection.execute(
             "DELETE FROM meta WHERE k = ?1",
-            params![head_key(gateway_id)],
+            params![moved_key(gateway_id)],
         )?;
         Ok(())
     }
@@ -463,12 +529,13 @@ impl Ledger {
     pub fn enqueue(&self, queued: &Queued) -> Result<()> {
         self.connection.execute(
             "INSERT INTO queue
-               (name, part_path, size, digest, kind, created_ms, handed_off_ms,
-                attempts, last_error)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+               (name, part_path, size, digest, kind, media_type, created_ms,
+                handed_off_ms, attempts, last_error)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT (name) DO UPDATE SET
                part_path = excluded.part_path, size = excluded.size,
                digest = excluded.digest, kind = excluded.kind,
+               media_type = excluded.media_type,
                created_ms = excluded.created_ms,
                handed_off_ms = excluded.handed_off_ms,
                attempts = excluded.attempts, last_error = excluded.last_error",
@@ -478,6 +545,7 @@ impl Ledger {
                 ms(queued.size)?,
                 queued.digest.to_hex(),
                 queued.kind.as_str(),
+                queued.media_type,
                 ms(queued.created_ms)?,
                 queued.handed_off_ms.map(ms).transpose()?,
                 i64::from(queued.attempts),
@@ -495,8 +563,8 @@ impl Ledger {
     /// SQLite's refusal, or a row this build cannot read.
     pub fn queued(&self) -> Result<Vec<Queued>> {
         let mut statement = self.connection.prepare(
-            "SELECT name, part_path, size, digest, kind, created_ms, handed_off_ms,
-                    attempts, last_error
+            "SELECT name, part_path, size, digest, kind, media_type, created_ms,
+                    handed_off_ms, attempts, last_error
                FROM queue ORDER BY kind = 'manifest', created_ms, name",
         )?;
         let rows = statement.query_map([], |row| {
@@ -509,10 +577,11 @@ impl Ledger {
                 kind: PartKind::parse(&kind).ok_or_else(|| {
                     rusqlite::Error::InvalidColumnType(4, kind.clone(), rusqlite::types::Type::Text)
                 })?,
-                created_ms: read_ms(row.get(5)?)?,
-                handed_off_ms: row.get::<_, Option<i64>>(6)?.map(read_ms).transpose()?,
-                attempts: u32::try_from(row.get::<_, i64>(7)?).unwrap_or(u32::MAX),
-                last_error: row.get(8)?,
+                media_type: row.get(5)?,
+                created_ms: read_ms(row.get(6)?)?,
+                handed_off_ms: row.get::<_, Option<i64>>(7)?.map(read_ms).transpose()?,
+                attempts: u32::try_from(row.get::<_, i64>(8)?).unwrap_or(u32::MAX),
+                last_error: row.get(9)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -565,6 +634,32 @@ impl Ledger {
         Ok(())
     }
 
+    /// The OS did not move a part it was handed: it goes back to waiting,
+    /// with `error` recorded as the attempt's outcome. Answers whether the
+    /// queue held the part at all.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn requeue(&self, name: &Name, error: &str) -> Result<bool> {
+        let changed = self.connection.execute(
+            "UPDATE queue SET handed_off_ms = NULL, attempts = attempts + 1, last_error = ?2
+              WHERE name = ?1",
+            params![name.to_hex(), error],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// The part `name` as queued, when it is.
+    ///
+    /// # Errors
+    /// As [`Self::queued`].
+    pub fn queued_part(&self, name: &Name) -> Result<Option<Queued>> {
+        Ok(self
+            .queued()?
+            .into_iter()
+            .find(|queued| queued.name == *name))
+    }
+
     // ─── confirmations ──────────────────────────────────────────────────────
 
     /// `gateway_id` acknowledged `name` at `now_ms`.
@@ -583,6 +678,34 @@ impl Ledger {
             "UPDATE destination SET last_ack_ms = ?2 WHERE gateway_id = ?1",
             params![gateway_id, ms(now_ms)?],
         )?;
+        Ok(())
+    }
+
+    /// `gateway_id` holds every one of `names`, as its own `exists` answered:
+    /// one transaction, so a snapshot's hundreds of unchanged ranges cost one
+    /// sync and not one each. `size` is what the caller knows of each — the
+    /// plaintext length the manifest names, for a name nobody sent from here.
+    ///
+    /// # Errors
+    /// SQLite's refusal, including a gateway that is not paired; nothing is
+    /// recorded then.
+    pub fn confirm_many(&self, names: &[(Name, u64)], gateway_id: &str, now_ms: u64) -> Result<()> {
+        if names.is_empty() {
+            return Ok(());
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        {
+            let mut statement = transaction.prepare(
+                "INSERT INTO confirmed (name, gateway_id, confirmed_ms, size)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT (name, gateway_id) DO UPDATE SET
+                   confirmed_ms = excluded.confirmed_ms, size = excluded.size",
+            )?;
+            for (name, size) in names {
+                statement.execute(params![name.to_hex(), gateway_id, ms(now_ms)?, ms(*size)?])?;
+            }
+        }
+        transaction.commit()?;
         Ok(())
     }
 
@@ -609,6 +732,18 @@ impl Ledger {
         let rows = statement.query_map(params![gateway_id], |row| {
             read_name(&row.get::<_, String>(0)?)
         })?;
+        Ok(rows.collect::<rusqlite::Result<BTreeSet<_>>>()?)
+    }
+
+    /// Every name any paired gateway acknowledged.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a row this build cannot read.
+    pub fn confirmed_anywhere(&self) -> Result<BTreeSet<Name>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT DISTINCT name FROM confirmed")?;
+        let rows = statement.query_map([], |row| read_name(&row.get::<_, String>(0)?))?;
         Ok(rows.collect::<rusqlite::Result<BTreeSet<_>>>()?)
     }
 
@@ -703,6 +838,13 @@ impl Ledger {
     /// or SQLite's refusal.
     pub fn put_local(&self, local: &LocalBytes) -> Result<()> {
         let identified = local.os_ref.as_deref().is_some_and(|text| !text.is_empty());
+        if local.edited && local.source != LocalSource::Os {
+            return Err(invariant(format!(
+                "a `{}` row for {} cannot be an edited library item",
+                local.source.as_str(),
+                local.hash
+            )));
+        }
         if identified != (local.source == LocalSource::Os) {
             return Err(invariant(format!(
                 "a `{}` row for {} {} an identifier",
@@ -716,16 +858,17 @@ impl Ledger {
             )));
         }
         self.connection.execute(
-            "INSERT INTO local_bytes (hash, source, ref, verified_ms)
-             VALUES (?1, ?2, ?3, ?4)
+            "INSERT INTO local_bytes (hash, source, ref, verified_ms, edited)
+             VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT (hash) DO UPDATE SET
                source = excluded.source, ref = excluded.ref,
-               verified_ms = excluded.verified_ms",
+               verified_ms = excluded.verified_ms, edited = excluded.edited",
             params![
                 local.hash.to_hex(),
                 local.source.as_str(),
                 local.os_ref,
                 local.verified_ms.map(ms).transpose()?,
+                i64::from(local.edited),
             ],
         )?;
         Ok(())
@@ -740,7 +883,7 @@ impl Ledger {
         Ok(self
             .connection
             .query_row(
-                "SELECT hash, source, ref, verified_ms FROM local_bytes WHERE hash = ?1",
+                "SELECT hash, source, ref, verified_ms, edited FROM local_bytes WHERE hash = ?1",
                 params![hash.to_hex()],
                 read_local,
             )
@@ -752,9 +895,9 @@ impl Ledger {
     /// # Errors
     /// SQLite's refusal, or a row this build cannot read.
     pub fn locals(&self) -> Result<Vec<LocalBytes>> {
-        let mut statement = self
-            .connection
-            .prepare("SELECT hash, source, ref, verified_ms FROM local_bytes ORDER BY hash")?;
+        let mut statement = self.connection.prepare(
+            "SELECT hash, source, ref, verified_ms, edited FROM local_bytes ORDER BY hash",
+        )?;
         let rows = statement.query_map([], read_local)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
@@ -817,10 +960,42 @@ impl Ledger {
     pub fn set_head(&self, gateway_id: &str, name: &Name) -> Result<()> {
         self.set_meta(&head_key(gateway_id), &name.to_hex())
     }
+
+    /// `gateway_id` moved the head to a snapshot this device took, at
+    /// `gateway_ms` on the GATEWAY's clock — the only moment a member may be
+    /// shown as "last backed up" (#1029 §2).
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn set_head_acked(&self, gateway_id: &str, gateway_ms: u64) -> Result<()> {
+        self.set_meta(&head_acked_key(gateway_id), &gateway_ms.to_string())
+    }
+
+    /// When `gateway_id` last moved the head for this device, on its own
+    /// clock.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a value that is not a number.
+    pub fn head_acked(&self, gateway_id: &str) -> Result<Option<u64>> {
+        self.meta(&head_acked_key(gateway_id))?
+            .map(|text| {
+                text.parse::<u64>()
+                    .map_err(|_| invariant(format!("`{text}` is not a time")))
+            })
+            .transpose()
+    }
 }
 
 fn head_key(gateway_id: &str) -> String {
     format!("head:{gateway_id}")
+}
+
+fn moved_key(gateway_id: &str) -> String {
+    format!("moved:{gateway_id}")
+}
+
+fn head_acked_key(gateway_id: &str) -> String {
+    format!("head-acked:{gateway_id}")
 }
 
 fn read_local(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalBytes> {
@@ -839,6 +1014,7 @@ fn read_local(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalBytes> {
         })?,
         os_ref: row.get(2)?,
         verified_ms: row.get::<_, Option<i64>>(3)?.map(read_ms).transpose()?,
+        edited: row.get::<_, i64>(4)? != 0,
     })
 }
 
@@ -871,6 +1047,7 @@ mod tests {
             source: LocalSource::Os,
             os_ref: Some(os_ref.to_owned()),
             verified_ms: Some(7),
+            edited: false,
         }
     }
 
@@ -881,6 +1058,7 @@ mod tests {
             size: 4_096,
             digest: Digest::of(label.as_bytes()),
             kind: PartKind::Range,
+            media_type: None,
             created_ms,
             handed_off_ms: None,
             attempts: 0,
@@ -1072,6 +1250,7 @@ mod tests {
             source: LocalSource::Store,
             os_ref: None,
             verified_ms: None,
+            edited: false,
         };
         ledger.put_local(&document).expect("records");
         let mut hashes = vec![photo.hash, document.hash];

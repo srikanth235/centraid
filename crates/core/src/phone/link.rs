@@ -1,222 +1,455 @@
-//! WHAT IT TAKES TO SPEAK TO THE LAPTOP: a device key, a certificate, an iroh
-//! transport and a signer (#1029 W15, W15-D3).
+//! THE LINK TO A GATEWAY (#1080 rulings 1, 7): the phone's pinned HTTPS
+//! client, and the backup plane's [`Store`] over it.
 //!
-//! # THE DEVICE KEY IS MINTED HERE AND KEPT BY THE SHELL
+//! `centraid_vault::backup2` is written against one synchronous trait so the
+//! snapshot, the mover, retention and restore run unchanged against the real
+//! gateway and against `MemoryStore`. [`GatewayStore`] is that trait over
+//! `centraid_gateway2::client::Client`, driven on the core's own runtime
+//! (`Handle::runtime_handle`): every call is one `block_on` from the thread
+//! the shell called the core on, which is never a runtime worker.
 //!
-//! A gateway request is signed by a **device**, and a device is a key plus a
-//! [`DeviceCertificate`] the vault's identity key issued for it at an epoch.
-//! Three things follow, and each rules out an easier answer:
+//! # WHAT A REFUSAL BECOMES
 //!
-//! 1. **It cannot be re-minted per launch.** A fresh key needs a fresh
-//!    certificate, a certificate names an epoch, and the lease only accepts an
-//!    epoch above the one it holds (F3) — so a phone that minted at every start
-//!    would bump the epoch at every start, and an epoch bump is exactly what F1
-//!    spells `VAULT_MOVED`. It would fire at nobody, forever.
-//! 2. **It cannot be derived from the seed.** A restored phone must be a *new*
-//!    device at epoch + 1, and the old phone's next put must be refused; a
-//!    seed-derived key would make the restored phone the same device as the one
-//!    that was lost, and nothing would freeze.
-//! 3. **This library does not write it down.** Same rule as the vault seed
-//!    (`CONTRACT.md` §4b): the one unrecoverable secret does not go in a file
-//!    beside the vault it protects.
+//! The plane acts on five answers by shape, not by code: `MOVED` is
+//! [`StoreError::Moved`] (this phone is no longer the vault's writer),
+//! `HEAD_CONFLICT` is [`StoreError::HeadConflict`], `NOT_FOUND` is
+//! [`StoreError::Missing`], `NO_HEAD` is a `head()` of `None`, and the
+//! gateway's own fault (`INTERNAL`) is [`StoreError::Unreachable`], retried
+//! later. A certificate that is not the pinned one is unreachable too: the
+//! gateway the member paired is not the machine that answered, and nothing is
+//! sent to it. Every other code is a [`Refusal`] by its spelling.
 //!
-//! So it is **minted by the core and persisted by the shell**, in the platform
-//! secure store, marked *this device only* and **never synced** — a synced
-//! device key makes two phones one device, which is the failure the lease
-//! exists to prevent.
+//! # A PART IS SENT FROM MEMORY OR FROM ITS SPOOL FILE
 //!
-//! **It is minted at pair or at restore, and never at open**, and it is handed
-//! back on that flow's own response. Minting at open would have to reach the
-//! shell as an event, and the event queue is bounded and may not be drained yet
-//! when a core opens; a device secret the shell missed is a phone that silently
-//! re-mints next launch, which is defect 1 again with an extra step. A response
-//! cannot be missed.
-//!
-//! # THE CERTIFICATE GOES BESIDE THE VAULT, NEVER IN IT
-//!
-//! [`super::Laptop`] carries it, for W15-D1's reason: a restored phone is a new
-//! device (F3), so a certificate inside the vault would be shipped to the
-//! laptop, restored onto the new phone, and name a device key that phone does
-//! not have.
+//! A bundle — ranges and derivatives, up to 256 MiB — streams from the spool
+//! files the mover names, never held whole. A single part arrives as a reader,
+//! which this store reads whole before the `PUT`: a part is at most 64 MiB of
+//! plaintext sealed, the protocol caps an object at 80 MiB, and one part in
+//! memory at a time is what a phone can afford where a whole film is not.
 
-use std::path::Path;
+use std::io::{Read, Write};
 
-use centraid_gateway_client::client::GatewayClient;
-use centraid_gateway_client::signer::DeviceSigner;
-use centraid_gateway_client::transport::IrohTransport;
-use centraid_identity::certificate::{DeviceCertificate, DeviceKey, Epoch};
+use centraid_gateway2::client::{Client, ClientError, Destination as Pinned, Part, Source};
+use centraid_gateway2::rules::code::Refusal as WireRefusal;
+use centraid_gateway2::rules::ids::{Digest as WireDigest, Name as WireName, Token, VaultId};
+use centraid_gateway2::rules::limits::MAX_OBJECT_BYTES;
+use centraid_gateway2::rules::wire::{HeadView, Info, SetHead};
+use centraid_vault::backup2::ledger::{Destination, Ledger};
+use centraid_vault::backup2::naming::{Digest, Name};
+use centraid_vault::backup2::store::{
+    Deleted, Head, ObjectEntry, Outgoing, PartAnswer, Put, Refusal, SnapshotEntry, Store,
+    StoreError,
+};
 
 use crate::error::{CoreError, Result};
 
-/// This device's signing identity for one vault.
-pub struct Device {
-    pub key: DeviceKey,
-    pub certificate: DeviceCertificate,
+/// The plane's name as the protocol's: both are the same 32 bytes.
+pub(crate) fn wire_name(name: &Name) -> WireName {
+    WireName::from_bytes(*name.as_bytes())
 }
 
-impl Device {
-    /// Mint a fresh device key and certify it at `epoch` with the vault's
-    /// identity key.
-    ///
-    /// # Errors
-    /// [`CoreError::Unavailable`] when the operating system has no entropy,
-    /// which is the one failure `DeviceKey::generate` has.
-    pub fn mint(identity: &centraid_identity::VaultIdentityKey, epoch: u64) -> Result<Self> {
-        let key = DeviceKey::generate().map_err(|error| CoreError::Unavailable {
-            reason: format!("this device could not mint a key: {error}"),
-        })?;
-        let certificate = DeviceCertificate::issue(identity, &key.public(), Epoch::new(epoch));
-        Ok(Self { key, certificate })
-    }
+fn plane_name(name: &WireName) -> Name {
+    Name::from_bytes(*name.as_bytes())
+}
 
-    /// Certify a key the caller already holds, at `epoch`.
-    ///
-    /// What a pair or a restore does when the shell handed a device secret back
-    /// but this vault has no certificate yet — a phone that paired one vault
-    /// and is now pairing a second holds one secret and needs a certificate per
-    /// vault, because a certificate names the VAULT identity that issued it.
-    #[must_use]
-    pub fn certify(
-        secret: &[u8; 32],
-        identity: &centraid_identity::VaultIdentityKey,
-        epoch: u64,
-    ) -> Self {
-        let key = DeviceKey::from_bytes(secret);
-        let certificate = DeviceCertificate::issue(identity, &key.public(), Epoch::new(epoch));
-        Self { key, certificate }
-    }
+fn wire_digest(digest: &Digest) -> WireDigest {
+    WireDigest::from_bytes(*digest.as_bytes())
+}
 
-    /// Rebuild from the secret the shell kept and the certificate beside the
-    /// vault.
-    ///
-    /// # Errors
-    /// [`CoreError::InvalidRequest`] when the stored certificate will not
-    /// parse, or does not certify this key. **A certificate for another key is
-    /// refused rather than replaced**: signing with a key the laptop never
-    /// enrolled produces `GatewaySignatureInvalid` on a member's backup, which
-    /// is a failure nobody can read in a log.
-    pub fn resume(secret: &[u8; 32], certificate_hex: &str) -> Result<Self> {
-        let key = DeviceKey::from_bytes(secret);
-        let raw = hex::decode(certificate_hex).map_err(|error| CoreError::InvalidRequest {
-            detail: format!("the stored device certificate is not hex: {error}"),
-        })?;
-        let certificate =
-            DeviceCertificate::from_bytes(&raw).map_err(|error| CoreError::InvalidRequest {
-                detail: format!("the stored device certificate will not parse: {error}"),
-            })?;
-        if certificate.device() != &key.public() {
-            return Err(CoreError::InvalidRequest {
-                detail: "the stored device certificate names a different key".to_owned(),
-            });
+fn plane_digest(digest: &WireDigest) -> Digest {
+    Digest::from_bytes(*digest.as_bytes())
+}
+
+fn unsigned(ms: i64) -> u64 {
+    u64::try_from(ms).unwrap_or(0)
+}
+
+fn head_of(view: &HeadView) -> Head {
+    Head {
+        name: plane_name(&view.name),
+        taken_at_ms: unsigned(view.taken_at_ms),
+        epoch: view.epoch,
+        set_at_ms: unsigned(view.set_at_ms),
+    }
+}
+
+/// What a client's failure is to the plane. See the module header.
+fn store_error(error: ClientError) -> StoreError {
+    match error {
+        ClientError::Refused(WireRefusal::Moved { epoch }) => StoreError::Moved { epoch },
+        ClientError::Refused(WireRefusal::HeadConflict { head, .. }) => StoreError::HeadConflict {
+            current: head.as_ref().map(head_of),
+        },
+        ClientError::Refused(WireRefusal::NotFound { name: Some(name) }) => {
+            StoreError::Missing(plane_name(&name))
         }
-        Ok(Self { key, certificate })
-    }
-
-    /// The hex a [`super::Laptop`] record keeps.
-    #[must_use]
-    pub fn certificate_hex(&self) -> String {
-        hex::encode(self.certificate.to_bytes())
-    }
-
-    pub(crate) fn signer(&self) -> DeviceSigner {
-        DeviceSigner::new(
-            self.key.clone(),
-            &self.certificate,
-            centraid_gateway_core::PROTOCOL_MIN,
-        )
+        ClientError::Refused(refusal) => {
+            StoreError::Refused(Refusal::from_code(refusal.code().as_str()))
+        }
+        ClientError::GatewayFault => {
+            StoreError::Unreachable("INTERNAL: the gateway's own store failed".to_owned())
+        }
+        ClientError::Unreachable(detail) => StoreError::Unreachable(detail),
+        ClientError::Untrusted => StoreError::Unreachable(
+            "the machine that answered is not the pinned gateway".to_owned(),
+        ),
+        ClientError::Protocol(detail) => {
+            StoreError::Unreachable(format!("the gateway's answer broke the protocol: {detail}"))
+        }
+        ClientError::NoToken => StoreError::Refused(Refusal::Unauthorized),
+        ClientError::Io(error) => StoreError::Io(error),
     }
 }
 
-/// Dial the laptop the record names and hand back a client for `vault`.
-///
-/// **This endpoint offers no ALPN and never accepts** — `dial_only_endpoint` is
-/// the phone's half of "the phone dials; it accepts no inbound connection"
-/// (#1029 §6), and `no-listening-socket` checks it.
-///
-/// # Errors
-/// [`CoreError::Unavailable`] when the endpoint will not bind or the record's
-/// endpoint id is not 32 bytes.
-pub async fn dial(
-    laptop: &super::Laptop,
-    device: &Device,
-    vault: centraid_gateway_core::ids::VaultId,
-) -> Result<GatewayClient<IrohTransport>> {
-    Ok(GatewayClient::new(
-        carrier(laptop).await?,
-        device.signer(),
-        vault,
-    ))
+/// `NOT_FOUND` naming nothing, from a call about `name`, is `name` missing.
+fn missing_or(name: &Name) -> impl FnOnce(ClientError) -> StoreError + '_ {
+    move |error| match error {
+        ClientError::Refused(WireRefusal::NotFound { name: None }) => StoreError::Missing(*name),
+        other => store_error(other),
+    }
 }
 
-/// Bind this phone's dial-only endpoint and point it at the laptop the record
-/// names — the carrier [`dial`] wraps in one vault's client.
-///
-/// Separate so a caller that speaks for several vaults can share it: a restore
-/// probes every derived index against one laptop, and a carrier per index was
-/// a fresh endpoint and a fresh hole-punch per index (#1047 R3).
-///
-/// # Errors
-/// As [`dial`].
-pub async fn carrier(laptop: &super::Laptop) -> Result<IrohTransport> {
-    let raw = hex::decode(&laptop.gateway_endpoint).map_err(|error| CoreError::Unavailable {
-        reason: format!("the paired laptop's id is not hex: {error}"),
-    })?;
-    let raw: [u8; 32] = raw.try_into().map_err(|_| CoreError::Unavailable {
-        reason: "the paired laptop's id is not 32 bytes".to_owned(),
-    })?;
-    let id = iroh::EndpointId::from_bytes(&raw).map_err(|error| CoreError::Unavailable {
-        reason: format!("the paired laptop's id is not an endpoint: {error}"),
-    })?;
+/// One paired destination's object and head routes, for one vault, under the
+/// token the ledger keeps for it.
+pub struct GatewayStore {
+    client: Client,
+    vault: VaultId,
+    gateway_id: String,
+    runtime: tokio::runtime::Handle,
+}
 
-    let endpoint =
-        IrohTransport::dial_only_endpoint()
-            .await
-            .map_err(|error| CoreError::Unavailable {
-                reason: format!("this phone could not bind an endpoint: {error}"),
+impl GatewayStore {
+    /// The store for `destination`, trusting its certificate by its exact
+    /// bytes and writing under its token.
+    ///
+    /// # Errors
+    /// [`CoreError::Invariant`] for a ledger row whose token is not 64 hex
+    /// characters.
+    pub fn for_destination(
+        destination: &Destination,
+        vault: VaultId,
+        runtime: &tokio::runtime::Handle,
+    ) -> Result<Self> {
+        let token: Token = destination
+            .token
+            .parse()
+            .map_err(|error| CoreError::Invariant {
+                context: format!(
+                    "the ledger's token for gateway {} will not read: {error}",
+                    destination.gateway_id
+                ),
             })?;
+        Ok(Self::over(
+            Client::new(&Pinned {
+                addrs: destination.addrs.clone(),
+                cert_der: destination.cert_der.clone(),
+                token,
+            }),
+            vault,
+            destination.gateway_id.clone(),
+            runtime,
+        ))
+    }
 
-    // THE HINTS ARE HINTS AND NEVER AUTHORITY: iroh's TLS proves the endpoint
-    // id, so a tampered address reaches the right laptop or nothing. They are
-    // here because a LAN-only deployment with no relay and no address lookup
-    // has nothing an id alone could be dialled through (D-1020-C15).
-    let address = iroh::EndpointAddr::from_parts(
-        id,
-        laptop
-            .direct_addrs
+    /// The store over a client already made: a restore's, which reads under a
+    /// read grant before it claims.
+    #[must_use]
+    pub fn over(
+        client: Client,
+        vault: VaultId,
+        gateway_id: String,
+        runtime: &tokio::runtime::Handle,
+    ) -> Self {
+        Self {
+            client,
+            vault,
+            gateway_id,
+            runtime: runtime.clone(),
+        }
+    }
+
+    /// The client underneath, for the routes the plane's trait does not name:
+    /// a pairing's claim, and a handoff's presigned `PUT`.
+    #[must_use]
+    pub const fn client(&self) -> &Client {
+        &self.client
+    }
+
+    /// The vault this store writes.
+    #[must_use]
+    pub const fn vault(&self) -> &VaultId {
+        &self.vault
+    }
+
+    /// `GET /v2/info`: whether the gateway answers at all, and its clock.
+    ///
+    /// # Errors
+    /// [`StoreError::Unreachable`] when it does not, or answers as another
+    /// gateway than the one paired.
+    pub fn info(&self) -> std::result::Result<Info, StoreError> {
+        let info = self
+            .runtime
+            .block_on(self.client.info())
+            .map_err(store_error)?;
+        if info.gateway_id.hex() != self.gateway_id {
+            return Err(StoreError::Unreachable(format!(
+                "the gateway answered as {}, not as the paired {}",
+                info.gateway_id, self.gateway_id
+            )));
+        }
+        Ok(info)
+    }
+}
+
+impl Store for GatewayStore {
+    fn gateway_id(&self) -> &str {
+        &self.gateway_id
+    }
+
+    fn exists(&self, names: &[Name]) -> std::result::Result<Vec<Name>, StoreError> {
+        let asked: Vec<WireName> = names.iter().map(wire_name).collect();
+        let missing = self
+            .runtime
+            .block_on(self.client.exists(&self.vault, &asked))
+            .map_err(store_error)?;
+        Ok(missing.iter().map(plane_name).collect())
+    }
+
+    fn put(
+        &self,
+        name: &Name,
+        digest: &Digest,
+        len: u64,
+        body: &mut dyn Read,
+    ) -> std::result::Result<Put, StoreError> {
+        if len > MAX_OBJECT_BYTES {
+            return Err(StoreError::Refused(Refusal::TooLarge));
+        }
+        let mut bytes = Vec::with_capacity(usize::try_from(len).unwrap_or(0));
+        body.take(len.saturating_add(1)).read_to_end(&mut bytes)?;
+        if bytes.len() as u64 != len {
+            return Err(StoreError::Refused(Refusal::DigestMismatch));
+        }
+        let answer = self.runtime.block_on(self.client.put(
+            &self.vault,
+            &wire_name(name),
+            &wire_digest(digest),
+            bytes,
+        ));
+        match answer {
+            Ok(centraid_gateway2::client::Put::Stored(_)) => Ok(Put::Stored),
+            Ok(centraid_gateway2::client::Put::AlreadyStored(_)) => Ok(Put::AlreadyStored),
+            // A NAME IS A FUNCTION OF THE PLAINTEXT and sealing is salted, so
+            // another digest under it is these bytes sealed again: the mover
+            // records it as acknowledged (R-1080-B4).
+            Ok(centraid_gateway2::client::Put::NameTaken { .. }) => {
+                Err(StoreError::Refused(Refusal::NameTaken))
+            }
+            Err(error) => Err(store_error(error)),
+        }
+    }
+
+    fn put_many(
+        &self,
+        parts: &[Outgoing],
+    ) -> std::result::Result<Vec<(Name, PartAnswer)>, StoreError> {
+        let sent: Vec<Part> = parts
             .iter()
-            .filter_map(|text| text.parse::<std::net::SocketAddr>().ok())
-            .map(iroh::TransportAddr::Ip),
-    );
+            .map(|part| Part {
+                name: wire_name(&part.name),
+                digest: wire_digest(&part.digest),
+                source: Source::File(part.path.clone()),
+            })
+            .collect();
+        let answer = self
+            .runtime
+            .block_on(self.client.bundle_parts(&self.vault, sent))
+            .map_err(store_error)?;
+        let mut out: Vec<(Name, PartAnswer)> = Vec::with_capacity(parts.len());
+        out.extend(
+            answer
+                .stored
+                .iter()
+                .map(|name| (plane_name(name), Ok(Put::Stored))),
+        );
+        out.extend(
+            answer
+                .already
+                .iter()
+                .map(|name| (plane_name(name), Ok(Put::AlreadyStored))),
+        );
+        out.extend(answer.refused.iter().map(|refused| {
+            (
+                plane_name(&refused.name),
+                Err(Refusal::from_code(refused.code.as_str())),
+            )
+        }));
+        // IN THE ORDER SENT, as the trait promises: the answer groups by
+        // outcome, and a caller pairing answers with parts reads them in order.
+        let order: std::collections::BTreeMap<Name, usize> = parts
+            .iter()
+            .enumerate()
+            .map(|(index, part)| (part.name, index))
+            .collect();
+        out.sort_by_key(|(name, _)| order.get(name).copied().unwrap_or(usize::MAX));
+        Ok(out)
+    }
 
-    Ok(IrohTransport::new(endpoint, address))
+    fn get(&self, name: &Name, sink: &mut dyn Write) -> std::result::Result<u64, StoreError> {
+        let bytes = self
+            .runtime
+            .block_on(self.client.get(&self.vault, &wire_name(name), None))
+            .map_err(missing_or(name))?;
+        sink.write_all(&bytes)?;
+        Ok(bytes.len() as u64)
+    }
+
+    fn get_many(
+        &self,
+        names: &[Name],
+        each: &mut dyn FnMut(&Name, &[u8]) -> std::io::Result<()>,
+    ) -> std::result::Result<usize, StoreError> {
+        let asked: Vec<WireName> = names.iter().map(wire_name).collect();
+        self.runtime
+            .block_on(self.client.fetch_each(&self.vault, &asked, |frame| {
+                each(&plane_name(&frame.name), &frame.bytes)
+            }))
+            .map_err(store_error)
+    }
+
+    fn head(&self) -> std::result::Result<Option<Head>, StoreError> {
+        let state = self
+            .runtime
+            .block_on(self.client.head_state(&self.vault))
+            .map_err(store_error)?;
+        Ok(state.head.as_ref().map(head_of))
+    }
+
+    fn set_head(
+        &self,
+        name: &Name,
+        prev: Option<&Name>,
+        taken_at_ms: u64,
+    ) -> std::result::Result<Head, StoreError> {
+        let request = SetHead {
+            name: wire_name(name),
+            prev: prev.map(wire_name),
+            taken_at_ms: i64::try_from(taken_at_ms).unwrap_or(i64::MAX),
+        };
+        let view = self
+            .runtime
+            .block_on(self.client.set_head(&self.vault, &request))
+            .map_err(missing_or(name))?;
+        Ok(head_of(&view))
+    }
+
+    fn snapshots(&self) -> std::result::Result<Vec<SnapshotEntry>, StoreError> {
+        let views = self
+            .runtime
+            .block_on(self.client.snapshots(&self.vault))
+            .map_err(store_error)?;
+        Ok(views
+            .iter()
+            .map(|view| SnapshotEntry {
+                name: plane_name(&view.name),
+                taken_at_ms: unsigned(view.taken_at_ms),
+                registered_at_ms: unsigned(view.registered_at_ms),
+            })
+            .collect())
+    }
+
+    fn list(
+        &self,
+        after: Option<&Name>,
+        limit: usize,
+    ) -> std::result::Result<Vec<ObjectEntry>, StoreError> {
+        let after = after.map(wire_name);
+        let entries = self
+            .runtime
+            .block_on(self.client.objects(&self.vault, after.as_ref(), limit))
+            .map_err(store_error)?;
+        Ok(entries
+            .iter()
+            .map(|entry| ObjectEntry {
+                name: plane_name(&entry.name),
+                size: entry.size,
+                digest: plane_digest(&entry.digest),
+                stored_at_ms: unsigned(entry.stored_at_ms),
+            })
+            .collect())
+    }
+
+    fn delete(&self, names: &[Name]) -> std::result::Result<Deleted, StoreError> {
+        let asked: Vec<WireName> = names.iter().map(wire_name).collect();
+        let answer = self
+            .runtime
+            .block_on(self.client.delete(&self.vault, &asked))
+            .map_err(store_error)?;
+        Ok(Deleted {
+            deleted: answer.deleted.iter().map(plane_name).collect(),
+            refused: answer
+                .refused
+                .iter()
+                .map(|refused| {
+                    (
+                        plane_name(&refused.name),
+                        Refusal::from_code(refused.code.as_str()),
+                    )
+                })
+                .collect(),
+        })
+    }
 }
 
-/// This phone's wall clock, in milliseconds, for signing.
+/// A destination that answered, and the store to it.
+pub struct Reached {
+    pub destination: Destination,
+    pub store: GatewayStore,
+    /// The gateway's clock when it answered: what a `MOVED` heard in this pass
+    /// is dated by, since the refusal itself carries no time a client reads.
+    pub gateway_ms: i64,
+}
+
+/// The first of `destinations`, in the ledger's order, that answers `info`
+/// as itself. A destination this phone was superseded at is skipped: its
+/// writes are refused and its reads have nothing a pass needs.
 ///
-/// The gateway corrects it — a `GatewayClockSkew` refusal carries the server's
-/// time and the client re-signs once (`gateway_client`'s header) — so a phone
-/// that has been off for a month is not stuck, and nothing here needs to be
-/// right to the second.
-#[must_use]
-pub fn now_ms() -> i64 {
-    i64::try_from(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|since| since.as_millis())
-            .unwrap_or(0),
-    )
-    .unwrap_or(i64::MAX)
-}
-
-/// The vault id a gateway path names: the vault's identity public key.
-#[must_use]
-pub fn vault_id_of(keys: &centraid_identity::VaultKeys) -> centraid_gateway_core::ids::VaultId {
-    centraid_gateway_core::ids::Key32::from_bytes(keys.identity.public().to_bytes())
-}
-
-/// A path a caller handed us exists and is a directory we can write.
-pub(crate) fn ensure_dir(path: &Path) -> Result<()> {
-    std::fs::create_dir_all(path).map_err(|error| CoreError::Invariant {
-        context: format!("making {}: {error}", path.display()),
-    })
+/// # Errors
+/// The ledger's refusal, or a destination row whose token will not read.
+pub fn reach(
+    destinations: &[Destination],
+    ledger: &Ledger,
+    vault: VaultId,
+    runtime: &tokio::runtime::Handle,
+) -> Result<Option<Reached>> {
+    for destination in destinations {
+        if ledger
+            .moved(&destination.gateway_id)
+            .map_err(super::plane_error)?
+            .is_some()
+        {
+            continue;
+        }
+        let store = GatewayStore::for_destination(destination, vault, runtime)?;
+        match store.info() {
+            Ok(info) => {
+                ledger
+                    .touch_seen(&destination.gateway_id, super::now_ms())
+                    .map_err(super::plane_error)?;
+                return Ok(Some(Reached {
+                    destination: destination.clone(),
+                    store,
+                    gateway_ms: info.time_ms,
+                }));
+            }
+            Err(error) => {
+                tracing::debug!(
+                    gateway = %destination.gateway_id,
+                    %error,
+                    "a paired gateway did not answer"
+                );
+            }
+        }
+    }
+    Ok(None)
 }

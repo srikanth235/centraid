@@ -227,7 +227,31 @@ pub fn move_queue(
     deadline: Instant,
     clock: &dyn Clock,
 ) -> Result<Moved> {
-    let queue = ledger.queued()?;
+    move_queue_where(ledger, spool, store, deadline, clock, &|_| true)
+}
+
+/// [`move_queue`] over the queued parts `admit` lets cross in this pass. A
+/// part it holds back stays queued, untouched, for a pass that admits it: an
+/// original the member's rule keeps off a metered link, a video the pass was
+/// asked to leave out, a part the operating system is moving already.
+///
+/// `Stop::Empty` then means nothing admitted is left.
+///
+/// # Errors
+/// As [`move_queue`].
+pub fn move_queue_where(
+    ledger: &Ledger,
+    spool: &Spool,
+    store: &dyn Store,
+    deadline: Instant,
+    clock: &dyn Clock,
+    admit: &dyn Fn(&Queued) -> bool,
+) -> Result<Moved> {
+    let queue: Vec<Queued> = ledger
+        .queued()?
+        .into_iter()
+        .filter(|part| admit(part))
+        .collect();
     let mut pass = Pass {
         ledger,
         spool,
@@ -291,9 +315,41 @@ pub fn reconcile(
     store: &dyn Store,
     clock: &dyn Clock,
 ) -> Result<Reconciled> {
+    reconcile_names(ledger, spool, store, clock, true)
+}
+
+/// [`reconcile`] over the queue alone: every queued name the destination
+/// already holds is confirmed and leaves the spool, and no confirmed name is
+/// asked about again. What a phone runs before each batch it hands the
+/// operating system, where asking about every name ever confirmed — tens of
+/// thousands on a library — would be the batch's cost many times over; the
+/// whole reconcile runs once a launch.
+///
+/// # Errors
+/// As [`reconcile`].
+pub fn reconcile_queue(
+    ledger: &Ledger,
+    spool: &Spool,
+    store: &dyn Store,
+    clock: &dyn Clock,
+) -> Result<Reconciled> {
+    reconcile_names(ledger, spool, store, clock, false)
+}
+
+fn reconcile_names(
+    ledger: &Ledger,
+    spool: &Spool,
+    store: &dyn Store,
+    clock: &dyn Clock,
+    with_confirmed: bool,
+) -> Result<Reconciled> {
     let gateway = store.gateway_id().to_owned();
     let queued = ledger.queued()?;
-    let confirmed = ledger.confirmed_names(&gateway)?;
+    let confirmed = if with_confirmed {
+        ledger.confirmed_names(&gateway)?
+    } else {
+        BTreeSet::new()
+    };
     let mut asked: BTreeSet<Name> = confirmed.clone();
     asked.extend(queued.iter().map(|part| part.name));
     let asked: Vec<Name> = asked.into_iter().collect();
@@ -371,6 +427,8 @@ mod tests {
                 size: bytes.len() as u64,
                 digest: Digest::of(&bytes),
                 kind,
+                media_type: matches!(kind, PartKind::Original | PartKind::Derivative)
+                    .then(|| "image/jpeg".to_owned()),
                 created_ms: 1,
                 handed_off_ms: None,
                 attempts: 0,
@@ -434,6 +492,27 @@ mod tests {
             move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
         assert_eq!(moved.confirmed, vec![original]);
         assert_eq!(rig.store.bundles(), 1, "an original goes as its own put");
+    }
+
+    /// A part the pass does not admit stays queued and untouched.
+    #[test]
+    fn a_part_the_pass_holds_back_stays_queued() {
+        let rig = rig();
+        let range = queue(&rig, "range", PartKind::Range);
+        let original = queue(&rig, "original", PartKind::Original);
+        let moved = move_queue_where(
+            &rig.ledger,
+            &rig.spool,
+            &rig.store,
+            far(),
+            &rig.clock,
+            &|part| part.kind != PartKind::Original,
+        )
+        .expect("moves");
+        assert_eq!(moved.stopped, Stop::Empty);
+        assert_eq!(moved.confirmed, vec![range]);
+        assert!(rig.spool.contains(&original));
+        assert_eq!(rig.ledger.queued().expect("reads").len(), 1);
     }
 
     /// A bundle refused whole leaves every part in it queued, each with the

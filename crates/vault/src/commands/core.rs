@@ -1236,6 +1236,7 @@ pub(crate) fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, content_hash: &str) 
         }
     };
     promote_staged_variants(ctx, content_hash, &content_id)?;
+    promote_staged_renditions(ctx, content_hash, &content_id)?;
     let media_type = staged
         .map(|(media_type, _)| media_type)
         .or(media_type_for_content(ctx, &content_id)?)
@@ -1282,8 +1283,8 @@ pub(crate) fn media_type_for_content(
 ///
 /// Only the two INLINE semantic variants Docs can produce — `text` and
 /// `transcript` — are promoted here; a binary derivative (`thumb`, `preview`,
-/// `poster`) is a CAS rental whose bytes this build cannot verify without the
-/// blob door, and promoting a row that names bytes nothing stored is the
+/// `poster`) is [`promote_staged_renditions`]'s, which asks the blob door
+/// first, because promoting a row that names bytes nothing stored is the
 /// failure D-1020-DC8 refuses.
 fn promote_staged_variants(
     ctx: &CommandCtx<'_, '_>,
@@ -1332,6 +1333,83 @@ fn promote_staged_variants(
     drop(statement);
     for (staging_id, media_type, variant, inline_content) in staged {
         upsert_text_derivative(ctx, content_id, &variant, &media_type, &inline_content)?;
+        ctx.connection().execute(
+            "DELETE FROM blob_staging WHERE staging_id = ?1",
+            [&staging_id],
+        )?;
+    }
+    Ok(())
+}
+
+/// Staged BINARY derivatives riding beside a parent — a thumbnail, a preview
+/// or a poster the shell rendered with the platform's decoder and staged
+/// before the command that mints the parent (`Vault::stage_derivative`,
+/// #1080) — become the parent's `core_content_derivative` rows, each replacing
+/// its tier's earlier row.
+///
+/// **Only bytes the store holds are promoted**: the stage door puts a
+/// derivative's bytes in the store before it stages the row, so a row whose
+/// bytes are not there names bytes nothing kept, which is the failure
+/// D-1020-DC8 refuses — it is dropped, and the tier falls back as a missing
+/// one does. Promoted first, these rows are what makes [`derive_image_tiers`]
+/// find the tiers present and leave the Rust decoder idle: the shell's
+/// rendition wins, and the decoder is the fallback for an item nothing was
+/// staged for.
+fn promote_staged_renditions(
+    ctx: &CommandCtx<'_, '_>,
+    parent_sha: &str,
+    content_id: &str,
+) -> Result<()> {
+    if !has_a_staging_band(ctx) {
+        return Ok(());
+    }
+    let mut statement = ctx.connection().prepare(
+        "SELECT staging_id, content_hash, media_type, byte_size, variant FROM blob_staging
+          WHERE variant_of = ?1 AND variant IN ('thumb','preview','poster')
+          ORDER BY staged_at, staging_id",
+    )?;
+    let staged: Vec<(String, String, String, i64, String)> = statement
+        .query_map([parent_sha], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(statement);
+    for (staging_id, hash, media_type, byte_size, variant) in staged {
+        let held = ctx
+            .blobs()
+            .is_some_and(|blobs| blobs.has(&hash).unwrap_or(false));
+        if held {
+            ctx.connection().execute(
+                "DELETE FROM core_content_derivative WHERE content_id = ?1 AND variant = ?2",
+                rusqlite::params![content_id, variant],
+            )?;
+            ctx.connection().execute(
+                "INSERT INTO core_content_derivative
+                   (derivative_id, content_id, variant, content_hash, media_type, byte_size,
+                    text_content, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?7)",
+                rusqlite::params![
+                    ctx.next_id(),
+                    content_id,
+                    variant,
+                    hash,
+                    media_type,
+                    byte_size.max(0),
+                    ctx.now
+                ],
+            )?;
+        } else {
+            tracing::warn!(
+                %content_id, %variant,
+                "a staged derivative's bytes are not in the store; it is dropped"
+            );
+        }
         ctx.connection().execute(
             "DELETE FROM blob_staging WHERE staging_id = ?1",
             [&staging_id],

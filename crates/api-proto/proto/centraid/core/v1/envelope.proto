@@ -94,19 +94,24 @@ message Request {
     // THE 24 WORDS (#1047 E1): minted, judged and turned into a seed in Rust,
     // with no vault. See `phone.proto`.
     PhraseRequest phrase = 22;
-    // THE BACKUP PLANE'S SIX DOORS BESIDE THE PASS (#1080). `drain` (15)
-    // stays the pass; these are what a pass cannot do by itself. `handoff`
-    // and `settle` are the two halves of an upload the operating system runs
-    // while the app is suspended, `reconcile` squares the device's ledger with
-    // what a gateway holds, `pins` gives a shell the certificates its own TLS
-    // pins, `fetch_original` brings one original back by its content hash, and
-    // `forget_destination` drops a paired gateway. See `phone.proto`.
+    // THE BACKUP PLANE'S DOORS BESIDE THE PASS (#1080). `drain` (15) stays
+    // the pass; these are what a pass cannot do by itself. `handoff` and
+    // `settle` are the two halves of an upload the operating system runs while
+    // the app is suspended, `reconcile` squares the device's ledger with what a
+    // gateway holds, `pins` gives a shell the certificates its own TLS pins,
+    // `fetch_original` brings one original back by its content hash,
+    // `forget_destination` drops a paired gateway, and `releasable` and
+    // `released` are the two halves of freeing space: which originals a
+    // gateway holds so the library's copy may go, and which the member
+    // deleted. See `phone.proto`.
     HandoffRequest handoff = 23;
     SettleRequest settle = 24;
     FetchOriginalRequest fetch_original = 25;
     PinsRequest pins = 26;
     ReconcileRequest reconcile = 27;
     ForgetDestinationRequest forget_destination = 28;
+    ReleasableRequest releasable = 29;
+    ReleasedRequest released = 30;
   }
 }
 
@@ -133,14 +138,16 @@ message Response {
     AppQueryResponse app_query = 20;
     LockerSessionResponse locker = 21;
     PhraseResponse phrase = 22;
-    // The answers to the backup plane's six doors (#1080), at their
-    // requests' numbers like the phone's four.
+    // The answers to the backup plane's doors (#1080), at their requests'
+    // numbers like the phone's four.
     HandoffResponse handoff = 23;
     SettleResponse settle = 24;
     FetchOriginalResponse fetch_original = 25;
     PinsResponse pins = 26;
     ReconcileResponse reconcile = 27;
     ForgetDestinationResponse forget_destination = 28;
+    ReleasableResponse releasable = 29;
+    ReleasedResponse released = 30;
   }
 }
 

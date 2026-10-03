@@ -873,7 +873,7 @@ impl Scratch {
     /// A passkey whose key material is real ciphertext under this vault's
     /// `K` — sealed here, because no phone door seals one (L-passkey).
     fn passkey(&self, item_id: &str) {
-        let keys = crate::phone::Keyring::derive(&seed_of(WORDS), 0, None).expect("keys");
+        let keys = crate::phone::Keyring::derive(&seed_of(WORDS), 0).expect("keys");
         let key_id = self
             .handle
             .with_vault(|vault| {

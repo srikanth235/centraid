@@ -133,12 +133,15 @@ message StageBegin {
   // photograph promoted as `application/octet-stream` is one a grid will not
   // embed.
   string media_type = 1;
-  // The declared length, which is the allocation and the bound.
+  // The declared length: the bound, when one is declared. A session that
+  // sends more is refused at the chunk, and one that ends short is refused at
+  // `end`.
   //
-  // From the #1080 cut-over, 0 is "not known" — an operating system's library
-  // does not always say how long an item is before it is read — and the core
-  // bounds such a stream by its spool budget as it goes. A core before it
-  // reads 0 as an empty object.
+  // 0 is "not known" (#1080) — an operating system's library does not always
+  // say how long an item is before it is read — and the session then takes
+  // what arrives: the bytes stream to a file, never into memory, and the
+  // sealing that runs beside an item from the library stops at the spool's
+  // budget and leaves the item to be asked for again (`NeedBytes`).
   uint64 byte_size = 2;
   // WHERE THESE BYTES LIVE ON THIS PHONE (#1080 ruling 6). Unspecified is
   // OWNED. See `StageSource`.
@@ -152,8 +155,14 @@ message StageBegin {
   // a derivative lives in the app's own store and is sealed like any other
   // file.
   bytes for_hash = 5;
-  // `thumb` or `preview`, set with `for_hash`.
+  // `thumb`, `preview` or `poster` (a video's still), set with `for_hash`.
   string tier = 6;
+  // THE MEMBER EDITED THIS ITEM IN THE LIBRARY (#1080, the root's ruling
+  // A20): `PHAsset.hasAdjustments` on iOS, and false on Android. The bytes
+  // streamed are the current rendition, not the camera's original, so the
+  // core never offers the item for deletion from the library
+  // (`ReleasableRequest`). Set only with `STAGE_SOURCE_OS_LIBRARY`.
+  bool os_edited = 7;
 }
 
 // WHERE STAGED BYTES LIVE ON THIS PHONE (#1080 ruling 6).
@@ -166,7 +175,9 @@ enum StageSource {
   // derivative. The core keeps the plaintext as a file named by its hash.
   STAGE_SOURCE_OWNED = 1;
   // The operating system's library holds the bytes, under `os_ref`. The core
-  // hashes and seals them as they stream and keeps no plaintext copy.
+  // hashes them and, when a gateway is paired and the spool has room, seals
+  // them into the spool in the same stream (#1080, the root's ruling A8); it
+  // keeps no plaintext copy.
   STAGE_SOURCE_OS_LIBRARY = 2;
 }
 
@@ -206,7 +217,9 @@ message StageChunked {
 message StageHandle {
   string content_hash = 1;
   uint64 byte_size = 2;
-  // Whether this core ALREADY held these bytes. A camera roll re-scanned is the
-  // ordinary case, and a shell that could not tell would re-upload the roll.
+  // Whether this core ALREADY held these bytes: the app's store had them, or
+  // the device's ledger had recorded them in the library. A camera roll
+  // re-scanned is the ordinary case, and a shell that could not tell would
+  // re-upload the roll.
   bool already_held = 3;
 }
