@@ -65,7 +65,7 @@ const APP_CRATE_ENTRY: [&str; 2] = [
 /// `centraid-gateway-server` when #1080 replaced that crate, which had taken
 /// it from `centraid-net` under #1029: the number follows the heaviest graph
 /// to whichever crate binds the gateway's listener.
-const HEAVIEST_CRATE: &str = "centraid-gateway2";
+const HEAVIEST_CRATE: &str = "centraid-gateway";
 
 /// One measurable key: its ledger name, the one line that says what it times,
 /// and how it is taken.

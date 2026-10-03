@@ -2,7 +2,7 @@
 //! GATEWAY (#1080, "The phone core").
 //!
 //! Every case here drives `Handle::call` — the arms `centraid_call` reaches —
-//! against `centraid_gateway2::server::harness`: the gateway a member runs,
+//! against `centraid_gateway::server::harness`: the gateway a member runs,
 //! TLS and SQLite and object files included, on `127.0.0.1:0`. Nothing below
 //! the socket is faked, and nothing above the core's doors is assumed.
 //!
@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_core::{Core, CoreConfig, Handle};
-use centraid_gateway2::server::harness::{self, Spawned};
+use centraid_gateway::server::harness::{self, Spawned};
 
 /// The BIP-39 test vector: the whole input to a restore.
 const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
@@ -498,21 +498,21 @@ fn the_operating_system_moves_a_handed_off_part_and_settle_records_it() {
 
     // THE OS UPLOADS IT, as a background session would: the file, the URL's
     // name, the headers as handed.
-    let token: centraid_gateway2::rules::ids::Token = header("authorization")
+    let token: centraid_gateway::rules::ids::Token = header("authorization")
         .strip_prefix("Bearer ")
         .expect("a bearer token")
         .parse()
         .expect("a token");
-    let digest = centraid_gateway2::rules::ids::Digest::from_header(&header("content-digest"))
+    let digest = centraid_gateway::rules::ids::Digest::from_header(&header("content-digest"))
         .expect("a digest");
     let client = gateway.spawned.client(token);
-    let vault = centraid_gateway2::rules::ids::VaultId::from_bytes(
+    let vault = centraid_gateway::rules::ids::VaultId::from_bytes(
         hex::decode(&part.vault_id)
             .expect("hex")
             .try_into()
             .expect("32 bytes"),
     );
-    let name: centraid_gateway2::rules::ids::Name = part.name.parse().expect("a name");
+    let name: centraid_gateway::rules::ids::Name = part.name.parse().expect("a name");
     gateway
         .runtime
         .block_on(client.put_file(&vault, &name, &digest, Path::new(&part.path)))
@@ -794,7 +794,7 @@ type Named = (String, u64, Option<String>);
 fn census(path: &Path) -> (Option<String>, Vec<Named>) {
     let vault = centraid_vault::Vault::open(path).expect("opens");
     let id = vault.vault_id().expect("reads");
-    let mut files: Vec<Named> = centraid_vault::backup2::files::content_files(&vault)
+    let mut files: Vec<Named> = centraid_vault::backup::files::content_files(&vault)
         .expect("reads")
         .into_iter()
         .map(|file| (file.h.to_hex(), file.len, file.variant))

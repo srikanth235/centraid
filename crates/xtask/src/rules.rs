@@ -330,13 +330,13 @@ fn function_name(signature: &str) -> Option<String> {
 /// stops accepting — an exemption nobody is looking at is how the next one gets
 /// added quietly.
 const LISTENER_ALLOWED: &[(&str, &str)] = &[(
-    "crates/gateway2/src/server/serve.rs",
+    "crates/gateway/src/server/serve.rs",
     "THE GATEWAY'S LISTENER (#1080). The phone opens a TLS connection \
      straight to the gateway the member runs; this file binds its one TCP \
      port, completes each TLS handshake and answers the LAN's Bonjour \
      queries, and hands every connection to \
-     `crates/gateway2/src/server/http.rs`, which decides nothing: every \
-     rule it serves is `crates/gateway2/src/rules`'. The rest of the crate, \
+     `crates/gateway/src/server/http.rs`, which decides nothing: every \
+     rule it serves is `crates/gateway/src/rules`'. The rest of the crate, \
      its harness and its tests are scanned like any other file",
 )];
 
@@ -391,7 +391,7 @@ pub fn no_listening_socket(root: &Path) -> RuleReport {
 /// | `.alpns(` | a QUIC endpoint offering a protocol for an inbound handshake to negotiate |
 /// | `.accept()` | an accept loop, on any carrier |
 ///
-/// The phone's client (`crates/gateway2/src/client`) opens a TCP stream to
+/// The phone's client (`crates/gateway/src/client`) opens a TCP stream to
 /// an address and completes a TLS handshake on it, and that is a dialler: it
 /// binds no listener, offers nothing to an inbound handshake and accepts
 /// nothing. No QUIC stack is linked since #1080 removed the iroh transport;
@@ -816,16 +816,16 @@ fn door() {
     /// property that makes this a pointed rule rather than a relaxed one.
     #[test]
     fn a_second_listener_in_the_gateway_crate_is_still_caught() {
-        let root = fixture_dir("listener-gateway2");
+        let root = fixture_dir("listener-gateway");
         write(
             &root,
-            "crates/gateway2/src/server/serve.rs",
+            "crates/gateway/src/server/serve.rs",
             "async fn bind() {\n    let _ = TcpListener::bind(\"0.0.0.0:8443\").await;\n    \
              let _ = listener.accept().await;\n}\n",
         );
         for sneaky in [
-            "crates/gateway2/src/server/harness.rs",
-            "crates/gateway2/tests/conformance_wire.rs",
+            "crates/gateway/src/server/harness.rs",
+            "crates/gateway/tests/conformance_wire.rs",
         ] {
             write(
                 &root,
@@ -836,12 +836,12 @@ fn door() {
         let report = no_listening_socket(&root);
         assert_eq!(report.findings.len(), 2, "{:?}", report.findings);
         assert!(
-            report.findings[0].contains("crates/gateway2/src/server/harness.rs:2"),
+            report.findings[0].contains("crates/gateway/src/server/harness.rs:2"),
             "{:?}",
             report.findings
         );
         assert!(
-            report.findings[1].contains("crates/gateway2/tests/conformance_wire.rs:2"),
+            report.findings[1].contains("crates/gateway/tests/conformance_wire.rs:2"),
             "{:?}",
             report.findings
         );

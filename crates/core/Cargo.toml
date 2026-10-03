@@ -69,7 +69,7 @@ centraid-identity = { path = "../identity" }
 # preimage, the refusal codes — so a phone and a gateway cannot disagree about
 # either. The client feature alone: a phone links no listener, no SQLite of the
 # gateway's and no certificate minting.
-centraid-gateway2 = { path = "../gateway2", default-features = false, features = [
+centraid-gateway = { path = "../gateway", default-features = false, features = [
   "client",
 ] }
 # THE SEALED FORMAT (#1080, `centraid-sealed/2`): a part is sealed straight
@@ -101,7 +101,7 @@ tracing.workspace = true
 serde_json.workspace = true
 # A REAL GATEWAY ON A REAL SOCKET for the phone's flows (#1080): the gateway
 # crate's own test harness, the whole server, spawned on 127.0.0.1:0.
-centraid-gateway2 = { path = "../gateway2" }
+centraid-gateway = { path = "../gateway" }
 tempfile.workspace = true
 
 [[test]]

@@ -381,8 +381,8 @@ impl Handle {
                 "the byte store adopted the layout it had before #1080"
             );
         }
-        let ledger_path = centraid_vault::backup2::ledger::Ledger::path_for(&self.path);
-        let door = match centraid_vault::backup2::ledger::Ledger::open(&ledger_path) {
+        let ledger_path = centraid_vault::backup::ledger::Ledger::path_for(&self.path);
+        let door = match centraid_vault::backup::ledger::Ledger::open(&ledger_path) {
             Ok(ledger) => {
                 centraid_blobs::ContentBytes::new(store).with_ledger(Arc::new(Mutex::new(ledger)))
             }
@@ -1124,9 +1124,9 @@ impl Handle {
                         .map_err(crate::phone::plane_error)?
                         .is_some();
                 ledger
-                    .put_local(&centraid_vault::backup2::ledger::LocalBytes {
+                    .put_local(&centraid_vault::backup::ledger::LocalBytes {
                         hash: h,
-                        source: centraid_vault::backup2::ledger::LocalSource::Os,
+                        source: centraid_vault::backup::ledger::LocalSource::Os,
                         os_ref: Some(os_ref),
                         verified_ms: Some(crate::phone::now_ms()),
                         edited,
@@ -1411,9 +1411,9 @@ mod tests {
             .expect("a blob is named by its hash")
             .to_owned();
         std::fs::remove_file(&path).expect("the store's copy goes");
-        let local = centraid_vault::backup2::ledger::LocalBytes {
-            hash: centraid_vault::backup2::naming::PlaintextHash::from_hex(&hash).expect("a hash"),
-            source: centraid_vault::backup2::ledger::LocalSource::Os,
+        let local = centraid_vault::backup::ledger::LocalBytes {
+            hash: centraid_vault::backup::naming::PlaintextHash::from_hex(&hash).expect("a hash"),
+            source: centraid_vault::backup::ledger::LocalSource::Os,
             os_ref: Some("library-item-1".to_owned()),
             verified_ms: Some(1),
             edited: false,

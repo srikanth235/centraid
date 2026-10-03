@@ -52,14 +52,14 @@ use std::time::{Duration, Instant};
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_media::sealed::{self, PartSealer};
-use centraid_vault::backup2::files::{ContentFile, content_files};
-use centraid_vault::backup2::ledger::{Ledger, LedgerSnapshot, LocalSource, PartKind, Queued};
-use centraid_vault::backup2::mover::{self, Stop};
-use centraid_vault::backup2::naming::{BackupKeys, Name, name as part_name, names_of, part_count};
-use centraid_vault::backup2::retention;
-use centraid_vault::backup2::snapshot::{self, Manifest, Settled};
-use centraid_vault::backup2::spool::Spool;
-use centraid_vault::backup2::store::{self as plane_store, Store};
+use centraid_vault::backup::files::{ContentFile, content_files};
+use centraid_vault::backup::ledger::{Ledger, LedgerSnapshot, LocalSource, PartKind, Queued};
+use centraid_vault::backup::mover::{self, Stop};
+use centraid_vault::backup::naming::{BackupKeys, Name, name as part_name, names_of, part_count};
+use centraid_vault::backup::retention;
+use centraid_vault::backup::snapshot::{self, Manifest, Settled};
+use centraid_vault::backup::spool::Spool;
+use centraid_vault::backup::store::{self as plane_store, Store};
 use centraid_vault::clock::SystemClock;
 
 use super::link::{self, GatewayStore, Reached};
@@ -1056,7 +1056,7 @@ pub fn handoff(
             .presign_put(
                 store.vault(),
                 &link::wire_name(&part.name),
-                &centraid_gateway2::rules::ids::Digest::from_bytes(*part.digest.as_bytes()),
+                &centraid_gateway::rules::ids::Digest::from_bytes(*part.digest.as_bytes()),
                 part.size,
             )
             .map_err(|error| CoreError::Invariant {
@@ -1197,7 +1197,7 @@ pub fn reconcile(
     };
     let reconciled = match reconciled {
         Ok(reconciled) => reconciled,
-        Err(centraid_vault::backup2::PlaneError::Store(error)) => {
+        Err(centraid_vault::backup::PlaneError::Store(error)) => {
             tracing::debug!(%error, "the gateway stopped answering mid-reconcile");
             return Ok(unreachable);
         }

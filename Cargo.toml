@@ -67,7 +67,7 @@ rusqlite = { version = "0.40", features = [
   # would change and none would match a name the gateway already holds.
   # `rusqlite::backup` copies page 1 to page 1 and page N to page N, which is
   # what lets an unchanged range keep its name (#1080,
-  # `crates/vault/src/backup2/snapshot.rs`).
+  # `crates/vault/src/backup/snapshot.rs`).
   "backup",
 ] }
 serde = { version = "1", features = ["derive"] }
@@ -218,7 +218,7 @@ hpke = { version = "0.14", default-features = false, features = [
   "alloc",
 ] }
 
-# THE GATEWAY A MEMBER RUNS (#1080, `crates/gateway2`'s `server` feature):
+# THE GATEWAY A MEMBER RUNS (#1080, `crates/gateway`'s `server` feature):
 # every entry here exists because a SERVER needs it and nothing else in this
 # workspace is one — the phone opens no listening socket, and this binary's
 # whole job is to be the thing it dials.
@@ -236,7 +236,7 @@ tokio-rustls = { version = "0.26", default-features = false, features = [
   "ring",
 ] }
 
-# #1080 — `crates/gateway2`, the gateway v2: direct HTTPS from the phone to a
+# #1080 — `crates/gateway`, the gateway v2: direct HTTPS from the phone to a
 # gateway that mints its own certificate, which the phone pins by BLAKE3
 # fingerprint. No certificate authority, relay or DNS service is involved.
 #

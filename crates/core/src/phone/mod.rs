@@ -3,7 +3,7 @@
 //!
 //! `phone.proto` states the shapes and why none of them is a registered
 //! command. This module is the core's half of them, over
-//! `centraid_vault::backup2` — the snapshot, the ledger, the spool, the mover,
+//! `centraid_vault::backup` — the snapshot, the ledger, the spool, the mover,
 //! retention and restore — and the gateway's pinned client:
 //!
 //! | Module | Door |
@@ -50,14 +50,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_gateway2::rules::ids::VaultId;
+use centraid_gateway::rules::ids::VaultId;
 use centraid_vault::Vault;
-use centraid_vault::backup2::PlaneError;
-use centraid_vault::backup2::files::{ContentFile, content_files};
-use centraid_vault::backup2::ledger::{Destination, Ledger, LocalSource};
-use centraid_vault::backup2::naming::{BackupKeys, Name, PlaintextHash, keys_from_root, names_of};
-use centraid_vault::backup2::spool::Spool;
-use centraid_vault::backup2::store::StoreError;
+use centraid_vault::backup::PlaneError;
+use centraid_vault::backup::files::{ContentFile, content_files};
+use centraid_vault::backup::ledger::{Destination, Ledger, LocalSource};
+use centraid_vault::backup::naming::{BackupKeys, Name, PlaintextHash, keys_from_root, names_of};
+use centraid_vault::backup::spool::Spool;
+use centraid_vault::backup::store::StoreError;
 
 use crate::error::{CoreError, Result};
 
@@ -346,7 +346,7 @@ pub(crate) fn standing(
     keys: &BackupKeys,
 ) -> Result<Standing> {
     let confirmed = ledger.confirmed_anywhere().map_err(plane_error)?;
-    let queued: BTreeMap<Name, centraid_vault::backup2::ledger::Queued> = ledger
+    let queued: BTreeMap<Name, centraid_vault::backup::ledger::Queued> = ledger
         .queued()
         .map_err(plane_error)?
         .into_iter()
@@ -488,7 +488,7 @@ pub fn releasable(
         .collect();
     // ONE LIBRARY ITEM, EVERY HASH UNDER IT (A20): a Live Photo is a still and
     // a film under one identifier, and the item is offered whole or not at all.
-    let mut by_ref: BTreeMap<String, Vec<centraid_vault::backup2::ledger::LocalBytes>> =
+    let mut by_ref: BTreeMap<String, Vec<centraid_vault::backup::ledger::LocalBytes>> =
         BTreeMap::new();
     for local in ledger.locals().map_err(plane_error)? {
         if local.source == LocalSource::Os

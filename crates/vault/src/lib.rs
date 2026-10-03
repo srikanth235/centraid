@@ -42,7 +42,7 @@
 
 pub mod access;
 pub mod audit;
-pub mod backup2;
+pub mod backup;
 pub mod bootstrap;
 pub mod bytes;
 pub mod canonical;

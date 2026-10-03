@@ -179,7 +179,7 @@ message PairRequest {
   // The scanned string, exactly as it was read. **Not a decoded struct**: the
   // payload is the one message with no handshake in front of it, and a shell
   // that parsed it would be a second parser to disagree with the gateway's
-  // own (`centraid_gateway2::rules::payload`).
+  // own (`centraid_gateway::rules::payload`).
   string payload = 1;
 }
 

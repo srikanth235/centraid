@@ -27,8 +27,8 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use centraid_vault::backup2::ledger::{Ledger, LocalSource};
-use centraid_vault::backup2::naming::PlaintextHash;
+use centraid_vault::backup::ledger::{Ledger, LocalSource};
+use centraid_vault::backup::naming::PlaintextHash;
 use centraid_vault::bytes::{BlobError, BlobStore, Located, Result};
 
 use crate::hash::ContentHash;
@@ -184,7 +184,7 @@ impl BlobStore for ContentBytes {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use centraid_vault::backup2::ledger::LocalBytes;
+    use centraid_vault::backup::ledger::LocalBytes;
 
     fn door(dir: &tempfile::TempDir) -> (ContentBytes, Arc<Mutex<Ledger>>) {
         let store = ByteStore::open(dir.path().join("vault.bytes")).expect("the store opens");

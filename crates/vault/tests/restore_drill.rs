@@ -1,10 +1,10 @@
 //! The snapshot plane's drill, end to end against `MemoryStore` (#1080).
 //!
-//! `backup2::drill::run` asserts every step itself and refuses with the step
+//! `backup::drill::run` asserts every step itself and refuses with the step
 //! that failed; this test runs it and holds the numbers it reports to the
 //! claims #1080's acceptance makes of them.
 
-use centraid_vault::backup2::drill;
+use centraid_vault::backup::drill;
 
 #[test]
 fn back_up_lose_everything_restore_and_prove_it() {

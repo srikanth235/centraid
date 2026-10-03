@@ -12,7 +12,7 @@ One home for the artifacts that put `centraid-gateway` on a host — the contain
 | Path | What it is |
 | --- | --- |
 | `gateway/Dockerfile` | **The gateway image**: one `centraid-gateway` binary, an unprivileged user, the data directory at `/var/lib/centraid`, and the gateway's own `health` as the health check. |
-| `gateway-server/README.md` | Running a gateway on a box you own: the shortest path, getting it reachable, a container, backing it up. |
+| `gateway/README.md` | Running a gateway on a box you own: the shortest path, getting it reachable, a container, backing it up. |
 | `vps/install.sh` | Download, verify, install, and _offer_ a service. |
 
 ## The service units
@@ -38,7 +38,7 @@ The image runs `centraid-gateway serve --data-dir /var/lib/centraid` as an unpri
 
 ## The VPS installer
 
-`vps/install.sh` verifies **before** it unpacks (`SHA256SUMS`), checks the installed binary's identity stamp against the release that claims to have published it, and **never installs an OS service silently**: `--with-service` prints the commands, only `--yes` runs them, and enabling is always left to the operator.
+`vps/install.sh` verifies **before** it unpacks (`SHA256SUMS`), checks the installed `centraid` binary's identity stamp against the release that claims to have published it, installs `centraid-gateway` beside it when the tarball carries it, and **never installs an OS service silently**: `--with-service` prints the `centraid-gateway install` commands, only `--yes` runs them, and enabling — `systemctl --user enable --now dev.centraid.gateway`, with `loginctl enable-linger` on a box nobody logs in to — is always left to the operator. A tarball without `centraid-gateway` installs no gateway and refuses `--with-service`; the release's prebuilt-core lane builds `--bin centraid` alone today ([#1080][issue] open item).
 
 [issue]: https://github.com/srikanth235/centraid/issues/1080
 [r1]: ../docs/decisions.md#backups-from-first-principles-1080

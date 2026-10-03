@@ -134,67 +134,26 @@ enum ErrorCode {
   // restarts the core deliberately (#1020 Execution model).
   ERROR_CODE_INTERNAL = 63;
 
-  // --- the #1029 gateway (#1029 §3) ---
+  // --- the #1029 gateway (#1029 §3), retired ---
   //
-  // These were the refusals of `crates/gateway-core`, which left with that
-  // crate at #1080's cut-over: the gateway a phone speaks to now refuses in
-  // its own protocol's codes (`crates/gateway2`'s `rules::code`), and the core
-  // maps those onto `UNAUTHORIZED`, `VAULT_MOVED` and `PEER_UNREACHABLE`. No
-  // build produces any of 80–93 any more. They stay numbered until the one
-  // consumer that still names one (`mobile/shared`'s `VaultMovedProducerSpec`
-  // names `GATEWAY_LEASE_STALE`) moves, and then go as reserved numbers and
-  // names. The companion messages the comments below mention (`ClockSkew`,
-  // `HeadConflict`, `DeleteRefusal`) left with the gateway's own files.
-
-  // The request signature did not verify against the device certificate it
-  // carried, or the certificate did not chain to the vault's identity key.
-  ERROR_CODE_GATEWAY_SIGNATURE_INVALID = 80;
-  // The request timestamp is outside the replay window. A `ClockSkew` rides
-  // with it carrying the SERVER'S time, and the client re-signs ONCE.
-  ERROR_CODE_GATEWAY_CLOCK_SKEW = 81;
-  // The declaration, or the store, offered no attested checksum. R2 records
-  // `checksums.sha256` only when the client sent it, so "no checksum" must be a
-  // rejection and not a shrug — otherwise the one rule the write-once scheme
-  // rests on is optional.
-  ERROR_CODE_GATEWAY_CHECKSUM_MISSING = 82;
-  // The attested checksum is not the one the declaration bound to this name,
-  // or the bytes do not hash to the name in read-and-hash mode.
-  ERROR_CODE_GATEWAY_CHECKSUM_MISMATCH = 83;
-  // A presign was asked for a name that is already committed. Storage is
-  // write-once and a name is the hash of its bytes.
-  ERROR_CODE_GATEWAY_ALREADY_COMMITTED = 84;
-  // A commit named an object that was never declared, or never uploaded.
-  ERROR_CODE_GATEWAY_OBJECT_UNKNOWN = 85;
-  // The declared size is above the 16 MiB cap (F6). A bigger file is a list of
-  // objects, recorded in the vault.
-  ERROR_CODE_GATEWAY_OBJECT_TOO_LARGE = 86;
-  // The manifest head compare-and-set lost: `prev_head` is not the current
-  // head. A `HeadConflict` rides with it (F7).
-  ERROR_CODE_GATEWAY_HEAD_CONFLICT = 87;
-  // The lease claim's epoch is at or below the one the gateway holds. The
-  // successor of `DeviceTrust`'s refusal, on the wire (F3).
-  ERROR_CODE_GATEWAY_LEASE_STALE = 88;
-  // The writer does not hold the lease. Distinct from `VAULT_MOVED`, which is
-  // for the device that USED to hold it.
-  ERROR_CODE_GATEWAY_NOT_LEASE_HOLDER = 89;
-  // The vault's quota is spent. Keys are free to mint, so an unbounded free
-  // tier is unbounded Sybil storage (F13).
-  ERROR_CODE_GATEWAY_QUOTA_EXCEEDED = 90;
-  // RESERVED. Held `ERROR_CODE_GATEWAY_PLAN_LAPSED` until the scope amendment
-  // of 2026-09-21 struck the account, purchases and plan lapse from v0. The
-  // number is not re-used: a phone carrying an older build reads 91 as "plan
-  // lapsed", and giving it a second meaning is how a refusal becomes a lie.
-  reserved 91;
-  // A delete was refused. A `DeleteRefusal` says which of the floor, the size
-  // guard, the rate limit or the append-only flag held it (F4, F10).
-  ERROR_CODE_GATEWAY_DELETE_REFUSED = 92;
-  // A capability does not cover the object or the pack range being read, or it
-  // was revoked or has expired.
-  ERROR_CODE_GATEWAY_CAPABILITY_SCOPE = 93;
-  // RESERVED. Held `ERROR_CODE_GATEWAY_MAILBOX_REFUSED` until the scope
-  // amendment of 2026-09-21 struck the mailbox. Not re-used, for the same
-  // reason as 91 above.
-  reserved 94;
+  // 80–94 were the refusals of `crates/gateway-core` (a signature, a clock
+  // skew, a checksum, a write-once name, an object's size, the head's
+  // compare-and-set, the lease, a quota, a plan, a delete, a capability, a
+  // mailbox). That gateway left at #1080's cut-over: the one a phone speaks to
+  // now refuses in its own protocol's codes (`crates/gateway`'s `rules::code`),
+  // and the core maps those onto `UNAUTHORIZED`, `VAULT_MOVED` and
+  // `PEER_UNREACHABLE`. No build produces any of them, so every number and
+  // every name is reserved: a phone carrying an older build reads 88 as "lease
+  // stale", and giving a number a second meaning is how a refusal becomes a lie.
+  reserved 80 to 94;
+  reserved "ERROR_CODE_GATEWAY_SIGNATURE_INVALID", "ERROR_CODE_GATEWAY_CLOCK_SKEW",
+    "ERROR_CODE_GATEWAY_CHECKSUM_MISSING", "ERROR_CODE_GATEWAY_CHECKSUM_MISMATCH",
+    "ERROR_CODE_GATEWAY_ALREADY_COMMITTED", "ERROR_CODE_GATEWAY_OBJECT_UNKNOWN",
+    "ERROR_CODE_GATEWAY_OBJECT_TOO_LARGE", "ERROR_CODE_GATEWAY_HEAD_CONFLICT",
+    "ERROR_CODE_GATEWAY_LEASE_STALE", "ERROR_CODE_GATEWAY_NOT_LEASE_HOLDER",
+    "ERROR_CODE_GATEWAY_QUOTA_EXCEEDED", "ERROR_CODE_GATEWAY_PLAN_LAPSED",
+    "ERROR_CODE_GATEWAY_DELETE_REFUSED", "ERROR_CODE_GATEWAY_CAPABILITY_SCOPE",
+    "ERROR_CODE_GATEWAY_MAILBOX_REFUSED";
 }
 
 message Error {

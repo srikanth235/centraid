@@ -579,7 +579,7 @@ dependencies = [
  "centraid-apps-tally",
  "centraid-apps-tasks",
  "centraid-blobs",
- "centraid-gateway2",
+ "centraid-gateway",
  "centraid-identity",
  "centraid-media",
  "centraid-ontology",
@@ -626,7 +626,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "centraid-gateway2"
+name = "centraid-gateway"
 version = "1.0.0-alpha.0"
 dependencies = [
  "anyhow",

@@ -13,7 +13,7 @@
 # message, a deleted file — was the #1029 gateway's commitment to seats that
 # updated on their own schedule, because that gateway spoke core.v1 to them over
 # the wire. Nothing does any more. The gateway a phone speaks to declares its
-# own protocol (`crates/gateway2/src/rules`, HTTPS and JSON) and does not depend
+# own protocol (`crates/gateway/src/rules`, HTTPS and JSON) and does not depend
 # on this package; core.v1 crosses exactly one boundary, the C ABI between a
 # shell and the core it links, and the two ship in ONE artifact — the case
 # screen.v1's entry below already makes. FILE therefore protected no install

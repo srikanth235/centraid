@@ -1,6 +1,6 @@
 [package]
 name = "centraid"
-description = "The operator's binary: `gateway install` and `doctor` (#1020, #1029)."
+description = "The operator's binary: `doctor` (#1020, #1029, #1080)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

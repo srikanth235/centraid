@@ -310,5 +310,5 @@ fn prost_drops_unknown_fields_which_is_why_nothing_relays_a_decoded_message() {
 // a tombstone's `purge_after_ms`, a declaration with no plaintext-shaped field,
 // the version and clock-skew refusals. Their messages left with that gateway's
 // `gateway.proto`, `backup.proto` and `lease.proto` (#1080): the gateway a
-// phone speaks to now declares its protocol in `crates/gateway2/src/rules`, and
+// phone speaks to now declares its protocol in `crates/gateway/src/rules`, and
 // its wire is held by that crate's own conformance suite.

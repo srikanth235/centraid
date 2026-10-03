@@ -13,7 +13,7 @@ Everything a shell can ask for goes through `call` and everything the core volun
 | `handle.next_event(timeout)` | blocks on a **bounded** queue (`EVENT_QUEUE_CAP = 1024`). `Ok(None)` is a timeout, not an error. |
 | `handle.close()` | unblocks every waiter with `CoreError::Closed`, then releases. Idempotent. Calls afterwards are typed errors. |
 
-**Dropping a `Handle` closes the byte store it owns** (`impl Drop for Handle`): a store that is dropped rather than closed keeps `<vault>.bytes/blobs.db` locked for the life of the process, and the next open of that vault in the same process hangs inside `centraid_open` — [docs/traps/byte-store-lock.md](../../docs/traps/byte-store-lock.md), proven at the C boundary by `crates/core-ffi/tests/reopen.rs` ([#1047](https://github.com/srikanth235/centraid/issues/1047)).
+**A vault closed over the ABI opens again in the same process.** The byte store is a directory of files with no lock and no index ([#1080](https://github.com/srikanth235/centraid/issues/1080)), so nothing a closed core held can stand in the next open's way; `crates/core-ffi/tests/reopen.rs` holds that at the C boundary.
 
 Plus `handle.cancel(request_id)`: cancels an in-flight **unbounded** operation. A bounded read is refused rather than cancelled, and the refusal is typed — bounded reads hold a SQLite read transaction, and cancelling one leaves it to be rolled back by a dropped future.
 

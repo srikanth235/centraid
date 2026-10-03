@@ -24,7 +24,7 @@
 //! ## No socket at all
 //!
 //! The store is files. It moves nothing over a network: the backup plane
-//! (`centraid_vault::backup2`) reads a file through a path, seals it, and
+//! (`centraid_vault::backup`) reads a file through a path, seals it, and
 //! hands the sealed parts to the core, which talks to the member's gateways.
 //! The `no-listening-socket` rule holds here with nothing to find.
 

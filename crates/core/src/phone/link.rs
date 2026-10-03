@@ -1,10 +1,10 @@
 //! THE LINK TO A GATEWAY (#1080 rulings 1, 7): the phone's pinned HTTPS
 //! client, and the backup plane's [`Store`] over it.
 //!
-//! `centraid_vault::backup2` is written against one synchronous trait so the
+//! `centraid_vault::backup` is written against one synchronous trait so the
 //! snapshot, the mover, retention and restore run unchanged against the real
 //! gateway and against `MemoryStore`. [`GatewayStore`] is that trait over
-//! `centraid_gateway2::client::Client`, driven on the core's own runtime
+//! `centraid_gateway::client::Client`, driven on the core's own runtime
 //! (`Handle::runtime_handle`): every call is one `block_on` from the thread
 //! the shell called the core on, which is never a runtime worker.
 //!
@@ -29,14 +29,14 @@
 
 use std::io::{Read, Write};
 
-use centraid_gateway2::client::{Client, ClientError, Destination as Pinned, Part, Source};
-use centraid_gateway2::rules::code::Refusal as WireRefusal;
-use centraid_gateway2::rules::ids::{Digest as WireDigest, Name as WireName, Token, VaultId};
-use centraid_gateway2::rules::limits::MAX_OBJECT_BYTES;
-use centraid_gateway2::rules::wire::{HeadView, Info, SetHead};
-use centraid_vault::backup2::ledger::{Destination, Ledger};
-use centraid_vault::backup2::naming::{Digest, Name};
-use centraid_vault::backup2::store::{
+use centraid_gateway::client::{Client, ClientError, Destination as Pinned, Part, Source};
+use centraid_gateway::rules::code::Refusal as WireRefusal;
+use centraid_gateway::rules::ids::{Digest as WireDigest, Name as WireName, Token, VaultId};
+use centraid_gateway::rules::limits::MAX_OBJECT_BYTES;
+use centraid_gateway::rules::wire::{HeadView, Info, SetHead};
+use centraid_vault::backup::ledger::{Destination, Ledger};
+use centraid_vault::backup::naming::{Digest, Name};
+use centraid_vault::backup::store::{
     Deleted, Head, ObjectEntry, Outgoing, PartAnswer, Put, Refusal, SnapshotEntry, Store,
     StoreError,
 };
@@ -237,12 +237,12 @@ impl Store for GatewayStore {
             bytes,
         ));
         match answer {
-            Ok(centraid_gateway2::client::Put::Stored(_)) => Ok(Put::Stored),
-            Ok(centraid_gateway2::client::Put::AlreadyStored(_)) => Ok(Put::AlreadyStored),
+            Ok(centraid_gateway::client::Put::Stored(_)) => Ok(Put::Stored),
+            Ok(centraid_gateway::client::Put::AlreadyStored(_)) => Ok(Put::AlreadyStored),
             // A NAME IS A FUNCTION OF THE PLAINTEXT and sealing is salted, so
             // another digest under it is these bytes sealed again: the mover
             // records it as acknowledged (R-1080-B4).
-            Ok(centraid_gateway2::client::Put::NameTaken { .. }) => {
+            Ok(centraid_gateway::client::Put::NameTaken { .. }) => {
                 Err(StoreError::Refused(Refusal::NameTaken))
             }
             Err(error) => Err(store_error(error)),
