@@ -109,6 +109,26 @@ impl Spool {
         })
     }
 
+    /// A temp path inside the spool for part `index` of a file still being
+    /// sealed, whose name is not known until its last byte
+    /// (`centraid_media::sealed::FileSealer`). It is a `.partial`, so a crash
+    /// leaves nothing [`Spool::open`] does not sweep.
+    #[must_use]
+    pub fn temp_path(&self, tag: &str, index: u32) -> PathBuf {
+        self.dir.join(format!("stage-{tag}-{index}.{PARTIAL}"))
+    }
+
+    /// Give a sealed, fsynced temp file its name.
+    ///
+    /// # Errors
+    /// The filesystem's refusal.
+    pub fn adopt(&self, temp: &Path, name: &Name) -> Result<PathBuf> {
+        let target = self.path(name);
+        fs::rename(temp, &target)?;
+        sync_dir(&self.dir)?;
+        Ok(target)
+    }
+
     /// Open a spooled part to send it.
     ///
     /// # Errors
@@ -284,6 +304,28 @@ mod tests {
         let reopened = Spool::open(spool.dir()).expect("reopens");
         assert!(!leftover.exists(), "the sweep removed it");
         assert!(reopened.names().expect("lists").is_empty());
+    }
+
+    /// A file sealed in one pass is written to temp paths and adopted under
+    /// its names once they are known; an unadopted temp is swept.
+    #[test]
+    fn a_temp_part_is_adopted_under_its_name_or_swept() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let spool = Spool::open(dir.path().join("s.spool")).expect("opens");
+        let kept = spool.temp_path("photo", 0);
+        let lost = spool.temp_path("photo", 1);
+        fs::write(&kept, b"sealed part 0").expect("writes");
+        fs::write(&lost, b"a crash left this").expect("writes");
+        let name = name_of("photo part 0");
+        assert_eq!(
+            spool.adopt(&kept, &name).expect("adopts"),
+            spool.path(&name)
+        );
+        assert_eq!(spool.names().expect("lists"), vec![name]);
+        assert_eq!(spool.bytes().expect("sums"), 13, "a temp is not a part");
+        Spool::open(spool.dir()).expect("reopens");
+        assert!(!lost.exists(), "the sweep removed it");
+        assert!(spool.contains(&name));
     }
 
     #[test]
