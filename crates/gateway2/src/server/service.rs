@@ -62,6 +62,21 @@ pub const DEFAULT_LABEL: &str = "dev.centraid.gateway2";
 /// directory the only writable path. `AF_NETLINK` is allowed beside the
 /// internet families because listing the interface addresses the pairing QR
 /// and the Bonjour advertisement carry is a netlink query on Linux.
+///
+/// **THE HOME DIRECTORY IS AN EMPTY TMPFS WITH TWO HOLES, NOT `true`.** A
+/// user unit's data directory is usually under `~`, and so is a
+/// `cargo install`ed binary. `ProtectHome=true` makes `/home` inaccessible,
+/// and systemd drops every mount beneath an inaccessible path — a
+/// `ReadWritePaths=` under it included (`drop_inaccessible` in
+/// `src/core/namespace.c`) — so that unit could never start with its data
+/// directory at home: the copy in `crates/gateway-server` has this defect.
+/// `ProtectHome=tmpfs` hides the rest of the home just as well, and
+/// `BindPaths=` and `BindReadOnlyPaths=` put back exactly the data directory
+/// and the binary. `install` creates the data directory first, because
+/// every one of those lines refuses a path that does not exist.
+///
+/// `StartLimitIntervalSec=` and `StartLimitBurst=` are `[Unit]` keys: under
+/// `[Service]` systemd ignores the first with a warning.
 #[must_use]
 pub fn systemd_unit(spec: &UnitSpec) -> String {
     let mut out = String::new();
@@ -69,6 +84,8 @@ pub fn systemd_unit(spec: &UnitSpec) -> String {
     let _ = writeln!(out, "Description=Centraid gateway ({})", spec.label);
     let _ = writeln!(out, "After=network-online.target");
     let _ = writeln!(out, "Wants=network-online.target");
+    let _ = writeln!(out, "StartLimitIntervalSec=600");
+    let _ = writeln!(out, "StartLimitBurst=10");
     let _ = writeln!(out);
     let _ = writeln!(out, "[Service]");
     let _ = writeln!(out, "Type=simple");
@@ -84,9 +101,12 @@ pub fn systemd_unit(spec: &UnitSpec) -> String {
     );
     let _ = writeln!(out, "Restart=on-failure");
     let _ = writeln!(out, "RestartSec=5");
-    let _ = writeln!(out, "StartLimitIntervalSec=600");
-    let _ = writeln!(out, "StartLimitBurst=10");
-    let _ = writeln!(out, "WorkingDirectory={}", spec.data_dir.display());
+    let _ = writeln!(
+        out,
+        "WorkingDirectory={}",
+        spec.data_dir.display().to_string().replace('%', "%%")
+    );
+    let _ = writeln!(out, "UMask=0077");
     let _ = writeln!(out);
     let _ = writeln!(out, "# The gateway is blind and reachable. Everything it");
     let _ = writeln!(out, "# provably does not need is taken away here.");
@@ -94,7 +114,9 @@ pub fn systemd_unit(spec: &UnitSpec) -> String {
     let _ = writeln!(out, "PrivateTmp=true");
     let _ = writeln!(out, "PrivateDevices=true");
     let _ = writeln!(out, "ProtectSystem=strict");
-    let _ = writeln!(out, "ProtectHome=true");
+    let _ = writeln!(out, "ProtectHome=tmpfs");
+    let _ = writeln!(out, "BindPaths={}", path_word(&spec.data_dir));
+    let _ = writeln!(out, "BindReadOnlyPaths={}", path_word(&spec.program));
     let _ = writeln!(out, "ProtectKernelTunables=true");
     let _ = writeln!(out, "ProtectKernelModules=true");
     let _ = writeln!(out, "ProtectControlGroups=true");
@@ -108,7 +130,7 @@ pub fn systemd_unit(spec: &UnitSpec) -> String {
     let _ = writeln!(out, "MemoryDenyWriteExecute=true");
     let _ = writeln!(out, "SystemCallArchitectures=native");
     let _ = writeln!(out, "SystemCallFilter=@system-service");
-    let _ = writeln!(out, "ReadWritePaths={}", spec.data_dir.display());
+    let _ = writeln!(out, "ReadWritePaths={}", path_word(&spec.data_dir));
     let _ = writeln!(out);
     let _ = writeln!(out, "[Install]");
     let _ = writeln!(out, "WantedBy=default.target");
@@ -199,7 +221,8 @@ pub fn install(platform: Platform, spec: &UnitSpec, home: &Path) -> std::io::Res
     Ok(path)
 }
 
-/// Shell-quote one systemd `ExecStart` word.
+/// Quote one systemd `ExecStart` word. A `%` is doubled, or systemd would
+/// read it as a specifier.
 fn quote(word: &str) -> String {
     if word
         .chars()
@@ -207,7 +230,32 @@ fn quote(word: &str) -> String {
     {
         return word.to_owned();
     }
-    format!("\"{}\"", word.replace('\\', "\\\\").replace('"', "\\\""))
+    escaped(word)
+}
+
+/// Quote one path for `BindPaths=`, `BindReadOnlyPaths=` and
+/// `ReadWritePaths=`, where a space separates paths and a colon separates a
+/// bind's source from its destination: anything but a plain path is quoted.
+fn path_word(path: &Path) -> String {
+    let text = path.display().to_string();
+    if text
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_' | '.'))
+    {
+        return text;
+    }
+    escaped(&text)
+}
+
+/// `text` in double quotes, with what systemd would otherwise read inside
+/// them escaped.
+fn escaped(text: &str) -> String {
+    format!(
+        "\"{}\"",
+        text.replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('%', "%%")
+    )
 }
 
 /// XML-escape one plist string.
@@ -269,6 +317,65 @@ mod tests {
         let written = install(Platform::Systemd, &spec(), home.path()).expect("installs");
         assert_eq!(written, path);
         assert_eq!(std::fs::read_to_string(&written).expect("reads"), text);
+    }
+
+    /// The unit a member gets from `install --data-dir ~/centraid-gateway`
+    /// with a `cargo install`ed binary: the home is hidden, and exactly the
+    /// data directory and the binary are put back into it.
+    #[test]
+    fn a_data_directory_at_home_is_bound_into_the_hidden_home() {
+        let mut at_home = spec();
+        at_home.program = PathBuf::from("/home/ada/.cargo/bin/centraid-gateway2");
+        at_home.data_dir = PathBuf::from("/home/ada/centraid-gateway");
+        let unit = systemd_unit(&at_home);
+        for line in [
+            "ProtectHome=tmpfs",
+            "BindPaths=/home/ada/centraid-gateway",
+            "BindReadOnlyPaths=/home/ada/.cargo/bin/centraid-gateway2",
+            "ReadWritePaths=/home/ada/centraid-gateway",
+            "WorkingDirectory=/home/ada/centraid-gateway",
+            "UMask=0077",
+        ] {
+            assert!(unit.lines().any(|held| held == line), "{line} in\n{unit}");
+        }
+        assert!(
+            !unit.contains("ProtectHome=true"),
+            "an inaccessible home masks every path beneath it:\n{unit}"
+        );
+    }
+
+    /// `StartLimitIntervalSec=` under `[Service]` is ignored with a warning.
+    #[test]
+    fn the_start_limits_are_unit_keys() {
+        let unit = systemd_unit(&spec());
+        let section_of = |key: &str| {
+            let mut section = "";
+            for line in unit.lines() {
+                if line.starts_with('[') {
+                    section = line;
+                } else if line.starts_with(key) {
+                    return section;
+                }
+            }
+            "nowhere"
+        };
+        assert_eq!(section_of("StartLimitIntervalSec="), "[Unit]");
+        assert_eq!(section_of("StartLimitBurst="), "[Unit]");
+    }
+
+    /// A path with a space, a colon or a percent sign stays one path.
+    #[test]
+    fn an_awkward_data_directory_is_one_path_to_systemd() {
+        let mut awkward = spec();
+        awkward.data_dir = PathBuf::from("/srv/my vault:100%");
+        let unit = systemd_unit(&awkward);
+        for line in [
+            "BindPaths=\"/srv/my vault:100%%\"",
+            "ReadWritePaths=\"/srv/my vault:100%%\"",
+            "WorkingDirectory=/srv/my vault:100%%",
+        ] {
+            assert!(unit.lines().any(|held| held == line), "{line} in\n{unit}");
+        }
     }
 
     #[test]
