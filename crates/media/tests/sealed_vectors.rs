@@ -1,18 +1,20 @@
 //! `centraid-sealed/2`'s vectors — `contracts/crypto/sealed-vectors.json`
-//! ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
+//! ([#1080](https://github.com/srikanth235/centraid/issues/1080), A8).
 //!
 //! ## HALF OF THIS FILE IS COMPARED AND HALF IS OPENED
 //!
 //! **Compared**: everything the format DETERMINES from a fixed root key — the
-//! two derived keys, names for several `(h, i)`, their object keys, part
-//! counts and lengths, an encoded header, and the sealed length of an
-//! uncompressed payload at each chunk boundary. A context string, a field
-//! order, the preimage layout or the framing that moved moves a value here.
+//! two derived keys, names for several `(h, i)`, the part key a fixed salt
+//! derives, part counts and lengths, an encoded header, and the sealed length
+//! of an uncompressed payload at each chunk boundary. A context string, the
+//! key material's order, the name preimage, the header layout or the framing
+//! that moved moves a value here.
 //!
-//! **Opened**: sealing draws random nonces, so the committed `sealedBase64`
-//! samples cannot be reproduced and are instead decrypted under their names
-//! and checked against their plaintext and their recorded digest. That pins the
-//! READER against bytes this build did not just produce.
+//! **Opened**: sealing draws a random salt and random nonces, so the committed
+//! `sealedBase64` samples cannot be reproduced and are instead opened with the
+//! keys alone, checked against the name they are stored under, their plaintext
+//! and their recorded digest. That pins the READER against bytes this build did
+//! not just produce.
 //!
 //! `CENTRAID_UPDATE_FIXTURES=1` regenerates the file; the comparison runs
 //! either way, so the variable is a generator and never a way to go green.
@@ -21,7 +23,8 @@
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use centraid_media::sealed::{
-    self, BackupKeys, CHUNK_BYTES, Digest, FORMAT_NAME, Header, Name, PART_BYTES, PlaintextHash,
+    self, BackupKeys, CHUNK_BYTES, Digest, FORMAT_NAME, HEADER_BYTES, Header, Name, PART_BYTES,
+    PlaintextHash, SALT_BYTES,
 };
 use serde_json::{Value, json};
 
@@ -92,15 +95,16 @@ fn the_committed_sealed_vectors_open_and_are_what_this_build_derives() {
         committed, regenerated,
         "contracts/crypto/sealed-vectors.json is not what this build derives. \
          Every field except `sealedBase64` is DETERMINED by the format — a \
-         context string, the name preimage, the header layout or the framing \
-         moved. Regenerate with CENTRAID_UPDATE_FIXTURES=1 when that is what you \
-         meant, and say so in the receipt."
+         context string, the key material, the name preimage, the header layout \
+         or the framing moved. Regenerate with CENTRAID_UPDATE_FIXTURES=1 when \
+         that is what you meant, and say so in the receipt."
     );
 
     open_every_committed_sample(&committed);
 }
 
-/// The half a derivation cannot reach: the committed ciphertext still opens.
+/// The half a derivation cannot reach: the committed ciphertext still opens,
+/// under the keys alone, as the file its name was derived for.
 fn open_every_committed_sample(committed: &Value) {
     let keys = keys();
     let samples = committed["samples"].as_array().expect("samples");
@@ -118,11 +122,12 @@ fn open_every_committed_sample(committed: &Value) {
         let plaintext = STANDARD
             .decode(sample["plaintextBase64"].as_str().expect("plaintext"))
             .expect("base64");
-        let opened = sealed::open_part(&keys, &name, &sealed)
+        let opened = sealed::open_whole(&keys, &name, &sealed)
             .unwrap_or_else(|error| panic!("{label} no longer opens: {error}"));
-        assert_eq!(opened.plaintext, plaintext, "{label}");
+        assert_eq!(opened, plaintext, "{label}");
+        let header = sealed::open_part(&keys, &sealed).expect("opens").header;
         assert_eq!(
-            opened.header.compressed,
+            header.compressed,
             sample["compressed"].as_bool().expect("a flag"),
             "{label}"
         );
@@ -154,15 +159,23 @@ fn generate(committed: &Value, refresh: bool) -> Value {
     .into_iter()
     .map(|(label, index)| {
         let h = hash_of(label);
-        let name = sealed::name(&keys, &h, index);
         json!({
             "h": h.to_hex(),
             "partIndex": index,
-            "name": name.to_hex(),
-            "objectKey": hex::encode(sealed::object_key(&keys, &name)),
+            "name": sealed::name(&keys, &h, index).to_hex(),
         })
     })
     .collect();
+
+    let part_keys: Vec<Value> = [[0_u8; SALT_BYTES], [0xa5; SALT_BYTES]]
+        .iter()
+        .map(|salt| {
+            json!({
+                "salt": hex::encode(salt),
+                "key": hex::encode(sealed::part_key(&keys, salt)),
+            })
+        })
+        .collect();
 
     let parts: Vec<Value> = [0, 1, 64 * mib - 1, 64 * mib, 64 * mib + 1, 200 * mib]
         .into_iter()
@@ -180,15 +193,17 @@ fn generate(committed: &Value, refresh: bool) -> Value {
         })
         .collect();
 
-    let header = Header::for_part(hash_of("header"), 200 * mib, 3, true).expect("a header");
+    let header = Header {
+        compressed: true,
+        part_index: 3,
+        part_len: 8 * 1024 * 1024,
+        salt: std::array::from_fn(|index| u8::try_from(0xf0 + index).expect("a byte")),
+    };
 
     let framing: Vec<Value> = [0_usize, 1, CHUNK_BYTES, CHUNK_BYTES + 1]
         .into_iter()
         .map(|len| {
-            let plaintext = vec![0x5a_u8; len];
-            let h = PlaintextHash::of(&plaintext);
-            let sealed =
-                sealed::seal_part(&keys, &h, len as u64, 0, &plaintext, false).expect("seals");
+            let sealed = sealed::seal_part(&keys, 0, &vec![0x5a_u8; len], false).expect("seals");
             json!({ "payloadLen": len, "sealedLen": sealed.len() })
         })
         .collect();
@@ -206,8 +221,7 @@ fn generate(committed: &Value, refresh: bool) -> Value {
                 .and_then(|sample| sample["sealedBase64"].as_str())
                 .and_then(|text| STANDARD.decode(text).ok());
             let sealed = carried.unwrap_or_else(|| {
-                sealed::seal_part(&keys, &h, plaintext.len() as u64, 0, &plaintext, compress)
-                    .expect("seals")
+                sealed::seal_part(&keys, 0, &plaintext, compress).expect("seals")
             });
             json!({
                 "label": label,
@@ -223,19 +237,20 @@ fn generate(committed: &Value, refresh: bool) -> Value {
 
     json!({
         "format": FORMAT_NAME,
+        "headerBytes": HEADER_BYTES,
         "partBytes": PART_BYTES,
         "chunkBytes": CHUNK_BYTES,
         "root": hex::encode(root()),
         "kBackup": hex::encode(keys.k_backup()),
         "kName": hex::encode(keys.k_name()),
         "names": names,
+        "partKeys": part_keys,
         "parts": parts,
         "header": {
-            "h": header.plaintext_hash.to_hex(),
-            "fileLen": header.file_len,
+            "compressed": header.compressed,
             "partIndex": header.part_index,
             "partLen": header.part_len,
-            "compressed": header.compressed,
+            "salt": hex::encode(header.salt),
             "hex": hex::encode(header.encode()),
         },
         "framing": framing,

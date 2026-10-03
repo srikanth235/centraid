@@ -1,11 +1,12 @@
 //! The vault's side of `centraid-sealed/2`'s naming (#1080 ruling 4).
 //!
-//! **The database plus the words is the whole index.** A part's name and key
-//! both derive from the vault's backup key and the plaintext hash of the file
-//! it belongs to, and the vault already stores that hash for every content
-//! item and every derivative. So the names a vault's content implies are
-//! computed, never recorded: [`content_names`] is the list a phone asks
-//! `exists` about and the list garbage collection keeps.
+//! **The database plus the words is the whole index.** A part's name derives
+//! from the vault's backup key and the plaintext hash of the file it belongs
+//! to, its key from the backup key and the salt in its own header, and the
+//! vault already stores that hash for every content item and every
+//! derivative. So the names a vault's content implies are computed, never
+//! recorded: [`content_names`] is the list a phone asks `exists` about and the
+//! list garbage collection keeps.
 //!
 //! ## THE ROOT KEY ARRIVES AS BYTES
 //!
@@ -18,7 +19,7 @@
 use std::collections::BTreeSet;
 
 pub use centraid_media::sealed::{
-    BackupKeys, Digest, Name, PART_BYTES, PlaintextHash, name, names_of, object_key, part_count,
+    BackupKeys, Digest, Name, PART_BYTES, PlaintextHash, name, names_of, part_count,
 };
 
 use super::{Result, invariant};
