@@ -5,7 +5,12 @@ import Photos
 import PhotosUI
 import SwiftUI
 
-/// THE CAMERA-ROLL BACKUP'S OWN SURFACE (#1025 S6, D-1025-S7-75).
+/// THE CAMERA-ROLL IMPORT'S OWN SURFACE (#1025 S6, D-1025-S7-75).
+///
+/// **An import, not the backup** (#1080). It brings the camera roll into this
+/// vault and says so; where the backup to a gateway stands is Home's backup
+/// line and the Backup screen (`BackupViews.swift`), read from
+/// `backup_status`, and nothing here claims a gateway holds anything.
 ///
 /// Its own file, and not a `VStack` inside `PhotosGridView`, because it is the
 /// other PLANE on that screen: the grid reads the vault, this reads the camera
@@ -27,7 +32,7 @@ import SwiftUI
 /// * **"Manage selection"** — only when the grant is `limited`, and it is
 ///   `presentLimitedLibraryPicker`, the member editing their own selection.
 ///   This is the honest half of calling `LIMITED` a first-class state: saying
-///   "Centraid backs up the photos you selected" while offering no way to
+///   "Centraid imports the photos you selected" while offering no way to
 ///   select more would be a statement with no remedy attached.
 /// * **"Import now"** — a pass, when one is not already running.
 ///

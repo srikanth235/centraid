@@ -39,8 +39,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import centraid.screen.v1.HomeEvent
-import dev.centraid.shared.platform.SyncPass
-import dev.centraid.shared.sync.DrainPass
+import dev.centraid.android.backup.ProcessSession
+import dev.centraid.android.screens.backup.BackupSheets
+import dev.centraid.android.screens.backup.writeTransferRule
 import dev.centraid.android.kit.MakeVaultSheet
 import dev.centraid.android.kit.TransferRulesSheet
 import dev.centraid.android.screens.HomeScreen
@@ -124,6 +125,9 @@ public class MainActivity : FragmentActivity() {
     /** THE 24 WORDS' SHEETS (#1047 E3), over every screen. See `WordsSheets`. */
     private val words: WordsSheets by lazy { WordsSheets(onEnterClosed = { locker.reattach(this) }) }
 
+    /** THE BACKUP SCREEN'S SHEET (#1080), over every screen. See `BackupSheets`. */
+    private val backupSheet: BackupSheets by lazy { BackupSheets() }
+
     /**
      * THE OS ASKING FOR MEMORY BACK (#1025 S7-13, ruling F).
      *
@@ -173,21 +177,11 @@ public class MainActivity : FragmentActivity() {
         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { open.rest() }
     }
 
-    override fun onDestroy() {
-        // The core is a HANDLE and it is released here. One core per device
-        // process (R-1020-24), so an activity that leaked one would refuse to
-        // open the next.
-        // CLOSED ON A SCOPE OF ITS OWN, because closing N cores is N ABI calls
-        // and `centraid_close` does not belong on the UI thread.
-        val going = session
-        session = null
-        if (going != null) {
-            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                going.close()
-            }
-        }
-        super.onDestroy()
-    }
+    // `onDestroy` NO LONGER CLOSES THE SESSION (#1080). The session is the
+    // PROCESS's ([ProcessSession]); this activity's hold on it is released by
+    // the composition that took it, when the composition is disposed — so a
+    // pass a job or a worker is running finishes its part rather than losing
+    // its core under it, and the last holder's release is what closes it.
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -227,12 +221,12 @@ public class MainActivity : FragmentActivity() {
             }
         }
         // WHERE THIS DEVICE'S VAULTS LIVE, as a DIRECTORY and not a list of
-        // paths (#1025 S5). The shell used to enumerate whatever `.db` files
-        // had been placed in `filesDir` and hand the list over; a device makes
-        // its own vaults now, so what it knows is where they go and `Shelf`
-        // opens every file it finds. An empty directory is the ordinary first
-        // run.
-        val vaultDir = filesDir.absolutePath
+        // paths (#1025 S5): `filesDir`, which `ProcessSession` opens for this
+        // activity and for every background pass alike. The shell used to
+        // enumerate whatever `.db` files had been placed there and hand the
+        // list over; a device makes its own vaults now, so what it knows is
+        // where they go and `Shelf` opens every file it finds. An empty
+        // directory is the ordinary first run.
         // THE DEMO VAULT'S SEED, HANDED TO A DEBUG BUILD AT LAUNCH (#1047 W2).
         // `mobile/scripts/demo-vault.sh android` starts the activity with the
         // seed `seed-demo-vault` printed as `CENTRAID_DEMO_SEED` — the public
@@ -257,38 +251,23 @@ public class MainActivity : FragmentActivity() {
                 // first composition already has a value to draw and the open
                 // runs on the IO dispatcher exactly once.
                 val homeSession by androidx.compose.runtime.produceState<HomeSession?>(null) {
-                    value = HomeSession.open(
-                        vaultDir = vaultDir,
-                        services = platformServices(),
-                        dispatcher = Dispatchers.IO,
-                        uiThreadName = Thread.currentThread().name,
-                        devSeed = devSeed,
-                    ).also { opened ->
+                    // THE PROCESS'S ONE SESSION (#1080): opened here or by a
+                    // background pass that got there first, and held for as
+                    // long as this composition lives — over `filesDir`, the
+                    // one directory the passes open too. The
+                    // pass the OS runs is installed by `CentraidApplication`,
+                    // not here, so a window that wakes the app with no activity
+                    // still has a body to run.
+                    //
+                    // NOT CANCELLABLE WHILE IT OPENS, and released in `finally`:
+                    // a composition disposed mid-open (a fast rotation) still
+                    // gets its hold back and gives it up, so the count never
+                    // keeps a session open for an activity that is gone.
+                    val opened = withContext(kotlinx.coroutines.NonCancellable) {
+                        ProcessSession.acquire(applicationContext, devSeed)
+                    }
+                    try {
                         session = opened
-                        // THE BACKGROUND WINDOW NOW HAS SOMETHING TO RUN
-                        // (#1029 W18-6). `AndroidBackgroundTasks.register()`
-                        // enqueues `CentraidSyncWorker` every 15 minutes and
-                        // that worker runs `SyncPass.installed` — which was
-                        // null on every device, so every window was a
-                        // `Result.success()` over nothing. This is the install.
-                        //
-                        // **WorkManager's stop signal IS the deadline.** A
-                        // worker gets about ten minutes before `onStopped`, so
-                        // the budget is that minus a margin to finish the
-                        // object in flight; a drain stopped short resumes next
-                        // window, because the spool never loses a sealed
-                        // object.
-                        SyncPass.install {
-                            opened.drain.run(SyncPass.WORK_MANAGER_BUDGET_MS)
-                                .all { outcome ->
-                                    val done = outcome.outcome
-                                    done is DrainPass.Outcome.Ran && done.answer.drained
-                                }
-                        }
-                        // AND THE FIRST FOREGROUND PASS, which `onResume` below
-                        // would otherwise miss: the activity resumed before the
-                        // session existed.
-                        opened.drain.onBecameActive()
                         // THE APP SCREENS GO ON THE SAME CORE (#1025 S5, lane
                         // L5). R-1020-24 is one core per VAULT FILE, so every app
                         // reads through the handle this session holds rather than
@@ -298,6 +277,18 @@ public class MainActivity : FragmentActivity() {
                         // without a tap — and a host routed twice re-reads twice.
                         routes.forEach { it.attach(opened, scope) }
                         words.attach(opened, scope)
+                        backupSheet.attach(opened)
+                        value = opened
+                        // AND THE FIRST FOREGROUND PASS, which `onResume` would
+                        // otherwise miss: the activity resumed before the session
+                        // existed. LAUNCHED, NOT AWAITED (#1080): a pass now takes
+                        // a snapshot and seals what is new, and Home does not wait
+                        // for a backup to draw.
+                        launch { opened.drain.onBecameActive() }
+                        kotlinx.coroutines.awaitCancellation()
+                    } finally {
+                        session = null
+                        ProcessSession.release()
                     }
                 }
                 // BACK IS THE STACK'S, AND A BAND IS NOT A STEP IN IT.
@@ -452,6 +443,8 @@ public class MainActivity : FragmentActivity() {
                                 camera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY),
                             )
                         },
+                        // HOME'S BACKUP LINE OPENS THE BACKUP SCREEN (#1080).
+                        onOpenBackup = { backupSheet.open() },
                     )
                     if (vaultSheetOpen) {
                         ModalBottomSheet(onDismissRequest = { vaultSheetOpen = false }) {
@@ -489,19 +482,16 @@ public class MainActivity : FragmentActivity() {
                                 selected = rule,
                                 onPick = { picked ->
                                     scope.launch {
-                                        val settled = TransferRule.of(picked)
-                                        TransferRule.write(
-                                            platformServices().secureStore,
-                                            settled,
-                                        )
                                         // WHAT THE STORE HOLDS, and not
                                         // what was tapped: an unknown word
                                         // settles to the conservative
                                         // default, and a tick the next
                                         // launch would not draw is worse
                                         // than a tap that appears to do
-                                        // nothing.
-                                        rule = settled.stored
+                                        // nothing. The background windows
+                                        // are asked for again under it
+                                        // (#1080), as from the Backup screen.
+                                        rule = writeTransferRule(session, picked)
                                     }
                                 },
                             )
@@ -510,6 +500,15 @@ public class MainActivity : FragmentActivity() {
                 }
                 // THE 24 WORDS' SHEET, over whatever is drawn (#1047 E3).
                 words.Sheets()
+                // THE BACKUP SCREEN (#1080). "Add a gateway" is pairing: the
+                // Backup sheet closes and pair.laptop opens in its place.
+                backupSheet.Sheet(
+                    onAddDestination = {
+                        words.openPair(
+                            camera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY),
+                        )
+                    },
+                )
                 }
             }
         }

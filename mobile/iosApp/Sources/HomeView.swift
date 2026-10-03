@@ -29,6 +29,11 @@ struct HomeView: View {
             // drawn above the three-branch switch on purpose: a Home that
             // failed to read still has to say which vault failed.
             VaultHeader(vault: home.vault, shell: shell)
+            // THE BACKUP LINE (#1080): where this vault's backup stands, in
+            // the machine's words, and the door to the Backup screen. It is
+            // the backup's and not the lockup's: the lockup says where the
+            // VAULT is, and the phone is the vault.
+            BackupLineView(line: home.backupLine) { shell.openBackup() }
             HomeTitleRow { shell.vaultSheetOpen = true }
             StatusRibbon(status: home.data.status, shell: shell)
 
