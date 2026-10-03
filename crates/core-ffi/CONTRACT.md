@@ -174,6 +174,14 @@ Test: `the_app_queries_round_trip_through_call` (and, below the ABI, `crates/cor
 
 Test: `the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault` (and, below the ABI, `crates/core/src/phone/phrase.rs`)
 
+## 4g. The backup plane's six doors are request kinds, and say "not yet" until the plane lands
+
+`handoff` (23), `settle` (24), `fetch_original` (25), `pins` (26), `reconcile` (27) and `forget_destination` (28) are the doors [#1080](https://github.com/srikanth235/centraid/issues/1080) adds beside `drain`, and `phone.proto` states each one's shape. `fetch_original` is **unbounded** and cancellable, because an original is as long as it is; the other five are **bounded**.
+
+Until #1080's cut-over lands the plane behind them, each of the six answers `CENTRAID_OK` with an `Error` body carrying `ERROR_CODE_NOT_YET_AVAILABLE` — never an empty answer, which would read as "nothing waiting" or "no gateway paired". The new request fields that need the plane are refused the same way rather than ignored: a `restore` carrying a `payload`, and a stage `begin` naming `STAGE_SOURCE_OS_LIBRARY`, an `os_ref`, a `for_hash` or a `tier`. A stage `source` this build has no name for is `INVALID_REQUEST`. The other new fields of `DrainRequest` are the cut-over's pass to read; the pass before it moves only the vault's own objects, which no rule or link state withholds. Every new answer field stays at its default, except `ContentUrl.source`: `STORE` beside a path and `NONE` without one.
+
+Test: `the_backup_plane_doors_are_request_kinds_and_not_yet_available` (and, below the ABI, `crates/core/src/handle.rs`)
+
 ## 5. `next_event` surfaces bounded-queue backpressure as a health event
 
 The event queue is bounded at 1024 and **drops nothing**. When it fills, sync stalls and a `HealthEvent { stalled: true, queue_depth, capacity, behind }` reaches the shell — later, on the first slot a drain frees, if the queue is full of change events, because a change event may not be dropped to make room for the report.
