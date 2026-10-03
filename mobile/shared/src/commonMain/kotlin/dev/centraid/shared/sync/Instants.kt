@@ -6,9 +6,9 @@ import dev.centraid.shared.kit.time.floorDiv
 /**
  * EPOCH MILLISECONDS AS AN RFC 3339 INSTANT, IN UTC (#1029 W5).
  *
- * `commonMain` has no calendar. The gateway's refusals and the lease speak
- * `int64` milliseconds since the Unix epoch (`lease.proto`, `gateway.proto`)
- * and `Shelf.Moved.atIso` wants RFC 3339, because `Shelf.Holding.frozenLine`
+ * `commonMain` has no calendar. A gateway and the core's backup ledger speak
+ * `int64` milliseconds since the Unix epoch (`phone.proto`, `error.proto`'s
+ * `VaultMoved`) and `Shelf.Moved.atIso` wants RFC 3339, because `Shelf.Holding.frozenLine`
  * takes its first ten characters as the date part. Something has to do the
  * conversion.
  *
