@@ -114,25 +114,36 @@ jobs:
       # is red with no evidence (gate.yml's backstop comment, #557).
       fail-fast: false
       matrix:
+        # `gateway` says whether the leg also ships `centraid-gateway` (#1080):
+        # the member's laptop or VPS runs it, and `centraid-gateway install`
+        # writes a systemd or launchd unit, so the Linux and macOS tarballs
+        # carry it beside `centraid`. Windows has no unit writer yet, so its
+        # tarball carries the operator binary alone until that lands.
         include:
           - triple: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
             required: true
+            gateway: true
           - triple: aarch64-unknown-linux-gnu
             runner: ubuntu-24.04-arm
             required: false
+            gateway: true
           - triple: aarch64-apple-darwin
             runner: macos-latest
             required: true
+            gateway: true
           - triple: x86_64-apple-darwin
             runner: macos-15-intel
             required: false
+            gateway: true
           - triple: x86_64-pc-windows-msvc
             runner: windows-latest
             required: true
+            gateway: false
           - triple: aarch64-pc-windows-msvc
             runner: windows-11-arm
             required: false
+            gateway: false
     steps:
       - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         if: runner.os == 'Linux'
@@ -187,7 +198,7 @@ jobs:
         env:
           CENTRAID_BUILD_GIT_SHA: ${{ github.sha }}
           CENTRAID_BUILD_DIGEST: ${{ steps.key.outputs.key }}
-        run: cargo build --profile dist --bin centraid --target '${{ matrix.triple }}'
+        run: cargo build --profile dist --bin centraid ${{ matrix.gateway && '--bin centraid-gateway' || '' }} --target '${{ matrix.triple }}'
       # SYMBOLS FIRST, THEN STRIP. The other order throws them away.
       - name: Collect the symbol file and strip the binary
         shell: bash
@@ -202,16 +213,25 @@ jobs:
           # cargo produced, rather than running objcopy/dsymutil here, is what
           # keeps the symbol file and the binary from being derived by two
           # different tools at two different times.
+          # Every binary the leg built, the same way: `centraid`, and on a leg
+          # with `gateway: true` the gateway beside it (deploy/vps/install.sh
+          # looks for `centraid-gateway` at the tarball's root).
+          bins="centraid"
+          if [ "${{ matrix.gateway }}" = "true" ]; then bins="centraid centraid-gateway"; fi
           case "${{ runner.os }}" in
             Linux)
-              cp "$built/centraid" "$out/centraid"
-              cp "$built/centraid.dwp" "$out/centraid.dwp"
-              objcopy --strip-debug "$out/centraid"
+              for bin in $bins; do
+                cp "$built/$bin" "$out/$bin"
+                cp "$built/$bin.dwp" "$out/$bin.dwp"
+                objcopy --strip-debug "$out/$bin"
+              done
               ;;
             macOS)
-              cp "$built/centraid" "$out/centraid"
-              cp -R "$built/centraid.dSYM" "$out/centraid.dSYM"
-              strip -S "$out/centraid"
+              for bin in $bins; do
+                cp "$built/$bin" "$out/$bin"
+                cp -R "$built/$bin.dSYM" "$out/$bin.dSYM"
+                strip -S "$out/$bin"
+              done
               ;;
             Windows)
               cp "$built/centraid.exe" "$out/centraid.exe"
