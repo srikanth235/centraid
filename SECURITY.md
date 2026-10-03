@@ -47,13 +47,13 @@ There is **no multi-tenant server, no Centraid-operated cloud, and no account.**
 
 ### What the phone accepts: nothing
 
-**The phone dials; it accepts no inbound connection.** It opens no listening socket and never calls `accept`. This is a structural rule rather than a convention: `cargo xtask rules`' `no-listening-socket` scans the whole workspace for a listener or an accept. The one exemption is `crates/gateway/src/server/serve.rs`, a gateway's listener — its Bonjour advertisement included, because answering a LAN's queries is listening — and the rule still scans every other file in that crate. The phone's one LAN act is a Bonjour browse for `_centraid-gateway._tcp` while the app is open: a query and its answers, not a listener.
+**The phone dials; it accepts no inbound connection.** It opens no listening socket and never calls `accept`. This is a structural rule rather than a convention: `cargo xtask rules`' `no-listening-socket` scans the whole workspace for a listener or an accept. The one exemption is `crates/gateway/src/server/serve.rs`, a gateway's listener — its Bonjour advertisement included, because answering a LAN's queries is listening — and the rule still scans every other file in that crate. The phone's one LAN act is to dial the gateway's `<host>.local` name from the pairing record, which Bonjour resolves: a query and its answers, not a listener. No shell browses for `_centraid-gateway._tcp` yet ([Q-1080-D3](docs/decisions.md#backups-from-first-principles-1080)).
 
 That is a security property and also the shape of v0: with no client but the phone there is no accept loop to get wrong. It is the deferral recorded as [R-1029-1](docs/decisions.md#the-phone-is-the-vault--v0-1029-ruled-2026-09-21), not an accident of scope.
 
 ### No third party in the path
 
-**There is no relay, no DNS service, no certificate authority and no Centraid-operated service between a phone and its gateway** ([R-1080-1](docs/decisions.md#backups-from-first-principles-1080)). The phone dials an address the pairing QR listed, its `.local` name first, and trusts exactly the certificate whose fingerprint it scanned; a proxy that terminates TLS is refused like any impostor. What the network path sees is TLS between two addresses, its timing and its volume.
+**There is no relay, no DNS service, no certificate authority and no Centraid-operated service between a phone and its gateway** ([R-1080-1](docs/decisions.md#backups-from-first-principles-1080)). The phone dials an address the pairing QR listed, its `.local` name among them, and trusts exactly the certificate whose fingerprint it scanned; a proxy that terminates TLS is refused like any impostor. What the network path sees is TLS between two addresses, its timing and its volume.
 
 ### What a malicious gateway can do
 
