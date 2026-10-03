@@ -69,7 +69,9 @@ centraid-identity = { path = "../identity" }
 # preimage, the refusal codes — so a phone and a gateway cannot disagree about
 # either. The client feature alone: a phone links no listener, no SQLite of the
 # gateway's and no certificate minting.
-centraid-gateway2 = { path = "../gateway2", default-features = false, features = ["client"] }
+centraid-gateway2 = { path = "../gateway2", default-features = false, features = [
+  "client",
+] }
 # THE SEALED FORMAT (#1080, `centraid-sealed/2`): a part is sealed straight
 # into the spool, and a fetched one opened and checked against its hash.
 centraid-media = { path = "../media" }
