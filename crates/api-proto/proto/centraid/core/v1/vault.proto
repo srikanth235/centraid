@@ -46,9 +46,8 @@ message FoundRequest {
   // only party in a fresh vault.
   //
   // THERE IS NO EMAIL ADDRESS, NO PHONE NUMBER AND NO ACCOUNT HERE, and there
-  // is nowhere for one to arrive (`lease.proto`'s header states the same rule
-  // for the gateway plane). A display name is what the owner is called on their
-  // own device.
+  // is nowhere for one to arrive. A display name is what the owner is called
+  // on their own device.
   string owner_name = 2;
 }
 

@@ -1,4 +1,4 @@
-//! WHAT REPLACED THE SESSION CAPTURE: an `update_hook` and a running census
+//! WHAT REPLACED THE SESSION CAPTURE: an `update_hook`
 //! ([#1029](https://github.com/srikanth235/centraid/issues/1029) §1).
 //!
 //! The commit guard used to open one SQLite session per replicated table,
@@ -9,7 +9,7 @@
 //! touched**, so a screen knows to re-read.
 //!
 //! `CommitResult::tables` now comes from a rusqlite `update_hook` installed for
-//! the length of the commit. Three claims, and each is a way this could be
+//! the length of the commit. Two claims, and each is a way this could be
 //! wrong:
 //!
 //! 1. A commit that edited one table reports **that table only** — a hook that
@@ -19,10 +19,10 @@
 //!    transaction that did not happen is the failure mode the whole
 //!    never-drop-a-change-event design exists to avoid, wearing the opposite
 //!    face.
-//! 3. The census equals `SELECT count(*)`, table by table — it is the number
-//!    the phone-side shrink warning is computed from (#1029 F4), and a count
-//!    that disagreed with the file would fire on a vault that lost nothing, or
-//!    stay quiet on one that lost everything.
+//!
+//! The running row census that stood beside these (#1029 F4) is retired: a
+//! backup counts rows on its own scratch copy of the file, off the request
+//! path ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
 
 mod common;
 
@@ -147,64 +147,4 @@ fn a_rollback_reports_nothing_and_does_not_leak_into_the_next_commit() {
         "{:?}",
         after.tables
     );
-}
-
-/// THE RUNNING CENSUS EQUALS THE FILE (#1029 F4).
-///
-/// The shrink warning a phone shows — "the total is below half of what it was,
-/// or one app's rows are down more than 90%" — is computed from this, so it has
-/// to be `SELECT count(*)` and not an estimate.
-#[test]
-fn the_census_matches_a_count_of_every_table() {
-    let scratch = common::Scratch::founded("census-count").expect("a vault is founded");
-    scratch
-        .vault
-        .commit(|tx| {
-            tx.set_producer("test.census");
-            for index in 0..5 {
-                tx.connection().execute(
-                    "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
-                     VALUES (?1, 'person', ?2, ?3, ?3)",
-                    rusqlite::params![
-                        format!("p-{index}"),
-                        format!("Person {index}"),
-                        "2026-01-01T00:00:00.000Z"
-                    ],
-                )?;
-            }
-            Ok(())
-        })
-        .expect("the commit lands");
-
-    let census = scratch.vault.census().expect("the census reads");
-    assert!(!census.is_empty(), "a founded vault has tables");
-    assert!(
-        census
-            .iter()
-            .all(|(table, _)| !table.starts_with("sqlite_")),
-        "SQLite's own bookkeeping is not a member's rows"
-    );
-
-    // EVERY table, counted independently and compared. A census that skipped a
-    // table would make its whole app invisible to the shrink guard.
-    for (table, counted) in &census {
-        let actual: i64 = scratch
-            .vault
-            .read(|connection| {
-                Ok(connection.query_row(
-                    &format!("SELECT count(*) FROM \"{table}\""),
-                    [],
-                    |row| row.get(0),
-                )?)
-            })
-            .unwrap_or_else(|error| panic!("`{table}` would not count: {error}"));
-        assert_eq!(*counted, actual, "`{table}`");
-    }
-
-    let parties = census
-        .iter()
-        .find(|(table, _)| table == "core_party")
-        .map(|(_, count)| *count)
-        .expect("core_party is in the census");
-    assert!(parties >= 5, "the five parties are counted: {parties}");
 }

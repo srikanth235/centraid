@@ -5,8 +5,8 @@
 //! operator image's default command. The vault itself lives on the phone
 //! (#1029); the laptop's gateway holds only sealed objects and has no vault
 //! file for this to check. **One definition of "sound", not two**: it calls
-//! `centraid_vault::backup::restore::restore_check`, the same function the
-//! restore drill asserts on a recovered vault. A second set of checks written
+//! `centraid_vault::backup2::restore::restore_check`, the structural check the
+//! backup plane keeps beside its restore. A second set of checks written
 //! for this verb would be a second idea of what a healthy vault is, and the
 //! two would disagree on exactly the day it mattered.
 //!
@@ -29,7 +29,7 @@
 
 use std::path::PathBuf;
 
-use centraid_vault::backup::restore::restore_check;
+use centraid_vault::backup2::restore::restore_check;
 
 use crate::exit;
 

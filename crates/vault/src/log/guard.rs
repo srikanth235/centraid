@@ -27,16 +27,17 @@
 //! rather than a row image. A rollback reports nothing, because the census is
 //! only read on the success path.
 //!
-//! The capture hook #1029 §2 wants — the one that spools changed PAGES before a
-//! checkpoint — is **not** here. W3 places it, and this module leaves the seam
-//! rather than half-building it.
+//! The hook counts nothing else. A backup counts rows on its own scratch copy
+//! of the file, off the request path
+//! ([#1080](https://github.com/srikanth235/centraid/issues/1080)), so the
+//! commit pair carries no row census.
 //!
 //! **Nesting is a deliberate no-op.** An inner `commit` runs its body inside
 //! the outer pair: one pair is one transaction, and a nested one that opened
 //! its own would be a `BEGIN` inside a `BEGIN`.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use rusqlite::Connection;
@@ -102,16 +103,16 @@ pub struct CommitResult<T> {
     pub tables: Vec<String>,
 }
 
-/// What the hook fills and the guard reads: the tables, the row count, and the
-/// **signed per-table delta** the running census is moved by (#1029 line 99).
+/// What the hook fills and the guard reads: the tables and the row count.
+///
+/// The signed per-table delta that moved a running row census stood here
+/// too; the census is counted on the backup snapshot's scratch copy now, off
+/// the request path, and the counter went
+/// ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
 #[derive(Debug, Default)]
 struct Tally {
     tables: BTreeSet<String>,
     rows: usize,
-    /// `+1` per insert, `−1` per delete, nothing for an update. Applied to
-    /// [`crate::log::census::RunningCensus`] **only when the COMMIT succeeds**,
-    /// which is how a rolled-back transaction leaves no increment behind.
-    deltas: BTreeMap<String, i64>,
 }
 
 /// The tally the hook fills and the guard reads.
@@ -177,11 +178,6 @@ impl Vault {
                 // before it would be a screen redrawn from a transaction that
                 // could still roll back.
                 let tally = take_census(connection, &census);
-                // APPLIED HERE AND NOWHERE ELSE: after the COMMIT returned, on
-                // the success path only. The rollback arm below drops the same
-                // tally on the floor, which is the whole of why a rolled-back
-                // transaction's increments do not survive.
-                self.running_census.apply(&tally.deltas);
                 let rows = tally.rows;
                 let tables: Vec<String> = tally.tables.into_iter().collect();
                 tracing::debug!(rows, tables = tables.len(), "commit");
@@ -206,20 +202,6 @@ impl Vault {
     #[must_use]
     pub fn in_commit(&self) -> bool {
         self.depth.get() > 0
-    }
-
-    /// EVERY ROW THIS VAULT HOLDS, BY TABLE (#1029 §1, F4).
-    ///
-    /// The running census a phone compares against: the shrink guard's
-    /// phone-side warning is "the total is below half of what it was, or one
-    /// app's rows are down more than 90%", and that question cannot be asked
-    /// of a gateway holding ciphertext — only here, where the rows are
-    /// readable.
-    ///
-    /// `sqlite_%` tables are excluded: they are SQLite's own bookkeeping and a
-    /// member has no app whose rows they are.
-    pub fn census(&self) -> Result<Vec<(String, i64)>> {
-        self.read(|connection| self.running_census.read(connection))
     }
 }
 
@@ -248,7 +230,7 @@ pub(crate) fn is_reportable(table: &str) -> bool {
 fn install_hook(connection: &Connection, census: &Census) -> Result<()> {
     let shared = Arc::clone(census);
     connection.update_hook(Some(
-        move |action: Action, _database: &str, table: &str, _row_id: i64| {
+        move |_action: Action, _database: &str, table: &str, _row_id: i64| {
             if !is_reportable(table) {
                 return;
             }
@@ -256,16 +238,6 @@ fn install_hook(connection: &Connection, census: &Census) -> Result<()> {
                 held.rows += 1;
                 if !held.tables.contains(table) {
                     held.tables.insert(table.to_owned());
-                }
-                // THE SIGNED HALF (#1029 line 99). An update moves no count:
-                // the row was there before and is there after.
-                let delta = match action {
-                    Action::SQLITE_INSERT => 1,
-                    Action::SQLITE_DELETE => -1,
-                    _ => 0,
-                };
-                if delta != 0 {
-                    *held.deltas.entry(table.to_owned()).or_insert(0) += delta;
                 }
             }
         },

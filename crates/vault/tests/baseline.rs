@@ -18,11 +18,12 @@
 //! founded schema and the corpus's schema are equal as sets and as text, EXCEPT
 //! for what the LADDER does above the baseline, in both directions:
 //!
-//! - what a rung ADDS — rung two's four revision guards (#1020, D-1020-N2),
-//!   rung three's four backup-index objects and rung four's four blob-custody
-//!   objects (#1029 §2, §4), rung six's kind guard on `core_collection` and
+//! - what a rung ADDS and no later rung drops — rung two's four revision
+//!   guards (#1020, D-1020-N2), rung six's kind guard on `core_collection` and
 //!   rung seven's one-generation index on `locker_key` — named in
-//!   `LADDER_OBJECTS`;
+//!   `LADDER_OBJECTS`. Rung three's four backup-index objects and rung four's
+//!   four blob-custody objects (#1029 §2, §4) are founded and dropped again by
+//!   rung ten (#1080), so a founded file holds none of them;
 //! - what rung five DROPS — the planes v1 does not have (#1029) — rung
 //!   seven's `locker_key_live_idx` and rung nine's `notifications_notice`,
 //!   named in `DROPPED_OBJECTS`;
@@ -45,25 +46,18 @@ use std::collections::BTreeMap;
 use centraid_vault::{APPLICATION_ID, Vault, head_version};
 
 /// What the ladder adds above the baseline: rung two's four revision guards
-/// (#1020, D-1020-N2), rung three's in-vault backup index, rung four's blob
-/// custody — a file key per blob, and where its bytes are (#1029 §2, §4) — and
-/// rung six's guard that a collection's kind never changes, and rung seven's
-/// index that makes a second Locker generation unrepresentable (R-1047-D2).
+/// (#1020, D-1020-N2), rung six's guard that a collection's kind never
+/// changes, and rung seven's index that makes a second Locker generation
+/// unrepresentable (R-1047-D2). Rungs three and four added the old backup
+/// plane's index and blob custody (#1029 §2, §4); rung ten drops all eight
+/// objects again (#1080), so they are founded and gone.
 ///
 /// The corpus is a v0 file and knows nothing of the v1 ladder above rung one,
 /// so a founded v1 file legitimately carries exactly these and nothing else.
 /// Named here rather than filtered by prefix: a guard that stopped being
 /// created, or an object arriving from somewhere, both have to show up as a
 /// failure.
-const LADDER_OBJECTS: [&str; 14] = [
-    "backup_base_range",
-    "backup_base_range_by_hash",
-    "backup_blob_custody",
-    "backup_blob_custody_by_role",
-    "backup_blob_placement",
-    "backup_blob_placement_by_object",
-    "backup_object_range",
-    "backup_object_range_by_object",
+const LADDER_OBJECTS: [&str; 6] = [
     "core_collection_kind_is_immutable",
     "core_entity_revision_no_self_parent",
     "core_entity_revision_parent_is_immutable",
@@ -83,9 +77,10 @@ const LADDER_OBJECTS: [&str; 14] = [
 /// (R-1047-D2) — and, from rung nine, `notifications_notice` with its two
 /// indexes, a table no plane has written or read since #1029.
 ///
-/// `access_device` and `access_device_secret` are deliberately NOT here:
-/// `Vault::enrol_device` has live callers and the base copy carries
-/// `access_device_secret` as a sealed custody property (#1029 B1).
+/// `access_device` and `access_device_secret` are NOT here, and that is an
+/// open item rather than a ruling: their writer (`Vault::enrol_device`, the
+/// gateway's peer allowlist) left with the iroh plane in #1080, and no rung
+/// drops them yet.
 const DROPPED_OBJECTS: [&str; 123] = [
     "access_agent",
     "access_agent_secret",
@@ -460,10 +455,11 @@ fn the_two_pragmas_and_the_replica_seed_are_written() {
     // in-vault backup index and rung four is blob custody (#1029 §2, §4); rung
     // five is the cut (#1029); rung six is the collection kind; rung seven is
     // the Locker's one generation (R-1047-D2); rung eight drops the Locker's
-    // match policy (Q-1047-15); rung nine drops the notices no plane writes.
+    // match policy (Q-1047-15); rung nine drops the notices no plane writes;
+    // rung ten drops rungs three and four's backup index (#1080).
     // Spelled out rather than left as `head_version()` alone: a rung silently
     // vanishing would still satisfy the line above.
-    assert_eq!(user_version, 9);
+    assert_eq!(user_version, 10);
     assert_eq!(journal, "wal");
 }
 

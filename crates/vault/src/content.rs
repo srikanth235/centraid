@@ -68,13 +68,11 @@ pub const BLOB_URI_PREFIX: &str = "blob:blake3-";
 /// holds unchanged over either — but the column was called `sha256`, which is a
 /// comment that lies and cannot be linted, so it is `content_hash`.
 ///
-/// **It IS the backup plane's digest too** (#1025 S4, D-1025-S4-1).
-/// `backup::store::digest` used to be SHA-256, on the reasoning that an
-/// artefact's identity is sealed across two languages and re-keying is not
-/// housekeeping (D-1020-R1). There is one language now and no released
-/// predecessor whose artefacts v1 can restore, so that clause was protecting
-/// nothing. Two names for one hash is how a store ends up verifying a member's
-/// bytes with the wrong one.
+/// **It IS the backup plane's plaintext hash too** (#1025 S4, D-1025-S4-1;
+/// #1080). `centraid-sealed/2` names every part from the BLAKE3 of the file it
+/// carries, `centraid_media::sealed::PlaintextHash`, and that is this
+/// function's 32 bytes. Two names for one hash is how a store ends up
+/// verifying a member's bytes with the wrong one.
 #[must_use]
 pub fn content_digest(bytes: &[u8]) -> String {
     hex::encode(blake3::hash(bytes).as_bytes())

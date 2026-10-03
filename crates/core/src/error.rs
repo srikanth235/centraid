@@ -50,25 +50,6 @@ pub enum CoreError {
     #[error("this file already holds vault {vault_id}; found into a fresh file")]
     VaultAlreadyHeld { vault_id: String },
 
-    /// THE ENDPOINT THIS DEVICE SPAWNED IS NOT THE ONE ITS GATEWAY ENROLLED
-    /// (#1025 S7-13).
-    ///
-    /// The enrolment record the shell handed back names the public key the
-    /// gateway put in its allowlist when this device paired — the gateway's own
-    /// statement, derived from the connection iroh's TLS proved. If the
-    /// endpoint that came up at open has a different key, the secret half is
-    /// gone: a lost Keychain item, a store whose write silently failed, a
-    /// record settled under one vault and a key under another.
-    ///
-    /// **Refused at open, and the network is NOT attached.** Dialling with an
-    /// unenrolled identity is not a smaller failure — it is the SAME failure
-    /// one round trip later, reported by the gateway as "an unenrolled peer"
-    /// and rendered on the phone as a version-window sentence, which sends a
-    /// member to update an app that is not the problem. Both keys are in
-    /// `detail` for the log; the member reads a sentence about re-pairing.
-    #[error("this device's endpoint is {found}, and its gateway enrolled {enrolled}")]
-    IdentityMismatch { enrolled: String, found: String },
-
     /// A thin seat could not reach its gateway.
     #[error("the gateway is unreachable: {reason}")]
     Unavailable { reason: String },
@@ -186,7 +167,6 @@ impl CoreError {
             Self::VaultMoved { .. } => ErrorCode::VaultMoved,
             Self::Unpaired => ErrorCode::RebootstrapRequired,
             Self::VaultAlreadyHeld { .. } => ErrorCode::VaultAlreadyHeld,
-            Self::IdentityMismatch { .. } => ErrorCode::IdentityMismatch,
             Self::InvalidRequest { .. } | Self::NotCancellable { .. } | Self::Decode(_) => {
                 ErrorCode::InvalidRequest
             }
@@ -309,14 +289,6 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
         // caller that got there another way (#1025 S7-9, #1029 W5).
         C::VaultAlreadyHeld => {
             "There is already a vault in that file, so it was left alone. Make a new one."
-        }
-        // WHAT IS WRONG IS THE CREDENTIAL, AND THE REMEDY IS PAIRING AGAIN
-        // (#1025 S7-13). It names neither key — they are 64 hex characters
-        // apiece and mean nothing to a member — and it does not blame the
-        // gateway, which is behaving correctly by not knowing this device.
-        C::IdentityMismatch => {
-            "This device's key for that vault is gone, so the gateway no longer recognises it. \
-             Pair it again."
         }
         C::IntentHashMismatch => {
             "That request does not match what was submitted with it, so it was not run."

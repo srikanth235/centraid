@@ -219,8 +219,7 @@ pub fn run_observed(
         gap_scanned,
         // NOTHING IS MINTED (#1080): the gateway admits the restored phone by
         // the token its claim answered, which the restored vault's ledger
-        // keeps. Empty, which a shell reads as "store nothing".
-        device_secret: Vec::new(),
+        // keeps, so the response carries no device secret (field 3 reserved).
         unclaimed,
     })
 }

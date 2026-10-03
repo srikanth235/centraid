@@ -345,3 +345,166 @@ fn rebuild(
     });
     Ok((manifest, checks))
 }
+
+// ---------------------------------------------------------------------------
+// The structural check: what `centraid doctor` runs over a vault file
+// ---------------------------------------------------------------------------
+
+/// Why the structural check could not run.
+#[derive(Debug, thiserror::Error)]
+pub enum CheckError {
+    #[error("no vault file at {0}")]
+    Missing(PathBuf),
+    #[error(transparent)]
+    Sqlite(#[from] rusqlite::Error),
+}
+
+/// What [`restore_check`] found.
+#[derive(Debug, Clone)]
+pub struct StructuralReport {
+    /// `PRAGMA integrity_check`.
+    pub integrity: String,
+    pub foreign_key_violations: Vec<String>,
+    pub receipts_checked: usize,
+    /// Reported, never thrown: a purge is SUPPOSED to leave its receipt behind,
+    /// so a receipt naming a row that is gone is a line in the report.
+    pub dangling_receipts: Vec<String>,
+}
+
+impl StructuralReport {
+    /// Clean means: pages sound and keys hold. Dangling receipts do **not**
+    /// make a report dirty.
+    #[must_use]
+    pub fn is_clean(&self) -> bool {
+        self.integrity == "ok" && self.foreign_key_violations.is_empty()
+    }
+}
+
+/// THE STRUCTURAL CHECK over a vault file that is not live: `integrity_check`,
+/// `foreign_key_check`, and the receipts' references, which no foreign key
+/// covers because they cross a band on purpose.
+///
+/// Read-only and lock-free, so it never changes the file it judges. It is the
+/// one definition of "sound" `centraid doctor` reports; [`restore_head`]'s own
+/// checks are stronger (the manifest's `db_hash` and census) and need the
+/// manifest this one does not have. There is no key verdict: the vault seals
+/// nothing under a key of its own (R-1047-D2).
+pub fn restore_check(file: &Path) -> Result<StructuralReport, CheckError> {
+    if !file.exists() {
+        return Err(CheckError::Missing(file.to_path_buf()));
+    }
+    let connection = rusqlite::Connection::open_with_flags(
+        file,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
+    )?;
+    let integrity: String = connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+
+    let mut violations = Vec::new();
+    {
+        let mut statement = connection.prepare("PRAGMA foreign_key_check")?;
+        let mut rows = statement.query([])?;
+        while let Some(row) = rows.next()? {
+            let child: String = row.get(0)?;
+            let rowid: Option<i64> = row.get(1)?;
+            let parent: String = row.get(2)?;
+            violations.push(format!(
+                "{child} rowid {} references {parent} and the parent row is missing",
+                rowid.map_or_else(|| "(none)".to_owned(), |id| id.to_string())
+            ));
+        }
+    }
+    let (receipts_checked, dangling_receipts) = check_receipts(&connection)?;
+    Ok(StructuralReport {
+        integrity,
+        foreign_key_violations: violations,
+        receipts_checked,
+        dangling_receipts,
+    })
+}
+
+/// Receipts whose object row is gone. Returns `(checked, dangling)`.
+fn check_receipts(connection: &rusqlite::Connection) -> Result<(usize, Vec<String>), CheckError> {
+    let has_table: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'access_receipt')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_table {
+        return Ok((0, Vec::new()));
+    }
+    let tables: BTreeSet<String> = connection
+        .prepare(
+            "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+        )?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let rows = connection
+        .prepare("SELECT receipt_id, object_type, object_id FROM access_receipt")?
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut checked = 0_usize;
+    let mut dangling = Vec::new();
+    for (receipt_id, object_type, object_id) in rows {
+        checked += 1;
+        // NULL means the receipt is about the act, not about a row.
+        let Some(object_id) = object_id else {
+            continue;
+        };
+        // `object_type` is an ontology entity name, which is the physical
+        // table. A name this file has no table for is a band this build does
+        // not carry — not a missing row.
+        if !tables.contains(&object_type) {
+            continue;
+        }
+        let keys: Vec<String> = connection
+            .prepare("SELECT name FROM pragma_table_info(?1) WHERE pk > 0 ORDER BY pk")?
+            .query_map([&object_type], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        // A composite key is not something a receipt addresses.
+        let [pk] = keys.as_slice() else {
+            continue;
+        };
+        let present: bool = connection.query_row(
+            &format!("SELECT EXISTS(SELECT 1 FROM \"{object_type}\" WHERE \"{pk}\" = ?1)"),
+            [&object_id],
+            |row| row.get(0),
+        )?;
+        if !present {
+            dangling.push(format!(
+                "receipt {receipt_id} references {object_type} {object_id}, which is not in the file"
+            ));
+        }
+    }
+    Ok((checked, dangling))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_sound_vault_file_is_structurally_clean() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("vault.db");
+        let vault = crate::file::Vault::create(&file).unwrap();
+        vault.found("The Household", "Ada").unwrap();
+        vault.close().unwrap();
+        let report = restore_check(&file).unwrap();
+        assert_eq!(report.integrity, "ok");
+        assert!(report.foreign_key_violations.is_empty());
+        assert!(report.is_clean());
+    }
+
+    #[test]
+    fn a_missing_file_is_a_named_refusal_not_a_panic() {
+        let dir = tempfile::tempdir().unwrap();
+        let error = restore_check(&dir.path().join("nothing.db")).unwrap_err();
+        assert!(error.to_string().contains("no vault file"), "{error}");
+    }
+}

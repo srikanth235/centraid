@@ -16,8 +16,8 @@
 //! A real founded vault with real sealed cells, sealed here with a key that is
 //! never written anywhere, and then: `keyset_page` over every sealed table,
 //! the `locker.*` command surface including `export` and the two derivations,
-//! the pre-migration snapshot, the backup base (sealed **and** opened), and the
-//! vault file with its WAL and SHM. Every answer is searched for every planted
+//! the pre-migration snapshot, the backup snapshot's parts (sealed **and**
+//! opened), and the vault file with its WAL and SHM. Every answer is searched for every planted
 //! plaintext as a raw byte run, because a structured payload could carry one
 //! without spelling it.
 //!
@@ -292,37 +292,55 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
     carries_no_secret("the snapshot (compressed)", &bytes);
     carries_no_secret("the snapshot (inflated)", &inflate(&bytes));
 
-    use centraid_vault::backup::store::BlobStore as _;
-
-    // ---- 4. THE BACKUP BASE, WHICH IS NOW SEALED (#1029 B1) ---------------
+    // ---- 4. THE BACKUP SNAPSHOT, SEALED AND OPENED (#1080) ---------------
     //
-    // The base used to be a gzipped copy, and this scan read both the gzip and
-    // the inflated bytes because a compressed plaintext is still a plaintext.
-    // Every range is now a `centraid-object/1` object, so the scan reads the
-    // ciphertext — which is the point, and which would pass vacuously if the
-    // sealing were ever removed. So the OPENED range is scanned too: it is the
-    // artefact the old check was really about, and a base that leaked a Locker
-    // secret into the plaintext it seals is a leak the moment its key is lost.
-    let objects =
-        centraid_vault::backup::FsBlobStore::open(sealed_vault.scratch.dir().join("objects"))
-            .expect("a store opens");
-    let keys = centraid_vault::backup::ObjectKeys::new([0x5a; 32], [0x6b; 32]);
-    let base = centraid_vault::backup::build_base(
-        &sealed_vault.scratch.vault,
-        &keys,
-        &objects,
-        centraid_vault::backup::GenerationId::mint().expect("mints"),
-        0,
-        &sealed_vault.scratch.dir().join("base-scratch"),
-    )
-    .expect("a base is built");
-    for range in &base.ranges {
-        let sealed = objects.get(&range.object_name).expect("the range reads");
-        carries_no_secret("a sealed base range", &sealed);
-        let plain = keys
-            .open(centraid_media::object::Kind::Base, &sealed)
-            .expect("the range opens");
-        carries_no_secret("an opened base range", &plain);
+    // A backup is the file copied page for page, cut into 64 KiB ranges, each
+    // sealed as a `centraid-sealed/2` part, plus one sealed manifest. The scan
+    // reads every sealed part — which would pass vacuously if the sealing were
+    // ever removed — AND every opened one: a range that leaked a Locker secret
+    // into the plaintext it seals is a leak the moment its key is lost.
+    {
+        use centraid_vault::backup2::ledger::Ledger;
+        use centraid_vault::backup2::naming::keys_from_root;
+        use centraid_vault::backup2::snapshot::{self, APP};
+        use centraid_vault::backup2::spool::{SPOOL_CEILING_BYTES, Spool};
+        use centraid_vault::backup2::store::MemoryStore;
+
+        let vault = &sealed_vault.scratch.vault;
+        let keys = keys_from_root(&[0x5a; 32]);
+        let ledger = Ledger::open(Ledger::path_for(vault.path())).expect("a ledger");
+        let spool = Spool::open(Spool::dir_for(vault.path())).expect("a spool");
+        let taken = snapshot::take(
+            vault,
+            &keys,
+            &sealed_vault.scratch.dir().join("backup-scratch"),
+            &"5a".repeat(32),
+            APP,
+        )
+        .expect("a snapshot is taken");
+        let plan = snapshot::plan(&taken, &MemoryStore::new("laptop")).expect("plans");
+        let spooled = snapshot::spool(
+            &taken,
+            &plan,
+            &spool,
+            &ledger,
+            &keys,
+            SPOOL_CEILING_BYTES,
+            1,
+        )
+        .expect("spools");
+        assert!(
+            spooled.spooled.len() > 1,
+            "the ranges and the manifest are sealed"
+        );
+        for name in &spooled.spooled {
+            let sealed = std::fs::read(spool.path(name)).expect("the part reads");
+            carries_no_secret("a sealed snapshot part", &sealed);
+            let plain =
+                centraid_media::sealed::open_whole(&keys, name, &sealed).expect("the part opens");
+            carries_no_secret("an opened snapshot part", &plain);
+        }
+        taken.discard().expect("the scratch copy goes");
     }
 
     // ---- 5. THE VAULT FILE ITSELF ----------------------------------------

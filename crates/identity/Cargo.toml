@@ -12,11 +12,6 @@ name = "centraid_identity"
 path = "src/lib.rs"
 
 [dependencies]
-# The pair ticket IS a protobuf message (`PairTicket`), not JSON: smaller in a
-# QR and not hand-editable into a shape a lenient parser half-accepts.
-centraid-api-proto = { path = "../api-proto" }
-
-base64.workspace = true
 bip39.workspace = true
 blake3.workspace = true
 ed25519-dalek.workspace = true
@@ -29,20 +24,10 @@ hmac.workspace = true
 # from v0 (#1029, scope amendment 2026-09-21), so the feature is gone and the
 # dependency is plain.
 hpke = { workspace = true, features = ["getrandom"] }
-pkarr.workspace = true
-prost.workspace = true
-# The pairing QR a headless laptop renders to its terminal. #1029's Reference A
-# moves the pair ticket here as the parent of the standalone invite and the §7
-# link ticket; `crates/net` is deleted with it.
-qrcode.workspace = true
 rand.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
-url.workspace = true
 x25519-dalek.workspace = true
 
 [dev-dependencies]
-iroh-dns-server.workspace = true
 serde_json.workspace = true
-tempfile.workspace = true
-tokio.workspace = true

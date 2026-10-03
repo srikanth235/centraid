@@ -8,10 +8,20 @@
 # files exactly once, which is the check that the split covers the tree without
 # double-counting it.
 #
-# `centraid.core.v1` gets FILE: the strictest category, refusing anything a
-# generated-code consumer could notice — a renamed field, a changed type, a
-# moved message, a deleted file. It is the gateway's commitment to seats that
-# update on their own schedule.
+# `centraid.core.v1` gets WIRE_JSON, and it used to get FILE (#1080). FILE —
+# refusing anything a generated-code consumer could notice: a rename, a moved
+# message, a deleted file — was the #1029 gateway's commitment to seats that
+# updated on their own schedule, because that gateway spoke core.v1 to them over
+# the wire. Nothing does any more. The gateway a phone speaks to declares its
+# own protocol (`crates/gateway2/src/rules`, HTTPS and JSON) and does not depend
+# on this package; core.v1 crosses exactly one boundary, the C ABI between a
+# shell and the core it links, and the two ship in ONE artifact — the case
+# screen.v1's entry below already makes. FILE therefore protected no install
+# from another: it only refused the deletion of messages nobody sends. What can
+# still hurt is a stored or in-flight byte read under a new meaning, and that
+# is exactly what WIRE_JSON keeps refusing: a field's number, wire type or JSON
+# name changing, and a deleted field, value or enum value whose NAME and
+# NUMBER are not both reserved.
 #
 # `centraid.screen.v1` gets WIRE_JSON: the wire and its JSON mapping must stay
 # compatible, and names may move. The shared module, SwiftUI and Compose ship in
@@ -33,7 +43,7 @@ modules:
         - STANDARD
     breaking:
       use:
-        - FILE
+        - WIRE_JSON
   - path: crates/api-proto/proto
     excludes:
       - crates/api-proto/proto/centraid/core
