@@ -19,6 +19,7 @@
 //! | [`mover`] | the `PUT`s, the confirmations they earn, and the reconcile against `exists` |
 //! | [`retention`] | which snapshots to keep, and which names are garbage |
 //! | [`restore`] | the file rebuilt from a destination, and every check that it is the snapshot's |
+//! | [`drill`] | back up, lose everything, restore, and prove it is the vault that was lost |
 //!
 //! ## WHAT IS DEVICE-LOCAL AND DERIVED
 //!
@@ -35,6 +36,7 @@
 //! built over it. It coexists with [`crate::backup`] until the cut-over that
 //! deletes that plane and takes this one's name.
 
+pub mod drill;
 pub mod ledger;
 pub mod mover;
 pub mod naming;
