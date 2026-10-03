@@ -13,6 +13,13 @@ use serde::{Deserialize, Serialize};
 use crate::rules::code::Code;
 use crate::rules::ids::{Digest, GatewayId, Name, Secret, Signature, Token, VaultId};
 
+/// The header an object's digest travels in, both ways: `blake3=<64 hex>`.
+pub const DIGEST_HEADER: &str = "content-digest";
+
+/// The header every refusal also carries its code in, so the answer to a
+/// `HEAD` — which has no body — still says which refusal it is.
+pub const CODE_HEADER: &str = "centraid-code";
+
 /// `GET /v2/info`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Info {
