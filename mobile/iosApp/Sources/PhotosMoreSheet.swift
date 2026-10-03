@@ -55,11 +55,11 @@ struct PhotosMoreSheet: View {
                     Text("The rest of Photos is in Collections.").centraidType("small")
                 }
                 // "FREE UP SPACE" — A STATEMENT, NOT A BUTTON (`KeepOriginals.kt`).
-                // v0's row deleted originals whose copy elsewhere was proved;
-                // the laptop's backup does not hold originals yet, so every
-                // one here is the only copy, and the row says so with the
-                // count and the size rather than offering a verb that could
-                // only destroy a photograph.
+                // v0's row deleted originals whose copy elsewhere was proved.
+                // An original is evictable only once a gateway has
+                // acknowledged it (#1080 ruling 6), and the census that says
+                // which is the machine's, so the row draws what `free_up`
+                // says — the count, the size and why — and offers no verb.
                 Section {
                     FreeUpSpaceRow(freeUp: state.freeUp)
                 } footer: {
@@ -112,17 +112,17 @@ extension PhotosGridStateView {
     }
 }
 
-/// WHAT THIS DEVICE'S CAMERA-ROLL PASS IS DOING, IN FULL.
+/// WHAT THIS DEVICE'S CAMERA-ROLL IMPORT IS DOING, IN FULL.
 ///
 /// The banner on the grid says the phase in one sentence, because that is what
-/// a member glancing at their library needs. This says the rest — how many, how
-/// many bytes, over which transport, and why it is not moving — which is the
-/// screen someone opens when the one sentence is not enough.
+/// a member glancing at their library needs. This says the rest — how many,
+/// and why it is not moving — which is the screen someone opens when the one
+/// sentence is not enough.
 ///
-/// **`transport` is reported and never claimed.** Which transport the product
-/// ships is decided by the overnight experiment in
-/// `mobile/maestro/ios-transfer-experiment.md`, and until that has run this is
-/// what a diagnostics surface reports rather than a sentence in a document.
+/// **An IMPORT, and only that** (#1080). It brings the camera roll into this
+/// vault; it says nothing about a gateway, and it carries no transport row:
+/// where a backup stands is the Backup screen's, read from `backup_status`,
+/// and a gateway's copy is never claimed here.
 struct PhotosBackupDetailSheet: View {
     @ObservedObject var shell: ShellModel
     @Environment(\.colorScheme) private var scheme
@@ -139,7 +139,6 @@ struct PhotosBackupDetailSheet: View {
                         // answer.
                         LabeledContent("Paused", value: state.pausedReason)
                     }
-                    LabeledContent("Transport", value: state.backupTransport)
                 }
                 Section {
                     Button("Import now") { shell.backUpCameraRoll() }

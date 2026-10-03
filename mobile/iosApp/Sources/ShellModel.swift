@@ -181,12 +181,16 @@ final class ShellModel: ObservableObject {
     /// `words.show`'s and `pair.laptop`'s last states (#1047 E5), as bytes.
     @Published var wordsShowState = Data()
     @Published var pairLaptopState = Data()
+    /// The Backup screen's last state, as bytes (#1080).
+    @Published var backupState = Data()
 
     /// The root custody sheet: the two words screens (#1047 E2), and the two
     /// the More sheet's rows open (#1047 E5) — showing the words again, and
     /// pairing with the laptop.
+    /// `backup` is the Backup screen (#1080): one sheet at the root like the
+    /// custody screens, so "Add a gateway" can swap it for `pair` in place.
     enum WordsSheet: String, Identifiable {
-        case make, enter, show, pair
+        case make, enter, show, pair, backup
         var id: String { rawValue }
     }
 
@@ -254,6 +258,10 @@ final class ShellModel: ObservableObject {
     /// `words.show` and `pair.laptop` (#1047 E5), held for the same reason.
     private let wordsShow = WordsShowBridge()
     private let pairLaptop = PairLaptopBridge()
+    /// THE BACKUP SCREEN'S BRIDGE (#1080), held for the same reason. Its
+    /// shape — `observe`, `open`, `send`, `attach` — is every kit bridge's;
+    /// its name is this lane's assumption (E-A6).
+    private let backup = BackupBridge()
 
     /// THE REGISTERED SCREENS' PORTS AND ROUTES (K5) — `ScreenRegistry.swift`.
     /// Filled once, in `init`, by `AppRegistry.apps`; held for the life of the
@@ -289,6 +297,7 @@ final class ShellModel: ObservableObject {
         wordsEntry.observe { [weak self] bytes in self?.wordsEntryChanged(bytes.data) }
         wordsShow.observe { [weak self] bytes in self?.wordsShowChanged(bytes.data) }
         pairLaptop.observe { [weak self] bytes in self?.pairLaptopChanged(bytes.data) }
+        backup.observe { [weak self] bytes in self?.backupChanged(bytes.data) }
         // ONE LINE PER APP lives in `AppRegistry.apps`, not here.
         for app in AppRegistry.apps { app.register(into: self) }
         photoShelf.observe { [weak self] bytes in
@@ -334,6 +343,7 @@ final class ShellModel: ObservableObject {
             self.vaultWords.attach(session: session)
             self.wordsEntry.attach(session: session)
             self.pairLaptop.attach(session: session)
+            self.backup.attach(session: session)
             self.photoShelf.attach(session: session)
             self.photoLightbox.attach(session: session)
             self.photoPicker.attach(session: session)
@@ -598,6 +608,8 @@ final class ShellModel: ObservableObject {
             sendWordsShow(WordsShowView.event { $0.dismissed = .init() })
         case .pair:
             sendPairLaptop(PairLaptopView.event { $0.dismissed = .init() })
+        case .backup:
+            sendBackup(BackupEvents.dismissed())
         case nil:
             break
         }
@@ -625,6 +637,59 @@ final class ShellModel: ObservableObject {
         pairLaptop.open(camera: PairScanner.available)
         #endif
         DispatchQueue.main.async { self.wordsSheet = .pair }
+    }
+
+    // MARK: The Backup screen (#1080)
+
+    /// OPEN THE BACKUP SCREEN: Home's backup line. The member's rule is read
+    /// as it opens — the store is the authority, and the screen draws the same
+    /// three sentences the Home header's sheet does.
+    func openBackup() {
+        send(screen: "home", event: HomeEvents.allApps(open: false))
+        #if canImport(CentraidShared)
+        transferRuleChoices = home.transferRuleChoices().map {
+            (stored: $0.stored, sentence: $0.sentence)
+        }
+        home.transferRule { [weak self] stored in self?.transferRule = stored }
+        backup.open()
+        #endif
+        DispatchQueue.main.async { self.wordsSheet = .backup }
+    }
+
+    func sendBackup(_ event: Data) {
+        #if canImport(CentraidShared)
+        backup.send(event: event.kotlin)
+        #endif
+    }
+
+    /// "ADD A GATEWAY" IS PAIRING: the Backup screen closes and `pair.laptop`
+    /// opens in its place, with its scan and its paste field. The new
+    /// gateway's row arrives with the screen's next read; its pin with
+    /// `pairLaptopChanged`.
+    func addBackupDestination() {
+        sendBackup(BackupEvents.dismissed())
+        openPairLaptop()
+    }
+
+    /// HELD WHILE "BACK UP NOW" RUNS, so leaving the app mid-run gives the
+    /// pass the background task's grace to finish its current part.
+    private var backupGrace: ForegroundGrace?
+
+    private func backupChanged(_ data: Data) {
+        let before = BackupScreenModel(decoding: backupState)
+        backupState = data
+        let now = BackupScreenModel(decoding: data)
+        if now.backingUpNow, backupGrace == nil {
+            backupGrace = ForegroundGrace(name: "dev.centraid.pass.now")
+        } else if !now.backingUpNow, let grace = backupGrace {
+            grace.end()
+            backupGrace = nil
+        }
+        // A GATEWAY FORGOTTEN OR ADDED CHANGES THE PINS: the mover must never
+        // trust a certificate this phone no longer pairs with.
+        #if canImport(CentraidShared)
+        if before.destinations.map(\.id) != now.destinations.map(\.id) { refreshUploadPins() }
+        #endif
     }
 
     func sendWordsShow(_ event: Data) {
