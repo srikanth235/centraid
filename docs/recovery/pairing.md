@@ -12,7 +12,7 @@ A vault is founded **on the phone**, at first launch. It mints 24 words, derives
 
 1. On the gateway: `centraid-gateway serve --data-dir <dir>`. While nothing has paired, `serve` prints a pairing payload and its QR; beside a running `serve`, `centraid-gateway pair --data-dir <dir>` prints a fresh one. Both commands point at the same `--data-dir`. A payload is `{v: 2, gw, addrs, pin, secret, exp_ms}`: the gateway's id, the addresses to dial, the BLAKE3 of its certificate, and a secret that admits **one** vault, once, within 24 hours.
 2. On the phone: **Pair with your laptop** on the band's More sheet, or **Add a gateway** on the Backup screen, takes the payload scanned or pasted ([R-1047-E12](../decisions.md#the-24-words-on-the-phone-1047-e1)). The phone dials the addresses in order, refuses any certificate whose BLAKE3 is not the pin, pairs with the secret, and records the gateway in its ledger.
-3. **Compare the safety number.** 60 digits in 12 groups of 5: the phone's paired screen shows it, and `serve` prints it as a `safety` line the moment the pairing lands; `pairings` prints it again beside each vault. Both are `centraid_identity::pairing_safety_number` over the vault's identity key and the gateway certificate's pin, sorted by their bytes, so both sides show the same digits without agreeing an order first ([D-9](../decisions.md#the-owners-rulings-of-2026-09-29-1047)). Every group must match. An empty safety number means the phone could not compute one, and it refuses that pairing ("Centraid could not check who answered") rather than show a blank — never "it matched".
+3. **Compare the safety number.** 60 digits in 12 groups of 5: the phone's paired screen shows it, and `serve` prints it as a `safety` line the moment the pairing lands; `pairings` prints it again beside each vault. Both are `centraid_identity::safety_number_of_bytes` over the vault's identity key and the gateway certificate's pin — two 32-byte strings, sorted by their bytes, BLAKE3 over the pair — so both sides show the same digits without agreeing an order first ([D-9](../decisions.md#the-owners-rulings-of-2026-09-29-1047)). Every group must match. An empty safety number means the phone could not compute one, and it refuses that pairing ("Centraid could not check who answered") rather than show a blank — never "it matched".
 4. `centraid-gateway pairings --data-dir <dir>` lists each vault with its writer epoch, its head, its tokens and what each may do, and how many pairing secrets are waiting, spent or expired.
 
 **More than one gateway** is the same steps with each gateway's own QR ([R-1080-8](../decisions.md#backups-from-first-principles-1080)). The phone backs up to whichever it can reach, the LAN one when home, and the Backup screen lists each with when it was last seen.
@@ -58,9 +58,13 @@ A phone at a higher epoch has claimed the vault — normally a restore onto a ne
 
 The vault is unaffected. Set up a gateway, pair the phone again, and its next passes upload a full snapshot and every original and derivative it still holds bytes for — from the operating system's library or from its own store. **What is lost** is the snapshot history that gateway held, and any original the phone had already evicted because that gateway acknowledged it — unless a second gateway holds a copy, which is what a second gateway is for.
 
+### Someone else has a copy of a gateway's data directory
+
+The copy holds ciphertext under names nobody can invert, sizes, times, device labels and the vaults' identity public keys — and **the gateway's TLS key**, which lets whoever also answers at the gateway's address impersonate it to its phones. Mint a new identity: stop `serve`, move `tls.key`, `tls.crt` and `gateway.id` aside, and start `serve` again, which mints a new certificate and prints a new `pin`. Then, on each phone, forget the gateway and pair it again from a fresh QR. Nothing the copy holds opens a vault.
+
 ### An object on a gateway is damaged
 
-`centraid-gateway scrub --data-dir <dir>` re-hashes every stored object against the digest recorded when it arrived, now rather than at the quarterly sweep. A damaged object is marked and reads as missing, so a phone that still holds the bytes sends it again on its next pass. No key is involved.
+`centraid-gateway scrub --data-dir <dir>` re-hashes every stored object against the digest recorded when it arrived, now rather than at the quarterly sweep. A damaged object is marked and reads as missing — `GET` answers `NOT_FOUND` and `fetch` leaves it out — so a phone that still holds the bytes sends it again on its next pass, and that `PUT` replaces it. No key is involved.
 
 ### The gateway moves to another machine
 
