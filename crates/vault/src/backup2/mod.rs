@@ -12,10 +12,13 @@
 //! | Module | What it owns |
 //! |---|---|
 //! | [`naming`] | the keys from the root key, and the names the vault's content implies |
+//! | [`snapshot`] | the page-identical copy, its ranges and manifest; plan, spool, settle |
 //! | [`store`] | the [`store::Store`] trait one destination answers, and [`store::MemoryStore`] |
 //! | [`ledger`] | `<stem>.backup.db`: destinations, the queue, confirmations, snapshots |
 //! | [`spool`] | `<stem>.spool/`: sealed parts waiting to move, under a byte budget |
+//! | [`mover`] | the `PUT`s, the confirmations they earn, and the reconcile against `exists` |
 //! | [`retention`] | which snapshots to keep, and which names are garbage |
+//! | [`restore`] | the file rebuilt from a destination, and every check that it is the snapshot's |
 //!
 //! ## WHAT IS DEVICE-LOCAL AND DERIVED
 //!
@@ -33,8 +36,11 @@
 //! deletes that plane and takes this one's name.
 
 pub mod ledger;
+pub mod mover;
 pub mod naming;
+pub mod restore;
 pub mod retention;
+pub mod snapshot;
 pub mod spool;
 pub mod store;
 

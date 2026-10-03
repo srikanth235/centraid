@@ -60,7 +60,7 @@ CREATE TABLE queue (
   last_error    TEXT
 ) STRICT;
 
-CREATE INDEX queue_in_order ON queue (created_ms, name);
+CREATE INDEX queue_in_order ON queue (kind = 'manifest', created_ms, name);
 
 CREATE TABLE confirmed (
   name         TEXT NOT NULL CHECK (length(name) = 64 AND name NOT GLOB '*[^0-9a-f]*'),
@@ -430,7 +430,9 @@ impl Ledger {
         Ok(())
     }
 
-    /// Every queued part, oldest first.
+    /// Every queued part in the order it moves: oldest first, and every
+    /// manifest after every other part, so a manifest never reaches a
+    /// destination ahead of a range it names.
     ///
     /// # Errors
     /// SQLite's refusal, or a row this build cannot read.
@@ -438,7 +440,7 @@ impl Ledger {
         let mut statement = self.connection.prepare(
             "SELECT name, part_path, size, digest, kind, created_ms, handed_off_ms,
                     attempts, last_error
-               FROM queue ORDER BY created_ms, name",
+               FROM queue ORDER BY kind = 'manifest', created_ms, name",
         )?;
         let rows = statement.query_map([], |row| {
             let kind: String = row.get(4)?;
@@ -764,6 +766,9 @@ mod tests {
     fn the_queue_is_in_order_and_requeuing_replaces() {
         let dir = tempfile::tempdir().expect("a directory");
         let ledger = Ledger::open(dir.path().join("l.backup.db")).expect("creates");
+        let mut manifest = queued("manifest", 1);
+        manifest.kind = PartKind::Manifest;
+        ledger.enqueue(&manifest).expect("queues");
         ledger.enqueue(&queued("second", 20)).expect("queues");
         ledger.enqueue(&queued("first", 10)).expect("queues");
         let names: Vec<Name> = ledger
@@ -772,7 +777,12 @@ mod tests {
             .iter()
             .map(|q| q.name)
             .collect();
-        assert_eq!(names, vec![name_of("first"), name_of("second")]);
+        assert_eq!(
+            names,
+            vec![name_of("first"), name_of("second"), name_of("manifest")],
+            "oldest first, and a manifest after the parts it names"
+        );
+        ledger.dequeue(&name_of("manifest")).expect("dequeues");
         assert_eq!(ledger.queued_bytes().expect("sums"), 8_192);
 
         ledger
