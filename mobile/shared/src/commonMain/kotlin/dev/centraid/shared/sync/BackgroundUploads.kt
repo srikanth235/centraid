@@ -136,6 +136,18 @@ public class UploadLoop(private val uploads: BackgroundUploads) : UploadEvents {
         binding.vaults().forEach { handOff(binding, it) }
     }
 
+    /**
+     * THE RULE CHANGED: let go of every task the OS holds (#1080, lane E's
+     * round). A handed-off task keeps the cellular flag it was enqueued with
+     * for up to a day, so a member who just narrowed the rule would otherwise
+     * go on paying under the old one. Each cancelled task settles as a failure
+     * and the core requeues its part; the next pass hands it off again under
+     * the rule the member holds now.
+     */
+    public fun cancelAll() {
+        uploads.cancelAll()
+    }
+
     /** A pass on [vaultId] ended: probe, hand off, enqueue. Answers the parts enqueued. */
     public suspend fun afterPass(vaultId: String): Int {
         val binding = binding() ?: return 0

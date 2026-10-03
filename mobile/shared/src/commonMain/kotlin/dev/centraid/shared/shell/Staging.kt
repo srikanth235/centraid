@@ -113,6 +113,13 @@ public object Staging {
         forHash: String? = null,
         /** `thumb` or `preview`, with [forHash]. */
         tier: String = "",
+        /**
+         * The library item carries an edit (A20): its bytes are the current
+         * rendition, which the next edit replaces, so the core never offers it
+         * for deletion. Carried as `StageBegin.os_edited` from lane C's proto
+         * slice that adds field 7; until then the core cannot be told.
+         */
+        osEdited: Boolean = false,
         // LAST, so every caller's trailing lambda stays the reader.
         read: suspend (max: Int) -> ByteArray,
     ): Outcome {

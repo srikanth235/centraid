@@ -652,11 +652,15 @@ message PhotosGridEvent {
     ExportSettled export_settled = 31;
     // The originals census answered for the More sheet (`KeepOriginals`).
     FreeUpCounted free_up_counted = 40;
+    // The member tapped the row's action (#1080 A19).
+    FreeUpTapped free_up_tapped = 41;
   }
 
   message FreeUpCounted {
     FreeUpSpace free_up = 1;
   }
+
+  message FreeUpTapped {}
 
   // What the shell's "Send a copy" came to, in the one clause
   // `export_notice` shows.
@@ -1728,21 +1732,36 @@ message PhotoShelfState {
 }
 
 // WHAT FREEING SPACE ON THIS PHONE CAN DO, AS THE MORE SHEET SAYS IT
-// (`originals.proto`). Sentences and not numbers, derived once in
+// (`originals.proto`; #1080 A19). Sentences and not numbers, derived once in
 // `KeepOriginals` so the two shells cannot word one fact two ways.
+//
+// A VERB SINCE #1080: originals are backed up now, and the core's
+// `releasable` door names the library originals every part of which a
+// gateway confirmed, never an edited one (R-1029-PH-1 is superseded). The
+// shell's installed `LibraryDeleter` removes them from the OS library behind
+// the system's own confirmation and reports which went (A19, A20).
 message FreeUpSpace {
   // False until a census answered. `meta` then says the phone is counting.
   bool counted = 1;
   // The row's line: how many originals this phone holds, and their size.
   string meta = 2;
-  // Why nothing can be freed, and how much of it the member keeps here.
-  // Empty when there is nothing on this phone to speak of.
-  //
-  // THE ROW IS A STATEMENT AND NEVER A BUTTON, and there is no "releasable"
-  // flag to make it one: no build can prove the gateway holds an original
-  // until originals are backed up (R-1029-PH-1), and a flag that is always
-  // false is a control nobody can test the true half of.
+  // What the action would free, or why nothing can be freed, and how much of
+  // it the member keeps here. Empty when there is nothing to speak of.
   string reason = 3;
+  // "Free up 2 GB": the action, drawn as a control only while `enabled`.
+  string action_label = 4;
+  bool enabled = 5;
+  // The originals a gateway holds whole, and their size on this phone.
+  uint32 releasable_count = 6;
+  uint64 releasable_bytes = 7;
+  // The system's confirmation is up, or the deletion is running.
+  bool freeing = 8;
+  // What the last free-up came to, in one clause; empty before the first.
+  string notice = 9;
+  // The platform can delete from its library behind the system's own
+  // confirmation (A20). False draws no row at all: an action this phone
+  // cannot take is not offered.
+  bool offered = 10;
 }
 
 // ONE ALBUM'S PLACE ON THIS PHONE'S KEEP LIST (`originals.proto`).

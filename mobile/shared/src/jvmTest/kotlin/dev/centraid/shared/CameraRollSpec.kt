@@ -8,7 +8,6 @@ import dev.centraid.shared.platform.NetworkStatus
 import dev.centraid.shared.shell.CameraRoll
 import dev.centraid.shared.sync.TransferRule
 import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
@@ -17,23 +16,18 @@ import kotlinx.coroutines.test.runTest
 /**
  * THE DECISIONS A CAMERA-ROLL PASS MAKES (#1025 S6, D-1025-S7-73).
  *
- * **What this file can prove, and what it deliberately does not.**
- * `CentraidCore` is a final class over a C ABI, so the staging half of a pass —
- * `Staging.stage`, the intent, the gateway's pull — cannot be driven from a JVM
- * test without a real core. It does not need to be: that path is proved end to
- * end in Rust by `crates/centraid/tests/bytes_upward.rs`, which mints a
- * photograph on a seat and asserts the gateway holds the bytes BEFORE the
- * content row lands. Mocking it here would prove the mock.
- *
  * What is proved here is everything the pass DECIDES, which is where the
- * product-level mistakes live: who may enumerate, when an original may move,
- * what the gateway is told about the asset, and what a member is told when the
- * answer is no. Each of those was a sentence or a rule somebody could get wrong
- * without any compiler noticing.
+ * product-level mistakes live: who may enumerate, when an original may be
+ * downloaded from iCloud, what the core is told about the asset, and what a
+ * member is told when the answer is no. What crosses the stage door is
+ * `CameraRollStreamSpec`'s, over a scripted core.
  */
 class CameraRollSpec : StringSpec({
 
     fun rollOf(services: FakePlatformServices) = CameraRoll(services, core = { null })
+
+    val wifi = NetworkStatus.Reading(online = true, metered = false, charging = false)
+    val cellular = NetworkStatus.Reading(online = true, metered = true, charging = false)
 
     "a limited selection is a library, not a denial" {
         val services = FakePlatformServices()
@@ -84,53 +78,48 @@ class CameraRollSpec : StringSpec({
         }
     }
 
-    "wifi-only is the default and an original waits for a link nobody pays for" {
+    "wifi-only is the default and an iCloud original is downloaded only on a link nobody pays for" {
         runTest {
             val roll = rollOf(FakePlatformServices())
             // THE DEFAULT IS READ, NOT ASSUMED: nothing has been written to the
             // store, so this is `TransferRule.of(null)`.
-            roll.mayMove(
-                NetworkStatus.Reading(online = true, metered = true, charging = false),
-            ) shouldBe BackupState.Phase.PHASE_WAITING_FOR_UNMETERED
-            roll.mayMove(
-                NetworkStatus.Reading(online = true, metered = false, charging = false),
-            ).shouldBeNull()
+            roll.mayFetch(cellular, MediaLibrary.Kind.PHOTO) shouldBe false
+            roll.mayFetch(wifi, MediaLibrary.Kind.PHOTO) shouldBe true
+            roll.mayFetch(wifi, MediaLibrary.Kind.VIDEO) shouldBe true
         }
     }
 
-    "a platform that would not say counts as expensive" {
+    "a platform that would not say counts as expensive, and offline downloads nothing" {
         runTest {
             // The deleted window policy's own asymmetry, kept here: a guess wrong
             // towards cheap spends a member's data plan, a guess wrong towards
             // expensive delays a photograph by one pass.
-            rollOf(FakePlatformServices()).mayMove(
-                NetworkStatus.Reading(
-                    online = true,
-                    metered = false,
-                    charging = false,
-                    platformRefused = true,
-                ),
-            ) shouldBe BackupState.Phase.PHASE_WAITING_FOR_UNMETERED
+            val roll = rollOf(FakePlatformServices())
+            roll.mayFetch(wifi.copy(platformRefused = true), MediaLibrary.Kind.PHOTO) shouldBe false
+            roll.mayFetch(wifi.copy(online = false), MediaLibrary.Kind.PHOTO) shouldBe false
         }
     }
 
-    "never is a floor that an unmetered radio does not lift" {
+    "manual fetches what a backup needs on Wi-Fi, as wifi-only does, and never on cellular" {
         runTest {
+            // NO TAP EXISTS FOR A BACKUP: camera-roll backup is automatic
+            // (R-1029-PH-4), so MANUAL holds downloads back to Wi-Fi rather
+            // than for ever (R-1080-D7).
             val services = FakePlatformServices()
             TransferRule.write(services.secureStore, TransferRule.MANUAL)
-            rollOf(services).mayMove(
-                NetworkStatus.Reading(online = true, metered = false, charging = true),
-            ) shouldBe BackupState.Phase.PHASE_WAITING_FOR_UNMETERED
+            rollOf(services).mayFetch(wifi, MediaLibrary.Kind.PHOTO) shouldBe true
+            rollOf(services).mayFetch(cellular, MediaLibrary.Kind.PHOTO) shouldBe false
         }
     }
 
-    "allow-metered moves an original on a metered link, which is what it means" {
+    "photos on cellular downloads a photograph's original there, and never a video's" {
         runTest {
             val services = FakePlatformServices()
             TransferRule.write(services.secureStore, TransferRule.WIFI_AND_CELLULAR_PHOTOS)
-            rollOf(services).mayMove(
-                NetworkStatus.Reading(online = true, metered = true, charging = false),
-            ).shouldBeNull()
+            rollOf(services).mayFetch(cellular, MediaLibrary.Kind.PHOTO) shouldBe true
+            // THE FIXED RULE, on the way in as well: a member who said "photos
+            // on cellular" did not say "a 900 MB video on cellular".
+            rollOf(services).mayFetch(cellular, MediaLibrary.Kind.VIDEO) shouldBe false
         }
     }
 
@@ -175,7 +164,7 @@ class CameraRollSpec : StringSpec({
 
     "a live photo's two halves carry one capture group" {
         val roll = rollOf(FakePlatformServices())
-        val still = MediaLibrary.Asset(
+        val live = MediaLibrary.Asset(
             localId = "L/L0/001",
             bytes = 1,
             capturedAtIso = "2026-02-03T10:11:12Z",
@@ -183,15 +172,13 @@ class CameraRollSpec : StringSpec({
             kind = MediaLibrary.Kind.PHOTO,
             captureGroupId = "L/L0/001",
         )
-        val movie = still.copy(
-            localId = "L/L0/001#pairedVideo",
-            kind = MediaLibrary.Kind.VIDEO,
-        )
-        // ONE THING TO A GRID, TWO THINGS TO AN UPLOADER. Both writes name the
-        // same group and different kinds.
-        roll.inputFor(still, "aa".repeat(32)) shouldContain "\"capture_group_id\":\"L/L0/001\""
-        roll.inputFor(movie, "bb".repeat(32)) shouldContain "\"capture_group_id\":\"L/L0/001\""
-        roll.inputFor(movie, "bb".repeat(32)) shouldContain "\"kind\":\"video\""
+        // ONE THING TO A GRID, TWO THINGS TO THE CORE. Both writes name the
+        // same group and different kinds: the movie is the asset's second
+        // resource, committed as a `video`.
+        roll.inputFor(live, "aa".repeat(32)) shouldContain "\"capture_group_id\":\"L/L0/001\""
+        roll.inputFor(live, "aa".repeat(32)) shouldContain "\"kind\":\"photo\""
+        roll.inputFor(live, "bb".repeat(32), MediaLibrary.Kind.VIDEO) shouldContain "\"capture_group_id\":\"L/L0/001\""
+        roll.inputFor(live, "bb".repeat(32), MediaLibrary.Kind.VIDEO) shouldContain "\"kind\":\"video\""
     }
 
     "a burst member gets no invented grouping" {

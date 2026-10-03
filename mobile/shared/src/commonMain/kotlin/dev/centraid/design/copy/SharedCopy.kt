@@ -100,7 +100,7 @@ public object SharedCopy {
     public const val TRASH_UNTITLED: String = "Untitled"
     public const val VAULTS_CURRENT: String = "Currently open"
     public const val VAULTS_FORGET: String = "Forget"
-    public const val VAULTS_FORGET_BODY: String = "This deletes the vault and everything in it. There is no copy anywhere else."
+    public const val VAULTS_FORGET_BODY: String = "This deletes the vault and everything in it from this phone. A laptop it backs up to keeps its copy, and your 24 words bring it back from there; without one, there is no other copy."
     public const val VAULTS_FORGET_THIS: String = "this vault"
     public const val VAULTS_FORGET_TITLE: String = "Forget {name}?"
     public const val VAULTS_KEEP: String = "Keep"
