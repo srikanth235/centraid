@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import centraid.screen.v1.HomeEvent
 import dev.centraid.android.backup.ProcessSession
+import dev.centraid.android.screens.backup.BackupSheets
 import dev.centraid.android.kit.MakeVaultSheet
 import dev.centraid.android.kit.TransferRulesSheet
 import dev.centraid.android.screens.HomeScreen
@@ -122,6 +123,9 @@ public class MainActivity : FragmentActivity() {
 
     /** THE 24 WORDS' SHEETS (#1047 E3), over every screen. See `WordsSheets`. */
     private val words: WordsSheets by lazy { WordsSheets(onEnterClosed = { locker.reattach(this) }) }
+
+    /** THE BACKUP SCREEN'S SHEET (#1080), over every screen. See `BackupSheets`. */
+    private val backupSheet: BackupSheets by lazy { BackupSheets() }
 
     /**
      * THE OS ASKING FOR MEMORY BACK (#1025 S7-13, ruling F).
@@ -272,6 +276,7 @@ public class MainActivity : FragmentActivity() {
                         // without a tap — and a host routed twice re-reads twice.
                         routes.forEach { it.attach(opened, scope) }
                         words.attach(opened, scope)
+                        backupSheet.attach(opened)
                         value = opened
                         // AND THE FIRST FOREGROUND PASS, which `onResume` would
                         // otherwise miss: the activity resumed before the session
@@ -437,6 +442,8 @@ public class MainActivity : FragmentActivity() {
                                 camera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY),
                             )
                         },
+                        // HOME'S BACKUP LINE OPENS THE BACKUP SCREEN (#1080).
+                        onOpenBackup = { backupSheet.open() },
                     )
                     if (vaultSheetOpen) {
                         ModalBottomSheet(onDismissRequest = { vaultSheetOpen = false }) {
@@ -495,6 +502,15 @@ public class MainActivity : FragmentActivity() {
                 }
                 // THE 24 WORDS' SHEET, over whatever is drawn (#1047 E3).
                 words.Sheets()
+                // THE BACKUP SCREEN (#1080). "Add a gateway" is pairing: the
+                // Backup sheet closes and pair.laptop opens in its place.
+                backupSheet.Sheet(
+                    onAddDestination = {
+                        words.openPair(
+                            camera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY),
+                        )
+                    },
+                )
                 }
             }
         }

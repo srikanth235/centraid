@@ -240,6 +240,15 @@ struct CentraidApp: App {
                 case .pair:
                     PairLaptopView(data: shell.pairLaptopState, send: { shell.sendPairLaptop($0) })
                         .interactiveDismissDisabled(!shell.pairLaptopSwipeable)
+                // THE BACKUP SCREEN (#1080), opened from Home's backup line.
+                // A swipe is its Dismissed, always heard.
+                case .backup:
+                    BackupView(
+                        data: shell.backupState,
+                        shell: shell,
+                        send: { shell.sendBackup($0) },
+                        onAddDestination: { shell.addBackupDestination() }
+                    )
                 }
             }
             // THE SWITCHER MASK. Leaving the foreground paints an opaque mask
