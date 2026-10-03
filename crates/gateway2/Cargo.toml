@@ -53,9 +53,11 @@ server = [
   "client",
   "dep:anyhow",
   "dep:axum",
+  "dep:centraid-identity",
   "dep:clap",
   "dep:gethostname",
   "dep:if-addrs",
+  "dep:jiff",
   "dep:mdns-sd",
   "dep:qrcode",
   "dep:rand",
@@ -63,6 +65,7 @@ server = [
   "dep:rusqlite",
   "dep:tracing",
   "dep:tracing-subscriber",
+  "tokio/signal",
 ]
 
 # THE RULES' DEPENDENCIES ARE THE FIRST SIX, AND THAT IS A RULE. No tokio, no
@@ -102,9 +105,14 @@ anyhow = { workspace = true, optional = true }
 # The HTTP surface over the rules. It carries no policy: every refusal it
 # renders is a `rules::code::Refusal`.
 axum = { workspace = true, optional = true }
+# `pairing_safety_number`, the one function a phone and a gateway both render
+# the digits a member compares with (#1080, the root's ruling A7).
+centraid-identity = { path = "../identity", optional = true }
 clap = { workspace = true, optional = true }
 gethostname = { workspace = true, optional = true }
 if-addrs = { workspace = true, optional = true }
+# The terminal's times, in UTC and in words a member reads.
+jiff = { workspace = true, optional = true }
 mdns-sd = { workspace = true, optional = true }
 # The pairing QR, rendered to the terminal as half blocks.
 qrcode = { workspace = true, optional = true }

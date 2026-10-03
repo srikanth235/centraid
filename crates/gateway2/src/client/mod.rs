@@ -108,7 +108,7 @@ pub enum ClientError {
     Unreachable(String),
     /// An address answered with a certificate that is not the pinned one,
     /// or could not prove it holds its key.
-    #[error("the gateway's certificate is not the one this phone pinned")]
+    #[error("the gateway's certificate is not the pinned one")]
     Untrusted,
     /// An answer that does not parse or breaks the protocol.
     #[error("the gateway's answer broke the protocol: {0}")]
@@ -201,6 +201,13 @@ impl Client {
     #[must_use]
     pub fn first_contact(addrs: Vec<String>, pin: Pin) -> Self {
         Self::with_trust(addrs, Trust::Pin(pin), None)
+    }
+
+    /// Trust `cert_der` by exact bytes, with no token yet: what the
+    /// gateway's own `health` verb uses, reading its certificate from disk.
+    #[must_use]
+    pub fn trusting(addrs: Vec<String>, cert_der: Vec<u8>) -> Self {
+        Self::with_trust(addrs, Trust::Certificate(cert_der), None)
     }
 
     /// A paired destination: trust its stored certificate by exact bytes.
