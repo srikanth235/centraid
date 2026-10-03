@@ -121,6 +121,12 @@ public data class DrainInput(
     public val charging: Boolean,
     /** "Back up now", entering the background or a finished restore: a snapshot now. */
     public val wantsSnapshot: Boolean,
+    /**
+     * The member tapped "Back up now" for this pass (#1080 A24): under MANUAL
+     * an original may be sealed, and a video's original off the charger.
+     * Nothing else sets it; false is the cheaper answer.
+     */
+    public val asked: Boolean = false,
 )
 
 /**

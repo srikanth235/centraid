@@ -4,15 +4,24 @@ import dev.centraid.shared.platform.PlatformServices
 
 /**
  * WHY A PASS RUNS (#1080, the shells). Every trigger on both shells names one,
- * so a pass is never anonymous and [wantsSnapshot] is decided by the reason
- * rather than by each caller.
+ * so a pass is never anonymous and [wantsSnapshot] and [asked] are decided by
+ * the reason rather than by each caller.
  *
  * A snapshot is forced only where the member or the platform is about to stop
  * looking: "Back up now", the app leaving the screen, and a restore that has
  * just finished. Every other pass leaves "is a snapshot due" to the core,
  * which takes one hourly on an unmetered link with a gateway reachable.
+ *
+ * **Only "Back up now" is the member asking** (#1080 A24, `DrainRequest.asked`).
+ * It alone lets an original be sealed under MANUAL and a video's original be
+ * sealed off the charger; leaving the screen and a finished restore time a
+ * snapshot and decide nothing else, because the member did not ask for either.
  */
-public enum class WakeReason(public val wantsSnapshot: Boolean) {
+public enum class WakeReason(
+    public val wantsSnapshot: Boolean,
+    /** The member tapped "Back up now" for this pass (A24). */
+    public val asked: Boolean = false,
+) {
     /** The session opened: the first pass of a launch. */
     SESSION_OPENED(false),
 
@@ -31,8 +40,8 @@ public enum class WakeReason(public val wantsSnapshot: Boolean) {
     /** A background window the OS granted. */
     SCHEDULED(false),
 
-    /** The member pressed "Back up now". */
-    BACK_UP_NOW(true),
+    /** The member pressed "Back up now": the one reason that is the member asking. */
+    BACK_UP_NOW(wantsSnapshot = true, asked = true),
 
     /** The app is leaving the screen; the platform's grace bounds the pass. */
     ENTERED_BACKGROUND(true),
@@ -68,6 +77,7 @@ public data class PassConditions(
         metered = metered ?: true,
         charging = charging ?: false,
         wantsSnapshot = reason.wantsSnapshot,
+        asked = reason.asked,
     )
 
     public companion object {

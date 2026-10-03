@@ -533,6 +533,32 @@ bash .governance/run.sh
 - Red first: against the machine at `217c876b`, the three A23 cases in `WordsEntrySpec` failed; against this one they pass.
 - `bash .governance/run.sh < /dev/null` — every directive passes but `law`, whose one finding is still the `## Audit` verdict for the close. (Without `< /dev/null`, `pre-push-gate` waits on stdin for the refs a push would send.)
 
+### Round four — the cut-over, and A24
+
+On the umbrella at `b9590be6` (lane C's cut-over), which fast-forwarded this branch. `1079683e` makes "Back up now" the only pass that asks (#1080 A24): `WakeReason.asked` is set by `BACK_UP_NOW` alone, `DrainInput.asked` carries it, and `CoreDrainDoor` sends it as `DrainRequest.asked`; the need-bytes rounds of the same pass keep the ask and drop the snapshot. **[Q-1080-D2](../docs/decisions.md#the-shared-halfs-questions-for-the-owner-1080) is answered by A24** ([R-1080-C13](../docs/decisions.md#the-phone-core-and-the-cut-over-1080-lane-c)): leaving the screen and a finished restore force a snapshot and ask nothing, and only the member's tap seals an original under MANUAL or a video's original off the charger. Files: `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/{PassConditions,DrainPass,CoreDoors,ShelfDrain}.kt`, `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/{ShelfDrainSpec,CoreBackupDoorsSpec}.kt`, `mobile/core/src/jvmTest/kotlin/dev/centraid/core/ConfigurationJsonSpec.kt` (a case name), `mobile/README.md`.
+
+#### Verification, round four
+
+```sh
+grep -rn "ERROR_CODE_GATEWAY_" mobile/ --include=*.kt --include=*.swift
+grep -rn -E "gateway2|backup2|centraid-gateway2" mobile/
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/user/cargo-target-shared cargo build -p centraid-core-ffi
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/user/cargo-target-shared mobile/gradlew -p mobile :shared:jvmTest :core:jvmTest
+mobile/gradlew -p mobile :shared:jvmTest --rerun
+touch crates/api-proto/build.rs
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/user/cargo-target-shared cargo xtask gate --profile mobile-jvm
+bun run format && bun run format:check
+bash .governance/run.sh < /dev/null
+```
+
+- `ERROR_CODE_GATEWAY_` — no match.
+- `gateway2|backup2` — one match, outside this lane's files: `mobile/iosApp/Sources/VaultFileProtection.swift:38` names `backup2/ledger.rs`, which is now `crates/vault/src/backup/ledger.rs`.
+- `cargo build -p centraid-core-ffi` — finished in 53 s.
+- `:core:jvmTest` — 32 tests in 10 suites, 0 failures: the real ABI round trips, and `ConfigurationJsonSpec`'s case that no open carries a device key. `:shared:jvmTest` — 1,104 tests in 75 suites, 0 failures (the A24 case is the one added), executed with `--rerun` after the combined run took it from the build cache.
+- `cargo xtask gate --profile mobile-jvm` — `ok mobile-jvm 48.4s git diff --exit-code -- design copy mobile contracts/screens`; `gate mobile-jvm: PASS`, 48.4 s of a 420 s budget.
+- Red first: the A24 case in `ShelfDrainSpec` failed with `ENTERED_BACKGROUND` given an ask, and passes without one.
+- `bun run format:check` — clean. `bash .governance/run.sh < /dev/null` — every directive passes but `law`, whose one finding is the `## Audit` verdict for the close.
+
 ### Lane A — the gateway v2 (`crates/gateway2`, renamed `crates/gateway` at the cut-over)
 
 Branch `worktree-agent-ad02a969bfe46e45e`, from `23e46810`; merged as `bccf0763`. Eight commits: `ceae39b71` the protocol v2 rules and their conformance suite; `9b8b25479` the HTTPS gateway, pinned client and wire suite; `d29922f4d` the CLI, pairing QR and safety line; `6a46b349d` store semantics for the phone and streamed bundles (A14, A15); `f999ef590` a user unit that can start with its data at home; `46bb10dee` sweeps paced by the clock and kept on disk; `c1d3760ff` the README and the container image; `f21084b0a` no other hash named in the digest-header test.
