@@ -221,8 +221,10 @@ public interface NetworkStatus {
  * * **Exact SHA-256 is identity**; [Asset.perceptualHash] is a duplicates HINT
  *   that never auto-merges, which is why the two fields are named differently
  *   and why only one is called an id.
- * * **A Live Photo's HEIC and its paired MOV share one [Asset.captureGroupId]**,
- *   so a pair is one thing to a grid and two things to an uploader.
+ * * **A Live Photo is ONE [Asset] with two [Resource]s** (#1080, the walker):
+ *   the still and its paired movie are one place in the walk and two staged
+ *   files, committed as two rows sharing one [Asset.captureGroupId], so a pair
+ *   is one thing to a grid and two things to the core.
  * * **Android motion photos, RAW and burst members pass through as original
  *   bytes with NO inferred grouping** — so [Asset.captureGroupId] is null for
  *   them, and a platform that guessed would be inventing a relationship.
@@ -248,7 +250,17 @@ public interface MediaLibrary {
      */
     public suspend fun page(afterCursor: String?, limit: Int): Page
 
-    public data class Page(public val assets: List<Asset>, public val nextCursor: String?)
+    public data class Page(
+        public val assets: List<Asset>,
+        /** Where the next page starts; null only when this page is empty. */
+        public val nextCursor: String?,
+        /**
+         * NOTHING IS LEFT TO WALK (#1080). Its own field, because "the roll is
+         * walked" and "here is where to resume" are two facts: a cursor that
+         * went null at the end made every later pass re-walk the last page.
+         */
+        public val exhausted: Boolean = nextCursor == null,
+    )
 
     /**
      * OPEN ONE ORIGINAL'S BYTES, AS A STREAM (#1025 S6, D-1025-S7-71).
@@ -263,13 +275,54 @@ public interface MediaLibrary {
      * never does. [Original.read] has exactly `Staging`'s shape so the two
      * compose with no buffer between them.
      *
-     * Null when the platform will not produce the bytes — an asset only in
-     * iCloud with no network, one the member removed between the page and the
-     * read, or one outside a LIMITED selection. **Not an error**: a roll changes
-     * under an enumeration, and a shell that threw would end a backup pass over
-     * one photograph that moved.
+     * **No temporary copy** (#1080 ruling 6): the phone keeps no second copy
+     * of what the OS library already holds, so the bytes stream from the
+     * library straight into the stage door, which hashes and seals them as
+     * they pass. What it could not produce is an [Opened] answer, not a null.
      */
-    public suspend fun open(localId: String): Original?
+    public suspend fun open(ref: String, allowNetwork: Boolean = true): Opened
+
+    /**
+     * What [open] found (#1080, the walker).
+     *
+     * [ref] is a [Resource.ref]. [allowNetwork] says whether the platform may
+     * DOWNLOAD the bytes — an original that lives only in iCloud — and is the
+     * walker's to decide from the member's rule and the link: an original the
+     * phone does not hold is [InCloud] rather than fetched behind the rule.
+     */
+    public sealed interface Opened {
+        public class Ready(public val original: Original) : Opened
+
+        /** Only in iCloud, and this pass may not download it. It waits; it is never skipped. */
+        public data object InCloud : Opened
+
+        /**
+         * Removed between the page and the read, outside a LIMITED selection,
+         * or refused. **Not an error**: a roll changes under an enumeration,
+         * and a shell that threw would end a backup pass over one photograph
+         * that moved.
+         */
+        public data object Gone : Opened
+    }
+
+    /**
+     * A DERIVATIVE THE PLATFORM DECODED (#1080: the core stores derivatives
+     * the phone's own decoder rendered, because it cannot decode HEIC and
+     * keeps no copy of a library original to decode later).
+     *
+     * JPEG at quality 80, the long edge no longer than [Tier.longEdge], drawn
+     * from the CURRENT edit, upright, and with no metadata — a thumbnail
+     * travels first, over any link, and one carrying a home's coordinates is
+     * worse than none. Null when the platform cannot: the walker stages the
+     * original either way.
+     */
+    public suspend fun render(ref: String, tier: Tier): ByteArray? = null
+
+    /** The two derivatives `crates/media/src/renditions.rs` names, at its sizes. */
+    public enum class Tier(public val wire: String, public val longEdge: Int) {
+        THUMB("thumb", 360),
+        PREVIEW("preview", 2048),
+    }
 
     /**
      * One original, open. [close] is owed on every path, including a refusal
@@ -285,7 +338,11 @@ public interface MediaLibrary {
          */
         public val mediaType: String
 
-        /** The resource's own length, which may differ from [Asset.bytes]. */
+        /**
+         * The resource's own length, or 0 when the platform does not state
+         * one before the read — Photos never does. `StageBegin.byte_size`
+         * reads 0 as unknown (seam contract A8), so no copy is made to learn it.
+         */
         public val bytes: Long
 
         /** The next slice, at most [max] bytes. An EMPTY array means the end. */
@@ -327,19 +384,45 @@ public interface MediaLibrary {
         public val capturedAtIso: String,
         public val capturedUtcOffsetMinutes: Int,
         /**
-         * `photo` or `video` — `media.add_asset`'s own vocabulary (#1025 S6).
-         *
-         * Carried because the command takes it and the gateway's fallback is a
-         * guess off the media type. A Live Photo is TWO assets here, a `photo`
-         * and a `video` sharing one [captureGroupId], which is what the field
-         * below means.
+         * `photo` or `video` — `media.add_asset`'s own vocabulary (#1025 S6),
+         * for the asset's ORIGINAL. A Live Photo is a `photo` whose paired
+         * movie is its second [Resource], committed as a `video` row in the
+         * same [captureGroupId].
          */
         public val kind: Kind = Kind.PHOTO,
         /** A duplicates hint. Never auto-merges, never an identity. */
         public val perceptualHash: String? = null,
         /** A Live Photo pair. Null for motion photos, RAW and burst members. */
         public val captureGroupId: String? = null,
+        /**
+         * WHAT IS STAGED FOR IT, in order (#1080, the walker): the camera's
+         * original first, then a Live Photo's paired movie. Each [Resource.ref]
+         * is what [open] reads and what the core keeps as the item's
+         * `os_ref`, so it must find the same bytes again after a relaunch.
+         */
+        public val resources: List<Resource> = listOf(Resource(Resource.Role.ORIGINAL, localId)),
+        /**
+         * The cursor that resumes AFTER this asset: everything up to and
+         * including it has been offered. Null when the platform cannot resume
+         * mid-page; the page's own [Page.nextCursor] then covers it.
+         */
+        public val after: String? = null,
     )
+
+    /** One file of an [Asset]. */
+    public data class Resource(public val role: Role, public val ref: String) {
+        public enum class Role {
+            /**
+             * The camera's own bytes — never an edit's render, which changes
+             * when the member edits again and so could not be found by its
+             * `os_ref` a second time.
+             */
+            ORIGINAL,
+
+            /** A Live Photo's movie. */
+            PAIRED_VIDEO,
+        }
+    }
 
     /**
      * `media_asset.kind`'s two values a camera roll can produce.

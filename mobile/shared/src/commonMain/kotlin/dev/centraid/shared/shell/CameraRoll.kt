@@ -15,22 +15,17 @@ import dev.centraid.shared.sync.TransferRule
 import okio.ByteString.Companion.encodeUtf8
 
 /**
- * THE CAMERA ROLL, GOING UP (#1025 S6, D-1025-S7-73).
+ * THE CAMERA ROLL, GOING IN (#1025 S6, D-1025-S7-73; #1080, the walker).
  *
- * The half of the product that was missing entirely. `MediaLibrary` could
- * describe a roll, `Staging` could hand bytes to the core, the runtime could
- * decide where a write goes, `ScreenEffect.Backup` could be emitted and
- * `BackupState` could be drawn — and **nothing joined any of them**. There was
- * no caller of `Staging` on any platform, no producer of a `BackupState` other
- * than a permission change, and no code anywhere that turned a photograph on a
- * phone into a row in a vault. A phone was a viewer.
+ * The half of the product that turns a photograph on a phone into a row in a
+ * vault and a sealed part in its spool.
  *
  * ## The shape, and why each step is where it is
  *
  * ```
- *   page(cursor)  ->  open(localId)  ->  Staging.stage  ->  media.add_asset
- *   the platform      the platform       THE CORE NAMES     THIS VAULT
- *   enumerates        streams bytes      THE BYTES          COMMITS THE ROW
+ *   page(cursor)  ->  open(ref)       ->  Staging.stage   ->  media.add_asset
+ *   the platform      the platform        THE CORE NAMES      THIS VAULT
+ *   enumerates        streams bytes       AND SEALS THEM      COMMITS THE ROW
  * ```
  *
  * **The phone never computes an identity.** `Staging` exists because the vault's
@@ -38,46 +33,46 @@ import okio.ByteString.Companion.encodeUtf8
  * therefore stages first and reads the hash off the core's answer, and the
  * `media.add_asset` it then commits NAMES that hash rather than asserting one.
  *
- * **THE PHONE IS THE WRITER** (#1029 §1). It used to say the gateway was: an
- * [Intent] carrying `NeededBytes` went into an outbox, and a gateway opened a
- * `blob` stream back down the seat's connection, fetched the bytes and then
- * executed. There is no gateway writer and no outbox — `crates/seat-link` is
- * gone — so the bytes are staged into THIS vault's own store and the command
- * commits the row beside them, in one process, with no second party.
+ * **NO SECOND COPY** (#1080 ruling 6). Every resource is staged with
+ * `source = OS_LIBRARY` and its `os_ref`: the core hashes the bytes and, when a
+ * gateway is paired and the spool has room, seals them in the same stream,
+ * and keeps no plaintext copy — the library already holds one. When the spool
+ * had no room the core asks for the bytes again later (`DrainResponse.need_bytes`,
+ * `LibraryFeed`), which is why a ref must find the same bytes after a relaunch
+ * and why the ORIGINAL is the camera's and never an edit's render.
+ *
+ * **The platform renders the derivatives.** The core cannot decode HEIC and
+ * keeps no library original to decode later, so after an original is staged
+ * the walker asks [MediaLibrary.render] for the thumbnail and the preview —
+ * drawn from the current edit — and stages each with `for_hash` and `tier`.
+ *
+ * **A Live Photo is one asset with two resources**: the still is committed as
+ * a `photo` row and its movie as a `video` row in the same capture group.
  *
  * ## Idempotence, twice over, because once is not enough
  *
  * 1. **The durable cursor** ([cursorKey]) is what makes a RE-ENUMERATION queue
- *    nothing. It is advanced after each asset is queued, not once at the end, so
+ *    nothing. It is advanced after each asset ([MediaLibrary.Asset.after]), so
  *    a pass the OS kills half way resumes at the photograph it was on rather
  *    than at the one it started from.
- * 2. **The invoke key is the CONTENT HASH** and not the asset's local id. That
- *    is the belt to the cursor's braces and it is the half that survives a
- *    cursor that was lost, reset, or written by an older build: the same bytes
- *    always produce the same key, the CORE's own replay ledger short-circuits
- *    the duplicate, and `media.add_asset` DEDUPES on the content row besides.
- *    A member who screenshots the same image twice is two assets with two
- *    hashes and is meant to be; a roll re-walked is one.
- *
- *    **It never leaves this device** (#1029 §4). It was `Intent.intent_id` and
- *    a gateway's replay ledger read it; now it is `Command.invoke_key` over the
- *    C ABI, in one process. No plaintext hash crosses the wire, and
- *    `gateway-core`'s own conformance canary
- *    (`no-plaintext-or-plaintext-hash-is-anywhere-in-the-store`) is what proves
- *    it rather than this sentence.
+ * 2. **The invoke key is the CONTENT HASH** and not the asset's local id. The
+ *    same bytes always produce the same key, the core's own replay ledger
+ *    short-circuits the duplicate, and `media.add_asset` DEDUPES on the
+ *    content row besides. It never leaves this device (#1029 §4).
  *
  * Keying on the local id instead would break in exactly the case that matters —
  * a restored phone, where every `PHAsset` identifier is new and the bytes are
  * the same, and the member would watch their whole library upload again.
  *
- * ## The transfer rule is the member's ONE setting
+ * ## The link governs downloads only
  *
- * [TransferRule], read through its own accessor. There is no second
- * switch for photographs: an original is the most expensive thing this product
- * moves, so if the member's answer about bytes did not govern it, the setting
- * would not mean anything. It is read **before each item and not once per
- * pass** (`NATIVE_V0.md:11-19`) — a phone that leaves Wi-Fi half way through a
- * roll stops there, mid-roll, with the cursor where it stopped.
+ * Staging is LOCAL: it reads the library and writes this phone's spool, and
+ * the pass never waits for Wi-Fi to do it. What crosses a link is the
+ * gateway's upload, which the core plans under the member's rule
+ * (`DrainRequest.rule`), and — here — an original that lives only in iCloud,
+ * which is downloaded only when the rule lets it cross the link the phone is
+ * on ([mayFetch]). One that may not is [Opened.InCloud]: the walk stops at it,
+ * with the cursor before it, and says so.
  */
 public class CameraRoll(
     private val services: PlatformServices,
@@ -90,7 +85,7 @@ public class CameraRoll(
      * `media.add_asset` — so a vault that moved to the member's other phone
      * refuses one exactly as it refuses a note save. A supplier and not a flag
      * for the same reason [core] is one: a pass runs for minutes and a value
-     * captured at construction would keep uploading into a vault frozen
+     * captured at construction would keep importing into a vault frozen
      * halfway through it.
      */
     private val readOnly: () -> String? = { null },
@@ -104,14 +99,16 @@ public class CameraRoll(
         /** Assets the core ALREADY held — a re-walk, and the cheap case. */
         public val alreadyHeld: Int = 0,
         /**
-         * Assets the platform would not produce bytes for. NOT a failure: an
-         * iCloud-only original with no network, one removed between the page
-         * and the read, one outside a LIMITED selection.
+         * Assets the platform would not produce bytes for. NOT a failure: one
+         * removed between the page and the read, one outside a LIMITED
+         * selection.
          */
         public val skipped: Int = 0,
         public val bytes: Long = 0,
         /** Assets still ahead of the cursor, when the walk stopped early. */
         public val remaining: Int = 0,
+        /** The walk stopped at an original only in iCloud that it may not download now. */
+        public val waitingInCloud: Int = 0,
         public val state: BackupState = BackupState(),
     )
 
@@ -119,8 +116,8 @@ public class CameraRoll(
      * ONE BOUNDED PASS over the roll.
      *
      * [limit] bounds the page AND the pass: a camera roll is tens of thousands
-     * of items and a pass that walked all of them would be a pass no background
-     * window ever finishes, reporting nothing until it did.
+     * of items and a pass that walked all of them would be a pass no window
+     * ever finishes, reporting nothing until it did.
      *
      * Answers a [Report] rather than throwing. The only thing a member can do
      * about any of these outcomes is read a sentence, and a backup that took the
@@ -172,9 +169,13 @@ public class CameraRoll(
         ).also { onState(it.state) }
 
         onState(BackupState(phase = BackupState.Phase.PHASE_ENUMERATING))
-        val cursor = services.secureStore.read(cursorKey(vaultId))
+        val key = cursorKey(vaultId)
+        val cursor = services.secureStore.read(key)
         val page = services.mediaLibrary.page(cursor, limit)
         if (page.assets.isEmpty()) {
+            // A PLATFORM MAY MOVE THE CURSOR WITH NOTHING TO OFFER — iOS trades
+            // a finished first walk for a change token — and it is kept.
+            page.nextCursor?.takeIf { it != cursor }?.let { services.secureStore.write(key, it) }
             // NOTHING NEW IS "DONE", NOT "IDLE". A member whose roll is fully
             // backed up must be able to tell that from a backup that is off.
             val done = BackupState(phase = BackupState.Phase.PHASE_DONE)
@@ -186,38 +187,37 @@ public class CameraRoll(
         var held = 0
         var skipped = 0
         var moved = 0L
-        var at = cursor
         for ((index, asset) in page.assets.withIndex()) {
-            // BEFORE EACH ITEM, NOT ONCE PER PASS. See the class comment.
-            val verdict = mayMove(services.networkStatus.current())
-            if (verdict != null) {
-                at?.let { services.secureStore.write(cursorKey(vaultId), it) }
-                val waiting = BackupState(
-                    phase = verdict,
-                    assets_remaining = (page.assets.size - index),
-                    assets_transferred_this_session = queued,
-                    bytes_transferred_this_session = moved,
-                    transport = BackupState.Transport.TRANSPORT_IROH_BLOBS,
-                    paused_reason = waitingSentence(verdict),
-                )
-                onState(waiting)
-                return Report(
-                    enumerated = page.assets.size,
-                    queued = queued,
-                    alreadyHeld = held,
-                    skipped = skipped,
-                    bytes = moved,
-                    remaining = page.assets.size - index,
-                    state = waiting,
-                )
-            }
-
+            val left = page.assets.size - index
             when (val outcome = offer(handle, asset)) {
                 is Offered.Skipped -> skipped += 1
                 is Offered.Queued -> {
                     if (outcome.alreadyHeld) held += 1
                     queued += 1
                     moved += outcome.bytes
+                }
+                is Offered.InCloud -> {
+                    // THE CURSOR STAYS BEFORE IT: a keyset cannot skip one asset
+                    // and come back, so the walk waits here for a link the rule
+                    // lets the download cross, and resumes on this photograph.
+                    val waiting = BackupState(
+                        phase = BackupState.Phase.PHASE_WAITING_FOR_UNMETERED,
+                        assets_remaining = left,
+                        assets_transferred_this_session = queued,
+                        bytes_transferred_this_session = moved,
+                        paused_reason = IN_CLOUD_SENTENCE,
+                    )
+                    onState(waiting)
+                    return Report(
+                        enumerated = page.assets.size,
+                        queued = queued,
+                        alreadyHeld = held,
+                        skipped = skipped,
+                        bytes = moved,
+                        remaining = left,
+                        waitingInCloud = 1,
+                        state = waiting,
+                    )
                 }
                 is Offered.Refused -> {
                     // ONE PHOTOGRAPH'S REFUSAL IS NOT THE PASS'S. The cursor is
@@ -226,13 +226,11 @@ public class CameraRoll(
                     // OS interrupted) must not silently cost a photograph.
                     val stopped = BackupState(
                         phase = BackupState.Phase.PHASE_PARKED_LOW_DISK,
-                        assets_remaining = (page.assets.size - index),
+                        assets_remaining = left,
                         assets_transferred_this_session = queued,
                         bytes_transferred_this_session = moved,
-                        transport = BackupState.Transport.TRANSPORT_IROH_BLOBS,
                         paused_reason = outcome.sentence,
                     )
-                    at?.let { services.secureStore.write(cursorKey(vaultId), it) }
                     onState(stopped)
                     return Report(
                         enumerated = page.assets.size,
@@ -240,34 +238,30 @@ public class CameraRoll(
                         alreadyHeld = held,
                         skipped = skipped,
                         bytes = moved,
-                        remaining = page.assets.size - index,
+                        remaining = left,
                         state = stopped,
                     )
                 }
             }
             // ADVANCED PER ASSET. A pass the OS kills resumes where it was.
-            at = cursorAfter(page, index) ?: at
-            at?.let { services.secureStore.write(cursorKey(vaultId), it) }
+            asset.after?.let { services.secureStore.write(key, it) }
             onState(
                 BackupState(
                     phase = BackupState.Phase.PHASE_TRANSFERRING,
-                    assets_remaining = (page.assets.size - index - 1),
+                    assets_remaining = left - 1,
                     assets_transferred_this_session = queued,
                     bytes_transferred_this_session = moved,
-                    transport = BackupState.Transport.TRANSPORT_IROH_BLOBS,
                 ),
             )
         }
+        // THE PAGE'S OWN CURSOR LAST: it is the one the platform minted, and on
+        // iOS the one that turns a finished walk into a change token.
+        page.nextCursor?.let { services.secureStore.write(key, it) }
 
         val finished = BackupState(
-            phase = if (page.nextCursor == null) {
-                BackupState.Phase.PHASE_DONE
-            } else {
-                BackupState.Phase.PHASE_TRANSFERRING
-            },
+            phase = if (page.exhausted) BackupState.Phase.PHASE_DONE else BackupState.Phase.PHASE_TRANSFERRING,
             assets_transferred_this_session = queued,
             bytes_transferred_this_session = moved,
-            transport = BackupState.Transport.TRANSPORT_IROH_BLOBS,
             // LIMITED IS SAID EVEN WHEN IT IS WORKING. A member who granted a
             // selection must be able to see that the other photographs are not
             // missing by accident.
@@ -287,80 +281,117 @@ public class CameraRoll(
     private sealed interface Offered {
         data object Skipped : Offered
 
+        data object InCloud : Offered
+
         data class Queued(val alreadyHeld: Boolean, val bytes: Long) : Offered
 
         data class Refused(val sentence: String) : Offered
     }
 
     /**
-     * One photograph: open it, stage it, queue the write that claims it.
+     * One asset: every resource streamed in and committed, then the
+     * original's derivatives.
      *
-     * `close()` is in a `finally` and is owed on every path, the refusals
-     * included: an abandoned `PHAssetResourceManager` request holds a Photos
-     * queue for the life of the process, and an abandoned Android descriptor is
-     * a file handle.
+     * An asset is offered WHOLE or not at all as far as the cursor is
+     * concerned: a resource that has to wait for iCloud stops the walk on this
+     * asset even when its still already landed, and the next pass re-offers
+     * both — the still as `already_held`.
      */
     private suspend fun offer(handle: CentraidCore, asset: MediaLibrary.Asset): Offered {
-        val original = services.mediaLibrary.open(asset.localId) ?: return Offered.Skipped
-        val staged = try {
+        var queued: Offered.Queued? = null
+        for (resource in asset.resources) {
+            val original = resource.role == MediaLibrary.Resource.Role.ORIGINAL
+            val kind = if (original) asset.kind else MediaLibrary.Kind.VIDEO
+            // BEFORE EACH RESOURCE: a phone that leaves Wi-Fi half way through
+            // a roll stops downloading from iCloud there.
+            val allowNetwork = mayFetch(services.networkStatus.current(), kind)
+            val opened = when (val answer = services.mediaLibrary.open(resource.ref, allowNetwork)) {
+                is MediaLibrary.Opened.Ready -> answer.original
+                MediaLibrary.Opened.InCloud -> return Offered.InCloud
+                // A STILL THAT IS GONE IS THE ASSET GONE; a movie that is gone
+                // costs the still nothing.
+                MediaLibrary.Opened.Gone -> if (original) return Offered.Skipped else continue
+            }
+            val staged = try {
+                Staging.stage(
+                    core = handle,
+                    mediaType = opened.mediaType,
+                    byteSize = opened.bytes,
+                    source = Staging.Source.OS_LIBRARY,
+                    osRef = resource.ref,
+                    read = opened::read,
+                )
+            } catch (why: IllegalStateException) {
+                // A STREAM THAT FAILED MID-WAY IS A REFUSAL, NOT A SHORT FILE.
+                // `MediaLibrary.Original.read` throws rather than ending quietly
+                // for exactly this reason — a truncated original staged as if
+                // it were whole would be committed, under the truncation's own
+                // hash, as the member's photograph.
+                return Offered.Refused(why.message ?: "Centraid could not read that photograph.")
+            } finally {
+                opened.close()
+            }
+            val ok = when (staged) {
+                is Staging.Outcome.No -> return Offered.Refused(staged.refused.sentence)
+                is Staging.Outcome.Ok -> staged.staged
+            }
+            commit(handle, inputFor(asset, ok.contentHash, kind), ok.contentHash)?.let { return it }
+            if (original) {
+                // A RE-WALK RENDERS NOTHING: the core already holds this
+                // original, and its derivatives went in with it the first time.
+                if (!ok.alreadyHeld) derivatives(handle, resource.ref, ok.contentHash)
+                queued = Offered.Queued(alreadyHeld = ok.alreadyHeld, bytes = ok.byteSize)
+            } else {
+                queued = queued?.let { it.copy(bytes = it.bytes + ok.byteSize) }
+            }
+        }
+        return queued ?: Offered.Skipped
+    }
+
+    /** `media.add_asset` for one staged resource; a refusal, or null when it was queued. */
+    private suspend fun commit(handle: CentraidCore, input: String, hash: String): Offered.Refused? {
+        val answer = handle.call(
+            Envelope(
+                request = Request(
+                    command = Command(
+                        name = ACTION,
+                        // THE HASH IS THE INVOKE KEY. See the class comment on
+                        // why it is not the local identifier: the same
+                        // photograph re-offered is the same key, so the re-walk
+                        // that follows a reinstall commits once.
+                        invoke_key = "$ACTION:$hash",
+                        input = input.encodeUtf8(),
+                    ),
+                ),
+            ),
+        )
+        return when (answer) {
+            is CoreOutcome.Failed -> Offered.Refused(
+                answer.failure.sentence.ifEmpty { "Centraid could not queue that photograph." },
+            )
+            is CoreOutcome.Answered -> null
+        }
+    }
+
+    /**
+     * The thumbnail and the preview of one original, as the platform drew
+     * them, staged against its content hash. **A derivative that fails costs
+     * nothing but itself**: the original is committed already, and the grid
+     * falls back to it.
+     */
+    private suspend fun derivatives(handle: CentraidCore, ref: String, hash: String) {
+        for (tier in MediaLibrary.Tier.entries) {
+            val bytes = services.mediaLibrary.render(ref, tier) ?: continue
+            var at = 0
             Staging.stage(
                 core = handle,
-                mediaType = original.mediaType,
-                byteSize = original.bytes,
-                read = original::read,
-            )
-        } catch (why: IllegalStateException) {
-            // A STREAM THAT FAILED MID-WAY IS A REFUSAL, NOT A SHORT FILE.
-            // `MediaLibrary.Original.read` throws rather than ending quietly for
-            // exactly this reason — a truncated original staged as if it were
-            // whole would be committed, under the truncation's own hash, as the
-            // member's photograph.
-            return Offered.Refused(
-                why.message ?: "Centraid could not read that photograph.",
-            )
-        } finally {
-            original.close()
-        }
-        return when (staged) {
-            is Staging.Outcome.No -> Offered.Refused(staged.refused.sentence)
-            is Staging.Outcome.Ok -> {
-                val hash = staged.staged.contentHash
-                val answer = handle.call(
-                    Envelope(
-                        request = Request(
-                            command = Command(
-                                name = ACTION,
-                                // THE HASH IS THE INVOKE KEY. See the class
-                                // comment on why it is not the local
-                                // identifier. It was `Intent.intent_id` and it
-                                // does the same job: the same photograph
-                                // re-offered is the same key, so the re-walk
-                                // that follows a reinstall commits once.
-                                invoke_key = "$ACTION:$hash",
-                                input = inputFor(asset, hash).encodeUtf8(),
-                                // NO `needs` AND NO `online_only` (#1029 §1).
-                                // `NeededBytes` was the declaration a GATEWAY
-                                // pulled the bytes on, and `online_only` was
-                                // the flag that forbade the outbox. There is no
-                                // gateway and no outbox: the bytes are already
-                                // staged in THIS vault's own store by the call
-                                // above, and the command commits the row beside
-                                // them.
-                            ),
-                        ),
-                    ),
-                )
-                when (answer) {
-                    is CoreOutcome.Failed -> Offered.Refused(
-                        answer.failure.sentence.ifEmpty {
-                            "Centraid could not queue that photograph."
-                        },
-                    )
-                    is CoreOutcome.Answered -> Offered.Queued(
-                        alreadyHeld = staged.staged.alreadyHeld,
-                        bytes = staged.staged.byteSize,
-                    )
-                }
+                mediaType = DERIVATIVE_MEDIA_TYPE,
+                byteSize = bytes.size.toLong(),
+                forHash = hash,
+                tier = tier.wire,
+            ) { max ->
+                val end = minOf(at + max, bytes.size)
+                bytes.copyOfRange(at, end).also { at = end }
             }
         }
     }
@@ -372,79 +403,50 @@ public class CameraRoll(
      * identifier is deliberately not sent at all. The column is an FK to
      * `media_asset(asset_id)` and it means EDIT LINEAGE (#711) — "this asset was
      * cropped out of that one" — so a `PHAsset` identifier there would be a
-     * dangling foreign key wearing a field's name. There is no column anywhere
-     * in `media_asset` for a device's own id for a photograph, which is why the
-     * durable cursor and the content-hash intent id, both of which live on the
-     * phone, are what keep a re-walk from re-uploading.
+     * dangling foreign key wearing a field's name. The library's own reference
+     * travels on the stage door as `os_ref`, where the core keeps it beside
+     * the bytes it names and nowhere a row is read.
      *
-     * **`phash` is not sent either.** It is a duplicates hint, the gateway
-     * derives one at commit from bytes it now holds (D-1025-S7-50), and a phone
+     * **`phash` is not sent either.** It is a duplicates hint, and a phone
      * computing one would be decoding every original to produce a second
      * opinion about a value that never merges anything.
      *
      * Hand-spelled rather than serialised: the input is the HASH PREIMAGE, so it
-     * has to be the exact bytes the gateway rehashes, and a JSON library's key
+     * has to be the exact bytes the core rehashes, and a JSON library's key
      * order is not something this layer may leave to a dependency.
      */
-    internal fun inputFor(asset: MediaLibrary.Asset, hash: String): String = buildString {
-        append("{\"staged_sha\":\"").append(hash).append('"')
-        append(",\"kind\":\"").append(asset.kind.wire).append('"')
-        if (asset.capturedAtIso.isNotEmpty()) {
-            append(",\"captured_at\":\"").append(asset.capturedAtIso).append('"')
+    internal fun inputFor(asset: MediaLibrary.Asset, hash: String, kind: MediaLibrary.Kind = asset.kind): String =
+        buildString {
+            append("{\"staged_sha\":\"").append(hash).append('"')
+            append(",\"kind\":\"").append(kind.wire).append('"')
+            if (asset.capturedAtIso.isNotEmpty()) {
+                append(",\"captured_at\":\"").append(asset.capturedAtIso).append('"')
+            }
+            append(",\"tz_offset_min\":").append(asset.capturedUtcOffsetMinutes)
+            asset.captureGroupId?.let {
+                append(",\"capture_group_id\":\"").append(it).append('"')
+            }
+            append('}')
         }
-        append(",\"tz_offset_min\":").append(asset.capturedUtcOffsetMinutes)
-        asset.captureGroupId?.let {
-            append(",\"capture_group_id\":\"").append(it).append('"')
-        }
-        append('}')
-    }
 
     /**
-     * The cursor to write once the asset at [index] is queued.
+     * MAY THIS PASS DOWNLOAD AN ORIGINAL THAT LIVES ONLY IN iCLOUD? (#1080)
      *
-     * The page's OWN `nextCursor` is only correct at the end of the page, so
-     * mid-page this is the platform's cursor for the asset just done — which
-     * `MediaLibrary.page` defines as "everything up to and including this has
-     * been offered". A page whose last asset is done takes `nextCursor`,
-     * because that is the one the platform minted and the one that says whether
-     * the roll is exhausted.
+     * The member's one setting, against the platform's real answer, read
+     * before each resource. A refused platform reading counts as expensive: a
+     * guess wrong towards cheap spends a data plan, a guess wrong towards
+     * expensive delays a photograph. A video never crosses a metered link,
+     * whatever the rule, and under MANUAL what a backup needs waits for Wi-Fi
+     * as under WIFI_ONLY (R-1080-D7).
      */
-    internal fun cursorAfter(page: MediaLibrary.Page, index: Int): String? =
-        if (index == page.assets.lastIndex) page.nextCursor else null
-
-    /**
-     * MAY AN ORIGINAL MOVE ON THIS LINK RIGHT NOW? Null means yes.
-     *
-     * The member's one setting, against the platform's real answer. A refused
-     * platform reading counts as expensive, matching the deleted window policy's
-     * asymmetry: a guess wrong towards cheap spends a data plan, a guess wrong
-     * towards expensive delays a photograph.
-     */
-    internal suspend fun mayMove(reading: NetworkStatus.Reading): BackupState.Phase? {
+    internal suspend fun mayFetch(reading: NetworkStatus.Reading, kind: MediaLibrary.Kind): Boolean {
+        if (!reading.online) return false
         val expensive = reading.metered || reading.platformRefused
+        if (!expensive) return true
         return when (TransferRule.read(services.secureStore)) {
-            // THE UPLOAD OBEYS THE SAME RULE AS THE DOWNLOAD (#1025 S4). A
-            // member who set this phone not to fetch full-size photographs on
-            // its own did not thereby ask it to PUSH them on any link, and one
-            // sentence in a sheet governing one direction would be a sheet
-            // that lies by omission.
-            TransferRule.MANUAL -> BackupState.Phase.PHASE_WAITING_FOR_UNMETERED
-            TransferRule.WIFI_ONLY ->
-                if (expensive) BackupState.Phase.PHASE_WAITING_FOR_UNMETERED else null
-            // A PHOTOGRAPH ON CELLULAR, AND A VIDEO NOT — the fixed rule, on
-            // the way up as well. `crates/blobs` applies it on the way down;
-            // this walk has no tier to plan over, so the one distinction it
-            // can draw is the asset's own kind.
-            TransferRule.WIFI_AND_CELLULAR_PHOTOS -> null
+            TransferRule.WIFI_AND_CELLULAR_PHOTOS -> kind == MediaLibrary.Kind.PHOTO
+            TransferRule.WIFI_ONLY, TransferRule.MANUAL -> false
         }
-    }
-
-    private fun waitingSentence(phase: BackupState.Phase): String = when (phase) {
-        BackupState.Phase.PHASE_WAITING_FOR_UNMETERED ->
-            "Centraid imports these on Wi-Fi."
-        BackupState.Phase.PHASE_WAITING_FOR_POWER ->
-            "Centraid imports these when this phone is charging."
-        else -> ""
     }
 
     /**
@@ -477,18 +479,25 @@ public class CameraRoll(
         internal const val APP: String = "media"
         internal const val ACTION: String = "media.add_asset"
 
+        /** `crates/media/src/renditions.rs`' `DERIVATIVE_MEDIA_TYPE`. */
+        internal const val DERIVATIVE_MEDIA_TYPE: String = "image/jpeg"
+
+        /** Why the walk is waiting on an original it may not download now. */
+        public const val IN_CLOUD_SENTENCE: String =
+            "Some originals are only in iCloud. Centraid fetches them on Wi-Fi."
+
         /**
          * One page, and one pass.
          *
          * Small because each item is an ORIGINAL — tens of megabytes, sometimes
-         * hundreds — and a background window that iOS ends after thirty seconds
-         * will not finish more. The cursor is what makes a small page cost
-         * nothing: the next pass starts where this one stopped.
+         * hundreds — and a window will not finish more. The cursor is what
+         * makes a small page cost nothing: the next pass starts where this one
+         * stopped.
          */
         public const val PAGE: Int = 25
 
         /**
-         * PER VAULT, because a photograph offered to two vaults is two uploads
+         * PER VAULT, because a photograph offered to two vaults is two imports
          * and two rows (`docs/mobile-offline.md:175`) — so a device that holds
          * two vaults walks the roll once for each and each walk has its own
          * place in it.
@@ -499,7 +508,7 @@ public class CameraRoll(
          * small, per-device, and required to survive a relaunch, and the
          * Keychain's `ThisDeviceOnly` accessibility gives it the right
          * lifetime — a restored phone finds no cursor, walks the roll again,
-         * and the content-hash intent id makes that walk queue nothing.
+         * and the content-hash invoke key makes that walk queue nothing.
          */
         public fun cursorKey(vaultId: String): String = "camera-roll.cursor.$vaultId"
     }
