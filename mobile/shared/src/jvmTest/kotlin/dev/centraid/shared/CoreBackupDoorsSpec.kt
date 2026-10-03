@@ -82,6 +82,7 @@ class CoreBackupDoorsSpec : StringSpec({
                     metered = true,
                     charging = false,
                     wantsSnapshot = true,
+                    asked = true,
                 ),
             )
             val sent = seen.single().drain.shouldNotBeNull()
@@ -90,8 +91,15 @@ class CoreBackupDoorsSpec : StringSpec({
             sent.metered shouldBe true
             sent.charging shouldBe false
             sent.wants_snapshot shouldBe true
+            // THE MEMBER'S TAP CROSSES AS ITS OWN BIT (#1080 A24).
+            sent.asked shouldBe true
             // INCLUDED IS THE ZERO VALUE: the wire's default is the complete backup.
             sent.exclude_videos shouldBe true
+            // A SNAPSHOT NOBODY ASKED FOR carries no ask: leaving the screen.
+            door.drain(
+                DrainInput(0, TransferRule.MANUAL, true, metered = false, charging = false, wantsSnapshot = true),
+            )
+            seen.last().drain.shouldNotBeNull().asked shouldBe false
         }
     }
 
