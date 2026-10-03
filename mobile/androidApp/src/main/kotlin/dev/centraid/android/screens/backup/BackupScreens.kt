@@ -379,8 +379,7 @@ private fun Destinations(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 44.dp)
-                    .padding(vertical = 10.dp)
-                    .testTag("backup-destination-" + row.id),
+                    .padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
