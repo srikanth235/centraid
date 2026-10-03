@@ -28,17 +28,25 @@ import Foundation
 /// which is the trap this whole class of bug lives in. So the directory gets it
 /// *and* every item under it does.
 ///
-/// And the items are not made here. The vault file's name is minted in
-/// `Shelf` (Kotlin, `commonMain`); `-wal` and `-shm` are SQLite's; `.bytes` is
-/// derived in `crates/core-ffi`; `objects/`, `spool/`, `scratch/` and
-/// `head.json` are `BackupHome::open`'s. Locker's `K` is not among them: it is
-/// derived from the seed in the core's memory and never written (#1047,
-/// Q-1047-11), so no key directory sits beside the vault. None of those layers can call
+/// And the items are not made here. Each vault's directory holds, by
+/// R-1029-8's list as #1080 left it:
+///
+/// | Path | Made by | What it is |
+/// |---|---|---|
+/// | `vault.db`, `-wal`, `-shm` | `Shelf` (Kotlin) names it; SQLite | the vault |
+/// | `vault.bytes` | the core's content store | originals with no OS-library home, and every derivative |
+/// | `vault.backup.db`, `-wal`, `-shm` | the core's backup ledger (`backup2/ledger.rs`) | destinations, confirmations, the queue — device-local and derived |
+/// | `vault.spool/` | the core's spool | sealed parts waiting for a gateway, which the OS reads while the app is suspended |
+///
+/// and the directory itself holds `.centraid-upload-pins.plist`, the gateway
+/// certificates the background mover pins against (`UploadPins`). Locker's
+/// `K` is not among them: it is derived from the seed in the core's memory
+/// and never written (#1047, Q-1047-11). None of those layers can call
 /// `URL.setResourceValues`, and the one layer that both owns this directory and
 /// can is the shell — `ShellModel.vaultDirectory` is where the path is made.
-/// So the shell sweeps: once before the core opens, once after, and again
-/// whenever the app goes to the background, which is the moment before iOS
-/// would take a backup.
+/// So the shell sweeps the whole tree: once before the core opens, once after,
+/// and again whenever the app goes to the background, which is the moment
+/// before iOS would take a backup.
 ///
 /// ## DATA PROTECTION, AND WHY NOT `.complete`
 ///
@@ -46,10 +54,11 @@ import Foundation
 /// and the reason is in the product: capture, backup upload and the byte
 /// store's work continue while the phone is locked. Under `.complete` the file
 /// becomes unreadable the moment the screen locks and every background task
-/// that touches it fails; under `.completeUntilFirstUserAuthentication` the
-/// file is encrypted at rest until the member unlocks the phone once after a
-/// reboot, and readable after that. It is the strongest class that does not
-/// make a background write a crash.
+/// that touches it fails — including the OS's own background uploads, which
+/// read the spool's parts with this app suspended (#1080 ruling 2). Under
+/// `.completeUntilFirstUserAuthentication` the file is encrypted at rest until
+/// the member unlocks the phone once after a reboot, and readable after that.
+/// It is the strongest class that does not make a background write a crash.
 enum VaultFileProtection {
     /// The protection class every vault-derived path is written under
     /// (#1029 line 84).

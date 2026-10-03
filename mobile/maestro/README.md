@@ -1,6 +1,6 @@
 # `mobile/maestro` — the device flows for the native shells
 
-One flow, `flows/home.yaml`, and the protocol for the iOS background transfer experiment ([#1020](https://github.com/srikanth235/centraid/issues/1020)), `ios-transfer-experiment.md`.
+One flow, `flows/home.yaml`, and the protocol for the backup measurement ([#1080](https://github.com/srikanth235/centraid/issues/1080)), `backup-measurement.md`: the first backup of a 2,000-asset library in one evening, a night's photos confirmed by morning with the app closed on iOS, and a fresh phone's full grid within minutes of the words. It supersedes the iOS background-transfer experiment of [#1020](https://github.com/srikanth235/centraid/issues/1020), whose question — which transport — #1080 ruling 2 answered.
 
 ## The flow has not run under Maestro
 

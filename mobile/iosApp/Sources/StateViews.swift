@@ -204,21 +204,6 @@ struct PhotosGridStateView {
         return event.encoded
     }
 
-    /// WHICH TRANSPORT CARRIED THEM, as a member-readable word.
-    ///
-    /// Reported, never claimed: the iOS background-transfer experiment
-    /// (`mobile/maestro/ios-transfer-experiment.md`) decides which of these the
-    /// product ships, and until it has run this is what a diagnostics surface
-    /// says rather than a sentence in a document. `unspecified` is an honest
-    /// "nothing has moved yet" and not a default.
-    var backupTransport: String {
-        switch state.backup.transport {
-        case .irohBlobs: return "Direct"
-        case .httpsBlobDoor: return "HTTPS"
-        case .unspecified, .UNRECOGNIZED: return "Nothing carried yet"
-        }
-    }
-
     /// WHICH SHEET IS OPEN, if one is.
     ///
     /// It was set and never read: `moreSheetEvent` moved the state and nothing

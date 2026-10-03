@@ -123,6 +123,11 @@ public fun HomeScreen(
      */
     onShowWords: () -> Unit = {},
     onPairLaptop: () -> Unit = {},
+    /**
+     * Open the Backup screen (#1080): Home's backup line is its door.
+     * Defaulted for previews.
+     */
+    onOpenBackup: () -> Unit = {},
 ) {
     Column(
         Modifier
@@ -139,6 +144,11 @@ public fun HomeScreen(
             },
             onDownloadSettings = onDownloadSettings,
         )
+        // THE BACKUP LINE (#1080): where this vault's backup stands, in the
+        // machine's words, and the door to the Backup screen. It is the
+        // backup's and not the lockup's: the lockup says where the VAULT is,
+        // and the phone is the vault.
+        dev.centraid.android.screens.backup.BackupLineRow(state.backup_line, onOpenBackup)
         HomeTitleRow(onSettings = onMakeVault)
         StatusRibbon(state.data_?.status, onEvent)
         val failure = state.failure
