@@ -1,6 +1,10 @@
 package dev.centraid.shared.platform
 
 import centraid.screen.v1.MediaPermission
+import dev.centraid.shared.sync.DeleteCapability
+import dev.centraid.shared.sync.DeleteOutcome
+import dev.centraid.shared.sync.LibraryDeleter
+import dev.centraid.shared.sync.ReleasableItem
 
 /**
  * The JVM's platform services: IN-MEMORY FAKES, and they say so
@@ -240,17 +244,6 @@ public class FakeMediaLibrary(
         )
     }
 
-    /** What [deleteFromLibrary] answers; null deletes every ref it was handed. */
-    public var deleting: ((List<String>) -> MediaLibrary.DeleteOutcome)? = null
-
-    /** Every list [deleteFromLibrary] was handed, in order. */
-    public val deletions: MutableList<List<String>> = mutableListOf()
-
-    override suspend fun deleteFromLibrary(refs: List<String>): MediaLibrary.DeleteOutcome {
-        deletions += refs
-        return deleting?.invoke(refs) ?: MediaLibrary.DeleteOutcome.Deleted(refs)
-    }
-
     /** Whether [open] states a length before the read, as Android does and Photos does not. */
     public var statesSize: Boolean = true
 
@@ -283,6 +276,28 @@ public class FakeMediaLibrary(
             nextCursor = window.lastOrNull()?.localId ?: afterCursor,
             exhausted = start + window.size >= assets.size,
         )
+    }
+}
+
+/**
+ * The shells' library deleter, as a spec drives it (#1080 A20): the system's
+ * confirmation always available, and an answer the spec chooses — by default
+ * every item it is handed went.
+ */
+public class FakeLibraryDeleter(
+    public var capability: DeleteCapability = DeleteCapability.SYSTEM_CONFIRMATION,
+    public var answer: (List<ReleasableItem>) -> DeleteOutcome = { items ->
+        DeleteOutcome(deleted = items.map { it.contentHash }, declined = false, error = null)
+    },
+) : LibraryDeleter {
+    /** Every list [delete] was handed, in order. */
+    public val handed: MutableList<List<ReleasableItem>> = mutableListOf()
+
+    override fun capability(): DeleteCapability = capability
+
+    override fun delete(items: List<ReleasableItem>, done: (DeleteOutcome) -> Unit) {
+        handed += items
+        done(answer(items))
     }
 }
 

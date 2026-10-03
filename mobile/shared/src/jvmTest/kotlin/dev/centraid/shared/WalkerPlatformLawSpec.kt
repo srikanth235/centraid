@@ -22,6 +22,7 @@ import java.io.File
  * | Android walks photographs AND videos | every video on an Android phone is left out of the backup |
  * | Android sizes from the descriptor | `available()` is what reads without blocking, not the length |
  * | Android asks for the original | the camera's GPS tags are redacted from the backed-up bytes |
+ * | iOS marks an edited asset | the core offers an edit's render for deletion, and the next edit loses it |
  */
 class WalkerPlatformLawSpec : StringSpec({
 
@@ -59,6 +60,13 @@ class WalkerPlatformLawSpec : StringSpec({
         withClue("an iCloud download is hard-coded on") {
             ios.contains("networkAccessAllowed = true").shouldBeFalse()
         }
+    }
+
+    "iOS stages the current rendition and says when it is an edit" {
+        // A20: the edited render is the asset's bytes for v1, and an edited
+        // asset is marked so the core never offers it for deletion.
+        ios shouldContain "edited = asset.hasAdjustments"
+        ios shouldContain "PHAssetResourceTypeFullSizePhoto"
     }
 
     "iOS finds what was added since the last walk by its persistent change token" {
