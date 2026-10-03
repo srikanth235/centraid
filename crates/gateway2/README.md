@@ -60,7 +60,7 @@ HTTPS with HTTP/1.1, straight from the phone to the gateway. JSON for small bodi
 - **`claim`** is a restore or a takeover by a phone holding the vault identity key. It signs, with Ed25519, the length-prefixed preimage `"centraid-gateway-claim-v2" ‖ gateway_id ‖ vault_id ‖ u64be(epoch) ‖ head_seen` (`rules::claim::claim_preimage`, which the phone calls too). `epoch` must be the writer epoch plus one and `head_seen` the current head, or nothing moves. The old phone's next write is `MOVED`.
 - **`read`** is the same signature at epoch 0: a token that reads and never writes, so a restoring phone can read the head before it claims.
 
-When a pairing lands, `serve` prints the pairing **safety number** — `centraid_identity::pairing_safety_number` over the vault identity key and the pin, the digits the phone shows — and `pairings` prints it beside each vault. For a pin the function declines, it prints the pin to compare instead. Nothing about it is on the wire.
+When a pairing lands, `serve` prints the pairing **safety number** — `centraid_identity::safety_number_of_bytes` over the vault identity key and the pin, the digits the phone shows — and `pairings` prints it beside each vault. The function reads both as 32 bytes and decodes neither, so every pin has a number (the root's ruling A17). Nothing about it is on the wire.
 
 ### What a phone's store relies on
 

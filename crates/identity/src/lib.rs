@@ -54,5 +54,6 @@ pub use record::{
 };
 pub use safety_number::{
     SAFETY_NUMBER_DIGITS, SAFETY_NUMBER_GROUP, SafetyNumber, pairing_safety_number, safety_number,
+    safety_number_of_bytes,
 };
 pub use sealed_box::{AssociatedData, SealError, SealedBox};
