@@ -152,7 +152,15 @@ fn write_notes(
 }
 
 /// Every row of every table a member has rows in, as text, sorted per table.
-fn dump(vault: &Vault) -> Result<BTreeMap<String, Vec<String>>, DrillError> {
+///
+/// Public because a restore is proved by comparing two of these — this drill's
+/// and `crates/centraid/tests/restore_drill.rs`'s, which crosses the real
+/// gateway — and a crate that may not write SQL has no other way to read
+/// every row.
+///
+/// # Errors
+/// SQLite's refusal.
+pub fn dump(vault: &Vault) -> Result<BTreeMap<String, Vec<String>>, DrillError> {
     Ok(vault.read(|connection| {
         let census = snapshot::census_of(connection).map_err(|error| VaultError::Invariant {
             context: error.to_string(),

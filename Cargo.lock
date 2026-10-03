@@ -415,14 +415,17 @@ name = "centraid"
 version = "1.0.0-alpha.0"
 dependencies = [
  "base64 0.22.1",
+ "blake3",
  "centraid-api-proto",
  "centraid-blobs",
  "centraid-core",
+ "centraid-gateway",
  "centraid-identity",
  "centraid-ontology",
  "centraid-vault",
  "clap",
  "hex",
+ "image",
  "rusqlite",
  "serde_json",
  "tempfile",
