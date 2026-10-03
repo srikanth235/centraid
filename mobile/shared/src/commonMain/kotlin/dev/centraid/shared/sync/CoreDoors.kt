@@ -47,36 +47,42 @@ import okio.ByteString.Companion.toByteString
  */
 public class CoreDrainDoor(private val core: () -> CentraidCore?) : DrainDoor {
 
-    override suspend fun drain(deadlineMs: Long): DrainAnswer? {
+    override suspend fun drain(input: DrainInput): DrainAnswer? {
         val open = core() ?: return null
         val answer = open.call(
-            Envelope(request_id = 0, request = Request(drain = DrainRequest(deadlineMs))),
+            Envelope(request_id = 0, request = Request(drain = DrainRequest(deadline_ms = input.deadlineMs))),
         )
         return when (answer) {
             is CoreOutcome.Answered -> answer.value.response?.drain?.let { drained ->
                 DrainAnswer(
-                    ackedTxid = drained.acked_txid,
                     pendingBytes = drained.pending_bytes,
                     stopped = when (drained.stopped) {
                         DrainStop.DRAIN_STOP_EMPTY -> DrainAnswer.Stopped.EMPTY
                         DrainStop.DRAIN_STOP_DEADLINE -> DrainAnswer.Stopped.DEADLINE
-                        // UNSPECIFIED IS READ AS UNREACHABLE, DELIBERATELY. A
-                        // core from a build that grew a fourth reason answers a
-                        // value this one has no name for, and the safe reading
-                        // of "I do not know why it stopped" is the one that
-                        // leaves the claim behind rather than ahead.
+                        // UNSPECIFIED IS READ AS UNREACHABLE, DELIBERATELY: the
+                        // safe reading of "I do not know why it stopped" leaves
+                        // the claim behind rather than ahead.
                         else -> DrainAnswer.Stopped.UNREACHABLE
                     },
-                    lastAckedAtMs = drained.acked_at_ms,
+                    ackedAtMs = drained.acked_at_ms,
                 )
             }
-            // EVERY REFUSAL IS "NO DRAIN RAN", including the one that means a
-            // drain is already running: `phone.proto` says the core refuses
-            // (`ERROR_CODE_INVALID_REQUEST`) rather than queueing, the pass has
-            // its own try-lock, and this is the same answer arriving from the
-            // other side of the ABI — from a background window that cannot see
-            // a foreground pass.
-            is CoreOutcome.Failed -> null
+            is CoreOutcome.Failed -> {
+                val failure = answer.failure
+                // THE ONE REFUSAL THAT IS AN ANSWER: another phone claimed the
+                // vault. Every other refusal is "no pass ran" — including "a
+                // pass is already running", which the core refuses rather than
+                // queues, exactly as [DrainPass]'s own try-lock does.
+                if (failure.isRefusedWith(ErrorCode.ERROR_CODE_VAULT_MOVED)) {
+                    DrainAnswer(
+                        pendingBytes = 0,
+                        stopped = DrainAnswer.Stopped.MOVED,
+                        movedAtMs = (failure as CoreFailure.Refused).movedAtMs ?: 0L,
+                    )
+                } else {
+                    null
+                }
+            }
         }
     }
 }

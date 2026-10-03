@@ -128,6 +128,29 @@ public enum class TransferRule(
         public suspend fun write(store: SecureStore, rule: TransferRule) {
             store.write(KEY, rule.stored)
         }
+
+        /**
+         * THE SECOND CONTROL: whether video originals are backed up at all
+         * (#1080, the Backup screen). Its own key because it answers a
+         * different question — what, not over which link — and the rule above
+         * already says videos never cross cellular.
+         *
+         * **Absent is INCLUDED**: the complete backup is the default, which is
+         * also why the wire spells it `exclude_videos` (seam contract A3) —
+         * proto3's zero value is then the whole library.
+         */
+        public const val INCLUDE_VIDEOS_KEY: String = "transfer-rule.include-videos"
+
+        public suspend fun includeVideos(store: SecureStore): Boolean =
+            store.read(INCLUDE_VIDEOS_KEY) != EXCLUDED
+
+        public suspend fun writeIncludeVideos(store: SecureStore, include: Boolean) {
+            // INCLUDED IS STORED AS ABSENCE, so the store holds a key only
+            // while the member is spending less than the default.
+            store.write(INCLUDE_VIDEOS_KEY, if (include) "" else EXCLUDED)
+        }
+
+        private const val EXCLUDED: String = "excluded"
     }
 }
 
@@ -143,8 +166,9 @@ public enum class TransferRule(
  * to name an app's types (`PerAppLayoutSpec`) and this is not photographs'
  * business anyway: it is the same window the pass runs under, which is what
  * makes it impossible for a grid to draw a download arrow under one rule while
- * the pass plans under another. `HomeSession` writes it once a round, from the
- * window it just built; a screen reads it.
+ * the pass plans under another. [PassConditions.read] writes it at the start
+ * of every pass, from the reading that pass is about to carry; a screen reads
+ * it.
  *
  * The defaults WITHHOLD NOTHING, so a read that ran before anybody said
  * otherwise labels a cell "still on its way" rather than drawing a download

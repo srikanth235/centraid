@@ -9,11 +9,15 @@ import dev.centraid.core.CentraidCore
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.custody.DevSeed
+import dev.centraid.shared.platform.BackgroundTasks
 import dev.centraid.shared.platform.PlatformServices
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.sync.ChangeStream
 import dev.centraid.shared.sync.CoreDrainDoor
+import dev.centraid.shared.sync.DrainAnswer
+import dev.centraid.shared.sync.DrainPass
+import dev.centraid.shared.sync.PassConditions
 import dev.centraid.shared.sync.ShelfDrain
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenQueryRuntime
@@ -21,6 +25,7 @@ import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenRuntime
 import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.sync.StrandedWrites
+import dev.centraid.shared.sync.rfc3339FromEpochMillis
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -28,9 +33,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -104,27 +111,66 @@ public class HomeSession private constructor(
     private val sinceOpen: TimeMark = TimeSource.Monotonic.markNow()
 
     /**
-     * THE DRAIN OVER THIS DEVICE'S SHELF (#1029 W18-6).
+     * THE PASS OVER THIS DEVICE'S SHELF (#1080, the shells; #1029 W18-6).
      *
-     * It lives on the session and not on either shell, because a pass is over
-     * the SHELF — every held vault, not the one screen a member left open — and
-     * the shelf is this object's. Both shells reach it the same way: iOS
-     * through `HomeBridge.drain`/`becameActive`, Android by calling it
-     * directly, the way Android already collects the `StateFlow` directly.
+     * On the session and not on either shell, because a pass is over the
+     * SHELF — every held vault — and the shelf is this object's. iOS reaches it
+     * through `HomeBridge`, Android directly and from its workers through
+     * [ShellProcess]. The session's own triggers are wired in [open]: the
+     * first pass, every commit, and the radio moving.
      *
-     * Its third trigger is wired here too ([open]): a `ChangeEvent` is the one
-     * signal in this process that says there is something new to send.
+     * The member's rule and the platform's reading are read at the start of
+     * every run ([PassConditions.read]); the next window is asked for after
+     * every pass, because a `BGTaskRequest` is one-shot.
      */
     public val drain: ShelfDrain = ShelfDrain(
         holdings = { shelf.all() },
         doorFor = { core -> CoreDrainDoor(core) },
-        // MONOTONIC, NOT THE WALL CLOCK. The only thing it measures is "how
-        // long since the last pass": a phone whose clock moves — a timezone, a
-        // network correction, a member setting it — would either debounce for
-        // hours or stop debouncing at all. It is never a backup claim; those
-        // moments are the gateway's.
+        // MONOTONIC, NOT THE WALL CLOCK: it measures only "how long since",
+        // and a phone whose clock moves would debounce for hours or never. It
+        // is never a backup claim; those moments are the gateway's.
         nowMs = { sinceOpen.elapsedNow().inWholeMilliseconds },
+        conditions = { PassConditions.read(services) },
+        reschedule = DrainPass.Rescheduler { services.backgroundTasks.resubmit() },
+        onOutcome = { outcome -> settle(outcome) },
     )
+
+    /**
+     * WHAT THE OS SAID WHEN THIS LAUNCH REGISTERED ITS WINDOWS, or null before
+     * it answered. A member reads it: "Background App Refresh is off" is a
+     * reason their backup waits for the app to be opened.
+     */
+    public val backgroundRegistration: StateFlow<BackgroundTasks.Registration?>
+        get() = registration.asStateFlow()
+
+    private val registration = MutableStateFlow<BackgroundTasks.Registration?>(null)
+
+    /**
+     * "BACK UP NOW" (#1080, the three controls): a snapshot and everything
+     * that can move, inside the platform's long-run envelope — a foreground
+     * notification on Android, an awake screen on iOS — which is released
+     * however the run ends. A second press joins the first ([ShelfDrain.backUpNow]).
+     */
+    public suspend fun backUpNow(): List<ShelfDrain.Outcome> {
+        services.backgroundTasks.backlog(start = true)
+        return try {
+            drain.backUpNow()
+        } finally {
+            services.backgroundTasks.backlog(start = false)
+        }
+    }
+
+    /**
+     * ONE VAULT'S PASS ENDED. A vault another phone claimed is frozen here —
+     * the gateway's `MOVED` is the producer `Shelf.freeze` was waiting for
+     * (#1029 F1) — dated by the gateway's clock, never this phone's.
+     */
+    private suspend fun settle(outcome: ShelfDrain.Outcome) {
+        val ran = outcome.outcome as? DrainPass.Outcome.Ran ?: return
+        if (ran.answer.stopped == DrainAnswer.Stopped.MOVED) {
+            vaultMoved(outcome.vaultId, rfc3339FromEpochMillis(ran.answer.movedAtMs ?: 0L), unacked = 0)
+        }
+    }
 
     /**
      * THE FOREGROUND HOLDING'S CORE, ASKED OF THE SHELF EVERY TIME.
@@ -500,6 +546,7 @@ public class HomeSession private constructor(
      * closed app still holds its vaults. Only [forget] removes one.
      */
     public suspend fun close() {
+        ShellProcess.closed(this)
         shelf.closeAll()
         scope.cancel()
     }
@@ -735,6 +782,9 @@ public class HomeSession private constructor(
             // core's bounded, drop-nothing event queue, and a listener that
             // waited for a network there would stall it.
             session.changes.onCommit = { scope.launch { session.drain.afterCommit() } }
+            // THE RADIO MOVED: a link that came back, or Wi-Fi after cellular,
+            // is when withheld originals can go. Debounced on its own clock.
+            services.networkStatus.onChange { reading -> scope.launch { session.drain.onConnectivity(reading) } }
             session.serveSwitches()
             // THE ROSTER COLLECTOR BEFORE THE REBIND, so the roster the shelf
             // is already holding reaches Home rather than being the one value
@@ -743,6 +793,14 @@ public class HomeSession private constructor(
             session.serveStranded()
             session.rebind()
             host.send(HomeEvent(opened = HomeEvent.Opened()))
+            // THE ONE LAUNCH REGISTRATION, here and nowhere else in commonMain
+            // (`BackgroundSchedulingSpec`): both shells open a session at
+            // launch, and a background window the OS never registered is a
+            // backup that runs only while the app is open.
+            scope.launch {
+                session.registration.value = services.backgroundTasks.register()
+                session.drain.onSessionOpened()
+            }
             return session
         }
     }
