@@ -293,7 +293,8 @@ extension Centraid_Screen_V1_VaultLockup {
     /// says the vault is here and whole — the phone is the vault. Nothing on
     /// this side probes anything, so "connected" would promise a live link no
     /// layer here has checked, and "synced" claimed a backup over a vault that
-    /// was never paired (#1047 walk); a laptop's copy is the backup line's. `.syncing` and `.offline` left with the pass
+    /// was never paired (#1047 walk); what a gateway holds is the backup
+    /// line's to say (`BackupLineView`, #1080). `.syncing` and `.offline` left with the pass
     /// they described (#1029 §1, W5) and `.frozen` took their place.
     var stateLine: String {
         switch state {

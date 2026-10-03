@@ -27,12 +27,16 @@
 	<string>1</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_centraid-gateway._tcp</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Centraid uses the camera to scan paper documents into Docs, and to read the square your laptop shows when you pair it.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Centraid uses Face ID to unlock Locker.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Centraid reaches your laptop on this network to back up your vault and to bring it back.</string>
+	<string>Centraid finds and reaches your laptop on this network to back up your vault and to bring it back.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Centraid backs up your camera roll into your own vault.</string>
 	<key>UIAppFonts</key>
