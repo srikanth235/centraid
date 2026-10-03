@@ -407,6 +407,9 @@ enum WaitReason {
   // Nothing but time: the next pass, or the next background window the
   // operating system grants, reaches it.
   WAIT_REASON_WINDOW = 6;
+  // An original the MANUAL rule holds until the member taps Back up now
+  // (`DrainRequest.asked`); no pass on its own moves it.
+  WAIT_REASON_ASK = 7;
 }
 
 // ----------------------------------------------------------- destinations --

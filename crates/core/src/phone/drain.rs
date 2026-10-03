@@ -266,7 +266,14 @@ impl Conditions {
             };
         }
         if !self.may_prepare(kind) {
-            return if matches!(kind, Kind::Original { video: true }) && !self.charging {
+            // `MANUAL` first: the tap lets a video through off the charger
+            // too, so it is the one act that moves either.
+            return if matches!(kind, Kind::Original { .. })
+                && self.rule == wire::TransferRule::Manual
+                && !self.asked
+            {
+                wire::WaitReason::Ask
+            } else if matches!(kind, Kind::Original { video: true }) && !self.charging {
                 wire::WaitReason::Charger
             } else {
                 wire::WaitReason::Window
@@ -1347,6 +1354,32 @@ mod tests {
         assert_eq!(
             wifi.waits_for(Kind::Original { video: false }, false, true),
             wire::WaitReason::Bytes
+        );
+    }
+
+    /// **AN ORIGINAL `MANUAL` HOLDS WAITS FOR THE TAP, NOT FOR TIME** (the
+    /// audit's finding 4): no pass moves it until the member taps Back up now,
+    /// so its reason is `ASK` — a video off the charger included, since the
+    /// tap lets that through too, and a library item whose bytes the shell
+    /// would stream only once it may be sealed.
+    #[test]
+    fn an_original_manual_holds_waits_for_the_members_tap() {
+        let manual = conditions(wire::TransferRule::Manual, false);
+        for (kind, library) in [
+            (Kind::Original { video: false }, false),
+            (Kind::Original { video: false }, true),
+            (Kind::Original { video: true }, false),
+        ] {
+            assert_eq!(
+                manual.waits_for(kind, false, library),
+                wire::WaitReason::Ask,
+                "{kind:?} library {library}"
+            );
+        }
+        assert_eq!(
+            manual.waits_for(Kind::Derivative, false, false),
+            wire::WaitReason::Window,
+            "a derivative is not held by the rule"
         );
     }
 
