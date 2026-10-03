@@ -19,8 +19,10 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-band-more` | Home | the band's More tab |
 | `home-backup-line` | Home | the backup line under the vault lockup, the door to the Backup screen ([#1080](https://github.com/srikanth235/centraid/issues/1080)) |
 | `backup-screen` | Backup | the Backup screen itself |
-| `backup-now` | Backup | "Back up now" |
+| `backup-now` | Backup | "Back up now", dimmed and disabled when the machine's `back_up_now_enabled` is false |
 | `backup-progress` | Backup | the progress sentence while a run is under way |
+| `backup-notice` | Backup | what the last act did, or why it could not (one clause, never a toast) |
+| `backup-background-notice` | Backup | why the phone will not wake Centraid in the background, when it will not |
 | `backup-include-videos` | Backup | the include-videos switch |
 | `backup-rule-<stored>` | Backup | one transfer-rule choice, keyed on the stored word |
 | `backup-add-destination` | Backup | the add-a-gateway control, which opens pairing |

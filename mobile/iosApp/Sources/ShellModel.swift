@@ -130,17 +130,20 @@ final class ShellModel: ObservableObject {
     ///
     /// Two things, in this order. The night's windows are asked for first —
     /// leaving the app is what arms them, and a one-shot request that was only
-    /// ever resubmitted from inside a handler never ran at all. Then one pass
-    /// under the background task's grace, bounded by [backgroundPassSeconds],
-    /// so what is sealed can be handed to the OS to carry while the app is
-    /// suspended. The vault directory's backup exclusion is swept by the
-    /// `didEnterBackground` observer below, not here.
+    /// ever resubmitted from inside a handler never ran at all. Then
+    /// `enteredBackground` under the background task's grace, bounded by
+    /// [backgroundPassSeconds]. It FORCES a snapshot, so what the member just
+    /// wrote is sealed before the app is suspended; it waits inside the grace
+    /// for a pass already running ("Back up now", say) rather than being
+    /// refused by it; and it ends like every iOS pass, handing what is sealed
+    /// to the OS to carry. The vault directory's backup exclusion is swept by
+    /// the `didEnterBackground` observer below, not here.
     func wentToBackground() {
         BackgroundPasses.resubmitAll()
         #if canImport(CentraidShared)
         let grace = ForegroundGrace(name: "dev.centraid.pass.background")
-        home.drain(
-            deadlineMs: Int64(Self.backgroundPassSeconds * 1000),
+        home.enteredBackground(
+            graceMs: Int64(Self.backgroundPassSeconds * 1000),
             onDone: { _ in grace.end() }
         )
         #endif
@@ -258,9 +261,9 @@ final class ShellModel: ObservableObject {
     /// `words.show` and `pair.laptop` (#1047 E5), held for the same reason.
     private let wordsShow = WordsShowBridge()
     private let pairLaptop = PairLaptopBridge()
-    /// THE BACKUP SCREEN'S BRIDGE (#1080), held for the same reason. Its
-    /// shape — `observe`, `open`, `send`, `attach` — is every kit bridge's;
-    /// its name is this lane's assumption (E-A6).
+    /// THE BACKUP SCREEN'S BRIDGE (#1080, seam contract A11), held for the
+    /// same reason. Its shape — `observe`, `open`, `send`, `attach` — is every
+    /// kit bridge's.
     private let backup = BackupBridge()
 
     /// THE REGISTERED SCREENS' PORTS AND ROUTES (K5) — `ScreenRegistry.swift`.
@@ -445,21 +448,19 @@ final class ShellModel: ObservableObject {
         }
     }
 
-    // MARK: The background mover's seam (#1080 §2, A6)
+    // MARK: The background mover's seam (#1080 §2, A6, A11)
     //
-    // EVERY KOTLIN NAME THE MOVER NEEDS BEYOND THE SEAM CONTRACT IS IN THESE
-    // TWO FUNCTIONS, so reconciling them with `commonMain` is one edit here.
-    // The contract names the two interfaces — `BackgroundUploads`, which
+    // EVERY KOTLIN NAME THE MOVER NEEDS IS IN THESE TWO FUNCTIONS: how each
+    // side is handed the other — `BackgroundUploads`, which
     // `BackgroundUploader` implements, and `UploadEvents`, which the core's
-    // side implements — but not how each side is handed the other, nor how
-    // the pinned certificates reach a shell that must answer a server-trust
-    // challenge before any vault is open. The two `HomeBridge` doors below
-    // are this lane's assumption (lane E report, E-A1 and E-A2).
+    // side implements — and how the pinned certificates reach a shell that
+    // must answer a server-trust challenge before any vault is open. Both
+    // `HomeBridge` doors are seam contract A11's.
 
     /// Hand the core this shell's mover, and take the core's sink for what
     /// the mover reports. Called at construction, before the core opens.
     private func wireUploads() {
-        // E-A1: `HomeBridge.installUploads(uploads: BackgroundUploads): UploadEvents`.
+        // A11: `HomeBridge.installUploads(uploads: BackgroundUploads): UploadEvents`.
         let events = home.installUploads(uploads: BackgroundUploader.shared)
         UploadSettlement.shared.attach(CoreUploadSink(events))
     }
@@ -469,9 +470,10 @@ final class ShellModel: ObservableObject {
     /// session opens, when a pairing closes and when a destination is
     /// forgotten — the three moments the core's answer to `pins` changes.
     func refreshUploadPins() {
-        // E-A2: `HomeBridge.uploadPins(onPins: (List<UploadPin>) -> Unit)`, where
+        // A11: `HomeBridge.uploadPins(onPins: (List<UploadPin>) -> Unit)`, where
         // `UploadPin(gateway: String, certDer: ByteArray, addrs: List<String>)`
         // is the core's `pins` arm's `Destination`, cut to what the mover needs.
+        // A refusal never calls back, so the pins kept are never emptied by one.
         home.uploadPins { pins in
             var table: [String: UploadPins.Pin] = [:]
             for pin in pins {
@@ -671,20 +673,17 @@ final class ShellModel: ObservableObject {
         openPairLaptop()
     }
 
-    /// HELD WHILE "BACK UP NOW" RUNS, so leaving the app mid-run gives the
-    /// pass the background task's grace to finish its current part.
-    private var backupGrace: ForegroundGrace?
-
+    /// The Backup screen's state arrived.
+    ///
+    /// A run in flight holds no grace of its own here: the screen's state
+    /// stops describing a run once the screen is dismissed, and leaving the
+    /// app runs `enteredBackground`, which waits for a running pass inside its
+    /// own grace ([wentToBackground]). The screen stays awake for the run
+    /// through the core's own `backlog` hook, not through this shell.
     private func backupChanged(_ data: Data) {
         let before = BackupScreenModel(decoding: backupState)
         backupState = data
         let now = BackupScreenModel(decoding: data)
-        if now.backingUpNow, backupGrace == nil {
-            backupGrace = ForegroundGrace(name: "dev.centraid.pass.now")
-        } else if !now.backingUpNow, let grace = backupGrace {
-            grace.end()
-            backupGrace = nil
-        }
         // A GATEWAY FORGOTTEN OR ADDED CHANGES THE PINS: the mover must never
         // trust a certificate this phone no longer pairs with.
         #if canImport(CentraidShared)
