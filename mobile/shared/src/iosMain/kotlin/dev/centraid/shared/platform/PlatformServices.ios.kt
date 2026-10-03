@@ -69,6 +69,7 @@ import platform.Security.kSecAttrSynchronizable
 import platform.Security.kSecAttrAccessibleAfterFirstUnlock
 import platform.Security.kSecReturnData
 import platform.Security.kSecValueData
+import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
 import platform.Foundation.NSData
 import platform.Foundation.NSFileHandle
@@ -115,6 +116,7 @@ import platform.Photos.PHAuthorizationStatusLimited
 import platform.Photos.PHAuthorizationStatusNotDetermined
 import platform.Photos.PHAuthorizationStatusRestricted
 import platform.Photos.PHPhotoLibrary
+import platform.UIKit.UIApplication
 import platform.UIKit.UIDevice
 import platform.UIKit.UIDeviceBatteryState
 
@@ -148,7 +150,11 @@ public class IosPlatformServices : PlatformServices {
     override val secureStore: SecureStore = IosSecureStore()
     override val backgroundTasks: BackgroundTasks = IosBackgroundTasks()
     override val syncedSecrets: SyncedSecrets = IosSyncedSecrets()
-    override val networkStatus: NetworkStatus = IosNetworkStatus()
+    private val network = IosNetworkStatus()
+    override val networkStatus: NetworkStatus = network
+    // THE SAME PATH MONITOR, so a pass and the seat line never read two
+    // different answers about one link.
+    override val powerAndLink: PowerAndLink = IosPowerAndLink(network)
     override val mediaLibrary: MediaLibrary = IosMediaLibrary()
     override val ocr: Ocr = IosOcr()
     override val secureRandom: SecureRandom = IosSecureRandom()
@@ -314,43 +320,43 @@ public class IosSecureStore : SecureStore {
 
 public class IosBackgroundTasks : BackgroundTasks {
 
-    override suspend fun register(): BackgroundTasks.Registration {
+    /**
+     * Submit both requests and say what iOS granted. **Both are submitted
+     * independently** — iOS grants them independently, and `&&` once meant a
+     * refused refresh left the processing request never asked for at all.
+     */
+    override suspend fun register(): BackgroundTasks.Registration = submitBoth()
+
+    override fun resubmit() {
+        submitBoth()
+    }
+
+    /** No earliest date: iOS may run the processing window as soon as it likes. */
+    override fun nudge() {
+        submit(processingRequest(earliest = false), PROCESSING_IDENTIFIER)
+    }
+
+    /**
+     * "BACK UP NOW" KEEPS THE SCREEN AWAKE (#1080, the shells): a locked phone
+     * suspends the app, and the background session moves only what was handed
+     * off. UIKit's flag, so it is set on the main queue.
+     */
+    override fun backlog(start: Boolean) {
+        dispatch_async(dispatch_get_main_queue()) {
+            UIApplication.sharedApplication.idleTimerDisabled = start
+        }
+    }
+
+    private fun submitBoth(): BackgroundTasks.Registration {
         val refresh = BGAppRefreshTaskRequest(REFRESH_IDENTIFIER)
         refresh.earliestBeginDate = NSDate.dateWithTimeIntervalSinceNow(EARLIEST_SECONDS)
-        // THE LONG ONE, for uploading a generation. A refresh task's budget is
-        // seconds; a `BGProcessingTask` gets minutes, and asks for a network
-        // rather than a charger — a member who never charges overnight still
-        // gets backed up, which is exactly the member most likely to lose a
-        // phone.
-        val processing = BGProcessingTaskRequest(PROCESSING_IDENTIFIER)
-        processing.earliestBeginDate = NSDate.dateWithTimeIntervalSinceNow(EARLIEST_SECONDS)
-        processing.requiresNetworkConnectivity = true
-        processing.requiresExternalPower = false
-        // BOTH ARE SUBMITTED, AND THE COMMENT USED TO LIE ABOUT THAT
-        // (#1029 W18-6). What stood here was
-        // `submit(refresh) && submit(processing)` under a comment reading
-        // "BOTH OR NEITHER" — and `&&` short-circuits, so a refused refresh
-        // meant the processing request was never submitted **at all**. That is
-        // not "neither": it is "the first was refused and the second was never
-        // asked", and the processing task is the one that uploads bytes. iOS
-        // grants the two independently, so a phone whose refresh is refused may
-        // still be granted a processing window.
-        var refusal = ""
-        fun submit(request: BGTaskRequest, which: String): Boolean = try {
-            BGTaskScheduler.sharedScheduler.submitTaskRequest(request, null)
-        } catch (error: Throwable) {
-            refusal = listOf(refusal, "$which: ${error.message ?: "refused"}")
-                .filter { it.isNotEmpty() }
-                .joinToString("; ")
-            false
-        }
-        val refreshTaken = submit(refresh, REFRESH_IDENTIFIER)
-        val processingTaken = submit(processing, PROCESSING_IDENTIFIER)
-        // WHICH ONE WAS REFUSED IS WHAT A MEMBER IS OWED. "Background App
-        // Refresh is off" is the whole truth only when NEITHER was taken; a
-        // phone that will upload but not catch up early, or the reverse, is a
-        // different product to use and saying so is the difference between a
-        // member who understands their backup and one who does not.
+        val refreshRefusal = submit(refresh, REFRESH_IDENTIFIER)
+        val processingRefusal = submit(processingRequest(earliest = true), PROCESSING_IDENTIFIER)
+        val refreshTaken = refreshRefusal == null
+        val processingTaken = processingRefusal == null
+        // WHICH ONE WAS REFUSED IS WHAT A MEMBER IS OWED: a phone that will
+        // prepare and seal but not settle early, or the reverse, is a
+        // different product to use.
         return BackgroundTasks.Registration(
             registered = refreshTaken || processingTaken,
             sentence = when {
@@ -359,13 +365,35 @@ public class IosBackgroundTasks : BackgroundTasks {
                     "Centraid backs up in the background. It only catches up on changes when " +
                         "you open it."
                 refreshTaken ->
-                    "Centraid catches up on changes in the background. It only uploads when " +
-                        "you open it."
+                    "Centraid catches up on changes in the background. It only prepares new " +
+                        "backups when you open it."
                 else ->
                     "Background App Refresh is off, so Centraid only catches up when you open it."
             },
-            refusal = refusal,
+            refusal = listOfNotNull(refreshRefusal, processingRefusal).joinToString("; "),
         )
+    }
+
+    /**
+     * THE LONG WINDOW: prepare and settle (#1080, the shells). Hashing and
+     * sealing a camera roll is minutes of CPU, so it waits for the charger,
+     * and it is pointless without a network to settle against. The bytes
+     * themselves move in the background `URLSession`, which needs neither.
+     */
+    private fun processingRequest(earliest: Boolean): BGProcessingTaskRequest {
+        val processing = BGProcessingTaskRequest(PROCESSING_IDENTIFIER)
+        if (earliest) processing.earliestBeginDate = NSDate.dateWithTimeIntervalSinceNow(EARLIEST_SECONDS)
+        processing.requiresNetworkConnectivity = true
+        processing.requiresExternalPower = true
+        return processing
+    }
+
+    /** Null when iOS took it; the refusal's words when it threw. */
+    private fun submit(request: BGTaskRequest, which: String): String? = try {
+        BGTaskScheduler.sharedScheduler.submitTaskRequest(request, null)
+        null
+    } catch (error: Throwable) {
+        "$which: ${error.message ?: "refused"}"
     }
 
     internal companion object {
@@ -384,9 +412,10 @@ public class IosBackgroundTasks : BackgroundTasks {
         const val REFRESH_IDENTIFIER = "dev.centraid.sync-pass"
 
         /**
-         * The long one. A refresh task gets ~30 seconds; uploading a
-         * generation does not fit in that, and `BGProcessingTask` is the class
-         * iOS provides for work that needs minutes and can wait for a charger.
+         * The long one: prepare (hash and seal into the spool) and settle. A
+         * refresh task gets ~30 seconds and only settles; `BGProcessingTask` is
+         * the class iOS provides for minutes of work that can wait for a
+         * charger. The name is kept because the bundle declares it.
          */
         const val PROCESSING_IDENTIFIER = "dev.centraid.upload-pass"
 
@@ -618,6 +647,9 @@ public class IosNetworkStatus : NetworkStatus {
         listeners += listener
     }
 
+    /** The last path's answer, or null when the monitor has not called back yet. */
+    internal fun meteredNow(): Boolean? = if (lastOnline == null) null else lastMetered
+
     private fun reading(online: Boolean, metered: Boolean): NetworkStatus.Reading =
         NetworkStatus.Reading(
             online = online,
@@ -637,6 +669,24 @@ public class IosNetworkStatus : NetworkStatus {
          * hang a lifecycle transition.
          */
         const val PATH_TIMEOUT_MS = 2_000L
+    }
+}
+
+/**
+ * The link and the charger, synchronously (#1080, `DrainRequest`). The link is
+ * [IosNetworkStatus]'s last path — null before the monitor first called back —
+ * and the charger is `UIDevice`'s battery state, whose monitoring that class
+ * turns on. `Full` counts: the phone is on external power.
+ */
+public class IosPowerAndLink(private val network: IosNetworkStatus) : PowerAndLink {
+    override fun metered(): Boolean? = network.meteredNow()
+
+    override fun charging(): Boolean? = when (UIDevice.currentDevice.batteryState) {
+        UIDeviceBatteryState.UIDeviceBatteryStateCharging,
+        UIDeviceBatteryState.UIDeviceBatteryStateFull,
+        -> true
+        UIDeviceBatteryState.UIDeviceBatteryStateUnplugged -> false
+        else -> null
     }
 }
 
