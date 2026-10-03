@@ -149,19 +149,15 @@ public data class PairAnswer(
 )
 
 /**
- * What a `Restore` answered (`phone.proto`'s `RestoreResponse`).
- *
- * **It carries the device secret the restore minted**, which the core hands
- * over exactly once (`crates/core/src/phone/link.rs`), so its `toString` says
- * nothing of it.
+ * What a `Restore` answered (`phone.proto`'s `RestoreResponse`). Its
+ * `toString` carries counts only: a path or a safety number is not a log
+ * line's to keep.
  */
 public class RestoreAnswer(
     /** Every vault the laptop held for these words, laid down on this phone. */
     public val vaults: List<RestoredVaultAt>,
     /** How many derivation indices were tried past the last that answered. */
     public val gapScanned: Int = 0,
-    /** This phone's new device secret, 64 lowercase hex; the device store's. */
-    public val deviceSecretHex: String = "",
     /**
      * Every vault the restore checked and could not claim
      * (`RestoreResponse.unclaimed`, R-1047-R5): a claim failed after another
@@ -178,7 +174,7 @@ public class RestoreAnswer(
     public val rows: Long get() = vaults.sumOf { it.rows }
 
     override fun toString(): String =
-        "RestoreAnswer(vaults=${vaults.size}, unclaimed=${unclaimed.size}, gapScanned=$gapScanned, <redacted>)"
+        "RestoreAnswer(vaults=${vaults.size}, unclaimed=${unclaimed.size}, gapScanned=$gapScanned)"
 }
 
 /**

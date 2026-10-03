@@ -586,11 +586,11 @@ message BackupState {
   uint32 assets_remaining = 2;
   uint32 assets_transferred_this_session = 3;
   uint64 bytes_transferred_this_session = 4;
-  // WHICH TRANSPORT carried them. The iOS background-transfer experiment
-  // (`mobile/maestro/ios-transfer-experiment.md`) decides which of these the
-  // product ships, and until it has run this field is what a diagnostics screen
-  // reports rather than a claim in a document.
-  Transport transport = 5;
+  // 5 was `transport`: which of the iroh blob transfer and the HTTPS blob door
+  // carried the bytes. Both left with #1080, whose backup has one protocol, and
+  // nothing set it.
+  reserved 5;
+  reserved "transport";
   // Why it is not running, when it is not. Never inferred from a radio: the
   // pass asks the platform for the real answer.
   string paused_reason = 6;
@@ -606,14 +606,6 @@ message BackupState {
     PHASE_WAITING_FOR_UNMETERED = 5;
     PHASE_PARKED_LOW_DISK = 6;
     PHASE_DONE = 7;
-  }
-
-  enum Transport {
-    TRANSPORT_UNSPECIFIED = 0;
-    TRANSPORT_IROH_BLOBS = 1;
-    // The HTTPS blob door, behind the `blob-door` feature — the one exception
-    // to `no-listening-socket`.
-    TRANSPORT_HTTPS_BLOB_DOOR = 2;
   }
 }
 
@@ -11156,7 +11148,10 @@ message WordsEntryState {
   string body = 5;
   // Always 24 cells, in order.
   repeated WordEntry cells = 6;
-  // PURPOSE_RESTORE only: the optional laptop address, and what it is for.
+  // The pairing code of the gateway to restore from, and what it is for: the
+  // text its `centraid-gateway pair` printed (`RestoreRequest.payload`, #1080
+  // A1). Drawn for every purpose but PURPOSE_REKEY; the core refuses a
+  // restore that names no gateway.
   string endpoint_label = 7;
   string endpoint = 8;
   // The phrase's verdict or the refusal, as a sentence; empty for none.
@@ -11202,7 +11197,7 @@ message WordsEntryState {
     // Bring every vault back with the seed this phone ALREADY holds — the one
     // the synchronised keychain carried here, with no words (#1047,
     // Q-1047-18). `cells` is empty and `secure` is false: nothing secret is
-    // on the screen, only the optional laptop address.
+    // on the screen, only the gateway's pairing code.
     PURPOSE_RESTORE_HELD = 3;
   }
 
@@ -11355,18 +11350,20 @@ message WordsShowEvent {
 // --- Pair with the laptop (#1047) ---
 // ---------------------------------------------------------------------------
 //
-// `pair.laptop`. The laptop's owner runs `centraid-gateway invite` and it
-// prints a square and the same text beneath it: a pairing ticket (the laptop's
-// endpoint id, a one-time invite code and the addresses to dial). The phone
-// scans or pastes it; the core redeems the invite, claims the lease and hands
-// back the pairing's safety number (`PairResponse.safety_number`: 60 digits in
-// 12 groups of 5 over the vault's identity key and the laptop's endpoint key),
+// `pair.laptop`. The gateway's owner runs `centraid-gateway pair` and it
+// prints a square and the same text beneath it: the pairing code
+// (`{v: 2, gw, addrs, pin, secret, exp_ms}`, #1080). The phone scans or
+// pastes it; the core dials one of its addresses pinning the certificate the
+// code names, pairs with its one-use secret, keeps the gateway as a backup
+// destination and hands back the pairing's safety number
+// (`PairResponse.safety_number`: 60 digits in 12 groups of 5 over the vault's
+// identity key and the gateway certificate's fingerprint, #1080 A7 and A17),
 // which the member compares with the number `centraid-gateway serve` prints
-// once the invite is redeemed (W15-D5). That comparison is the whole security
+// when the pairing lands (W15-D5). That comparison is the whole security
 // property of the flow and it is the member's to make.
 //
-// The ticket is not a secret the way the words are — it is spent on first use
-// and expires — so pasting is allowed and the screen is not shielded.
+// The code is not a secret the way the words are — its secret is spent on
+// first use and expires — so pasting is allowed and the screen is not shielded.
 
 message PairLaptopState {
   Phase phase = 1;

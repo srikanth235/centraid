@@ -59,18 +59,18 @@ class EnrollmentSpec : StringSpec({
         }
 
         val restore = object : RestoreDoor {
-            override suspend fun restore(words: List<String>, endpoint: String?): RestoreResult {
+            override suspend fun restore(words: List<String>, payload: String?): RestoreResult {
                 log += "restore seed=${secrets.seed() != null}"
                 return answered()
             }
 
-            override suspend fun restoreSeed(seedHex: String, endpoint: String?): RestoreResult {
-                log += "restore-seed ${seedHex.take(4)} endpoint=$endpoint"
+            override suspend fun restoreSeed(seedHex: String, payload: String?): RestoreResult {
+                log += "restore-seed ${seedHex.take(4)} payload=$payload"
                 return answered()
             }
 
-            override suspend fun restoreStayed(seedHex: String, endpoint: String?, indices: List<Int>): RestoreResult {
-                log += "restore-stayed ${seedHex.take(4)} endpoint=$endpoint indices=$indices"
+            override suspend fun restoreStayed(seedHex: String, payload: String?, indices: List<Int>): RestoreResult {
+                log += "restore-stayed ${seedHex.take(4)} payload=$payload indices=$indices"
                 return answered()
             }
         }
@@ -81,8 +81,8 @@ class EnrollmentSpec : StringSpec({
                 return FoundResult.Made("My vault")
             }
 
-            override suspend fun adoptRestored(restored: List<Shelf.Restored>, deviceSecretHex: String): Int {
-                log += "adopt ${restored.map { it.index }} seed=${secrets.seed() != null} secret=${deviceSecretHex.length}"
+            override suspend fun adoptRestored(restored: List<Shelf.Restored>): Int {
+                log += "adopt ${restored.map { it.index }} seed=${secrets.seed() != null}"
                 return restored.size
             }
 
@@ -188,15 +188,14 @@ class EnrollmentSpec : StringSpec({
             val phone = Phone()
             phone.restoreAnswer = RestoreAnswer(
                 vaults = listOf(RestoredVaultAt("/v/a/vault.db", 0, rows = 10), RestoredVaultAt("/v/b/vault.db", 2)),
-                deviceSecretHex = "cd".repeat(32),
             )
             val done = phone.enrollment.restore(wordsA, null).shouldBeInstanceOf<Enrollment.Restored.Done>()
             done.added shouldBe 2
-            phone.log shouldBe listOf("restore seed=false", "adopt [0, 2] seed=true secret=64")
+            phone.log shouldBe listOf("restore seed=false", "adopt [0, 2] seed=true")
             phone.secrets.seed() shouldBe seedA
             phone.secrets.seedSettled() shouldBe true
-            // THE DEVICE SECRET NEVER PRINTS.
-            done.answer.toString() shouldNotContain "cd".repeat(32)
+            // A RESTORED VAULT'S PATH NEVER PRINTS: the answer's text is counts.
+            done.answer.toString() shouldNotContain "/v/a/vault.db"
         }
     }
 
@@ -207,12 +206,11 @@ class EnrollmentSpec : StringSpec({
             val phone = Phone()
             phone.restoreAnswer = RestoreAnswer(
                 vaults = listOf(RestoredVaultAt("/v/a/vault.db", 0)),
-                deviceSecretHex = "cd".repeat(32),
                 unclaimed = listOf(UnclaimedVaultAt(index = 1, vaultId = "ef".repeat(32))),
             )
             val done = phone.enrollment.restore(wordsA, null).shouldBeInstanceOf<Enrollment.Restored.Done>()
             done.added shouldBe 1
-            phone.log shouldBe listOf("restore seed=false", "adopt [0] seed=true secret=64")
+            phone.log shouldBe listOf("restore seed=false", "adopt [0] seed=true")
             done.answer.unclaimed.map { it.index } shouldBe listOf(1)
         }
     }
@@ -224,26 +222,24 @@ class EnrollmentSpec : StringSpec({
             val phone = Phone()
             phone.restoreAnswer = RestoreAnswer(
                 vaults = listOf(RestoredVaultAt("/v/a/vault.db", 0)),
-                deviceSecretHex = "cd".repeat(32),
                 unclaimed = listOf(UnclaimedVaultAt(index = 1, vaultId = "ef".repeat(32))),
             )
             phone.enrollment.restore(wordsA, null).shouldBeInstanceOf<Enrollment.Restored.Done>()
             phone.restoreAnswer = RestoreAnswer(
                 vaults = listOf(RestoredVaultAt("/v/c/vault.db", 1)),
-                deviceSecretHex = "ce".repeat(32),
             )
             val again = phone.enrollment.restoreStayed(listOf(1), "ab")
                 .shouldBeInstanceOf<Enrollment.Restored.Done>()
             again.added shouldBe 1
             phone.log.drop(2) shouldBe listOf(
-                "restore-stayed aaaa endpoint=ab indices=[1]",
-                "adopt [1] seed=true secret=64",
+                "restore-stayed aaaa payload=ab indices=[1]",
+                "adopt [1] seed=true",
             )
             // STILL REFUSED, NOTHING HELD: the vaults already here are untouched.
             phone.restoreAnswer = null
             phone.refusal = RestoreRefusal.NOT_TAKEN
             phone.enrollment.restoreStayed(listOf(1), null) shouldBe Enrollment.Restored.NotTaken
-            phone.log.last() shouldBe "restore-stayed aaaa endpoint=null indices=[1]"
+            phone.log.last() shouldBe "restore-stayed aaaa payload=null indices=[1]"
             // NO SEED HERE, NO RETRY: nothing is dialled.
             val bare = Phone()
             bare.enrollment.restoreStayed(listOf(1), null) shouldBe Enrollment.Restored.Refused(Enrollment.Refusal.NOT_A_PHRASE)
@@ -258,12 +254,11 @@ class EnrollmentSpec : StringSpec({
             phone.enrollment.standing() shouldBe Enrollment.Standing.UNSETTLED
             phone.restoreAnswer = RestoreAnswer(
                 vaults = listOf(RestoredVaultAt("/v/a/vault.db", 0), RestoredVaultAt("/v/c/vault.db", 1)),
-                deviceSecretHex = "cd".repeat(32),
             )
             val done = phone.enrollment.restoreHeld("ab".repeat(32))
                 .shouldBeInstanceOf<Enrollment.Restored.Done>()
             done.added shouldBe 2
-            phone.log shouldBe listOf("restore-seed aaaa endpoint=${"ab".repeat(32)}", "adopt [0, 1] seed=true secret=64")
+            phone.log shouldBe listOf("restore-seed aaaa payload=${"ab".repeat(32)}", "adopt [0, 1] seed=true")
             phone.enrollment.standing() shouldBe Enrollment.Standing.SETTLED
             phone.secrets.words().shouldBeNull()
         }

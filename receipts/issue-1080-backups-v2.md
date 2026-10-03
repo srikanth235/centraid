@@ -465,3 +465,41 @@ bash .governance/run.sh
 - The emitters and `bun run format` — no drift outside this lane's edits; `bun run format:check` — all 525 files formatted.
 - `bash .governance/run.sh` — every directive passes but `law`, with one finding at the window door: `receipt-per-issue`, because this receipt's `## Audit` holds no PASS or REFUTED verdict yet. The verdict is the umbrella's independent review's to write at the close, above this section.
 - Red first: removing the launch `register()` turned two scheduling specs red; a line that called everything whole turned `BackupStatusSpec` red; the walker's platform laws were red against `20dfdfd5`'s actuals (a temporary file, `available()`, images only); the rule-change spec was red with `uploads?.cancelAll()` removed.
+
+### Round two — on lane C's phone core
+
+The umbrella at `477ad015` (lane C's `618c1525`, merged at `8cbc5039`) fast-forwarded this branch, which it already contained at `3aa8bcda`. Kotlin only: no cargo command ran, because lane C's cut-over was rebuilding in the shared target directory.
+
+| File | Change |
+| --- | --- |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/FreeUpDoors.kt` | `CoreFreeUpDoors` sends `releasable = 29` and `released = 30`. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/CoreBackupDoors.kt` | The envelope helper is `internal askDoor`, shared with the free-up doors. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/Staging.kt` | `osEdited` crosses as `StageBegin.os_edited = 7`, only with `STAGE_SOURCE_OS_LIBRARY`; `poster` is named among the tiers. |
+| `mobile/core/src/commonMain/kotlin/dev/centraid/core/CentraidCore.kt`, `CoreFailure.kt` | `CoreConfiguration.deviceSecretHex` and the `device` key it wrote are gone (#1080 A21); the open-refused text names no device secret. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/custody/VaultSecrets.kt` | `deviceSecret`, `rememberDeviceSecret`, `forgetDeviceSecret` and their constants are gone. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/{shell/Shelf,shell/HomeSession,custody/Enrollment,custody/PairAndRestore,sync/CoreDoors}.kt` | `adoptRestored` takes no secret, `openCore` no vault id, `RestoreAnswer` no `deviceSecretHex`; the restore door does not read `RestoreResponse.device_secret`. |
+| `crates/api-proto/proto/centraid/screen/v1/screen.proto` | The words section names the restore's field as the gateway's pairing code, which the core requires; the pair section's header describes pairing v2; `BackupState.transport` is retired as `reserved 5; reserved "transport";` and its enum deleted, which WIRE_JSON allows once the field is reserved. |
+| `contracts/screens/photos/limited-selection.{textproto,bin}` | No transport; the `.bin` is `build-screen-fixtures.ts`'s output. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/custody/WordsEntry.kt` | Comments: the pairing code, not a laptop address. |
+| `mobile/README.md` | The secure store's row and the bearer-token line follow A21. |
+| `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/{CoreBackupDoorsSpec,VaultSecretsSpec,WordsShelfSpec,EnrollmentSpec,VaultWordsSpec,WordsEntrySpec,ScreenFixtureSpec}.kt`, `mobile/core/src/jvmTest/kotlin/dev/centraid/core/ConfigurationJsonSpec.kt` | `allows_cellular` reaches the mover; `os_edited` is sent for a library item and never for an owned one; the free-up doors cross both ways and a refusal is no answer; no open carries a `device` key and no device key is stored; the fixture decodes with no unknown fields. |
+
+**Not done.** `:core:jvmTest` and `cargo xtask gate --profile mobile-jvm` wait for the cut-over. `mobile/iosApp/Tests/ScreenFixtureTests.swift:129` asserts `state.backup.transport == .irohBlobs`; it is lane E's line to delete, and the iOS test target does not compile until it is. Secure-store keys `device-secret.<vaultId>` that earlier builds wrote are not purged; nothing reads them.
+
+**Found.** words.enter enables Restore with no pairing code, and the re-key that offers a restore never draws the code's field; the core refuses an empty payload as `INVALID_REQUEST` (`crates/core/src/phone/restore.rs:128`), which `CoreRestoreDoor` reads as "could not reach your laptop". `buf breaking` against `main` reports nine deletions in `core/v1/phone.proto` under FILE, all lane C's reservations.
+
+#### Verification, round two
+
+```sh
+mobile/gradlew -p mobile :shared:jvmTest :core:compileTestKotlinJvm
+mobile/gradlew -p mobile :shared:jvmTest --rerun
+buf lint && buf breaking --against '.git#ref=477ad015a,subdir=crates/api-proto/proto'
+bun contracts/tools/export-native-theme.ts && bun contracts/tools/build-screen-fixtures.ts && bun run format && bun run format:check
+bash .governance/run.sh
+```
+
+- `:shared:jvmTest` — 1,102 tests in 75 suites, 0 failures: four device-secret cases left with the device secret, one free-up case joined. `:core:compileTestKotlinJvm` compiled; no cargo task ran.
+- `buf lint` — exit 0; `buf breaking` against the umbrella tip — exit 0.
+- The emitters — only `limited-selection.bin` changed (126 bytes to 124); `bun run format:check` — clean.
+- Red first: `ScreenFixtureSpec` failed against the old `.bin` and passed against the new one.
+- `bash .governance/run.sh` — every directive passes but `law`, whose one finding is still `receipt-per-issue`: the `## Audit` verdict the umbrella's independent review writes at the close.
