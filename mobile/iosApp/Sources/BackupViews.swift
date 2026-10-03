@@ -148,10 +148,8 @@ struct BackupView: View {
 
                 // BACK UP NOW. Offered while nothing runs; while it runs, the
                 // machine's progress sentence stands in its place.
-                if !model.backUpNowLabel.isEmpty, !model.frozen {
+                if !model.backUpNowLabel.isEmpty, !model.frozen, !model.backingUpNow {
                     KitInkButton(label: model.backUpNowLabel) { send(BackupEvents.backUpNow()) }
-                        .disabled(model.backingUpNow)
-                        .opacity(model.backingUpNow ? 0.4 : 1)
                         .accessibilityIdentifier("backup-now")
                 }
                 if model.backingUpNow, !model.progress.isEmpty {
