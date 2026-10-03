@@ -43,6 +43,7 @@
 pub mod access;
 pub mod audit;
 pub mod backup;
+pub mod backup2;
 pub mod bootstrap;
 pub mod canonical;
 pub mod clock;

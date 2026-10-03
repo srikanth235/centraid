@@ -37,3 +37,6 @@ zstd.workspace = true
 [dev-dependencies]
 base64.workspace = true
 serde_json.workspace = true
+# `sealed::FileSealer` writes each part to a temp path the caller supplies, so
+# its tests need a directory of their own (#1080).
+tempfile.workspace = true

@@ -350,16 +350,34 @@ fn function_name(signature: &str) -> Option<String> {
 /// [`tests::the_listener_allowlist_has_no_dead_entries`] fails if an entry
 /// stops accepting — an exemption nobody is looking at is how the next one gets
 /// added quietly.
-const LISTENER_ALLOWED: &[(&str, &str)] = &[(
-    "crates/gateway-server/src/serve.rs",
-    "THE GATEWAY'S LISTENER (#1029 §3). The gateway is the server a \
+///
+/// **Two files while #1080 replaces the gateway, and then one.** The v2
+/// gateway (`crates/gateway2`) is built beside the v1 one in wave 1 and
+/// replaces it at the cut-over; until then each has its one listener file, and
+/// the cut-over lane deletes the first entry with the crate it names.
+const LISTENER_ALLOWED: &[(&str, &str)] = &[
+    (
+        "crates/gateway-server/src/serve.rs",
+        "THE GATEWAY'S LISTENER (#1029 §3). The gateway is the server a \
          member runs on their own laptop; the hosted adapter is struck from v0 \
          (scope amendment 2026-09-21). Both carriers are confined to this file \
          — the TCP bind for a self-hoster with a domain, and the iroh endpoint \
          that offers `centraid-gateway/1` and accepts — and it hands every \
          connection to `crates/gateway-server/src/http.rs`: it decides nothing \
-         about a request, and every rule it serves is `crates/gateway-core`'s",
-)];
+         about a request, and every rule it serves is `crates/gateway-core`'s. \
+         Removed with that crate at #1080's cut-over",
+    ),
+    (
+        "crates/gateway2/src/server/serve.rs",
+        "THE v2 GATEWAY'S LISTENER (#1080). The phone opens a TLS connection \
+         straight to the gateway the member runs; this file binds its one TCP \
+         port, completes each TLS handshake and answers the LAN's Bonjour \
+         queries, and hands every connection to \
+         `crates/gateway2/src/server/http.rs`, which decides nothing: every \
+         rule it serves is `crates/gateway2/src/rules`'. The rest of the crate, \
+         its harness and its tests are scanned like any other file",
+    ),
+];
 
 pub fn no_listening_socket(root: &Path) -> RuleReport {
     const NAME: &str = "no-listening-socket";
@@ -847,6 +865,42 @@ fn door() {
         assert_eq!(report.findings.len(), 1, "{:?}", report.findings);
         assert!(
             report.findings[0].contains("crates/gateway-server/src/sneaky.rs:2"),
+            "{:?}",
+            report.findings
+        );
+    }
+
+    /// THE v2 ALLOWANCE IS ONE FILE TOO (#1080). `serve.rs` binds and
+    /// accepts; the same lines anywhere else in `crates/gateway2` — the test
+    /// harness, a route, an integration test — are findings.
+    #[test]
+    fn a_second_listener_in_the_v2_gateway_crate_is_still_caught() {
+        let root = fixture_dir("listener-gateway2");
+        write(
+            &root,
+            "crates/gateway2/src/server/serve.rs",
+            "async fn bind() {\n    let _ = TcpListener::bind(\"0.0.0.0:8443\").await;\n    \
+             let _ = listener.accept().await;\n}\n",
+        );
+        for sneaky in [
+            "crates/gateway2/src/server/harness.rs",
+            "crates/gateway2/tests/conformance_wire.rs",
+        ] {
+            write(
+                &root,
+                sneaky,
+                "async fn other() {\n    let _ = tokio::net::TcpListener::bind(\"127.0.0.1:0\").await;\n}\n",
+            );
+        }
+        let report = no_listening_socket(&root);
+        assert_eq!(report.findings.len(), 2, "{:?}", report.findings);
+        assert!(
+            report.findings[0].contains("crates/gateway2/src/server/harness.rs:2"),
+            "{:?}",
+            report.findings
+        );
+        assert!(
+            report.findings[1].contains("crates/gateway2/tests/conformance_wire.rs:2"),
             "{:?}",
             report.findings
         );
