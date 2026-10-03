@@ -356,6 +356,14 @@ pub enum StoreError {
     /// later; nothing is assumed stored.
     #[error("the destination is unreachable: {0}")]
     Unreachable(String),
+    /// The machine that answered is not the destination this device paired
+    /// with: another certificate, or another id. Nothing is sent to it.
+    #[error("the machine that answered is not the paired destination: {0}")]
+    Untrusted(String),
+    /// What the destination served does not hash to the digest it came with:
+    /// the copy it holds, or the bytes on the way, are damaged.
+    #[error("the copy on the destination did not open: {0}")]
+    Damaged(String),
     /// A newer writer claimed this vault at `epoch`; this one's writes are
     /// refused and its reads still answer.
     #[error("MOVED: a writer at epoch {epoch} superseded this one")]

@@ -237,6 +237,7 @@ pub(crate) fn plane_error(error: PlaneError) -> CoreError {
 pub(crate) fn store_error(error: StoreError) -> CoreError {
     match error {
         StoreError::Unreachable(reason) => CoreError::Unavailable { reason },
+        StoreError::Untrusted(reason) => CoreError::GatewayRefused { reason },
         StoreError::Moved { epoch } => CoreError::VaultMoved {
             current_epoch: epoch,
             moved_at_ms: 0,
@@ -402,7 +403,7 @@ pub(crate) fn standing(
         .map(|part| (part.name, part))
         .collect();
     let conditions = drain::Conditions::remembered(ledger)?;
-    let reachable = drain::last_reach(ledger)?;
+    let unreached = drain::last_reach(ledger)?;
     let paired = !ledger.destinations().map_err(plane_error)?.is_empty();
     let mut out = Standing::default();
     for file in files {
@@ -420,8 +421,10 @@ pub(crate) fn standing(
             // up without a reason to wait out.
             continue;
         }
-        let reason = if !paired || !reachable {
+        let reason = if !paired {
             wire::WaitReason::Gateway
+        } else if let Some(reason) = unreached {
+            reason
         } else {
             let spooled = names
                 .iter()

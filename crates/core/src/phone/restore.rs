@@ -297,7 +297,8 @@ impl Staged {
 }
 
 /// What a rebuild that would not finish is to the shell: a gateway that
-/// stopped answering is `Unavailable`; anything else is a snapshot this phone
+/// stopped answering is `Unavailable`; a machine that is not the pinned
+/// gateway is refused, as at pairing; anything else is a snapshot this phone
 /// would not accept, `INTERNAL`.
 fn restore_error(error: RestoreError, index: u32) -> CoreError {
     match error {
@@ -305,6 +306,9 @@ fn restore_error(error: RestoreError, index: u32) -> CoreError {
             CoreError::Unavailable {
                 reason: format!("the gateway stopped answering: {reason}"),
             }
+        }
+        RestoreError::Plane(PlaneError::Store(StoreError::Untrusted(reason))) => {
+            CoreError::GatewayRefused { reason }
         }
         other => CoreError::Invariant {
             context: format!(

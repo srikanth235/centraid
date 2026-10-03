@@ -64,7 +64,7 @@ use centraid_vault::backup::spool::Spool;
 use centraid_vault::backup::store::{self as plane_store, Store};
 use centraid_vault::clock::SystemClock;
 
-use super::link::{self, GatewayStore, Reached};
+use super::link::{self, GatewayStore, Reached, Unreached};
 use super::{Keyring, Plane, now_ms, plane_error, store_error};
 use crate::error::{CoreError, Result};
 use crate::handle::Handle;
@@ -287,17 +287,28 @@ impl Conditions {
     }
 }
 
-/// Whether the last pass reached a gateway. Unknown is "yes": a phone that
-/// has not run a pass yet is not blamed on its gateway.
+/// What the last pass found at the gateway, as the reason everything waits:
+/// `None` when it reached one, or when no pass has run yet — a phone that has
+/// not tried is not blamed on its gateway; `GATEWAY` when none answered;
+/// `UNTRUSTED` when the machine that answered is not the pinned gateway,
+/// whether at the start of the pass or part-way through it.
 ///
 /// # Errors
 /// The ledger's refusal.
-pub fn last_reach(ledger: &Ledger) -> Result<bool> {
-    Ok(ledger
-        .meta(REACHABLE_KEY)
-        .map_err(plane_error)?
-        .is_none_or(|text| text == "1"))
+pub fn last_reach(ledger: &Ledger) -> Result<Option<wire::WaitReason>> {
+    Ok(
+        match ledger.meta(REACHABLE_KEY).map_err(plane_error)?.as_deref() {
+            Some(REACH_SILENT) => Some(wire::WaitReason::Gateway),
+            Some(REACH_UNTRUSTED) => Some(wire::WaitReason::Untrusted),
+            _ => None,
+        },
+    )
 }
+
+/// `REACHABLE_KEY`'s three values.
+const REACH_ANSWERED: &str = "1";
+const REACH_SILENT: &str = "0";
+const REACH_UNTRUSTED: &str = "untrusted";
 
 // ─── the pass ───────────────────────────────────────────────────────────────
 
@@ -350,6 +361,10 @@ fn stop_of(stop: &Stop) -> Result<Option<wire::DrainStop>> {
             tracing::debug!(%reason, "the gateway stopped answering mid-pass");
             Ok(Some(wire::DrainStop::Unreachable))
         }
+        Stop::Untrusted(reason) => {
+            tracing::warn!(%reason, "the machine that answered is not the pinned gateway");
+            Ok(Some(wire::DrainStop::Untrusted))
+        }
         Stop::Refused(refusal) => {
             tracing::warn!(code = %refusal, "the gateway refused a part; the pass stops");
             Ok(Some(wire::DrainStop::Unreachable))
@@ -389,25 +404,34 @@ pub fn run(
     let mut pass = Pass::new();
     let destinations = ledger.destinations().map_err(plane_error)?;
     let reached = if destinations.is_empty() {
-        None
+        Err(Unreached::Silent)
     } else {
         link::reach(&destinations, &ledger, keyring.vault_id(), runtime)?
     };
     ledger
         .set_meta(
             REACHABLE_KEY,
-            if reached.is_some() || destinations.is_empty() {
-                "1"
-            } else {
-                "0"
+            match &reached {
+                Ok(_) => REACH_ANSWERED,
+                // Nothing paired is not a gateway to blame.
+                Err(_) if destinations.is_empty() => REACH_ANSWERED,
+                Err(Unreached::Silent) => REACH_SILENT,
+                Err(Unreached::Untrusted) => REACH_UNTRUSTED,
             },
         )
         .map_err(plane_error)?;
-    let Some(reached) = reached else {
-        // NOTHING PAIRED, OR NOTHING ANSWERED: nothing is sealed for nobody,
-        // and the spool is left exactly as it was.
-        pass.stopped = wire::DrainStop::Unreachable;
-        return answer(&spool, pass);
+    let reached = match reached {
+        Ok(reached) => reached,
+        Err(unreached) => {
+            // NOTHING PAIRED, NOTHING ANSWERED, OR NOT THE PINNED GATEWAY:
+            // nothing is sealed for nobody, and the spool is left exactly as
+            // it was.
+            pass.stopped = match unreached {
+                Unreached::Silent => wire::DrainStop::Unreachable,
+                Unreached::Untrusted => wire::DrainStop::Untrusted,
+            };
+            return answer(&spool, pass);
+        }
     };
     let outcome = pass_over(
         handle,
@@ -421,7 +445,16 @@ pub fn run(
         &mut pass,
     );
     match outcome {
-        Ok(()) => answer(&spool, pass),
+        Ok(()) => {
+            if pass.stopped == wire::DrainStop::Untrusted {
+                // PART-WAY THROUGH, ANOTHER MACHINE ANSWERED: status says so
+                // until a pass reaches the pinned gateway again.
+                ledger
+                    .set_meta(REACHABLE_KEY, REACH_UNTRUSTED)
+                    .map_err(plane_error)?;
+            }
+            answer(&spool, pass)
+        }
         Err(CoreError::VaultMoved { current_epoch, .. }) => {
             // FROZEN, AND REMEMBERED: the ledger keeps the refusal, so status
             // draws the phone read-only and every pass refuses at once.
@@ -1204,7 +1237,7 @@ pub fn reconcile(
         return Ok(unreachable);
     }
     let destinations = ledger.destinations().map_err(plane_error)?;
-    let Some(reached) = link::reach(&destinations, &ledger, keyring.vault_id(), runtime)? else {
+    let Ok(reached) = link::reach(&destinations, &ledger, keyring.vault_id(), runtime)? else {
         return Ok(unreachable);
     };
     let reconciled = if full {

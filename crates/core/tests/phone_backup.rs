@@ -14,6 +14,7 @@
 //! | [`a_restore_brings_every_vault_back_and_the_old_phone_freezes`] | the words and the payload alone bring the vault back, checked before the claim, with its derivatives; the old phone's next pass is refused `MOVED` and it reads frozen; the restored phone backs up again |
 //! | [`a_head_set_between_the_check_and_the_claim_is_checked_before_it_is_claimed`] | #1047 L1 on the new plane: the claim names the head it checked, and a head the old phone set in that window is laid down and checked first |
 //! | [`pairing_a_gateway_that_holds_the_vault_takes_it_over`] | `VAULT_KNOWN` at pairing is a takeover by claim, and the phone it supersedes freezes |
+//! | [`a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_damaged`] | a flipped bit in the gateway's copy is `FETCH_OUTCOME_DAMAGED` and lands nothing; another machine at the gateway's address is `FETCH_OUTCOME_UNTRUSTED`, a pass that stops `DRAIN_STOP_UNTRUSTED`, and a status that waits `WAIT_REASON_UNTRUSTED` |
 //! | [`forgetting_a_gateway_revokes_this_phones_token_there`] | `forget_destination` revokes the phone's token on the gateway first, and a gateway that cannot be reached is forgotten anyway and says it was not revoked |
 
 use std::path::{Path, PathBuf};
@@ -1055,4 +1056,98 @@ fn forgetting_a_gateway_revokes_this_phones_token_there() {
         !forget(&handle, &gone_id).forgotten,
         "a second forget finds nothing"
     );
+}
+
+/// The gateway's name for part `index` of the file `hash_hex`: what a test
+/// needs to damage one object on purpose.
+fn gateway_name(hash_hex: &str, index: u32) -> centraid_gateway::rules::ids::Name {
+    let keyring = centraid_core::phone::Keyring::derive(&seed(), 0).expect("the keys derive");
+    let h = centraid_vault::backup::naming::PlaintextHash::from_bytes(
+        <[u8; 32]>::try_from(hex::decode(hash_hex).expect("hex")).expect("32 bytes"),
+    );
+    let name = centraid_vault::backup::naming::name(&keyring.backup, &h, index);
+    centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes())
+}
+
+#[test]
+fn a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_damaged() {
+    let home = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    let id = pair(&phone, &home)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    let photo = bytes_of("an original the gateway will damage", 250_000);
+    let photo_handle = stage(&phone, owned("image/heic", &photo), &photo);
+    add_asset(&phone, &photo_handle, "photo");
+    drain(&phone, at_home());
+    let door = phone.bytes().expect("a door");
+    let hash = centraid_blobs::ContentHash::parse_hex(&photo_handle.content_hash).expect("hex");
+    assert!(door.store().remove(hash).expect("removes"));
+    let fetch = || {
+        let wire::response::Kind::FetchOriginal(fetched) = ask(
+            &phone,
+            wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
+                content_hash: hex::decode(&photo_handle.content_hash).expect("hex"),
+            }),
+        ) else {
+            panic!("a fetch answers");
+        };
+        fetched
+    };
+
+    // DAMAGED: one bit flipped in the gateway's copy, which no scrub has
+    // marked yet, so the gateway still serves it.
+    let vault = centraid_core::phone::Keyring::derive(&seed(), 0)
+        .expect("the keys derive")
+        .vault_id();
+    home.spawned
+        .corrupt(&vault, &gateway_name(&photo_handle.content_hash, 0))
+        .expect("a bit flips");
+    let damaged = fetch();
+    assert_eq!(
+        damaged.outcome,
+        wire::FetchOutcome::Damaged as i32,
+        "{damaged:?}"
+    );
+    assert!(
+        door.store().path_of(hash).expect("reads").is_none(),
+        "nothing damaged lands"
+    );
+
+    // UNTRUSTED: another machine answers at the pinned gateway's address.
+    let impostor = gateway();
+    let ledger = centraid_vault::backup::ledger::Ledger::open(dir.path().join("vault.backup.db"))
+        .expect("the ledger opens");
+    let mut row = ledger
+        .destination(&id)
+        .expect("reads")
+        .expect("the gateway is paired");
+    row.addrs = vec![impostor.spawned.addr.to_string()];
+    ledger.put_destination(&row).expect("writes");
+    let untrusted = fetch();
+    assert_eq!(
+        untrusted.outcome,
+        wire::FetchOutcome::Untrusted as i32,
+        "{untrusted:?}"
+    );
+    let fresh = bytes_of("taken while another machine answers", 40_000);
+    let fresh_handle = stage(&phone, owned("image/heic", &fresh), &fresh);
+    add_asset(&phone, &fresh_handle, "photo");
+    let drained = drain(&phone, at_home());
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Untrusted as i32,
+        "{drained:?}"
+    );
+    let status = status(&phone);
+    assert!(
+        status
+            .waiting
+            .iter()
+            .any(|row| row.reason == wire::WaitReason::Untrusted as i32),
+        "{status:?}"
+    );
+    assert_eq!(tokens(&impostor), 0, "nothing paired with the impostor");
 }

@@ -131,6 +131,11 @@ enum DrainStop {
   // No paired gateway answered, or none is paired. Nothing was lost — the
   // spool is intact and the next pass starts where this one did.
   DRAIN_STOP_UNREACHABLE = 3;
+  // The machine that answered is not the pinned gateway: its certificate is
+  // not the one this phone paired with, or it answered as another gateway
+  // (#1080, the audit's finding 5). Nothing was sent to it, and the spool is
+  // intact.
+  DRAIN_STOP_UNTRUSTED = 4;
 }
 
 message DrainResponse {
@@ -410,6 +415,10 @@ enum WaitReason {
   // An original the MANUAL rule holds until the member taps Back up now
   // (`DrainRequest.asked`); no pass on its own moves it.
   WAIT_REASON_ASK = 7;
+  // The last pass stopped because the machine that answered is not the
+  // pinned gateway (`DRAIN_STOP_UNTRUSTED`). Not time but the member: the
+  // gateway was replaced or something else answers at its address.
+  WAIT_REASON_UNTRUSTED = 8;
 }
 
 // ----------------------------------------------------------- destinations --
@@ -627,6 +636,13 @@ enum FetchOutcome {
   FETCH_OUTCOME_UNREACHABLE = 3;
   // A gateway answered and does not hold it whole: it has not been backed up.
   FETCH_OUTCOME_NOT_IN_BACKUP = 4;
+  // The machine that answered is not the pinned gateway. Nothing was taken
+  // from it (#1080, the audit's finding 5).
+  FETCH_OUTCOME_UNTRUSTED = 5;
+  // The copy on the gateway did not open: its bytes do not hash to their
+  // digest, a part does not open under this vault's key, or the parts are not
+  // the file their names derive from. Nothing landed.
+  FETCH_OUTCOME_DAMAGED = 6;
 }
 
 message FetchOriginalResponse {
