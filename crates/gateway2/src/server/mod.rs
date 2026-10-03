@@ -30,12 +30,14 @@
 //! | [`sweeps`] | purge hourly, scrub quarterly |
 //! | [`harness`] | a real gateway on an ephemeral port, for tests in any crate |
 //! | [`addrs`] | the addresses the pairing QR lists |
+//! | [`report`] | what the terminal says: the payload, the safety number, `pairings` |
 //! | [`service`], [`qr`] | the unit files `install` writes, the terminal QR |
 
 pub mod addrs;
 pub mod harness;
 pub mod http;
 pub mod qr;
+pub mod report;
 pub mod serve;
 pub mod service;
 pub mod sql;
@@ -44,6 +46,7 @@ pub mod store;
 pub mod sweeps;
 pub mod tls;
 
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -58,6 +61,45 @@ use crate::rules::wire::PairKind;
 use crate::server::state::{STATE_FILE, SqliteState};
 use crate::server::store::ObjectStore;
 use crate::server::tls::{Identity, IdentityError};
+
+/// The port `serve` binds when told nothing.
+pub const DEFAULT_PORT: u16 = 8443;
+
+/// Where `serve` records the address it bound, for `pair` and `health`: they
+/// run as second processes beside it and cannot ask the socket.
+pub const SERVE_FILE: &str = "serve.json";
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Served {
+    bind: String,
+}
+
+/// Record the address `serve` bound. Written whole and renamed into place, so
+/// a reader never sees half of it; it holds no key.
+///
+/// # Errors
+///
+/// If the data directory cannot be written.
+pub fn record_bound(data_dir: &Path, bound: SocketAddr) -> std::io::Result<()> {
+    let staged = data_dir.join(format!("{SERVE_FILE}.tmp"));
+    let text = serde_json::to_string(&Served {
+        bind: bound.to_string(),
+    })
+    .map_err(std::io::Error::other)?;
+    std::fs::write(&staged, text)?;
+    std::fs::rename(&staged, data_dir.join(SERVE_FILE))
+}
+
+/// The address `serve` last recorded, if it ever ran here.
+#[must_use]
+pub fn last_bound(data_dir: &Path) -> Option<SocketAddr> {
+    let text = std::fs::read_to_string(data_dir.join(SERVE_FILE)).ok()?;
+    serde_json::from_str::<Served>(&text)
+        .ok()?
+        .bind
+        .parse()
+        .ok()
+}
 
 /// The gateway's clock, in milliseconds since the Unix epoch. The rules take
 /// time as an argument; this is where the argument comes from.

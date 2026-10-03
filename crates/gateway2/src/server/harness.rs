@@ -25,7 +25,7 @@ use crate::rules::payload::PairPayload;
 use crate::rules::state::{Fault, StoreFault};
 use crate::server::serve::{TlsListener, bind, run};
 use crate::server::sweeps::{purge_once, scrub_once};
-use crate::server::{Handle, OpenError, Shared, system_now_ms};
+use crate::server::{Announcer, Handle, OpenError, Shared, system_now_ms};
 
 /// A gateway serving on `127.0.0.1`, and the handles a test needs.
 #[derive(Debug)]
@@ -50,11 +50,28 @@ pub struct Spawned {
 ///
 /// [`OpenError`] if the directory will not open or the port will not bind.
 pub async fn spawn(data_dir: &Path) -> Result<Spawned, OpenError> {
+    spawn_with(data_dir, None).await
+}
+
+/// [`spawn`], telling `announcer` about each [`crate::server::Event`] as
+/// `serve` tells its terminal.
+///
+/// # Errors
+///
+/// As [`spawn`].
+pub async fn spawn_with(
+    data_dir: &Path,
+    announcer: Option<Announcer>,
+) -> Result<Spawned, OpenError> {
     let offset = Arc::new(AtomicI64::new(0));
     let clock_offset = Arc::clone(&offset);
     let clock =
         Arc::new(move || system_now_ms().saturating_add(clock_offset.load(Ordering::SeqCst)));
-    let shared = Arc::new(Shared::open(data_dir, clock)?);
+    let opened = Shared::open(data_dir, clock)?;
+    let shared = Arc::new(match announcer {
+        Some(announcer) => opened.with_announcer(announcer),
+        None => opened,
+    });
     shared
         .store()
         .clear_staged()

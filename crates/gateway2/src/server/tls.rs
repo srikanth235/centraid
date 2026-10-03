@@ -158,6 +158,21 @@ impl Identity {
         })
     }
 
+    /// The certificate `data_dir` holds, DER, without minting one: what
+    /// `health` trusts when it dials its own gateway.
+    ///
+    /// # Errors
+    ///
+    /// [`IdentityError`] when there is no readable certificate.
+    pub fn read_certificate(data_dir: &Path) -> Result<Vec<u8>, IdentityError> {
+        let path = data_dir.join(CERT_FILE);
+        let bytes = std::fs::read(&path)
+            .map_err(|error| IdentityError::Io(path.display().to_string(), error))?;
+        CertificateDer::from_pem_slice(&bytes)
+            .map(|der| der.to_vec())
+            .map_err(|_| IdentityError::Malformed(CERT_FILE.to_owned()))
+    }
+
     fn load(data_dir: &Path) -> Result<Self, IdentityError> {
         let read = |file: &str| {
             let path = data_dir.join(file);

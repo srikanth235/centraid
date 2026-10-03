@@ -135,3 +135,54 @@ async fn a_phone_pairs_from_the_text_of_a_qr_and_hands_off_an_upload() {
 
     gateway.shutdown().await;
 }
+
+/// THE TERMINAL HEARS A PAIRING AS IT LANDS, with the safety number a member
+/// may compare against the phone's (the root's ruling A7): the event names the
+/// vault, how it paired and at which epoch, and the line `serve` prints for it
+/// is the safety line over that vault and this gateway's pin.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_landed_pairing_is_announced_with_its_safety_line() {
+    use std::sync::{Arc, Mutex};
+
+    use centraid_gateway2::server::harness::spawn_with;
+    use centraid_gateway2::server::{Event, report};
+
+    let heard: Arc<Mutex<Vec<Event>>> = Arc::default();
+    let ear = Arc::clone(&heard);
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let gateway = spawn_with(
+        dir.path(),
+        Some(Arc::new(move |event: &Event| {
+            ear.lock().expect("the ear").push(event.clone());
+        })),
+    )
+    .await
+    .expect("spawned");
+    let payload = gateway.payload();
+    let identity = ed25519_dalek::SigningKey::from_bytes(&[5; 32]);
+    let vault = VaultId::from_bytes(identity.verifying_key().to_bytes());
+    Client::first_contact(payload.addrs.clone(), payload.pin)
+        .pair(&PairRequest {
+            vault_id: vault,
+            label: "Ada's phone".to_owned(),
+            kind: PairKind::Secret,
+            secret: Some(payload.secret),
+            claim: None,
+            read: None,
+        })
+        .await
+        .expect("pairs");
+    let events = heard.lock().expect("the ear").clone();
+    assert_eq!(
+        events,
+        vec![Event::Paired {
+            vault,
+            kind: PairKind::Secret,
+            epoch: 1,
+            label: "Ada's phone".to_owned(),
+        }]
+    );
+    let lines = report::event_lines(&events[0], &gateway.pin);
+    assert_eq!(lines[1], report::safety_line(&vault, &gateway.pin));
+    gateway.shutdown().await;
+}

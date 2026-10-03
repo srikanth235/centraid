@@ -619,6 +619,16 @@ impl<S: State> Gateway<S> {
         })
     }
 
+    /// Every pairing secret, as hashes with their times, for `pairings` and
+    /// for `serve` deciding whether to print a first QR.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    pub fn secrets(&self) -> Result<Vec<SecretRecord>, Fault> {
+        Ok(self.state.secrets()?)
+    }
+
     /// Every paired vault, its head and its tokens, for `pairings`.
     ///
     /// # Errors
