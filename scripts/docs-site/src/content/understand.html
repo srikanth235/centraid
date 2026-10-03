@@ -8,8 +8,8 @@
           of the system so you can dive into any part with the context to make sense of it.
         </p>
         <p class="lede r" style="--d: 0.3s">
-          New to the underlying ideas — ontologies, SKOS, iroh, PKCE? Ten short primers cover the
-          prior art first: <a href="../learn/">learn the foundations →</a>
+          New to the underlying ideas — ontologies, SKOS, certificate pinning, PKCE? Ten short
+          primers cover the prior art first: <a href="../learn/">learn the foundations →</a>
         </p>
       </section>
 
@@ -57,16 +57,15 @@
               <p class="c-no">chapter 3</p>
               <h3>Devices</h3>
               <p>
-                One gateway, many clients: the star topology, (gateway, vault) addressing, one-time
-                pairing tickets, the iroh peer-to-peer tunnel, the desktop shell, an installable web
-                app, native mobile apps backed by a consent-scoped offline replica, and the agent
-                runtimes a gateway can host — Claude Code, Codex.
+                The phone is the vault, and gateways keep it safe: one writer, the native app over
+                the Rust core, gateways you control holding sealed copies, (gateway, vault)
+                addressing, pairing by QR, HTTPS pinned to the gateway's own certificate, the writer
+                epoch a restore claims — and what v0 does not have.
               </p>
               <div class="pill-row" style="margin-top: 14px">
                 <span class="pill">gateway</span><span class="pill">pairing</span
-                ><span class="pill">iroh</span><span class="pill">replica</span
-                ><span class="pill">desktop</span><span class="pill">mobile</span
-                ><span class="pill">runtimes</span>
+                ><span class="pill">https</span><span class="pill">epochs</span
+                ><span class="pill">mobile</span>
               </div>
             </a>
           </div>
@@ -176,27 +175,27 @@
               <tr>
                 <td>gateway topology</td>
                 <td><a class="u" href="../devices/#topology">Devices § topology</a></td>
-                <td>one gateway, star of clients, three hosts</td>
+                <td>the phone is the vault; gateways you control hold sealed copies</td>
               </tr>
               <tr>
                 <td>pairing</td>
                 <td><a class="u" href="../devices/#pairing">Devices § pairing</a></td>
-                <td>one-time tickets, QR flow, enrollment ACL</td>
+                <td>the pairing QR, the certificate pin, one-use secrets, the safety number</td>
               </tr>
               <tr>
-                <td>iroh tunnel</td>
+                <td>connectivity</td>
                 <td><a class="u" href="../devices/#iroh">Devices § connectivity</a></td>
-                <td>the wire protocol, transport tiers, anti-spoof</td>
+                <td>HTTPS pinned to the gateway's certificate, LAN first, no relay</td>
               </tr>
               <tr>
                 <td>harness runtimes</td>
                 <td><a class="u" href="../devices/#runtimes">Devices § runtimes</a></td>
-                <td>Claude Code, Codex — how a gateway hosts a brain</td>
+                <td>none in v0 — a gateway runs nothing but its blind store</td>
               </tr>
               <tr>
-                <td>mobile &amp; replica</td>
+                <td>the phone app</td>
                 <td><a class="u" href="../devices/#mobile">Devices § mobile</a></td>
-                <td>the web app, native Photos/Docs/Agenda, the consent-scoped offline replica, and offline writes as intents</td>
+                <td>native SwiftUI and Compose over the Rust core, and the backup that runs while the app is closed</td>
               </tr>
               <tr>
                 <td>offsite backup</td>
