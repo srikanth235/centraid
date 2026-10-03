@@ -1,5 +1,6 @@
 package dev.centraid.shared
 
+import centraid.screen.v1.BackupLine
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.HomeState
 import centraid.screen.v1.HomeStatus
@@ -751,6 +752,18 @@ class HomeMachineSpec : StringSpec({
             "Tasks: That task is gone."
         val told = HomeMachine.reduce(named("v1", "Demo vault"), HomeEvent(status = HomeEvent.StatusChanged(status = quiet))).state
         told.data_.shouldNotBeNull().status shouldBe quiet
+    }
+
+    "the backup line is Home's to draw, and a reopen keeps it until the store redraws it" {
+        // #1080 (seam contract A11): every line `BackupStatusStore` draws
+        // arrives as a `BackupLineChanged`, and the view reads it off the
+        // state like any other field.
+        val line = BackupLine(sentence = "Backed up 2 minutes ago.", tone = BackupLine.Tone.TONE_QUIET)
+        val drawn = HomeMachine.reduce(opened(), HomeEvent(backup_line = HomeEvent.BackupLineChanged(line = line))).state
+        drawn.backup_line shouldBe line
+        // A RELOAD IS THE TILES', not the line's: the session's rebind re-reads
+        // the status and sends the new line itself.
+        HomeMachine.reduce(drawn, HomeEvent(opened = HomeEvent.Opened())).state.backup_line shouldBe line
     }
 })
 

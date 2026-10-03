@@ -18,26 +18,38 @@ import centraid.screen.v1.MediaPermission
 public interface PlatformServices {
     public val secureStore: SecureStore
     public val backgroundTasks: BackgroundTasks
-    // ONE W5 SEAM IS LEFT, AND THE OTHER LEFT WITH ITS DESTINATION
-    // (#1029 W18-3, the amendment of 2026-09-21, "Struck").
+    // THE OS MOVES BYTES WHILE THE APP IS SUSPENDED, ON iOS ONLY (#1080
+    // rulings 1, 2). That seam is `dev.centraid.shared.sync.BackgroundUploads`,
+    // installed by the iOS shell rather than built here, because its delegate
+    // is a Swift object; every other platform moves bytes in the pass itself.
     //
-    // `backgroundTransfers` stood here: a seam onto `NSURLSession`'s background
-    // session and a WorkManager upload worker, because the OS was the only
-    // thing that could move bytes to an HTTPS endpoint while the app was not
-    // running. There is no such endpoint any more — the gateway is the member's
-    // own laptop, reached over iroh by a client inside this process — so the
-    // seam had nowhere to carry bytes to. `dev.centraid.shared.sync.DrainPass`
-    // is what replaced it, and it is `commonMain` because the flow no longer
-    // needs anything a platform alone can do.
-    //
-    // `syncedSecrets` stays for the reason it was always here: the OS is the
-    // only thing that can synchronise a secret to a member's next phone.
+    // `syncedSecrets` is here because the OS is the only thing that can
+    // synchronise a secret to a member's next phone.
     public val syncedSecrets: SyncedSecrets
     public val networkStatus: NetworkStatus
+    public val powerAndLink: PowerAndLink
     public val mediaLibrary: MediaLibrary
     public val ocr: Ocr
     public val secureRandom: SecureRandom
     public val clock: DeviceClock
+}
+
+/**
+ * WHAT A PASS IS TOLD ABOUT THE LINK AND THE CHARGER (#1080, `DrainRequest`).
+ *
+ * Synchronous and cheap, because it is read at the start of every pass and
+ * must not hang one. **Null is "the platform would not say"**, and the pass
+ * reads it as the expensive answer — metered, not charging — because a guess
+ * wrong towards cheap spends a member's data plan and a guess wrong towards
+ * expensive delays a photograph (D-1025-S7-74). That mapping is
+ * `dev.centraid.shared.sync.PassConditions.input` and nowhere else.
+ */
+public interface PowerAndLink {
+    /** True on cellular, tethering or Low Data Mode; null when unknown. */
+    public fun metered(): Boolean?
+
+    /** True on external power; null when unknown. */
+    public fun charging(): Boolean?
 }
 
 /**
@@ -121,26 +133,41 @@ public interface SecureRandom {
 }
 
 /**
- * BGTaskScheduler on iOS, WorkManager on Android (v0's
- * `expo-background-task`, `docs/mobile-offline.md:208`).
+ * BGTaskScheduler on iOS, WorkManager on Android (#1080, the shells).
  *
- * **Registration is observable rather than assumed** (`:214`): [register]
- * returns what the platform said, and "Background App Refresh is off" is a
- * sentence a member reads rather than a silent absence of passes.
+ * **Registration is observable rather than assumed**: [register] returns what
+ * the platform said, and "Background App Refresh is off" is a sentence a
+ * member reads rather than a silent absence of passes. It is called ONCE per
+ * launch, by `HomeSession.open`, and `BackgroundSchedulingSpec` counts it.
+ *
+ * The other three are the shells' to call, and none of them suspends: they
+ * are reached from an app-delegate callback, a scene phase or a capture, none
+ * of which can await.
  */
 public interface BackgroundTasks {
     public suspend fun register(): Registration
 
-    // THE WINDOW, THE EXPIRY SIGNAL AND THE WAKE REASON LEFT WITH THE PASS
-    // (#1029 §1, §6). `window(WakeReason)` existed to bound one `seat.sync`
-    // call — its answer became the `SyncWindow` on the command, and
-    // `onPlatformExpiration`/`platformExpired` were the second trigger
-    // `SyncScheduler` honoured. There is no gateway, no pass and no scheduler,
-    // so all three named a shape of work this device no longer does.
-    //
-    // `register` stays: whether the OS will wake this app at all is a fact a
-    // member reads, and it is what W5's background transfers and W10's
-    // reminders will register against.
+    /**
+     * Ask for the next window again. iOS: at EVERY background entry and at the
+     * end of each pass, because a `BGTaskRequest` is one-shot and a request not
+     * resubmitted is the last one. Android: re-enqueues under the rule the
+     * member holds now, so a changed rule changes the constraints.
+     */
+    public fun resubmit()
+
+    /**
+     * Something new is worth a window soon: a capture, an import. Android
+     * enqueues an expedited one-off; iOS resubmits with no earliest date.
+     */
+    public fun nudge()
+
+    /**
+     * A long run the member asked for ("Back up now") or a backlog is
+     * starting ([start] true) or ended. Android runs it as a long-running job
+     * with a notification the app supplies; iOS keeps the screen awake while
+     * it runs. Idempotent both ways.
+     */
+    public fun backlog(start: Boolean)
 
     public data class Registration(
         public val registered: Boolean,
