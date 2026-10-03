@@ -491,9 +491,7 @@ public class Shelf(
             if (index != null) secrets.releaseVaultIndex(index)
             return FoundOutcome.Refused(because)
         }
-        // NO DEVICE SECRET: a vault founded this moment has never paired, and
-        // the secret is the core's to mint at pair or restore (R-1047-E4).
-        val (core, keyed) = openCore(path, create = true, index = index, vaultId = null)
+        val (core, keyed) = openCore(path, create = true, index = index)
             ?: return@withLock refuse(null, FoundRefusal.NO_CORE)
         if (!VaultRoster.found(core, displayName = name, ownerName = ownerName)) {
             return@withLock refuse(core, FoundRefusal.NOT_FOUNDED)
@@ -626,7 +624,7 @@ public class Shelf(
         custody?.let { return@withLock it }
         val path = vaultDir.toPath().resolve(CUSTODY_FILE).toString()
         runCatching { fs.createDirectories(vaultDir.toPath()) }
-        val opened = openCore(path, create = false, index = null, vaultId = null)?.first
+        val opened = openCore(path, create = false, index = null)?.first
         custody = opened
         opened
     }
@@ -639,23 +637,22 @@ public class Shelf(
      *
      * Each file is asked which vault it is — the id the shelf keys on is the
      * one the file names (`core_vault`), which is not the identity key a
-     * restore reports — and that id is given the index the restore found it at
-     * and the device secret the restore minted, before the keyed reopen. The
+     * restore reports — and that id is given the index the restore found it at,
+     * before the keyed reopen. The
      * SEED must already be stored: `custody.Enrollment` stores it first. Answers how
      * many vaults were added.
      */
-    public suspend fun adoptRestored(restored: List<Restored>, deviceSecretHex: String): Int = gate.withLock {
+    public suspend fun adoptRestored(restored: List<Restored>): Int = gate.withLock {
         var added = 0
         for (vault in restored) {
-            val (probe, _) = openCore(vault.path, create = false, index = null, vaultId = null) ?: continue
+            val (probe, _) = openCore(vault.path, create = false, index = null) ?: continue
             val named = VaultRoster.identify(probe)
             probe.close()
             if (named == null || named.vault_id.isEmpty()) continue
             if (holdings.value.any { it.vaultId == named.vault_id }) continue
             secrets.rememberVaultIndex(named.vault_id, vault.index)
-            runCatching { secrets.rememberDeviceSecret(named.vault_id, deviceSecretHex) }
-            val (core, keyed) = openCore(vault.path, create = false, index = vault.index, vaultId = named.vault_id)
-                ?: openCore(vault.path, create = false, index = null, vaultId = null)
+            val (core, keyed) = openCore(vault.path, create = false, index = vault.index)
+                ?: openCore(vault.path, create = false, index = null)
                 ?: continue
             holdings.value = holdings.value + Holding(
                 vaultId = named.vault_id,
@@ -689,8 +686,8 @@ public class Shelf(
             val index = keyedIndex(holding.vaultId)
             if (holding.keyed || index == null) return@map holding
             holding.core?.close()
-            val (core, keyed) = openCore(holding.path, create = false, index = index, vaultId = holding.vaultId)
-                ?: openCore(holding.path, create = false, index = null, vaultId = null)
+            val (core, keyed) = openCore(holding.path, create = false, index = index)
+                ?: openCore(holding.path, create = false, index = null)
                 ?: return@map holding.copy(core = null, keyed = false)
             changed = true
             holding.copy(core = core, keyed = keyed)
@@ -809,7 +806,7 @@ public class Shelf(
         val holding = holdings.value.firstOrNull { it.vaultId == vaultId } ?: return null
         holding.core?.let { return it }
         val (opened, keyed) =
-            openCore(holding.path, create = false, index = keyedIndex(holding.vaultId), vaultId = holding.vaultId)
+            openCore(holding.path, create = false, index = keyedIndex(holding.vaultId))
                 ?: return null
         holdings.value = holdings.value.map {
             if (it.vaultId == holding.vaultId) it.copy(core = opened, keyed = keyed) else it
@@ -833,7 +830,7 @@ public class Shelf(
         /** The found in flight at this path when the process died, if any. */
         pending: VaultSecrets.PendingFound? = null,
     ): Holding? {
-        val opened = openCore(path, create = false, index = null, vaultId = null)
+        val opened = openCore(path, create = false, index = null)
         val named = opened?.first?.let { VaultRoster.identify(it) }
         if (opened == null || named == null || named.vault_id.isEmpty()) {
             opened?.first?.close()
@@ -857,8 +854,8 @@ public class Shelf(
             probe to false
         } else {
             probe.close()
-            openCore(path, create = false, index = index, vaultId = named.vault_id)
-                ?: openCore(path, create = false, index = null, vaultId = null)
+            openCore(path, create = false, index = index)
+                ?: openCore(path, create = false, index = null)
                 ?: return null
         }
         return Holding(
@@ -900,28 +897,18 @@ public class Shelf(
         path: String,
         create: Boolean,
         index: Int?,
-        /** The vault this open is for, when known: its device secret rides a keyed open. */
-        vaultId: String?,
     ): Pair<CentraidCore, Boolean>? {
         // THE SEED LIVES FOR THIS CALL AND NO LONGER (#1047 W2, `CONTRACT.md`
         // §4b). Read out of the store here, carried by one configuration into
         // `centraid_open`, and dropped with it; nothing on this class keeps it.
         // A `String` cannot be zeroed, so the defence is scope, not scrubbing.
         val seed = index?.let { secrets.seed() }
-        // THE DEVICE SECRET RIDES EVERY KEYED OPEN (#1047 E1, R-1047-E4,
-        // `CONTRACT.md` §4b's `device`): the one a pair or a restore handed
-        // back for this vault, so the core signs with the key its certificate
-        // names. Absent before either has happened — a core that seals and
-        // does not sign. Never on an unkeyed open: a signer with no vault keys
-        // has nothing to sign for.
-        val device = if (seed != null && vaultId != null) secrets.deviceSecret(vaultId) else null
         val core = opener(
             CoreConfiguration(
                 databasePath = path,
                 create = create,
                 vaultSeedHex = seed,
                 vaultIndex = if (seed == null) 0 else index,
-                deviceSecretHex = device,
             ),
         ) ?: return null
         return core to (seed != null)

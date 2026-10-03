@@ -9,15 +9,13 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 
 /**
- * THE TWO SECRETS, AND THE RULE THAT THEY LIVE IN DIFFERENT PLACES
- * (#1029 W18, `CONTRACT.md` §4b).
+ * THE SEED, AND THE RULE THAT IT AND THIS PHONE'S FACTS LIVE IN DIFFERENT
+ * PLACES (#1029 W18, `CONTRACT.md` §4b).
  *
  * The seed is SYNCHRONISED — it is the 24 words, and iCloud Keychain carrying it
- * to the member's next phone is the point. The device secret is **this device
- * only**: a copy on a second phone would enrol both as the same device, which
- * is the distinction F1's `VAULT_MOVED` freeze is keyed on. They are two hex
- * strings that look alike, which is exactly why the store each goes to is
- * asserted rather than remembered.
+ * to the member's next phone is the point. The words this phone was given and
+ * each vault's index are **this device only**. There is no device secret
+ * (#1080 A21): a gateway knows the phone by a token in the core's ledger.
  */
 class VaultSecretsSpec : StringSpec({
 
@@ -34,43 +32,6 @@ class VaultSecretsSpec : StringSpec({
             // whose next phone cannot be restored by the thing that followed
             // their Apple ID.
             services.secureStore.keys.none { it.contains("seed") } shouldBe true
-        }
-    }
-
-    "the device secret is the CORE's, kept in the DEVICE store and never minted here" {
-        runTest {
-            val (services, vault) = secrets()
-            // NOTHING BEFORE A PAIR OR A RESTORE HANDS ONE BACK (#1047 E1,
-            // R-1047-E4): a secret this class minted would be a key no
-            // certificate names, and every drain would be refused.
-            vault.deviceSecret("vault-a").shouldBeNull()
-            val minted = "cd".repeat(32)
-            vault.rememberDeviceSecret("vault-a", minted)
-            vault.deviceSecret("vault-a") shouldBe minted
-            services.secureStore.keys.any { it.endsWith(VaultSecrets.DEVICE_SECRET_PREFIX + "vault-a") } shouldBe true
-            services.syncedSecrets.seed().shouldBeNull()
-        }
-    }
-
-    "a device secret is PER VAULT, so unpairing one does not un-enrol the other" {
-        runTest {
-            val (_, vault) = secrets()
-            vault.rememberDeviceSecret("vault-a", "aa".repeat(32))
-            vault.rememberDeviceSecret("vault-b", "bb".repeat(32))
-            vault.forgetDeviceSecret("vault-a")
-            vault.deviceSecret("vault-b") shouldBe "bb".repeat(32)
-            vault.deviceSecret("vault-a").shouldBeNull()
-        }
-    }
-
-    "a stored value that is not the right shape is treated as absent, never as a credential" {
-        runTest {
-            val (services, vault) = secrets()
-            services.secureStore.write(VaultSecrets.DEVICE_SECRET_PREFIX + "vault-a", "not hex")
-            // ABSENT rather than handed to the core, which would be a
-            // BAD_ARGUMENT arriving as a refused open on a path a member
-            // cannot fix.
-            vault.deviceSecret("vault-a").shouldBeNull()
         }
     }
 
@@ -94,9 +55,7 @@ class VaultSecretsSpec : StringSpec({
         runTest {
             val (_, vault) = secrets()
             shouldThrow<IllegalArgumentException> { vault.rememberSeed("abc") }
-            shouldThrow<IllegalArgumentException> {
-                vault.rememberDeviceSecret("vault-a", "AB".repeat(32))
-            }
+            shouldThrow<IllegalArgumentException> { vault.rememberSeed("AB".repeat(64)) }
         }
     }
 

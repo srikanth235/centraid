@@ -32,7 +32,7 @@ import kotlinx.coroutines.sync.withLock
  *   was typed.
  * * **PURPOSE_RESTORE_HELD** — the phone already holds a seed the
  *   synchronised keychain carried here (words.make's RESTORE_FIRST): no grid,
- *   only the optional laptop address, and the restore runs from that seed
+ *   only the gateway's pairing code, and the restore runs from that seed
  *   ([Enrollment.restoreHeld], Q-1047-18).
  *
  * Every cell is judged by the CORE as it is typed (`PhraseRequest.check`): a
@@ -168,7 +168,7 @@ public object WordsEntryMachine {
         if (model.phase != WordsEntryState.Phase.PHASE_WORKING) return EntryStep(model)
         if (model.retrying) return retried(model, outcome)
         return when (outcome) {
-            // THE WORDS GO; the laptop address stays, for a retry of what stayed.
+            // THE WORDS GO; the pairing code stays, for a retry of what stayed.
             is Enrollment.Restored.Done -> EntryStep(
                 settled(
                     Entry(

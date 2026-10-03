@@ -12,6 +12,9 @@ import centraid.core.v1.HandoffResponse
 import centraid.core.v1.Header
 import centraid.core.v1.NeedBytes
 import centraid.core.v1.ReconcileResponse
+import centraid.core.v1.Releasable
+import centraid.core.v1.ReleasableResponse
+import centraid.core.v1.ReleasedResponse
 import centraid.core.v1.Request
 import centraid.core.v1.Response
 import centraid.core.v1.SettleResponse
@@ -28,9 +31,11 @@ import dev.centraid.shared.sync.ContentHash
 import dev.centraid.shared.sync.CoreBackupDoors
 import dev.centraid.shared.sync.CoreBackupStatus
 import dev.centraid.shared.sync.CoreDrainDoor
+import dev.centraid.shared.sync.CoreFreeUpDoors
 import dev.centraid.shared.sync.DrainAnswer
 import dev.centraid.shared.sync.DrainInput
 import dev.centraid.shared.sync.LedgerChange
+import dev.centraid.shared.sync.ReleasableItem
 import dev.centraid.shared.sync.TransferRule
 import dev.centraid.shared.sync.WaitReason
 import io.kotest.core.spec.style.StringSpec
@@ -48,8 +53,7 @@ import okio.ByteString.Companion.toByteString
  * Each door is one envelope out and one `when` back; these cases hold what
  * crosses in each direction — the member's rule and the link going out, the
  * gateway's clock and the core's counts coming back — and that every refusal,
- * the `NOT_YET_AVAILABLE` the new arms answer until the core lands included,
- * reads as "no answer" and never as a fact.
+ * `NOT_YET_AVAILABLE` included, reads as "no answer" and never as a fact.
  */
 class CoreBackupDoorsSpec : StringSpec({
 
@@ -200,6 +204,7 @@ class CoreBackupDoorsSpec : StringSpec({
                                         size = 1_024,
                                         gateway_id = "gw-1",
                                         vault_id = "vlt",
+                                        allows_cellular = true,
                                     ),
                                 ),
                             ),
@@ -207,10 +212,11 @@ class CoreBackupDoorsSpec : StringSpec({
                     )
                 }
             }.handoff(maxBytes = 50_000_000, maxParts = 32).shouldNotBeNull()
-            // NOTHING IS RE-SPELLED ON THE WAY: a field the core adds to a part
-            // (A10's `allows_cellular`) reaches the mover without this door
-            // knowing it exists.
+            // NOTHING IS RE-SPELLED ON THE WAY: the core's cellular verdict for
+            // the part (A10's `allows_cellular`) reaches the mover as the core
+            // set it, without this door reading it.
             val part = parts.single()
+            part.allows_cellular shouldBe true
             part.headers.single().value_ shouldBe "blake3=00"
             part.gateway_id shouldBe "gw-1"
             part.vault_id shouldBe "vlt"
@@ -264,22 +270,76 @@ class CoreBackupDoorsSpec : StringSpec({
             }
             val bytes = "abcdef".encodeToByteArray()
             var at = 0
-            Staging.stage(stager, "image/heic", byteSize = 0, source = Staging.Source.OS_LIBRARY, osRef = "L/1") { max ->
+            Staging.stage(
+                stager,
+                "image/heic",
+                byteSize = 0,
+                source = Staging.Source.OS_LIBRARY,
+                osRef = "L/1",
+                osEdited = true,
+            ) { max ->
                 bytes.copyOfRange(at, minOf(at + max, bytes.size)).also { at += it.size }
             }.shouldBeInstanceOf<Staging.Outcome.Ok>()
             val begin = seen.first().stage!!.begin!!
             begin.source shouldBe StageSource.STAGE_SOURCE_OS_LIBRARY
             begin.os_ref shouldBe "L/1"
             begin.byte_size shouldBe 0L
+            // AN EDITED LIBRARY ITEM SAYS SO (A20), so the core never offers it
+            // for deletion.
+            begin.os_edited shouldBe true
             seen.clear()
             at = 0
-            Staging.stage(stager, "image/jpeg", 6, forHash = hash, tier = "thumb") { max ->
+            Staging.stage(stager, "image/jpeg", 6, forHash = hash, tier = "thumb", osEdited = true) { max ->
                 bytes.copyOfRange(at, minOf(at + max, bytes.size)).also { at += it.size }
             }
             val derivative = seen.first().stage!!.begin!!
             derivative.source shouldBe StageSource.STAGE_SOURCE_OWNED
             derivative.for_hash shouldBe ContentHash.raw(hash)
             derivative.tier shouldBe "thumb"
+            // AN OWNED FILE IS NO LIBRARY ITEM: the edit mark is never sent with it.
+            derivative.os_edited shouldBe false
+        }
+    }
+
+    "free up's two doors cross both ways, and a refusal is no list and no record" {
+        runTest {
+            val seen = mutableListOf<Request>()
+            val raw = ByteArray(32) { 0xab.toByte() }
+            val doors = CoreFreeUpDoors {
+                core(seen) { request ->
+                    if (request.releasable != null) {
+                        Envelope(
+                            response = Response(
+                                releasable = ReleasableResponse(
+                                    items = listOf(
+                                        Releasable(
+                                            content_hash = raw.toByteString(),
+                                            os_ref = "L/1",
+                                            size = 2_048,
+                                            media_type = "image/heic",
+                                        ),
+                                    ),
+                                    total_bytes = 2_048,
+                                ),
+                            ),
+                        )
+                    } else {
+                        Envelope(response = Response(released = ReleasedResponse(recorded = 1)))
+                    }
+                }
+            }
+            val list = doors.releasable(1_000).shouldNotBeNull()
+            seen.single().releasable!!.limit shouldBe 1_000L
+            list.totalBytes shouldBe 2_048L
+            list.items shouldBe listOf(ReleasableItem(raw, "L/1", 2_048, "image/heic"))
+            list.items.single().hex shouldBe hash
+            // ONLY WHAT THE PLATFORM DELETED IS REPORTED, by raw content hash.
+            doors.released(listOf(raw)) shouldBe 1
+            seen.last().released!!.content_hash shouldBe listOf(raw.toByteString())
+            val refused = CoreFreeUpDoors { refusing(ErrorCode.ERROR_CODE_NOT_YET_AVAILABLE) }
+            refused.releasable(1).shouldBeNull()
+            refused.released(listOf(raw)).shouldBeNull()
+            CoreFreeUpDoors { null }.releasable(1).shouldBeNull()
         }
     }
 })
