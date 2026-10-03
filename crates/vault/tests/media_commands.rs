@@ -1508,6 +1508,7 @@ fn an_original_the_library_holds_is_located_by_its_identifier_and_never_by_a_pat
         source: centraid_vault::backup2::ledger::LocalSource::Os,
         os_ref: Some("library-item-1".to_owned()),
         verified_ms: Some(1),
+        edited: false,
     };
     ledger
         .lock()
@@ -1540,5 +1541,135 @@ fn an_original_the_library_holds_is_located_by_its_identifier_and_never_by_a_pat
     assert!(
         !gone.absent_reason.is_empty(),
         "nowhere says so in a sentence"
+    );
+}
+
+/// **THE SHELL'S RENDITION IS THE TIER, AND THE DECODER STAYS IDLE** (#1080,
+/// the stage door's `for_hash` and `tier`).
+///
+/// A thumbnail the platform rendered and staged beside a photograph, before
+/// the command that mints it, becomes the photograph's `thumb` row and names
+/// the staged bytes; the Rust decoder — which makes a `thumb` and a `preview`
+/// of a PNG nobody staged anything for — makes neither. One staged after the
+/// photograph replaces its tier's row. A staged row whose bytes the store does
+/// not hold is dropped, never promoted, and the decoder is the fallback again.
+#[test]
+fn a_derivative_the_shell_staged_is_the_tier_and_the_decoder_stays_idle() {
+    use base64::Engine as _;
+    use centraid_vault::content::{NeededBytes, StagedDerivative};
+
+    let scratch = common::Scratch::founded_with_blobs("staged-renditions").expect("a vault");
+    let registry = registry();
+    registry.install(&scratch.vault).expect("installs");
+    let store = scratch.vault.blobs().expect("a content store");
+    let png = base64::engine::general_purpose::STANDARD
+        .decode(ONE_PIXEL_PNG)
+        .expect("base64");
+    let add = |hash: &str| {
+        let outcome = scratch
+            .vault
+            .execute(
+                &registry,
+                &Principal::owner("phone"),
+                &Command::new(
+                    "media.add_asset",
+                    serde_json::json!({ "staged_sha": hash, "kind": "photo" }),
+                ),
+            )
+            .expect("the command runs");
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Executed,
+            "{:?}",
+            outcome.reason
+        );
+    };
+    let tiers = |parent: &str| -> Vec<(String, String)> {
+        scratch
+            .vault
+            .read(|connection| {
+                let mut statement = connection.prepare(
+                    "SELECT d.variant, d.content_hash FROM core_content_derivative d
+                       JOIN core_content_item c USING (content_id)
+                      WHERE c.content_hash = ?1 AND d.variant IN ('thumb', 'preview')
+                      ORDER BY d.variant",
+                )?;
+                let rows = statement.query_map([parent], |row| Ok((row.get(0)?, row.get(1)?)))?;
+                Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+            })
+            .expect("the tiers read")
+    };
+    let stage = |parent: &str, bytes: &[u8], kept: bool| -> String {
+        let hash = if kept {
+            store.put(bytes).expect("the store takes it")
+        } else {
+            centraid_vault::content::content_digest(bytes)
+        };
+        scratch
+            .vault
+            .stage_derivative(&StagedDerivative {
+                hash: hash.clone(),
+                byte_size: bytes.len() as i64,
+                media_type: "image/jpeg".to_owned(),
+                variant: "thumb".to_owned(),
+                variant_of: parent.to_owned(),
+            })
+            .expect("staged");
+        hash
+    };
+
+    let photo = store.put(&png).expect("the store takes the photograph");
+    scratch
+        .vault
+        .stage_bytes(&[NeededBytes {
+            hash: photo.clone(),
+            byte_size: png.len() as i64,
+            media_type: "image/png".to_owned(),
+        }])
+        .expect("staged");
+    let rendered = stage(&photo, b"the platform's thumbnail", true);
+    add(&photo);
+    assert_eq!(
+        tiers(&photo),
+        vec![("thumb".to_owned(), rendered)],
+        "the staged rendition, and no preview from the decoder"
+    );
+
+    let again = stage(&photo, b"a re-scan's thumbnail", true);
+    assert_eq!(
+        tiers(&photo),
+        vec![("thumb".to_owned(), again)],
+        "the tier is replaced"
+    );
+
+    // NOTHING HELD BEHIND THE STAGED ROW: dropped, and the decoder derives.
+    let second = {
+        let mut bytes = png.clone();
+        bytes.extend_from_slice(b"\0trailing bytes make a second photograph");
+        bytes
+    };
+    let other = store.put(&second).expect("the store takes it");
+    scratch
+        .vault
+        .stage_bytes(&[NeededBytes {
+            hash: other.clone(),
+            byte_size: second.len() as i64,
+            media_type: "image/png".to_owned(),
+        }])
+        .expect("staged");
+    let lost = stage(&other, b"a thumbnail nobody kept", false);
+    add(&other);
+    let derived = tiers(&other);
+    assert!(
+        derived.iter().all(|(_, hash)| *hash != lost),
+        "a row naming bytes nothing kept is never promoted: {derived:?}"
+    );
+    assert_eq!(
+        derived
+            .iter()
+            .map(|(tier, _)| tier.as_str())
+            .collect::<Vec<_>>(),
+        vec!["preview", "thumb"],
+        "with nothing staged, the decoder is the fallback"
     );
 }

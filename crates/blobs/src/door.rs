@@ -235,6 +235,7 @@ mod tests {
             source: LocalSource::Os,
             os_ref: Some("library-item-1".to_owned()),
             verified_ms: Some(1),
+            edited: false,
         };
         ledger
             .lock()
@@ -271,6 +272,7 @@ mod tests {
                 source: LocalSource::Store,
                 os_ref: None,
                 verified_ms: None,
+                edited: false,
             })
             .expect("records");
         assert_eq!(

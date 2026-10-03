@@ -460,6 +460,45 @@ pub fn plan(snapshot: &Snapshot, store: &dyn Store) -> Result<Plan> {
     })
 }
 
+/// Record what `plan` found `gateway_id` already holds: every range and the
+/// manifest its `exists` did not name missing. Answers how many names that
+/// was.
+///
+/// The ledger is a cache of the destination's own answer (#1080 ruling 7), and
+/// [`settle`] moves the head only over names the ledger confirms. A range held
+/// before this device's ledger knew of it — every range of the first snapshot
+/// after a restore, or after the ledger was lost — is confirmed here or never,
+/// because nothing seals or sends it again.
+///
+/// # Errors
+/// The ledger's refusal.
+pub fn confirm_held(
+    snapshot: &Snapshot,
+    plan: &Plan,
+    ledger: &Ledger,
+    gateway_id: &str,
+    now_ms: u64,
+) -> Result<usize> {
+    let missing: BTreeSet<Name> = plan
+        .missing_ranges
+        .iter()
+        .filter_map(|index| snapshot.ranges.get(usize::try_from(*index).ok()?))
+        .map(|range| range.name)
+        .collect();
+    let mut held: BTreeMap<Name, u64> = BTreeMap::new();
+    for range in &snapshot.ranges {
+        if !missing.contains(&range.name) {
+            held.insert(range.name, range.len);
+        }
+    }
+    if !plan.manifest_missing {
+        held.insert(snapshot.manifest_name, snapshot.manifest_json.len() as u64);
+    }
+    let held: Vec<(Name, u64)> = held.into_iter().collect();
+    ledger.confirm_many(&held, gateway_id, now_ms)?;
+    Ok(held.len())
+}
+
 /// What [`spool`] did.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Spooled {
@@ -504,6 +543,7 @@ pub fn spool(
             size: sealed.len() as u64,
             digest: Digest::of(sealed),
             kind,
+            media_type: None,
             created_ms: now_ms,
             handed_off_ms: None,
             attempts: 0,
@@ -886,5 +926,97 @@ mod tests {
             spool_dir.names().expect("lists").is_empty(),
             "nothing was sealed"
         );
+    }
+
+    /// **A held range is confirmed from the destination's answer.** A ledger
+    /// that never sent a snapshot — a restored phone's, or one that was lost —
+    /// finds every range already held; without `confirm_held` the head would
+    /// wait on names nothing will ever send again.
+    #[test]
+    fn ranges_a_destination_already_holds_are_confirmed_and_the_head_moves() {
+        use super::super::ledger::Destination;
+        use super::super::mover::{Stop, move_queue};
+        use super::super::store::MemoryStore;
+
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = founded(dir.path());
+        add_party(&vault, "Grace");
+        let keys = BackupKeys::from_root(&[3; 32]);
+        let store = MemoryStore::new("gw");
+        let destination = |ledger: &Ledger| {
+            ledger
+                .put_destination(&Destination {
+                    gateway_id: "gw".to_owned(),
+                    addrs: Vec::new(),
+                    cert_der: Vec::new(),
+                    token: "t".to_owned(),
+                    epoch: 1,
+                    label: "laptop".to_owned(),
+                    paired_at_ms: 0,
+                    last_seen_ms: None,
+                    last_ack_ms: None,
+                })
+                .expect("pairs");
+        };
+        let vault_id = "ab".repeat(32);
+
+        // One device sends a snapshot whole.
+        let first_ledger = Ledger::open(dir.path().join("one.backup.db")).expect("a ledger");
+        destination(&first_ledger);
+        let first_spool = Spool::open(dir.path().join("one.spool")).expect("a spool");
+        let taken = take(&vault, &keys, &dir.path().join("a"), &vault_id, APP).expect("takes");
+        let planned = plan(&taken, &store).expect("plans");
+        spool(
+            &taken,
+            &planned,
+            &first_spool,
+            &first_ledger,
+            &keys,
+            u64::MAX,
+            1,
+        )
+        .expect("spools");
+        let far = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        let clock = crate::clock::FixedClock::frozen();
+        let moved = move_queue(&first_ledger, &first_spool, &store, far, &clock).expect("moves");
+        assert_eq!(moved.stopped, Stop::Empty);
+
+        // A second ledger, knowing nothing, snapshots the same vault — a
+        // millisecond later at least, so its manifest is a new name.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let ledger = Ledger::open(dir.path().join("two.backup.db")).expect("a ledger");
+        destination(&ledger);
+        let again = take(&vault, &keys, &dir.path().join("b"), &vault_id, APP).expect("takes");
+        let replanned = plan(&again, &store).expect("plans");
+        assert!(replanned.missing_ranges.is_empty(), "every range is held");
+        let waiting = settle(
+            &ledger,
+            &store,
+            &again.manifest_name,
+            &again.manifest,
+            &clock,
+        )
+        .expect("settles");
+        assert!(
+            matches!(waiting, Settled::Waiting { .. }),
+            "with nothing confirmed the head cannot move: {waiting:?}"
+        );
+        let confirmed = confirm_held(&again, &replanned, &ledger, "gw", 2).expect("confirms");
+        assert_eq!(confirmed, again.manifest.range_names().len());
+        let fresh = Spool::open(dir.path().join("two.spool")).expect("a spool");
+        let spooled =
+            spool(&again, &replanned, &fresh, &ledger, &keys, u64::MAX, 2).expect("spools");
+        assert_eq!(
+            spooled.spooled,
+            vec![again.manifest_name],
+            "only the manifest is new"
+        );
+        let moved = move_queue(&ledger, &fresh, &store, far, &clock).expect("moves");
+        assert_eq!(moved.stopped, Stop::Empty);
+        assert!(matches!(
+            settle(&ledger, &store, &again.manifest_name, &again.manifest, &clock)
+                .expect("settles"),
+            Settled::HeadSet(head) if head.name == again.manifest_name
+        ));
     }
 }

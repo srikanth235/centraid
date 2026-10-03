@@ -998,15 +998,18 @@ fn the_phones_four_flows_round_trip_through_call() {
     let Some(wire::response::Kind::BackupStatus(status)) = response.kind else {
         panic!("a BackupStatusRequest is answered by a BackupStatusResponse");
     };
-    assert!(!status.laptop_paired, "this core has never scanned a QR");
+    assert!(
+        status.destinations.is_empty(),
+        "this core has never scanned a QR"
+    );
     assert_eq!(
         status.acked_at_ms, None,
         "a moment that is not the gateway's is no moment at all"
     );
 
-    // `drain` — the door `BackupNow` stood in for, and it is NOT
-    // `NotYetAvailable`: an unpaired phone has nowhere to send bytes, which is
-    // `DRAIN_STOP_UNREACHABLE` and not a failure.
+    // `drain` — the door `BackupNow` stood in for: an unpaired phone has
+    // nowhere to send bytes, which is `DRAIN_STOP_UNREACHABLE` and not a
+    // failure.
     let (code, bytes) = call(
         opened.handle,
         &envelope(
@@ -1034,8 +1037,8 @@ fn the_phones_four_flows_round_trip_through_call() {
         "nothing was acked, so nothing is claimed"
     );
 
-    // `pair` — a payload that is not a ticket is refused by the core's own
-    // decoder, so no shell ever writes a second one.
+    // `pair` — a payload that is not a gateway's pairing code is refused by
+    // the core's own parser, so no shell ever writes a second one.
     let (code, bytes) = call(
         opened.handle,
         &envelope(
@@ -1059,11 +1062,7 @@ fn the_phones_four_flows_round_trip_through_call() {
             14,
             wire::request::Kind::Restore(wire::RestoreRequest {
                 phrase: "abandon abandon abandon".to_owned(),
-                endpoint: None,
-                direct_addrs: Vec::new(),
-                seed: None,
-                indices: Vec::new(),
-                payload: String::new(),
+                ..wire::RestoreRequest::default()
             }),
         ),
     );
@@ -1267,10 +1266,12 @@ fn a_locked_core_refuses_to_drain_rather_than_inventing_a_key() {
     // `CoreError::Unavailable` is `ERROR_CODE_PEER_UNREACHABLE` on the wire
     // (`crates/core/src/error.rs`), which is the sentence a member reads.
     assert_eq!(error.code, wire::ErrorCode::PeerUnreachable as i32);
-    assert!(
-        !centraid_core::phone::Laptop::path_for(&opened.dir.join("vault.db")).exists(),
-        "a refused drain wrote something beside the vault"
-    );
+    for beside in ["vault.scratch", "vault.spool"] {
+        assert!(
+            !opened.dir.join(beside).exists(),
+            "a refused drain made {beside} beside the vault"
+        );
+    }
 }
 
 /// CLAUSE 4c, the companion W15-D5 added. **A member compares a designed short
@@ -1282,12 +1283,14 @@ fn a_locked_core_refuses_to_drain_rather_than_inventing_a_key() {
 /// stand-in for "it matched".
 #[test]
 fn the_pair_and_restore_answers_carry_a_safety_number_a_member_can_read_aloud() {
-    // The rendering is `centraid_identity`'s, over two Ed25519 keys — an iroh
-    // `EndpointId` IS one, which is what lets a phone and a laptop render the
-    // same digits with no third value agreed in advance.
-    let one = centraid_identity::certificate::DeviceKey::generate().expect("a key");
-    let other = centraid_identity::certificate::DeviceKey::generate().expect("a key");
-    let number = centraid_identity::safety_number(&one.public(), &other.public()).grouped();
+    // The rendering is `centraid_identity`'s, over two 32-byte strings as each
+    // side holds them — the vault's identity key and the gateway
+    // certificate's pin — decoding neither (#1080, the root's ruling A17).
+    let vault_key = [0x11_u8; 32];
+    // A pin is a BLAKE3 output, and about half of those are no curve point:
+    // the function reads both as bytes, so it has a number for every pin.
+    let pin = [0xEE_u8; 32];
+    let number = centraid_identity::safety_number_of_bytes(&vault_key, &pin).grouped();
     assert!(
         !number.is_empty() && number.chars().any(|character| character.is_ascii_digit()),
         "a safety number is digits a member reads out: {number:?}"
@@ -1296,7 +1299,7 @@ fn the_pair_and_restore_answers_carry_a_safety_number_a_member_can_read_aloud() 
     // told which of them is "first".
     assert_eq!(
         number,
-        centraid_identity::safety_number(&other.public(), &one.public()).grouped(),
+        centraid_identity::safety_number_of_bytes(&pin, &vault_key).grouped(),
         "the two ends would read different numbers to each other"
     );
 
@@ -1443,20 +1446,33 @@ fn the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// CLAUSE 4g. The backup plane's six doors (#1080) are request kinds: each is
-/// encoded, handed to the C symbol and answered, and until the plane behind
-/// them lands the answer is a typed `NOT_YET_AVAILABLE` body on a successful
-/// call — never an empty response and never a hang. A `restore` carrying a
-/// gateway's `payload`, and a stage `begin` naming the operating system's
-/// library, are refused the same way rather than read as the old request.
+/// CLAUSE 4g. The backup plane's doors are request kinds (#1080), and over a
+/// core paired with nothing each is an ANSWER a shell draws — nothing to hand
+/// off, nothing settled, no pin, no gateway reached — never a hang and never
+/// an empty answer pretending to be one. The stage door's v2 sources stage.
 #[test]
-fn the_backup_plane_doors_are_request_kinds_and_not_yet_available() {
+fn the_backup_plane_doors_are_request_kinds_and_answer_an_unpaired_phone() {
     let opened = Opened::unlocked();
-    let doors = [
+    let answered = |id: u64, door: wire::request::Kind| {
+        let (code, bytes) = call(opened.handle, &envelope(id, door.clone()));
+        assert_eq!(code, CENTRAID_OK, "{door:?}");
+        let Some(wire::envelope::Body::Response(response)) = answer(&bytes).body else {
+            panic!("{door:?} is answered by a Response");
+        };
+        response.kind.expect("an answer has a kind")
+    };
+    let Some(wire::response::Kind::Handoff(handoff)) = Some(answered(
+        41,
         wire::request::Kind::Handoff(wire::HandoffRequest {
             max_bytes: 8 << 20,
             max_parts: 16,
         }),
+    )) else {
+        panic!("a handoff answers");
+    };
+    assert!(handoff.parts.is_empty(), "nothing is paired to hand off to");
+    let Some(wire::response::Kind::Settle(settled)) = Some(answered(
+        42,
         wire::request::Kind::Settle(wire::SettleRequest {
             settled: vec![wire::Settled {
                 name: "ab".repeat(32),
@@ -1464,42 +1480,68 @@ fn the_backup_plane_doors_are_request_kinds_and_not_yet_available() {
                 ..wire::Settled::default()
             }],
         }),
-        wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
-            content_hash: vec![0xAB; 32],
-        }),
+    )) else {
+        panic!("a settle answers");
+    };
+    assert_eq!((settled.confirmed, settled.requeued), (0, 0));
+    let Some(wire::response::Kind::Pins(pins)) = Some(answered(
+        43,
         wire::request::Kind::Pins(wire::PinsRequest {}),
+    )) else {
+        panic!("pins answer");
+    };
+    assert!(pins.destinations.is_empty());
+    let Some(wire::response::Kind::Reconcile(reconciled)) = Some(answered(
+        44,
         wire::request::Kind::Reconcile(wire::ReconcileRequest {}),
+    )) else {
+        panic!("a reconcile answers");
+    };
+    assert!(!reconciled.reachable);
+    let Some(wire::response::Kind::ForgetDestination(forgot)) = Some(answered(
+        45,
         wire::request::Kind::ForgetDestination(wire::ForgetDestinationRequest {
             gateway_id: "a-gateway".to_owned(),
         }),
-        wire::request::Kind::Restore(wire::RestoreRequest {
-            payload: "a gateway's pairing payload".to_owned(),
-            ..wire::RestoreRequest::default()
+    )) else {
+        panic!("a forget answers");
+    };
+    assert!(!forgot.forgotten);
+    let Some(wire::response::Kind::Releasable(releasable)) = Some(answered(
+        46,
+        wire::request::Kind::Releasable(wire::ReleasableRequest { limit: 10 }),
+    )) else {
+        panic!("releasable answers");
+    };
+    assert!(releasable.items.is_empty());
+    let Some(wire::response::Kind::Released(released)) = Some(answered(
+        47,
+        wire::request::Kind::Released(wire::ReleasedRequest {
+            content_hash: vec![vec![7; 32]],
         }),
-        wire::request::Kind::Stage(wire::StageRequest {
-            kind: Some(wire::stage_request::Kind::Begin(wire::StageBegin {
-                media_type: "image/heic".to_owned(),
-                byte_size: 4096,
-                source: wire::StageSource::OsLibrary as i32,
-                os_ref: "library-item-1".to_owned(),
-                ..wire::StageBegin::default()
-            })),
-        }),
-    ];
-    for (id, door) in (41_u64..).zip(doors) {
+    )) else {
+        panic!("released answers");
+    };
+    assert_eq!(released.recorded, 0);
+
+    // THE REQUEST'S OWN REFUSALS: a zero limit, a hash that is not 32 bytes.
+    for (id, door) in [
+        (
+            48,
+            wire::request::Kind::Handoff(wire::HandoffRequest::default()),
+        ),
+        (
+            49,
+            wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
+                content_hash: vec![0xAB; 3],
+            }),
+        ),
+    ] {
         let (code, bytes) = call(opened.handle, &envelope(id, door.clone()));
-        assert_eq!(
-            code, CENTRAID_OK,
-            "{door:?}: a refusing answer is a successful call"
-        );
+        assert_eq!(code, CENTRAID_BAD_ARGUMENT, "{door:?}");
         let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
-            panic!("{door:?} is answered by an Error body, never an empty response");
+            panic!("{door:?} is refused with an Error body");
         };
-        assert_eq!(
-            error.code,
-            wire::ErrorCode::NotYetAvailable as i32,
-            "{door:?}: {}",
-            error.detail
-        );
+        assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
     }
 }

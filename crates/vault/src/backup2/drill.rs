@@ -256,6 +256,7 @@ fn back_up_content(
                 size: part.len,
                 digest: part.digest,
                 kind: PartKind::Original,
+                media_type: Some("text/plain".to_owned()),
                 created_ms: now_ms(),
                 handed_off_ms: None,
                 attempts: 0,

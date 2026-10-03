@@ -29,9 +29,6 @@ tokio = { workspace = true }
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
-# `tests/drain_wire.rs` reads Locker's own queries back on a restored vault.
-centraid-apps-kit = { path = "../apps/kit" }
-centraid-apps-locker = { path = "../apps/locker" }
 # `tests/derive_sweep.rs` builds a `data:` URI.
 base64.workspace = true
 # THE RESTORE DRILL'S CRATES (#1029 W5). `tests/restore_drill.rs` drives the
@@ -47,10 +44,6 @@ centraid-gateway-core = { path = "../gateway-core" }
 # dev-only: this binary is not a gateway and does not sign a gateway request.
 centraid-gateway-server = { path = "../gateway-server" }
 centraid-gateway-client = { path = "../gateway-client" }
-# THE CARRIER, in `tests/drain_wire.rs` only: naming the loopback address the
-# test hands the phone through the laptop record's `direct_addrs`. Dev-only and
-# dial-only — this crate's tests offer no ALPN and call no `accept`.
-iroh.workspace = true
 centraid-ontology = { path = "../ontology" }
 hex.workspace = true
 rusqlite.workspace = true

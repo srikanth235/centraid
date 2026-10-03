@@ -628,8 +628,6 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "base64 0.22.1",
  "centraid-api-proto",
- "centraid-apps-kit",
- "centraid-apps-locker",
  "centraid-blobs",
  "centraid-core",
  "centraid-gateway-client",
@@ -640,7 +638,6 @@ dependencies = [
  "centraid-vault",
  "clap",
  "hex",
- "iroh",
  "rusqlite",
  "serde_json",
  "tempfile",
@@ -786,6 +783,7 @@ dependencies = [
 name = "centraid-core"
 version = "1.0.0-alpha.0"
 dependencies = [
+ "blake3",
  "centraid-api-proto",
  "centraid-apps-agenda",
  "centraid-apps-docs",
@@ -796,8 +794,7 @@ dependencies = [
  "centraid-apps-tally",
  "centraid-apps-tasks",
  "centraid-blobs",
- "centraid-gateway-client",
- "centraid-gateway-core",
+ "centraid-gateway2",
  "centraid-identity",
  "centraid-media",
  "centraid-ontology",
@@ -806,11 +803,12 @@ dependencies = [
  "centraid-vault",
  "hex",
  "hmac",
- "iroh",
  "prost",
+ "rustix",
  "serde",
  "serde_json",
  "sha1",
+ "tempfile",
  "thiserror 2.0.20",
  "tokio",
  "tracing",

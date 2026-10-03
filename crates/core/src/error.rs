@@ -73,22 +73,26 @@ pub enum CoreError {
     #[error("the gateway is unreachable: {reason}")]
     Unavailable { reason: String },
 
-    /// THE LAPTOP ANSWERED AND SAID NO (#1047 E5).
+    /// THE GATEWAY ANSWERED AND SAID NO (#1047 E5).
     ///
     /// Distinct from [`Self::Unavailable`] because the remedy is different: a
-    /// laptop that did not answer wants waking, and one that answered and
-    /// refused a pairing code — spent, unknown, or a lease it will not grant —
-    /// wants a new code. Folding the two into `PEER_UNREACHABLE` sent a member
-    /// to check a laptop that was awake and had told the phone why.
+    /// gateway that did not answer wants waking, and one that answered and
+    /// refused a pairing code — spent, expired, unknown, or a claim it will
+    /// not admit — wants a new code. Folding the two into `PEER_UNREACHABLE`
+    /// sent a member to check a gateway that was awake and had told the phone
+    /// why.
     #[error("the gateway refused: {reason}")]
     GatewayRefused { reason: String },
 
-    /// **THIS VAULT MOVED TO ANOTHER PHONE** (#1029 F1, §1, W15-2).
+    /// **THIS VAULT MOVED TO ANOTHER PHONE** (#1029 F1, §1; #1080).
     ///
-    /// A gateway's refusal, heard by this core because a drain holds the lease
-    /// and commits under it. The shell freezes the vault read-only, shows the
-    /// unacked spool as "N changes since `<date>`", and **keeps everything** —
-    /// nothing is wiped and nothing is taken back automatically.
+    /// A gateway's refusal, heard by this core because a pass writes under a
+    /// token whose writer epoch another phone's claim has passed — a restore,
+    /// or a pairing that took the vault over. The shell freezes the vault
+    /// read-only, shows the unacknowledged work as "N changes since `<date>`",
+    /// and **keeps everything** — nothing is wiped and nothing is taken back
+    /// automatically. The ledger remembers it, so every later pass refuses
+    /// the same way.
     ///
     /// It is deliberately NOT a `DrainStop`: a stop reason says why a pass
     /// ended and invites the next one, and "unreachable" in particular promises
@@ -96,7 +100,7 @@ pub enum CoreError {
     /// to it is to stop drawing a backup at all.
     #[error("this vault moved to another phone at epoch {current_epoch}")]
     VaultMoved {
-        /// The lease epoch that holds it now.
+        /// The writer epoch that holds it now.
         current_epoch: u64,
         /// When, on the GATEWAY's clock.
         moved_at_ms: i64,
