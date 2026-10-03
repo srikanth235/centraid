@@ -1296,6 +1296,10 @@ message HomeState {
   // The vault switcher is a SHEET, exactly as the all-apps listing is: it is
   // not a second Home, it gets no route, and it survives no navigation.
   bool vault_sheet_open = 8;
+  // THE BACKUP LINE (#1080, seam contract A11): the foreground vault's, as
+  // `BackupLines` finished it from the core's `backup_status`. The shell told
+  // Home it (`BackupLineChanged`), so a reload carries it.
+  BackupLine backup_line = 9;
 }
 
 message HomeData {
@@ -1493,6 +1497,13 @@ message HomeEvent {
     VaultSwitchRequested vault_switch = 10;
     VaultPicked vault_picked = 12;
     RosterChanged roster_changed = 13;
+    BackupLineChanged backup_line = 14;
+  }
+
+  // The foreground vault's backup line moved: a pass ended, the foreground
+  // switched, or the vault froze. See `HomeState.backup_line`.
+  message BackupLineChanged {
+    BackupLine line = 1;
   }
 
   // `VaultsListed`, the one-shot survey. See `RosterChanged`.
@@ -11429,23 +11440,25 @@ message PairLaptopEvent {
 // --- Backup ---
 // ---------------------------------------------------------------------------
 
-// ONE HONEST LINE AND THREE CONTROLS (#1080, the shells).
+// ONE HONEST LINE AND THREE CONTROLS (#1080, the shells; seam contract A11).
 //
-// `BackupLine` is what Home draws under the vault lockup and what the Backup
-// screen (`backup.home`) draws at its top; tapping it opens the screen. Every
-// count and time on it is the core's `backup_status`, and a thing is "backed
-// up" only once a gateway acknowledged it and the phone recorded that (#1080
-// ruling 7): the line never says more than the ledger holds. The screen adds
-// the paired gateways and the three controls — Wi-Fi only or cellular,
-// include videos, back up now. Every word is finished in `commonMain`
-// (`BackupLines`, `BackupScreenMachine`); a view draws and decides nothing.
+// `BackupLine` is what Home draws (`HomeState.backup_line`) and what the
+// Backup screen draws at its top; tapping it opens the screen. Every count and
+// time on it is the core's `backup_status`, and a thing is "backed up" only
+// once a gateway acknowledged it and the phone recorded that (#1080 ruling 7):
+// the line never says more than the ledger holds. The screen adds the paired
+// gateways and the three controls — the member's transfer rule (drawn from
+// `HomeBridge`'s rule doors, one setting with one store), include videos, and
+// back up now; "add a gateway" opens `pair.laptop`. Every word is finished in
+// `commonMain` (`BackupLines`, `BackupScreenMachine`); a view draws and decides
+// nothing.
 
 // One reason items wait, with how many.
 message BackupWaitingRow {
   Reason reason = 1;
   uint64 count = 2;
   // "12 waiting for Wi-Fi".
-  string label = 3;
+  string sentence = 3;
 
   enum Reason {
     REASON_UNSPECIFIED = 0;
@@ -11473,7 +11486,7 @@ message BackupLine {
   bool frozen = 5;
   // No gateway is paired: the line offers pairing instead of a status.
   bool unpaired = 6;
-  // The line, finished: "Backed up 2 minutes ago".
+  // The line, finished: "Backed up 2 minutes ago". Empty draws no line.
   string sentence = 7;
   // Its second clause, or empty: "1,203 of 1,240 photos and files".
   string detail = 8;
@@ -11491,69 +11504,58 @@ message BackupLine {
   }
 }
 
-// One gateway this vault backs up to. `destination_id` is the gateway's id as
-// the core's ledger names it; a vault, a mount or a file never carries one
-// (D-1025-S5-2), so above the core's wire it is called a destination's.
+// One gateway this vault backs up to (#1080 ruling 8: the pairing record is a
+// list). A gateway id names a DESTINATION; a vault is mounted by its own id
+// and never by one (seam contract A13).
 message BackupDestinationRow {
-  string destination_id = 1;
+  string gateway_id = 1;
   string label = 2;
-  // Where it was last reached, for display: "192.168.1.20:7443".
-  string address = 3;
-  // "Answered 2 minutes ago", "Not reached yet".
-  string seen_label = 4;
-  int64 last_seen_ms = 5;
-  int64 last_ack_ms = 6;
-  string forget_label = 7;
-  string accessibility_label = 8;
-}
-
-// One choice of the member's transfer rule. `stored` is what `SetRule` sends.
-message BackupRuleChoice {
-  string stored = 1;
-  string label = 2;
+  // Where it was last reached and when, finished:
+  // "192.168.1.20:7443 · reached 2 minutes ago".
   string detail = 3;
-  bool selected = 4;
+  int64 last_seen_ms = 4;
+  int64 last_ack_ms = 5;
+  string accessibility_label = 6;
 }
 
 message BackupScreenState {
   string title = 1;
   BackupLine line = 2;
   repeated BackupDestinationRow destinations = 3;
-  string destinations_heading = 4;
-  string add_destination_label = 5;
-  // The rule as stored, and its choices.
+  // "Add a gateway": the shell opens `pair.laptop`.
+  string add_destination_label = 4;
+  // One label for every row's forget control.
+  string forget_label = 5;
+  // The rule as `TransferRule.stored` holds it, and the heading over its
+  // choices; the choices themselves are `HomeBridge.transferRuleChoices`.
   string rule = 6;
-  string rule_heading = 7;
-  repeated BackupRuleChoice rule_choices = 8;
-  bool include_videos = 9;
-  string include_videos_label = 10;
-  string include_videos_detail = 11;
-  // A "Back up now" run is in progress.
-  bool backing_up_now = 12;
-  string back_up_now_label = 13;
-  bool back_up_now_enabled = 14;
-  int64 last_snapshot_ms = 15;
-  int64 last_ack_ms = 16;
-  uint64 spool_bytes = 17;
-  // "Ready to upload: 120 MB", empty when nothing waits.
-  string spool_label = 18;
+  string rule_label = 7;
+  bool include_videos = 8;
+  string include_videos_label = 9;
+  // A "Back up now" run is in progress; `progress` says so in words.
+  bool backing_up_now = 10;
+  string back_up_now_label = 11;
+  bool back_up_now_enabled = 12;
+  string progress = 13;
+  // Why a phone's battery saving can hold backups back, and the label of the
+  // control that lets Centraid run. A shell draws them only where the
+  // platform says the app is held back (Android's battery optimisation).
+  string battery_sentence = 14;
+  string battery_label = 15;
+  int64 last_snapshot_ms = 16;
+  int64 last_ack_ms = 17;
+  uint64 spool_bytes = 18;
   // What the last act did, or why it could not: one clause, never a toast.
   string notice = 19;
-  // The phone will not wake Centraid in the background, and why.
+  // The phone will not wake Centraid in the background, and what that means.
   string background_notice = 20;
-  // Set while a forget waits for the member's yes.
-  optional Confirm confirm = 21;
-  // The destination a pending `confirm` would forget.
-  string confirming_destination_id = 22;
-  Phase phase = 23;
+  Phase phase = 21;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
     PHASE_LOADING = 1;
     PHASE_READY = 2;
-    // A pairing from `AddDestination` is in flight.
-    PHASE_PAIRING = 3;
-    PHASE_CLOSED = 4;
+    PHASE_CLOSED = 3;
   }
 }
 
@@ -11561,40 +11563,24 @@ message BackupScreenEvent {
   oneof kind {
     Opened opened = 1;
     BackUpNow back_up_now = 2;
-    SetRule set_rule = 3;
-    SetIncludeVideos set_include_videos = 4;
-    // A pairing payload the shell scanned or the member pasted.
-    AddDestination add_destination = 5;
-    // Asks for the member's yes; nothing is forgotten until `ForgetConfirmed`.
-    ForgetDestination forget_destination = 6;
-    ForgetConfirmed forget_confirmed = 7;
-    ForgetCancelled forget_cancelled = 8;
-    Dismissed dismissed = 9;
+    SetIncludeVideos set_include_videos = 3;
+    // Forgets at once: it drops this phone's pairing and nothing the gateway
+    // holds, and pairing again undoes it.
+    ForgetDestination forget_destination = 4;
+    Dismissed dismissed = 5;
   }
 
   message Opened {}
 
   message BackUpNow {}
 
-  message SetRule {
-    string stored = 1;
-  }
-
   message SetIncludeVideos {
     bool include = 1;
   }
 
-  message AddDestination {
-    string payload = 1;
-  }
-
   message ForgetDestination {
-    string destination_id = 1;
+    string gateway_id = 1;
   }
-
-  message ForgetConfirmed {}
-
-  message ForgetCancelled {}
 
   message Dismissed {}
 }
