@@ -340,6 +340,22 @@ fn dialable(bound: SocketAddr) -> SocketAddr {
     }
 }
 
+/// Create `dir`, readable only by its owner, if it is missing. One that
+/// exists is the member's, and is left as it is.
+fn private_dir(dir: &Path) -> anyhow::Result<()> {
+    if dir.is_dir() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+            .with_context(|| format!("restricting {}", dir.display()))?;
+    }
+    Ok(())
+}
+
 /// `install`.
 fn install(data_dir: &Path, bind: &str, dry_run: bool, label: String) -> anyhow::Result<()> {
     let platform = Platform::host().context(
@@ -367,6 +383,13 @@ fn install(data_dir: &Path, bind: &str, dry_run: bool, label: String) -> anyhow:
         println!("# {}", path.display());
         print!("{text}");
         return Ok(());
+    }
+    // The unit names these directories, and systemd refuses to start a unit
+    // whose `BindPaths=` or `ReadWritePaths=` do not exist; launchd will not
+    // create a log file's directory.
+    private_dir(&spec.data_dir)?;
+    if platform == Platform::Launchd {
+        private_dir(&spec.log_dir)?;
     }
     let path = service::install(platform, &spec, &home)?;
     println!("{}", path.display());
