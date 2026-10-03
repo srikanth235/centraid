@@ -15,16 +15,15 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.Dispatchers
 
 /**
- * THE FREEZE HAS A PRODUCER NOW (#1029 W5, hand-offs 2 and 3).
+ * THE FREEZE HAS A PRODUCER (#1029 F1, #1080).
  *
- * `VaultMovedSpec` pins what the freeze DOES. This pins the two things that
- * were missing on either side of it:
+ * `VaultMovedSpec` pins what the freeze DOES. This pins the two things on
+ * either side of it:
  *
- * 1. **The code that starts it.** `Shelf.freeze` had no caller that could
- *    exist: `error.proto` carried no `ERROR_CODE_VAULT_MOVED`, and the mobile
- *    lane refused to invent a number rather than mint a second mechanism. The
- *    code is minted with the lease it belongs to, `lease.proto`'s `VaultMoved`
- *    rides on the refusal, and `movedFrom` is the ONE reader.
+ * 1. **The code that starts it.** A gateway refuses a write whose token's
+ *    epoch another phone's claim superseded (`MOVED`, `docs/gateway.md`); the
+ *    core answers `ERROR_CODE_VAULT_MOVED` with `error.proto`'s `VaultMoved`
+ *    riding on the refusal, and `movedFrom` is the ONE reader.
  * 2. **The slot that shows it.** `VaultLockup` had three pass-shaped states and
  *    no case for a frozen vault, so the switcher's row said "synced" over a
  *    vault refusing every write — which is the umbrella's UI invariant broken
@@ -61,12 +60,11 @@ class VaultMovedProducerSpec : StringSpec({
         // `UNAUTHORIZED` is the near miss and the one that matters: "whoever
         // you are, not here" and "you held this vault and a higher epoch took
         // it" are different facts with different answers, and a client that
-        // froze on the first would freeze a vault over a bad signature.
+        // froze on the first would freeze a vault over a token the gateway
+        // does not know. A gateway that did not answer said nothing about who
+        // writes.
         movedFrom(refusal(code = ErrorCode.ERROR_CODE_UNAUTHORIZED), unacked = 3).shouldBeNull()
-        movedFrom(
-            refusal(code = ErrorCode.ERROR_CODE_GATEWAY_LEASE_STALE),
-            unacked = 3,
-        ).shouldBeNull()
+        movedFrom(refusal(code = ErrorCode.ERROR_CODE_PEER_UNREACHABLE), unacked = 3).shouldBeNull()
     }
 
     "a move with no companion message is still a move" {
