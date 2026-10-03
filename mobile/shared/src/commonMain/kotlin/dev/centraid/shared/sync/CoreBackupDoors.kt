@@ -16,6 +16,7 @@ import centraid.core.v1.SettleRequest
 import centraid.core.v1.Settled
 import centraid.core.v1.WaitReason as WireWaitReason
 import dev.centraid.core.CentraidCore
+import dev.centraid.design.copy.SharedCopy
 import dev.centraid.core.CoreOutcome
 
 /**
@@ -82,8 +83,15 @@ public class CoreBackupDoors(private val core: () -> CentraidCore?) : UploadDoor
             FetchOutcome.FETCH_OUTCOME_LANDED -> FetchedOriginal.LANDED
             FetchOutcome.FETCH_OUTCOME_ALREADY_HELD -> FetchedOriginal.ALREADY_HELD
             FetchOutcome.FETCH_OUTCOME_NOT_IN_BACKUP -> FetchedOriginal.NOT_IN_BACKUP
-            // UNSPECIFIED READS AS UNREACHABLE: "try again" is never a harmful remedy.
-            else -> FetchedOriginal.UNREACHABLE
+            // LANE C'S TWO OUTCOMES ARE MATCHED BY NAME, so this compiles on
+            // both sides of the merge that adds them to `phone.proto`; before
+            // it, Wire decodes either as UNSPECIFIED. UNSPECIFIED READS AS
+            // UNREACHABLE: "try again" is never a harmful remedy.
+            else -> when (fetched.outcome.name) {
+                "FETCH_OUTCOME_UNTRUSTED" -> FetchedOriginal.UNTRUSTED
+                "FETCH_OUTCOME_DAMAGED" -> FetchedOriginal.DAMAGED
+                else -> FetchedOriginal.UNREACHABLE
+            }
         }
         return outcome to fetched.path
     }
@@ -94,12 +102,22 @@ public class CoreBackupDoors(private val core: () -> CentraidCore?) : UploadDoor
             ?.forget_destination?.forgotten
 }
 
-/** How fetching one original back by its content hash went (`FetchOutcome`). */
-public enum class FetchedOriginal {
-    LANDED,
-    ALREADY_HELD,
-    UNREACHABLE,
-    NOT_IN_BACKUP,
+/**
+ * How fetching one original back by its content hash went (`FetchOutcome`),
+ * and the line a screen shows when it did not come back. [fetched] means the
+ * bytes are on this phone now, so the next read serves the original.
+ */
+public enum class FetchedOriginal(public val fetched: Boolean, public val sentence: String) {
+    LANDED(true, ""),
+    ALREADY_HELD(true, ""),
+    UNREACHABLE(false, SharedCopy.FETCH_UNREACHABLE),
+    NOT_IN_BACKUP(false, SharedCopy.FETCH_NOT_IN_BACKUP),
+
+    /** The machine that answered at the gateway's address is not the pinned gateway. */
+    UNTRUSTED(false, SharedCopy.FETCH_UNTRUSTED),
+
+    /** The gateway's copy did not open: a sealed part failed its checks. */
+    DAMAGED(false, SharedCopy.FETCH_DAMAGED),
 }
 
 /**
@@ -128,4 +146,13 @@ private fun reasonOf(reason: WireWaitReason): WaitReason? = when (reason) {
     WireWaitReason.WAIT_REASON_BYTES -> WaitReason.BYTES
     WireWaitReason.WAIT_REASON_WINDOW -> WaitReason.WINDOW
     WireWaitReason.WAIT_REASON_UNSPECIFIED -> null
+    // LANE C'S TWO REASONS (`WAIT_REASON_ASK = 7`, `WAIT_REASON_UNTRUSTED = 8`)
+    // ARE MATCHED BY NAME, so this file compiles on both sides of the merge
+    // that adds them to `phone.proto`. Before it, Wire decodes either number
+    // as UNSPECIFIED and nothing reaches here.
+    else -> when (reason.name) {
+        "WAIT_REASON_ASK" -> WaitReason.ASK
+        "WAIT_REASON_UNTRUSTED" -> WaitReason.UNTRUSTED
+        else -> null
+    }
 }

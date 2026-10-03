@@ -222,16 +222,17 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
                 )
             }
 
-            // THE ANSWER CAME BACK. A fetch that LANDED redraws through the row
-            // change its own bytes caused, so this is here for the other two
-            // outcomes — a gateway that was not reached, and a refusal by code
-            // — and what it does is stop the spinner. A cell left spinning
-            // because nobody said "it did not happen" is the state this
-            // deletes.
+            // THE ANSWER CAME BACK (#1080). A fetch that succeeded is a row
+            // change for that asset: the bytes are on this phone now, and the
+            // re-read is what draws the original. It is asked for HERE rather
+            // than left to the core's change event, because an original the
+            // phone already held settles without one, and its cell would spin
+            // for ever. A failure stops the spinner and says why on
+            // `write_failure`, the slot that never replaces the library.
             event.fetch_settled != null -> {
                 val settled = event.fetch_settled
                 if (settled.fetched) {
-                    Step(state)
+                    changed(state, PhotosGridEvent.RowsChanged(asset_ids = listOf(settled.asset_id)))
                 } else {
                     Step(
                         state.copy(
@@ -244,6 +245,7 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
                                 // arrow, so the member can try again.
                                 PhotoCell.Held.HELD_WITHHELD_BY_RULE,
                             ),
+                            write_failure = settled.sentence.takeIf { it.isNotEmpty() }?.let(Reads::refused),
                         ),
                     )
                 }

@@ -1,7 +1,14 @@
 package dev.centraid.shared
 
 import centraid.core.v1.CommandStatus
+import centraid.core.v1.Envelope
+import centraid.core.v1.ErrorCode
+import centraid.core.v1.FetchOriginalResponse
+import centraid.core.v1.FetchOutcome
 import centraid.core.v1.NullValue
+import centraid.core.v1.Page
+import centraid.core.v1.Request
+import centraid.core.v1.Response
 import centraid.core.v1.Row
 import centraid.core.v1.Value
 import centraid.screen.v1.PhotoCell
@@ -10,6 +17,8 @@ import centraid.screen.v1.PhotoLabel
 import centraid.screen.v1.PhotoLightboxEvent
 import centraid.screen.v1.PhotoLightboxState
 import centraid.screen.v1.PhotoPerson
+import dev.centraid.core.CentraidCore
+import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.apps.photos.PhotoEditorMachine
 import dev.centraid.shared.apps.photos.PhotoLightboxLeg
 import dev.centraid.shared.apps.photos.PhotoLightboxMachine
@@ -18,7 +27,11 @@ import dev.centraid.shared.apps.photos.SharePlacePrecision
 import dev.centraid.shared.apps.photos.sharePlaceOptions
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
+import dev.centraid.shared.screen.ScreenHost
+import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.sync.ContentHash
+import dev.centraid.shared.sync.ScreenRuntime
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -27,6 +40,15 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
+import okio.ByteString.Companion.toByteString
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * THE LIGHTBOX (#1029, photos port, lane 2).
@@ -825,6 +847,82 @@ class PhotoLightboxSpec : StringSpec({
         )
         settled.state.detail.shouldNotBeNull().held shouldBe
             PhotoCell.Held.HELD_WITHHELD_BY_RULE
+    }
+
+    "a fetch that succeeded re-reads this photograph, and another's success moves nothing (#1080)" {
+        val tapped = PhotoLightboxMachine.reduce(
+            loaded().state,
+            PhotoLightboxEvent(fetch_original = PhotoLightboxEvent.OriginalRequested(asset_id = asset, content_hash = "a0b1")),
+        )
+        // THE BYTES ARE ON THIS PHONE NOW, so the read draws the original —
+        // asked for here, because one the phone already held brings no change
+        // event with it.
+        PhotoLightboxMachine.reduce(
+            tapped.state,
+            PhotoLightboxEvent(fetch_settled = PhotoLightboxEvent.FetchSettled(asset_id = asset, fetched = true)),
+        ).effects shouldBe listOf(ScreenEffect.ReadPage(PhotoLightboxMachine.SCREEN_ID, afterCursor = null))
+        PhotoLightboxMachine.reduce(
+            tapped.state,
+            PhotoLightboxEvent(fetch_settled = PhotoLightboxEvent.FetchSettled(asset_id = "asset-2", fetched = true)),
+        ).effects.shouldBeEmpty()
+    }
+
+    "the runtime takes a tapped original to the core's fetch_original, then re-reads or says why not (#1080)" {
+        val raw = ByteArray(32) { 0xa0.toByte() }
+        val hash = ContentHash.hex(raw.toByteString())
+        // Each row: what the core answers (null is a refusal), and the line the
+        // member reads (null is a success, which re-reads instead).
+        val rows = listOf(
+            FetchOutcome.FETCH_OUTCOME_LANDED to null,
+            FetchOutcome.FETCH_OUTCOME_ALREADY_HELD to null,
+            FetchOutcome.FETCH_OUTCOME_NOT_IN_BACKUP to SharedCopy.FETCH_NOT_IN_BACKUP,
+            FetchOutcome.FETCH_OUTCOME_UNREACHABLE to SharedCopy.FETCH_UNREACHABLE,
+            null to SharedCopy.FETCH_NO_ANSWER,
+        )
+        for ((outcome, line) in rows) {
+            withClue("$outcome") {
+                val seen = CopyOnWriteArrayList<Request>()
+                val core = CentraidCore.answering(Dispatchers.Unconfined) { envelope ->
+                    val request = envelope.request!!
+                    seen += request
+                    when {
+                        request.fetch_original == null -> Envelope(response = Response(page = Page()))
+                        outcome == null -> Envelope(
+                            error = centraid.core.v1.Error(code = ErrorCode.ERROR_CODE_NOT_YET_AVAILABLE, detail = "logs only"),
+                        )
+                        else -> Envelope(response = Response(fetch_original = FetchOriginalResponse(outcome = outcome)))
+                    }
+                }
+                val start = loaded().state
+                val host = ScreenHost(
+                    object : ScreenMachine<PhotoLightboxState, PhotoLightboxEvent> by PhotoLightboxMachine {
+                        override fun initial(): PhotoLightboxState = start
+                    },
+                )
+                val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+                try {
+                    ScreenRuntime(core = { core }, host = host, reads = PhotoLightboxReads, scope = scope).start()
+                    host.send(
+                        PhotoLightboxEvent(
+                            fetch_original = PhotoLightboxEvent.OriginalRequested(asset_id = asset, content_hash = hash),
+                        ),
+                    )
+                    if (line == null) {
+                        // A SUCCESS RE-READS: the detail's page follows the fetch.
+                        withTimeout(5_000) { while (seen.none { it.page != null }) delay(5) }
+                    } else {
+                        val failed = withTimeout(5_000) { host.state.first { it.write_failure != null } }
+                        failed.write_failure.shouldNotBeNull().sentence shouldBe line
+                        failed.detail.shouldNotBeNull().held shouldBe PhotoCell.Held.HELD_WITHHELD_BY_RULE
+                        seen.none { it.page != null } shouldBe true
+                    }
+                    // THE TAP CROSSED TO ARM 25, with the hash the cell named, raw.
+                    seen.first().fetch_original.shouldNotBeNull().content_hash shouldBe raw.toByteString()
+                } finally {
+                    scope.cancel()
+                }
+            }
+        }
     }
 
     // --- Sync --------------------------------------------------------------

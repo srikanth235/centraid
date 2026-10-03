@@ -1,16 +1,21 @@
 package dev.centraid.shared
 
+import centraid.screen.v1.PhotoCell
+import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.PhotosGridEvent
+import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.apps.photos.FreeUpFlow
 import dev.centraid.shared.apps.photos.KeepOriginals
 import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.platform.FakeLibraryDeleter
 import dev.centraid.shared.platform.FakePlatformServices
+import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.sync.ContentHash
 import dev.centraid.shared.sync.CoreOriginals
 import dev.centraid.shared.sync.DeleteCapability
 import dev.centraid.shared.sync.DeleteOutcome
+import dev.centraid.shared.sync.FetchedOriginal
 import dev.centraid.shared.sync.FreeUpDoors
 import dev.centraid.shared.sync.ReleasableItem
 import dev.centraid.shared.sync.ReleasableList
@@ -168,5 +173,45 @@ class FreeUpSpec : StringSpec({
             doors.released.shouldBeEmpty()
             session.close()
         }
+    }
+
+    "the way back: a freed original fetched from the grid re-reads on success and says why not on a failure (#1080)" {
+        val grid = PhotosGridMachine.initial().copy(
+            loading = null,
+            data_ = PhotosGridData(cells = listOf(PhotoCell(asset_id = "a-1", held = PhotoCell.Held.HELD_WITHHELD_BY_RULE))),
+        )
+        val tapped = PhotosGridMachine.reduce(
+            grid,
+            PhotosGridEvent(fetch_original = PhotosGridEvent.OriginalRequested(asset_id = "a-1", content_hash = "ab".repeat(32))),
+        )
+        tapped.state.data_!!.cells.single().held shouldBe PhotoCell.Held.HELD_FETCHING
+        tapped.effects shouldBe listOf(ScreenEffect.FetchOriginal(PhotosGridMachine.SCREEN_ID, "a-1", "ab".repeat(32)))
+        // A SUCCESS IS A RE-READ: the bytes are here, and only a read draws them.
+        PhotosGridMachine.reduce(
+            tapped.state,
+            PhotosGridEvent(fetch_settled = PhotosGridEvent.FetchSettled(asset_id = "a-1", fetched = true)),
+        ).effects.any { it is ScreenEffect.ReadPage } shouldBe true
+        // A FAILURE STOPS THE SPINNER AND NAMES WHY, without replacing the library.
+        val failed = PhotosGridMachine.reduce(
+            tapped.state,
+            PhotosGridEvent(
+                fetch_settled = PhotosGridEvent.FetchSettled(asset_id = "a-1", fetched = false, sentence = SharedCopy.FETCH_UNTRUSTED),
+            ),
+        )
+        failed.state.data_!!.cells.single().held shouldBe PhotoCell.Held.HELD_WITHHELD_BY_RULE
+        failed.state.write_failure!!.sentence shouldBe SharedCopy.FETCH_UNTRUSTED
+        failed.state.failure.shouldBeNull()
+        failed.effects.shouldBeEmpty()
+    }
+
+    "every way a fetch ends is fetched or a line that names why, the two outcomes lane C adds included" {
+        FetchedOriginal.entries.filter { it.fetched } shouldBe listOf(FetchedOriginal.LANDED, FetchedOriginal.ALREADY_HELD)
+        FetchedOriginal.entries.filterNot { it.fetched }.associateWith { it.sentence } shouldBe mapOf(
+            FetchedOriginal.UNREACHABLE to SharedCopy.FETCH_UNREACHABLE,
+            FetchedOriginal.NOT_IN_BACKUP to SharedCopy.FETCH_NOT_IN_BACKUP,
+            FetchedOriginal.UNTRUSTED to SharedCopy.FETCH_UNTRUSTED,
+            FetchedOriginal.DAMAGED to SharedCopy.FETCH_DAMAGED,
+        )
+        FetchedOriginal.entries.filter { it.fetched }.all { it.sentence.isEmpty() } shouldBe true
     }
 })

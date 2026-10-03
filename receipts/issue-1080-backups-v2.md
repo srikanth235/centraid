@@ -591,6 +591,38 @@ bash .governance/run.sh < /dev/null
 - Red first: the A24 case in `ShelfDrainSpec` failed with `ENTERED_BACKGROUND` given an ask, and passes without one.
 - `bun run format:check` — clean. `bash .governance/run.sh < /dev/null` — every directive passes but `law`, whose one finding is the `## Audit` verdict for the close.
 
+### Round five — the way back (the audit's finding 1), and two wait reasons
+
+On the umbrella at `511a20ee` (the audit), which fast-forwarded this branch. Kotlin only, no cargo command.
+
+| File | Change |
+| --- | --- |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/ScreenRuntime.kt` | Serves `ScreenEffect.FetchOriginal` for its own screen through `CoreBackupDoors.fetchOriginal` (arm 25), the vault pinned at the tap; `ScreenReads.fetchSettled` (null by default) carries the outcome back, and no answer is `FETCH_NO_ANSWER`'s line. The comment that said `Request` has no `fetch_original` arm is gone. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/CoreBackupDoors.kt` | `FetchedOriginal` gains `UNTRUSTED` and `DAMAGED`, `fetched` and `sentence`. Lane C's `FETCH_OUTCOME_UNTRUSTED`, `FETCH_OUTCOME_DAMAGED`, `WAIT_REASON_ASK` and `WAIT_REASON_UNTRUSTED` are matched by name, so the file compiles on both sides of the merge that adds them. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/photos/{PhotosReads,PhotoLightboxReads}.kt` | `fetchSettled` as each screen's `FetchSettled`. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/photos/{PhotosGridMachine,PhotoLightboxMachine}.kt` | A success re-reads, because an original the phone already held settles with no change event; the grid's failure line lands on `write_failure`. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/screen/ScreenMachine.kt` | `FetchOriginal`'s comment says what serves it. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/{BackupStatus,BackupLines}.kt`, `copy/shared.json`, `mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/SharedCopy.kt`, `crates/api-proto/proto/centraid/screen/v1/screen.proto` (the Backup block: `REASON_ASK = 7`, `REASON_UNTRUSTED = 8`) | The two waits and the five fetch lines. |
+| `mobile/README.md` | The way back. |
+| `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/{PhotoLightboxSpec,FreeUpSpec,BackupStatusSpec}.kt` | The tap crosses to arm 25 with the raw hash; a success re-reads; each failure shows its line and stops the spinner; every outcome is fetched or a line; the two wait rows. |
+
+**Waiting on lane C's proto.** The wire rows — `WAIT_REASON_ASK` and `WAIT_REASON_UNTRUSTED` to `WaitReason`, `FETCH_OUTCOME_UNTRUSTED` and `FETCH_OUTCOME_DAMAGED` to `FetchedOriginal` — have no constants to name in a spec until it merges; the Kotlin rows behind them are specced.
+
+#### Verification, round five
+
+```sh
+mobile/gradlew -p mobile :shared:jvmTest --rerun
+buf lint && buf breaking --against '.git#ref=511a20ee3,subdir=crates/api-proto/proto'
+bun contracts/tools/export-native-theme.ts && bun contracts/tools/build-screen-fixtures.ts && bun run format && bun run format:check
+bash .governance/run.sh < /dev/null
+```
+
+- `:shared:jvmTest` — 1,109 tests in 75 suites, 0 failures (five added).
+- `buf lint`, `buf breaking` against the umbrella — exit 0.
+- The emitters — no drift beyond `copy/shared.json`'s seven keys; `bun run format:check` — clean.
+- `bash .governance/run.sh < /dev/null` — all 6 directives pass.
+- Red first: with the runtime's new branch disabled and the two machines as at `511a20ee`, the grid case, the lightbox re-read case and the runtime case failed; restored, they pass.
+
 ### Lane A — the gateway v2 (`crates/gateway2`, renamed `crates/gateway` at the cut-over)
 
 Branch `worktree-agent-ad02a969bfe46e45e`, from `23e46810`; merged as `bccf0763`. Eight commits: `ceae39b71` the protocol v2 rules and their conformance suite; `9b8b25479` the HTTPS gateway, pinned client and wire suite; `d29922f4d` the CLI, pairing QR and safety line; `6a46b349d` store semantics for the phone and streamed bundles (A14, A15); `f999ef590` a user unit that can start with its data at home; `46bb10dee` sweeps paced by the clock and kept on disk; `c1d3760ff` the README and the container image; `f21084b0a` no other hash named in the digest-header test.
