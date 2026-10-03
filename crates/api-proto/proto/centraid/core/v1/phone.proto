@@ -110,9 +110,11 @@ message DrainRequest {
   // THE MEMBER TAPPED "BACK UP NOW" IN THIS PASS (#1080, the root's ruling
   // A24), and nothing else sets it: not the app leaving the screen, not a
   // background window. Under `TRANSFER_RULE_MANUAL` it is what lets originals
-  // be sealed, and on any rule it lets a video's original be sealed off the
-  // charger. A shell that sent `wants_snapshot` for both meant two things by
-  // one bit, and MANUAL means the member's own tap.
+  // be sealed; on any rule it lets a video's original be sealed off the
+  // charger, and on a metered link it sends the snapshot — the records, a few
+  // MB — whatever the rule, while originals still follow it (R-1080-C38). A
+  // shell that sent `wants_snapshot` for both meant two things by one bit,
+  // and MANUAL means the member's own tap.
   bool asked = 7;
 }
 

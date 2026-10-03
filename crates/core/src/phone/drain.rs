@@ -27,7 +27,7 @@
 //!
 //! | What | May be sealed | May cross a metered link |
 //! |---|---|---|
-//! | the vault's snapshot | always | under `WIFI_AND_CELLULAR_PHOTOS` |
+//! | the vault's snapshot | always | under `WIFI_AND_CELLULAR_PHOTOS`, or under any rule when the member asked (R-1080-C38) |
 //! | a thumbnail, a preview, a poster | always | always |
 //! | a photograph's original | not under `MANUAL` unless the member asked | under `WIFI_AND_CELLULAR_PHOTOS` |
 //! | a video's original | on a charger, or when the member asked; never when videos are left out | never |
@@ -163,8 +163,9 @@ pub struct Conditions {
     pub charging: bool,
     pub exclude_videos: bool,
     /// The member tapped "Back up now" in this pass (`DrainRequest.asked`,
-    /// the root's ruling A24): under `MANUAL` it lets originals be sealed, and
-    /// it lets a video's original be sealed off the charger.
+    /// the root's ruling A24): under `MANUAL` it lets originals be sealed, it
+    /// lets a video's original be sealed off the charger, and on a metered
+    /// link it lets the snapshot cross under any rule (R-1080-C38).
     pub asked: bool,
     /// The shell asked for a snapshot now (`wants_snapshot`): "Back up now",
     /// or the app leaving the screen. It decides the snapshot's timing and
@@ -235,10 +236,15 @@ impl Conditions {
         !(matches!(kind, Kind::Original { video: true }) && self.exclude_videos)
     }
 
-    /// Whether a part of this kind may cross the link this pass is on.
+    /// Whether a part of this kind may cross the link this pass is on. The
+    /// member's tap sends the records over a metered link under any rule
+    /// (R-1080-C38): a snapshot is a few MB, and the tap is consent.
     #[must_use]
     pub fn may_move(&self, kind: Kind) -> bool {
-        self.counts(kind) && (!self.metered || allows_cellular(kind, self.rule))
+        self.counts(kind)
+            && (!self.metered
+                || allows_cellular(kind, self.rule)
+                || (self.asked && kind == Kind::Records))
     }
 
     /// Whether a file of this kind may be sealed into the spool now.
@@ -1340,6 +1346,37 @@ mod tests {
             };
             assert!(!without_videos.may_move(Kind::Original { video: true }));
             assert!(without_videos.may_move(Kind::Original { video: false }));
+        }
+    }
+
+    /// **A TAP SENDS THE RECORDS OVER A METERED LINK, UNDER ANY RULE**
+    /// (R-1080-C38, superseding C14): the snapshot is a few MB and the tap is
+    /// consent. Originals still follow the rule, and without the tap the
+    /// records do too.
+    #[test]
+    fn a_tap_sends_the_records_over_a_metered_link_under_any_rule() {
+        for rule in RULES {
+            let paid = conditions(rule, true);
+            let tapped = Conditions {
+                asked: true,
+                ..paid
+            };
+            assert!(tapped.may_move(Kind::Records), "{rule:?}");
+            assert_eq!(
+                paid.may_move(Kind::Records),
+                allows_cellular(Kind::Records, rule),
+                "{rule:?}: no tap, the rule alone"
+            );
+            for original in [
+                Kind::Original { video: false },
+                Kind::Original { video: true },
+            ] {
+                assert_eq!(
+                    tapped.may_move(original),
+                    allows_cellular(original, rule),
+                    "{rule:?} {original:?}: an original follows the rule"
+                );
+            }
         }
     }
 
