@@ -117,6 +117,7 @@ public class PhotosBridge {
             // photograph offered to two vaults is two uploads
             // (`docs/mobile-offline.md:175`).
             vaultId = { session.shelf.foregroundHolding()?.vaultId },
+            afterImport = { session.drain.afterImport() },
         ).also { it.start() }
         // AFTER the runner's start job: that job syncs permission before it
         // suspends on effects, so the first state this collect publishes past
