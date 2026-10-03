@@ -1,7 +1,7 @@
 //! The ledger: what this device knows about its uploads, in
 //! `<stem>.backup.db` beside the vault (#1080, "Ledger").
 //!
-//! Five tables, and every one is a cache of somebody else's truth:
+//! Six tables, and every one is a cache of somebody else's truth:
 //!
 //! | Table | Whose truth |
 //! |---|---|
@@ -9,7 +9,16 @@
 //! | `queue` | the spool: each sealed part waiting to move, and how its last attempt went |
 //! | `confirmed` | each gateway's `exists`: a name it acknowledged |
 //! | `snapshot` | the snapshots this device took, with their manifests, and when each became the head |
+//! | `local_bytes` | the operating system's library and the app's store: where each hash's bytes are on this device |
 //! | `meta` | small facts, among them the head this device last set at each gateway |
+//!
+//! `local_bytes` is what lets the phone keep no second copy of what the
+//! library holds (#1080 ruling 6): an original streamed from the library is
+//! recorded here under the library's own identifier and never written to the
+//! store, and the byte door answers a read of it with that identifier for the
+//! shell to resolve. It is device-local twice over — an identifier means
+//! nothing on another phone — which is why it is a ledger table and never a
+//! vault row.
 //!
 //! **Acknowledgement is the `PUT`'s success** (#1080 ruling 7), recorded here
 //! and reconciled against the gateway's own `exists` on every launch, so the
@@ -26,7 +35,7 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::naming::{Digest, Name};
+use super::naming::{Digest, Name, PlaintextHash};
 use super::{Result, invariant};
 
 /// `CBL1`: a Centraid backup ledger.
@@ -77,6 +86,13 @@ CREATE TABLE snapshot (
   taken_at_ms   INTEGER NOT NULL CHECK (taken_at_ms >= 0),
   manifest_json TEXT NOT NULL CHECK (json_valid(manifest_json)),
   acked_ms      INTEGER CHECK (acked_ms IS NULL OR acked_ms >= 0)
+) STRICT;
+
+CREATE TABLE local_bytes (
+  hash        TEXT PRIMARY KEY CHECK (length(hash) = 64 AND hash NOT GLOB '*[^0-9a-f]*'),
+  source      TEXT NOT NULL CHECK (source IN ('os', 'store')),
+  ref         TEXT CHECK ((source = 'os') = (ref IS NOT NULL AND ref <> '')),
+  verified_ms INTEGER CHECK (verified_ms IS NULL OR verified_ms >= 0)
 ) STRICT;
 
 CREATE TABLE meta (
@@ -183,6 +199,46 @@ pub struct LedgerSnapshot {
     pub acked_ms: Option<u64>,
 }
 
+/// Where a hash's bytes are kept on this device (`local_bytes.source`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalSource {
+    /// The operating system's library, under [`LocalBytes::os_ref`].
+    Os,
+    /// The app's own content store.
+    Store,
+}
+
+impl LocalSource {
+    /// The spelling the `local_bytes.source` CHECK names.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Os => "os",
+            Self::Store => "store",
+        }
+    }
+
+    fn parse(text: &str) -> Option<Self> {
+        Some(match text {
+            "os" => Self::Os,
+            "store" => Self::Store,
+            _ => return None,
+        })
+    }
+}
+
+/// One row of `local_bytes`: where a hash's bytes are on this device.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalBytes {
+    pub hash: PlaintextHash,
+    pub source: LocalSource,
+    /// The library's own identifier for the item, for [`LocalSource::Os`]
+    /// only: the shell resolves it, and it means nothing on another phone.
+    pub os_ref: Option<String>,
+    /// When this device last read the bytes and found they hash to `hash`.
+    pub verified_ms: Option<u64>,
+}
+
 /// The ledger file and its one connection.
 pub struct Ledger {
     connection: Connection,
@@ -283,6 +339,7 @@ impl Ledger {
              DELETE FROM confirmed;
              DELETE FROM queue;
              DELETE FROM snapshot;
+             DELETE FROM local_bytes;
              DELETE FROM meta;
              DELETE FROM destination;
              COMMIT;",
@@ -635,6 +692,85 @@ impl Ledger {
         Ok(())
     }
 
+    // ─── local bytes ────────────────────────────────────────────────────────
+
+    /// Record where a hash's bytes are on this device, replacing whatever was
+    /// recorded for it.
+    ///
+    /// # Errors
+    /// A library row with no identifier, or a store row with one — the
+    /// `local_bytes` CHECK refuses both, and this says so before SQLite does —
+    /// or SQLite's refusal.
+    pub fn put_local(&self, local: &LocalBytes) -> Result<()> {
+        let identified = local.os_ref.as_deref().is_some_and(|text| !text.is_empty());
+        if identified != (local.source == LocalSource::Os) {
+            return Err(invariant(format!(
+                "a `{}` row for {} {} an identifier",
+                local.source.as_str(),
+                local.hash,
+                if identified {
+                    "may not carry"
+                } else {
+                    "must carry"
+                }
+            )));
+        }
+        self.connection.execute(
+            "INSERT INTO local_bytes (hash, source, ref, verified_ms)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT (hash) DO UPDATE SET
+               source = excluded.source, ref = excluded.ref,
+               verified_ms = excluded.verified_ms",
+            params![
+                local.hash.to_hex(),
+                local.source.as_str(),
+                local.os_ref,
+                local.verified_ms.map(ms).transpose()?,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Where a hash's bytes are on this device, as recorded. `None` is no
+    /// record, which a reader takes as "ask the store".
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a row this build cannot read.
+    pub fn local(&self, hash: &PlaintextHash) -> Result<Option<LocalBytes>> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT hash, source, ref, verified_ms FROM local_bytes WHERE hash = ?1",
+                params![hash.to_hex()],
+                read_local,
+            )
+            .optional()?)
+    }
+
+    /// Every recorded hash, in hash order.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a row this build cannot read.
+    pub fn locals(&self) -> Result<Vec<LocalBytes>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT hash, source, ref, verified_ms FROM local_bytes ORDER BY hash")?;
+        let rows = statement.query_map([], read_local)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// The bytes left this device: forget where they were.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn forget_local(&self, hash: &PlaintextHash) -> Result<()> {
+        self.connection.execute(
+            "DELETE FROM local_bytes WHERE hash = ?1",
+            params![hash.to_hex()],
+        )?;
+        Ok(())
+    }
+
     // ─── meta ───────────────────────────────────────────────────────────────
 
     /// One small fact.
@@ -687,6 +823,25 @@ fn head_key(gateway_id: &str) -> String {
     format!("head:{gateway_id}")
 }
 
+fn read_local(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalBytes> {
+    let hash: String = row.get(0)?;
+    let source: String = row.get(1)?;
+    Ok(LocalBytes {
+        hash: PlaintextHash::from_hex(&hash).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(
+                0,
+                rusqlite::types::Type::Text,
+                Box::new(error),
+            )
+        })?,
+        source: LocalSource::parse(&source).ok_or_else(|| {
+            rusqlite::Error::InvalidColumnType(1, source.clone(), rusqlite::types::Type::Text)
+        })?,
+        os_ref: row.get(2)?,
+        verified_ms: row.get::<_, Option<i64>>(3)?.map(read_ms).transpose()?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -707,6 +862,15 @@ mod tests {
             paired_at_ms: 1_000,
             last_seen_ms: None,
             last_ack_ms: None,
+        }
+    }
+
+    fn library_item(label: &str, os_ref: &str) -> LocalBytes {
+        LocalBytes {
+            hash: PlaintextHash::of(label.as_bytes()),
+            source: LocalSource::Os,
+            os_ref: Some(os_ref.to_owned()),
+            verified_ms: Some(7),
         }
     }
 
@@ -867,10 +1031,105 @@ mod tests {
         ledger.put_destination(&destination("gw")).expect("pairs");
         ledger.enqueue(&queued("q", 1)).expect("queues");
         ledger.set_meta("k", "v").expect("sets");
+        ledger
+            .put_local(&library_item("photo", "library-item-1"))
+            .expect("records");
         ledger.reset().expect("resets");
+        assert!(ledger.locals().expect("reads").is_empty());
         assert!(ledger.snapshots().expect("reads").is_empty());
         assert!(ledger.queued().expect("reads").is_empty());
         assert!(ledger.destinations().expect("reads").is_empty());
         assert_eq!(ledger.meta("k").expect("reads"), None);
+    }
+
+    /// WHERE A HASH'S BYTES ARE ON THIS DEVICE (#1080 ruling 6): a library item
+    /// carries the library's identifier and a store item carries none, and a
+    /// row that says otherwise is refused by the ledger and by the table.
+    #[test]
+    fn local_bytes_say_where_a_hash_is_and_a_library_item_carries_its_identifier() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let ledger = Ledger::open(dir.path().join("l.backup.db")).expect("creates");
+        let photo = library_item("photo", "library-item-1");
+        assert_eq!(ledger.local(&photo.hash).expect("reads"), None, "no record");
+        ledger.put_local(&photo).expect("records");
+        assert_eq!(
+            ledger.local(&photo.hash).expect("reads"),
+            Some(photo.clone())
+        );
+
+        // A library item copied into the store (an edit) is replaced, not
+        // doubled: one hash, one answer.
+        let edited = LocalBytes {
+            source: LocalSource::Store,
+            os_ref: None,
+            verified_ms: Some(9),
+            ..photo.clone()
+        };
+        ledger.put_local(&edited).expect("replaces");
+        assert_eq!(ledger.local(&photo.hash).expect("reads"), Some(edited));
+        let document = LocalBytes {
+            hash: PlaintextHash::of(b"a document"),
+            source: LocalSource::Store,
+            os_ref: None,
+            verified_ms: None,
+        };
+        ledger.put_local(&document).expect("records");
+        let mut hashes = vec![photo.hash, document.hash];
+        hashes.sort();
+        assert_eq!(
+            ledger
+                .locals()
+                .expect("reads")
+                .iter()
+                .map(|local| local.hash)
+                .collect::<Vec<_>>(),
+            hashes,
+            "in hash order"
+        );
+        ledger.forget_local(&photo.hash).expect("forgets");
+        assert_eq!(ledger.local(&photo.hash).expect("reads"), None);
+
+        // THE REFUSALS, in Rust and in the table.
+        let anonymous = LocalBytes {
+            os_ref: None,
+            ..library_item("video", "unused")
+        };
+        assert!(
+            ledger.put_local(&anonymous).is_err(),
+            "a library item names itself"
+        );
+        let blank = LocalBytes {
+            os_ref: Some(String::new()),
+            ..library_item("video", "unused")
+        };
+        assert!(
+            ledger.put_local(&blank).is_err(),
+            "an empty identifier is none"
+        );
+        let stray = LocalBytes {
+            source: LocalSource::Store,
+            ..library_item("video", "library-item-2")
+        };
+        assert!(
+            ledger.put_local(&stray).is_err(),
+            "a store item has no identifier"
+        );
+        for (source, reference) in [
+            ("os", None),
+            ("os", Some("")),
+            ("store", Some("x")),
+            ("cloud", None),
+        ] {
+            assert!(
+                ledger
+                    .connection
+                    .execute(
+                        "INSERT INTO local_bytes (hash, source, ref) VALUES (?1, ?2, ?3)",
+                        params![PlaintextHash::of(b"raw").to_hex(), source, reference],
+                    )
+                    .is_err(),
+                "the table refuses source {source} with ref {reference:?}"
+            );
+        }
     }
 }

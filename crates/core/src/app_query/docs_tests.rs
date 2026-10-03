@@ -479,8 +479,7 @@ impl Scratch {
 #[test]
 fn a_staged_file_files_and_its_document_answers_the_held_path() {
     let scratch = Scratch::founded();
-    // The phone's own byte store, as the shell opens it; `Handle`'s `Drop`
-    // closes it (docs/traps/byte-store-lock.md).
+    // The phone's own byte store, as the shell opens it.
     scratch
         .handle
         .open_own_bytes(scratch.dir.join("vault.bytes"))

@@ -1232,9 +1232,9 @@ fn adding_an_asset_spills_its_bytes_and_writes_a_row_that_points_at_them() {
     assert_eq!(i64::try_from(bytes.len()).unwrap_or_default(), size);
     assert_eq!(&bytes[1..4], b"PNG");
 
-    // AND THE GRID'S ANSWER IS A FILE. `content_location` returns iroh's data
-    // file for a complete blob (D-1025-S3-2: nothing is inlined, so a one-pixel
-    // PNG has one), and it reads byte-identical.
+    // AND THE GRID'S ANSWER IS A FILE. `content_location` returns the content
+    // store's own file for the blob (D-1025-S3-2: nothing is inlined, so a
+    // one-pixel PNG has one), and it reads byte-identical.
     let located = scratch
         .vault
         .content_location(&content_id, "media.asset", &asset_id)
@@ -1460,5 +1460,85 @@ fn a_content_id_that_is_not_here_is_absent_with_a_sentence() {
         !found.absent_reason.contains('/'),
         "{}",
         found.absent_reason
+    );
+}
+
+/// AN ORIGINAL THE OPERATING SYSTEM'S LIBRARY HOLDS (#1080 ruling 6) is on this
+/// device with no path: the phone never copied it into its store, so the
+/// location names the library's identifier for the shell to resolve, and
+/// nothing is absent. With the library's row gone too, it is nowhere.
+#[test]
+fn an_original_the_library_holds_is_located_by_its_identifier_and_never_by_a_path() {
+    let (scratch, ledger) =
+        common::Scratch::founded_with_library("locate-library").expect("a vault");
+    let registry = registry();
+    registry
+        .install(&scratch.vault)
+        .expect("the record installs");
+    let outcome = scratch
+        .vault
+        .execute(
+            &registry,
+            &Principal::owner("phone"),
+            &Command::new(
+                "media.add_asset",
+                serde_json::json!({ "data_uri": png_uri(), "kind": "photo" }),
+            ),
+        )
+        .expect("the command runs");
+    let asset_id = outcome.output["asset_id"].as_str().expect("an asset id");
+    let content_id = outcome.output["content_id"].as_str().expect("a content id");
+    let stored = scratch
+        .vault
+        .content_location(content_id, "media.asset", asset_id)
+        .expect("the lookup runs")
+        .path
+        .expect("the command spilled the bytes into the store");
+    let hash = stored
+        .file_name()
+        .and_then(|name| name.to_str())
+        .expect("a blob is named by its hash")
+        .to_owned();
+
+    // THE STORE'S COPY GOES and the library is recorded as the bytes' home,
+    // which is the state an original streamed from the library is in.
+    std::fs::remove_file(&stored).expect("the store's copy goes");
+    let local = centraid_vault::backup2::ledger::LocalBytes {
+        hash: centraid_vault::backup2::naming::PlaintextHash::from_hex(&hash).expect("a hash"),
+        source: centraid_vault::backup2::ledger::LocalSource::Os,
+        os_ref: Some("library-item-1".to_owned()),
+        verified_ms: Some(1),
+    };
+    ledger
+        .lock()
+        .expect("the ledger")
+        .put_local(&local)
+        .expect("records");
+    let found = scratch
+        .vault
+        .content_location(content_id, "media.asset", asset_id)
+        .expect("the lookup runs");
+    assert_eq!(found.path, None, "a library item has no path in the store");
+    assert_eq!(found.os_ref.as_deref(), Some("library-item-1"));
+    assert!(
+        found.absent_reason.is_empty(),
+        "the bytes are on this device"
+    );
+    assert_eq!(found.media_type, "image/png");
+    assert!(found.embeddable);
+
+    ledger
+        .lock()
+        .expect("the ledger")
+        .forget_local(&local.hash)
+        .expect("forgets");
+    let gone = scratch
+        .vault
+        .content_location(content_id, "media.asset", asset_id)
+        .expect("the lookup runs");
+    assert_eq!((gone.path, gone.os_ref), (None, None));
+    assert!(
+        !gone.absent_reason.is_empty(),
+        "nowhere says so in a sentence"
     );
 }

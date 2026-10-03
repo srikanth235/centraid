@@ -45,6 +45,7 @@ pub mod audit;
 pub mod backup;
 pub mod backup2;
 pub mod bootstrap;
+pub mod bytes;
 pub mod canonical;
 pub mod clock;
 pub mod commands;

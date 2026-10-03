@@ -106,23 +106,15 @@ pub struct Handle {
     /// an honest state and not a failure: a vault with no store refuses binary
     /// bytes rather than writing a row that names bytes nothing kept.
     bytes: Mutex<Option<centraid_blobs::ContentBytes>>,
-    /// THE RUNTIME THAT STORE RUNS ON, WHEN THIS CORE OWNS IT (#1029 W6).
-    ///
-    /// `None` when somebody else owns one and handed a `ContentBytes` in
-    /// through [`Handle::attach_bytes`] — a gateway's `run.rs` does exactly
-    /// that. `Some` when [`Handle::open_own_bytes`] built one, which is the
-    /// case over the C ABI, where there is no other owner left on the device.
-    ///
-    /// It is held HERE and nowhere else because it must outlive every verb the
-    /// byte door drives on it: a runtime dropped while `ContentBytes` still
-    /// holds its handle is a store whose next call panics.
+    /// THE RUNTIME THE FLOWS THAT DIAL A GATEWAY RUN ON (#1029 W15), built
+    /// the first time one is asked for. See [`Handle::runtime_handle`].
     runtime: Mutex<Option<Arc<tokio::runtime::Runtime>>>,
-    /// THE STORE THIS CORE OPENED ITSELF, which is the store it must close.
+    /// THE STORE THIS CORE OPENED ITSELF.
     ///
-    /// `Some` only after [`Handle::open_own_bytes`]: a store handed in through
-    /// [`Handle::attach_bytes`] belongs to whoever opened it, and closing it
-    /// here would close it under them. See this type's `Drop` for why an
-    /// owned store is closed rather than dropped.
+    /// `Some` only after [`Handle::open_own_bytes`]; a store handed in through
+    /// [`Handle::attach_bytes`] belongs to whoever opened it. It is a directory
+    /// with no lock and no index, so nothing has to be closed when the core
+    /// goes — the next core on the same vault opens the same files.
     owned_bytes: Mutex<Option<centraid_blobs::ContentBytes>>,
     /// Open staging sessions: bytes a shell is streaming in so this core can
     /// name them (#1025 S4). See [`crate::stage`].
@@ -304,17 +296,15 @@ impl Core {
         };
         // THE CONTENT STORE, HANDED IN (#1025 S3, D-1025-S3-1).
         //
-        // This used to OPEN one here — a flat `<vault>.blobs/` CAS beside the
-        // file — and that is how a device came to hold two content stores: this
-        // one, which nothing but `content_location` ever read, and iroh's
-        // `<vault>.bytes`, which every transfer wrote. A photograph a seat
-        // synced could not be displayed and one a window minted could not be
-        // served.
+        // A device holds ONE content store per vault. Opening a second one
+        // here, beside the one the core attached, is how a device once held
+        // two, and a photograph written into one could not be displayed from
+        // the other.
         //
-        // Opening the byte plane's store is asynchronous and belongs to
-        // whoever owns a runtime — `SeatLink` on a phone, `run.rs` on a
-        // gateway — so this function takes the store rather than making one,
-        // and [`Handle::attach_bytes`] re-attaches it to the vault a bootstrap
+        // The store belongs to whoever opened it — this core, through
+        // [`Handle::open_own_bytes`], or a host that handed one in — so this
+        // function takes the store rather than making one, and
+        // [`Handle::attach_bytes`] re-attaches it to the vault a restore
         // reopens.
         //
         // `None` is NOT a core that will not open: the vault's rows are still
@@ -338,82 +328,62 @@ impl Handle {
 
     /// Attach THE content store this device holds for this vault (#1025 S3).
     ///
-    /// One per vault, opened by whoever owns a runtime, and the same one the
-    /// byte plane fetches into: a device holds one content store per vault, the
-    /// grid reads it and the window writes it (D-1025-S3-1). Attaching it puts
-    /// the vault's byte door over it, so `media.add_asset` spills into the
-    /// store a seat can serve from and `content_location` answers with a file
-    /// a platform can open.
+    /// One per vault: the grid reads it and the commands write it
+    /// (D-1025-S3-1). Attaching it puts the vault's byte door over it, so
+    /// `media.add_asset` spills into it and `content_location` answers with a
+    /// file a platform can open.
     ///
-    /// Attached AFTER the vault is open, because opening the store is
-    /// asynchronous and `Core::open` is not. A core that is never handed one
-    /// holds text and refuses photographs, honestly and by name.
-    /// **OPEN THE CONTENT STORE THIS CORE OWNS** (#1029 W6, hand-off 2).
+    /// A core that is never handed one holds text and refuses photographs,
+    /// honestly and by name.
+    /// **OPEN THE CONTENT STORE THIS CORE OWNS** (#1029 W6, hand-off 2;
+    /// [#1080](https://github.com/srikanth235/centraid/issues/1080)).
     ///
-    /// ## The decision, and why it is this one
-    ///
-    /// `ByteStore::open` is asynchronous and `ContentBytes` holds a runtime
-    /// handle, so somebody has to own a runtime for the life of the core.
-    /// Until #1029 that was `SeatLink`, which opened `<vault>.bytes` and handed
-    /// it to [`Self::attach_bytes`]; `SeatLink` went with the seat plane, and a
-    /// core opened over the C ABI has been holding text and refusing binary
-    /// bytes by name ever since (`core-ffi/src/lib.rs`).
-    ///
-    /// There is no other owner left on a phone. The alternatives were:
-    ///
-    /// - **leave it** — then F14's "the vault owns its copy" is unreachable
-    ///   from a phone, a restored grid has nowhere to put a thumbnail, and
-    ///   `ScreenEffect.FetchOriginal` has no server for a second wave running;
-    /// - **make the shell own one** — a Swift or Kotlin shell would have to
-    ///   hold a Rust runtime handle across the ABI, which is a pointer with no
-    ///   type on the other side and a lifetime nobody can state;
-    /// - **this** — the core owns it, opens the store beside the vault, and
-    ///   drops both together.
-    ///
-    /// ## Why the runtime is MULTI-THREADED, which is not a preference
-    ///
-    /// `ContentBytes` drives each verb with `runtime.block_on` from a thread of
-    /// its own (`blobs/src/door.rs` says why). On a **current-thread** runtime
-    /// that call drives only the future it was given — nothing drives the tasks
-    /// `iroh-blobs` spawns for its store actor, so the first verb waits for a
-    /// task that will never be polled. A multi-threaded runtime drives its own
-    /// workers, so the spawned actor runs whoever calls in. Two workers: this
-    /// runtime serves one store and a phone has other things to do with its
-    /// cores.
+    /// `<vault>.bytes` beside the vault file: a directory of files named by
+    /// their BLAKE3, opened synchronously, with nothing to own but the path.
+    /// The door also reads the backup ledger beside the vault,
+    /// `<vault>.backup.db`, for the originals the operating system's library
+    /// holds and the phone never copied (#1080 ruling 6); a ledger that will
+    /// not open leaves a door that knows its own files, which is every byte
+    /// this core has written.
     ///
     /// Non-fatal by design. A store that will not open leaves the core exactly
     /// as it was — text, and photographs refused by name — because a vault that
     /// would not open its byte store is still a vault whose notes save.
     ///
     /// # Errors
-    /// [`CoreError`] wrapping whatever the runtime builder or the store
-    /// refused. The core is unchanged on either.
+    /// [`CoreError`] wrapping what the store refused. The core is unchanged.
     pub fn open_own_bytes(&self, root: impl AsRef<std::path::Path>) -> Result<()> {
         let root = root.as_ref().to_path_buf();
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .thread_name("centraid-bytes")
-            .enable_all()
-            .build()
-            .map_err(|error| CoreError::Invariant {
-                context: format!("the byte store's runtime would not start: {error}"),
+        let (store, adopted) =
+            centraid_blobs::ByteStore::open_adopting(&root).map_err(|error| {
+                CoreError::Invariant {
+                    context: format!(
+                        "the byte store at {} would not open: {error}",
+                        root.display()
+                    ),
+                }
             })?;
-        let store = runtime
-            .block_on(centraid_blobs::ByteStore::open(&root))
-            .map_err(|error| CoreError::Invariant {
-                context: format!(
-                    "the byte store at {} would not open: {error}",
-                    root.display()
-                ),
-            })?;
-        let door = centraid_blobs::ContentBytes::new(store, runtime.handle().clone());
-        // THE RUNTIME IS KEPT FIRST. `attach_bytes` publishes a door that
-        // drives on this runtime's handle; publishing it before the runtime is
-        // held would leave a window where a verb could reach a runtime about to
-        // be dropped.
-        if let Ok(mut held) = self.runtime.lock() {
-            *held = Some(Arc::new(runtime));
+        if adopted != centraid_blobs::Adopted::default() {
+            tracing::info!(
+                blobs = adopted.blobs,
+                discarded = adopted.discarded,
+                "the byte store adopted the layout it had before #1080"
+            );
         }
+        let ledger_path = centraid_vault::backup2::ledger::Ledger::path_for(&self.path);
+        let door = match centraid_vault::backup2::ledger::Ledger::open(&ledger_path) {
+            Ok(ledger) => {
+                centraid_blobs::ContentBytes::new(store).with_ledger(Arc::new(Mutex::new(ledger)))
+            }
+            Err(error) => {
+                tracing::warn!(
+                    "the backup ledger at {} did not open; the byte door knows only its \
+                     own files: {error}",
+                    ledger_path.display()
+                );
+                centraid_blobs::ContentBytes::new(store)
+            }
+        };
         if let Ok(mut owned) = self.owned_bytes.lock() {
             *owned = Some(door.clone());
         }
@@ -423,16 +393,11 @@ impl Handle {
 
     /// A tokio handle for the flows that dial the laptop (#1029 W15).
     ///
-    /// Reuses the runtime `open_own_bytes` built when there is one, and builds
-    /// one otherwise, **keeping it in the same slot**: a drain and a byte store
-    /// on two runtimes would be two thread pools on a phone, and a runtime
-    /// dropped while a store still holds its handle is a store whose next call
-    /// panics.
-    ///
-    /// It is multi-threaded for `open_own_bytes`'s reason, which applies here
-    /// too: a current-thread runtime under `block_on` is a deadlock the moment
-    /// anything it drives blocks on another task, and the iroh transport's
-    /// connection driver is exactly such a task.
+    /// Built the first time it is asked for and kept, so every flow shares one
+    /// thread pool. It is multi-threaded because a current-thread runtime under
+    /// `block_on` is a deadlock the moment anything it drives blocks on another
+    /// task, and the iroh transport's connection driver is exactly such a
+    /// task.
     ///
     /// # Errors
     /// [`CoreError::Invariant`] when a runtime will not start.
@@ -460,7 +425,10 @@ impl Handle {
     /// Whether this core opened and owns its own byte store.
     #[must_use]
     pub fn owns_its_bytes(&self) -> bool {
-        self.runtime.lock().ok().is_some_and(|held| held.is_some())
+        self.owned_bytes
+            .lock()
+            .ok()
+            .is_some_and(|held| held.is_some())
     }
 
     pub fn attach_bytes(&self, bytes: centraid_blobs::ContentBytes) {
@@ -962,16 +930,6 @@ impl Handle {
 
     /// One staging frame from a shell: the write half's door (#1025 S4).
     ///
-    /// The bytes are already in this vault's content store, verified against
-    /// their own name by bao. This writes the `blob_staging` row that carries
-    /// the two facts the store cannot answer — the media type and the declared
-    /// size — so `promote_staged_blob` mints a content row a grid can embed
-    /// rather than one typed `application/octet-stream`.
-    ///
-    /// A gateway only, for the same reason [`Self::submit_intent`] is: a seat
-    /// staging bytes into its copy would be writing rows the applier overwrites.
-    /// One staging frame from a shell: the write half's door (#1025 S4).
-    ///
     /// See [`crate::stage`] for the shape and for what replaced
     /// `MediaLibrary.Asset.sha256`. `end` PUTS the assembled bytes into this
     /// core's content store before it answers, so the handle it hands back names
@@ -1001,7 +959,7 @@ impl Handle {
                 // idempotent and would make every answer `false` on the way in
                 // and `true` on the way out.
                 let already_held = {
-                    use centraid_vault::backup::store::BlobStore as _;
+                    use centraid_vault::bytes::BlobStore as _;
                     bytes.has(&staged.content_hash).unwrap_or(false)
                 };
                 self.with_vault(|vault| {
@@ -1014,7 +972,7 @@ impl Handle {
                         .map_err(CoreError::from)
                 })
                 .and_then(|_| {
-                    use centraid_vault::backup::store::BlobStore as _;
+                    use centraid_vault::bytes::BlobStore as _;
                     bytes
                         .put(&staged.bytes)
                         .map(|_| ())
@@ -1064,34 +1022,6 @@ impl Handle {
         self.cancelled
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-}
-
-/// A CORE THAT OPENED ITS OWN BYTE STORE CLOSES IT, so the next core on the
-/// same vault can open it again.
-///
-/// Dropping the store is not closing it. iroh-blobs 0.103 unlocks
-/// `<vault>.bytes/blobs.db` only when its actor's runtime is torn down, and
-/// that teardown runs on the runtime it is tearing down and never finishes —
-/// so the file stayed locked for the life of the process, and the next
-/// `open_own_bytes` on the same path parked in `block_on` forever
-/// (`ByteStore::open` now refuses that case by name instead). A shell that
-/// closes and reopens a vault — the JVM's ABI round trip, a phone switching
-/// back to a vault it left — is exactly that sequence.
-///
-/// Closed here, before the fields drop, because the close is driven on
-/// the `runtime` field's workers, and that runtime is one of the fields.
-/// `crates/core-ffi/tests/reopen.rs` is the regression.
-impl Drop for Handle {
-    fn drop(&mut self) {
-        let owned = self
-            .owned_bytes
-            .get_mut()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take();
-        if let Some(door) = owned {
-            door.close();
-        }
     }
 }
 
@@ -1248,16 +1178,12 @@ mod tests {
     }
 
     /// **HAND-OFF 2, ANSWERED.** A core that opens its own byte store holds
-    /// photographs; one that does not holds text and says so.
-    ///
-    /// The whole claim is here: the runtime the core built actually drives the
-    /// store's actor, so a verb that reaches through `ContentBytes` answers
-    /// instead of hanging on a task nobody polls. That is the property a
-    /// current-thread runtime would not have, and it is why the builder asks
-    /// for workers.
+    /// photographs; one that does not holds text and says so. The store is
+    /// `<vault>.bytes`, and its door reads the backup ledger beside the vault
+    /// for what the operating system's library holds (#1080).
     #[test]
     fn a_core_that_opens_its_own_bytes_can_hold_a_photograph() {
-        use centraid_vault::backup::store::BlobStore as _;
+        use centraid_vault::bytes::BlobStore as _;
 
         let scratch = Scratch::founded();
         assert!(
@@ -1281,6 +1207,121 @@ mod tests {
             door.path_of(&id).expect("it answers").is_some(),
             "nothing is inlined, so a grid has a file to open"
         );
+        assert!(door.ledger().is_some(), "the door reads the backup ledger");
+        assert!(
+            scratch.dir.join("vault.backup.db").is_file(),
+            "the ledger is beside the vault, where the backup plane keeps it"
+        );
+    }
+
+    /// A PHOTOGRAPH'S BYTES, LOCATED OVER THE WIRE (#1080 ruling 6): a path for
+    /// the store's own file, the library's identifier for an original the
+    /// operating system's library holds and the phone never copied, and
+    /// neither for bytes that are on this device nowhere.
+    #[test]
+    fn content_urls_answer_the_store_the_library_or_nowhere() {
+        const ONE_PIXEL_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+        let scratch = Scratch::founded();
+        scratch
+            .handle
+            .open_own_bytes(scratch.dir.join("vault.bytes"))
+            .expect("the byte store opens");
+        let Some(wire::response::Kind::Command(outcome)) = scratch
+            .handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::Command(wire::Command {
+                    name: "media.add_asset".to_owned(),
+                    input: serde_json::to_vec(&serde_json::json!({
+                        "data_uri": format!("data:image/png;base64,{ONE_PIXEL_PNG}"),
+                        "kind": "photo",
+                    }))
+                    .expect("json"),
+                    invoke_key: "content-urls-library".to_owned(),
+                    ..wire::Command::default()
+                })),
+            })
+            .expect("the command answers")
+            .kind
+        else {
+            panic!("a command answers with an outcome");
+        };
+        assert_eq!(
+            outcome.status,
+            wire::CommandStatus::Executed as i32,
+            "{}",
+            outcome.reason
+        );
+        let output: serde_json::Value =
+            serde_json::from_slice(&outcome.output).expect("the output is JSON");
+        let reference = wire::ContentRef {
+            content_id: output["content_id"]
+                .as_str()
+                .expect("a content id")
+                .to_owned(),
+            owner_type: "media.asset".to_owned(),
+            owner_id: output["asset_id"].as_str().expect("an asset id").to_owned(),
+        };
+        let locate = || {
+            let Some(wire::response::Kind::ContentUrls(urls)) = scratch
+                .handle
+                .call(&wire::Request {
+                    kind: Some(wire::request::Kind::ContentUrls(wire::ContentUrlRequest {
+                        refs: vec![reference.clone()],
+                    })),
+                })
+                .expect("the lookup answers")
+                .kind
+            else {
+                panic!("a lookup answers with locations");
+            };
+            urls.urls.into_iter().next().expect("one answer per ref")
+        };
+
+        let stored = locate();
+        assert_eq!(stored.source, wire::ContentSource::Store as i32);
+        let path = std::path::PathBuf::from(stored.path.expect("a path for the store"));
+        assert!(stored.os_ref.is_empty());
+
+        let door = scratch.handle.bytes().expect("a door");
+        let hash = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("a blob is named by its hash")
+            .to_owned();
+        std::fs::remove_file(&path).expect("the store's copy goes");
+        let local = centraid_vault::backup2::ledger::LocalBytes {
+            hash: centraid_vault::backup2::naming::PlaintextHash::from_hex(&hash).expect("a hash"),
+            source: centraid_vault::backup2::ledger::LocalSource::Os,
+            os_ref: Some("library-item-1".to_owned()),
+            verified_ms: Some(1),
+        };
+        let ledger = door.ledger().expect("the door reads the ledger");
+        ledger
+            .lock()
+            .expect("the ledger")
+            .put_local(&local)
+            .expect("records");
+        let in_library = locate();
+        assert_eq!(in_library.source, wire::ContentSource::OsLibrary as i32);
+        assert_eq!(in_library.os_ref, "library-item-1");
+        assert_eq!(
+            in_library.path, None,
+            "a path is answered for the store only"
+        );
+        assert!(
+            in_library.absent_reason.is_empty(),
+            "the bytes are on this device"
+        );
+
+        ledger
+            .lock()
+            .expect("the ledger")
+            .forget_local(&local.hash)
+            .expect("forgets");
+        let nowhere = locate();
+        assert_eq!(nowhere.source, wire::ContentSource::None as i32);
+        assert!(nowhere.path.is_none() && nowhere.os_ref.is_empty());
+        assert!(!nowhere.absent_reason.is_empty());
     }
 
     /// A core over a file `create` made and nothing has founded.

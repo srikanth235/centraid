@@ -73,7 +73,7 @@ pub struct Vault {
     /// binary, and the bytes themselves live here — a vault file is rows, and
     /// a photograph in a row is a photograph in the journal. See
     /// [`Vault::with_blobs`].
-    blobs: Option<Box<dyn crate::backup::store::BlobStore + Send + Sync>>,
+    blobs: Option<Box<dyn crate::bytes::BlobStore + Send + Sync>>,
     /// THE RUNNING ROW CENSUS (#1029 line 99, W13 finding 15). Maintained by
     /// the commit guard's `update_hook` and read by [`Vault::census`], so the
     /// question "how many rows does this vault hold" costs arithmetic rather
@@ -324,25 +324,21 @@ impl Vault {
     /// it now asks THIS.
     ///
     /// It is the OPENER's decision where the store lives, because only the
-    /// opener knows the layout it is opening into. Since #1025 S3 every opener
-    /// hands over the SAME store the byte plane moves bytes on — `<vault>.bytes`,
-    /// iroh's, behind `centraid_core::bytes::ContentBytes` — so a photograph
-    /// this door spills is a photograph a seat can fetch, and one a seat
-    /// fetched is a photograph this vault can locate. The flat
-    /// `<vault>.blobs/` CAS and `Vault::blobs_root_for` that named it are gone
-    /// (D-1025-S3-1).
+    /// opener knows the layout it is opening into. Every opener hands over the
+    /// device's ONE content store for this vault (D-1025-S3-1) —
+    /// `<vault>.bytes`, behind `centraid_blobs::ContentBytes` — so a photograph
+    /// this door spills is a photograph every read of this vault can locate,
+    /// and an original the operating system's library holds is located there
+    /// through the same door (#1080 ruling 6).
     #[must_use]
-    pub fn with_blobs(
-        mut self,
-        blobs: Box<dyn crate::backup::store::BlobStore + Send + Sync>,
-    ) -> Self {
+    pub fn with_blobs(mut self, blobs: Box<dyn crate::bytes::BlobStore + Send + Sync>) -> Self {
         self.blobs = Some(blobs);
         self
     }
 
     /// The local content store, if one was attached.
     #[must_use]
-    pub fn blobs(&self) -> Option<&(dyn crate::backup::store::BlobStore + Send + Sync)> {
+    pub fn blobs(&self) -> Option<&(dyn crate::bytes::BlobStore + Send + Sync)> {
         self.blobs.as_deref()
     }
 

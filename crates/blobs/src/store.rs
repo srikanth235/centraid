@@ -1,229 +1,148 @@
-//! The local byte store: what this device holds, and how much of it (#1020,
-//! D-1020-B3).
+//! The content store: a directory of files, each named by the BLAKE3 of its
+//! bytes ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
 //!
-//! This is `iroh-blobs`' filesystem store with a Centraid-shaped door on it.
-//! The door is narrow on purpose — five verbs — because every extra one is a
-//! place a caller could learn that the bytes are BLAKE3-addressed, and the
-//! point of [`crate::hash::ContentHash`] is that they need not.
+//! `<vault stem>.bytes/<64 lowercase hex>`, one file per blob, and nothing
+//! else a reader has to know. A platform opens a path in place — a grid cell,
+//! a document viewer, the sealer that backs a file up — so a blob is a FILE,
+//! never a row in an index and never inlined (D-1025-S3-2), and its name is
+//! computable from its hash without asking anything.
 //!
-//! ## ONE CONTENT STORE PER VAULT, AND THIS IS IT (#1025 S3, D-1025-S3-1)
+//! ## A WRITE IS WHOLE OR IT DID NOT HAPPEN
 //!
-//! A device used to hold two: this one, and a plain one-file-per-hash CAS at
-//! `<vault>.blobs` that `Vault::with_blobs` wrote and `content_location` read.
-//! The read path knew the second and the transfer path knew the first, so a
-//! photograph a seat FETCHED could never be displayed and a photograph a
-//! window MINTED could never be served. Both are gone into this one, which the
-//! grid reads and the window writes alike.
+//! Bytes go to `incoming/` first, are hashed as they are written, are synced,
+//! and are renamed to their name only when the last byte is in; the directory
+//! is synced after the rename. A reader therefore sees a whole blob or no
+//! blob, never a prefix, and "the file exists" is the whole of "this device
+//! holds these bytes". There is no partial state to track and no index to keep
+//! in step with the files: the directory IS the index.
 //!
-//! The sibling `centraid_vault::backup::store::FsBlobStore` stays, and it is a
-//! different question: it keeps one digest over whole BACKUP ARTEFACTS, which are
-//! small, moved whole and sealed by `contracts/golden/format-golden.json`.
-//! Applying ITS shape — `put(&[u8])`, `get(&str) -> Vec<u8>` — to a camera roll
-//! would mean buffering an 800 MB video in a phone's address space to store it
-//! and again to read it, and it has no way to express the state this plane
-//! exists to make routine: **a blob this device holds PART of**.
+//! A write a crash cut short is a stray file in `incoming/`, never a blob, and
+//! [`ByteStore::open`] clears any that has not been written to for an hour —
+//! long enough that no live writer in this or another process is touched.
 //!
-//! ## NOTHING IS INLINED, EVER (#1025 S3, D-1025-S3-2)
+//! ## A READ OF BYTES VERIFIES THEM
 //!
-//! iroh-blobs inlines a blob under 16 KiB into its own redb index instead of
-//! writing a file. That is a sensible default for a transfer cache and a wrong
-//! one for a content store a platform reads FROM: `content_location` answers a
-//! PATH — `UIImage(contentsOfFile:)`, a Compose painter, an `<img>` — and a
-//! thumbnail small enough to be inlined is a thumbnail with no path, which is
-//! most of a photo grid. [`ByteStore::open`] therefore sets the inline
-//! threshold to zero, so every complete blob is a file at a name
-//! [`ByteStore::data_path`] can compute without asking the store anything.
+//! [`ByteStore::read`] hashes what it read and refuses bytes that are not
+//! their own name: a store whose file rotted answers [`StoreError::Corrupt`]
+//! rather than a photograph that is someone else's. A PATH handed to a
+//! platform is not re-hashed per open — a grid would hash a screenful of
+//! photographs to draw them — and the backup sealer hashes every file it reads
+//! anyway, so a rotten file is named where it would do harm.
 //!
-//! ## Holding is three states, not two
+//! ## THE STORE BEFORE #1080, ADOPTED ONCE
 //!
-//! [`Holding`] is `Missing`, `Partial` or `Complete`, and the middle one is the
-//! normal state of a phone that has been awake for thirty seconds. Code that
-//! treats holding as a boolean re-downloads from zero, which is precisely the
-//! failure the byte plane was designed to remove — so the store never answers
-//! `bool` for "do you have it" except in [`ByteStore::is_complete`], whose name
-//! says which question it answered.
-//!
-//! ## A tag per blob, named by the hash
-//!
-//! `iroh-blobs` garbage-collects untagged blobs, so an untagged import is a
-//! photograph that may not survive the night. Every import here takes a tag
-//! whose name IS the hex hash: idempotent (the same bytes twice is the same
-//! tag), greppable, and it makes eviction a deletion by a name the caller can
-//! compute without asking the store anything.
+//! Until #1080 this directory held a transfer store's layout: a `blobs.db`
+//! index beside `data/<hex>.data`, with `.obao4` outboards and, for a blob
+//! held in part, `.bitfield` and `.sizes4` files. The index cannot be read
+//! without the crate that wrote it, which has left the tree, and the files
+//! hold bytes a member may have nowhere else
+//! — an edit, a document, a download — so [`ByteStore::open`] adopts them
+//! rather than leaving them stranded: every `data/<hex>.data` with no
+//! `.bitfield` beside it is hashed, and moved to its name when it hashes to
+//! it. What is left of the old layout — partial blobs, outboards, files that
+//! did not verify, the index — is then removed. The pass reads every adopted
+//! byte once, at the first open after the upgrade, and never again: a store
+//! with no `data/` directory has nothing to adopt.
 
+use std::collections::HashSet;
+use std::fs;
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-
-use iroh_blobs::api::blobs::Blobs;
-use iroh_blobs::api::proto::BlobStatus;
-use iroh_blobs::store::fs::FsStore;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime};
 
 use crate::hash::ContentHash;
 
+/// Where writes land before they have a name.
+const INCOMING: &str = "incoming";
+
+/// How long a file in `incoming/` may go unwritten before [`ByteStore::open`]
+/// treats it as a crashed write. A live writer appends at least every chunk.
+const STALE_INCOMING: Duration = Duration::from_secs(60 * 60);
+
+/// One read or write unit: large enough that a video is not a million
+/// syscalls, small enough that it is not a second copy of a photograph.
+const CHUNK_BYTES: usize = 1024 * 1024;
+
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
-    #[error("the byte store at {path} could not be opened: {detail}")]
-    Open { path: PathBuf, detail: String },
-    #[error("the byte store could not take {path}: {detail}")]
-    Import { path: PathBuf, detail: String },
-    #[error("the byte store could not answer for {hash}: {detail}")]
-    Query { hash: ContentHash, detail: String },
-    #[error("the byte store could not write {hash} to {path}: {detail}")]
-    Export {
-        hash: ContentHash,
+    #[error("the content store at {path}: {source}")]
+    Io {
         path: PathBuf,
-        detail: String,
+        #[source]
+        source: io::Error,
+    },
+    #[error("{hash} in the content store hashes to {actual}: the file is corrupt")]
+    Corrupt {
+        hash: ContentHash,
+        actual: ContentHash,
     },
 }
 
 pub type Result<T> = std::result::Result<T, StoreError>;
 
-/// How much of a blob this device holds.
-///
-/// ## Two numbers, and the bug that comes from collapsing them
-///
-/// `held` is how many verified bytes are on this disk. `size` is how large the
-/// whole blob turns out to be. They are NOT the same number and a partial blob
-/// is exactly where they diverge — which is the one case this type exists for.
-///
-/// iroh-blobs' own `BlobStatus::Partial { size }` carries the second, and the
-/// first version of this module read it as the first. The windows test caught
-/// it immediately: a resumed window reported twenty-one megabytes already held
-/// while the store said zero, because `size` had simply not been validated yet.
-/// Had it read `Some(size)` instead of `None` the mistake would have been
-/// invisible and every progress figure in the product would have been the file
-/// size from the first chunk onward. So both are carried, both are named, and
-/// [`Self::held_bytes`] answers the question a scheduler is actually asking.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Holding {
-    Missing,
-    /// Some verified chunks, and not all of them.
-    Partial {
-        /// Verified bytes on this disk.
-        held: u64,
-        /// The whole blob's size. `None` until the size proof has arrived,
-        /// which is the normal state after a window that was cut early.
-        size: Option<u64>,
-    },
-    Complete {
-        bytes: u64,
-    },
+fn io_at(path: &Path) -> impl FnOnce(io::Error) -> StoreError + '_ {
+    move |source| StoreError::Io {
+        path: path.to_path_buf(),
+        source,
+    }
 }
 
-impl Holding {
-    #[must_use]
-    pub const fn is_complete(self) -> bool {
-        matches!(self, Self::Complete { .. })
-    }
+/// A blob the store just took.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Stored {
+    pub hash: ContentHash,
+    pub bytes: u64,
+    /// The file its bytes are in, from now on.
+    pub path: PathBuf,
+    /// Whether the store held these bytes before this write: the write then
+    /// added nothing, and the second copy it made was discarded.
+    pub already_held: bool,
+}
 
-    /// Verified bytes this device holds. The number a progress row shows and a
-    /// scheduler subtracts.
-    #[must_use]
-    pub const fn held_bytes(self) -> u64 {
-        match self {
-            Self::Missing => 0,
-            Self::Partial { held, .. } => held,
-            Self::Complete { bytes } => bytes,
-        }
-    }
-
-    /// The whole blob's size, when it is known. `None` on a partial blob whose
-    /// size proof has not arrived — a caller that needs a denominator must
-    /// handle that rather than divide by the numerator.
-    #[must_use]
-    pub const fn total_bytes(self) -> Option<u64> {
-        match self {
-            Self::Missing => None,
-            Self::Partial { size, .. } => size,
-            Self::Complete { bytes } => Some(bytes),
-        }
-    }
+/// What the first open after the upgrade did with the store's old layout.
+/// See the module header.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Adopted {
+    /// Blobs moved to their name.
+    pub blobs: usize,
+    /// Old files that were not whole blobs or did not hash to their name, and
+    /// were removed with the old layout.
+    pub discarded: usize,
 }
 
 /// This device's content-addressed bytes.
 ///
-/// Cheap to clone; every clone is the same store. Held by the gateway (which
-/// holds everything) and by a seat (which holds what it has fetched and has not
-/// evicted).
+/// Cheap to clone; every clone is the same directory, and two stores opened
+/// over one directory are one store — there is no lock, because there is no
+/// index to guard.
 #[derive(Debug, Clone)]
 pub struct ByteStore {
-    store: FsStore,
     root: PathBuf,
 }
 
 impl ByteStore {
-    /// Open, creating the directory if it is not there.
+    /// Open, creating the directory if it is not there, adopting the layout
+    /// before #1080 if it is, and clearing writes a crash cut short.
     ///
-    /// **The inline threshold is zero** (D-1025-S3-2). See the module header:
-    /// a blob small enough to be inlined is a blob with no file, and this
-    /// store's readers are platforms that open files.
+    /// # Errors
+    /// [`StoreError::Io`] when the directory cannot be made or read.
+    pub fn open(root: impl AsRef<Path>) -> Result<Self> {
+        Ok(Self::open_adopting(root)?.0)
+    }
+
+    /// [`Self::open`], answering what the adoption of the old layout did.
     ///
-    /// **A store somebody else holds is refused HERE, by name** — see
-    /// [`refuse_if_held`] for why iroh-blobs cannot be left to say so.
-    pub async fn open(root: impl AsRef<Path>) -> Result<Self> {
+    /// # Errors
+    /// As [`Self::open`].
+    pub fn open_adopting(root: impl AsRef<Path>) -> Result<(Self, Adopted)> {
         let root = root.as_ref().to_path_buf();
-        std::fs::create_dir_all(&root).map_err(|error| StoreError::Open {
-            path: root.clone(),
-            detail: error.to_string(),
-        })?;
-        let index = root.join("blobs.db");
-        refuse_if_held(&root, &index)?;
-        let mut options = iroh_blobs::store::fs::options::Options::new(&root);
-        options.inline = iroh_blobs::store::fs::options::InlineOptions::NO_INLINE;
-        let store = FsStore::load_with_opts(index, options)
-            .await
-            .map_err(|error| StoreError::Open {
-                path: root.clone(),
-                detail: error.to_string(),
-            })?;
-        Ok(Self { store, root })
-    }
-
-    /// The file a complete blob's bytes are in, or `None` when this device does
-    /// not hold the whole thing.
-    ///
-    /// THE ANSWER `content_location` GIVES A GRID. It is iroh-blobs' own data
-    /// file, read in place and never exported to a second copy: a phone that
-    /// exported every cell of a camera roll would hold the roll twice.
-    ///
-    /// The name is computable — `<root>/data/<hex>.data`, which is
-    /// `PathOptions::data_path` — but completeness is not, so this asks the
-    /// store first. A path to a PARTIAL blob would be half a photograph
-    /// rendered as a photograph, which is worse than a cell that says the file
-    /// has not arrived.
-    pub async fn data_path(&self, hash: ContentHash) -> Result<Option<PathBuf>> {
-        if !self.is_complete(hash).await? {
-            return Ok(None);
-        }
-        Ok(Some(self.data_file(hash)))
-    }
-
-    /// EVERY WHOLE BLOB THIS STORE HOLDS, with its file and its size.
-    ///
-    /// One store round trip ([`Self::complete_hashes`]) and then a `stat` per
-    /// blob, which is what [`Self::sweep`] already does for the same set: the
-    /// file name is computable, so asking the actor per blob would be a
-    /// round trip to learn something the path already says.
-    ///
-    /// The one caller is the seat's held-blob table, which is rebuilt from this
-    /// at every core open (#1025, D-1025-S7-20). A hash the index calls
-    /// complete whose file cannot be stated is **left out**: a row is a promise
-    /// that a surface can open the path, and a path that does not resolve is
-    /// worse than a cell that says the photograph has not arrived.
-    pub async fn held_files(&self) -> Result<Vec<(ContentHash, PathBuf, u64)>> {
-        let mut held = Vec::new();
-        for hash in self.complete_hashes().await? {
-            let path = self.data_file(hash);
-            let Ok(metadata) = std::fs::metadata(&path) else {
-                continue;
-            };
-            held.push((hash, path, metadata.len()));
-        }
-        Ok(held)
-    }
-
-    /// Where a blob's bytes WOULD be. Says nothing about whether they are.
-    fn data_file(&self, hash: ContentHash) -> PathBuf {
-        self.root.join("data").join(format!("{hash}.data"))
+        let incoming = root.join(INCOMING);
+        fs::create_dir_all(&incoming).map_err(io_at(&incoming))?;
+        let store = Self { root };
+        let adopted = store.adopt_legacy_layout()?;
+        store.clear_stale_incoming()?;
+        Ok((store, adopted))
     }
 
     #[must_use]
@@ -231,321 +150,454 @@ impl ByteStore {
         &self.root
     }
 
-    fn blobs(&self) -> &Blobs {
-        self.store.blobs()
+    /// Where a blob's bytes are, or would be. Says nothing about whether they
+    /// are.
+    #[must_use]
+    pub fn path_for(&self, hash: ContentHash) -> PathBuf {
+        self.root.join(hash.to_hex())
     }
 
-    /// Take a file into the store, hashing it as it is read.
+    /// The file a blob's bytes are in, or `None` when this store does not hold
+    /// it. A file at its name is whole, by construction.
     ///
-    /// **Never holds the file in memory.** This is the verb a camera roll uses,
-    /// and the reason [`Self::add_bytes`] exists beside it rather than instead
-    /// of it.
-    pub async fn add_path(&self, path: impl AsRef<Path>) -> Result<ContentHash> {
-        let path = path.as_ref().to_path_buf();
-        // An ABSOLUTE path: iroh-blobs refuses a relative one, and the refusal
-        // would otherwise surface at a caller that never said "relative".
-        let absolute = std::path::absolute(&path).map_err(|error| StoreError::Import {
-            path: path.clone(),
-            detail: error.to_string(),
-        })?;
-        // `TryReference`: a gateway importing a vault's whole CAS must not
-        // store every photograph twice. iroh-blobs is free to copy anyway and
-        // does for small files, which is why this is the option and not a
-        // promise.
-        let options = iroh_blobs::api::blobs::AddPathOptions {
-            path: absolute,
-            format: iroh_blobs::BlobFormat::Raw,
-            mode: iroh_blobs::api::proto::ImportMode::TryReference,
-        };
-        self.tag_of(self.blobs().add_path_with_opts(options), &path)
-            .await
+    /// # Errors
+    /// [`StoreError::Io`] when the file system will not say.
+    pub fn path_of(&self, hash: ContentHash) -> Result<Option<PathBuf>> {
+        let path = self.path_for(hash);
+        match fs::metadata(&path) {
+            Ok(metadata) if metadata.is_file() => Ok(Some(path)),
+            Ok(_) => Ok(None),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(io_at(&path)(error)),
+        }
     }
 
-    /// Take bytes already in memory. For a thumbnail, a caption, a manifest —
-    /// things whose size is known to be small at the call site.
-    pub async fn add_bytes(&self, bytes: impl Into<bytes::Bytes>) -> Result<ContentHash> {
-        self.tag_of(self.blobs().add_bytes(bytes), Path::new("<memory>"))
-            .await
-    }
-
-    async fn tag_of(
-        &self,
-        progress: iroh_blobs::api::blobs::AddProgress<'_>,
-        path: &Path,
-    ) -> Result<ContentHash> {
-        // A TEMPORARY TAG FIRST, then a permanent one named by the hash. The
-        // temp tag is what keeps the freshly-imported blob from being collected
-        // in the window between "the bytes are in" and "we know what to call
-        // them" — which is a window that exists precisely because the name IS
-        // the hash and is therefore not known until the import finishes.
-        let temp = progress
-            .temp_tag()
-            .await
-            .map_err(|error| StoreError::Import {
-                path: path.to_path_buf(),
-                detail: error.to_string(),
-            })?;
-        let hash_and_format = temp.hash_and_format();
-        let hash = ContentHash::from(hash_and_format.hash);
-        self.store
-            .tags()
-            .set(hash.to_hex(), hash_and_format)
-            .await
-            .map_err(|error| StoreError::Import {
-                path: path.to_path_buf(),
-                detail: error.to_string(),
-            })?;
-        drop(temp);
-        Ok(hash)
-    }
-
-    /// How much of this blob is here.
+    /// Whether this store holds the blob. There is no partial blob to be
+    /// confused with: a write is whole or it is not here.
     ///
-    /// Reads the BITFIELD, not the status. `status` answers which of the three
-    /// states a blob is in and, for a partial one, how big the whole blob is;
-    /// only the bitfield knows how much of it landed. See [`Holding`].
-    pub async fn holding(&self, hash: ContentHash) -> Result<Holding> {
-        let query = |detail: String| StoreError::Query { hash, detail };
-        let status = self
-            .blobs()
-            .status(hash)
-            .await
-            .map_err(|error| query(error.to_string()))?;
-        Ok(match status {
-            BlobStatus::NotFound => Holding::Missing,
-            BlobStatus::Complete { size } => Holding::Complete { bytes: size },
-            BlobStatus::Partial { size } => {
-                let bitfield = self
-                    .blobs()
-                    .observe(hash)
-                    .await
-                    .map_err(|error| query(error.to_string()))?;
-                Holding::Partial {
-                    held: bitfield.total_bytes(),
-                    size,
-                }
-            }
+    /// # Errors
+    /// As [`Self::path_of`].
+    pub fn is_complete(&self, hash: ContentHash) -> Result<bool> {
+        Ok(self.path_of(hash)?.is_some())
+    }
+
+    /// The blob's length, or `None` when this store does not hold it.
+    ///
+    /// # Errors
+    /// As [`Self::path_of`].
+    pub fn size(&self, hash: ContentHash) -> Result<Option<u64>> {
+        let path = self.path_for(hash);
+        match fs::metadata(&path) {
+            Ok(metadata) if metadata.is_file() => Ok(Some(metadata.len())),
+            Ok(_) => Ok(None),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(io_at(&path)(error)),
+        }
+    }
+
+    /// Begin a write whose name is not known until its last byte: the stage
+    /// door's shape, where bytes arrive over many calls.
+    ///
+    /// # Errors
+    /// [`StoreError::Io`] when the incoming file cannot be made.
+    pub fn writer(&self) -> Result<Writer> {
+        let path = self.root.join(INCOMING).join(incoming_name());
+        let file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(io_at(&path))?;
+        Ok(Writer {
+            store: self.clone(),
+            path,
+            file: Some(file),
+            hasher: blake3::Hasher::new(),
+            bytes: 0,
         })
     }
 
-    /// Whether the whole blob is here. The narrow question, named as such.
-    pub async fn is_complete(&self, hash: ContentHash) -> Result<bool> {
-        Ok(self.holding(hash).await?.is_complete())
+    /// Take bytes already in memory: a thumbnail, a note's attachment, a body
+    /// a command spills.
+    ///
+    /// # Errors
+    /// [`StoreError::Io`] when the write fails; nothing is left behind.
+    pub fn put_bytes(&self, bytes: &[u8]) -> Result<Stored> {
+        let mut writer = self.writer()?;
+        writer.write(bytes)?;
+        writer.finish()
     }
 
-    /// Write a complete blob out to a file a platform can open.
+    /// Take a stream, hashing it as it is written: never more than one chunk
+    /// in memory, whatever its length.
     ///
-    /// The answer a grid wants is a path (`ContentUrl.path`), and this is what
-    /// produces one. Refuses a partial blob: half a photograph rendered as a
-    /// photograph is worse than a cell that says the file has not arrived.
-    pub async fn export(&self, hash: ContentHash, target: impl AsRef<Path>) -> Result<u64> {
-        let target = target.as_ref().to_path_buf();
-        let absolute = std::path::absolute(&target).map_err(|error| StoreError::Export {
-            hash,
-            path: target.clone(),
-            detail: error.to_string(),
-        })?;
-        self.blobs()
-            .export(hash, &absolute)
-            .finish()
-            .await
-            .map_err(|error| StoreError::Export {
-                hash,
-                path: target,
-                detail: error.to_string(),
-            })
+    /// # Errors
+    /// [`StoreError::Io`] when the read or the write fails; nothing is left
+    /// behind.
+    pub fn put_stream(&self, reader: &mut dyn Read) -> Result<Stored> {
+        let mut writer = self.writer()?;
+        let mut chunk = vec![0_u8; CHUNK_BYTES];
+        loop {
+            let read = match reader.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(read) => read,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(io_at(&writer.path)(error)),
+            };
+            writer.write(&chunk[..read])?;
+        }
+        writer.finish()
     }
 
-    /// Read a complete blob into memory. Small things only — a thumbnail, a
-    /// manifest. There is deliberately no "read the original" verb.
-    pub async fn read(&self, hash: ContentHash) -> Result<Vec<u8>> {
-        self.blobs()
-            .get_bytes(hash)
-            .await
-            .map(|bytes| bytes.to_vec())
-            .map_err(|error| StoreError::Query {
-                hash,
-                detail: error.to_string(),
-            })
+    /// Take a file, streamed: the file is read once and never held whole.
+    ///
+    /// # Errors
+    /// As [`Self::put_stream`], and [`StoreError::Io`] naming `path` when it
+    /// will not open.
+    pub fn put_path(&self, path: impl AsRef<Path>) -> Result<Stored> {
+        let path = path.as_ref();
+        let mut file = fs::File::open(path).map_err(io_at(path))?;
+        self.put_stream(&mut file)
     }
 
-    /// Every blob this device holds WHOLE, in one call.
+    /// Read a blob into memory, verified against its name. Small things only —
+    /// a thumbnail, a manifest; a platform opens anything larger by its path.
     ///
-    /// A planner over a camera roll needs to know which of forty thousand
-    /// candidates are already done, and asking [`Self::holding`] forty thousand
-    /// times is forty thousand round trips to the store's actor. This is one.
-    /// It deliberately says nothing about partial blobs — those are the small
-    /// minority and [`Self::holding`] answers them exactly.
-    pub async fn complete_hashes(&self) -> Result<std::collections::HashSet<ContentHash>> {
-        self.blobs()
-            .list()
-            .hashes()
-            .await
-            .map(|hashes| hashes.into_iter().map(ContentHash::from).collect())
-            .map_err(|error| StoreError::Query {
-                hash: ContentHash::from_bytes([0; 32]),
-                detail: format!("listing the store: {error}"),
-            })
+    /// # Errors
+    /// [`StoreError::Io`] when the file is missing or unreadable, and
+    /// [`StoreError::Corrupt`] when its bytes are not its name's.
+    pub fn read(&self, hash: ContentHash) -> Result<Vec<u8>> {
+        let path = self.path_for(hash);
+        let bytes = fs::read(&path).map_err(io_at(&path))?;
+        let actual = ContentHash::of(&bytes);
+        if actual != hash {
+            return Err(StoreError::Corrupt { hash, actual });
+        }
+        Ok(bytes)
     }
 
-    /// Drop this device's claim on a blob.
+    /// Delete a blob. `false` when it was not here, which is not an error: the
+    /// caller wanted it gone and it is.
     ///
-    /// Deletes the TAG, which is the only thing keeping the blob from
-    /// iroh-blobs' collector; the bytes go when it next runs. Named `forget`
-    /// and not `delete` because that is exactly what it promises — a blob
-    /// another tag still names, or one a transfer is holding, stays.
+    /// # Errors
+    /// [`StoreError::Io`] when the file system refuses.
+    pub fn remove(&self, hash: ContentHash) -> Result<bool> {
+        let path = self.path_for(hash);
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(true),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(io_at(&path)(error)),
+        }
+    }
+
+    /// Every blob this store holds, in hash order.
     ///
-    /// What it is for: the bootstrap artifact. It is the size of the vault, it
-    /// has already been expanded into the replica, and a seat that kept it
-    /// would hold its own vault twice on a phone.
-    pub async fn forget(&self, hash: ContentHash) -> Result<()> {
-        self.store
-            .tags()
-            .delete(hash.to_hex())
-            .await
-            .map(|_| ())
-            .map_err(|error| StoreError::Query {
-                hash,
-                detail: error.to_string(),
-            })
+    /// # Errors
+    /// [`StoreError::Io`] when the directory will not list.
+    pub fn hashes(&self) -> Result<Vec<ContentHash>> {
+        Ok(self
+            .entries()?
+            .into_iter()
+            .map(|entry| entry.hash)
+            .collect())
+    }
+
+    /// The bytes this store holds.
+    ///
+    /// # Errors
+    /// [`StoreError::Io`] when the directory will not list.
+    pub fn bytes_held(&self) -> Result<u64> {
+        Ok(self.entries()?.iter().map(|entry| entry.bytes).sum())
     }
 
     /// Free space down to `budget_bytes`, and NEVER take a pinned blob.
     ///
     /// ## The pin is structural, not a filter at the end (#1025 S3, R25)
     ///
-    /// Bytes an unsettled outbox intent names are the ONE copy of a write a
-    /// member has already made. Deleting them to make room for a cache turns a
-    /// queued photograph into a queued photograph with nothing behind it, and
-    /// no later window can recover it — the gateway never had the bytes, which
-    /// is the whole reason the intent is still queued.
+    /// A pinned blob is one whose loss nothing could repair: an original no
+    /// gateway has acknowledged, held nowhere else. So `pinned` is subtracted
+    /// BEFORE anything is ordered, and a store whose pins alone exceed the
+    /// budget reports [`Sweep::over_budget_by`] rather than breaking the
+    /// promise. A sweep that filtered pins out at the end would evict them
+    /// whenever the arithmetic came out that way, which is exactly when it
+    /// matters.
     ///
-    /// So `pinned` is subtracted BEFORE anything is ordered, and a store whose
-    /// pins alone exceed the budget reports [`Sweep::over_budget_by`] rather
-    /// than breaking the promise. A sweep that filtered pins out at the end
-    /// would evict them whenever the arithmetic came out that way, which is
-    /// exactly when it matters.
+    /// ## Oldest first, by the file's own mtime
     ///
-    /// ## Oldest first, by the data file's own mtime
+    /// There is no access time to read — a phone's file system is usually
+    /// mounted `noatime` — so the order is by when the bytes landed. A file
+    /// that cannot be stated is not listed at all and so is never a candidate.
     ///
-    /// There is no access time to read — iroh-blobs keeps none, and a phone's
-    /// filesystem is usually mounted `noatime` — so the order is by when the
-    /// bytes landed. That is the right order for a cache filled newest-first by
-    /// [`crate::plan`]: the tail of the store is what a member scrolled past
-    /// longest ago. A blob whose file cannot be stated sorts OLDEST, so a store
-    /// that has lost track of a file frees it rather than keeping it forever.
+    /// It answers WHICH blobs it took, not only how many: a caller keeping a
+    /// row per held blob drops exactly those rows.
     ///
-    /// What is deleted is the TAG (see [`Self::forget`]); the bytes go when
-    /// iroh-blobs' collector next runs.
-    /// **It answers WHICH blobs it took, not only how many** (#1025,
-    /// D-1025-S7-20): the seat keeps a row per held blob so a page read can
-    /// join it, and a count cannot tell that table which rows to drop.
-    pub async fn sweep(
+    /// # Errors
+    /// [`StoreError::Io`] when the directory will not list or a file will not
+    /// delete; what was deleted before the refusal stays deleted.
+    pub fn sweep(
         &self,
-        pinned: &std::collections::HashSet<ContentHash>,
+        pinned: &HashSet<ContentHash>,
         budget_bytes: u64,
     ) -> Result<(Sweep, Vec<ContentHash>)> {
         let mut report = Sweep::default();
-        let mut candidates: Vec<(std::time::SystemTime, ContentHash, u64)> = Vec::new();
-        for hash in self.complete_hashes().await? {
-            // The data file's own length and mtime in ONE stat. With nothing
-            // inlined (see the module header) the file is the blob, so its
-            // length is the size the budget is counted in.
-            let Ok(metadata) = std::fs::metadata(self.data_file(hash)) else {
-                // No file for a hash the index calls complete. Oldest, so it is
-                // the first thing released.
-                candidates.push((std::time::SystemTime::UNIX_EPOCH, hash, 0));
-                continue;
-            };
-            let bytes = metadata.len();
-            report.held += bytes;
-            if pinned.contains(&hash) {
-                report.pinned += bytes;
-                continue;
+        let mut candidates = Vec::new();
+        for entry in self.entries()? {
+            report.held += entry.bytes;
+            if pinned.contains(&entry.hash) {
+                report.pinned += entry.bytes;
+            } else {
+                candidates.push(entry);
             }
-            candidates.push((
-                metadata
-                    .modified()
-                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH),
-                hash,
-                bytes,
-            ));
         }
         report.over_budget_by = report.pinned.saturating_sub(budget_bytes);
-        candidates.sort_by_key(|(at, hash, _)| (*at, *hash));
+        candidates.sort_by_key(|entry| (entry.modified, entry.hash));
 
         let mut standing = report.held;
         let mut taken = Vec::new();
-        for (_, hash, bytes) in candidates {
+        for entry in candidates {
             if standing <= budget_bytes {
                 break;
             }
-            self.forget(hash).await?;
-            standing = standing.saturating_sub(bytes);
-            report.freed += bytes;
+            self.remove(entry.hash)?;
+            standing = standing.saturating_sub(entry.bytes);
+            report.freed += entry.bytes;
             report.evicted += 1;
-            taken.push(hash);
+            taken.push(entry.hash);
         }
         Ok((report, taken))
     }
 
-    /// Close the store cleanly, flushing its index.
-    ///
-    /// **This is what unlocks `blobs.db`, and nothing else does.** iroh-blobs'
-    /// shutdown drops the redb database before it acknowledges, so when this
-    /// returns the index file is free for the next opener. Dropping the last
-    /// clone instead leaves the unlock to iroh-blobs' own runtime teardown,
-    /// which never finishes (see [`refuse_if_held`]) — so an owner that means
-    /// to open this directory again in the same process must come through
-    /// here first.
-    pub async fn close(self) {
-        self.store.shutdown().await.ok();
+    /// Every blob file, with its length and mtime. Entries whose name is not a
+    /// hash — `incoming/`, anything a platform put here — are not blobs.
+    fn entries(&self) -> Result<Vec<Entry>> {
+        let mut entries = Vec::new();
+        for item in fs::read_dir(&self.root).map_err(io_at(&self.root))? {
+            let item = item.map_err(io_at(&self.root))?;
+            let Some(hash) = item
+                .file_name()
+                .to_str()
+                .and_then(|name| ContentHash::parse_hex(name).ok())
+            else {
+                continue;
+            };
+            let Ok(metadata) = item.metadata() else {
+                continue;
+            };
+            if !metadata.is_file() {
+                continue;
+            }
+            entries.push(Entry {
+                hash,
+                bytes: metadata.len(),
+                modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+            });
+        }
+        entries.sort_by_key(|entry| entry.hash);
+        Ok(entries)
+    }
+
+    /// Move a finished write to its name.
+    fn settle(&self, incoming: &Path, hash: ContentHash, bytes: u64) -> Result<Stored> {
+        let path = self.path_for(hash);
+        if self.path_of(hash)?.is_some() {
+            // THE SAME BYTES TWICE ARE ONE BLOB. The file already at the name
+            // is these bytes by construction, so the copy is dropped rather
+            // than renamed over it.
+            fs::remove_file(incoming).map_err(io_at(incoming))?;
+            return Ok(Stored {
+                hash,
+                bytes,
+                path,
+                already_held: true,
+            });
+        }
+        fs::rename(incoming, &path).map_err(io_at(&path))?;
+        sync_directory(&self.root)?;
+        Ok(Stored {
+            hash,
+            bytes,
+            path,
+            already_held: false,
+        })
+    }
+
+    /// Clear writes a crash cut short. See the module header.
+    fn clear_stale_incoming(&self) -> Result<()> {
+        let incoming = self.root.join(INCOMING);
+        let now = SystemTime::now();
+        for item in fs::read_dir(&incoming).map_err(io_at(&incoming))? {
+            let item = item.map_err(io_at(&incoming))?;
+            let Ok(metadata) = item.metadata() else {
+                continue;
+            };
+            let idle = metadata
+                .modified()
+                .ok()
+                .and_then(|modified| now.duration_since(modified).ok())
+                .unwrap_or_default();
+            if metadata.is_file() && idle >= STALE_INCOMING {
+                let path = item.path();
+                fs::remove_file(&path).map_err(io_at(&path))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Adopt the layout before #1080. See the module header.
+    fn adopt_legacy_layout(&self) -> Result<Adopted> {
+        let data = self.root.join("data");
+        let mut adopted = Adopted::default();
+        if data.is_dir() {
+            for item in fs::read_dir(&data).map_err(io_at(&data))? {
+                let item = item.map_err(io_at(&data))?;
+                let name = item.file_name();
+                let Some(hex) = name.to_str().and_then(|name| name.strip_suffix(".data")) else {
+                    continue;
+                };
+                let Ok(hash) = ContentHash::parse_hex(hex) else {
+                    continue;
+                };
+                // A `.bitfield` is how that store marked a blob it held in
+                // part: not a blob, and never adopted as one.
+                if data.join(format!("{hex}.bitfield")).exists() {
+                    adopted.discarded += 1;
+                    continue;
+                }
+                if self.path_of(hash)?.is_some() {
+                    continue;
+                }
+                let path = item.path();
+                let mut file = fs::File::open(&path).map_err(io_at(&path))?;
+                let mut hasher = blake3::Hasher::new();
+                io::copy(&mut file, &mut hasher).map_err(io_at(&path))?;
+                if ContentHash::from_bytes(*hasher.finalize().as_bytes()) == hash {
+                    fs::rename(&path, self.path_for(hash)).map_err(io_at(&path))?;
+                    adopted.blobs += 1;
+                } else {
+                    adopted.discarded += 1;
+                }
+            }
+            sync_directory(&self.root)?;
+            fs::remove_dir_all(&data).map_err(io_at(&data))?;
+        }
+        let temp = self.root.join("temp");
+        if temp.is_dir() {
+            fs::remove_dir_all(&temp).map_err(io_at(&temp))?;
+        }
+        let index = self.root.join("blobs.db");
+        match fs::remove_file(&index) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(io_at(&index)(error)),
+        }
+        Ok(adopted)
     }
 }
 
-/// REFUSE A STORE WHOSE INDEX ANOTHER OPENER HOLDS, rather than hang on it.
+/// A write in progress: bytes hashed as they arrive, named when they end.
 ///
-/// redb locks `blobs.db` for as long as a store has it open, and a second
-/// opener gets `DatabaseAlreadyOpen` — in this process or another. iroh-blobs
-/// 0.103 never delivers that error: `FsStore::load_with_opts` builds a private
-/// runtime, hands it to the actor it spawns ON that runtime, and on the actor's
-/// error path drops it there (`RtWrapper::drop` → `block_in_place` →
-/// `BlockingPool::shutdown`), which waits for every pool thread including the
-/// one doing the waiting. The future `load_with_opts` returned never completes,
-/// and whoever awaited it parks forever with no line saying why. That is how
-/// `centraid_open` hung the JVM's ABI round trip: a reopen of a vault whose
-/// previous core had not released this file.
-///
-/// So the lock is asked about first, with the same advisory lock redb takes
-/// (`File::try_lock`, which is `flock` on the platforms a phone runs): a
-/// `WouldBlock` here is exactly the `DatabaseAlreadyOpen` iroh-blobs would have
-/// swallowed, and it becomes an [`StoreError::Open`] a caller can print. The
-/// probe's own lock is released before iroh-blobs opens the file. A file that
-/// does not exist yet cannot be held, and a platform without file locks is one
-/// where redb does not lock either, so both go on to the real open.
-fn refuse_if_held(root: &Path, index: &Path) -> Result<()> {
-    let Ok(file) = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(index)
-    else {
-        return Ok(());
-    };
-    match file.try_lock() {
-        Ok(()) => {
-            let _ = file.unlock();
-            Ok(())
-        }
-        Err(std::fs::TryLockError::WouldBlock) => Err(StoreError::Open {
-            path: root.to_path_buf(),
-            detail: format!(
-                "{} is held by another open store, in this process or another; \
-                 close that one first",
-                index.display()
-            ),
-        }),
-        Err(std::fs::TryLockError::Error(_)) => Ok(()),
+/// Dropped unfinished, it deletes its incoming file: a write that did not end
+/// is not a blob.
+#[derive(Debug)]
+pub struct Writer {
+    store: ByteStore,
+    path: PathBuf,
+    file: Option<fs::File>,
+    hasher: blake3::Hasher,
+    bytes: u64,
+}
+
+impl Writer {
+    /// Append bytes.
+    ///
+    /// # Errors
+    /// [`StoreError::Io`] when the incoming file will not take them.
+    pub fn write(&mut self, bytes: &[u8]) -> Result<()> {
+        let Some(file) = self.file.as_mut() else {
+            return Err(io_at(&self.path)(io::Error::other(
+                "this write has already ended",
+            )));
+        };
+        file.write_all(bytes).map_err(io_at(&self.path))?;
+        self.hasher.update(bytes);
+        self.bytes += bytes.len() as u64;
+        Ok(())
     }
+
+    /// The bytes written so far.
+    #[must_use]
+    pub const fn written(&self) -> u64 {
+        self.bytes
+    }
+
+    /// End the write: sync the bytes, name them, and move them to their name.
+    ///
+    /// # Errors
+    /// [`StoreError::Io`] when the sync or the move fails; the incoming file
+    /// is removed either way.
+    pub fn finish(mut self) -> Result<Stored> {
+        let Some(file) = self.file.take() else {
+            return Err(io_at(&self.path)(io::Error::other(
+                "this write has already ended",
+            )));
+        };
+        let synced = file.sync_all().map_err(io_at(&self.path));
+        drop(file);
+        let stored = synced.and_then(|()| {
+            let hash = ContentHash::from_bytes(*self.hasher.finalize().as_bytes());
+            self.store.settle(&self.path, hash, self.bytes)
+        });
+        // EVERY REFUSAL AFTER THE HANDLE IS TAKEN CLEANS UP HERE: `Drop` only
+        // removes the incoming file of a write that still holds its handle.
+        if stored.is_err() {
+            let _ = fs::remove_file(&self.path);
+        }
+        stored
+    }
+}
+
+impl Drop for Writer {
+    fn drop(&mut self) {
+        if self.file.take().is_some() {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+}
+
+/// One blob file, as a listing saw it.
+struct Entry {
+    hash: ContentHash,
+    bytes: u64,
+    modified: SystemTime,
+}
+
+/// A name for an incoming file no other write in this or another process can
+/// share: the process, a counter, and the moment.
+fn incoming_name() -> String {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let nanos = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |since| since.as_nanos());
+    format!(
+        "{}-{}-{nanos}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+/// Make a rename in `directory` durable. On the platforms the store runs on —
+/// a phone, and the Unix machines its tests run on — a directory is synced
+/// through a handle on it; elsewhere the rename is as durable as the
+/// platform makes it.
+fn sync_directory(directory: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        fs::File::open(directory)
+            .and_then(|handle| handle.sync_all())
+            .map_err(io_at(directory))?;
+    }
+    #[cfg(not(unix))]
+    let _ = directory;
+    Ok(())
 }
 
 /// What one eviction sweep did.
@@ -561,14 +613,178 @@ pub struct Sweep {
     pub freed: u64,
     /// How far the PINS alone exceed the budget. Non-zero is an honest report
     /// and never a licence: the sweep has already stopped, and what a surface
-    /// says is that a queued write is holding the space.
+    /// says is that a pinned original is holding the space.
     pub over_budget_by: u64,
 }
 
-/// `ContentHash` is accepted wherever iroh-blobs wants a `Hash`, so the store's
-/// own signatures never mention the dependency.
-impl From<ContentHash> for iroh_blobs::HashAndFormat {
-    fn from(hash: ContentHash) -> Self {
-        Self::raw(hash.into())
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn store() -> (tempfile::TempDir, ByteStore) {
+        let dir = tempfile::tempdir().expect("a directory");
+        let store = ByteStore::open(dir.path().join("vault.bytes")).expect("the store opens");
+        (dir, store)
+    }
+
+    /// A WRITE IS WHOLE: the file appears at its name only when the last byte
+    /// is in, and the same bytes twice are one blob.
+    #[test]
+    fn a_blob_is_a_file_named_by_its_hash_and_the_same_bytes_twice_are_one() {
+        let (_dir, store) = store();
+        let photograph = b"a camera original".repeat(1000);
+        let mut writer = store.writer().expect("a write begins");
+        writer.write(&photograph[..500]).expect("a chunk");
+        let hash = ContentHash::of(&photograph);
+        assert_eq!(
+            store.path_of(hash).expect("asks"),
+            None,
+            "half a write is no blob"
+        );
+        writer.write(&photograph[500..]).expect("the rest");
+        assert_eq!(writer.written(), photograph.len() as u64);
+        let stored = writer.finish().expect("it ends");
+        assert_eq!(stored.hash, hash);
+        assert!(!stored.already_held);
+        assert_eq!(stored.path, store.root().join(hash.to_hex()));
+        assert_eq!(fs::read(&stored.path).expect("reads"), photograph);
+        assert_eq!(
+            store.path_of(hash).expect("asks"),
+            Some(stored.path.clone())
+        );
+        assert_eq!(
+            store.size(hash).expect("asks"),
+            Some(photograph.len() as u64)
+        );
+
+        let again = store.put_bytes(&photograph).expect("it lands");
+        assert!(again.already_held, "the same bytes twice are one blob");
+        assert_eq!(store.hashes().expect("lists"), vec![hash]);
+        assert_eq!(store.bytes_held().expect("sums"), photograph.len() as u64);
+        assert_eq!(
+            fs::read_dir(store.root().join(INCOMING))
+                .expect("lists")
+                .count(),
+            0,
+            "no write leaves an incoming file behind"
+        );
+    }
+
+    /// A write that never ended leaves nothing, a stream is hashed as it is
+    /// written, and a file is taken whole without being held whole.
+    #[test]
+    fn an_abandoned_write_leaves_nothing_and_a_stream_or_a_file_is_taken_whole() {
+        let (dir, store) = store();
+        {
+            let mut writer = store.writer().expect("a write begins");
+            writer
+                .write(b"a video the app was killed during")
+                .expect("a chunk");
+        }
+        assert!(store.hashes().expect("lists").is_empty());
+        assert_eq!(
+            fs::read_dir(store.root().join(INCOMING))
+                .expect("lists")
+                .count(),
+            0
+        );
+
+        let long: Vec<u8> = (0..3 * CHUNK_BYTES + 17)
+            .map(|at| (at % 251) as u8)
+            .collect();
+        let streamed = store.put_stream(&mut long.as_slice()).expect("it lands");
+        assert_eq!(streamed.hash, ContentHash::of(&long));
+        assert_eq!(streamed.bytes, long.len() as u64);
+
+        let source = dir.path().join("download.pdf");
+        fs::write(&source, b"%PDF a downloaded document").expect("writes");
+        let taken = store.put_path(&source).expect("it lands");
+        assert_eq!(
+            store.read(taken.hash).expect("reads"),
+            b"%PDF a downloaded document"
+        );
+        assert!(source.exists(), "the source is read, never moved");
+    }
+
+    /// A READ VERIFIES: a file whose bytes are not its name is corruption,
+    /// named, and never handed back as the blob.
+    #[test]
+    fn a_rotten_file_is_refused_as_corrupt_and_removal_is_idempotent() {
+        let (_dir, store) = store();
+        let stored = store.put_bytes(b"a thumbnail").expect("it lands");
+        fs::write(&stored.path, b"a thumbnail, rotted").expect("rots");
+        assert!(matches!(
+            store.read(stored.hash),
+            Err(StoreError::Corrupt { hash, .. }) if hash == stored.hash
+        ));
+        assert!(store.remove(stored.hash).expect("removes"));
+        assert!(!store.remove(stored.hash).expect("removes"), "already gone");
+        assert!(!store.is_complete(stored.hash).expect("asks"));
+        assert!(matches!(
+            store.read(stored.hash),
+            Err(StoreError::Io { .. })
+        ));
+    }
+
+    /// A crashed write older than an hour is cleared at open; a fresh one is a
+    /// live writer's and is left alone.
+    #[test]
+    fn a_stale_incoming_file_is_cleared_at_open_and_a_live_one_is_not() {
+        let (_dir, store) = store();
+        let incoming = store.root().join(INCOMING);
+        let stale = incoming.join("crashed");
+        let live = incoming.join("writing");
+        fs::write(&stale, b"half a video").expect("writes");
+        fs::write(&live, b"a video arriving").expect("writes");
+        let an_hour_ago = SystemTime::now() - STALE_INCOMING - Duration::from_secs(1);
+        fs::File::options()
+            .write(true)
+            .open(&stale)
+            .and_then(|file| file.set_modified(an_hour_ago))
+            .expect("ages");
+        ByteStore::open(store.root()).expect("reopens");
+        assert!(!stale.exists(), "a crashed write is cleared");
+        assert!(live.exists(), "a live writer is never touched");
+    }
+
+    /// THE STORE BEFORE #1080, ADOPTED: a whole blob moves to its name, and a
+    /// partial blob, a file that does not hash to its name, the outboards and
+    /// the index go with the old layout.
+    #[test]
+    fn the_layout_before_1080_is_adopted_once_and_only_whole_verified_blobs_survive() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let root = dir.path().join("vault.bytes");
+        let data = root.join("data");
+        fs::create_dir_all(&data).expect("makes");
+        fs::create_dir_all(root.join("temp")).expect("makes");
+        fs::write(root.join("blobs.db"), b"an index nothing can read").expect("writes");
+
+        let document = b"an edited document, held nowhere else".to_vec();
+        let whole = ContentHash::of(&document);
+        fs::write(data.join(format!("{whole}.data")), &document).expect("writes");
+        fs::write(data.join(format!("{whole}.obao4")), b"outboard").expect("writes");
+        let partial = ContentHash::of(b"a video fetched in part");
+        fs::write(data.join(format!("{partial}.data")), b"a video").expect("writes");
+        fs::write(data.join(format!("{partial}.bitfield")), b"bits").expect("writes");
+        let rotten = ContentHash::of(b"what this file should hold");
+        fs::write(data.join(format!("{rotten}.data")), b"something else").expect("writes");
+
+        let (store, adopted) = ByteStore::open_adopting(&root).expect("opens");
+        assert_eq!(
+            adopted,
+            Adopted {
+                blobs: 1,
+                discarded: 2
+            }
+        );
+        assert_eq!(store.hashes().expect("lists"), vec![whole]);
+        assert_eq!(store.read(whole).expect("reads"), document);
+        assert!(!data.exists(), "the old layout is gone");
+        assert!(!root.join("temp").exists());
+        assert!(!root.join("blobs.db").exists());
+
+        let (_, again) = ByteStore::open_adopting(&root).expect("reopens");
+        assert_eq!(again, Adopted::default(), "adoption happens once");
+        assert_eq!(store.hashes().expect("lists"), vec![whole]);
     }
 }

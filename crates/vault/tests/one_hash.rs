@@ -143,9 +143,9 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
     ),
     (
         "vault/src/content.rs",
-        "`Vault::stage_bytes`, which writes the hash bao already verified the \
-         pulled bytes against — and this file DEFINES `content_digest`, so its \
-         one `blake3::hash` call is the door itself",
+        "`Vault::stage_bytes`, which writes the hash the content store computed \
+         as the bytes were written — and this file DEFINES `content_digest`, so \
+         its one `blake3::hash` call is the door itself",
     ),
     (
         "vault/src/page.rs",

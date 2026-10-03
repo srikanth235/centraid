@@ -30,64 +30,15 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, thiserror::Error)]
-pub enum BlobError {
-    #[error("blob {id} is not in the store")]
-    NotFound { id: String },
-    #[error("blob {id} hashes to {actual} — the store is corrupt")]
-    Corrupt { id: String, actual: String },
-    #[error("blob id {0:?} is not a hex digest")]
-    InvalidId(String),
-    #[error("blob store io at {path}: {source}")]
-    Io {
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
-}
-
-/// Public because the trait is implemented outside this crate — `crates/blobs`
-/// puts the byte plane's store behind it (#1025 S3).
-pub type Result<T> = std::result::Result<T, BlobError>;
+/// The byte door's names are [`crate::bytes`]'s, re-exported for this plane's
+/// own callers until #1080's cut-over deletes it.
+pub use crate::bytes::{BlobError, BlobStore, Result};
 
 fn io_at(path: &Path) -> impl FnOnce(io::Error) -> BlobError + '_ {
     move |source| BlobError::Io {
         path: path.to_path_buf(),
         source,
     }
-}
-
-/// Content-addressed byte storage. The id is always the 64-lowercase-hex
-/// digest of the bytes, so an implementation can never be asked to invent a
-/// name.
-///
-/// **Two implementations, and they are not interchangeable** (#1025 S3).
-/// [`FsBlobStore`] keeps BACKUP ARTEFACTS, named by that digest, and is the only
-/// one this crate ships. A member's OWN bytes are kept by the byte plane's
-/// `centraid_blobs::ByteStore`, which is BLAKE3-named, holds partial blobs and
-/// is what `Vault::with_blobs` takes — `centraid_core::bytes` is the door that
-/// puts it behind this trait.
-pub trait BlobStore {
-    /// Store bytes, returning their digest. Idempotent: the same bytes twice
-    /// are one blob.
-    fn put(&self, bytes: &[u8]) -> Result<String>;
-    /// Fetch bytes by digest, verifying them.
-    fn get(&self, id: &str) -> Result<Vec<u8>>;
-    /// Whether the store holds a blob, without reading it.
-    fn has(&self, id: &str) -> Result<bool>;
-    /// Every digest the store holds, sorted.
-    fn ids(&self) -> Result<BTreeSet<String>>;
-    /// The stored size, for sizing a restore before fetching it.
-    fn size(&self, id: &str) -> Result<u64>;
-    /// The FILE these bytes are in, when this store holds them whole.
-    ///
-    /// THE ANSWER `Vault::content_location` GIVES A GRID (#1025 S3). Every cell
-    /// of a photo grid is a path the platform opens directly, and a store that
-    /// could only answer `get(&str) -> Vec<u8>` would mean the core buffering a
-    /// photograph so a view could buffer it again. `None` is a real answer — a
-    /// blob this device holds only part of, or not at all — and it is the
-    /// normal state of a seat whose rows have arrived and whose bytes have not.
-    fn path_of(&self, id: &str) -> Result<Option<PathBuf>>;
 }
 
 /// The digest that names a BACKUP artefact.

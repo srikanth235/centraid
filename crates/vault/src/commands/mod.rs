@@ -116,7 +116,7 @@ pub struct CommandCtx<'tx, 'conn> {
     clock: &'tx dyn crate::clock::Clock,
     produced_ids: std::cell::RefCell<Vec<String>>,
     /// The vault's local content store, when it has one. See [`CommandCtx::blobs`].
-    blobs: Option<&'tx (dyn crate::backup::store::BlobStore + Send + Sync)>,
+    blobs: Option<&'tx (dyn crate::bytes::BlobStore + Send + Sync)>,
 }
 
 impl<'conn> CommandCtx<'_, 'conn> {
@@ -134,7 +134,7 @@ impl<'conn> CommandCtx<'_, 'conn> {
     /// bytes nothing kept. `pre_inline_bytes_are_storable` is that refusal, so
     /// in practice a handler reaching here has already been gated.
     #[must_use]
-    pub const fn blobs(&self) -> Option<&(dyn crate::backup::store::BlobStore + Send + Sync)> {
+    pub const fn blobs(&self) -> Option<&(dyn crate::bytes::BlobStore + Send + Sync)> {
         self.blobs
     }
 
