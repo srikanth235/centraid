@@ -1,8 +1,10 @@
 package dev.centraid.shared
 
+import dev.centraid.shared.sync.BackgroundWindows
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import java.io.File
 
@@ -40,9 +42,10 @@ class BackgroundPassLawSpec : StringSpec({
         System.getProperty("centraid.mobileRoot")
             ?: error("centraid.mobileRoot is unset; see mobile/shared/build.gradle.kts"),
     )
-    val androidServices = mobileRoot.resolve(
-        "shared/src/androidMain/kotlin/dev/centraid/shared/platform/PlatformServices.android.kt",
-    ).readText()
+    /** Every androidMain file: the windows live in `AndroidBackgroundWork.kt`. */
+    val androidServices = mobileRoot.resolve("shared/src/androidMain").walkTopDown()
+        .filter { it.isFile && it.extension == "kt" }
+        .joinToString("\n") { it.readText() }
 
     /**
      * The CODE, with comments dropped.
@@ -74,6 +77,7 @@ class BackgroundPassLawSpec : StringSpec({
         }
         androidCode shouldContain "PeriodicWorkRequestBuilder<CentraidSyncWorker>"
         androidCode shouldContain "class CentraidSyncWorker"
+        androidCode shouldContain "class CentraidBacklogWorker"
         androidCode shouldContain "CoroutineWorker"
     }
 
@@ -81,7 +85,8 @@ class BackgroundPassLawSpec : StringSpec({
         // KEEP would keep exactly the unrunnable request a shipped build left
         // behind. The name stays so nothing is orphaned; UPDATE is what
         // replaces the request under it.
-        androidCode shouldContain "\"centraid-sync-pass\""
+        BackgroundWindows.PERIODIC shouldBe "centraid-sync-pass"
+        androidCode shouldContain "enqueueUniquePeriodicWork("
         androidCode shouldContain "ExistingPeriodicWorkPolicy.UPDATE"
         withClue("KEEP would preserve the worker that can never run") {
             androidCode.contains("ExistingPeriodicWorkPolicy.KEEP").shouldBeFalse()

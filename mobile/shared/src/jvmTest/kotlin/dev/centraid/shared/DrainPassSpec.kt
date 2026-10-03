@@ -4,7 +4,9 @@ import dev.centraid.shared.sync.DrainAnswer
 import dev.centraid.shared.sync.DrainClaim
 import dev.centraid.shared.sync.DrainCopy
 import dev.centraid.shared.sync.DrainDoor
+import dev.centraid.shared.sync.DrainInput
 import dev.centraid.shared.sync.DrainPass
+import dev.centraid.shared.sync.TransferRule
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -25,26 +27,50 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class DrainPassSpec : StringSpec({
 
-    fun door(answer: DrainAnswer?) = object : DrainDoor {
-        override suspend fun drain(deadlineMs: Long): DrainAnswer? = answer
-    }
+    fun door(answer: DrainAnswer?) = DrainDoor { answer }
+
+    fun input(deadlineMs: Long = 25_000) = DrainInput(
+        deadlineMs = deadlineMs,
+        rule = TransferRule.WIFI_ONLY,
+        includeVideos = true,
+        metered = false,
+        charging = true,
+        wantsSnapshot = false,
+    )
 
     "a pass answers what the core answered, and nothing it worked out itself" {
         runTest {
             val answer = DrainAnswer(
-                ackedTxid = 41,
                 pendingBytes = 0,
                 stopped = DrainAnswer.Stopped.EMPTY,
-                lastAckedAtMs = 1_700_000_000_000,
+                ackedAtMs = 1_700_000_000_000,
+                confirmedParts = 41,
             )
-            val outcome = DrainPass(door(answer)).run(deadlineMs = 25_000)
+            val outcome = DrainPass(door(answer)).run(input())
             outcome shouldBe DrainPass.Outcome.Ran(answer)
+        }
+    }
+
+    "the pass hands the core exactly the input it was given" {
+        runTest {
+            // THE RULE CROSSES (#1080): a pass that dropped it would be the core
+            // planning a member's bill under a rule the member never chose.
+            val seen = mutableListOf<DrainInput>()
+            val asked = input(deadlineMs = 9_000).copy(
+                rule = TransferRule.WIFI_AND_CELLULAR_PHOTOS,
+                includeVideos = false,
+                metered = true,
+                charging = false,
+                wantsSnapshot = true,
+            )
+            DrainPass(DrainDoor { seen += it; null }).run(asked)
+            seen shouldBe listOf(asked)
         }
     }
 
     "no core to ask is not a failure and is not a sentence" {
         runTest {
-            DrainPass(door(null)).run(deadlineMs = 25_000) shouldBe DrainPass.Outcome.Unavailable
+            DrainPass(door(null)).run(input()) shouldBe DrainPass.Outcome.Unavailable
         }
     }
 
@@ -56,22 +82,22 @@ class DrainPassSpec : StringSpec({
             val entered = CompletableDeferred<Unit>()
             val release = CompletableDeferred<Unit>()
             val calls = AtomicInteger(0)
-            val slow = object : DrainDoor {
-                override suspend fun drain(deadlineMs: Long): DrainAnswer {
-                    calls.incrementAndGet()
-                    entered.complete(Unit)
-                    release.await()
-                    return DrainAnswer(1, 0, DrainAnswer.Stopped.EMPTY, lastAckedAtMs = 1)
-                }
+            val slow = DrainDoor {
+                calls.incrementAndGet()
+                entered.complete(Unit)
+                release.await()
+                DrainAnswer(0, DrainAnswer.Stopped.EMPTY, ackedAtMs = 1)
             }
             val pass = DrainPass(slow)
             coroutineScope {
-                val first = async { pass.run(deadlineMs = 60_000) }
+                val first = async { pass.run(input(60_000)) }
                 entered.await()
-                pass.run(deadlineMs = 60_000) shouldBe DrainPass.Outcome.Busy
+                pass.busy shouldBe true
+                pass.run(input(60_000)) shouldBe DrainPass.Outcome.Busy
                 release.complete(Unit)
                 first.await()
             }
+            pass.busy shouldBe false
             calls.get() shouldBe 1
         }
     }
@@ -82,10 +108,9 @@ class DrainPassSpec : StringSpec({
             // emptied the spool would run once in the life of an install, which
             // reads to a member as "it worked the first day".
             val asked = AtomicInteger(0)
-            val unreachable = DrainAnswer(0, 900, DrainAnswer.Stopped.UNREACHABLE)
-            DrainPass(door(unreachable)) { asked.incrementAndGet() }
-                .run(deadlineMs = 25_000)
-            DrainPass(door(null)) { asked.incrementAndGet() }.run(deadlineMs = 25_000)
+            val unreachable = DrainAnswer(900, DrainAnswer.Stopped.UNREACHABLE)
+            DrainPass(door(unreachable)) { asked.incrementAndGet() }.run(input())
+            DrainPass(door(null)) { asked.incrementAndGet() }.run(input())
             asked.get() shouldBe 2
         }
     }
@@ -94,19 +119,18 @@ class DrainPassSpec : StringSpec({
         // THE UMBRELLA'S UI INVARIANT. Everything below has run a pass; only the
         // one the laptop acknowledged may use the word.
         DrainClaim.isBackedUp(
-            DrainAnswer(0, 0, DrainAnswer.Stopped.EMPTY, lastAckedAtMs = null),
+            DrainAnswer(0, DrainAnswer.Stopped.EMPTY, ackedAtMs = null),
         ) shouldBe false
         DrainClaim.isBackedUp(
-            DrainAnswer(9, 0, DrainAnswer.Stopped.EMPTY, lastAckedAtMs = 1_700_000_000_000),
+            DrainAnswer(0, DrainAnswer.Stopped.EMPTY, ackedAtMs = 1_700_000_000_000),
         ) shouldBe true
     }
 
     "an acknowledged vault with bytes still in the spool is BEHIND, not backed up" {
         val behind = DrainAnswer(
-            ackedTxid = 9,
             pendingBytes = 4_096,
             stopped = DrainAnswer.Stopped.DEADLINE,
-            lastAckedAtMs = 1_700_000_000_000,
+            ackedAtMs = 1_700_000_000_000,
         )
         DrainClaim.isBackedUp(behind) shouldBe false
         DrainClaim.line(behind, unacked = 3, relative = "2 minutes ago") shouldContain
@@ -119,16 +143,17 @@ class DrainPassSpec : StringSpec({
         // is working — and an unreachable laptop lost nothing, so neither
         // sentence may read as "backup failed". These are W15's own words.
         val deadline = DrainCopy.stoppedSentence(
-            DrainAnswer(1, 3_200_000, DrainAnswer.Stopped.DEADLINE),
+            DrainAnswer(3_200_000, DrainAnswer.Stopped.DEADLINE),
         )
         deadline shouldBe "Still backing up — 3 MB to go. It will finish on its own."
-        DrainCopy.stoppedSentence(DrainAnswer(1, 0, DrainAnswer.Stopped.EMPTY)) shouldBe
+        DrainCopy.stoppedSentence(DrainAnswer(0, DrainAnswer.Stopped.EMPTY)) shouldBe
             "Backed up. Your laptop holds this vault's records; photos and files stay only on this phone."
-        DrainCopy.stoppedSentence(DrainAnswer(0, 99, DrainAnswer.Stopped.UNREACHABLE)) shouldBe
+        DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNREACHABLE)) shouldBe
             "Your laptop didn't answer. Nothing was lost; we'll pick up where we left off."
         listOf(
-            DrainCopy.stoppedSentence(DrainAnswer(1, 99, DrainAnswer.Stopped.DEADLINE)),
-            DrainCopy.stoppedSentence(DrainAnswer(0, 99, DrainAnswer.Stopped.UNREACHABLE)),
+            DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.DEADLINE)),
+            DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNREACHABLE)),
+            DrainCopy.stoppedSentence(DrainAnswer(0, DrainAnswer.Stopped.MOVED)),
         ).forEach { it.contains("failed") shouldBe false }
     }
 

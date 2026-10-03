@@ -389,6 +389,7 @@ public class CentraidCore private constructor(
                             detail = error.detail,
                             diagnosticId = error.diagnostic_id,
                             sentence = error.sentence.ifBlank { "Centraid refused that." },
+                            movedAtMs = error.moved?.moved_at_ms,
                         ),
                     )
                 } else {
@@ -442,6 +443,7 @@ public class CentraidCore private constructor(
             detail = error.detail,
             diagnosticId = error.diagnostic_id,
             sentence = error.sentence.ifBlank { "Centraid refused that." },
+            movedAtMs = error.moved?.moved_at_ms,
         )
     }
 
