@@ -113,3 +113,232 @@ grep -rn "sha256" crates/media/src/sealed.rs crates/vault/src/backup2
 ## Audit
 
 No verdict from the author. The umbrella's independent review records one for lane B's section, against the diff and the commands above, at the close.
+
+### Lane F — the docs
+
+Every state document #1080 names now describes the new plane as current state, and the old one only as history cited by issue link: gateways the member controls reached over direct HTTPS with a pinned certificate, snapshots in 64 KiB ranges, sealed originals and derivatives, the ledger and the spool, the pass, and the restore that reads, checks, then claims. Written from the issue, the root's seam contract (A1–A18), lane B's merged plane, lane A's merged crate and its README (the source of truth for the gateway, on the root's word), lane D's merged shared module, and lane E's and lane C's work in flight. No build was run: the lane's checks are the docs' own.
+
+Branch `worktree-agent-ad555fbcf690bfe7d`, cut from `23e46810` and fast-forwarded to the umbrella tip `1e620bf7` before its first commit; the umbrella was merged in again at `e0079c08` when lanes A and D landed.
+
+| Commit | Subject |
+| --- | --- |
+| `c056362c` | docs(gateway): protocol v2, its runbooks and the deploy READMEs (#1080) |
+| `734d285f` | docs: architecture, threat model and README describe backup v2 (#1080) |
+| `0da954e9` | docs: the pass, glossary, traps and gate docs describe backup v2 (#1080) |
+| `e0079c08` | Merge branch 'ccr-ffb8b956-lwxeta' into worktree-agent-ad555fbcf690bfe7d |
+| `9378b364` | docs(gateway): follow the merged gateway2 README and A16 to A18 (#1080) |
+| this commit | docs(decisions): what #1080 superseded, and the lane F receipt (#1080) |
+
+| File | Change |
+| --- | --- |
+| `docs/gateway.md` | rewritten: protocol v2's routes, objects, tokens and writer epochs, the three pairing kinds, refusal codes, the six commands, the certificate, pairing and the safety number, discovery, the data directory and what a stolen copy yields, the sweeps, self-hosting, mirroring as designed-not-built, versioning |
+| `docs/recovery/backup-restore.md` | rewritten: what a backup is, the pass, retention, invariants, restore step by step, the symptoms with the v2 codes, the drill, the schema-change checklist with rung 010 as its example, what not to do |
+| `docs/recovery/pairing.md` | rewritten: pairing v2, more than one gateway, durable state with `tls.key` as the identity, `node.key` as history, recovery steps including `PIN_MISMATCH` and a stolen data directory |
+| `deploy/README.md` | rewritten: one gateway, one way in; the service units; the container on the host's network; the installer |
+| `deploy/gateway-server/README.md` | rewritten: running a gateway on a box you own |
+| `ARCHITECTURE.md` | the shape, the two programs, the crate table (`gateway`, `media`, `blobs`, `identity`), the shell, what crosses to a gateway, authorization, on-disk layouts, at-rest formats, backup and recovery |
+| `SECURITY.md` | the threat model and the claim register rewritten; the threat-model heading kept byte-identical for the three decisions rows that link it |
+| `README.md` | the pitch, the diagram, getting started, gateway install, the command list, the Devices row |
+| `docs/mobile-offline.md` | current sections first (files, the pass, the rule, the spool budget, the per-state promise); #1029's seat-plane record kept below a rule |
+| `docs/photos/README.md` | Derivatives; Keeping originals, and freeing space; the Backup row |
+| `docs/glossary.md` | a Backup section; pairing, gateway, transport, byte plane, drain, drill, daemon, the Owners section and five synonym rows rewritten; the pair ticket, custody state and the generation vocabulary retired |
+| `docs/traps/wal-checkpoint.md` | rewritten around the online backup API |
+| `docs/traps/README.md` | four rows removed, the WAL row rewritten |
+| `docs/traps/worktrees.md` | the seat socket and seat processes |
+| `docs/traps/byte-store-lock.md` | deleted: iroh-blobs leaves |
+| `docs/traps/census-around-the-guard.md` | deleted: the census is counted on the scratch copy |
+| `docs/traps/first-dial-readiness.md` | deleted: iroh leaves |
+| `docs/traps/migration-header-is-a-format.md` | deleted: no dictionary |
+| `TESTING.md` | profiles as `gate.rs` has them, the drill row, no `vps-smoke`, the vectors, the `backup-measurement` device lane, no `no_listener.rs` |
+| `docs/toolchain.md` | the same profile facts and the device lane |
+| `docs/release.md` | installing a gateway and the real-VPS hand-off |
+| `docs/dev-environment.md` | the gateway loop and the profile rows |
+| `docs/logs.md` | the two binaries, where a gateway's output lands, the phone's backup state and settle codes, the drill's timing path, what is not a log |
+| `docs/protocol.md` | the gateway transport section, the version paragraph, the queued-backup paragraph |
+| `docs/external-review-scope.md` | the covered table, Review A's gateway plane and sealed format, Review C's egress list |
+| `docs/decisions.md` | appended: four open questions and Q-1080-B1's answer to lane B's table; `### Supersessions closed by #1080` |
+| `CHANGELOG.md` | one line under Unreleased for the docs |
+| `receipts/issue-1080-backups-v2.md` | this section |
+
+**Rulings this lane took** (the root records them):
+
+| Id | Ruling and reason |
+| --- | --- |
+| **F-D1** | Commit trailers name the model that wrote them, as the root accepted for C-D9 and A-D1 (#1080). |
+| **F-D2** | #1029's seat-plane record stays in `docs/mobile-offline.md`, below a rule and after every current section, because `docs/blueprint-seats.md` links `#one-stream-three-occasions` and an append-only decisions row links `#background-work-and-push-privacy`; its two links into the deleted `crates/seat` became text (#1080). |
+| **F-D3** | The gate docs follow `crates/xtask/src/gate.rs`, which they had drifted from before #1080: `restore-drill` is in `local` and so in every profile, there is no `vps-smoke`, and `artifact-identity` and `prebuilt-core-required` are `release`'s (#1080). |
+| **F-D4** | The write claim's wire kind is written `claim`, as lane A's `PairKind` and README spell it; A18 calls the two claims `read` and `write` (#1080). |
+| **F-D5** | The open questions continue lane B's `### Open questions for the owner (#1080)` table, the file's last lines, instead of a second subsection whose anchor would collide; Q-1080-B1's answer is a new row (#1080). |
+| **F-D6** | `no-listening-socket` is registered as enforced statically, with no runtime half, because `crates/centraid/tests/no_listener.rs` went with the seat plane in #1029 and three documents still cited it (#1080). |
+
+**Found outside this lane's files**, for the root:
+
+- `mobile/README.md` (lane D): `:186` the iOS transfer experiment row; `:316` pairing by `centraid-gateway invite`, "claims the lease"; `:327` and `:329` the device secret; `:330` "grant the lease", "moved no lease"; `:333` "No Bonjour and no local-network permission" — `grep -n "ios-transfer\|invite\|lease\|device secret\|No Bonjour" mobile/README.md`.
+- No lane owns: `AGENTS.md:35` (the vocabulary still defines a generation as a base plus its segments); `docs/enrollment.md:85,89,90,99` (invites, `node.key`, and a link to the `#nodekey` section `docs/gateway.md` no longer has); `docs/config-ownership.md:36` (the device key and `backup/laptop.json`); `docs/vault-ontology.md:32` (generation, base, segments, dictionary, `object-vectors.json`); `docs/blueprint-seats.md` (links into the seat record); `scripts/docs-site/src/content/{learn,index,understand,devices,start}.html` name iroh — `grep -rlni iroh scripts/docs-site/src/content/`.
+- Lane C's: `contracts/README.md:20` and `crates/core/README.md:16` link the deleted traps; `contracts/README.md:21,22,24` describe `object-vectors.json`, the gateway schema's leases and invites, and the old units' tests; `crates/core/src/app_query/docs_tests.rs:483` cites `byte-store-lock.md`; the `ios-transfer-experiment` device lane in `gate.rs`, `gate-nightly.yml:193` and `contracts/handoff/E/device-lane-bodies.md`; the deploy tree beside the new image (`deploy/docker`, `deploy/gateway-server/Dockerfile`, `deploy/systemd`, `deploy/launchd`, `deploy/vps/install.sh`), whose units run `centraid gateway --data-dir`, a verb `centraid` no longer has.
+- `docs/decisions.md:1821` (T-1029-1) and `:2077` (R-1047-R1) link two deleted traps; both rows are append-only, so the supersessions table records the links as history.
+- Lane E's Photos More sheet offers no "Free up space" verb, while #1080's shell scope and this lane's brief describe one; R-1080-E1 ("never cross a metered link") predates A10's `allows_cellular`.
+- `CHANGELOG.md`'s first #1080 line says 4 MiB ranges; A14 made them 64 KiB, which the cut-over's own line can say.
+
+**Waiting on another lane.** Twelve links resolve when the cut-over renames `crates/gateway2` to `crates/gateway` (four) and lane E's `mobile/maestro/backup-measurement.md` and its decisions section land (eight). Facts written from the contract and checked when lane C reports: the drill the `restore-drill` step runs, the pragmas, `centraid`'s verbs, the identity files that leave, `local_bytes`, and the restore's multi-vault claim test the claim register names.
+
+#### Verification
+
+Run in this worktree on 2026-10-03, at this commit's tree. No cargo command: the lane changes no code.
+
+```sh
+bun run format && bun run format:check
+grep -rln "internal-doc-links\|markdown-link\|checkLinks\|broken internal link" scripts .governance/law crates/xtask package.json
+python3 <scratchpad>/linkcheck.py . <the 23 touched markdown files>
+grep -n "iroh\|pkarr\|iroh-dns\|gateway-core\|gateway-client\|gateway-server\|invite\b\|GATEWAY_HEAD_CONFLICT\|acked_txid\|backup_blob_custody\|ios-transfer" <the owned state docs>
+git diff 9378b364 -- docs/decisions.md | grep -c "^-[^-]"
+bash .governance/run.sh
+```
+
+- `bun run format` then `bun run format:check` — "All matched files use the correct format", 525 files.
+- The link-checker grep — `scripts/docs-site/smoke.mjs` and its README (the built site's smoke) and one law fixture: the repo has no committed checker for markdown links, so a scratch one resolved every relative path and GitHub anchor in the 23 files. 14 unresolved: the twelve forward links above, and the two decisions rows above.
+- The old-names grep — nine lines, eight citing history by issue link (`ARCHITECTURE.md:45`, `README.md:145`, `docs/recovery/backup-restore.md:74`, `docs/recovery/pairing.md:34`, `docs/mobile-offline.md:215`, `docs/glossary.md:58,62,287`); the ninth, `deploy/README.md:15`, is the path of `deploy/gateway-server/README.md` itself, which the cut-over can move beside `deploy/gateway/`.
+- `docs/decisions.md` is a pure append: 0 removed lines.
+- `bash .governance/run.sh` — one finding, `receipt-per-issue`: this receipt's `## Audit` records no verdict, which the close pass writes. Every other directive and rule green.
+## Wave 3 — the native shells (lane E)
+
+The iOS background mover, the processing windows, the Android jobs, the Backup screen and Home's backup line, on both shells. **Nothing here has been compiled**: there is no Xcode and no Android SDK in the container that wrote it, so every claim that needs one is a device hand-off row in [v1-handoffs.md §8](../docs/release/v1-handoffs.md#8-the-backups-native-halves-1080) with the command that proves it. Built in parallel with lanes C and D against the seam contract the root fixed on 2026-10-03 (its §1–§4, amendments A1–A9); the umbrella's proto commit (`f9791e17`) is merged in, and lane D's Kotlin seam and `screen.proto`'s Backup block are not yet, so every name this lane needed beyond the contract is listed below as an assumption.
+
+### What landed
+
+**Slice 1 — the iOS mover and the windows** (`32b0533d`):
+
+| File | Change |
+| --- | --- |
+| `mobile/iosApp/Sources/BackgroundUploads.swift` | new: the one background `URLSession` (`dev.centraid.uploads`) behind `BackgroundUploads`; exact-DER pinning per task's gateway; the ordered settle road to `UploadEvents` with relaunch hold and completion-handler cap; `UploadPins`; `ForegroundGrace` (the `beginBackgroundTask` wrapper) |
+| `mobile/iosApp/Sources/AppDelegate.swift` | new: `handleEventsForBackgroundURLSession` and the launch-time reconnect |
+| `mobile/iosApp/Sources/BackgroundPasses.swift` | processing request on power and network; `resubmitAll()` at every background entry; resubmit after each pass; cold-launch wait for the pass; `setTaskCompleted` exactly once |
+| `mobile/iosApp/Sources/CentraidApp.swift` | the delegate adaptor, `ShellModel.shared`, `.background` arms the windows |
+| `mobile/iosApp/Sources/ShellModel.swift` | `static let shared`; graced foreground passes; `wentToBackground()`; the mover's seam in one place (`wireUploads`, `refreshUploadPins`) |
+| `mobile/iosApp/Sources/VaultFileProtection.swift` | the R-1029-8 table: vault, store, ledger, spool and the pins file named |
+| `mobile/iosApp/project.yml`, `mobile/iosApp/Resources/Info.plist` | `NSBonjourServices: [_centraid-gateway._tcp]`; the local-network sentence says the phone finds the laptop too |
+| `mobile/iosApp/Tests/BackgroundUploadTests.swift` | new: 13 XCTests over the pure half, each law with its negative case |
+
+**Slice 2 — the Android jobs** (`aa94e868`):
+
+| File | Change |
+| --- | --- |
+| `mobile/androidApp/src/main/kotlin/dev/centraid/android/backup/ProcessSession.kt` | new: one `HomeSession` per process, counted, acquired and released on one thread in order |
+| `mobile/androidApp/src/main/kotlin/dev/centraid/android/backup/BackupNow.kt` | new: the user-initiated job (API 34+), the `dataSync` foreground service (below 34), their notification, and the pass body they share |
+| `mobile/androidApp/src/main/kotlin/dev/centraid/android/CentraidApplication.kt` | installs the worker body and the backlog hook |
+| `mobile/androidApp/src/main/kotlin/dev/centraid/android/MainActivity.kt` | holds the process session for the composition's life; the first pass launched, not awaited |
+| `mobile/androidApp/src/main/AndroidManifest.xml` | `ACCESS_MEDIA_LOCATION`, `RUN_USER_INITIATED_JOBS`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`; the two services |
+| `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/PhotoAccessRemedy.kt` | the photo request carries `ACCESS_MEDIA_LOCATION` from Android 10 |
+
+**Slice 3 — the screens** (`fe2729ae`, `7afffede`, `00ac3ee8`):
+
+| File | Change |
+| --- | --- |
+| `mobile/iosApp/Sources/BackupViews.swift` | new: `BackupScreenModel`, `BackupEvents`, `BackupLineView`, `BackupView` (idle timer while "Back up now" runs) |
+| `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/backup/BackupScreens.kt` | new: the same model and events, `BackupLineRow`, `BackupSheets` (notification grant at the tap, the job, the battery remedy) |
+| `mobile/iosApp/Sources/HomeView.swift`, `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/HomeScreen.kt` | the backup line under the lockup |
+| `mobile/iosApp/Sources/ShellModel.swift`, `mobile/iosApp/Sources/CentraidApp.swift`, `mobile/androidApp/src/main/kotlin/dev/centraid/android/MainActivity.kt` | the Backup sheet, its bridge, "Add a gateway" handing over to `pair.laptop`, a grace held while "Back up now" runs, pins refreshed when the gateways change |
+| `mobile/iosApp/Sources/PhotosMoreSheet.swift`, `mobile/iosApp/Sources/StateViews.swift`, `mobile/iosApp/Sources/BackupStatus.swift`, `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/PhotosGridScreen.kt` | the camera-roll import sheets lose the transport row and stop speaking of a backup |
+| `mobile/iosApp/Sources/VaultHeader.swift`, `mobile/androidApp/src/main/kotlin/dev/centraid/android/kit/VaultHeader.kt` | the lockup's comment points at the backup line that now exists |
+| `mobile/maestro/flows/selectors.md` | the Backup screen's ids, one string on both shells |
+
+**Slice 4 — the measurement** (`ac6cd258`): `mobile/maestro/ios-transfer-experiment.md` deleted; `mobile/maestro/backup-measurement.md` new; `mobile/maestro/README.md` points at it.
+
+**Registry**: this section; `docs/decisions.md` (R-1080-E1…E10 and two supersessions); `docs/release/v1-handoffs.md` (§8, rows 8.1–8.15; row 7.1 marked superseded).
+
+### Rulings spent
+
+#1080 rulings 1 (the pin), 2 (the OS carries the bytes on iOS), 6 (media from where it lives — the location grant) and 7 (acknowledgement is the PUT's success, the ledger a cache that `reconcile` repairs); [R-1029-8](../docs/decisions.md#the-phone-is-the-vault--v0-1029-ruled-2026-09-21) (every vault-derived path out of OS backup — the sweep's table names the ledger, the spool, the store and the pins file); [R-1020-20](../docs/decisions.md#v1-platform--rust-core-kmp-shell-electron-seat-gateway-anywhere-1020) (no simulator number is promoted — the measurement names a reference device); D-1025-S7-72 and S7-75 (the prompt is real; a limited grant keeps "Select more photos").
+
+### Decisions this lane made
+
+Each is recorded in [docs/decisions.md](../docs/decisions.md#the-native-shells-backup-half-1080) with its reason.
+
+| Id | Decision |
+| --- | --- |
+| **R-1080-E1** | OS-moved uploads never cross a metered link: a part carries no media kind ([#1080](https://github.com/srikanth235/centraid/issues/1080) ruling 2's session cannot keep "a video never on cellular" per part). Deviates from the brief's "`allowsCellularAccess` from the rule". |
+| **R-1080-E2** | One background session, `dev.centraid.uploads`, not discretionary ([#1080](https://github.com/srikanth235/centraid/issues/1080)); iOS makes background-started transfers discretionary itself. |
+| **R-1080-E3** | The pin is exact DER equality per task's gateway, kept in `Documents/.centraid-upload-pins.plist` for a cold relaunch ([#1080](https://github.com/srikanth235/centraid/issues/1080) ruling 1, A6). |
+| **R-1080-E4** | One `ShellModel` per process on iOS; a window waits up to 20 s for the pass ([#1080](https://github.com/srikanth235/centraid/issues/1080)). |
+| **R-1080-E5** | The processing window asks for power and a network and is re-armed at every background entry and after every pass ([#1080](https://github.com/srikanth235/centraid/issues/1080)); supersedes #1029 W18-1's "a network, not a charger". |
+| **R-1080-E6** | One `HomeSession` per Android process, counted and ordered ([#1080](https://github.com/srikanth235/centraid/issues/1080); R-1020-24), with its stated rotation cost. |
+| **R-1080-E7** | "Back up now" on Android: user-initiated job from 34, `dataSync` service below, 30 minutes, any network ([#1080](https://github.com/srikanth235/centraid/issues/1080)). |
+| **R-1080-E8** | Forgetting a gateway asks no confirmation ([#1080](https://github.com/srikanth235/centraid/issues/1080) A5). |
+| **R-1080-E9** | The Backup screen's rule control is the existing transfer rule; "include videos" negates into `exclude_videos` in the machine ([#1080](https://github.com/srikanth235/centraid/issues/1080) A3). |
+| **R-1080-E10** | A settle's error is a code, never a sentence ([#1080](https://github.com/srikanth235/centraid/issues/1080) ruling 7). |
+
+### What this lane assumed beyond the seam contract
+
+The contract names the interfaces; it does not name how the two sides are handed to each other, and lane D's Backup block was not yet written. Each assumption sits in one place per platform so reconciling it is one edit.
+
+| # | Assumed | Where it is read |
+| --- | --- | --- |
+| E-A1 | `HomeBridge.installUploads(uploads: BackgroundUploads): UploadEvents` — the shell hands Kotlin its mover and takes the core's sink, before the core opens | `ShellModel.wireUploads` |
+| E-A2 | `HomeBridge.uploadPins(onPins: (List<UploadPin>) -> Unit)` with `UploadPin(gateway, certDer, addrs)`, answered only with the core's `pins` answer (a refusal does not call back with an empty list, which would wipe the kept pins) | `ShellModel.refreshUploadPins` |
+| E-A3 | `UploadEvents.settled(name, httpStatus, error, gatewayId, vaultId)` — the contract's signature with A6's vault | `CoreUploadSink` |
+| E-A4 | `SyncPass.installBacklog((Boolean) -> Unit)` in `androidMain`, the hook `BackgroundTasks.backlog(start)` reaches the job through | `CentraidApplication.onCreate` |
+| E-A5 | `screen.proto`'s Backup block carries words as well as §3's data: `BackupScreenState.{title, add_destination_label, forget_label, rule_label, include_videos_label, back_up_now_label, progress, battery_sentence, battery_label}`, `BackupLine.sentence`, `BackupWaitingRow.sentence`, `BackupDestinationRow.{gateway_id, label, detail}`, and events `BackUpNow`, `SetIncludeVideos{include}`, `ForgetDestination{gateway_id}`, `Dismissed` | `BackupScreenModel` / `BackupEvents` (both shells), `BackupLineView`, `BackupLineRow` |
+| E-A6 | `BackupBridge` in `dev.centraid.shared.sync`, shaped like every kit bridge: `attach`, `observe`/`states`, `open`, `send`/`forward` | `ShellModel`, `BackupSheets` |
+| E-A7 | `HomeState.backup_line: BackupLine` | `HomeView`, `HomeScreen` |
+| E-A8 | `HomeBridge.drain(deadlineMs:onDone:)` and `ShelfDrain.run(deadlineMs)` keep their signatures, the rule, link and power read inside from `PowerAndLink`; every iOS pass ends with `reconcile` → `handoff` → `enqueue`, the background-entry pass included, so what it sealed is carried while suspended | `BackgroundPasses`, `ShellModel.wentToBackground`, `BackupNow.run`, `CentraidApplication` |
+
+### Found, not this lane's
+
+1. **`NavigationAndMountSpec` "no gateway id names anything under mobile/" fails on the contract's own names.** Its regex `\bgatewayId\b|\bgatewayHex\b|\bgateway_id\b` flags four lines of this lane (`BackgroundUploads.swift:529` `part.gateway_id`, `:644` `gatewayId:`, `BackupScreens.kt:113` and `:144` `gateway_id`), and lane D's `UploadEvents` declaration trips it too. Its subject is D-1025-S5-2's mount key; #1080 ruling 8 brings gateway ids back as destination ids. Lane D owns the spec; narrowing it to the mount is theirs.
+2. **`BackgroundPassLawSpec` "the URLSession seam stays retired" passes for the wrong reason.** It scans for the Objective-C spellings (`NSURLSessionUploadTask`, `backgroundSessionConfigurationWithIdentifier`) and this lane's Swift spells `URLSessionConfiguration.background(withIdentifier:)`. #1080 ruling 2 inverts its subject; it should become a positive assertion (one `background(withIdentifier:`, `sessionSendsLaunchEvents`, `SecCertificateCopyData`, `handleEventsForBackgroundURLSession`). Lane D's file.
+3. **The deleted experiment is still named** by `crates/xtask/src/gate.rs` (the `ios-transfer-experiment` device lane, its evidence path and messages, and a test asserting the name), `.github/workflows/gate-nightly.yml:193`, `crates/xtask/README.md:49`, `TESTING.md:122,126`, `docs/toolchain.md:165`, `docs/mobile-offline.md:218`, `docs/decisions.md:1384,1580`, `mobile/README.md:186` and `contracts/handoff/E/device-lane-bodies.md` — `grep -rn "ios-transfer" --include=*.md --include=*.yml --include=*.rs .`. The lane should read `receipts/experiments/backup/` and the protocol `backup-measurement.md`; lane C owns `gate.rs`, lane F the docs.
+4. **`DrainCopy.POSTURE_SENTENCE` and `FORCE_QUIT_SENTENCE`** (`mobile/shared/.../sync/DrainPass.kt:222-238`) say Centraid "does not upload while the app is closed"; on iOS it now does. Lane D's copy.
+5. **`mobile/README.md`** still says pairing has "no Bonjour" (`:333`) and lists the experiment in its hand-off table (`:186`). Lane D's and lane F's sections.
+
+### Device hand-offs
+
+Rows 8.1–8.15 of [v1-handoffs.md](../docs/release/v1-handoffs.md#8-the-backups-native-halves-1080), each with its command, its evidence and its destination: the iOS compile and the 13 `BackgroundUploadTests` (8.1); a part handed off while suspended lands and the next batch chains (8.2); the pin refusing another certificate (8.3); the processing window on both paths (8.4); a foreground part finished under the grace (8.5); the idle timer (8.6); the local-network prompt and the Bonjour type (8.7); the Android compile and lint (8.8); the periodic worker with no activity (8.9); the user-initiated job (8.10); the foreground service below 34 (8.11); EXIF location surviving the read (8.12); rotation during a background pass (8.13); the battery remedy (8.14); and the three backup claims of `backup-measurement.md` (8.15).
+
+### Verification
+
+| Command | Result |
+| --- | --- |
+| `./mobile/gradlew -p mobile :shared:jvmTest` | 1028 tests, 1 failed: `NavigationAndMountSpec` on the four contract lines in "Found" 1. Every other spec green, `BackgroundIdentifierSpec`, `NativeAccessibilityLintSpec`, `PartyHueWheelSpec` and Konsist's `CommonMainIsPlatformFreeSpec`/`PerAppLayoutSpec` among them. The first run, before any change, failed resolving `junit-jupiter-api` with HTTP 429 from Maven Central and is not a baseline. |
+| `bun contracts/tools/export-native-theme.ts && bun contracts/tools/build-screen-fixtures.ts && bun run format`, then the drift diff over `design copy mobile contracts/screens` (the `mobile-jvm` profile's drift check) | exit 0; the tree clean |
+| `:core:jvmTest` | not run: it needs the core's cdylib built by cargo, and this lane changed nothing under `mobile/core` |
+| `project.yml` against `Resources/Info.plist`, by a script that loads both | 11 source keys, all present and equal; 8 XcodeGen defaults; 0 mismatches; keys sorted. The same script refuses a copy with `NSBonjourServices` changed (exit 1). |
+| `grep -rn "background(withIdentifier" mobile/iosApp/Sources` | one: `BackgroundUploads.swift:344` |
+| `grep -rn "beginBackgroundTask" mobile/iosApp/Sources` | one: `BackgroundUploads.swift:674`, `ForegroundGrace` |
+| `grep -n "ACCESS_MEDIA_LOCATION\|RUN_USER_INITIATED_JOBS\|FOREGROUND_SERVICE_DATA_SYNC\|POST_NOTIFICATIONS" mobile/androidApp/src/main/AndroidManifest.xml` | all four `uses-permission` lines (35, 56, 58, 59) |
+| `oxfmt --check mobile/iosApp/project.yml` | formatted |
+| the manifest parsed as XML, every comment checked for `--` | parses; none |
+| the commit hooks on every commit | green: `format-check`, `lint-check`, `law` (6 rules), `commit-message-format`, `estate-separation` |
+
+## Wave 3, reconciled — the native shells on lane D's seam (lane E)
+
+Lane E's second round on [#1080](https://github.com/srikanth235/centraid/issues/1080), after lane D's interim seam (`20dfdfd5`) and lane B's receipt reached the umbrella branch. Like lane E's first section, it was written with no Xcode and no Android SDK in the container, so neither shell has been compiled; every device claim is a row of [v1-handoffs.md §8](../docs/release/v1-handoffs.md#8-the-backups-native-halves-1080).
+
+### What changed
+
+| Commit | What |
+| --- | --- |
+| `16b5f798f` | The umbrella branch merged, never rebased. This receipt and `docs/decisions.md` keep the upstream text first and lane E's sections after it, byte for byte. |
+| `88a9399e0` | Both shells matched to lane D's seam, in the five places lane D found: a header's value is Wire's `value_`; leaving the app on iOS calls `enteredBackground(graceMs:onDone:)`, which forces a snapshot, not `drain(deadlineMs:)`; both Backup screens draw `notice` and `background_notice`; "Back up now" follows `back_up_now_enabled`, dimmed and disabled like the shared primary control, where the views had decided from `frozen` and `backing_up_now`; Android's rule writes, from the Backup screen and the Home header's sheet, go through one `writeTransferRule` that calls `HomeSession.ruleChanged()`. `battery_sentence` and `battery_label` needed nothing. Home's line now draws lane D's `tone`, `detail` and `accessibility_label`. |
+| `d33340545` | #1080 A10 on iOS: `UploadOrder.allowsCellular` from `HandoffPart.allows_cellular`, false when absent; each request's cellular and expensive-network flags follow it; the session allows both, so the request decides; Low Data Mode is refused on both; a changed rule cancels every task iOS holds. `BackgroundUploadTests` go from 13 to 15, the negative case among them. |
+| this section's commit | `docs/decisions.md`: R-1080-E1 struck and **superseded by R-1080-E11 (#1080 A10)**; E5, E7 and E9 brought to the reconciled behaviour. `docs/release/v1-handoffs.md`: row 8.6 rewritten, 8.1 expects 15 tests, rows 8.16–8.18 new. |
+
+Three things lane D's seam made redundant are gone, each a second owner of one job. The Backup screen set the idle timer, and its `onDisappear` let the phone lock mid-run; the core's `backlog` hook (`IosBackgroundTasks`) now owns it for the whole run. Android's sheet started the job itself as well as through `installBacklog`; it now only sends the event, once the notification grant is answered. iOS held a grace while `backing_up_now`, which ended early because the screen's state stops describing a run once the screen is dismissed; `enteredBackground` waits for a running pass inside its own grace.
+
+### Found, for the root
+
+1. **`allows_cellular` is not on the umbrella branch yet.** `grep -rn allows_cellular crates/api-proto` finds nothing. `BackgroundUploads.swift`'s Kotlin-visible extension reads `part.allows_cellular`, so the Xcode build waits on lane C's A10 field (`HandoffPart`, field 9) and the core that sets it. The XCTests do not depend on it.
+2. **A changed rule did not reach tasks iOS already held**, for up to a day. The iOS shell now cancels them (`ShellModel.setTransferRule`). The same call could live in `HomeSession.ruleChanged()` through `BackgroundUploads.cancelAll()`, lane D's files; the shell's call would then be redundant and harmless.
+3. **`SyncPass.installNotice` stays uninstalled**, so an Android nudge is an ordinary one-off rather than expedited. Installing it needs WorkManager's `SystemForegroundService` declared with a `dataSync` type for API 34, which this lane would not add without a compiler.
+
+### Verification
+
+| Command | Result |
+| --- | --- |
+| `./mobile/gradlew -p mobile :shared:jvmTest` | BUILD SUCCESSFUL: 1,085 tests in 72 suites, 0 failed, 0 skipped, lane D's narrowed `NavigationAndMountSpec` and positive `BackgroundPassLawSpec` row 3 among them |
+| `grep -rn "background(withIdentifier" mobile/iosApp/Sources` | one: `BackgroundUploads.swift:358` |
+| `grep -rn "beginBackgroundTask" mobile/iosApp/Sources` | one: `BackgroundUploads.swift:693`, in `ForegroundGrace` |
+| `grep -rn "idleTimerDisabled" mobile/iosApp/Sources mobile/shared/src/iosMain` | one: `PlatformServices.ios.kt:346`, the core's `backlog` hook |
+| `grep -rn "BackupNow.start\|BackupNow.stop" mobile/androidApp/src` | one: `CentraidApplication.kt:48`, the `installBacklog` body |
+| `grep -n "requiresExternalPower\|requiresNetworkConnectivity"` over `BackgroundPasses.swift` and `PlatformServices.ios.kt` | both `true` in both submitters (#1080 A12) |
+| `oxfmt --check` over the three Markdown files this round touched | formatted |
+| the commit hooks on every commit | green |

@@ -17,17 +17,20 @@ import SwiftUI
 #if os(iOS)
 @main
 struct CentraidApp: App {
-    @StateObject private var shell = ShellModel()
-    /// WHAT THE SCENE PHASE STILL DECIDES (#1029 §1).
+    /// THE APPLICATION DELEGATE, FOR THE ONE CALLBACK SwiftUI HAS NO SCENE
+    /// FOR (#1080): `handleEventsForBackgroundURLSession`, which is how iOS
+    /// hands back finished background uploads. See `AppDelegate.swift`.
+    @UIApplicationDelegateAdaptor(CentraidAppDelegate.self) private var appDelegate
+    /// THE PROCESS'S ONE SHELL, not a fresh one: a background relaunch may
+    /// already have made it (`ShellModel.shared`).
+    @StateObject private var shell = ShellModel.shared
+    /// WHAT THE SCENE PHASE DECIDES (#1029 §1; #1080).
     ///
-    /// It used to open and close the TAIL: `active` connected to the gateway's
-    /// log stream and held it, `inactive` and `background` closed it. There is
-    /// no gateway and no stream — the vault is on this phone and it is already
-    /// current — so arriving and leaving are no longer sync occasions.
-    ///
-    /// What is left is the SWITCHER MASK, which was never about the network:
-    /// a phone in the app switcher must not show a member's rows in a snapshot
-    /// the OS keeps.
+    /// The SWITCHER MASK, which was never about the network: a phone in the
+    /// app switcher must not show a member's rows in a snapshot the OS keeps.
+    /// And the two BACKUP occasions: arriving runs a pass, and leaving arms the
+    /// background windows and runs one more under the grace iOS gives a
+    /// leaving app (`ShellModel.becameActive`, `ShellModel.wentToBackground`).
     @Environment(\.scenePhase) private var scenePhase
 
     /// REGISTER THE BACKGROUND HANDLERS BEFORE ANYTHING SUBMITS ONE (#1029 W18-1).
@@ -36,9 +39,9 @@ struct CentraidApp: App {
     /// before the app finishes launching, and raises
     /// `NSInternalInconsistencyException` — which **terminates the app**, rather
     /// than failing the task — for a submit whose identifier has no handler.
-    /// `ShellModel()` is what eventually submits, and an `init` body runs before
-    /// any of this type's property-wrapper storage is read, so this is the one
-    /// place in the app that is unambiguously launch.
+    /// `ShellModel.shared` is what eventually submits, and an `init` body runs
+    /// before any of this type's property-wrapper storage is read, so this is
+    /// the one place in the app that is unambiguously launch.
     init() {
         BackgroundPasses.register()
     }
@@ -237,6 +240,15 @@ struct CentraidApp: App {
                 case .pair:
                     PairLaptopView(data: shell.pairLaptopState, send: { shell.sendPairLaptop($0) })
                         .interactiveDismissDisabled(!shell.pairLaptopSwipeable)
+                // THE BACKUP SCREEN (#1080), opened from Home's backup line.
+                // A swipe is its Dismissed, always heard.
+                case .backup:
+                    BackupView(
+                        data: shell.backupState,
+                        shell: shell,
+                        send: { shell.sendBackup($0) },
+                        onAddDestination: { shell.addBackupDestination() }
+                    )
                 }
             }
             // THE SWITCHER MASK. Leaving the foreground paints an opaque mask
@@ -264,6 +276,11 @@ struct CentraidApp: App {
                     shell.mask()
                     // words.show drops its words on leaving (#1047 E5).
                     shell.leftForeground()
+                    // AND ARM THE NIGHT (#1080): resubmit both background
+                    // windows and run one pass under the background task's
+                    // grace, so what it seals is handed to the OS to carry
+                    // while the app is suspended.
+                    shell.wentToBackground()
                 case .inactive:
                     break
                 @unknown default:
