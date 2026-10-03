@@ -13,7 +13,10 @@ import dev.centraid.shared.platform.BackgroundTasks
 import dev.centraid.shared.platform.PlatformServices
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
+import dev.centraid.shared.sync.BackupReading
+import dev.centraid.shared.sync.BackupStatusStore
 import dev.centraid.shared.sync.ChangeStream
+import dev.centraid.shared.sync.CoreBackupStatus
 import dev.centraid.shared.sync.CoreDrainDoor
 import dev.centraid.shared.sync.DrainAnswer
 import dev.centraid.shared.sync.DrainPass
@@ -25,7 +28,7 @@ import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenRuntime
 import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.sync.StrandedWrites
-import dev.centraid.shared.sync.rfc3339FromEpochMillis
+import dev.centraid.shared.sync.freezeFor
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -161,15 +164,51 @@ public class HomeSession private constructor(
     }
 
     /**
-     * ONE VAULT'S PASS ENDED. A vault another phone claimed is frozen here —
-     * the gateway's `MOVED` is the producer `Shelf.freeze` was waiting for
-     * (#1029 F1) — dated by the gateway's clock, never this phone's.
+     * EVERY VAULT'S BACKUP READING AND THE FOREGROUND'S LINE (#1080). Re-read
+     * after each pass ([settle]) and on every rebind, so Home's line follows a
+     * switch; the Backup screen re-reads it when it opens.
+     */
+    public val backupStatus: BackupStatusStore = BackupStatusStore(
+        holdings = { shelf.all() },
+        foreground = { shelf.foregroundHolding()?.vaultId },
+        doorFor = { core -> CoreBackupStatus(core) },
+        // THE WALL CLOCK, for "2 minutes ago" only: every time it is compared
+        // with is the gateway's.
+        nowMs = { services.clock.read().epochMillis },
+    )
+
+    /**
+     * ONE VAULT'S PASS ENDED: re-read its status, and freeze a vault another
+     * phone claimed. The gateway's `MOVED` — on this pass, or remembered by the
+     * core's ledger — is the producer `Shelf.freeze` was waiting for (#1029 F1).
      */
     private suspend fun settle(outcome: ShelfDrain.Outcome) {
-        val ran = outcome.outcome as? DrainPass.Outcome.Ran ?: return
-        if (ran.answer.stopped == DrainAnswer.Stopped.MOVED) {
-            vaultMoved(outcome.vaultId, rfc3339FromEpochMillis(ran.answer.movedAtMs ?: 0L), unacked = 0)
-        }
+        val reading = backupStatus.refresh(outcome.vaultId)
+        val answer = (outcome.outcome as? DrainPass.Outcome.Ran)?.answer
+        freezeIfMoved(outcome.vaultId, reading, movedAtMs = answer?.movedAtMs?.takeIf {
+            answer.stopped == DrainAnswer.Stopped.MOVED
+        })
+    }
+
+    /** Freeze [vaultId] once, when a pass or the ledger says it moved ([freezeFor]). */
+    private suspend fun freezeIfMoved(vaultId: String, reading: BackupReading?, movedAtMs: Long?) {
+        val moved = freezeFor(reading, movedAtMs) ?: return
+        if (shelf.all().any { it.vaultId == vaultId && it.moved != null }) return
+        vaultMoved(vaultId, moved.atIso, moved.unacked)
+        backupStatus.publish()
+    }
+
+    /**
+     * Stop backing [shelf]'s foreground vault up to [destinationId] (seam contract
+     * A5). True when forgotten, false when refused, null when there was no core
+     * to ask. Null until `envelope.proto` carries `forget_destination = 28`.
+     */
+    @Suppress("UNUSED_PARAMETER", "RedundantSuspendModifier")
+    public suspend fun forgetDestination(destinationId: String): Boolean? = null
+
+    /** The member changed the rule: the windows' constraints follow it. */
+    public fun ruleChanged() {
+        services.backgroundTasks.resubmit()
     }
 
     /**
@@ -612,13 +651,14 @@ public class HomeSession private constructor(
         if (open != null) {
             changeReader = changes.start(open, scope)
         }
-        // THE SEAT LINE TRAVELS WITH THE BINDING, and this is now the only
-        // place it is published: it used to ride every pass's outcome, and
-        // there are no passes. What it says — is a vault open, is a write
-        // durable, what does the radio report — changes exactly when the
-        // foreground does.
+        // THE SEAT LINE TRAVELS WITH THE BINDING: what it says — is a vault
+        // open, is a write durable, what does the radio report — changes
+        // exactly when the foreground does. So does the backup line.
         publishSeat()
         publishLockup()
+        val front = shelf.foregroundHolding()?.vaultId
+        val reading = backupStatus.refreshForeground()
+        if (front != null) freezeIfMoved(front, reading, movedAtMs = null)
     }
 
     /**
