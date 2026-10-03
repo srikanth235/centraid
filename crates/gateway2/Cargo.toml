@@ -1,0 +1,41 @@
+[package]
+name = "centraid-gateway2"
+description = "The gateway protocol v2: blind rules, the HTTPS gateway and the phone's pinned client (#1080)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_gateway2"
+path = "src/lib.rs"
+
+# TWO FEATURES, SO THE PHONE LINKS NO SERVER (#1080). `rules` is always built
+# and reaches no runtime, no socket, no file and no clock; `client` adds the
+# pinned HTTPS client a phone links; `server` adds the gateway a member runs.
+# The default is the whole gateway so `cargo test --workspace` — the gate's
+# `test` step — runs the wire conformance suite; a phone depends on this crate
+# with `default-features = false, features = ["client"]`.
+[features]
+default = ["server", "client"]
+client = []
+server = ["client"]
+
+# THE RULES' DEPENDENCIES ARE THE WHOLE LIST BELOW, AND THAT IS A RULE. No
+# tokio, no rusqlite, no filesystem and no clock: `tests/pure_rules.rs` scans
+# `src/rules` for every reach, and `--no-default-features` is what proves the
+# list compiles alone.
+[dependencies]
+# ONE HASH: a digest, a pin, a token's stored form and a pairing secret's.
+blake3.workspace = true
+# The claim and the read grant are signed by the vault's identity key, whose
+# public half IS the vault id.
+ed25519-dalek.workspace = true
+hex.workspace = true
+# The refusal body and every request and answer are declared once, here, for
+# both ends; `serde_json` parses the pairing payload a QR carries.
+serde = { workspace = true }
+serde_json.workspace = true
+thiserror.workspace = true
