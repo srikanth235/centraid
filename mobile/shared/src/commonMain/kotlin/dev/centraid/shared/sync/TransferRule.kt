@@ -30,11 +30,12 @@ import dev.centraid.shared.platform.SecureStore
  *
  * ## THE SHELL HOLDS THE VALUE AND DOES NONE OF THE ARITHMETIC
  *
- * This enum carries a member's choice onto the wire and nothing else. Which
- * tiers a window may fetch under which rule on which link is
- * `centraid_blobs::Budget::admits_original`, in Rust, in one table — a Kotlin
- * or Swift copy of it would be a second rule deciding a member's bill, and the
- * two would drift the first time either was touched. **No sizes and no
+ * This enum carries a member's choice onto the wire and nothing else. What a
+ * pass may seal and move under which rule on which link is the core's
+ * `phone::drain::Conditions` (`may_prepare`, `may_move`, `allows_cellular`),
+ * in Rust, in one place — a Kotlin or Swift copy of it would be a second rule
+ * deciding a member's bill, and the two would drift the first time either was
+ * touched. **No sizes and no
  * ceilings appear anywhere in this file.**
  *
  * ## Thumbnails and previews are not in here

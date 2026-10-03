@@ -260,7 +260,7 @@ class WordsShelfSpec : StringSpec({
                 }
             }
             val words = List(24) { "abandon" }
-            // A GENERATION THIS PHONE REFUSED is not a laptop that did not answer
+            // A SNAPSHOT THIS PHONE REFUSED is not a laptop that did not answer
             // (#1047 R3): the census refusal arrives as INTERNAL.
             refusing(ErrorCode.ERROR_CODE_INTERNAL).restore(words, null) shouldBe
                 RestoreResult.Refused(RestoreRefusal.DID_NOT_CHECK)

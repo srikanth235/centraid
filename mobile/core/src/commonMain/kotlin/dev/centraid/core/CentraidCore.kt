@@ -75,12 +75,12 @@ public data class CoreConfiguration(
      * THE VAULT'S SEED, AND IT CROSSES ONLY AT OPEN (`CONTRACT.md` §4b, #1029 W15).
      *
      * The 64-byte BIP-39 seed the member's 24 words derive, as **128 lowercase
-     * hex characters**, out of this device's Keychain or Keystore. Sealing a
-     * generation is built from it, so a core opened without it cannot back up.
+     * hex characters**, out of this device's Keychain or Keystore. The backup's
+     * keys derive from it (#1080), so a core opened without it cannot back up.
      *
      * **Absent is not an error.** Such a core reads and writes its vault
-     * perfectly well and refuses `Drain` with `ERROR_CODE_PEER_UNREACHABLE` and
-     * a sentence naming the seed — a state a shell draws as "unlock to back up",
+     * perfectly well and cannot back up (`crates/core/src/phone/mod.rs`) — a
+     * state a shell draws as "unlock to back up",
      * because a member who has not unlocked their phone has not lost anything.
      * **Present and malformed IS an error** (`BAD_ARGUMENT`), deliberately: a
      * shell that believed it had unlocked a core which cannot seal a byte would

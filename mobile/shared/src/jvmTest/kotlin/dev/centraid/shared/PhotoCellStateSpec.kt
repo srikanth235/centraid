@@ -31,9 +31,9 @@ import io.kotest.matchers.shouldBe
  *
  * ## No arithmetic is asserted here that Rust does not own
  *
- * Which tier a window actually FETCHES under which rule is
- * `centraid_blobs::Budget::admits_original`, and its own table test is the
- * authority. What this covers is the LABEL — the sentence and the affordance a
+ * What a pass actually seals and moves under which rule is the core's
+ * `phone::drain::Conditions` (`may_prepare`, `may_move`, `allows_cellular`),
+ * and its own row-by-row tests are the authority. What this covers is the LABEL — the sentence and the affordance a
  * member sees — which is this side's, and which has to agree with that table.
  */
 class PhotoCellStateSpec : StringSpec({

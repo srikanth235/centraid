@@ -155,8 +155,8 @@ class PairAndRestoreSpec : StringSpec({
     }
 
     "a laptop that answered and refused is not one that did not answer: each refusal says its own remedy" {
-        // #1047 E5: a spent or unknown invite used to read "your laptop did not
-        // answer", which sends a member to wake a laptop that is awake.
+        // #1047 E5: a spent or unknown pairing code is not "your laptop did not
+        // answer", which would send a member to wake a laptop that is awake.
         val pairing = reduce(reduce(waiting(), typed("eyJ2")).model, primary).model
         val notTaken = reduce(pairing, refused(PairRefusal.NOT_TAKEN)).model.state
         notTaken.phase shouldBe PairLaptopState.Phase.PHASE_FAILED

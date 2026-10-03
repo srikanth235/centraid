@@ -201,8 +201,8 @@ class EnrollmentSpec : StringSpec({
 
     "a restore that left a vault with the old phone holds only what it claimed, and carries the rest to the screen" {
         runTest {
-            // R-1047-R5: the file of an unclaimed vault is gone and its lease is
-            // the old phone's, so the shelf must not be told to hold it.
+            // R-1047-R5: the file of an unclaimed vault is gone and its writer
+            // epoch is the old phone's, so the shelf must not be told to hold it.
             val phone = Phone()
             phone.restoreAnswer = RestoreAnswer(
                 vaults = listOf(RestoredVaultAt("/v/a/vault.db", 0)),
@@ -289,7 +289,7 @@ class EnrollmentSpec : StringSpec({
         }
     }
 
-    "a laptop that refused the lease, or a backup this phone would not accept, is its own outcome and stores nothing" {
+    "a laptop that refused the claim, or a backup this phone would not accept, is its own outcome and stores nothing" {
         runTest {
             val phone = Phone()
             phone.refusal = RestoreRefusal.NOT_TAKEN
