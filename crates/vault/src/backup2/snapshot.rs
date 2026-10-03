@@ -225,7 +225,13 @@ pub fn copy(vault: &Vault, scratch_dir: &Path) -> Result<Copied> {
     }
     fs::create_dir_all(scratch_dir)?;
     let taken_at_ms = u64::try_from(vault.clock().now_ms()).unwrap_or(0);
-    let path = scratch_dir.join(format!("snapshot-{taken_at_ms}.db"));
+    // A RANDOM SUFFIX, not the time alone: a copy whose ranges are still
+    // being spooled must never be replaced by a second copy taken in the same
+    // millisecond, or by any copy under a clock a test holds still.
+    let path = scratch_dir.join(format!(
+        "snapshot-{taken_at_ms}-{:016x}.db",
+        rand::random::<u64>()
+    ));
     remove_copy(&path)?;
     backup_into(vault.connection(), &path)?;
     Ok(Copied { path, taken_at_ms })
@@ -505,6 +511,15 @@ pub fn spool(
         buffer.resize(usize::try_from(range.len).unwrap_or(usize::MAX), 0);
         file.seek(SeekFrom::Start(range.offset))?;
         file.read_exact(&mut buffer)?;
+        // VERIFY BEFORE SEALING: the name was computed from these bytes when
+        // the copy was described, and a part sealed under it from any other
+        // bytes would be a range no restore could open as its own.
+        if PlaintextHash::of(&buffer) != range.h {
+            return Err(invariant(format!(
+                "range {} of the scratch copy changed after it was named",
+                range.i
+            )));
+        }
         let sealed = sealed::seal_part(keys, 0, &buffer, true)?;
         held += put(range.name, PartKind::Range, &sealed, &mut out)?;
     }
@@ -796,5 +811,61 @@ mod tests {
             take(&vault, &keys, &dir.path().join("b"), &"cd".repeat(32), APP).expect("takes");
         assert_eq!(first.manifest.range_names(), second.manifest.range_names());
         assert_eq!(first.manifest.db_hash, second.manifest.db_hash);
+    }
+
+    /// A held clock gives two copies one `taken_at_ms`; they still never share
+    /// a file, so neither replaces a copy the other is spooling from.
+    #[test]
+    fn two_copies_under_a_held_clock_never_share_a_file() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = Vault::create_with(
+            dir.path().join("vault.db"),
+            Box::new(crate::clock::FixedClock::frozen()),
+            Box::new(crate::clock::SeededIds::new("copies")),
+        )
+        .expect("a vault");
+        vault.found("Household", "Ada").expect("founds");
+        let scratch = dir.path().join("scratch");
+        let first = copy(&vault, &scratch).expect("copies");
+        let second = copy(&vault, &scratch).expect("copies");
+        assert_eq!(first.taken_at_ms, second.taken_at_ms);
+        assert_ne!(first.path, second.path);
+        assert!(first.path.exists() && second.path.exists());
+    }
+
+    /// **Verify before sealing.** A range is sealed under the name its bytes
+    /// were given when the copy was described; a copy that changed since is
+    /// refused rather than sealed under a name that is no longer its own.
+    #[test]
+    fn a_scratch_copy_that_changed_after_it_was_named_is_not_spooled() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = founded(dir.path());
+        let keys = BackupKeys::from_root(&[3; 32]);
+        let snapshot = take(
+            &vault,
+            &keys,
+            &dir.path().join("scratch"),
+            &"ef".repeat(32),
+            APP,
+        )
+        .expect("takes");
+        let store = super::super::store::MemoryStore::new("gw");
+        let plan = plan(&snapshot, &store).expect("plans");
+        let mut bytes = fs::read(&snapshot.path).expect("reads");
+        bytes[5_000] ^= 0xff;
+        fs::write(&snapshot.path, &bytes).expect("tampers");
+        let ledger = Ledger::open(dir.path().join("vault.backup.db")).expect("a ledger");
+        let spool_dir = Spool::open(dir.path().join("vault.spool")).expect("a spool");
+        let outcome = spool(&snapshot, &plan, &spool_dir, &ledger, &keys, u64::MAX, 1);
+        assert!(
+            outcome
+                .as_ref()
+                .is_err_and(|error| error.to_string().contains("changed after it was named")),
+            "{outcome:?}"
+        );
+        assert!(
+            spool_dir.names().expect("lists").is_empty(),
+            "nothing was sealed"
+        );
     }
 }
