@@ -84,9 +84,9 @@ ok iff peer.schema_version >= local.min_supported
 
 `SCHEMA_VERSION` and `MIN_SUPPORTED` are both `1` today.
 
-**What is left of `crates/protocol`** is the call session and the version window, and **no iroh type appears in it**. The stream framing, the handshake, the ALPNs and the transport trait were deleted with the seat plane, and `contracts/protocol/framing-golden.json` with them: that fixture existed so a Swift and a Kotlin implementation of the framing could be held to one answer, and neither has a frame to build. Both survivors are read by `crates/core`'s **call door**, where the peer is the shell in the same process: `session::Session` mints a request id, decides whether a `Cancel` may cancel it and settles it, and `version::judge` answers a shell's `Hello` — which is exactly the version-skew case a shell linking a prebuilt core is.
+**What is left of `crates/protocol`** is the call session and the version window, and **it names no network type**. The stream framing, the handshake, the ALPNs and the transport trait were deleted with the seat plane, and `contracts/protocol/framing-golden.json` with them: that fixture existed so a Swift and a Kotlin implementation of the framing could be held to one answer, and neither has a frame to build. Both survivors are read by `crates/core`'s **call door**, where the peer is the shell in the same process: `session::Session` mints a request id, decides whether a `Cancel` may cancel it and settles it, and `version::judge` answers a shell's `Hello` — which is exactly the version-skew case a shell linking a prebuilt core is.
 
-**Compatibility, in four rules.** A gateway supports clients from the last **N = 3** minor releases; a client outside the window gets a typed `UpgradeRequired` the shell renders, and a gateway older than the client is allowed as long as the client's `min_supported` admits it. On the gateway API the same comparison is [`VERSION_WINDOW`](gateway.md#versioning), carried in both directions. Migrations are forward-only, held as fixtures in `contracts/migrations`, and a file newer than its binary refuses to open with `DowngradeRefused` rather than guessing.
+**Compatibility, in four rules.** A gateway supports clients from the last **N = 3** minor releases; a client outside the window gets a typed `UpgradeRequired` the shell renders, and a gateway older than the client is allowed as long as the client's `min_supported` admits it. The gateway API has no window to negotiate: its major version is in every path (`/v2`) and in `GET /v2/info`, and a breaking change is a new path ([gateway.md](gateway.md#versioning)). Migrations are forward-only, held as fixtures in `contracts/migrations`, and a file newer than its binary refuses to open with `DowngradeRefused` rather than guessing.
 
 **Unknown fields, and the honest limit.** The rule is that unknown fields are preserved and unknown message types are answered with `Unsupported{type_url}`, never dropped silently. prost 0.14 does not retain unknown fields — verified in the vendored source rather than assumed — so the invariant is held **one layer out**, at the frame: nothing in the v1 plane relays a _decoded_ message, and every payload that crosses a version boundary is opaque `bytes`. The residual gap is named rather than papered over: a **field** added in a future release is invisible to this build, and a middlebox that decoded and re-encoded would lose it. A test turns red if prost ever gains the feature ([D-1020-C13](decisions.md#wave-2-lane-rulings-1020)).
 
@@ -94,11 +94,11 @@ ok iff peer.schema_version >= local.min_supported
 
 **There is no local channel.** The seat socket, its `0x00`/`0x01` channel tag and `LOCAL_PROTOCOL_VERSION` went with the desktop shell ([R-1029-1](decisions.md#the-phone-is-the-vault--v0-1029-ruled-2026-09-21)). The one boundary a shell crosses today is the five-symbol C ABI, whose contract is [`crates/core-ffi/CONTRACT.md`](../crates/core-ffi/CONTRACT.md).
 
-## The gateway API's ALPN: `centraid-gateway/1` ([#1029](https://github.com/srikanth235/centraid/issues/1029), [scope amendment 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795))
+## The gateway API: HTTPS to a pinned certificate ([#1080](https://github.com/srikanth235/centraid/issues/1080))
 
-v0 is a phone backing up to the member's own laptop. The gateway API — the same HTTP requests, headers, signatures, JSON bodies and refusal shapes `gateway-client` signs and `gateway-server` routes — is carried as **HTTP/1.1 over one iroh bidirectional stream** under the ALPN **`centraid-gateway/1`**. One iroh dial gives the LAN-direct, hole-punched and relayed paths, so a laptop behind NAT needs no port forwarding and no certificate. The carrier's version (`/1`) is not the protocol version: `PROTOCOL_MIN`/`PROTOCOL_MAX` are negotiated _inside_ the requests this carries.
+v0 is a phone backing up to gateways the member controls. The gateway API — JSON bodies, raw object bytes, refusal codes — is **HTTP/1.1 over TLS straight to the gateway's address**, trusting exactly the certificate whose BLAKE3 the pairing QR carried: no relay, no certificate authority, no DNS service, and no ALPN but `http/1.1` ([R-1080-1](decisions.md#backups-from-first-principles-1080)). HTTPS because the only transfer iOS continues while an app is suspended is a file upload to a URL ([R-1080-2](decisions.md#backups-from-first-principles-1080)).
 
-The ALPN is declared once, in the rules — `centraid_gateway_core::ALPN` — and imported by both ends, so the listener and the dialler cannot disagree about a string whose mismatch is a hang rather than a compile error. The laptop's endpoint offers it and calls `accept`; **the phone's endpoint offers no ALPN and never calls `accept`** — it dials, and accepts no inbound connection. `cargo xtask rules`' `no-listening-socket` enforces both halves.
+The routes, the bodies, the refusal codes and every number the protocol states are declared once, in `crates/gateway`'s `rules` module, and imported by the server and by the phone's client, so the two ends cannot drift into two shapes of one answer. **The phone dials and accepts no inbound connection**; `cargo xtask rules`' `no-listening-socket` allows a listener in one file of the gateway's server and nowhere else.
 
 ## Canonical JSON, and where a hash is taken
 
@@ -106,7 +106,7 @@ The ALPN is declared once, in the rules — `centraid_gateway_core::ALPN` — an
 
 **The intent plane is gone.** `seat_outbox`, `base_versions`, `depends_on`, `WaitingOn` and the outcome ledger were the offline-write machinery of a device that was not the authority. The phone **is** the authority: a write is a local transaction, not a queued claim, and there is nothing to settle, conflict or park. What survives is canonical JSON for the audit hash, and `NeededBytes`.
 
-**What is queued instead is the backup**, and its identity is the object's: a name is the BLAKE3 of its bytes and storage is write-once, so a re-declared object is a no-op and a re-run of an interrupted drain costs nothing. See [gateway.md](gateway.md).
+**What is queued instead is the backup**: sealed parts in the spool, each named by a keyed hash of its file's plaintext. Storage is write-once and a name is a function of the plaintext, so a part sent twice is acknowledged twice and stored once, and a re-run of an interrupted pass costs nothing. See [gateway.md](gateway.md).
 
 ## The member sentence and its detail (#1015 R-NY-10)
 
@@ -117,7 +117,7 @@ Anything a producer hands the shell **to display** travels in two registers, and
 | The member sentence | A whole sentence about the member's vault, in member words, one error noun, sentence case | Every screen, **verbatim** |
 | `detail` | The raw text — exception, database message, path | Logs and support bundles only ([logs.md](logs.md)) |
 
-The producer owes both. On the wire, `centraid.core.v1.Error` carries `sentence` — built from the error `code` alone, with no layer's own text interpolated into it (`sentence_for_code` in `crates/core/src/error.rs`) — beside `detail`, which is for logs only and once carried a SQLite `RAISE(ABORT)` message onto a member's screen. `CommandOutcome.reason` is an owner-facing sentence on the same terms: the author's words for a failed precondition, the access plane's sentence for a denial, with the raw predicate kept for the audit trail. A gateway refusal follows the same split from the other side: [`ErrorBody`](gateway.md#the-refusal-body) carries a **code and never a sentence**, and the shell derives the wording.
+The producer owes both. On the wire, `centraid.core.v1.Error` carries `sentence` — built from the error `code` alone, with no layer's own text interpolated into it (`sentence_for_code` in `crates/core/src/error.rs`) — beside `detail`, which is for logs only and once carried a SQLite `RAISE(ABORT)` message onto a member's screen. `CommandOutcome.reason` is an owner-facing sentence on the same terms: the author's words for a failed precondition, the access plane's sentence for a denial, with the raw predicate kept for the audit trail. A gateway refusal follows the same split from the other side: [the refusal body](gateway.md#the-refusal-body) carries a **code and never a sentence**, and the shell derives the wording.
 
 **A shell never repairs a string it was given.** A regex that lowers engine vocabulary after the fact catches one shape and misses the next; a producer that emits engine vocabulary is a bug at the producer.
 
@@ -128,4 +128,4 @@ The producer owes both. On the wire, `centraid.core.v1.Error` carries `sentence`
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — the crates and what crosses between the shells
 - [`crates/api-proto`](../crates/api-proto/README.md) — the schema tree, and how to add a field
 - [`crates/protocol`](../crates/protocol/src/lib.rs) — the call session and the version window
-- [gateway.md](gateway.md) — the gateway API, its signing and its refusal body
+- [gateway.md](gateway.md) — the gateway API, its tokens and its refusal body
