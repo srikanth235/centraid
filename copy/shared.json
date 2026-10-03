@@ -95,7 +95,7 @@
     "TRASH_UNTITLED": "Untitled",
     "VAULTS_CURRENT": "Currently open",
     "VAULTS_FORGET": "Forget",
-    "VAULTS_FORGET_BODY": "This deletes the vault and everything in it. There is no copy anywhere else.",
+    "VAULTS_FORGET_BODY": "This deletes the vault and everything in it from this phone. A laptop it backs up to keeps its copy, and your 24 words bring it back from there; without one, there is no other copy.",
     "VAULTS_FORGET_THIS": "this vault",
     "VAULTS_FORGET_TITLE": "Forget {name}?",
     "VAULTS_KEEP": "Keep",

@@ -342,3 +342,64 @@ Three things lane D's seam made redundant are gone, each a second owner of one j
 | `grep -n "requiresExternalPower\|requiresNetworkConnectivity"` over `BackgroundPasses.swift` and `PlatformServices.ios.kt` | both `true` in both submitters (#1080 A12) |
 | `oxfmt --check` over the three Markdown files this round touched | formatted |
 | the commit hooks on every commit | green |
+
+## Wave 3 — the shared half (lane D)
+
+The phone's half of the new backup in `mobile/shared`: the pass and its triggers, scheduling, the iOS mover's Kotlin half, the backup line and the Backup screen, pairing v2, the camera-roll walker and free up space, built against the seam contract (A1–A13, A19, A20) and the proto at `f9791e17`. Branch `worktree-agent-a52fb3e3ab127d10e`, cut from `23e46810`; the umbrella was merged in at `49e8c2ef` (the proto), `acedd039` and `7aa589ea` (lanes A, B, E and F). Rulings are [R-1080-D1…D13](../docs/decisions.md#the-shared-half-of-the-backup-1080); questions Q-1080-D1…D3 sit beside them.
+
+| Commit | Subject |
+| --- | --- |
+| `1c1881d2` | feat(mobile): pass input, launch registration and wake reasons (#1080) |
+| `37135526` | feat(screen): the Backup block of screen.proto (#1080) |
+| `eb289bf9` | refactor(screen): name a backup destination's id, not a gateway's (#1080) |
+| `619754f1` | feat(mobile): the backup line, its status store and backup.home (#1080) |
+| `92e15ad9` | feat(screen): the Backup block and Home's line, as the shells read them (#1080) |
+| `20dfdfd5` | feat(mobile): the mover's seam, Backup screen and pairing v2 (#1080) |
+| `812d9b38` | feat(mobile): the walker streams from the OS library (#1080) |
+| `bd592552` | feat(mobile): free up space frees what a gateway holds whole (#1080) |
+| `f3a734b2` | fix(mobile): a changed rule lets go of the uploads iOS holds (#1080) |
+| `01466ec4` | refactor(mobile): free up space through an installed deleter (#1080) |
+| this commit | docs(mobile): the shared half's README, decisions and receipt (#1080) |
+
+| Area | Files |
+| --- | --- |
+| the pass | `sync/{ShelfDrain,DrainPass,DrainCopy,PassConditions,BackgroundWindows,TransferRule,CoreDoors,ContentHash}.kt` |
+| scheduling | `platform/PlatformServices.kt` (`PowerAndLink`, `BackgroundTasks.register/resubmit/nudge/backlog`), the iOS, Android and JVM actuals, `androidMain/.../AndroidBackgroundWork.kt` |
+| the mover | `sync/BackgroundUploads.kt` (`BackgroundUploads`, `UploadEvents`, `UploadLoop`, `UploadPin`), `sync/CoreBackupDoors.kt`, `shell/HomeBridge.kt` (`installUploads`, `uploadPins`, `enteredBackground`) |
+| status and screen | `sync/{BackupStatus,BackupLines,BackupScreen,BackupBridge}.kt`, `shell/{HomeSession,HomeMachine}.kt`, `screen.proto`'s Backup block, `HomeState.backup_line`, `copy/shared.json` + `SharedCopy.kt` |
+| pairing v2 | `custody/{PairLaptop,PairAndRestore}.kt`, `copy/words.json` + `WordsCopy.kt`, `shell/Shelf.kt` (no reopen) |
+| the walker | `shell/{CameraRoll,LibraryFeed,Staging}.kt`, `iosMain/.../IosLibraryStream.kt`, the iOS and Android `MediaLibrary` actuals |
+| free up space | `apps/photos/KeepOriginals.kt` (`FreeUpFlow`), `sync/FreeUpDoors.kt` (`LibraryDeleter`), `PhotosGridMachine.kt`, `screen.proto`'s `FreeUpSpace` and `FreeUpTapped` |
+| specs | `BackgroundSchedulingSpec`, `BackgroundPassLawSpec` (row 3 positive, A13), `NavigationAndMountSpec` (narrowed to the mount key, A13), `ShelfDrainSpec`, `DrainPassSpec`, `BackupStatusSpec`, `BackupScreenSpec`, `CoreBackupDoorsSpec`, `UploadLoopSpec`, `CameraRollSpec`, `CameraRollStreamSpec`, `WalkerPlatformLawSpec`, `FreeUpSpec`, `HomeMachineSpec`, `PairAndRestoreSpec`, `WordsShelfSpec` |
+| docs | `mobile/README.md` (pairing v2, restore and the held-seed restore's pairing code, discovery, `Shelf.forget`, the frozen line, the secure store's contents, the `sync/` layout, the hand-off rows, "The backup plane, shared half"), `docs/decisions.md`, `CHANGELOG.md`, `Shelf.forget`'s comment and `VAULTS_FORGET_BODY` in `copy/shared.json` + `SharedCopy.kt`, this section |
+
+**Not done, and why.** The `:core:jvmTest` round trips and `cargo xtask gate --profile mobile-jvm` wait on lane C's core. `CoreFreeUpDoors` answers no answer until lane C's `releasable` (29) and `released` (30) arms merge, and `Staging`'s `osEdited` reaches `StageBegin.os_edited` (7) only then. Backing up an edited asset's camera original and adjustment data is an owner question (A20); the walker stages the current rendition. The iOS and Android walker and scheduling actuals are uncompiled here. Comments in this lane's files still name the lease, generations and the invite code (`Shelf.kt`, `HomeSession.kt`, `Enrollment.kt`, `PairAndRestore.kt`, `PairLaptop.kt`, `ReadFailures.kt`, `Instants.kt`), and the restore's pairing-code field is "the laptop address" in `WordsEntry.kt`'s comments as in `screen.proto`'s words section; they describe `lease.proto`, `ERROR_CODE_NO_RELAY_REACHABLE` and `RestoreResponse.device_secret`, which stand until the cut-over, and move with it. The `custody` package keeps its name: a rename reaches 11 lines of lane E's shells.
+
+**Found outside this lane's files**, for the root:
+
+- Android's `screens/HomeScreen.kt:310` comment says a forgotten vault has no copy anywhere else; `HomeWords.VAULTS_FORGET_BODY` now says a paired gateway keeps one.
+- `mobile/maestro/backup-measurement.md`'s corpus counts edited photographs as "an original plus its adjustment data", which A20 defers.
+- `BackupState.Transport` still names `TRANSPORT_IROH_BLOBS`, and the `photos/limited-selection` fixture carries it (`ScreenFixtureSpec`); the walker no longer sets it.
+- No shell browses `_centraid-gateway._tcp` (Q-1080-D3).
+
+### Verification
+
+Run in this worktree on 2026-10-03 at `7aa589ea` plus `01466ec4`; no cargo command, by the brief, until the core lands.
+
+```sh
+mobile/gradlew -p mobile :shared:jvmTest
+grep -rn "backgroundTasks.register" mobile/shared/src/commonMain
+grep -rn "NSTemporaryDirectory\|centraid-stage-" mobile/shared/src/iosMain
+cd crates/api-proto/proto && buf lint && buf breaking --against '../../../.git#ref=23e468100,subdir=crates/api-proto/proto'
+bun contracts/tools/export-native-theme.ts && bun contracts/tools/build-screen-fixtures.ts && bun run format
+bun run format:check
+bash .governance/run.sh
+```
+
+- `:shared:jvmTest` — 1,105 tests in 75 suites, 0 failures on the merged tree, and the same with this commit's edits; on lane D alone before lane E merged, 1,104 and the one failure was row 3 over lane E's `BackgroundUploads.swift`.
+- `backgroundTasks.register` — one call site, `shell/HomeSession.kt`.
+- The temporary-copy grep — no match.
+- `buf lint`, `buf breaking` — clean.
+- The emitters and `bun run format` — no drift outside this lane's edits; `bun run format:check` — all 525 files formatted.
+- `bash .governance/run.sh` — every directive passes but `law`, with one finding at the window door: `receipt-per-issue`, because this receipt's `## Audit` holds no PASS or REFUTED verdict yet. The verdict is the umbrella's independent review's to write at the close, above this section.
+- Red first: removing the launch `register()` turned two scheduling specs red; a line that called everything whole turned `BackupStatusSpec` red; the walker's platform laws were red against `20dfdfd5`'s actuals (a temporary file, `available()`, images only); the rule-change spec was red with `uploads?.cancelAll()` removed.
