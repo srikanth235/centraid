@@ -11491,9 +11491,11 @@ message BackupLine {
   }
 }
 
-// One gateway this vault backs up to.
+// One gateway this vault backs up to. `destination_id` is the gateway's id as
+// the core's ledger names it; a vault, a mount or a file never carries one
+// (D-1025-S5-2), so above the core's wire it is called a destination's.
 message BackupDestinationRow {
-  string gateway_id = 1;
+  string destination_id = 1;
   string label = 2;
   // Where it was last reached, for display: "192.168.1.20:7443".
   string address = 3;
@@ -11541,8 +11543,8 @@ message BackupScreenState {
   string background_notice = 20;
   // Set while a forget waits for the member's yes.
   optional Confirm confirm = 21;
-  // The gateway a pending `confirm` would forget.
-  string confirming_gateway_id = 22;
+  // The destination a pending `confirm` would forget.
+  string confirming_destination_id = 22;
   Phase phase = 23;
 
   enum Phase {
@@ -11587,7 +11589,7 @@ message BackupScreenEvent {
   }
 
   message ForgetDestination {
-    string gateway_id = 1;
+    string destination_id = 1;
   }
 
   message ForgetConfirmed {}
