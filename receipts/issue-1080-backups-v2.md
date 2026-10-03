@@ -775,3 +775,70 @@ On the umbrella at `511a20ee3` (the audit's first verdict, REFUTED), which fast-
 **Verification.** `cargo test -p centraid-gateway -p centraid-core -p centraid-vault`: 694 passed in 45 suites, none failed. `cargo xtask gate --profile local`, warm: every step ok (fmt 1.4 s, clippy 22.6 s, test 250.0 s, restore-drill 30.0 s, rules 0.2 s, ledgers 0.0 s), and `FAIL — over budget`, 304.2 s of 120 s, the budget the audit already records as open. `buf lint` and `buf breaking --against '.git#branch=main,subdir=crates/api-proto/proto'`: exit 0. `bun run format`: clean. `bash .governance/run.sh < /dev/null`: all six directives pass.
 
 **Files, by commit.** `c69c3ec47`: `SECURITY.md`, `docs/gateway.md`, `crates/gateway/{Cargo.toml,README.md}`, `crates/gateway/src/{bin/centraid-gateway.rs,client/mod.rs}`, `crates/gateway/src/rules/{conformance,engine,memory,state,wire}.rs`, `crates/gateway/src/server/{http,report,sql,state}.rs`, `crates/gateway/src/server/sql/token_delete.sql` (added), `crates/gateway/tests/{conformance,conformance_wire}.rs`, `crates/gateway/tests/revoke.rs` (added), `crates/api-proto/proto/centraid/core/v1/phone.proto`, `crates/core-ffi/CONTRACT.md`, `crates/core/src/{handle.rs,phone/mod.rs}`, `crates/core/tests/phone_backup.rs`. `8f379ef44`: `phone.proto`, `crates/core/src/phone/drain.rs`. `89cba7738`: `phone.proto`, `crates/core/src/phone/{drain,fetch,link,mod,restore}.rs`, `crates/core/tests/phone_backup.rs`, `crates/gateway/{README.md,src/client/mod.rs}`, `crates/vault/src/backup/{mover,store}.rs`. `b02c8f696`: `crates/centraid/src/cmd/mod.rs`. `7a7e8472f`: `phone.proto`, `crates/core-ffi/CONTRACT.md`, `crates/core/src/phone/drain.rs`, `docs/decisions.md`. This receipt's commit: `receipts/issue-1080-backups-v2.md`, `CHANGELOG.md`.
+
+## Lane E — free up space's two deleters, on the cut-over
+
+Lane E's third round on [#1080](https://github.com/srikanth235/centraid/issues/1080): the shells' half of amendments A19 and A20, and three stale lines other lanes and the audit found in the shells. The round was relaunched from the first agent's uncommitted work, which is kept whole. Like lane E's earlier sections, it was written with no Xcode and no Android SDK in the container, so neither shell has been compiled; every device claim is a row of [v1-handoffs.md §8](../docs/release/v1-handoffs.md#8-the-backups-native-halves-1080).
+
+### What changed
+
+| Commit | What |
+| --- | --- |
+| `88e372946` | The two `LibraryDeleter`s. iOS: `PhotoLibraryDeleter` runs `PHAssetChangeRequest.deleteAssets` inside `performChanges`, so Photos' own alert is the confirmation; its pure half, `LibraryDeletion`, has six XCTests, each rule's refusal among them; `ShellModel` installs it once through `HomeBridge.installLibraryDeleter`. Android: `MediaStoreDeleter` asks `MediaStore.createDeleteRequest` through a launcher `MainActivity` registers as a field, installed on the session when it opens and cleared when the activity goes, only if still its own; `NONE` below API 30. Home's forget-vault comment, the measurement corpus's edited-photograph line, R-1080-E12 and E13, hand-off rows 8.19 and 8.20, owner question PH4. |
+| `71cc358ac` | The umbrella at `02081b557` merged, never rebased. `docs/decisions.md` resolves as a union, the umbrella's text first and byte for byte (`head -n 2365` equals the umbrella's file), then lane E's section; `docs/release/v1-handoffs.md` merged clean. |
+| this section's commit | `ScreenFixtureTests` stops asserting the reserved `BackupState.transport`; `VaultFileProtection` names `crates/vault/src/backup/ledger.rs`; `project.yml`'s camera and local-network comments say what is true today; R-1080-E14; row 8.1 runs `ScreenFixtureTests` too; this section. |
+
+| File | Change |
+| --- | --- |
+| `mobile/iosApp/Sources/PhotoLibraryDeleter.swift` (added) | `LibraryDeletion` (which assets may go, what an answer meant) and `PhotoLibraryDeleter` (the `LibraryDeleter`) |
+| `mobile/iosApp/Tests/LibraryDeletionTests.swift` (added) | six tests: an offered photo may go; an edited asset, a Live Photo without its movie and a movie row alone are kept; a ref names its asset; a yes, a no and a failure |
+| `mobile/androidApp/src/main/kotlin/dev/centraid/android/backup/MediaStoreDeleter.kt` (added) | the `LibraryDeleter` over `createDeleteRequest`, its launcher, the request kept across a rotation |
+| `mobile/iosApp/Sources/ShellModel.swift` | installs the deleter beside the mover's seam |
+| `mobile/androidApp/src/main/kotlin/dev/centraid/android/MainActivity.kt` | the deleter as a field; installed when the session opens, cleared when the activity goes |
+| `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/HomeScreen.kt` | the forget dialog's comment: what can survive a forget is the sealed backup on each paired gateway, as far as it acknowledged, and only the 24 words bring it back |
+| `mobile/maestro/backup-measurement.md` | the corpus's edited photographs: the walker stages the current rendition; the original and its adjustment data are the owner question A20 recorded |
+| `mobile/iosApp/Tests/ScreenFixtureTests.swift` | the `transport` assertion deleted; the test stays, because it is the limited-selection case |
+| `mobile/iosApp/Sources/VaultFileProtection.swift` | the ledger row names `crates/vault/src/backup/ledger.rs` |
+| `mobile/iosApp/project.yml` | the camera comment names `serve` and `pair`, not `invite`; the local-network comment says no shell browses, why the type is still declared, and how an address change is survived today. `NSBonjourServices` kept; no key or value changed, so `Resources/Info.plist` is unchanged |
+| `docs/decisions.md` | R-1080-E12, E13 and E14, appended at the end |
+| `docs/release/v1-handoffs.md` | rows 8.1 (extended), 8.19 and 8.20; owner question PH4 |
+| `receipts/issue-1080-backups-v2.md` | this section |
+
+### Decisions this round made
+
+| Id | Decision |
+| --- | --- |
+| **R-1080-E12** | iOS deletes whole, unedited assets through Photos' own alert, and reports exactly the request's rows on a yes ([decisions](../docs/decisions.md#the-native-shells-library-deleters-1080)). |
+| **R-1080-E13** | Android deletes through `MediaStore.createDeleteRequest` from API 30 only, reporting only rows the store no longer answers for ([decisions](../docs/decisions.md#the-native-shells-library-deleters-1080)). |
+| **R-1080-E14** | The bundle declares `_centraid-gateway._tcp` while no shell browses, so the browse Q-1080-D3 recommends needs no bundle change ([decisions](../docs/decisions.md#finding-a-gateway-on-ios-until-a-shell-browses-1080)). |
+
+### What this round assumed beyond the seam contract
+
+| # | Assumed | Where it is read |
+| --- | --- | --- |
+| E-A9 | A Live Photo's movie row is the still's `os_ref` plus `#pairedVideo`, spelled as `IosMediaLibrary.PAIRED_VIDEO` spells it; nothing ties the two spellings but a comment | `LibraryDeletion.pairedVideoSuffix` |
+| E-A10 | An Android `os_ref` is `image:<id>` or `video:<id>`, as `AndroidMediaLibrary` stages it | `MediaStoreDeleter.uriOf` |
+| E-A11 | `done` may be called on any thread: Photos' completion queue on iOS, the deleter's own thread on Android. `FreeUpFlow` resumes a continuation with it, which is safe from any thread | both deleters |
+
+### Found, for the root
+
+1. **The pairing payload lists `<host>.local` last, not first.** `crates/gateway/src/server/addrs.rs:15-41` pushes every interface address and then `format!("{host}.local:{port}")`, and its tests' payload is `["192.168.1.20:8443", "[fd00::20]:8443", "ada-laptop.local:8443"]`; the client dials them in turn from the one that answered last (`crates/gateway/src/client/mod.rs`, `connect`). `docs/gateway.md:146` and `docs/recovery/pairing.md:45` say "first"; the conclusion they draw (a moved address on one network is reached by name) holds either way. `project.yml` says what the code does.
+2. **`SECURITY.md:50`** says the phone's one LAN act is a Bonjour browse while the app is open; no shell browses (`grep -rn "NWBrowser\|NetServiceBrowser\|NsdManager" mobile/iosApp/Sources mobile/androidApp/src mobile/shared/src` finds nothing).
+3. **`mobile/README.md:335`** says an address that changed needs the pairing again, which the `.local` fallback contradicts on one network.
+4. **`NSCameraUsageDescription`** tells the member "the square your laptop shows"; the word waits on Q-1080-D1, and changing it means regenerating the plist, so it is unchanged.
+
+### Verification
+
+Run in this worktree on 2026-10-03, at this commit's tree. No cargo command: the round changes no Rust.
+
+| Command | Result |
+| --- | --- |
+| `mobile/gradlew -p mobile :shared:jvmTest --rerun` | BUILD SUCCESSFUL: 1,109 tests in 75 suites, 0 failed, 0 skipped. Before the merge it did not compile: `WordsShelfSpec` named `RestoreRequest.endpoint` and `device_secret`, which the umbrella's `217c876b4` had already brought to lane C's proto |
+| `bun run format` then `bun run format:check` | no change; "All matched files use the correct format", 517 files |
+| `bash .governance/run.sh < /dev/null` | all 6 directives pass; the law's window door, 10 rules, no findings |
+| `python3 plist_check.py mobile/iosApp` (a scratch comparison of `project.yml`'s info properties with `Resources/Info.plist`) | 11 keys, 0 mismatches, the plist's keys sorted |
+| `grep -rn "gateway2\|backup2\|centraid-gateway2" mobile/iosApp mobile/androidApp mobile/maestro` | nothing (exit 1) |
+| `grep -rn "transport" mobile/iosApp/Tests` | nothing (exit 1) |
+| `grep -rn "deleteAssets\|createDeleteRequest(" mobile/iosApp/Sources mobile/androidApp/src`, comments aside | one each: `PhotoLibraryDeleter.swift:120`, `MediaStoreDeleter.kt:94` |
+| `grep -rn "installLibraryDeleter" mobile/iosApp/Sources mobile/androidApp/src`, comments aside | `ShellModel.swift:396`; `MainActivity.kt:290` (install) and `:303` (clear) |
+| the commit hooks on every commit | green |

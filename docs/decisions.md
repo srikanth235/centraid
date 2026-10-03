@@ -2363,3 +2363,20 @@ Recorded by lane A with `crates/gateway` (then `crates/gateway2`), and entered h
 | **[D-1025-S7-80](#slice-s7--one-loop-one-file-one-page-one-report-1025)** and **D-1025-S7-81** — the gateway's allowlist is the vault's `access_device` rows; the gateway's endpoint identity is long-term | Retired with the iroh gateway: protocol v2 admits a phone by a bearer token and a gateway is pinned by its certificate (R-1080-C35). |
 | **[Q-1080-D2](#the-shared-halfs-questions-for-the-owner-1080)** — "Back up now" under MANUAL | Answered by the root's ruling A24: `DrainRequest.asked` (R-1080-C13). |
 | `Budget::admits_original` (`crates/blobs/src/plan.rs`), the one table of what each transfer rule admits | Replaced by `centraid_core::phone::drain::Conditions` (`may_prepare`, `may_move`, `allows_cellular`); `plan.rs` is deleted (#1080). |
+
+## The native shells' library deleters (#1080)
+
+Recorded 2026-10-03 by lane E of [#1080](https://github.com/srikanth235/centraid/issues/1080) with the two `LibraryDeleter`s that free up space hands its releasable originals to (amendments A19 and A20). The core never deletes from the OS library; these are the only code that does, each behind the system's own confirmation. Neither has run on a device; [v1-handoffs.md](release/v1-handoffs.md#8-the-backups-native-halves-1080) rows 8.19 and 8.20 are the proof owed.
+
+| Id | Current decision |
+| --- | --- |
+| **R-1080-E12** — **iOS deletes whole, unedited assets through Photos' own alert** | `PhotoLibraryDeleter` runs `PHAssetChangeRequest.deleteAssets` inside `performChanges`, so the confirmation is the system's. A Live Photo goes only when the core offered both its still and its `#pairedVideo` row, an asset never goes on its movie's row alone, and an asset with `hasAdjustments` at deletion time is kept, because an edit made after the backup is not on the gateway. On a yes exactly the request's rows are reported; Photos' `userCancelled` (or Cocoa's `NSUserCancelledError`) is `declined`; any other failure is `error` with nothing reported. An offered asset the library no longer shows is not reported, because its absence is not proof this request removed it. The capability is `SYSTEM_CONFIRMATION` while the app holds read-write or limited access, `NONE` otherwise. |
+| **R-1080-E13** — **Android deletes through `MediaStore.createDeleteRequest`, from API 30 only** | `MediaStoreDeleter` is built as a field of `MainActivity`, so its activity result launcher is registered before the activity starts. It is installed on the session when the session opens and cleared when the activity goes, only if it is still the one installed. The collection is the item's `media_type`, a ref whose walker prefix names the other collection is skipped, and a row whose store `SIZE` differs from the backed-up size is left out of the request. On a yes each asked row is looked up again and only a row the store no longer answers for is reported; a request in flight across a rotation is kept by the process, because the answer is delivered to the new activity's launcher. Below API 30 the capability is `NONE` and nothing is offered (`minSdk`: owner question PH4). |
+
+### Finding a gateway on iOS until a shell browses (#1080)
+
+Recorded 2026-10-03 by lane E of [#1080](https://github.com/srikanth235/centraid/issues/1080), with the `project.yml` comment that says it.
+
+| Id | Current decision |
+| --- | --- |
+| **R-1080-E14** — **the bundle declares `_centraid-gateway._tcp` while no shell browses** | `NSBonjourServices` lists the type so the foreground browse [Q-1080-D3](#the-shared-halfs-questions-for-the-owner-1080) recommends needs no bundle change; iOS refuses to browse a type the bundle does not list, and the declaration asks nothing of the member. Until a browse lands, the pairing payload lists the gateway's interface addresses and then its `<host>.local` name (`crates/gateway/src/server/addrs.rs`), the core dials them in turn, and iOS resolves the name through Bonjour: an address change on the same network is survived by the name, and a gateway whose name changed is paired again. |
