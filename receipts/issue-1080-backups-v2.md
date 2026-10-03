@@ -343,6 +343,68 @@ Three things lane D's seam made redundant are gone, each a second owner of one j
 | `oxfmt --check` over the three Markdown files this round touched | formatted |
 | the commit hooks on every commit | green |
 
+#### Round two — the documents no lane owned, and the site
+
+The root grew this lane's files by the ones no lane owned — `AGENTS.md`, `docs/enrollment.md`, `docs/config-ownership.md`, `docs/vault-ontology.md`'s backup paragraph, `docs/blueprint-seats.md`, and the five docs-site pages that named iroh — and added lane B's CHANGELOG line and the root's amendment A19 (Free up space). The branch fast-forwarded to the umbrella at `8d18e4f0` first. `CLAUDE.md` is a symlink to `AGENTS.md` (`ls -l`), so one edit covers both.
+
+| Commit | Subject |
+| --- | --- |
+| this commit | docs: the unowned docs and the site describe backup v2 (#1080) |
+
+| File | Change |
+| --- | --- |
+| `AGENTS.md` | the intro's gateway is any machine the member controls; the vocabulary row names the pass, the snapshot and "backed up", and says there is no generation, base, segment, lease or custody table |
+| `docs/enrollment.md` | §6 rewritten for pairing v2 — the QR from `serve` or `pair`, the pin, the one-use secret, the ledger, the safety number, more than one gateway — and its two restart facts (a pairing secret's hash in `state.db`; the identity as `tls.key`, `tls.crt`, `gateway.id`); §7's pairing bullet |
+| `docs/config-ownership.md` | the gateway data directory as v2 has it; `centraid-gateway install` as the one unit generator; pairing state on both ends; the gateway token in the ledger where `backup/laptop.json` was |
+| `docs/vault-ontology.md` | the backup paragraph: snapshots in 64 KiB ranges, the manifest's census, no custody table, rung 010's four drops, `sealed-vectors.json` |
+| `docs/blueprint-seats.md` | the banner; the seat table's byte flow, danger state and Free up space rows; machinery items 2 and 3; the SQL-confinement crate list as `rules.rs` has it |
+| `docs/photos/README.md` | Free up space as A19 has it: `releasable`, the system's own deletion, `released`, the row and thumbnail kept, `fetch_original` |
+| `docs/decisions.md` | Q-1080-3's answer appended as a row of the open-questions table; this lane's own R-1029-PH-1 supersession row points at it |
+| `CHANGELOG.md` | lane B's line says 64 KiB ranges; this lane's line names the round's documents |
+| `README.md` | the docs-site table's Start and Devices rows |
+| `scripts/docs-site/src/content/devices.html` | the chapter rewritten: the phone as the vault, a vault in every request, pairing v2, pinned HTTPS, one writer and the claim, and what v0 does not have; every section id kept |
+| `scripts/docs-site/src/content/start.html` | §06–§08: pairing a gateway, an always-on gateway and its unit, the 24 words |
+| `scripts/docs-site/src/content/learn.html` | §06: the primer on pinned HTTPS in place of iroh |
+| `scripts/docs-site/src/content/index.html`, `scripts/docs-site/src/content/understand.html` | the iroh mentions, the Devices card, the subsystem rows for topology, pairing, connectivity, runtimes and the phone app |
+| `receipts/issue-1080-backups-v2.md` | this subsection |
+
+**Rulings this round took** (the root records them):
+
+| Id | Ruling and reason |
+| --- | --- |
+| **F-D7** | Q-1080-3's answer is a new row of the open-questions table, as Q-1080-B1's was, and this lane's own R-1029-PH-1 supersession row — written in this umbrella, below every other lane's text — changes its last sentence to point at it rather than gaining a twin row (#1080). |
+| **F-D8** | The docs-site pages keep every section id their `.astro` rails link (`#iroh`, `#replica` and `#p2p` among them), because the rails are not this lane's files; each section's eyebrow and heading say what it now holds (#1080). |
+
+**Found outside this lane's files**, for the root:
+
+- `scripts/docs-site/src/pages/{devices,learn,understand,index,start}.astro`: the titles, descriptions and search keywords name iroh, peer-to-peer QUIC, the desktop shell, harness runtimes and replicas, and `devices.astro`'s rail labels §05 "Replica" and §08 "Mobile companion", where the sections now read "one writer" and "the phone app". Renaming the `#iroh` id moves the rail and the two links into it together.
+- `scripts/docs-site/src/content/backups.html` describes the v0 recovery kit and provider plane, and `data.html` the hosted-era vault; `understand.html`'s offsite-backup, recovery and conversation-ledger rows and its Data card ("blob custody") point at them. `start.html` §01–§05 and `index.html`'s first path card describe the desktop shell; README's Start row now says so.
+- `docs/vault-ontology.md:36`'s table counts and `:120`'s `blob_custody_*` change when rung 010 lands and the DDL is regenerated.
+- `docs/mobile-offline.md`'s seat record has no inbound link left now that `docs/blueprint-seats.md` points at `#the-pass`, so F-D2's reason for keeping it is gone; it can be deleted.
+- `docs/blueprint-seats.md` item 1 names `centraid_blobs::Budget::admits_original` in `crates/blobs/src/plan.rs`, whose wants come from the custody rows rung 010 drops; it stays until lane C says where the rule's decision lives.
+- `crates/api-proto/proto/centraid/screen/v1/screen.proto:1741` says the Free up space row is a statement and that there is no "releasable"; A19 makes it a verb.
+- `mobile/iosApp/project.yml:189` says "No Bonjour", while the issue and `docs/gateway.md`, `docs/recovery/pairing.md` and `SECURITY.md` have the phone browse `_centraid-gateway._tcp` in the foreground; lane E's brief adds `NSBonjourServices`.
+
+**Still waiting.** Lane C's facts — the drill step, the pragmas, `centraid`'s verbs, the identity files that leave, `local_bytes`, the restore test names, and the device secret's fate, on which `docs/config-ownership.md`'s "two secrets per vault" sentence and `docs/enrollment.md` §7's device-secret bullet wait — and lane E's merge, which resolves eight forward links.
+
+#### Verification, round two
+
+Run in this worktree on 2026-10-03, at this commit's tree. No cargo command and no site build: the round changes no code.
+
+```sh
+bun run format && bun run format:check
+python3 <scratchpad>/linkcheck.py . <the 26 markdown files this lane owns>
+python3 <scratchpad>/htmlcheck.py devices.html start.html learn.html index.html understand.html
+grep -n -i -E 'iroh|laptop\.json|node\.key|\blease\b|invite|endpoint id|object-vectors|4 MiB ranges|drain runs|custodian' <this round's files>
+bash .governance/run.sh
+```
+
+- `bun run format` then `bun run format:check` — no change; "All matched files use the correct format", 525 files.
+- The link check — 26 files, 14 unresolved: the same twelve forward links and two append-only decisions rows as round one, and nothing new.
+- The page check (a scratch parser over the content fragments) — every tag closed in all five pages, and every `../<page>/#<id>` link resolves to an id on that page; seven `../ontology/` links are reported only because that route is built from `ontology-body.html`.
+- The old-names grep — no hit but history cited by issue link, the `#iroh` section id (F-D8), and `docs/blueprint-seats.md:51`'s "work-lease lane", which is the enrichment plane's.
+- `bash .governance/run.sh` — one finding, `receipt-per-issue`: the `## Audit` verdict the close pass writes. Every other directive and rule green.
+
 ## Wave 3 — the shared half (lane D)
 
 The phone's half of the new backup in `mobile/shared`: the pass and its triggers, scheduling, the iOS mover's Kotlin half, the backup line and the Backup screen, pairing v2, the camera-roll walker and free up space, built against the seam contract (A1–A13, A19, A20) and the proto at `f9791e17`. Branch `worktree-agent-a52fb3e3ab127d10e`, cut from `23e46810`; the umbrella was merged in at `49e8c2ef` (the proto), `acedd039` and `7aa589ea` (lanes A, B, E and F). Rulings are [R-1080-D1…D13](../docs/decisions.md#the-shared-half-of-the-backup-1080); questions Q-1080-D1…D3 sit beside them.

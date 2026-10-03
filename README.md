@@ -139,10 +139,10 @@ The docs ([centraid.dev/docs](https://centraid.dev/docs/)) are Astro-built stati
 
 |  |  |
 | --- | --- |
-| [Start](https://centraid.dev/docs/start/) | Install → vault → first app → pair a phone → always-on → key backup |
+| [Start](https://centraid.dev/docs/start/) | Install → vault → first app → pair a gateway → always-on → the 24 words. **§01–§05 pending a rewrite for v0** — they describe the desktop shell [#1029](https://github.com/srikanth235/centraid/issues/1029) deleted |
 | [Data](https://centraid.dev/docs/data/) | The vault, consent & the outbox, sealed columns, connections & sync, automations, the assistant, blobs, search |
 | [Apps](https://centraid.dev/docs/apps/) | The eight first-party apps, app anatomy, the install model, attach & link, the harness surface, mobile |
-| [Devices](https://centraid.dev/docs/devices/) | Pairing, the gateway, and the mobile client. **Pending a rewrite for [#1080](https://github.com/srikanth235/centraid/issues/1080)** — the site still describes the iroh carrier |
+| [Devices](https://centraid.dev/docs/devices/) | The phone as the vault, gateways and their addressing, pairing by QR, pinned HTTPS, the writer epoch, the mobile app, and what v0 does not have |
 | [Ontology](https://centraid.dev/docs/ontology/) | The full logical model — schemas, entity map, ownership matrix, gateway contract, rules |
 | [Privacy](https://centraid.dev/docs/privacy/) | What Centraid holds and where. **Pending a rewrite for v0** — its Google/Assist sections describe a path this release does not offer |
 | [Terms](https://centraid.dev/docs/terms/) | Terms for Centraid. **Pending a rewrite for v0**, for the same reason |
