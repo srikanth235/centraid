@@ -27,8 +27,9 @@ mod common;
 
 use centraid_media::format::content_hash_hex;
 use centraid_vault::access::Principal;
-use centraid_vault::backup::store::{BlobStore, FsBlobStore, digest};
+use centraid_vault::bytes::{BlobStore, FsBlobStore};
 use centraid_vault::commands::Registry;
+use centraid_vault::content::content_digest as digest;
 use centraid_vault::{Command, CommandOutcome, CommandStatus, Vault};
 use serde_json::{Value, json};
 

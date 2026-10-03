@@ -13,8 +13,7 @@
 //! [`keys_from_root`] takes the 32 bytes `seed / vault'(i) / root'` derives
 //! (`centraid_identity`'s `VaultKeys::root`), not that crate's type: this
 //! crate does not depend on `crates/identity`, and a restore holds the key
-//! before it holds a vault to ask. It is the seam the old plane's
-//! `ObjectKeys::new` used, kept.
+//! before it holds a vault to ask.
 
 use std::collections::BTreeSet;
 

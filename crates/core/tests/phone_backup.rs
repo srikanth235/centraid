@@ -841,7 +841,6 @@ fn a_restore_brings_every_vault_back_and_the_old_phone_freezes() {
     assert_eq!(restored.vaults.len(), 1, "{restored:?}");
     assert!(restored.unclaimed.is_empty());
     assert_eq!(restored.gap_scanned, centraid_core::phone::restore::GAP);
-    assert!(restored.device_secret.is_empty(), "nothing is minted");
     let vault = &restored.vaults[0];
     assert_eq!(vault.index, 0);
     assert!(vault.rows > 0);

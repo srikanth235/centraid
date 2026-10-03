@@ -9,18 +9,19 @@
 //! derivation passes; so does a `blake3` version bump that changed a context
 //! string's handling. So the vectors live in `contracts/crypto/blake3-vectors.json`,
 //! where they are bytes rather than behaviour, and this regenerates and diffs
-//! them the way `contracts/crypto/object-vectors.json` and
+//! them the way `contracts/crypto/sealed-vectors.json` and
 //! `contracts/crypto/identity-vectors.json` are regenerated and diffed:
 //! `CENTRAID_UPDATE_FIXTURES=1` writes the file and the comparison still runs
 //! afterwards, so the variable is a generator and never a way to go green.
 //!
 //! ## What each vector is FOR, because a vector with no site is decoration
 //!
-//! Every `context` and every keyed input below is a real one: the backup
-//! keyring's data and dedup keys, the member-key envelope's context with a vault
-//! id folded into it (BLAKE3 has no salt argument — D-1025-S4-3), a WAL nonce,
-//! and `centraid-object/1`'s key-wrap context. If a site's context string
-//! changes, its vector moves and this test says which.
+//! The contexts below are the shapes this repository derives with — a purpose
+//! and a vault id folded into one context string (BLAKE3 has no salt argument —
+//! D-1025-S4-3), and a nonce-length output off the XOF — pinned as primitives.
+//! The backup format's own sites (`centraid backup v2 root`, `… name`,
+//! `… object`) are pinned with the format, in `tests/sealed_vectors.rs`
+//! ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
 
 use std::path::{Path, PathBuf};
 
@@ -41,8 +42,7 @@ const VAULT_ID: &str = "00000000-0000-7000-8000-000000000456";
 
 fn generated() -> Value {
     let derived: Vec<Value> = [
-        // `backup::keyring::derive_data_key` — what every object for a vault is
-        // sealed under.
+        // A purpose and a vault id in one context.
         (format!("centraid-backup:data:{VAULT_ID}"), 32_usize),
         // `derive_dedup_key` — a SEPARATE key, so a chunk id reveals nothing
         // that helps open a chunk. Same key material, different context: if the
@@ -68,7 +68,7 @@ fn generated() -> Value {
     .collect();
 
     let keyed: Vec<Value> = [
-        // `backup::keyring::chunk_id` over a chunk of plaintext.
+        // A keyed hash over a chunk of plaintext.
         (
             "chunkId",
             b"the same bytes in two vaults are two addresses".to_vec(),
@@ -89,25 +89,12 @@ fn generated() -> Value {
     })
     .collect();
 
-    // `centraid-object/1`'s key-wrap key, derived from the vault root so the
-    // root is never itself an AEAD key (#1029 §4). It REPLACED the frame-nonce
-    // vector that stood here, whose site went with the frame format it pinned:
-    // that format derived its nonce from the object's ADDRESS, which is exactly
-    // the defect B9 names, and a vector with no site is decoration. The context string below is the domain
-    // separator — if it moves, every object ever sealed stops opening, and this
-    // is what says so.
-    let object_wrap_key = blake3::derive_key("centraid-object/1 vault-root key wrap", &KEY);
-
     json!({
         "schema": "centraid-blake3-vectors/1",
         "why": "The keyed MAC and the KDF are format decisions (#1025 S4, D-1025-S4-2/-3). A round trip cannot see a changed derivation; these bytes can.",
         "keyHex": hex::encode(KEY),
         "deriveKey": derived,
         "keyedHash": keyed,
-        "objectKeyWrapKey": {
-            "context": "centraid-object/1 vault-root key wrap",
-            "keyHex": hex::encode(object_wrap_key),
-        },
     })
 }
 

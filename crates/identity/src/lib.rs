@@ -9,10 +9,13 @@
 //! | [`derive`] | SLIP-0010 hardened derivation: each vault's identity, box and root keys |
 //! | [`safety_number`] | the digits two people read to each other to confirm they hold each other's real key |
 //! | [`sealed_box`] | HPKE base mode to a box key — the primitive sealed mail and share invites are built from |
-//! | [`certificate`] | "identity key K certifies device D at epoch E", and the verifier that refuses a superseded one |
-//! | [`discovery`] | publish and resolve against a configurable `iroh-dns-server`, and the typed-URL fallback |
-//! | [`ticket`] | the pair ticket: what a laptop shows and a phone scans, and its QR |
-//! | [`record`] | the signed pkarr record that makes a key findable: `gateway=` and `cert=` under the vault's identity key |
+//!
+//! The network half that stood beside these — device certificates, the signed
+//! pkarr record, discovery against a DNS server and the pair ticket — left with
+//! the iroh plane ([#1080](https://github.com/srikanth235/centraid/issues/1080)):
+//! a phone pairs with its gateway from a QR naming addresses and a certificate
+//! pin, and a gateway's writer epoch is the gateway's to keep
+//! (`crates/gateway`).
 //!
 //! ## WHY THREE HASH FAMILIES LIVE IN THIS CRATE AND NOWHERE ELSE (W0.5-R1)
 //!
@@ -29,31 +32,16 @@
 //! **Do not spend this carve-out on anything else.** A digest inside this crate
 //! that is not pinned by a published specification is `blake3`.
 
-pub mod certificate;
 pub mod derive;
-pub mod discovery;
 pub mod phrase;
-pub mod record;
 pub mod safety_number;
 pub mod sealed_box;
-pub mod ticket;
 
-pub use certificate::{
-    CERTIFICATE_CONTEXT, CertificateError, DeviceCertificate, DeviceKey, DeviceTrust, Epoch,
-};
 pub use derive::{
     BoxKey, DeriveError, LockerKey, VaultIdentityKey, VaultKeys, VaultMint, VaultRootKey,
 };
-pub use discovery::{
-    DEFAULT_DNS_SERVER, Discovery, DiscoveryError, Located, ResolutionSource, SourceUsed,
-};
 pub use phrase::{PhraseError, RecoveryPhrase, Seed};
-pub use record::{
-    CERT_ENTRY, GATEWAY_ENTRY, GatewayUrl, IdentityRecord, RECORD_NAME, RECORD_TTL_SECONDS,
-    RecordError,
-};
 pub use safety_number::{
-    SAFETY_NUMBER_DIGITS, SAFETY_NUMBER_GROUP, SafetyNumber, pairing_safety_number, safety_number,
-    safety_number_of_bytes,
+    SAFETY_NUMBER_DIGITS, SAFETY_NUMBER_GROUP, SafetyNumber, safety_number, safety_number_of_bytes,
 };
 pub use sealed_box::{AssociatedData, SealError, SealedBox};

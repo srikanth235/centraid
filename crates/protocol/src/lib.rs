@@ -4,7 +4,7 @@
 //!
 //! This crate was the stream protocol a seat spoke to a gateway: one ALPN,
 //! `u32BE(len) ‖ bytes` framing with a 256 KiB ceiling, `Envelope`s over
-//! frames, and a handshake at request id 0. v0 has no iroh transport and no
+//! frames, and a handshake at request id 0. There is no such transport and no
 //! second host, so there is no stream to frame and no peer to hand-shake with.
 //!
 //! | Module | What it holds |

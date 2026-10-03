@@ -17,11 +17,10 @@
 //!   one root key §0 derives.
 //!
 //! What replaces them is not another CLI verb. §1 makes **the phone the vault**:
-//! capture, the spool and the checkpoint run inside the core under the write
-//! mutex (`centraid_vault::backup::capture`), and the restore a member performs
-//! is onto a new phone from the 24 words, which is W5's. The drill that proves
-//! the whole chain moved with the code, to
-//! `crates/vault/tests/restore_drill.rs`.
+//! the snapshot, the spool and the upload run inside the core
+//! (`centraid_core::phone`, over `centraid_vault::backup2`, #1080), and the
+//! restore a member performs is onto a new phone from the 24 words. The drill
+//! that proves the whole chain is `tests/restore_drill.rs` beside this crate.
 //!
 //! ## Facts to stderr, JSON to stdout
 //!

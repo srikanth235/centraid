@@ -12,8 +12,6 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
-import "centraid/core/v1/lease.proto";
-
 enum ErrorCode {
   ERROR_CODE_UNSPECIFIED = 0;
 
@@ -59,16 +57,12 @@ enum ErrorCode {
   // says what a member reads.
   ERROR_CODE_VAULT_ALREADY_HELD = 23;
 
-  // THE ENDPOINT THIS DEVICE SPAWNED IS NOT THE ONE ITS GATEWAY ENROLLED
-  // (#1025 S7-13).
-  //
-  // Refused at open, before one frame is sent. The enrolment record names the
-  // public key the gateway put in its allowlist; if the endpoint that came up
-  // has a different one, the secret half is gone and every dial from here
-  // would arrive as an unenrolled stranger. Dialling anyway spends the
-  // member's battery to earn a refusal that names the wrong cause, so the
-  // device says the true thing instead: this identity is not the enrolled one.
-  ERROR_CODE_IDENTITY_MISMATCH = 24;
+  // 24 WAS `ERROR_CODE_IDENTITY_MISMATCH` (#1025 S7-13): an open whose iroh
+  // endpoint was not the key its gateway enrolled. There is no endpoint and no
+  // enrolment since #1080 — a gateway knows a phone by the token its pairing
+  // minted — so nothing produced it, and it left with the iroh plane.
+  reserved 24;
+  reserved "ERROR_CODE_IDENTITY_MISMATCH";
 
   // THE VAULT MOVED TO ANOTHER DEVICE (#1029 §0, §3).
   //
@@ -80,7 +74,7 @@ enum ErrorCode {
   //
   // The phone's answer is behavioural rather than a sentence: it freezes that
   // vault read-only, shows the unacked spool as "N changes since <date>", and
-  // keeps it. A `VaultMoved` (`lease.proto`) rides with this code.
+  // keeps it. A `VaultMoved` (below) rides with this code.
   ERROR_CODE_VAULT_MOVED = 25;
 
   // A READ REACHED ITS OWN STATED CEILING (#1046).
@@ -140,12 +134,17 @@ enum ErrorCode {
   // restarts the core deliberately (#1020 Execution model).
   ERROR_CODE_INTERNAL = 63;
 
-  // --- the gateway (#1029 §3) ---
+  // --- the #1029 gateway (#1029 §3) ---
   //
-  // Every one of these is a rule in `crates/gateway-core`, and the mapping is
-  // that crate's `Refusal::code`. A code and not a sentence, like every refusal
-  // in this enum: an adapter that invented its own wording for one of these
-  // would be an adapter the phone branches on differently.
+  // These were the refusals of `crates/gateway-core`, which left with that
+  // crate at #1080's cut-over: the gateway a phone speaks to now refuses in
+  // its own protocol's codes (`crates/gateway2`'s `rules::code`), and the core
+  // maps those onto `UNAUTHORIZED`, `VAULT_MOVED` and `PEER_UNREACHABLE`. No
+  // build produces any of 80–93 any more. They stay numbered until the one
+  // consumer that still names one (`mobile/shared`'s `VaultMovedProducerSpec`
+  // names `GATEWAY_LEASE_STALE`) moves, and then go as reserved numbers and
+  // names. The companion messages the comments below mention (`ClockSkew`,
+  // `HeadConflict`, `DeleteRefusal`) left with the gateway's own files.
 
   // The request signature did not verify against the device certificate it
   // carried, or the certificate did not chain to the vault's identity key.
@@ -227,8 +226,8 @@ message Error {
 
   // WHAT `ERROR_CODE_VAULT_MOVED` RIDES WITH (#1029 §0, W5 hand-off 2).
   //
-  // The code's own comment above has said "a `VaultMoved` (`lease.proto`) rides
-  // with this code" since the gateway messages landed, and **there was no field
+  // The code's own comment above has said "a `VaultMoved` rides with this code"
+  // since the gateway messages landed, and **there was no field
   // for it to ride in** — so a phone could learn THAT its vault had moved and
   // never when, which is half the line a member is owed ("N changes since
   // <date>"). A client that inferred the date from its own clock would be
@@ -240,4 +239,21 @@ message Error {
   // absent `moved` on a `VAULT_MOVED` is HANDLED rather than trusted — see
   // `dev.centraid.shared.sync.movedFrom`.
   optional VaultMoved moved = 5;
+}
+
+// A SUPERSEDED PHONE IS TOLD IT WAS SUPERSEDED, not that it is a stranger
+// (#1029 F1; #1080).
+//
+// A gateway answers `MOVED` to a writer whose epoch a newer claim superseded,
+// and that is a different fact from `UNAUTHORIZED`: the phone FREEZES THAT
+// VAULT READ-ONLY and keeps what it had not uploaded, and taking the vault back
+// is a deliberate action on that phone, never automatic. The seed is on both
+// phones, so this is cooperation and not enforcement: the claim's
+// compare-and-set is what makes the race first-writer-wins, and this message
+// is what makes the loser coherent. It lived in `lease.proto` with the lease
+// the #1029 gateway kept; that file left with that gateway (#1080), and the
+// message moved here, beside the one code it rides with.
+message VaultMoved {
+  uint64 current_epoch = 1;
+  int64 moved_at_ms = 2;
 }

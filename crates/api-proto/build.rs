@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 26] = [
+const PROTOS: [&str; 21] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -24,18 +24,8 @@ const PROTOS: [&str; 26] = [
     "proto/centraid/core/v1/content.proto",
     "proto/centraid/core/v1/change.proto",
     "proto/centraid/core/v1/handshake.proto",
-    "proto/centraid/core/v1/pair.proto",
-    "proto/centraid/core/v1/admin.proto",
     "proto/centraid/core/v1/error.proto",
     "proto/centraid/core/v1/envelope.proto",
-    // The gateway protocol (#1029 §3). It lives in `centraid.core.v1` rather
-    // than in a package of its own because core.v1's promise IS this promise —
-    // "a gateway's commitment to seats that update on their own schedule" — and
-    // a third package would need its own `buf breaking` category in `buf.yaml`
-    // to say the same thing twice.
-    "proto/centraid/core/v1/gateway.proto",
-    "proto/centraid/core/v1/backup.proto",
-    "proto/centraid/core/v1/lease.proto",
     // Founding a vault over the ABI (#1029 W5, hand-off 1). Its own file rather
     // than an arm on `command.proto`, because founding is the act that writes
     // the rows the command plane's gate order reads.

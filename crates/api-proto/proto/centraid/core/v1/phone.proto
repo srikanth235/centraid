@@ -293,12 +293,12 @@ message RestoredVault {
 }
 
 message RestoreResponse {
-  // ALWAYS EMPTY SINCE #1080. A restore used to mint a device key and hand
-  // its secret over here (#1029 W15-D3); a gateway now admits the restored
-  // phone by the bearer token its claim minted, which the restored vault's
-  // ledger keeps. Kept, empty, while a shell still reads it — an empty value
-  // is "nothing minted", which a shell already reads as "store nothing".
-  bytes device_secret = 3;
+  // 3 WAS `device_secret`, the device key a restore minted (#1029 W15-D3). A
+  // gateway admits the restored phone by the bearer token its claim minted,
+  // which the restored vault's ledger keeps, so nothing is minted and nothing
+  // is handed to a shell to keep (#1080). The number is reserved, not reused.
+  reserved 3;
+  reserved "device_secret";
   // Every vault the gateway holds for this identity, restored. Empty is a real
   // answer and not a failure: an identity the gateway has never seen has no
   // vaults, and a shell that drew an error would tell a member their words

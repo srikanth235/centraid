@@ -504,6 +504,12 @@ mod tests {
         Vault::create(&vault_file).unwrap().close().unwrap();
         {
             let raw = rusqlite::Connection::open(&vault_file).unwrap();
+            // Rungs three and four's tables come back for rung ten to drop,
+            // because the climb runs every rung above six.
+            raw.execute_batch(crate::migrations::BACKUP_INDEX_SQL)
+                .unwrap();
+            raw.execute_batch(crate::migrations::BLOB_CUSTODY_SQL)
+                .unwrap();
             raw.execute_batch(
                 "BEGIN;
                  DROP TABLE locker_key;

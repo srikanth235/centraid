@@ -34,8 +34,7 @@
 //!
 //! It speaks to one destination through [`store::Store`] and never to a
 //! socket; the gateway client and the phone's drain and media pipeline are
-//! built over it. It coexists with [`crate::backup`] until the cut-over that
-//! deletes that plane and takes this one's name.
+//! built over it (`crates/core/src/phone`).
 
 pub mod drill;
 pub mod files;

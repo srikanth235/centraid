@@ -895,7 +895,7 @@ mod keyset_tests {
         let dir = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let store_dir = dir.join("blobs");
-        let store = crate::backup::store::FsBlobStore::open(&store_dir).expect("a blob store");
+        let store = crate::bytes::FsBlobStore::open(&store_dir).expect("a blob store");
         let bytes = b"not really a JPEG, and the store does not care";
         let hash = store.put(bytes).expect("the bytes are stored");
 
@@ -1023,7 +1023,7 @@ mod keyset_tests {
     fn no_path_for(media_type: &str, bytes: &[u8]) {
         let dir = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
-        let store = crate::backup::store::FsBlobStore::open(dir.join("blobs")).expect("a store");
+        let store = crate::bytes::FsBlobStore::open(dir.join("blobs")).expect("a store");
         let hash = store.put(bytes).expect("stored");
 
         let vault = Vault::create(dir.join("v.db")).expect("a vault");

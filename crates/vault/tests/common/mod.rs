@@ -181,8 +181,24 @@ pub fn owner_party(vault: &Vault) -> Result<String> {
     })
 }
 
-/// Enrol a device owned by the vault's owner.
+/// A device row and its private key sibling, owned by the vault's owner —
+/// the private table a canary is planted in. Written raw: nothing in the
+/// product enrols a device since the gateway allowlist left with iroh (#1080).
 pub fn enrol(vault: &Vault, device_id: &str, public_key: &str) -> Result<()> {
     let owner = owner_party(vault)?;
-    vault.enrol_device(device_id, &owner, "Test device", "ios", public_key)
+    let now = vault.clock().now_text();
+    vault.commit(|tx| {
+        tx.set_producer("test.enrol");
+        tx.connection().execute(
+            "INSERT INTO access_device (device_id, owner_party_id, name, platform, enrolled_at)
+             VALUES (?1, ?2, 'Test device', 'ios', ?3)",
+            rusqlite::params![device_id, owner, now],
+        )?;
+        tx.connection().execute(
+            "INSERT INTO access_device_secret (device_id, public_key) VALUES (?1, ?2)",
+            rusqlite::params![device_id, public_key],
+        )?;
+        Ok(())
+    })?;
+    Ok(())
 }

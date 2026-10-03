@@ -190,7 +190,7 @@ jobs:
       fail-fast: false
       matrix:
         lane:
-          - ios-transfer-experiment
+          - backup-measurement
           - android-macrobenchmark
           - ios-xctest-metrics
           - battery-per-background-pass
