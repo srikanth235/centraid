@@ -1,11 +1,13 @@
 package dev.centraid.shared
 
 import centraid.core.v1.Envelope
+import centraid.core.v1.HandoffPart
 import dev.centraid.core.CentraidCore
 import dev.centraid.shared.platform.FakePlatformServices
 import dev.centraid.shared.platform.FakePowerAndLink
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.shell.Shelf
+import dev.centraid.shared.sync.BackgroundUploads
 import dev.centraid.shared.sync.BackgroundWindows
 import dev.centraid.shared.sync.DrainAnswer
 import dev.centraid.shared.sync.DrainDoor
@@ -14,6 +16,7 @@ import dev.centraid.shared.sync.LinkConditions
 import dev.centraid.shared.sync.PassConditions
 import dev.centraid.shared.sync.ShelfDrain
 import dev.centraid.shared.sync.TransferRule
+import dev.centraid.shared.sync.UploadLoop
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
@@ -155,13 +158,31 @@ class BackgroundSchedulingSpec : StringSpec({
         android shouldNotContain "CentraidBacklogWorker"
     }
 
-    "changing the rule asks for the windows again, so Android's constraint follows it" {
+    "changing the rule asks for the windows again, and lets go of the uploads iOS holds" {
         runTest {
             val services = FakePlatformServices()
             val opened = session(services)
+            // A HANDED-OFF TASK KEEPS ITS CELLULAR FLAG for up to a day, so the
+            // tasks enqueued under the old rule are cancelled; the core requeues
+            // their parts and the next pass hands them off under the new one.
+            var cancels = 0
+            opened.attachUploads(
+                UploadLoop(
+                    object : BackgroundUploads {
+                        override fun enqueue(batch: List<HandoffPart>) = Unit
+
+                        override fun pending(): Int = 0
+
+                        override fun cancelAll() {
+                            cancels += 1
+                        }
+                    },
+                ),
+            )
             val before = services.backgroundTasks.resubmits
             opened.ruleChanged()
             services.backgroundTasks.resubmits shouldBe before + 1
+            cancels shouldBe 1
             // AND THE BRIDGE'S SETTER IS WHERE A SHELL REACHES IT.
             code(
                 mobileRoot.resolve("shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeBridge.kt").readText(),

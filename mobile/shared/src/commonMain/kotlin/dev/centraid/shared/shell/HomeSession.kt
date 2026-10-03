@@ -262,9 +262,14 @@ public class HomeSession private constructor(
         return forgotten
     }
 
-    /** The member changed the rule: the windows' constraints follow it. */
+    /**
+     * The member changed the rule: the windows' constraints follow it, and on
+     * iOS every upload the OS holds is cancelled, because each keeps the
+     * cellular flag of the rule it was handed off under ([UploadLoop.cancelAll]).
+     */
     public fun ruleChanged() {
         services.backgroundTasks.resubmit()
+        uploads?.cancelAll()
     }
 
     /**
