@@ -147,7 +147,7 @@ class DrainPassSpec : StringSpec({
         )
         deadline shouldBe "Still backing up — 3 MB to go. It will finish on its own."
         DrainCopy.stoppedSentence(DrainAnswer(0, DrainAnswer.Stopped.EMPTY)) shouldBe
-            "Backed up. Your laptop holds this vault's records; photos and files stay only on this phone."
+            "Your laptop has everything this phone had ready to send."
         DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNREACHABLE)) shouldBe
             "Your laptop didn't answer. Nothing was lost; we'll pick up where we left off."
         listOf(
@@ -157,16 +157,19 @@ class DrainPassSpec : StringSpec({
         ).forEach { it.contains("failed") shouldBe false }
     }
 
-    "the two platform truths and the amendment's posture live with the pass" {
-        // THEY MOVED HERE FROM `BackgroundTransfers` WITH THE PASS, because a
-        // sentence spelled in each shell is a sentence one shell gets wrong.
+    "the two platform truths and the posture live with the pass, and say what #1080 made true" {
+        // A SENTENCE SPELLED IN EACH SHELL is a sentence one shell gets wrong.
+        // #1080 ruling 2 hands sealed parts to the OS, which uploads them while
+        // the app is suspended; a force-quit cancels them and Low Power Mode
+        // pauses them, and the copy says all three.
+        DrainCopy.POSTURE_SENTENCE shouldContain "goes on uploading"
         DrainCopy.FORCE_QUIT_SENTENCE shouldContain "swipe Centraid away"
-        DrainCopy.FORCE_QUIT_SENTENCE shouldContain "until you open it again"
-        DrainCopy.ANDROID_UNMETERED_SENTENCE shouldContain "Downloads setting"
-        // THE AMENDMENT'S OWN COMPARISON. "This is the iCloud Backup posture and
-        // the copy says so."
-        DrainCopy.POSTURE_SENTENCE shouldContain "iCloud Backup"
-        DrainCopy.POSTURE_SENTENCE shouldContain "does not upload while the app is closed"
+        DrainCopy.FORCE_QUIT_SENTENCE shouldContain "cancels those uploads until you open it again"
+        DrainCopy.FORCE_QUIT_SENTENCE shouldContain "Low Power Mode pauses them"
+        DrainCopy.ANDROID_UNMETERED_SENTENCE shouldContain "your setting"
+        // THE v0 POSTURE IS GONE: it promised nothing moved while the app was
+        // closed, which the background mover makes false.
+        DrainCopy.POSTURE_SENTENCE.contains("does not upload while the app is closed") shouldBe false
     }
 
     "the old promise that uploads survive the app is gone from the copy" {

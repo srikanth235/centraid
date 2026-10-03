@@ -36,6 +36,8 @@ import kotlinx.coroutines.launch
  * What a window RUNS is installed, never hard-coded ([SyncPass]): the app's
  * `Application` installs the bodies, so a worker the OS starts with no Activity
  * still has a pass to run, and the sync policy stays where a JVM test reaches it.
+ * The long run behind "Back up now" is the app's own job, started through
+ * [SyncPass.installBacklog].
  */
 public class AndroidBackgroundTasks(
     private val context: Context,
@@ -83,23 +85,13 @@ public class AndroidBackgroundTasks(
     }
 
     /**
-     * "Back up now" and backlogs: a long-running job that holds a foreground
-     * notification while [SyncPass.installBacklog]'s body runs, so the member
-     * can leave the app. KEEP, because a second start while one runs is the
-     * same backup.
+     * "Back up now" and backlogs: the app's own long run — a user-initiated
+     * data transfer job on API 34+, a `dataSync` foreground service below —
+     * which [SyncPass.installBacklog] put here, so the member can leave the
+     * app while it runs. Nothing installed is nothing to start.
      */
     override fun backlog(start: Boolean) {
-        runCatching {
-            val manager = WorkManager.getInstance(context)
-            if (start) {
-                val request = OneTimeWorkRequestBuilder<CentraidBacklogWorker>()
-                    .setConstraints(constraintsOf(BackgroundWindows.BACKLOG))
-                    .build()
-                manager.enqueueUniqueWork(BackgroundWindows.BACKLOG.name, ExistingWorkPolicy.KEEP, request)
-            } else {
-                manager.cancelUniqueWork(BackgroundWindows.BACKLOG.name)
-            }
-        }
+        SyncPass.backlog?.invoke(start)
     }
 
     private fun enqueuePeriodic(rule: TransferRule) {
@@ -162,37 +154,11 @@ public class CentraidSyncWorker(
             ?: error("SyncPass.installNotice was never called; an expedited pass needs a notification")
 }
 
-/** The long run: [SyncPass.installBacklog]'s body under a foreground notification. */
-public class CentraidBacklogWorker(
-    context: Context,
-    parameters: WorkerParameters,
-) : CoroutineWorker(context, parameters) {
-
-    override suspend fun doWork(): Result {
-        val body = SyncPass.backlog ?: return Result.success()
-        SyncPass.notice?.let { notice ->
-            // A REFUSED FOREGROUND START IS NOT A REFUSED BACKUP: the run goes on
-            // as ordinary work, and only leaving the app can now stop it.
-            runCatching { setForeground(notice(applicationContext, SyncPass.Notice.BACKLOG)) }
-        }
-        return try {
-            body()
-            Result.success()
-        } catch (error: Exception) {
-            Result.retry()
-        }
-    }
-
-    override suspend fun getForegroundInfo(): ForegroundInfo =
-        SyncPass.notice?.invoke(applicationContext, SyncPass.Notice.BACKLOG)
-            ?: error("SyncPass.installNotice was never called; a backlog needs a notification")
-}
-
 /**
  * THE BODIES THE WORKERS RUN, installed by the app's `Application` at
  * `onCreate` so a worker the OS starts before (or without) an Activity has
- * one. Each body reaches the one session through `ShellProcess`, which opens
- * the vaults on first use — `Application.onCreate` itself opens nothing.
+ * one. Each body reaches the process's one session itself, opening the vaults
+ * on first use — `Application.onCreate` opens nothing.
  */
 public object SyncPass {
 
@@ -205,7 +171,7 @@ public object SyncPass {
 
     internal var installed: (suspend () -> Boolean)? = null
         private set
-    internal var backlog: (suspend () -> Unit)? = null
+    internal var backlog: ((Boolean) -> Unit)? = null
         private set
     internal var notice: ((Context, Notice) -> ForegroundInfo)? = null
         private set
@@ -215,22 +181,26 @@ public object SyncPass {
         installed = pass
     }
 
-    /** "Back up now": runs until the shelf is backed up or nothing more can move. */
-    public fun installBacklog(body: suspend () -> Unit) {
+    /**
+     * "Back up now" and backlogs (seam contract A11): [body] starts the app's
+     * long run with `true` and stops it with `false`. The run reaches the
+     * session's pass itself; this only says when.
+     */
+    public fun installBacklog(body: (Boolean) -> Unit) {
         backlog = body
     }
 
     /**
-     * The notification a foreground run shows. The app's: its channel, its
-     * icon and its words live in the app module, and a `dataSync` foreground
-     * service needs the manifest's `FOREGROUND_SERVICE_DATA_SYNC` beside it.
+     * Optional: the notification an EXPEDITED nudge shows below API 31, where
+     * WorkManager runs expedited work as a foreground service. Without it a
+     * nudge is an ordinary one-off.
      */
     public fun installNotice(notice: (Context, Notice) -> ForegroundInfo) {
         this.notice = notice
     }
 
     /** Which run is asking for its notification. */
-    public enum class Notice { NUDGE, BACKLOG }
+    public enum class Notice { NUDGE }
 }
 
 /**

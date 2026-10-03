@@ -35,7 +35,7 @@ class BackupStatusSpec : StringSpec({
     val minute = 60_000L
 
     fun gateway(seenAgoMs: Long? = minute) = DestinationReading(
-        destinationId = "gw-1",
+        gatewayId = "gw-1",
         label = "Home laptop",
         addrs = listOf("192.168.1.20:7443"),
         lastSeenMs = seenAgoMs?.let { now - it },
@@ -81,7 +81,7 @@ class BackupStatusSpec : StringSpec({
             BackupWaitingRow.Reason.REASON_WIFI,
             BackupWaitingRow.Reason.REASON_ICLOUD,
         )
-        line.waiting.map { it.label } shouldBe listOf("30 waiting for Wi-Fi", "7 waiting in iCloud")
+        line.waiting.map { it.sentence } shouldBe listOf("30 waiting for Wi-Fi", "7 waiting in iCloud")
         line.accessibility_label shouldBe
             "Records backed up 2 minutes ago. 1,203 of 1,240 photos and files. 30 waiting for Wi-Fi. 7 waiting in iCloud"
     }

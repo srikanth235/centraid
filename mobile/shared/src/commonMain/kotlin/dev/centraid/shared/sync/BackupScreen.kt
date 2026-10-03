@@ -1,23 +1,11 @@
-package dev.centraid.shared.shell
+package dev.centraid.shared.sync
 
 import centraid.screen.v1.BackupDestinationRow
 import centraid.screen.v1.BackupLine
-import centraid.screen.v1.BackupRuleChoice
 import centraid.screen.v1.BackupScreenEvent
 import centraid.screen.v1.BackupScreenState
-import centraid.screen.v1.Confirm
 import dev.centraid.design.copy.SharedCopy
-import dev.centraid.design.copy.WordsCopy
-import dev.centraid.shared.custody.CustodyCopy
-import dev.centraid.shared.custody.PairDoor
-import dev.centraid.shared.custody.PairLaptopMachine
-import dev.centraid.shared.custody.PairRefusal
-import dev.centraid.shared.custody.PairResult
 import dev.centraid.shared.platform.BackgroundTasks
-import dev.centraid.shared.sync.BackupLines
-import dev.centraid.shared.sync.BackupReading
-import dev.centraid.shared.sync.DrainCopy
-import dev.centraid.shared.sync.TransferRule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,14 +15,17 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * `backup.home` — ONE HONEST LINE AND THREE CONTROLS (#1080, the shells).
+ * `backup.home` — ONE HONEST LINE AND THREE CONTROLS (#1080, the shells; seam
+ * contract A11).
  *
  * A pure machine: the core's reading and the member's settings in, a finished
- * [BackupScreenState] out, and every act an [BackupEffect] the flow runs. The
- * line at the top is [BackupLines]' and is the same value Home draws. The
- * three controls are the member's transfer rule, "Include videos", and "Back
- * up now"; the destinations are the gateways this vault backs up to, one more
- * added by a pairing payload and one removed only after the member confirms.
+ * [BackupScreenState] out, and every act a [BackupEffect] the flow runs. The
+ * line at the top is [BackupLines]' and is the value Home draws. The three
+ * controls are the member's transfer rule (the shells draw its choices from
+ * `HomeBridge.transferRuleChoices`, one setting with one store), "Include
+ * videos", and "Back up now". The destinations are the gateways this vault
+ * backs up to; adding one is `pair.laptop`'s, and forgetting one drops only
+ * this phone's pairing, so it asks nothing first.
  */
 public object BackupScreenMachine {
     public fun initial(): BackupModel = render(BackupModel())
@@ -49,11 +40,7 @@ public object BackupScreenMachine {
             is BackupInput.View -> view(model, input.event)
             is BackupInput.Read -> step(
                 model.copy(
-                    phase = if (model.phase == BackupScreenState.Phase.PHASE_PAIRING) {
-                        model.phase
-                    } else {
-                        BackupScreenState.Phase.PHASE_READY
-                    },
+                    phase = BackupScreenState.Phase.PHASE_READY,
                     reading = input.reading,
                     line = input.line,
                     rule = input.rule,
@@ -66,10 +53,6 @@ public object BackupScreenMachine {
             is BackupInput.Running -> step(
                 model.copy(backingUpNow = input.backingUp),
                 if (model.backingUpNow && !input.backingUp) listOf(BackupEffect.Read) else emptyList(),
-            )
-            is BackupInput.Paired -> step(
-                model.copy(phase = BackupScreenState.Phase.PHASE_READY, notice = pairedNotice(input.result)),
-                listOf(BackupEffect.Read),
             )
             is BackupInput.Forgot -> step(
                 model.copy(
@@ -86,7 +69,7 @@ public object BackupScreenMachine {
 
     private fun view(model: BackupModel, event: BackupScreenEvent): BackupStep = when {
         event.opened != null -> step(
-            model.copy(phase = BackupScreenState.Phase.PHASE_LOADING, notice = "", confirming = null),
+            model.copy(phase = BackupScreenState.Phase.PHASE_LOADING, notice = ""),
             listOf(BackupEffect.Read),
         )
         event.dismissed != null -> step(BackupModel(phase = BackupScreenState.Phase.PHASE_CLOSED))
@@ -94,35 +77,16 @@ public object BackupScreenMachine {
             model.copy(backingUpNow = true, notice = ""),
             listOf(BackupEffect.BackUpNow),
         )
-        event.set_rule != null -> {
-            val rule = TransferRule.of(event.set_rule.stored)
-            step(model.copy(rule = rule, notice = ""), listOf(BackupEffect.WriteRule(rule)))
-        }
         event.set_include_videos != null -> {
             val include = event.set_include_videos.include
             step(model.copy(includeVideos = include, notice = ""), listOf(BackupEffect.WriteIncludeVideos(include)))
         }
-        event.add_destination != null && model.phase != BackupScreenState.Phase.PHASE_PAIRING -> {
-            // THE TEXT AS THE CORE WILL READ IT, by pairing's own rule.
-            val ticket = PairLaptopMachine.ticketOf(event.add_destination.payload)
-            if (ticket.isEmpty()) {
-                step(model.copy(notice = CustodyCopy.PAIR_EMPTY))
-            } else {
-                step(
-                    model.copy(phase = BackupScreenState.Phase.PHASE_PAIRING, notice = ""),
-                    listOf(BackupEffect.Pair(ticket)),
-                )
-            }
-        }
-        // A FORGET ASKS FIRST, and only for a gateway the screen is drawing.
+        // ONLY A GATEWAY THE SCREEN IS DRAWING can be forgotten from it.
         event.forget_destination != null &&
-            model.destinations().any { it.destinationId == event.forget_destination.destination_id } ->
-            step(model.copy(confirming = event.forget_destination.destination_id, notice = ""))
-        event.forget_confirmed != null && model.confirming != null -> step(
-            model.copy(confirming = null),
-            listOf(BackupEffect.Forget(model.confirming, labelOf(model, model.confirming))),
-        )
-        event.forget_cancelled != null -> step(model.copy(confirming = null))
+            model.destinations().any { it.gatewayId == event.forget_destination.gateway_id } -> {
+            val gatewayId = event.forget_destination.gateway_id
+            step(model.copy(notice = ""), listOf(BackupEffect.Forget(gatewayId, labelOf(model, gatewayId))))
+        }
         else -> BackupStep(model)
     }
 
@@ -130,99 +94,85 @@ public object BackupScreenMachine {
     private fun canBackUpNow(model: BackupModel): Boolean =
         !model.backingUpNow && model.destinations().isNotEmpty() && !model.line.frozen
 
-    private fun pairedNotice(result: PairResult): String = when (result) {
-        is PairResult.Paired -> if (result.answer.safetyNumber.isBlank()) {
-            // A PAIRING WITH NOTHING TO COMPARE IS REFUSED (seam contract A7).
-            CustodyCopy.PAIR_NOTHING_TO_COMPARE
-        } else {
-            SharedCopy.BACKUP_PAIRED.replace("{name}", result.answer.laptopName.ifBlank { SharedCopy.BACKUP_UNNAMED })
-        }
-        is PairResult.Refused -> when (result.because) {
-            PairRefusal.UNREACHABLE -> CustodyCopy.PAIR_UNREACHABLE
-            PairRefusal.NOT_A_CODE -> WordsCopy.PAIR_NOT_A_CODE
-            PairRefusal.NOT_TAKEN -> WordsCopy.PAIR_NOT_TAKEN
-        }
-    }
-
-    private fun labelOf(model: BackupModel, destinationId: String): String =
-        model.destinations().firstOrNull { it.destinationId == destinationId }?.label?.ifBlank { null }
+    private fun labelOf(model: BackupModel, gatewayId: String): String =
+        model.destinations().firstOrNull { it.gatewayId == gatewayId }?.label?.ifBlank { null }
             ?: SharedCopy.BACKUP_UNNAMED
 
     private fun step(model: BackupModel, effects: List<BackupEffect> = emptyList()): BackupStep =
         BackupStep(render(model), effects)
 
     internal fun render(model: BackupModel): BackupModel {
-        val destinations = model.destinations()
-        val spool = model.reading?.spoolBytes ?: 0L
-        val choices = buildList {
-            add(choice(TransferRule.WIFI_ONLY, SharedCopy.BACKUP_RULE_WIFI, SharedCopy.BACKUP_RULE_WIFI_DETAIL, model.rule))
-            add(
-                choice(
-                    TransferRule.WIFI_AND_CELLULAR_PHOTOS,
-                    SharedCopy.BACKUP_RULE_CELLULAR,
-                    SharedCopy.BACKUP_RULE_CELLULAR_DETAIL,
-                    model.rule,
-                ),
-            )
-            // MANUAL IS DRAWN ONLY WHILE IT IS THE RULE: the screen offers Wi-Fi
-            // or cellular, and never hides the choice a member already made.
-            if (model.rule == TransferRule.MANUAL) {
-                add(choice(TransferRule.MANUAL, SharedCopy.BACKUP_RULE_MANUAL, SharedCopy.BACKUP_RULE_MANUAL_DETAIL, model.rule))
-            }
-        }
-        val confirming = model.confirming
+        val reading = model.reading
+        val stood = backlogStood(reading, model.line.frozen, model.nowMs)
         return model.copy(
             state = BackupScreenState(
                 title = SharedCopy.BACKUP_TITLE,
                 line = model.line,
-                destinations = destinations.map { row(it, model.nowMs) },
-                destinations_heading = if (destinations.isEmpty()) "" else SharedCopy.BACKUP_DESTINATIONS,
+                destinations = model.destinations().map { row(it, model.nowMs) },
                 add_destination_label = SharedCopy.BACKUP_ADD_DESTINATION,
+                forget_label = SharedCopy.BACKUP_FORGET,
                 rule = model.rule.stored,
-                rule_heading = SharedCopy.BACKUP_RULE_HEADING,
-                rule_choices = choices,
+                rule_label = SharedCopy.BACKUP_RULE_HEADING,
                 include_videos = model.includeVideos,
                 include_videos_label = SharedCopy.BACKUP_INCLUDE_VIDEOS,
-                include_videos_detail = SharedCopy.BACKUP_INCLUDE_VIDEOS_DETAIL,
                 backing_up_now = model.backingUpNow,
-                back_up_now_label = if (model.backingUpNow) SharedCopy.BACKUP_NOW_RUNNING else SharedCopy.BACKUP_NOW,
+                back_up_now_label = SharedCopy.BACKUP_NOW,
                 back_up_now_enabled = canBackUpNow(model),
-                last_snapshot_ms = model.reading?.lastSnapshotMs ?: 0L,
-                last_ack_ms = model.reading?.lastAckMs ?: 0L,
-                spool_bytes = spool,
-                spool_label = if (spool > 0L) SharedCopy.BACKUP_SPOOL.replace("{size}", DrainCopy.bytes(spool)) else "",
+                progress = if (model.backingUpNow) progress(reading) else "",
+                battery_sentence = if (stood) SharedCopy.BACKUP_BATTERY else "",
+                battery_label = if (stood) SharedCopy.BACKUP_BATTERY_ACTION else "",
+                last_snapshot_ms = reading?.lastSnapshotMs ?: 0L,
+                last_ack_ms = reading?.lastAckMs ?: 0L,
+                spool_bytes = reading?.spoolBytes ?: 0L,
                 notice = model.notice,
                 background_notice = model.backgroundNotice,
-                confirm = confirming?.let {
-                    Confirm(
-                        title = SharedCopy.BACKUP_FORGET_TITLE.replace("{name}", labelOf(model, it)),
-                        body = SharedCopy.BACKUP_FORGET_BODY,
-                        confirm_label = SharedCopy.BACKUP_FORGET_CONFIRM,
-                        destructive = true,
-                    )
-                },
-                confirming_destination_id = confirming.orEmpty(),
                 phase = model.phase,
             ),
         )
     }
 
-    private fun choice(rule: TransferRule, label: String, detail: String, current: TransferRule) =
-        BackupRuleChoice(stored = rule.stored, label = label, detail = detail, selected = rule == current)
+    /**
+     * A BACKLOG THAT HAS STOOD FOR A DAY: something is still to move and no
+     * gateway has acknowledged anything for [BACKLOG_STOOD_MS]. Only then is
+     * battery saving worth a sentence; whether it APPLIES is the shell's to
+     * read (Android's optimisation list), so the machine never says it is on.
+     * A vault never acknowledged is not counted: its first pass runs in the
+     * foreground, where battery saving holds nothing back.
+     */
+    internal fun backlogStood(reading: BackupReading?, frozen: Boolean, nowMs: Long): Boolean {
+        if (reading == null || frozen || reading.destinations.isEmpty()) return false
+        val acked = reading.lastAckMs ?: return false
+        val behind = reading.unconfirmed > 0L || reading.pendingBytes > 0L
+        return behind && nowMs - acked >= BACKLOG_STOOD_MS
+    }
 
-    private fun row(destination: dev.centraid.shared.sync.DestinationReading, nowMs: Long): BackupDestinationRow {
+    /** A day: one night shift missed is ordinary, a whole day without an acknowledgement is not. */
+    public const val BACKLOG_STOOD_MS: Long = 24L * 60L * 60L * 1_000L
+
+    /**
+     * "Backing up — 1,203 of 1,240 photos and files" while items are still to
+     * be acknowledged; plain "Backing up…" when there is nothing to count, or
+     * nothing but the records left to send.
+     */
+    private fun progress(reading: BackupReading?): String =
+        if (reading == null || reading.contentTotal <= 0L || reading.unconfirmed == 0L) {
+            SharedCopy.BACKUP_NOW_RUNNING
+        } else {
+            SharedCopy.BACKUP_PROGRESS.replace("{counts}", BackupLines.counts(reading))
+        }
+
+    private fun row(destination: DestinationReading, nowMs: Long): BackupDestinationRow {
         val label = destination.label.ifBlank { SharedCopy.BACKUP_UNNAMED }
         val seen = destination.lastSeenMs?.let { SharedCopy.BACKUP_SEEN.replace("{when}", BackupLines.ago(it, nowMs)) }
             ?: SharedCopy.BACKUP_SEEN_NEVER
+        val detail = listOfNotNull(destination.addrs.firstOrNull(), seen).joinToString(" · ")
         return BackupDestinationRow(
-            destination_id = destination.destinationId,
+            gateway_id = destination.gatewayId,
             label = label,
-            address = destination.addrs.firstOrNull().orEmpty(),
-            seen_label = seen,
+            detail = detail,
             last_seen_ms = destination.lastSeenMs ?: 0L,
             last_ack_ms = destination.lastAckMs ?: 0L,
-            forget_label = SharedCopy.BACKUP_FORGET,
-            accessibility_label = "$label. $seen",
+            accessibility_label = "$label. $detail",
         )
     }
 }
@@ -237,13 +187,11 @@ public data class BackupModel(
     public val backingUpNow: Boolean = false,
     public val notice: String = "",
     public val backgroundNotice: String = "",
-    /** The gateway a pending confirm would forget. */
-    public val confirming: String? = null,
     /** This phone's clock when the reading arrived, for "reached 2 minutes ago". */
     public val nowMs: Long = 0,
     public val state: BackupScreenState = BackupScreenState(),
 ) {
-    internal fun destinations() = reading?.destinations.orEmpty()
+    internal fun destinations(): List<DestinationReading> = reading?.destinations.orEmpty()
 }
 
 public sealed interface BackupInput {
@@ -259,29 +207,21 @@ public sealed interface BackupInput {
         public val nowMs: Long,
     ) : BackupInput
 
-    /** A "Back up now" run started or ended. */
+    /** A "Back up now" run started or ended, wherever it was asked for. */
     public data class Running(public val backingUp: Boolean) : BackupInput
 
-    public data class Paired(public val result: PairResult) : BackupInput
-
-    public data class Forgot(public val destinationId: String, public val label: String, public val forgotten: Boolean) : BackupInput
+    public data class Forgot(public val gatewayId: String, public val label: String, public val forgotten: Boolean) : BackupInput
 }
 
 public sealed interface BackupEffect {
-    /** Re-read the foreground vault, the rule and the registration. */
+    /** Re-read the foreground vault, the rule, the videos bit and the registration. */
     public data object Read : BackupEffect
 
     public data object BackUpNow : BackupEffect
 
-    public data class WriteRule(public val rule: TransferRule) : BackupEffect
-
     public data class WriteIncludeVideos(public val include: Boolean) : BackupEffect
 
-    public class Pair(internal val ticket: String) : BackupEffect {
-        override fun toString(): String = "Pair(<redacted>)"
-    }
-
-    public data class Forget(public val destinationId: String, public val label: String) : BackupEffect
+    public data class Forget(public val gatewayId: String, public val label: String) : BackupEffect
 }
 
 public data class BackupStep(public val model: BackupModel, public val effects: List<BackupEffect> = emptyList())
@@ -298,9 +238,6 @@ public interface BackupScreenDoors {
 
     public suspend fun includeVideos(): Boolean
 
-    /** The rule and the videos bit were written; the windows follow the rule. */
-    public suspend fun writeRule(rule: TransferRule)
-
     public suspend fun writeIncludeVideos(include: Boolean)
 
     public fun registration(): BackgroundTasks.Registration?
@@ -309,10 +246,8 @@ public interface BackupScreenDoors {
 
     public val backingUp: StateFlow<Boolean>
 
-    public fun pairDoor(): PairDoor?
-
     /** True when forgotten, false when the core refused, null when there was no core to ask. */
-    public suspend fun forget(destinationId: String): Boolean?
+    public suspend fun forget(gatewayId: String): Boolean?
 
     public fun nowMs(): Long
 }
@@ -331,7 +266,7 @@ public class BackupScreenFlow(
     /** The model, for specs. */
     public val current: BackupModel get() = model.value
 
-    /** Follow "Back up now" runs started anywhere — this screen, a second press, a worker. */
+    /** Follow "Back up now" runs started anywhere — this screen, a second press, an Android job. */
     public fun start() {
         scope.launch { doors.backingUp.collect { reduce(BackupInput.Running(it)) } }
     }
@@ -349,42 +284,32 @@ public class BackupScreenFlow(
         }
         effects.forEach { effect ->
             // EACH EFFECT ON ITS OWN COROUTINE: "Back up now" runs for minutes,
-            // and the screen must go on answering taps while it does.
+            // and the screen goes on answering taps while it does.
             scope.launch { run(effect)?.let { reduce(it) } }
         }
     }
 
     private suspend fun run(effect: BackupEffect): BackupInput? = when (effect) {
-        BackupEffect.Read -> {
-            val reading = doors.read()
-            BackupInput.Read(
-                reading = reading,
-                line = doors.line(),
-                rule = doors.rule(),
-                includeVideos = doors.includeVideos(),
-                registration = doors.registration(),
-                nowMs = doors.nowMs(),
-            )
-        }
+        BackupEffect.Read -> BackupInput.Read(
+            reading = doors.read(),
+            line = doors.line(),
+            rule = doors.rule(),
+            includeVideos = doors.includeVideos(),
+            registration = doors.registration(),
+            nowMs = doors.nowMs(),
+        )
         BackupEffect.BackUpNow -> {
             doors.backUpNow()
             BackupInput.Running(false)
-        }
-        is BackupEffect.WriteRule -> {
-            doors.writeRule(effect.rule)
-            null
         }
         is BackupEffect.WriteIncludeVideos -> {
             doors.writeIncludeVideos(effect.include)
             null
         }
-        is BackupEffect.Pair -> BackupInput.Paired(
-            doors.pairDoor()?.pair(effect.ticket) ?: PairResult.Refused(PairRefusal.UNREACHABLE),
-        )
         is BackupEffect.Forget -> BackupInput.Forgot(
-            effect.destinationId,
+            effect.gatewayId,
             effect.label,
-            forgotten = doors.forget(effect.destinationId) == true,
+            forgotten = doors.forget(effect.gatewayId) == true,
         )
     }
 }

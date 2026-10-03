@@ -99,7 +99,7 @@ public object BackupLines {
                 BackupWaitingRow(
                     reason = wire(reason),
                     count = count,
-                    label = waitingWords(reason).replace("{count}", CustodyCopy.grouped(count)),
+                    sentence = waitingWords(reason).replace("{count}", CustodyCopy.grouped(count)),
                 )
             }
         }
@@ -124,7 +124,7 @@ public object BackupLines {
 
     /** The accessibility label is the line read aloud: sentence, detail, then what waits. */
     private fun finish(line: BackupLine): BackupLine = line.copy(
-        accessibility_label = (listOf(line.sentence.removeSuffix("."), line.detail) + line.waiting.map { it.label })
+        accessibility_label = (listOf(line.sentence.removeSuffix("."), line.detail) + line.waiting.map { it.sentence })
             .filter { it.isNotEmpty() }
             .joinToString(". "),
     )

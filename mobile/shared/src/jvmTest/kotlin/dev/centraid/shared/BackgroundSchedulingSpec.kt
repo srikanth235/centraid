@@ -116,11 +116,9 @@ class BackgroundSchedulingSpec : StringSpec({
         }
     }
 
-    "the night shift needs the charger and Wi-Fi; a backlog the member asked for needs neither" {
+    "the night shift needs the charger and Wi-Fi" {
         BackgroundWindows.NIGHT_SHIFT.requiresCharging shouldBe true
         BackgroundWindows.NIGHT_SHIFT.link shouldBe BackgroundWindows.Link.UNMETERED
-        BackgroundWindows.BACKLOG.requiresCharging shouldBe false
-        BackgroundWindows.BACKLOG.link shouldBe BackgroundWindows.Link.CONNECTED
     }
 
     "the periodic name is kept, and every window has its own" {
@@ -131,7 +129,6 @@ class BackgroundSchedulingSpec : StringSpec({
             BackgroundWindows.periodic(TransferRule.WIFI_ONLY).name,
             BackgroundWindows.NIGHT_SHIFT.name,
             BackgroundWindows.nudge(TransferRule.WIFI_ONLY).name,
-            BackgroundWindows.BACKLOG.name,
         )
         names.toSet().size shouldBe names.size
         BackgroundWindows.periodic(TransferRule.WIFI_ONLY).periodMinutes shouldBe 15
@@ -148,9 +145,29 @@ class BackgroundSchedulingSpec : StringSpec({
         android shouldContain "BackgroundWindows.periodic(rule)"
         android shouldContain "BackgroundWindows.NIGHT_SHIFT"
         android shouldContain "BackgroundWindows.nudge("
-        android shouldContain "BackgroundWindows.BACKLOG"
         android shouldContain "setRequiresCharging(window.requiresCharging)"
         android shouldContain "BackgroundWindows.Link.UNMETERED -> NetworkType.UNMETERED"
+        // "BACK UP NOW" IS THE APP'S OWN LONG RUN (A11): the shared half says
+        // when, through the body the `Application` installed, and enqueues no
+        // worker of its own for it.
+        android shouldContain "SyncPass.backlog?.invoke(start)"
+        android shouldContain "fun installBacklog(body: (Boolean) -> Unit)"
+        android shouldNotContain "CentraidBacklogWorker"
+    }
+
+    "changing the rule asks for the windows again, so Android's constraint follows it" {
+        runTest {
+            val services = FakePlatformServices()
+            val opened = session(services)
+            val before = services.backgroundTasks.resubmits
+            opened.ruleChanged()
+            services.backgroundTasks.resubmits shouldBe before + 1
+            // AND THE BRIDGE'S SETTER IS WHERE A SHELL REACHES IT.
+            code(
+                mobileRoot.resolve("shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeBridge.kt").readText(),
+            ) shouldContain "session?.ruleChanged()"
+            opened.close()
+        }
     }
 
     "the iOS processing request waits for the charger and a network" {
