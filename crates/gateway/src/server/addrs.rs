@@ -35,10 +35,18 @@ pub fn advertised(bound: SocketAddr) -> Vec<String> {
         out.push(bound.to_string());
     }
     if let Some(host) = host_name() {
-        out.push(format!("{host}.local:{port}"));
+        with_host(&mut out, &host, port);
     }
     out.truncate(MAX_ADDRS);
     out
+}
+
+/// The host's `.local` name goes last and always fits: a host with eight or
+/// more interface addresses (Docker networks, a VPN) would otherwise lose the
+/// one entry that still answers after the laptop moved to a new address.
+fn with_host(out: &mut Vec<String>, host: &str, port: u16) {
+    out.truncate(MAX_ADDRS - 1);
+    out.push(format!("{host}.local:{port}"));
 }
 
 /// Every interface address worth listing.
@@ -97,6 +105,17 @@ mod tests {
             assert!(crate::rules::payload::is_host_port(&addr), "{addr}");
             assert!(!addr.starts_with("127."), "{addr}");
         }
+    }
+
+    #[test]
+    fn the_host_name_survives_a_host_with_many_addresses() {
+        let mut out: Vec<String> = (0..12).map(|i| format!("10.0.{i}.1:8443")).collect();
+        with_host(&mut out, "ada-laptop", 8443);
+        assert_eq!(out.len(), MAX_ADDRS);
+        assert_eq!(
+            out.last().map(String::as_str),
+            Some("ada-laptop.local:8443")
+        );
     }
 
     #[test]
