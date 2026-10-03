@@ -7,10 +7,15 @@ import centraid.screen.v1.PhotoShelfEvent
 import centraid.screen.v1.PhotoShelfState
 import centraid.screen.v1.PhotosGridEvent
 import centraid.screen.v1.PhotosGridState
+import dev.centraid.shared.platform.MediaLibrary
+import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeSession
+import dev.centraid.shared.sync.CoreFreeUpDoors
 import dev.centraid.shared.sync.CoreOriginals
 import dev.centraid.shared.sync.DrainCopy
+import dev.centraid.shared.sync.FreeUpDoors
+import dev.centraid.shared.sync.ReleasableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -22,25 +27,26 @@ import kotlinx.coroutines.launch
  * v0's `album-keep-originals.ts`, `photos-library-pins.ts` and
  * `free-up-space.ts`).
  *
- * Two surfaces over one core door ([CoreOriginals]): an album shelf's switch,
+ * Two surfaces over the core's originals doors: an album shelf's switch,
  * which puts that album on this phone's keep list, and the More sheet's row,
- * which says what freeing space could reclaim. The reducer halves are pure
- * functions here so [PhotoShelfMachine] and [PhotosGridMachine] each carry one
- * line per event; the I/O halves are the two `attach` functions, which watch a
- * host's state and answer it through its own events — the reducer stays the
- * only writer of a screen's state.
+ * which says what freeing space would reclaim and does it. The reducer halves
+ * are pure functions here so [PhotoShelfMachine] and [PhotosGridMachine] each
+ * carry one line per event; the I/O halves are the two `attach` functions and
+ * [FreeUpFlow], which answer a host through its own events — the reducer stays
+ * the only writer of a screen's state.
  *
- * ## WHY "FREE UP SPACE" IS A STATEMENT AND NOT A BUTTON
+ * ## "FREE UP SPACE" IS A VERB AGAIN (#1080 A19)
  *
- * v0 deleted a device original only where a copy elsewhere was PROVED. On a
- * phone that is the vault, the only copy elsewhere is the laptop's backup, and
- * that backup carries the vault's rows and never an original's bytes
- * (`originals.proto`, R-1029-PH-1). So every original on this phone is the
- * only copy of itself, and the row says exactly that — with the count and the
- * size, which is what a member deciding whether to worry needs — rather than
- * offering a verb whose only possible effect is to destroy a photograph. The
- * keep list is live all the same: it is the member's standing answer, and the
- * census already reads it to say how much of this phone's library is kept.
+ * v0 deleted a device original only where a copy elsewhere was PROVED, and
+ * until #1080 nothing could prove one: the backup carried rows and never an
+ * original's bytes, so the row was a statement (R-1029-PH-1, superseded). Now
+ * a gateway acknowledges every part of an original, and the core's
+ * `releasable` door names the library originals whose every part a gateway
+ * confirmed, outside the albums kept here. Only those are offered, the
+ * platform deletes them behind the system's own confirmation, and the core is
+ * told which went (`released`) so the grid shows them as fetchable. The keep
+ * list is the member's standing answer, and the core reads it to leave those
+ * albums out.
  */
 public object KeepOriginals {
 
@@ -66,13 +72,31 @@ public object KeepOriginals {
     /** A core that could not count — no content store, or a refused read. */
     public const val NOT_COUNTED: String = "Not counted yet."
 
-    /**
-     * WHY NOTHING CAN BE FREED. A fact about the backup, stated plainly, and
-     * the reason the row has no verb.
-     */
-    public const val NOT_BACKED_UP: String =
-        "None can be freed yet. Your laptop's backup does not hold originals, " +
-            "so this phone has the only copy of each."
+    /** WHY NOTHING CAN BE FREED YET: no original is whole on a gateway. */
+    public const val NOTHING_SAFE: String =
+        "None can be freed yet. An original can be freed once a gateway holds every part of it."
+
+    /** The core could not say what is safe, so nothing is offered. */
+    public const val NOT_CHECKED: String =
+        "Centraid could not check which originals are safe on your gateways, so none is offered."
+
+    /** The action: "Free up 2 GB". */
+    public const val FREE_UP_ACTION: String = "Free up {size}"
+
+    /** The notice after a free-up. */
+    public const val FREED: String =
+        "Freed {size}. Those photos stay in Centraid and come back from your gateways when you open one."
+
+    /** The member said no in the system's dialog, or nothing could go. */
+    public const val NOTHING_REMOVED: String = "Nothing was removed."
+
+    /** The library let them go and the core did not record it. */
+    public const val NOT_RECORDED: String =
+        "The photos were removed from this phone. Centraid shows them as fetchable once it catches up."
+
+    /** How many originals a gateway holds whole, in the row's words. */
+    public fun safe(count: Int): String =
+        if (count == 1) "1 photo is safe on your gateways." else "$count photos are safe on your gateways."
 
     // -----------------------------------------------------------------------
     // The album shelf's switch — reducer halves
@@ -135,11 +159,15 @@ public object KeepOriginals {
     /** The row while the census runs. */
     public fun counting(): FreeUpSpace = FreeUpSpace(counted = false, meta = COUNTING)
 
-    /** The row from what the core counted; null is [NOT_COUNTED], never zero. */
-    public fun freeUp(census: CoreOriginals.Census?): FreeUpSpace {
-        if (census == null) return FreeUpSpace(counted = false, meta = NOT_COUNTED)
+    /**
+     * The row from what the core counted. [census] null is [NOT_COUNTED], never
+     * zero; [releasable] null is [NOT_CHECKED], which offers nothing. The
+     * action frees exactly what [releasable] lists, so its size is theirs.
+     */
+    public fun freeUp(census: CoreOriginals.Census?, releasable: ReleasableList?, notice: String = ""): FreeUpSpace {
+        if (census == null) return FreeUpSpace(counted = false, meta = NOT_COUNTED, notice = notice)
         if (census.onPhoneCount <= 0L) {
-            return FreeUpSpace(counted = true, meta = "No originals on this phone")
+            return FreeUpSpace(counted = true, meta = "No originals on this phone", notice = notice)
         }
         val noun = if (census.onPhoneCount == 1L) "original" else "originals"
         val kept = when {
@@ -147,12 +175,34 @@ public object KeepOriginals {
             census.keptCount == 1L -> " One of them is in an album you keep on this phone."
             else -> " ${census.keptCount} of them are in albums you keep on this phone."
         }
-        return FreeUpSpace(
+        val row = FreeUpSpace(
             counted = true,
             meta = "${census.onPhoneCount} $noun · ${DrainCopy.bytes(census.onPhoneBytes)} on this phone",
-            reason = NOT_BACKED_UP + kept,
+            notice = notice,
         )
+        val items = releasable?.items.orEmpty()
+        return when {
+            releasable == null -> row.copy(reason = NOT_CHECKED + kept)
+            items.isEmpty() -> row.copy(reason = NOTHING_SAFE + kept)
+            else -> {
+                val bytes = items.sumOf { it.size }
+                row.copy(
+                    reason = safe(items.size) + kept,
+                    action_label = FREE_UP_ACTION.replace("{size}", DrainCopy.bytes(bytes)),
+                    enabled = true,
+                    releasable_count = items.size,
+                    releasable_bytes = bytes,
+                )
+            }
+        }
     }
+
+    /**
+     * The member tapped the action. **Null is "ignore"**: before the count,
+     * with nothing to free, or while a free-up is already in the system's hands.
+     */
+    public fun tapped(row: FreeUpSpace?): FreeUpSpace? =
+        row?.takeIf { it.counted && it.enabled && !it.freeing }?.copy(freeing = true, notice = "")
 
     // -----------------------------------------------------------------------
     // The I/O halves
@@ -197,24 +247,80 @@ public object KeepOriginals {
     /**
      * THE MORE SHEET'S ROW, served. Counted each time the sheet opens, because
      * a count is only as fresh as the last import, and never while it is shut:
-     * a census lists the whole content store.
+     * a census lists the whole content store. A tap ([tapped]) is run by
+     * [FreeUpFlow.free], and its answer is the next count.
      */
     public fun attachGrid(
         session: HomeSession,
         host: ScreenHost<PhotosGridState, PhotosGridEvent>,
         scope: CoroutineScope,
+        library: MediaLibrary = platformServices().mediaLibrary,
     ) {
         val door = CoreOriginals { session.shelf.core() }
+        val flow = FreeUpFlow(CoreFreeUpDoors { session.shelf.core() }, { door.census()?.census }, library)
+        fun counted(row: FreeUpSpace) = PhotosGridEvent(free_up_counted = PhotosGridEvent.FreeUpCounted(row))
         scope.launch {
             host.state
                 .map { it.sheet == PhotosGridState.Sheet.SHEET_MORE }
                 .distinctUntilChanged()
                 .filter { it }
                 .collect {
-                    host.send(PhotosGridEvent(free_up_counted = PhotosGridEvent.FreeUpCounted(counting())))
-                    val census = door.census()?.census
-                    host.send(PhotosGridEvent(free_up_counted = PhotosGridEvent.FreeUpCounted(freeUp(census))))
+                    host.send(counted(counting()))
+                    host.send(counted(flow.count()))
                 }
         }
+        scope.launch {
+            host.state
+                .map { it.free_up?.freeing == true }
+                .distinctUntilChanged()
+                .filter { it }
+                .collect { host.send(counted(flow.free())) }
+        }
+    }
+}
+
+/**
+ * FREE UP SPACE, RUN (#1080 A19).
+ *
+ * Ask the core what is safe to free, hand those library references to the
+ * platform — which shows the system's own confirmation and deletes only whole
+ * assets — then tell the core which went, and count again. Every answer is a
+ * row ([KeepOriginals.freeUp]) carrying what happened as its `notice`.
+ */
+public class FreeUpFlow(
+    private val doors: FreeUpDoors,
+    private val census: suspend () -> CoreOriginals.Census?,
+    private val library: MediaLibrary,
+) {
+    /** The row as it stands, with [notice] on it. */
+    public suspend fun count(notice: String = ""): FreeUpSpace =
+        KeepOriginals.freeUp(census(), doors.releasable(LIMIT), notice)
+
+    /** Free what is safe; answers the row recounted, saying what happened. */
+    public suspend fun free(): FreeUpSpace {
+        val list = doors.releasable(LIMIT) ?: return count(KeepOriginals.NOT_CHECKED)
+        val refs = list.items.map { it.osRef }.filter { it.isNotEmpty() }.distinct()
+        if (refs.isEmpty()) return count(KeepOriginals.NOTHING_REMOVED)
+        val notice = when (val outcome = library.deleteFromLibrary(refs)) {
+            is MediaLibrary.DeleteOutcome.Deleted -> {
+                val gone = outcome.refs.toSet()
+                // ONLY WHAT THE PLATFORM SAYS WENT is reported: an asset it left
+                // whole (a movie not yet confirmed, an edit) stays on the phone.
+                val freed = list.items.filter { it.osRef in gone }
+                when {
+                    freed.isEmpty() -> KeepOriginals.NOTHING_REMOVED
+                    doors.released(freed.map { it.contentHash }) == null -> KeepOriginals.NOT_RECORDED
+                    else -> KeepOriginals.FREED.replace("{size}", DrainCopy.bytes(freed.sumOf { it.size }))
+                }
+            }
+            MediaLibrary.DeleteOutcome.Declined -> KeepOriginals.NOTHING_REMOVED
+            is MediaLibrary.DeleteOutcome.Refused -> outcome.sentence
+        }
+        return count(notice)
+    }
+
+    public companion object {
+        /** One tap frees at most this many originals, oldest first; the next tap frees more. */
+        public const val LIMIT: Long = 1_000
     }
 }
