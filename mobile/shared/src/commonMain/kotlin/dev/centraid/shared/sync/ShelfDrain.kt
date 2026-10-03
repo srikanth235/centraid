@@ -20,16 +20,20 @@ import kotlinx.coroutines.withTimeoutOrNull
  * [DrainPass] knows how to run one vault's pass. Every trigger on both shells
  * comes through here with a [WakeReason]:
  *
- * | Trigger | Reason | Deadline |
- * |---|---|---|
- * | the session opened | [WakeReason.SESSION_OPENED] | none |
- * | the app became active | [WakeReason.BECAME_ACTIVE] | none |
- * | a commit landed (debounced) | [WakeReason.AFTER_COMMIT] | none |
- * | a camera-roll pass imported | [WakeReason.AFTER_IMPORT] | none |
- * | the link came back (debounced) | [WakeReason.CONNECTIVITY] | none |
- * | a background window | [WakeReason.SCHEDULED] | the window's |
- * | "Back up now" | [WakeReason.BACK_UP_NOW] | none |
- * | the app left the screen | [WakeReason.ENTERED_BACKGROUND] | the grace |
+ * | Trigger | Reason | Deadline | Snapshot | Asked |
+ * |---|---|---|---|---|
+ * | the session opened | [WakeReason.SESSION_OPENED] | none | when due | no |
+ * | the app became active | [WakeReason.BECAME_ACTIVE] | none | when due | no |
+ * | a commit landed (debounced) | [WakeReason.AFTER_COMMIT] | none | when due | no |
+ * | a camera-roll pass imported | [WakeReason.AFTER_IMPORT] | none | when due | no |
+ * | the link came back (debounced) | [WakeReason.CONNECTIVITY] | none | when due | no |
+ * | a background window | [WakeReason.SCHEDULED] | the window's | when due | no |
+ * | "Back up now" | [WakeReason.BACK_UP_NOW] | none | now | yes |
+ * | the app left the screen | [WakeReason.ENTERED_BACKGROUND] | the grace | now | no |
+ * | a restore finished | [WakeReason.RESTORED] | none | now | no |
+ *
+ * "Asked" is `DrainRequest.asked` (#1080 A24): the member's own tap, which
+ * alone lets originals through under MANUAL and a video off the charger.
  *
  * ## EVERY HELD VAULT, AND THE DEADLINE IS DIVIDED
  *
@@ -228,6 +232,8 @@ public class ShelfDrain(
             asked = ask
             if (budgetMs > 0L && remaining() <= MIN_ROUND_MS) break
             if (feed(vaultId, answer.needBytes) == 0) break
+            // THE SNAPSHOT WAS TAKEN IN THE FIRST ROUND; the member's ask
+            // covers the whole pass, so `asked` rides every round.
             outcome = pass.run(read.input(remaining(), reason).copy(wantsSnapshot = false))
         }
         return Outcome(vaultId, outcome, reason)

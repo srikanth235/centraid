@@ -1,5 +1,7 @@
-//! The verbs this binary still has: `doctor`, `gateway install`, and the unit
-//! writer behind it (#1020, D-1020-G1).
+//! The verb this binary still has: `doctor` (#1020). `gateway install` and the
+//! unit writer behind it left at #1080's cut-over: the units it wrote ran a
+//! `centraid gateway` verb that no longer existed, and `centraid-gateway
+//! install` (`crates/gateway`) writes the gateway's own.
 //!
 //! ## `backup now`, `recover` and `export` ARE GONE (#1029 §5, Reference A)
 //!
@@ -17,11 +19,10 @@
 //!   one root key §0 derives.
 //!
 //! What replaces them is not another CLI verb. §1 makes **the phone the vault**:
-//! capture, the spool and the checkpoint run inside the core under the write
-//! mutex (`centraid_vault::backup::capture`), and the restore a member performs
-//! is onto a new phone from the 24 words, which is W5's. The drill that proves
-//! the whole chain moved with the code, to
-//! `crates/vault/tests/restore_drill.rs`.
+//! the snapshot, the spool and the upload run inside the core
+//! (`centraid_core::phone`, over `centraid_vault::backup`, #1080), and the
+//! restore a member performs is onto a new phone from the 24 words. The drill
+//! that proves the whole chain is `tests/restore_drill.rs` beside this crate.
 //!
 //! ## Facts to stderr, JSON to stdout
 //!
@@ -30,8 +31,6 @@
 //! report unparseable exactly when it matters.
 
 pub mod doctor;
-pub mod gateway_install;
-pub mod units;
 
 use std::path::{Path, PathBuf};
 
@@ -42,7 +41,7 @@ use std::path::{Path, PathBuf};
 /// `keys_dir_in`, `blobs_dir_in` and `parse_iso_ms` stood here and are deleted
 /// with their only consumers (#1029 §5): the first two were read by `backup
 /// now` and `export`, and `parse_iso_ms` existed for `recover --at`. A
-/// point-in-time restore is now "pick a base and a txid" (F10) rather than a
+/// restore brings back the snapshot the gateway's head names (#1080), never a
 /// wall-clock instant, and nothing in this binary parses a date any more.
 pub fn vault_dir_in(data_dir: &Path) -> PathBuf {
     data_dir.join("vault")

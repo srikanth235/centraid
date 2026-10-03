@@ -191,11 +191,11 @@ class VaultWordsSpec : StringSpec({
                         "ab".repeat(64).also { order += "seed" }
                 },
                 restoreDoor = object : RestoreDoor {
-                    override suspend fun restore(words: List<String>, endpoint: String?): RestoreResult =
+                    override suspend fun restore(words: List<String>, payload: String?): RestoreResult =
                         RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
-                    override suspend fun restoreSeed(seedHex: String, endpoint: String?): RestoreResult =
+                    override suspend fun restoreSeed(seedHex: String, payload: String?): RestoreResult =
                         RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
-                    override suspend fun restoreStayed(seedHex: String, endpoint: String?, indices: List<Int>): RestoreResult =
+                    override suspend fun restoreStayed(seedHex: String, payload: String?, indices: List<Int>): RestoreResult =
                         RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
                 },
                 keeper = object : Enrollment.Keeper {
@@ -203,7 +203,7 @@ class VaultWordsSpec : StringSpec({
                         order += "found stored=${secrets.seed() != null}"
                         return FoundResult.Made("My vault")
                     }
-                    override suspend fun adoptRestored(restored: List<Shelf.Restored>, deviceSecretHex: String) = 0
+                    override suspend fun adoptRestored(restored: List<Shelf.Restored>) = 0
                     override suspend fun rekey() = 0
                     override suspend fun indexedHoldings() = 0
                 },

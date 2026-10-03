@@ -62,7 +62,7 @@ use std::sync::Mutex;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_media::sealed::{BackupKeys, FileSeal, FileSealer, PlaintextHash};
-use centraid_vault::backup2::spool::Spool;
+use centraid_vault::backup::spool::Spool;
 
 use crate::error::{CoreError, Result};
 

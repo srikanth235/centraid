@@ -12,7 +12,6 @@
 //! | [`store`] | [`store::ByteStore`] — a directory of files named by their BLAKE3, written whole or not at all |
 //! | [`door`] | [`door::ContentBytes`] — that store wearing the vault's byte door, so a device has ONE content store |
 //! | [`hash`] | [`hash::ContentHash`], the `blob:blake3-<hex>` URI, and why the hash is BLAKE3 |
-//! | [`plan`] | WHICH blobs a window asks for under the member's transfer rule, and in what order — pure, no I/O |
 //!
 //! ## Bytes never conflict
 //!
@@ -25,16 +24,14 @@
 //! ## No socket at all
 //!
 //! The store is files. It moves nothing over a network: the backup plane
-//! (`centraid_vault::backup2`) reads a file through a path, seals it, and
+//! (`centraid_vault::backup`) reads a file through a path, seals it, and
 //! hands the sealed parts to the core, which talks to the member's gateways.
 //! The `no-listening-socket` rule holds here with nothing to find.
 
 pub mod door;
 pub mod hash;
-pub mod plan;
 pub mod store;
 
 pub use door::ContentBytes;
 pub use hash::{BLOB_URI_PREFIX, ContentHash, HashError};
-pub use plan::{Budget, OriginalsRule, Plan, Tier, Want, plan};
 pub use store::{Adopted, ByteStore, StoreError, Stored, Sweep, Writer};

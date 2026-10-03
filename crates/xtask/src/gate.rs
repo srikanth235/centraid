@@ -39,7 +39,7 @@ use crate::rules;
 /// the runner, so `gate-nightly.yml`'s matrix and this file cannot disagree
 /// about which lanes exist.
 pub const DEVICE_LANES: [&str; 4] = [
-    "ios-transfer-experiment",
+    "backup-measurement",
     "android-macrobenchmark",
     "ios-xctest-metrics",
     "battery-per-background-pass",
@@ -131,32 +131,21 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // THE PRODUCT'S PROMISE, ON EVERY LOOP (#1029 §2, W5-4).
         //
         // It stood in `release` alone, and that was right while the drill was
-        // the durability one and nobody had measured it. Both drills together
-        // cost about a second and a half on this hardware, and `release` is the
+        // the durability one and nobody had measured it. The drill costs
+        // seconds on this hardware, and `release` is the
         // profile that runs LEAST often — so a promise proved only there is a
         // promise proved after the code is merged. It is in `local` now, which
         // makes it a step of every profile, because each is a superset of the
         // one before.
         //
-        // `test` above also runs both, and they must stay ordinary
-        // integration tests: a drill that only ran under a gate step is a drill
+        // `test` above also runs it, and it must stay an ordinary integration
+        // test: a drill that only ran under a gate step is a drill
         // nobody can run while they are working on it. What the step buys is
         // that the promise is NAMED — "lose the phone, type 24 words, get every
         // vault back, and the old phone freezes" is the sentence this product
         // is for, and a drill buried in fifteen hundred passing tests has a
         // failure that reads as "the workspace is red".
         //
-        // **ONE ARM OF IT NOW CROSSES A SOCKET** (#1029 W5B-4). Until W5 lane B
-        // the step drove the gateway as a LIBRARY, and its own header said so:
-        // no request signing, no wire. That made it a proof of the rules and of
-        // the keys, which is not the same as a proof of the product — a member's
-        // phone signs a request and sends it to a server that has never seen its
-        // process. `the_restore_crosses_a_real_socket_and_the_old_phone_is_refused_by_the_server`
-        // brings up a real `centraid-gateway-server` on `127.0.0.1:0` and talks
-        // to it through `centraid-gateway-client`, so the signature, the four
-        // headers and the `VAULT_MOVED` refusal are exercised rather than
-        // described. The library arm stays: it is faster, it carries the plural
-        // ("every vault"), and it runs the other checksum mode.
         step("restore-drill", run_restore_drill),
         step("rules", run_rules),
         step("ledgers", run_ledgers),
@@ -226,8 +215,8 @@ pub fn steps(profile: Profile) -> Vec<Step> {
     release.extend([
         step("artifact-identity", run_artifact_identity),
         step("prebuilt-core-required", run_prebuilt_core_required),
-        // The gateway's end-to-end is `crates/gateway-server`'s own tests
-        // (#1029 W4b) and the phone-shaped restore drill, not a container
+        // The gateway's end-to-end is `crates/gateway`'s own wire
+        // conformance suite (#1080) and the restore drill, not a container
         // smoke (D-1020-G5, superseded by #1029 §6).
     ]);
     release
@@ -705,81 +694,61 @@ fn line(name: &str, elapsed: Duration, outcome: &Outcome) -> String {
 // Steps
 // ---------------------------------------------------------------------------
 
-/// THE RESTORE DRILL (#1020, wave 2 lane R, D-1020-R7; rewritten for #1029 §2,
-/// and given its second half by #1029 W5-4).
+/// THE RESTORE DRILL (#1020, wave 2 lane R, D-1020-R7; rebuilt for
+/// [#1080](https://github.com/srikanth235/centraid/issues/1080)).
 ///
 /// The acceptance box is *"the restore drill runs in CI"*, and this is the step
-/// that makes it true. **It runs two**, in order, because the promise has two
-/// halves and each is meaningless alone: a vault that comes back byte-exact on
-/// a phone nobody can restore onto is a backup with no product, and a phone
-/// that lists two vaults and restores files nobody checked is a product with no
-/// backup.
+/// that makes it true. It runs every integration test named `restore_drill` in
+/// the workspace, and there are two, because the promise has two halves and
+/// each is meaningless alone.
 ///
-/// ### 1. Durability — `centraid-vault`'s `restore_drill`
+/// ### 1. The plane — `centraid-vault`'s `restore_drill`
 ///
-/// - founds a vault and writes commits;
-/// - captures, so the spool holds every committed page;
-/// - takes a generation — a page-identical sealed base, the segments after it,
-///   and a manifest chained by its own object name;
-/// - writes **more** commits and captures them, so there is a tail the first
-///   base does not cover;
-/// - **deletes the live vault, its log and its spool**;
-/// - restores: the base, then every segment, applied (#1029 B3);
-/// - proves `restore_check` is clean, proves the census matches the census the
-///   generation carried at that txid, and proves the restored file is
-///   **byte-identical** to the one that was lost.
+/// `backup::drill` against the in-memory store:
 ///
-/// ### 2. The phone — `centraid`'s `restore_drill` (#1029 W5-4)
+/// - founds a vault with rows and content, takes a page-identical snapshot,
+///   seals its 64 KiB ranges and every content file, and uploads them;
+/// - takes 50 more commits and a second snapshot, and proves only the changed
+///   ranges were sealed;
+/// - **destroys the vault, its ledger and its spool**;
+/// - restores from the store, and proves `integrity_check`, the manifest's
+///   census and `db_hash`, the ladder, a full row dump equal to the lost
+///   vault's, and that every content hash's names are confirmed.
 ///
-/// The half `crates/vault`'s drill names in its own header as belonging to the
-/// wave that builds the lease:
+/// ### 2. The product — `centraid`'s `restore_drill`
 ///
-/// - one 24-word phrase, one account key, **two** vaults minted at two indices
-///   and named by the account's own signed listing;
-/// - real commits, a real generation, and every object **uploaded through the
-///   gateway's rules** — lease, plan, quota, write-once, compare-and-set;
-/// - the phone is lost. It is NOT deleted: F1 is about a phone that is still
-///   there;
-/// - a fresh phone restores from **the phrase and a gateway and nothing else**
-///   — the restore function takes no path, no key and no vault id, so F2 holds
-///   structurally rather than by discipline — claims each lease at `epoch + 1`
-///   (F3), and both vaults come back with matching censuses;
-/// - the old phone's next put is refused with `VAULT_MOVED` carrying the epoch
-///   that took it and WHEN, and every row and spool entry it holds is still
-///   there for the freeze to show.
+/// The phone's core, through its own doors, against the gateway a member runs
+/// (`centraid_gateway::server::harness`, TLS and SQLite and object files on
+/// `127.0.0.1:0`):
 ///
-/// **It moved crates with the code it is about** (#1029 §5). It used to run
-/// `crates/centraid`'s test against the real `centraid recover` binary and a
-/// password-wrapped recovery kit; the kit file is deleted (the member's 24
-/// words replace it) and `recover` is deleted as a gateway command, so there is
-/// no binary left to drive. What the drill proves is unchanged.
+/// - pairs, and backs up a real JPEG the core derives its tiers from, the
+///   shell's own derivatives, a library photograph and a film above 64 MiB;
+///   every name is confirmed in the ledger and held by the gateway, and the
+///   gateway's directory holds no plaintext, plaintext hash or key;
+/// - takes 50 more commits and a second snapshot;
+/// - a phone holding nothing restores from the 24 words and the pairing
+///   payload, claiming writer epoch 2; every row equals the lost vault's,
+///   every derivative is back, and the film fetched by name verifies;
+/// - the lost phone's next pass is refused `VAULT_MOVED`.
 ///
 /// It is a `cargo test` invocation rather than logic in this file on purpose:
 /// the drill needs the vault crate, and this runner is on the edit-run loop
-/// with three dependencies. `--nocapture` is passed so the drill's own
-/// wall-clock line reaches the artifact log, and the step records its own
-/// elapsed time beside it.
+/// with three dependencies. `--nocapture` is passed so the drill's own report
+/// reaches the artifact log, and the step records its own elapsed time beside
+/// it.
 ///
 /// **It must FAIL, never skip.** A release profile that could pass without the
 /// drill would report "release is green" for a release nobody proved
 /// restorable.
 fn run_restore_drill(ctx: &Ctx) -> Result<Outcome> {
     let started = Instant::now();
-    // TWO DRILLS, ONE STEP, ONE INVOCATION (#1029 W5-4). The second cannot
-    // live in the first's crate: it drives `centraid-identity` and
-    // `centraid-gateway-core` as well as the vault, and `crates/vault` depends
-    // on neither — a durability crate that had to know about an account key
-    // would be the layering this workspace is arranged to prevent. So it is
-    // `crates/centraid`'s, and a SECOND STEP for it would be a second name for
-    // one promise.
-    //
-    // **`--workspace --test`, NOT two `-p` runs, and the difference is 100
-    // seconds of the local loop.** `cargo test -p <one>` resolves features for
+    // **`--workspace --test`, NOT `-p` runs, and the difference is 100 seconds
+    // of the local loop.** `cargo test -p <one>` resolves features for
     // that package alone, which is a DIFFERENT feature set from the
     // `--workspace` build the `test` step above has just done — so two `-p`
     // invocations rebuilt a large part of the dependency graph on every run
     // (measured: 105.7 s against 1.5 s). Naming the TARGET across the workspace
-    // runs both drills under the same resolution the step before it warmed.
+    // runs every drill under the same resolution the step before it warmed.
     let outcome = process(
         ctx,
         "restore-drill",
@@ -813,9 +782,10 @@ fn run_restore_drill(ctx: &Ctx) -> Result<Outcome> {
         ),
     )?;
     Ok(Outcome::Ok(format!(
-        "lose a vault and restore it byte-exact, then lose the PHONE and restore \
-         every vault from 24 words while the old one freezes, in {seconds:.1}s \
-         (no budget slot by ruling) — evidence: {}",
+        "back a vault up, lose it with its ledger and spool, and restore it \
+         row for row; then lose the PHONE, restore from 24 words across the \
+         real gateway, and freeze the old one, in {seconds:.1}s (no budget \
+         slot by ruling) — evidence: {}",
         display_relative(&ctx.root, &dir)
     )))
 }
@@ -1350,8 +1320,8 @@ fn run_ci_policy(ctx: &Ctx) -> Result<Outcome> {
 /// an uncommitted secret is exactly what a pre-merge scan is for — but it also
 /// makes gitleaks walk `target/` and `node_modules/`, and once the Rust
 /// workspace is built that walk reports six findings inside `.rmeta` files,
-/// every one of them a PEM header in `pem-rfc7468`/`pkcs8` doc strings vendored
-/// through iroh. gitleaks 8.30 has no `--exclude-path` and no `.gitignore`
+/// every one of them a PEM header in `pem-rfc7468`/`pkcs8` doc strings a
+/// TLS dependency vendors. gitleaks 8.30 has no `--exclude-path` and no `.gitignore`
 /// support (`gitleaks dir --help`; the only `gitignore` string in the binary is
 /// a stopword), and its one exclusion mechanism is the config allowlist, which
 /// is the file this step exists to keep honest.
@@ -1678,7 +1648,7 @@ fn run_device_lanes(ctx: &Ctx) -> Result<Outcome> {
     let mut outcomes: Vec<(String, Outcome)> = Vec::new();
     for lane in &lanes {
         let outcome = match *lane {
-            "ios-transfer-experiment" => device_transfer_evidence(ctx)?,
+            "backup-measurement" => device_backup_evidence(ctx)?,
             "android-macrobenchmark" => device_android_macrobenchmark(ctx)?,
             "ios-xctest-metrics" => device_ios_xctest_metrics(ctx)?,
             "battery-per-background-pass" => device_battery_per_pass(),
@@ -1713,22 +1683,76 @@ fn run_device_lanes(ctx: &Ctx) -> Result<Outcome> {
     Ok(Outcome::Ok(lines.join(" · ")))
 }
 
-/// `ios-transfer-experiment` — the EVIDENCE, not the run.
+/// `backup-measurement` — the EVIDENCE, not the run
+/// ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
 ///
-/// The protocol (`mobile/maestro/ios-transfer-experiment.md`) is an 8-hour
-/// overnight run per transport on a charging device, once per transport. A
-/// nightly cell that re-ran it would run nothing that finished; what a nightly
-/// can check is that the evidence the ruling rests on exists, is complete, is
-/// under 90 days old, and did not come from a simulator (R-1020-20).
-fn device_transfer_evidence(ctx: &Ctx) -> Result<Outcome> {
-    let dir = ctx.root.join("receipts/experiments/ios-transfer");
+/// The protocol (`mobile/maestro/backup-measurement.md`) is three claims on a
+/// named reference device — a first backup in one evening, a night's photos
+/// confirmed by morning with the app closed, a fresh phone's grid within
+/// minutes of the words — and each is an evening, a night or a restore, not a
+/// nightly. What a nightly can check is that the evidence each claim rests on
+/// exists under the names the protocol fixes, is complete, is under 90 days
+/// old, and did not come from a simulator (R-1020-20).
+fn device_backup_evidence(ctx: &Ctx) -> Result<Outcome> {
+    let dir = ctx.root.join("receipts/experiments/backup");
     if !dir.is_dir() {
         return Ok(Outcome::Skipped(format!(
-            "no evidence in {}. The protocol is mobile/maestro/ios-transfer-experiment.md: an 8-hour overnight run per transport on a NAMED reference device, not a nightly",
+            "no evidence in {}. The protocol is mobile/maestro/backup-measurement.md: an evening, a night and a restore on a NAMED reference device, not a nightly",
             display_relative(&ctx.root, &dir)
         )));
     }
     const NINETY_DAYS: Duration = Duration::from_secs(90 * 24 * 60 * 60);
+    // The keys `mobile/maestro/backup-measurement.md` "What to record" fixes,
+    // per claim. A file missing one is evidence for a claim it cannot carry.
+    const CLAIMS: [(&str, &[&str]); 3] = [
+        (
+            "-evening.json",
+            &[
+                "device",
+                "osVersion",
+                "build",
+                "corpus",
+                "pairedAt",
+                "completeAt",
+                "hours",
+                "samples",
+                "batteryDelta",
+                "gatewayObjects",
+            ],
+        ),
+        (
+            "-night.json",
+            &[
+                "device",
+                "osVersion",
+                "build",
+                "taken",
+                "confirmedAtOpen",
+                "contentTotalAtOpen",
+                "waitingICloud",
+                "lastAckMs",
+                "lastSnapshotMs",
+                "gatewayObjectsBefore",
+                "gatewayObjectsAfter",
+                "sessionRelaunches",
+                "processingWindows",
+                "batteryDelta",
+            ],
+        ),
+        (
+            "-restore.json",
+            &[
+                "device",
+                "osVersion",
+                "build",
+                "rowsAtSeconds",
+                "gridCompleteAtSeconds",
+                "originalAtSeconds",
+                "originalVerified",
+                "oldPhoneRefused",
+            ],
+        ),
+    ];
     let mut fresh = 0_usize;
     let mut findings: Vec<String> = Vec::new();
     for entry in fs::read_dir(&dir)? {
@@ -1738,34 +1762,28 @@ fn device_transfer_evidence(ctx: &Ctx) -> Result<Outcome> {
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        if !name.ends_with("-overnight.json") {
+        let Some((_, keys)) = CLAIMS.iter().find(|(suffix, _)| name.ends_with(suffix)) else {
             continue;
-        }
+        };
         let text = fs::read_to_string(&path)?;
         let run: serde_json::Value =
             serde_json::from_str(&text).with_context(|| format!("{name} is not JSON"))?;
-        for key in [
-            "assets",
-            "bytes",
-            "hours",
-            "batteryDelta",
-            "transport",
-            "device",
-            "iosVersion",
-            "corpus",
-        ] {
+        for key in *keys {
             if run.get(key).is_none() {
                 findings.push(format!("{name} is missing `{key}`"));
             }
         }
-        // A SIMULATOR IS NOT A DEVICE. Its background scheduler is not iOS's,
-        // and states 3-5 of the experiment are about that scheduler.
+        // A SIMULATOR IS NOT A DEVICE. Its background scheduler and its
+        // `nsurlsessiond` are not a phone's, and claim 2 is about exactly those.
         let device = run
             .get("device")
             .and_then(serde_json::Value::as_str)
             .unwrap_or_default();
-        if device.to_lowercase().contains("simulator") {
-            findings.push(format!("{name} names a simulator (`{device}`, R-1020-20)"));
+        if device.to_lowercase().contains("simulator") || device.to_lowercase().contains("emulator")
+        {
+            findings.push(format!(
+                "{name} names a simulator or an emulator (`{device}`, R-1020-20)"
+            ));
         }
         let age = path
             .metadata()
@@ -1781,10 +1799,10 @@ fn device_transfer_evidence(ctx: &Ctx) -> Result<Outcome> {
     }
     if fresh == 0 {
         return Ok(Outcome::Failed(
-            "the transfer evidence is over 90 days old and the ruling rests on it; the transport may have changed underneath it".to_owned(),
+            "no backup evidence under 90 days old; the claims rest on it, and the pipeline may have changed underneath it".to_owned(),
         ));
     }
-    Ok(Outcome::Ok(format!("{fresh} fresh overnight run(s)")))
+    Ok(Outcome::Ok(format!("{fresh} fresh evidence file(s)")))
 }
 
 /// `android-macrobenchmark` — on a physical device, never an emulator.
@@ -1913,7 +1931,7 @@ fn device_ios_xctest_metrics(ctx: &Ctx) -> Result<Outcome> {
 /// than having none.
 fn device_battery_per_pass() -> Outcome {
     Outcome::Skipped(
-        "not automatable on either platform. The owner's procedure IS the measurement: charge to 100% and note the time, run the transfer experiment's overnight cell for one transport, read Settings → Battery → Centraid for the run window, record `batteryDelta` in the *-overnight.json evidence. It is a row in mobile/maestro/ios-transfer-experiment.md's measurement table, not a CI step".to_owned(),
+        "not automatable on either platform. The owner's procedure IS the measurement: run the backup measurement's evening or night on a reference device, read Settings → Battery → Centraid (iOS) or `dumpsys batterystats` (Android) for the run window, record `batteryDelta` in that claim's evidence file. It is a field in mobile/maestro/backup-measurement.md's evidence, not a CI step".to_owned(),
     )
 }
 
@@ -2208,7 +2226,7 @@ mod tests {
         let error = select(Profile::Nightly, Some("no-such-lane")).expect_err("must refuse");
         let text = format!("{error:#}");
         assert!(text.contains("--lane no-such-lane names no step"), "{text}");
-        assert!(text.contains("ios-transfer-experiment"), "{text}");
+        assert!(text.contains("backup-measurement"), "{text}");
         // A real step name selects exactly one step; a device lane selects the
         // one step that owns all four.
         assert_eq!(select(Profile::Local, Some("fmt")).unwrap().len(), 1);
@@ -2471,6 +2489,45 @@ mod tests {
         );
     }
 
+    /// THE BACKUP MEASUREMENT'S EVIDENCE IS CHECKED, NOT TRUSTED (#1080). No
+    /// directory is a loud skip; a file missing a key its claim needs, or one
+    /// that names a simulator, is a failure; a complete, fresh file passes.
+    #[test]
+    fn the_backup_measurement_lane_reads_the_evidence_the_protocol_names() {
+        let root = crate::testing::fixture_dir("backup-evidence");
+        let ctx = scoring_ctx(&root);
+        assert!(matches!(
+            device_backup_evidence(&ctx).expect("runs"),
+            Outcome::Skipped(why) if why.contains("receipts/experiments/backup")
+        ));
+
+        let dir = root.join("receipts/experiments/backup");
+        fs::create_dir_all(&dir).expect("the evidence dir");
+        let restore = serde_json::json!({
+            "device": "iPhone 15", "osVersion": "26.0", "build": "1.0.0",
+            "rowsAtSeconds": 12, "gridCompleteAtSeconds": 340,
+            "originalAtSeconds": 4, "originalVerified": true, "oldPhoneRefused": true,
+        });
+        fs::write(dir.join("iphone15-26.0-restore.json"), restore.to_string()).expect("writes");
+        assert!(matches!(
+            device_backup_evidence(&ctx).expect("runs"),
+            Outcome::Ok(line) if line.contains("1 fresh")
+        ));
+
+        let mut partial = restore.clone();
+        partial
+            .as_object_mut()
+            .expect("an object")
+            .remove("oldPhoneRefused");
+        partial["device"] = serde_json::json!("iPhone 15 Simulator");
+        fs::write(dir.join("sim-26.0-restore.json"), partial.to_string()).expect("writes");
+        let Outcome::Failed(why) = device_backup_evidence(&ctx).expect("runs") else {
+            panic!("an incomplete simulator run must fail the lane");
+        };
+        assert!(why.contains("missing `oldPhoneRefused`"), "{why}");
+        assert!(why.contains("simulator"), "{why}");
+    }
+
     fn scoring_ctx(root: &Path) -> Ctx {
         Ctx {
             root: root.to_path_buf(),
@@ -2548,7 +2605,7 @@ mod tests {
 
     /// The secrets step drops a finding only when git says the file is neither
     /// tracked nor part of the repository (D-1020-B2-5). The two halves that
-    /// matter are pinned here: iroh's `.rmeta` under `target/` goes, and a
+    /// matter are pinned here: a dependency's `.rmeta` under `target/` goes, and a
     /// tracked file goes nowhere — including a tracked file that matches an
     /// ignore pattern, which is the case a naive `.gitignore` filter would lose.
     #[test]

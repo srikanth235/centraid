@@ -179,7 +179,9 @@ class ScreenFixtureSpec : StringSpec({
         val state = PhotosGridState.ADAPTER.decode(screens.bytes("photos/limited-selection"))
         state.permission shouldBe MediaPermission.MEDIA_PERMISSION_LIMITED
         state.backup.shouldNotBeNull().phase shouldBe BackupState.Phase.PHASE_TRANSFERRING
-        state.backup.transport shouldBe BackupState.Transport.TRANSPORT_IROH_BLOBS
+        // FIELD 5 IS RESERVED (#1080): the fixture carries no transport, so
+        // nothing decodes into the unknown fields where a stale `.bin` would put it.
+        state.backup.unknownFields.size shouldBe 0
         // A Live Photo's still and its paired movie share one capture group.
         state.data_.shouldNotBeNull().cells.single().capture_group_id.shouldNotBeNull()
     }

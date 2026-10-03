@@ -47,14 +47,28 @@ class WordsEntrySpec : StringSpec({
             firstUnknown = firstUnknown,
         )
 
-    /** All 24 cells typed at once (a space moves to the next cell) and judged [answer]. */
-    fun filled(purpose: WordsEntryState.Purpose, answer: PhraseVerdict.Verdict = PhraseVerdict.Verdict.VALID): Entry {
-        val step = reduce(open(purpose), typed(1, List(24) { "abandon" }.joinToString(" ")))
+    /** A gateway's pairing code, as pasted (#1080 A1). */
+    val code = """{"v":2,"gw":"gw-1"}"""
+
+    fun coded(model: Entry, text: String = code): Entry =
+        reduce(model, EntryInput.View(WordsEntryEvent(endpoint = WordsEntryEvent.EndpointTyped(text = text)))).model
+
+    /**
+     * All 24 cells typed at once (a space moves to the next cell) and judged
+     * [answer]; a restore's pairing [pasted] first, which a re-key has no field for.
+     */
+    fun filled(
+        purpose: WordsEntryState.Purpose,
+        answer: PhraseVerdict.Verdict = PhraseVerdict.Verdict.VALID,
+        pasted: String = if (purpose == WordsEntryState.Purpose.PURPOSE_REKEY) "" else code,
+    ): Entry {
+        val opened = open(purpose).let { if (pasted.isEmpty()) it else coded(it, pasted) }
+        val step = reduce(opened, typed(1, List(24) { "abandon" }.joinToString(" ")))
         val check = step.effects.single() as EntryEffect.Check
         return reduce(step.model, EntryInput.Checked(check.revision, verdict(answer))).model
     }
 
-    "the grid opens empty and secure, with the purpose's words and the laptop box only for a restore" {
+    "the grid opens empty and secure, with the purpose's words and the pairing code's field only for a restore" {
         val restore = open(WordsEntryState.Purpose.PURPOSE_RESTORE).state
         restore.phase shouldBe WordsEntryState.Phase.PHASE_ENTERING
         restore.secure shouldBe true
@@ -111,6 +125,23 @@ class WordsEntrySpec : StringSpec({
         judged.cells[0].mark shouldBe WordEntry.Mark.MARK_KNOWN
     }
 
+    "a restore waits for its gateway's pairing code: valid words alone leave the control closed (#1080 A23)" {
+        val noCode = filled(WordsEntryState.Purpose.PURPOSE_RESTORE, pasted = "")
+        noCode.valid shouldBe true
+        noCode.state.endpoint_label shouldBe WordsCopy.ENDPOINT_LABEL
+        noCode.state.primary_enabled shouldBe false
+        // A STRAY TAP ASKS NOTHING: the core would refuse a restore that names
+        // no gateway, and the member would read "could not reach your laptop".
+        val tapped = reduce(noCode, primary)
+        tapped.effects.shouldBeEmpty()
+        tapped.model.state.phase shouldBe WordsEntryState.Phase.PHASE_ENTERING
+        // BLANK IS NO CODE.
+        coded(noCode, "   ").state.primary_enabled shouldBe false
+        val withCode = coded(noCode)
+        withCode.state.primary_enabled shouldBe true
+        (reduce(withCode, primary).effects.single() as EntryEffect.Restore).endpoint shouldBe code
+    }
+
     "a valid phrase opens the one control; a restore runs, and its answer drops every word" {
         val ready = filled(WordsEntryState.Purpose.PURPOSE_RESTORE)
         ready.state.primary_enabled shouldBe true
@@ -121,7 +152,6 @@ class WordsEntrySpec : StringSpec({
 
         val answer = RestoreAnswer(
             vaults = listOf(RestoredVaultAt("/v/a/vault.db", 0, rows = 1_204, safetyNumber = "12345 67890")),
-            deviceSecretHex = "cd".repeat(32),
         )
         val done = reduce(working.model, EntryInput.Restored(Enrollment.Restored.Done(answer, 1))).model
         done.state.phase shouldBe WordsEntryState.Phase.PHASE_DONE
@@ -132,7 +162,6 @@ class WordsEntrySpec : StringSpec({
         // ONE ROW IS A ROW (#1047 walk's plural sweep).
         val one = RestoreAnswer(
             vaults = listOf(RestoredVaultAt("/v/a/vault.db", 0, rows = 1, safetyNumber = "")),
-            deviceSecretHex = "cd".repeat(32),
         )
         reduce(working.model, EntryInput.Restored(Enrollment.Restored.Done(one, 1))).model.state.restored.single().line shouldBe
             "Vault 1: 1 row."
@@ -142,14 +171,13 @@ class WordsEntrySpec : StringSpec({
 
     "a vault that stayed with the other phone is named, numbered with the ones that came back, and offers a retry" {
         // R-1047-R5: a claim failed after another landed. The claimed vaults are
-        // answered; the rest are `unclaimed`, their leases still the old phone's.
+        // answered; the rest are `unclaimed`, their writer epochs still the old phone's.
         val working = reduce(filled(WordsEntryState.Purpose.PURPOSE_RESTORE), primary).model
         val answer = RestoreAnswer(
             vaults = listOf(
                 RestoredVaultAt("/v/a/vault.db", 0, rows = 3),
                 RestoredVaultAt("/v/c/vault.db", 2, rows = 1),
             ),
-            deviceSecretHex = "cd".repeat(32),
             unclaimed = listOf(UnclaimedVaultAt(index = 1, vaultId = "ab".repeat(32))),
         )
         val done = reduce(working, EntryInput.Restored(Enrollment.Restored.Done(answer, 2))).model.state
@@ -181,12 +209,12 @@ class WordsEntrySpec : StringSpec({
 
     "a retry asks for the vaults that stayed alone, keeps what came back, and a refusal leaves both lists standing" {
         // R-1047-R6: vaults 0 and 2 came back, vault 1 stayed. The retry names
-        // index 1 and the laptop address the member typed; the words are gone.
-        val typedAddress = reduce(
+        // index 1 and the pairing code the member typed; the words are gone.
+        val typedCode = reduce(
             filled(WordsEntryState.Purpose.PURPOSE_RESTORE),
             EntryInput.View(WordsEntryEvent(endpoint = WordsEntryEvent.EndpointTyped(text = "ab"))),
         ).model
-        val working = reduce(typedAddress, primary).model
+        val working = reduce(typedCode, primary).model
         val first = RestoreAnswer(
             vaults = listOf(RestoredVaultAt("/v/a/vault.db", 0, rows = 3), RestoredVaultAt("/v/c/vault.db", 2, rows = 1)),
             unclaimed = listOf(UnclaimedVaultAt(index = 1, vaultId = "ab".repeat(32))),
@@ -261,10 +289,17 @@ class WordsEntrySpec : StringSpec({
         val none = reduce(working.model, EntryInput.Rekeyed(Enrollment.Rekeyed.NoneToKey)).model
         none.state.notice shouldBe WordsCopy.REKEY_NONE
         none.state.primary_label shouldBe WordsCopy.REKEY_NONE_ACTION
-        none.state.primary_enabled shouldBe true
-        val restoring = reduce(none, primary)
+        // THE OFFERED RESTORE DRAWS THE CODE'S FIELD AND WAITS FOR IT (#1080
+        // A23): the re-key had no field, and the restore it offers needs one.
+        none.state.endpoint_label shouldBe WordsCopy.ENDPOINT_LABEL
+        none.state.primary_enabled shouldBe false
+        reduce(none, primary).effects.shouldBeEmpty()
+        val ready = coded(none)
+        ready.state.primary_enabled shouldBe true
+        ready.holdsWords shouldBe true
+        val restoring = reduce(ready, primary)
         restoring.model.purpose shouldBe WordsEntryState.Purpose.PURPOSE_RESTORE
-        (restoring.effects.single() is EntryEffect.Restore) shouldBe true
+        (restoring.effects.single() as EntryEffect.Restore).endpoint shouldBe code
     }
 
     "a re-key explains itself in its door's words: pairing's, Locker's, and a restore's own (#1047 F5)" {
@@ -298,18 +333,21 @@ class WordsEntrySpec : StringSpec({
         lockerDone.body shouldBe WordsCopy.REKEYED_BODY
     }
 
-    "a held-seed restore has no grid and nothing secret: only the laptop box, and the control is open" {
+    "a held-seed restore has no grid and nothing secret: only the code's field, and the control waits for it" {
         val held = open(WordsEntryState.Purpose.PURPOSE_RESTORE_HELD)
         held.state.cells.shouldBeEmpty()
         held.state.secure shouldBe false
         held.state.title shouldBe WordsCopy.RESTORE_HELD_TITLE
         held.state.endpoint_label shouldBe WordsCopy.ENDPOINT_LABEL
-        held.state.primary_enabled shouldBe true
+        // NO CODE, NO RESTORE (#1080 A23).
+        held.state.primary_enabled shouldBe false
+        reduce(held, primary).effects.shouldBeEmpty()
         // A typed word has nowhere to land.
         reduce(held, typed(1, "abandon")).effects.shouldBeEmpty()
 
-        val withAddress = reduce(held, EntryInput.View(WordsEntryEvent(endpoint = WordsEntryEvent.EndpointTyped(text = " ab "))))
-        val working = reduce(withAddress.model, primary)
+        val withCode = reduce(held, EntryInput.View(WordsEntryEvent(endpoint = WordsEntryEvent.EndpointTyped(text = " ab "))))
+        withCode.model.state.primary_enabled shouldBe true
+        val working = reduce(withCode.model, primary)
         working.model.state.phase shouldBe WordsEntryState.Phase.PHASE_WORKING
         working.effects shouldBe listOf(EntryEffect.RestoreHeld(" ab "))
 

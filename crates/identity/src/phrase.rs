@@ -64,9 +64,8 @@ pub struct RecoveryPhrase(Mnemonic);
 impl RecoveryPhrase {
     /// A fresh phrase from operating-system entropy.
     ///
-    /// `try_os_rng` rather than a thread-local generator, for the same reason
-    /// `centraid_identity::ticket::fresh_secret` uses it: a predictable phrase hands
-    /// over every vault this person will ever have, so the source is the
+    /// `try_os_rng` rather than a thread-local generator: a predictable phrase
+    /// hands over every vault this person will ever have, so the source is the
     /// operating system and a failure to read it is an error, never a fallback.
     ///
     /// Behind the `mint` feature: a Worker verifies rather than mints, and

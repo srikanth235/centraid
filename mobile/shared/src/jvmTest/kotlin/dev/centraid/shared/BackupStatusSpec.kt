@@ -86,6 +86,26 @@ class BackupStatusSpec : StringSpec({
             "Records backed up 2 minutes ago. 1,203 of 1,240 photos and files. 30 waiting for Wi-Fi. 7 waiting in iCloud"
     }
 
+    "the two waits lane C adds have rows of their own: the member's tap, and a machine that is not the gateway (#1080)" {
+        val line = BackupLines.line(
+            reading(confirmed = 1_203, waiting = mapOf(WaitReason.UNTRUSTED to 2L, WaitReason.ASK to 4L)),
+            frozen = false,
+            nowMs = now,
+        )
+        line.waiting.map { it.reason } shouldBe listOf(
+            BackupWaitingRow.Reason.REASON_ASK,
+            BackupWaitingRow.Reason.REASON_UNTRUSTED,
+        )
+        line.waiting.map { it.sentence } shouldBe listOf(
+            "4 waiting for you to tap Back up now",
+            "2 waiting: the machine that answered is not your laptop",
+        )
+        // THE SCREEN'S NUMBERS ARE THE CORE'S (`WAIT_REASON_ASK = 7`,
+        // `WAIT_REASON_UNTRUSTED = 8`), so a shell reading either sees one value.
+        BackupWaitingRow.Reason.REASON_ASK.value shouldBe 7
+        BackupWaitingRow.Reason.REASON_UNTRUSTED.value shouldBe 8
+    }
+
     "everything acknowledged is backed up, quietly, at the gateway's time" {
         val line = BackupLines.line(reading(), frozen = false, nowMs = now)
         line.sentence shouldBe "Backed up 2 minutes ago."

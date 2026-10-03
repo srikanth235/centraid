@@ -30,9 +30,7 @@ pub use locker_key::{
 ///
 /// One helper, so there is exactly one place to look when asking "where does
 /// a nonce come from". Every nonce in this module is random
-/// per value. The backup plane's are still **derived** — see
-/// [`crate::backup`] and `centraid_media::format`, whose header names that as
-/// the defect `centraid-object/1` closes (#1029 §4, Reference A B9).
+/// per value, as every nonce of `centraid-sealed/2` is (#1080).
 pub(crate) fn random_bytes<const N: usize>() -> [u8; N] {
     use rand::RngCore as _;
     let mut bytes = [0_u8; N];

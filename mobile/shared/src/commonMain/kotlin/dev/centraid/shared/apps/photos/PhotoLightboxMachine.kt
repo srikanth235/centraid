@@ -465,11 +465,12 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
             )
         }
 
-        // A FETCH THAT LANDED REDRAWS THROUGH THE ROW CHANGE ITS OWN BYTES
-        // CAUSED, so this is here for the other two outcomes — a gateway that
-        // was not reached and a refusal by code — and what it does is stop the
-        // spinner. A photograph left fetching because nobody said "it did not
-        // happen" is the state this deletes.
+        // A FETCH THAT SUCCEEDED RE-READS THE DETAIL (#1080): the bytes are on
+        // this phone now, so the read draws the original. It is asked for HERE
+        // rather than left to the core's change event, because an original the
+        // phone already held settles without one. A failure stops the spinner:
+        // a photograph left fetching because nobody said "it did not happen"
+        // is the state this deletes.
         //
         // `FetchSettled.sentence` LANDS ON `write_failure` TOO. A fetch is not
         // a write, but what the member is owed is identical — a line that says
@@ -477,7 +478,11 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
         // would be a second place the chrome has to look.
         event.fetch_settled != null ->
             if (event.fetch_settled.fetched) {
-                Step(state)
+                if (event.fetch_settled.asset_id == state.asset_id) {
+                    Step(state, listOf(ScreenEffect.ReadPage(SCREEN_ID, afterCursor = null)))
+                } else {
+                    Step(state)
+                }
             } else {
                 Step(
                     state.copy(

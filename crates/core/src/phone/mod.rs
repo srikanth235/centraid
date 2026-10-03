@@ -3,7 +3,7 @@
 //!
 //! `phone.proto` states the shapes and why none of them is a registered
 //! command. This module is the core's half of them, over
-//! `centraid_vault::backup2` — the snapshot, the ledger, the spool, the mover,
+//! `centraid_vault::backup` — the snapshot, the ledger, the spool, the mover,
 //! retention and restore — and the gateway's pinned client:
 //!
 //! | Module | Door |
@@ -50,14 +50,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_gateway2::rules::ids::VaultId;
+use centraid_gateway::rules::ids::VaultId;
 use centraid_vault::Vault;
-use centraid_vault::backup2::PlaneError;
-use centraid_vault::backup2::files::{ContentFile, content_files};
-use centraid_vault::backup2::ledger::{Destination, Ledger, LocalSource};
-use centraid_vault::backup2::naming::{BackupKeys, Name, PlaintextHash, keys_from_root, names_of};
-use centraid_vault::backup2::spool::Spool;
-use centraid_vault::backup2::store::StoreError;
+use centraid_vault::backup::PlaneError;
+use centraid_vault::backup::files::{ContentFile, content_files};
+use centraid_vault::backup::ledger::{Destination, Ledger, LocalSource};
+use centraid_vault::backup::naming::{BackupKeys, Name, PlaintextHash, keys_from_root, names_of};
+use centraid_vault::backup::spool::Spool;
+use centraid_vault::backup::store::StoreError;
 
 use crate::error::{CoreError, Result};
 
@@ -192,8 +192,17 @@ impl Plane {
     #[must_use]
     pub fn budget(&self) -> u64 {
         let dir = self.spool_dir();
+        // `statvfs` is POSIX, which covers both phones; on any other target
+        // the volume is read as full, which gives the spool nothing (C-D23)
+        // rather than a budget the target cannot vouch for.
+        #[cfg(unix)]
         let free =
             rustix::fs::statvfs(&dir).map_or(0, |stat| stat.f_bavail.saturating_mul(stat.f_frsize));
+        #[cfg(not(unix))]
+        let free = {
+            let _ = &dir;
+            0_u64
+        };
         Spool::budget(free)
     }
 }
@@ -228,6 +237,7 @@ pub(crate) fn plane_error(error: PlaneError) -> CoreError {
 pub(crate) fn store_error(error: StoreError) -> CoreError {
     match error {
         StoreError::Unreachable(reason) => CoreError::Unavailable { reason },
+        StoreError::Untrusted(reason) => CoreError::GatewayRefused { reason },
         StoreError::Moved { epoch } => CoreError::VaultMoved {
             current_epoch: epoch,
             moved_at_ms: 0,
@@ -307,23 +317,63 @@ pub fn pins(plane: &Plane) -> Result<wire::PinsResponse> {
 /// row and every acknowledgement it gave leave the ledger, so what it held is
 /// prepared again for the gateways left; what it stores is left as it is.
 ///
+/// **First it revokes this phone's token there, best-effort** (#1080, the
+/// audit's finding 2): a forgotten gateway that still honoured the token would
+/// keep answering anyone who copied the ledger. Any answer from the pinned
+/// gateway that the token opens nothing — the revoke, or `UNAUTHORIZED`
+/// because its operator already revoked it — is `revoked`; an unreachable
+/// gateway, a machine that is not the pinned one, or a core with no vault keys
+/// to name the vault with is not, and the row goes anyway.
+///
 /// # Errors
 /// The ledger's refusal.
 pub fn forget_destination(
     plane: &Plane,
+    vault: Option<VaultId>,
+    runtime: &tokio::runtime::Handle,
     request: &wire::ForgetDestinationRequest,
 ) -> Result<wire::ForgetDestinationResponse> {
     let ledger = plane.ledger()?;
-    let known = ledger
+    let Some(destination) = ledger
         .destination(&request.gateway_id)
         .map_err(plane_error)?
-        .is_some();
-    if known {
-        ledger
-            .remove_destination(&request.gateway_id)
-            .map_err(plane_error)?;
+    else {
+        return Ok(wire::ForgetDestinationResponse::default());
+    };
+    let revoked = vault.is_some_and(|vault| revoke(&destination, vault, runtime));
+    ledger
+        .remove_destination(&request.gateway_id)
+        .map_err(plane_error)?;
+    Ok(wire::ForgetDestinationResponse {
+        forgotten: true,
+        revoked,
+    })
+}
+
+/// Ask `destination` to revoke this phone's token for `vault`. Whether the
+/// pinned gateway answered that the token opens nothing there now.
+fn revoke(destination: &Destination, vault: VaultId, runtime: &tokio::runtime::Handle) -> bool {
+    use centraid_gateway::client::ClientError;
+    use centraid_gateway::rules::Refusal;
+    let store = match link::GatewayStore::for_destination(destination, vault, runtime) {
+        Ok(store) => store,
+        Err(error) => {
+            tracing::debug!(%error, "a forgotten gateway's token does not read");
+            return false;
+        }
+    };
+    match runtime.block_on(store.client().revoke(&vault)) {
+        Ok(answer) => answer.revoked,
+        Err(ClientError::Refused(Refusal::Unauthorized)) => true,
+        Err(error) => {
+            tracing::debug!(
+                gateway = %destination.gateway_id,
+                %error,
+                "a forgotten gateway did not revoke this phone's token"
+            );
+            false
+        }
     }
-    Ok(wire::ForgetDestinationResponse { forgotten: known })
 }
 
 // ─── status ─────────────────────────────────────────────────────────────────
@@ -346,14 +396,14 @@ pub(crate) fn standing(
     keys: &BackupKeys,
 ) -> Result<Standing> {
     let confirmed = ledger.confirmed_anywhere().map_err(plane_error)?;
-    let queued: BTreeMap<Name, centraid_vault::backup2::ledger::Queued> = ledger
+    let queued: BTreeMap<Name, centraid_vault::backup::ledger::Queued> = ledger
         .queued()
         .map_err(plane_error)?
         .into_iter()
         .map(|part| (part.name, part))
         .collect();
     let conditions = drain::Conditions::remembered(ledger)?;
-    let reachable = drain::last_reach(ledger)?;
+    let unreached = drain::last_reach(ledger)?;
     let paired = !ledger.destinations().map_err(plane_error)?.is_empty();
     let mut out = Standing::default();
     for file in files {
@@ -371,8 +421,10 @@ pub(crate) fn standing(
             // up without a reason to wait out.
             continue;
         }
-        let reason = if !paired || !reachable {
+        let reason = if !paired {
             wire::WaitReason::Gateway
+        } else if let Some(reason) = unreached {
+            reason
         } else {
             let spooled = names
                 .iter()
@@ -488,7 +540,7 @@ pub fn releasable(
         .collect();
     // ONE LIBRARY ITEM, EVERY HASH UNDER IT (A20): a Live Photo is a still and
     // a film under one identifier, and the item is offered whole or not at all.
-    let mut by_ref: BTreeMap<String, Vec<centraid_vault::backup2::ledger::LocalBytes>> =
+    let mut by_ref: BTreeMap<String, Vec<centraid_vault::backup::ledger::LocalBytes>> =
         BTreeMap::new();
     for local in ledger.locals().map_err(plane_error)? {
         if local.source == LocalSource::Os

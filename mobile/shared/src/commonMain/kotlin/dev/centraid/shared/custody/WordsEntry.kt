@@ -23,16 +23,19 @@ import kotlinx.coroutines.sync.withLock
  * `words.enter`, for two purposes over one grid:
  *
  * * **PURPOSE_RESTORE** — a fresh install, or a phone told to restore first:
- *   the words bring every vault back from the laptop ([Enrollment.restore]).
+ *   the words bring every vault back from the gateway whose pairing code is
+ *   pasted beside them ([Enrollment.restore]). The control waits for both
+ *   (#1080 A23).
  * * **PURPOSE_REKEY** — Locker's "needs your 24 words" wall, or pairing's
  *   NEEDS_WORDS: the words go back to this phone's own vaults, which reopen
  *   keyed ([Enrollment.rekey]). The `origin` names which door, and the body
  *   explains the words in that door's terms (#1047 F5). When no vault here
  *   has an index to key, the screen offers the restore instead, keeping what
- *   was typed.
+ *   was typed and drawing the pairing code's field (#1080 A23).
  * * **PURPOSE_RESTORE_HELD** — the phone already holds a seed the
  *   synchronised keychain carried here (words.make's RESTORE_FIRST): no grid,
- *   only the optional laptop address, and the restore runs from that seed
+ *   only the gateway's pairing code, and the restore runs from that seed once
+ *   it is pasted
  *   ([Enrollment.restoreHeld], Q-1047-18).
  *
  * Every cell is judged by the CORE as it is typed (`PhraseRequest.check`): a
@@ -135,6 +138,10 @@ public object WordsEntryMachine {
 
     private fun primary(model: Entry): EntryStep = when (model.phase) {
         WordsEntryState.Phase.PHASE_ENTERING -> when {
+            // A RESTORE NAMES ITS GATEWAY (#1080 A23): the core refuses one with
+            // no pairing code, and that refusal would read as "could not reach
+            // your laptop". The control is disabled; a stray tap does nothing.
+            model.restores && model.endpoint.isBlank() -> EntryStep(model)
             model.offerRestore -> EntryStep(
                 render(
                     model.copy(
@@ -168,7 +175,7 @@ public object WordsEntryMachine {
         if (model.phase != WordsEntryState.Phase.PHASE_WORKING) return EntryStep(model)
         if (model.retrying) return retried(model, outcome)
         return when (outcome) {
-            // THE WORDS GO; the laptop address stays, for a retry of what stayed.
+            // THE WORDS GO; the pairing code stays, for a retry of what stayed.
             is Enrollment.Restored.Done -> EntryStep(
                 settled(
                     Entry(
@@ -375,12 +382,17 @@ public object WordsEntryMachine {
                 title = title,
                 body = body,
                 cells = cells,
-                endpoint_label = if (!rekey && !answered && phase != WordsEntryState.Phase.PHASE_CLOSED) WordsCopy.ENDPOINT_LABEL else "",
-                endpoint = if (!rekey && !answered) model.endpoint else "",
+                // THE CODE'S FIELD IS DRAWN WHEREVER THE PRIMARY RESTORES (#1080
+                // A23): every restore, and the re-key that offers one instead.
+                endpoint_label = if (model.restores && !answered && phase != WordsEntryState.Phase.PHASE_CLOSED) WordsCopy.ENDPOINT_LABEL else "",
+                endpoint = if (model.restores && !answered) model.endpoint else "",
                 notice = notice,
                 primary_label = primary,
                 primary_enabled = when (phase) {
-                    WordsEntryState.Phase.PHASE_ENTERING -> held || model.offerRestore || model.valid
+                    WordsEntryState.Phase.PHASE_ENTERING -> when {
+                        model.restores && model.endpoint.isBlank() -> false
+                        else -> held || model.offerRestore || model.valid
+                    }
                     WordsEntryState.Phase.PHASE_DONE -> true
                     else -> false
                 },
@@ -430,6 +442,13 @@ public data class Entry(
 
     /** The core called exactly these words a phrase. */
     public val valid: Boolean get() = currentVerdict?.verdict == PhraseVerdict.Verdict.VALID
+
+    /**
+     * Whether the primary control restores: every purpose but a re-key, and a
+     * re-key that found nothing to key and offers the restore instead. Such a
+     * control needs the gateway's pairing code (#1080 A23).
+     */
+    public val restores: Boolean get() = purpose != WordsEntryState.Purpose.PURPOSE_REKEY || offerRestore
 
     /** Whether any word is held. For the specs; never the words. */
     public val holdsWords: Boolean get() = cells.any { it.isNotEmpty() }

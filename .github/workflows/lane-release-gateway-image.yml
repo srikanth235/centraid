@@ -3,8 +3,9 @@ name: lane-release-gateway-image
 # A `release.yml` lane, not an independently-triggered workflow (#557).
 
 # #501 / #504 — optional GHCR image for centraid-gateway (D5: never move latest on beta).
-# Build uses deploy/docker/Dockerfile, the v1 gateway image (#1020, D-1020-G1):
-# the `centraid` binary on debian-slim with operator-safe defaults.
+# Build uses deploy/gateway/Dockerfile, the gateway image (#1080): the
+# `centraid-gateway` binary from `crates/gateway`, run as an unprivileged user
+# with its own `health` as the health check.
 
 on:
   workflow_call:
@@ -65,7 +66,7 @@ jobs:
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
-          file: deploy/docker/Dockerfile
+          file: deploy/gateway/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha

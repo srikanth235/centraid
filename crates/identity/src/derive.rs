@@ -196,12 +196,12 @@ redacted_debug!(VaultRootKey, "VaultRootKey");
 redacted_debug!(LockerKey, "LockerKey");
 
 impl VaultIdentityKey {
-    /// The public half: the vault id, the address, and the pkarr record's name.
+    /// The public half: the vault id, and what a gateway knows the vault by.
     pub fn public(&self) -> VerifyingKey {
         self.0.verifying_key()
     }
 
-    /// The signing key, for device certificates and published records.
+    /// The signing key, for the claims and read grants a gateway verifies.
     pub const fn signing(&self) -> &SigningKey {
         &self.0
     }

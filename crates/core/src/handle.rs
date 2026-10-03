@@ -381,8 +381,8 @@ impl Handle {
                 "the byte store adopted the layout it had before #1080"
             );
         }
-        let ledger_path = centraid_vault::backup2::ledger::Ledger::path_for(&self.path);
-        let door = match centraid_vault::backup2::ledger::Ledger::open(&ledger_path) {
+        let ledger_path = centraid_vault::backup::ledger::Ledger::path_for(&self.path);
+        let door = match centraid_vault::backup::ledger::Ledger::open(&ledger_path) {
             Ok(ledger) => {
                 centraid_blobs::ContentBytes::new(store).with_ledger(Arc::new(Mutex::new(ledger)))
             }
@@ -959,9 +959,13 @@ impl Handle {
                 }
                 Ok(response(wire::response::Kind::Reconcile(answer)))
             }
-            K::ForgetDestination(request) => Ok(response(wire::response::Kind::ForgetDestination(
-                crate::phone::forget_destination(&self.plane, request)?,
-            ))),
+            K::ForgetDestination(request) => {
+                let runtime = self.runtime_handle()?;
+                let vault = self.keys.as_ref().map(crate::phone::Keyring::vault_id);
+                Ok(response(wire::response::Kind::ForgetDestination(
+                    crate::phone::forget_destination(&self.plane, vault, &runtime, request)?,
+                )))
+            }
             K::Releasable(request) => {
                 let keyring = self.keyring()?;
                 Ok(response(wire::response::Kind::Releasable(
@@ -1124,9 +1128,9 @@ impl Handle {
                         .map_err(crate::phone::plane_error)?
                         .is_some();
                 ledger
-                    .put_local(&centraid_vault::backup2::ledger::LocalBytes {
+                    .put_local(&centraid_vault::backup::ledger::LocalBytes {
                         hash: h,
-                        source: centraid_vault::backup2::ledger::LocalSource::Os,
+                        source: centraid_vault::backup::ledger::LocalSource::Os,
                         os_ref: Some(os_ref),
                         verified_ms: Some(crate::phone::now_ms()),
                         edited,
@@ -1243,11 +1247,11 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             | K::Phrase(_)
             // SEVEN OF THE BACKUP PLANE'S DOORS ARE BOUNDED (#1080).
             // `handoff` answers at most the batch it was asked for, `settle`
-            // records what the shell already heard, `pins` and
-            // `forget_destination` are one read and one write of the device's
-            // ledger, `reconcile` asks `exists` once per thousand names the
-            // ledger holds — a count the ledger bounds, and the network is not
-            // the same question, as with `pair_phone` — `releasable` reads
+            // records what the shell already heard, `pins` is one read of the
+            // device's ledger and `forget_destination` one read, one revoke
+            // and one write, `reconcile` asks `exists` once per thousand names
+            // the ledger holds — a count the ledger bounds, and the network is
+            // not the same question, as with `pair_phone` — `releasable` reads
             // the ledger and the rows up to its limit, and `released` forgets
             // the hashes it was handed.
             | K::Handoff(_)
@@ -1411,9 +1415,9 @@ mod tests {
             .expect("a blob is named by its hash")
             .to_owned();
         std::fs::remove_file(&path).expect("the store's copy goes");
-        let local = centraid_vault::backup2::ledger::LocalBytes {
-            hash: centraid_vault::backup2::naming::PlaintextHash::from_hex(&hash).expect("a hash"),
-            source: centraid_vault::backup2::ledger::LocalSource::Os,
+        let local = centraid_vault::backup::ledger::LocalBytes {
+            hash: centraid_vault::backup::naming::PlaintextHash::from_hex(&hash).expect("a hash"),
+            source: centraid_vault::backup::ledger::LocalSource::Os,
             os_ref: Some("library-item-1".to_owned()),
             verified_ms: Some(1),
             edited: false,

@@ -27,13 +27,15 @@
 //!
 //! | What | May be sealed | May cross a metered link |
 //! |---|---|---|
-//! | the vault's snapshot | always | under `WIFI_AND_CELLULAR_PHOTOS` |
+//! | the vault's snapshot | always | under `WIFI_AND_CELLULAR_PHOTOS`, or under any rule when the member asked (R-1080-C38) |
 //! | a thumbnail, a preview, a poster | always | always |
 //! | a photograph's original | not under `MANUAL` unless the member asked | under `WIFI_AND_CELLULAR_PHOTOS` |
 //! | a video's original | on a charger, or when the member asked; never when videos are left out | never |
 //!
-//! "The member asked" is `wants_snapshot`: "Back up now", or the app leaving
-//! the screen. The rule and the link a pass was told are remembered in the
+//! "The member asked" is `DrainRequest.asked`: the "Back up now" tap and
+//! nothing else (the root's ruling A24). `wants_snapshot`, which the shell
+//! also sends when the app leaves the screen, decides only when the snapshot
+//! is taken. The rule and the link a pass was told are remembered in the
 //! ledger, because `handoff` — which hands parts to an operating system that
 //! moves them while this core is suspended — is not told them again, and
 //! `allows_cellular` is how the rule survives the hand-off.
@@ -52,17 +54,17 @@ use std::time::{Duration, Instant};
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_media::sealed::{self, PartSealer};
-use centraid_vault::backup2::files::{ContentFile, content_files};
-use centraid_vault::backup2::ledger::{Ledger, LedgerSnapshot, LocalSource, PartKind, Queued};
-use centraid_vault::backup2::mover::{self, Stop};
-use centraid_vault::backup2::naming::{BackupKeys, Name, name as part_name, names_of, part_count};
-use centraid_vault::backup2::retention;
-use centraid_vault::backup2::snapshot::{self, Manifest, Settled};
-use centraid_vault::backup2::spool::Spool;
-use centraid_vault::backup2::store::{self as plane_store, Store};
+use centraid_vault::backup::files::{ContentFile, content_files};
+use centraid_vault::backup::ledger::{Ledger, LedgerSnapshot, LocalSource, PartKind, Queued};
+use centraid_vault::backup::mover::{self, Stop};
+use centraid_vault::backup::naming::{BackupKeys, Name, name as part_name, names_of, part_count};
+use centraid_vault::backup::retention;
+use centraid_vault::backup::snapshot::{self, Manifest, Settled};
+use centraid_vault::backup::spool::Spool;
+use centraid_vault::backup::store::{self as plane_store, Store};
 use centraid_vault::clock::SystemClock;
 
-use super::link::{self, GatewayStore, Reached};
+use super::link::{self, GatewayStore, Reached, Unreached};
 use super::{Keyring, Plane, now_ms, plane_error, store_error};
 use crate::error::{CoreError, Result};
 use crate::handle::Handle;
@@ -160,9 +162,15 @@ pub struct Conditions {
     pub metered: bool,
     pub charging: bool,
     pub exclude_videos: bool,
-    /// The member asked for this pass: "Back up now", or the app leaving the
-    /// screen (`wants_snapshot`).
+    /// The member tapped "Back up now" in this pass (`DrainRequest.asked`,
+    /// the root's ruling A24): under `MANUAL` it lets originals be sealed, it
+    /// lets a video's original be sealed off the charger, and on a metered
+    /// link it lets the snapshot cross under any rule (R-1080-C38).
     pub asked: bool,
+    /// The shell asked for a snapshot now (`wants_snapshot`): "Back up now",
+    /// or the app leaving the screen. It decides the snapshot's timing and
+    /// nothing else.
+    pub snapshot: bool,
 }
 
 fn rule_of(value: i32) -> wire::TransferRule {
@@ -182,7 +190,8 @@ impl Conditions {
             metered: request.metered,
             charging: request.charging,
             exclude_videos: request.exclude_videos,
-            asked: request.wants_snapshot,
+            asked: request.asked,
+            snapshot: request.wants_snapshot,
         }
     }
 
@@ -203,6 +212,7 @@ impl Conditions {
             charging: read(CHARGING_KEY)?.is_some_and(|text| text == "1"),
             exclude_videos: read(EXCLUDE_VIDEOS_KEY)?.is_some_and(|text| text == "1"),
             asked: false,
+            snapshot: false,
         })
     }
 
@@ -226,10 +236,15 @@ impl Conditions {
         !(matches!(kind, Kind::Original { video: true }) && self.exclude_videos)
     }
 
-    /// Whether a part of this kind may cross the link this pass is on.
+    /// Whether a part of this kind may cross the link this pass is on. The
+    /// member's tap sends the records over a metered link under any rule
+    /// (R-1080-C38): a snapshot is a few MB, and the tap is consent.
     #[must_use]
     pub fn may_move(&self, kind: Kind) -> bool {
-        self.counts(kind) && (!self.metered || allows_cellular(kind, self.rule))
+        self.counts(kind)
+            && (!self.metered
+                || allows_cellular(kind, self.rule)
+                || (self.asked && kind == Kind::Records))
     }
 
     /// Whether a file of this kind may be sealed into the spool now.
@@ -257,7 +272,14 @@ impl Conditions {
             };
         }
         if !self.may_prepare(kind) {
-            return if matches!(kind, Kind::Original { video: true }) && !self.charging {
+            // `MANUAL` first: the tap lets a video through off the charger
+            // too, so it is the one act that moves either.
+            return if matches!(kind, Kind::Original { .. })
+                && self.rule == wire::TransferRule::Manual
+                && !self.asked
+            {
+                wire::WaitReason::Ask
+            } else if matches!(kind, Kind::Original { video: true }) && !self.charging {
                 wire::WaitReason::Charger
             } else {
                 wire::WaitReason::Window
@@ -271,17 +293,28 @@ impl Conditions {
     }
 }
 
-/// Whether the last pass reached a gateway. Unknown is "yes": a phone that
-/// has not run a pass yet is not blamed on its gateway.
+/// What the last pass found at the gateway, as the reason everything waits:
+/// `None` when it reached one, or when no pass has run yet — a phone that has
+/// not tried is not blamed on its gateway; `GATEWAY` when none answered;
+/// `UNTRUSTED` when the machine that answered is not the pinned gateway,
+/// whether at the start of the pass or part-way through it.
 ///
 /// # Errors
 /// The ledger's refusal.
-pub fn last_reach(ledger: &Ledger) -> Result<bool> {
-    Ok(ledger
-        .meta(REACHABLE_KEY)
-        .map_err(plane_error)?
-        .is_none_or(|text| text == "1"))
+pub fn last_reach(ledger: &Ledger) -> Result<Option<wire::WaitReason>> {
+    Ok(
+        match ledger.meta(REACHABLE_KEY).map_err(plane_error)?.as_deref() {
+            Some(REACH_SILENT) => Some(wire::WaitReason::Gateway),
+            Some(REACH_UNTRUSTED) => Some(wire::WaitReason::Untrusted),
+            _ => None,
+        },
+    )
 }
+
+/// `REACHABLE_KEY`'s three values.
+const REACH_ANSWERED: &str = "1";
+const REACH_SILENT: &str = "0";
+const REACH_UNTRUSTED: &str = "untrusted";
 
 // ─── the pass ───────────────────────────────────────────────────────────────
 
@@ -334,6 +367,10 @@ fn stop_of(stop: &Stop) -> Result<Option<wire::DrainStop>> {
             tracing::debug!(%reason, "the gateway stopped answering mid-pass");
             Ok(Some(wire::DrainStop::Unreachable))
         }
+        Stop::Untrusted(reason) => {
+            tracing::warn!(%reason, "the machine that answered is not the pinned gateway");
+            Ok(Some(wire::DrainStop::Untrusted))
+        }
         Stop::Refused(refusal) => {
             tracing::warn!(code = %refusal, "the gateway refused a part; the pass stops");
             Ok(Some(wire::DrainStop::Unreachable))
@@ -373,25 +410,34 @@ pub fn run(
     let mut pass = Pass::new();
     let destinations = ledger.destinations().map_err(plane_error)?;
     let reached = if destinations.is_empty() {
-        None
+        Err(Unreached::Silent)
     } else {
         link::reach(&destinations, &ledger, keyring.vault_id(), runtime)?
     };
     ledger
         .set_meta(
             REACHABLE_KEY,
-            if reached.is_some() || destinations.is_empty() {
-                "1"
-            } else {
-                "0"
+            match &reached {
+                Ok(_) => REACH_ANSWERED,
+                // Nothing paired is not a gateway to blame.
+                Err(_) if destinations.is_empty() => REACH_ANSWERED,
+                Err(Unreached::Silent) => REACH_SILENT,
+                Err(Unreached::Untrusted) => REACH_UNTRUSTED,
             },
         )
         .map_err(plane_error)?;
-    let Some(reached) = reached else {
-        // NOTHING PAIRED, OR NOTHING ANSWERED: nothing is sealed for nobody,
-        // and the spool is left exactly as it was.
-        pass.stopped = wire::DrainStop::Unreachable;
-        return answer(&spool, pass);
+    let reached = match reached {
+        Ok(reached) => reached,
+        Err(unreached) => {
+            // NOTHING PAIRED, NOTHING ANSWERED, OR NOT THE PINNED GATEWAY:
+            // nothing is sealed for nobody, and the spool is left exactly as
+            // it was.
+            pass.stopped = match unreached {
+                Unreached::Silent => wire::DrainStop::Unreachable,
+                Unreached::Untrusted => wire::DrainStop::Untrusted,
+            };
+            return answer(&spool, pass);
+        }
     };
     let outcome = pass_over(
         handle,
@@ -405,7 +451,16 @@ pub fn run(
         &mut pass,
     );
     match outcome {
-        Ok(()) => answer(&spool, pass),
+        Ok(()) => {
+            if pass.stopped == wire::DrainStop::Untrusted {
+                // PART-WAY THROUGH, ANOTHER MACHINE ANSWERED: status says so
+                // until a pass reaches the pinned gateway again.
+                ledger
+                    .set_meta(REACHABLE_KEY, REACH_UNTRUSTED)
+                    .map_err(plane_error)?;
+            }
+            answer(&spool, pass)
+        }
         Err(CoreError::VaultMoved { current_epoch, .. }) => {
             // FROZEN, AND REMEMBERED: the ledger keeps the refusal, so status
             // draws the phone read-only and every pass refuses at once.
@@ -439,7 +494,7 @@ fn pass_over(
 
     // 1. THE RECORDS, when the link may carry them.
     if conditions.may_move(Kind::Records) {
-        if snapshot_due(ledger, store.gateway_id(), conditions.asked)? {
+        if snapshot_due(ledger, store.gateway_id(), conditions.snapshot)? {
             take_snapshot(handle, keyring, plane, ledger, spool, store, budget)?;
         }
         let moved =
@@ -513,11 +568,12 @@ fn names_of_snapshot(snapshot: &LedgerSnapshot) -> Result<BTreeSet<Name>> {
     Ok(names)
 }
 
-/// Whether a snapshot is due. One the member asked for always is; otherwise
+/// Whether a snapshot is due. One the shell asked for (`wants_snapshot`)
+/// always is; otherwise
 /// one is due an hour after the newest a head named, and not while a younger
 /// one is still on its way whole — every part of it queued or held.
-fn snapshot_due(ledger: &Ledger, gateway_id: &str, asked: bool) -> Result<bool> {
-    if asked {
+fn snapshot_due(ledger: &Ledger, gateway_id: &str, wanted: bool) -> Result<bool> {
+    if wanted {
         return Ok(true);
     }
     let now = now_ms();
@@ -1056,7 +1112,7 @@ pub fn handoff(
             .presign_put(
                 store.vault(),
                 &link::wire_name(&part.name),
-                &centraid_gateway2::rules::ids::Digest::from_bytes(*part.digest.as_bytes()),
+                &centraid_gateway::rules::ids::Digest::from_bytes(*part.digest.as_bytes()),
                 part.size,
             )
             .map_err(|error| CoreError::Invariant {
@@ -1187,7 +1243,7 @@ pub fn reconcile(
         return Ok(unreachable);
     }
     let destinations = ledger.destinations().map_err(plane_error)?;
-    let Some(reached) = link::reach(&destinations, &ledger, keyring.vault_id(), runtime)? else {
+    let Ok(reached) = link::reach(&destinations, &ledger, keyring.vault_id(), runtime)? else {
         return Ok(unreachable);
     };
     let reconciled = if full {
@@ -1197,7 +1253,7 @@ pub fn reconcile(
     };
     let reconciled = match reconciled {
         Ok(reconciled) => reconciled,
-        Err(centraid_vault::backup2::PlaneError::Store(error)) => {
+        Err(centraid_vault::backup::PlaneError::Store(error)) => {
             tracing::debug!(%error, "the gateway stopped answering mid-reconcile");
             return Ok(unreachable);
         }
@@ -1259,6 +1315,7 @@ mod tests {
             charging: false,
             exclude_videos: false,
             asked: false,
+            snapshot: false,
         }
     }
 
@@ -1289,6 +1346,37 @@ mod tests {
             };
             assert!(!without_videos.may_move(Kind::Original { video: true }));
             assert!(without_videos.may_move(Kind::Original { video: false }));
+        }
+    }
+
+    /// **A TAP SENDS THE RECORDS OVER A METERED LINK, UNDER ANY RULE**
+    /// (R-1080-C38, superseding C14): the snapshot is a few MB and the tap is
+    /// consent. Originals still follow the rule, and without the tap the
+    /// records do too.
+    #[test]
+    fn a_tap_sends_the_records_over_a_metered_link_under_any_rule() {
+        for rule in RULES {
+            let paid = conditions(rule, true);
+            let tapped = Conditions {
+                asked: true,
+                ..paid
+            };
+            assert!(tapped.may_move(Kind::Records), "{rule:?}");
+            assert_eq!(
+                paid.may_move(Kind::Records),
+                allows_cellular(Kind::Records, rule),
+                "{rule:?}: no tap, the rule alone"
+            );
+            for original in [
+                Kind::Original { video: false },
+                Kind::Original { video: true },
+            ] {
+                assert_eq!(
+                    tapped.may_move(original),
+                    allows_cellular(original, rule),
+                    "{rule:?} {original:?}: an original follows the rule"
+                );
+            }
         }
     }
 
@@ -1339,6 +1427,56 @@ mod tests {
         );
     }
 
+    /// **AN ORIGINAL `MANUAL` HOLDS WAITS FOR THE TAP, NOT FOR TIME** (the
+    /// audit's finding 4): no pass moves it until the member taps Back up now,
+    /// so its reason is `ASK` — a video off the charger included, since the
+    /// tap lets that through too, and a library item whose bytes the shell
+    /// would stream only once it may be sealed.
+    #[test]
+    fn an_original_manual_holds_waits_for_the_members_tap() {
+        let manual = conditions(wire::TransferRule::Manual, false);
+        for (kind, library) in [
+            (Kind::Original { video: false }, false),
+            (Kind::Original { video: false }, true),
+            (Kind::Original { video: true }, false),
+        ] {
+            assert_eq!(
+                manual.waits_for(kind, false, library),
+                wire::WaitReason::Ask,
+                "{kind:?} library {library}"
+            );
+        }
+        assert_eq!(
+            manual.waits_for(Kind::Derivative, false, false),
+            wire::WaitReason::Window,
+            "a derivative is not held by the rule"
+        );
+    }
+
+    /// THE MEMBER'S TAP AND THE SNAPSHOT'S TIMING ARE TWO BITS (the root's
+    /// ruling A24). The shell sends `wants_snapshot` when the app leaves the
+    /// screen too, and under `MANUAL` that must not let an original through:
+    /// only `asked`, the "Back up now" tap, does.
+    #[test]
+    fn under_manual_only_the_members_tap_lets_an_original_through() {
+        let leaving = Conditions::of(&wire::DrainRequest {
+            rule: wire::TransferRule::Manual as i32,
+            wants_snapshot: true,
+            asked: false,
+            ..wire::DrainRequest::default()
+        });
+        assert!(leaving.snapshot, "the snapshot is still taken now");
+        assert!(!leaving.may_prepare(Kind::Original { video: false }));
+        assert!(leaving.may_prepare(Kind::Derivative));
+        let tapped = Conditions::of(&wire::DrainRequest {
+            rule: wire::TransferRule::Manual as i32,
+            wants_snapshot: true,
+            asked: true,
+            ..wire::DrainRequest::default()
+        });
+        assert!(tapped.may_prepare(Kind::Original { video: false }));
+    }
+
     /// An unspecified rule is `WIFI_ONLY`, and what a pass was told is what
     /// a handoff reads back.
     #[test]
@@ -1361,6 +1499,7 @@ mod tests {
             back,
             Conditions {
                 asked: false,
+                snapshot: false,
                 ..told
             }
         );

@@ -1,10 +1,10 @@
 //! THE LINK TO A GATEWAY (#1080 rulings 1, 7): the phone's pinned HTTPS
 //! client, and the backup plane's [`Store`] over it.
 //!
-//! `centraid_vault::backup2` is written against one synchronous trait so the
+//! `centraid_vault::backup` is written against one synchronous trait so the
 //! snapshot, the mover, retention and restore run unchanged against the real
 //! gateway and against `MemoryStore`. [`GatewayStore`] is that trait over
-//! `centraid_gateway2::client::Client`, driven on the core's own runtime
+//! `centraid_gateway::client::Client`, driven on the core's own runtime
 //! (`Handle::runtime_handle`): every call is one `block_on` from the thread
 //! the shell called the core on, which is never a runtime worker.
 //!
@@ -15,9 +15,15 @@
 //! `HEAD_CONFLICT` is [`StoreError::HeadConflict`], `NOT_FOUND` is
 //! [`StoreError::Missing`], `NO_HEAD` is a `head()` of `None`, and the
 //! gateway's own fault (`INTERNAL`) is [`StoreError::Unreachable`], retried
-//! later. A certificate that is not the pinned one is unreachable too: the
-//! gateway the member paired is not the machine that answered, and nothing is
-//! sent to it. Every other code is a [`Refusal`] by its spelling.
+//! later. Every other code is a [`Refusal`] by its spelling.
+//!
+//! Two failures are not an absent gateway, and are kept apart from one (#1080,
+//! the audit's finding 5): a certificate that is not the pinned one, or a
+//! gateway that answers as another, is [`StoreError::Untrusted`] — the machine
+//! that answered is not the gateway the member paired, and nothing is sent to
+//! it; bytes that do not hash to the digest they came with are
+//! [`StoreError::Damaged`] — the copy on the gateway did not open. A phone
+//! away from home waits; these two are the member's to hear about.
 //!
 //! # A PART IS SENT FROM MEMORY OR FROM ITS SPOOL FILE
 //!
@@ -29,14 +35,14 @@
 
 use std::io::{Read, Write};
 
-use centraid_gateway2::client::{Client, ClientError, Destination as Pinned, Part, Source};
-use centraid_gateway2::rules::code::Refusal as WireRefusal;
-use centraid_gateway2::rules::ids::{Digest as WireDigest, Name as WireName, Token, VaultId};
-use centraid_gateway2::rules::limits::MAX_OBJECT_BYTES;
-use centraid_gateway2::rules::wire::{HeadView, Info, SetHead};
-use centraid_vault::backup2::ledger::{Destination, Ledger};
-use centraid_vault::backup2::naming::{Digest, Name};
-use centraid_vault::backup2::store::{
+use centraid_gateway::client::{Client, ClientError, Destination as Pinned, Part, Source};
+use centraid_gateway::rules::code::Refusal as WireRefusal;
+use centraid_gateway::rules::ids::{Digest as WireDigest, Name as WireName, Token, VaultId};
+use centraid_gateway::rules::limits::MAX_OBJECT_BYTES;
+use centraid_gateway::rules::wire::{HeadView, Info, SetHead};
+use centraid_vault::backup::ledger::{Destination, Ledger};
+use centraid_vault::backup::naming::{Digest, Name};
+use centraid_vault::backup::store::{
     Deleted, Head, ObjectEntry, Outgoing, PartAnswer, Put, Refusal, SnapshotEntry, Store,
     StoreError,
 };
@@ -90,9 +96,10 @@ fn store_error(error: ClientError) -> StoreError {
             StoreError::Unreachable("INTERNAL: the gateway's own store failed".to_owned())
         }
         ClientError::Unreachable(detail) => StoreError::Unreachable(detail),
-        ClientError::Untrusted => StoreError::Unreachable(
-            "the machine that answered is not the pinned gateway".to_owned(),
-        ),
+        ClientError::Untrusted => {
+            StoreError::Untrusted("the machine that answered is not the pinned gateway".to_owned())
+        }
+        ClientError::Damaged(detail) => StoreError::Damaged(detail),
         ClientError::Protocol(detail) => {
             StoreError::Unreachable(format!("the gateway's answer broke the protocol: {detail}"))
         }
@@ -184,15 +191,16 @@ impl GatewayStore {
     /// `GET /v2/info`: whether the gateway answers at all, and its clock.
     ///
     /// # Errors
-    /// [`StoreError::Unreachable`] when it does not, or answers as another
-    /// gateway than the one paired.
+    /// [`StoreError::Unreachable`] when it does not;
+    /// [`StoreError::Untrusted`] when the machine that answered is not the
+    /// pinned one, or answers as another gateway than the one paired.
     pub fn info(&self) -> std::result::Result<Info, StoreError> {
         let info = self
             .runtime
             .block_on(self.client.info())
             .map_err(store_error)?;
         if info.gateway_id.hex() != self.gateway_id {
-            return Err(StoreError::Unreachable(format!(
+            return Err(StoreError::Untrusted(format!(
                 "the gateway answered as {}, not as the paired {}",
                 info.gateway_id, self.gateway_id
             )));
@@ -237,12 +245,12 @@ impl Store for GatewayStore {
             bytes,
         ));
         match answer {
-            Ok(centraid_gateway2::client::Put::Stored(_)) => Ok(Put::Stored),
-            Ok(centraid_gateway2::client::Put::AlreadyStored(_)) => Ok(Put::AlreadyStored),
+            Ok(centraid_gateway::client::Put::Stored(_)) => Ok(Put::Stored),
+            Ok(centraid_gateway::client::Put::AlreadyStored(_)) => Ok(Put::AlreadyStored),
             // A NAME IS A FUNCTION OF THE PLAINTEXT and sealing is salted, so
             // another digest under it is these bytes sealed again: the mover
             // records it as acknowledged (R-1080-B4).
-            Ok(centraid_gateway2::client::Put::NameTaken { .. }) => {
+            Ok(centraid_gateway::client::Put::NameTaken { .. }) => {
                 Err(StoreError::Refused(Refusal::NameTaken))
             }
             Err(error) => Err(store_error(error)),
@@ -410,9 +418,20 @@ pub struct Reached {
     pub gateway_ms: i64,
 }
 
+/// Why no destination was reached.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unreached {
+    /// None answered, or none is paired.
+    Silent,
+    /// None that answered is the gateway this phone pinned: a machine with
+    /// another certificate, or a gateway answering as another.
+    Untrusted,
+}
+
 /// The first of `destinations`, in the ledger's order, that answers `info`
 /// as itself. A destination this phone was superseded at is skipped: its
-/// writes are refused and its reads have nothing a pass needs.
+/// writes are refused and its reads have nothing a pass needs. When none
+/// does, whether any machine answered that is not the pinned gateway.
 ///
 /// # Errors
 /// The ledger's refusal, or a destination row whose token will not read.
@@ -421,7 +440,8 @@ pub fn reach(
     ledger: &Ledger,
     vault: VaultId,
     runtime: &tokio::runtime::Handle,
-) -> Result<Option<Reached>> {
+) -> Result<std::result::Result<Reached, Unreached>> {
+    let mut unreached = Unreached::Silent;
     for destination in destinations {
         if ledger
             .moved(&destination.gateway_id)
@@ -436,11 +456,19 @@ pub fn reach(
                 ledger
                     .touch_seen(&destination.gateway_id, super::now_ms())
                     .map_err(super::plane_error)?;
-                return Ok(Some(Reached {
+                return Ok(Ok(Reached {
                     destination: destination.clone(),
                     store,
                     gateway_ms: info.time_ms,
                 }));
+            }
+            Err(error @ StoreError::Untrusted(_)) => {
+                tracing::warn!(
+                    gateway = %destination.gateway_id,
+                    %error,
+                    "a machine that is not the pinned gateway answered"
+                );
+                unreached = Unreached::Untrusted;
             }
             Err(error) => {
                 tracing::debug!(
@@ -451,5 +479,29 @@ pub fn reach(
             }
         }
     }
-    Ok(None)
+    Ok(Err(unreached))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **A WRONG CERTIFICATE AND A DAMAGED COPY ARE NOT AN ABSENT GATEWAY**
+    /// (#1080, the audit's finding 5): a phone away from home waits it out,
+    /// and these two are the member's to hear about.
+    #[test]
+    fn a_wrong_certificate_is_untrusted_and_bytes_off_their_digest_are_damaged() {
+        assert!(matches!(
+            store_error(ClientError::Untrusted),
+            StoreError::Untrusted(_)
+        ));
+        assert!(matches!(
+            store_error(ClientError::Damaged("a flipped bit".to_owned())),
+            StoreError::Damaged(_)
+        ));
+        assert!(matches!(
+            store_error(ClientError::Unreachable("away".to_owned())),
+            StoreError::Unreachable(_)
+        ));
+    }
 }

@@ -53,7 +53,7 @@ That is a security property and also the shape of v0: with no client but the pho
 
 ### No third party in the path
 
-**There is no relay, no DNS service, no certificate authority and no Centraid-operated service between a phone and its gateway** ([R-1080-1](docs/decisions.md#backups-from-first-principles-1080)). The phone dials an address the pairing QR listed or a LAN browse found, and trusts exactly the certificate whose fingerprint it scanned; a proxy that terminates TLS is refused like any impostor. What the network path sees is TLS between two addresses, its timing and its volume.
+**There is no relay, no DNS service, no certificate authority and no Centraid-operated service between a phone and its gateway** ([R-1080-1](docs/decisions.md#backups-from-first-principles-1080)). The phone dials an address the pairing QR listed, its `.local` name first, and trusts exactly the certificate whose fingerprint it scanned; a proxy that terminates TLS is refused like any impostor. What the network path sees is TLS between two addresses, its timing and its volume.
 
 ### What a malicious gateway can do
 
@@ -85,6 +85,8 @@ The 64-byte **seed** is the opposite case and is in the synced keychain on purpo
 1. **The member has the 24 words.** A fresh install takes them and a gateway's pairing payload, derives the vault keys, rebuilds each vault from its head and checks it. The new phone claims each vault at the next writer epoch only after its checks, and the old phone — if it ever comes back online — is answered `MOVED` and freezes read-only with its unacknowledged changes visible (F1).
 2. **The member does not have the 24 words and the seed was synced.** The keychain restores it, and the restore runs from that seed with no words typed (`RestoreRequest.seed`, [R-1047-E9](docs/decisions.md#the-24-words-on-the-phone-1047-e1)). This is the common path and the reason the seed is synced.
 3. **Neither.** The vault is gone. There is no key escrow, no recovery service and no reset link, and this is said plainly at setup.
+
+Whatever the case, the lost phone's gateway token still reads the sealed backup until it is revoked: `centraid-gateway pairings` lists each token's id and `centraid-gateway pairings revoke <id>` forgets it, after which the gateway answers that phone `UNAUTHORIZED` on every route ([docs/gateway.md](docs/gateway.md)); a phone that forgets a gateway revokes its own token first, best-effort.
 
 ### The member key `K`
 

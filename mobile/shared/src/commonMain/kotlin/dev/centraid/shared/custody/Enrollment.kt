@@ -23,7 +23,7 @@ import dev.centraid.shared.shell.Shelf
  *   laptop is dialled; a phone already holding different words for vaults it
  *   keys is refused; the seed is stored only once the laptop brought something
  *   back; then each vault is held under the id its own file names, at the
- *   index the restore found it at, with the device secret the restore minted.
+ *   index the restore found it at.
  * * **Re-keying** ([rekey], Locker's wall): the words are seeded, checked
  *   against any seed already here, stored, and every vault with a recorded
  *   index is reopened keyed. No laptop; and no index is ever guessed.
@@ -51,7 +51,7 @@ public class Enrollment(
     public interface Keeper {
         public suspend fun found(): FoundResult
 
-        public suspend fun adoptRestored(restored: List<Shelf.Restored>, deviceSecretHex: String): Int
+        public suspend fun adoptRestored(restored: List<Shelf.Restored>): Int
 
         public suspend fun rekey(): Int
 
@@ -109,7 +109,7 @@ public class Enrollment(
 
         /**
          * What the laptop sent did not pass this phone's check (#1047 R3).
-         * Nothing was stored, nothing laid down, and the lease did not move.
+         * Nothing was stored, nothing laid down, and nothing was claimed.
          */
         public data object DidNotCheck : Restored
 
@@ -126,10 +126,7 @@ public class Enrollment(
         }
         if (answer.vaults.isEmpty()) return Restored.NothingHeld
         store(seed, words)?.let { return Restored.Refused(it) }
-        val added = keeper.adoptRestored(
-            answer.vaults.map { Shelf.Restored(path = it.path, index = it.index) },
-            answer.deviceSecretHex,
-        )
+        val added = keeper.adoptRestored(answer.vaults.map { Shelf.Restored(path = it.path, index = it.index) })
         return Restored.Done(answer, added)
     }
 
@@ -150,10 +147,7 @@ public class Enrollment(
         }
         if (answer.vaults.isEmpty()) return Restored.NothingHeld
         secrets.settleSeed()
-        val added = keeper.adoptRestored(
-            answer.vaults.map { Shelf.Restored(path = it.path, index = it.index) },
-            answer.deviceSecretHex,
-        )
+        val added = keeper.adoptRestored(answer.vaults.map { Shelf.Restored(path = it.path, index = it.index) })
         return Restored.Done(answer, added)
     }
 
@@ -162,8 +156,7 @@ public class Enrollment(
      * answered some vaults and named [indices] as `unclaimed`, and the member
      * asks again. The seed is already stored — the first restore stored it —
      * so no words are asked for and nothing is stored; the core leaves the
-     * vaults this phone holds as they are, and only what came back is held,
-     * under the device secret this answer minted for it.
+     * vaults this phone holds as they are, and only what came back is held.
      */
     public suspend fun restoreStayed(indices: List<Int>, endpoint: String?): Restored {
         val seed = secrets.seed() ?: return Restored.Refused(Refusal.NOT_A_PHRASE)
@@ -172,10 +165,7 @@ public class Enrollment(
             is RestoreResult.Refused -> return stopped(result.because)
         }
         if (answer.vaults.isEmpty()) return Restored.NothingHeld
-        val added = keeper.adoptRestored(
-            answer.vaults.map { Shelf.Restored(path = it.path, index = it.index) },
-            answer.deviceSecretHex,
-        )
+        val added = keeper.adoptRestored(answer.vaults.map { Shelf.Restored(path = it.path, index = it.index) })
         return Restored.Done(answer, added)
     }
 
@@ -244,8 +234,8 @@ public class Enrollment(
             keeper = object : Keeper {
                 override suspend fun found(): FoundResult = session.found()
 
-                override suspend fun adoptRestored(restored: List<Shelf.Restored>, deviceSecretHex: String): Int =
-                    session.adoptRestored(restored, deviceSecretHex)
+                override suspend fun adoptRestored(restored: List<Shelf.Restored>): Int =
+                    session.adoptRestored(restored)
 
                 override suspend fun rekey(): Int = session.rekeyed()
 

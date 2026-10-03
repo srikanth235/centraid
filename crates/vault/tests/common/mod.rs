@@ -80,7 +80,7 @@ impl Scratch {
         seed: &str,
     ) -> Result<(
         Self,
-        Arc<std::sync::Mutex<centraid_vault::backup2::ledger::Ledger>>,
+        Arc<std::sync::Mutex<centraid_vault::backup::ledger::Ledger>>,
     )> {
         let dir = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&dir)?;
@@ -89,8 +89,8 @@ impl Scratch {
         let store = centraid_blobs::ByteStore::open(file.with_extension("bytes"))
             .expect("a content store opens");
         let ledger = Arc::new(std::sync::Mutex::new(
-            centraid_vault::backup2::ledger::Ledger::open(
-                centraid_vault::backup2::ledger::Ledger::path_for(&file),
+            centraid_vault::backup::ledger::Ledger::open(
+                centraid_vault::backup::ledger::Ledger::path_for(&file),
             )
             .expect("the ledger opens"),
         ));
@@ -181,8 +181,24 @@ pub fn owner_party(vault: &Vault) -> Result<String> {
     })
 }
 
-/// Enrol a device owned by the vault's owner.
+/// A device row and its private key sibling, owned by the vault's owner —
+/// the private table a canary is planted in. Written raw: nothing in the
+/// product enrols a device since the gateway allowlist left with iroh (#1080).
 pub fn enrol(vault: &Vault, device_id: &str, public_key: &str) -> Result<()> {
     let owner = owner_party(vault)?;
-    vault.enrol_device(device_id, &owner, "Test device", "ios", public_key)
+    let now = vault.clock().now_text();
+    vault.commit(|tx| {
+        tx.set_producer("test.enrol");
+        tx.connection().execute(
+            "INSERT INTO access_device (device_id, owner_party_id, name, platform, enrolled_at)
+             VALUES (?1, ?2, 'Test device', 'ios', ?3)",
+            rusqlite::params![device_id, owner, now],
+        )?;
+        tx.connection().execute(
+            "INSERT INTO access_device_secret (device_id, public_key) VALUES (?1, ?2)",
+            rusqlite::params![device_id, public_key],
+        )?;
+        Ok(())
+    })?;
+    Ok(())
 }

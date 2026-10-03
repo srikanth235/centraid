@@ -24,18 +24,6 @@ CREATE INDEX access_provenance_occurred_page_idx
 CREATE INDEX access_receipt_occurred_page_idx
   ON access_receipt(occurred_at, receipt_id);
 
--- index backup_base_range_by_hash on backup_base_range
-CREATE INDEX backup_base_range_by_hash ON backup_base_range (plaintext_hash);
-
--- index backup_blob_custody_by_role on backup_blob_custody
-CREATE INDEX backup_blob_custody_by_role ON backup_blob_custody (blob_role);
-
--- index backup_blob_placement_by_object on backup_blob_placement
-CREATE INDEX backup_blob_placement_by_object ON backup_blob_placement (object_name);
-
--- index backup_object_range_by_object on backup_object_range
-CREATE INDEX backup_object_range_by_object ON backup_object_range (object_name);
-
 -- index core_attachment_target_role_page_idx on core_attachment
 CREATE INDEX core_attachment_target_role_page_idx
   ON core_attachment(target_type, role, attachment_id);
@@ -919,45 +907,6 @@ CREATE TABLE audit_archive_manifest (
 -- table audit_archive_pass on audit_archive_pass
 CREATE TABLE audit_archive_pass (
   active INTEGER PRIMARY KEY CHECK (active = 1)
-) STRICT;
-
--- table backup_base_range on backup_base_range
-CREATE TABLE backup_base_range (
-  generation      TEXT NOT NULL CHECK (length(generation) = 32),
-  range_index     INTEGER NOT NULL CHECK (range_index >= 0),
-  byte_offset     INTEGER NOT NULL CHECK (byte_offset >= 0),
-  byte_length     INTEGER NOT NULL CHECK (byte_length > 0),
-  plaintext_hash  TEXT NOT NULL CHECK (length(plaintext_hash) = 64),
-  object_name     TEXT NOT NULL CHECK (length(object_name) = 64),
-  PRIMARY KEY (generation, range_index)
-) STRICT;
-
--- table backup_blob_custody on backup_blob_custody
-CREATE TABLE backup_blob_custody (
-  plaintext_hash  TEXT PRIMARY KEY CHECK (length(plaintext_hash) = 64 AND plaintext_hash NOT GLOB '*[^0-9a-f]*'),
-  file_key        BLOB NOT NULL CHECK (length(file_key) = 32),
-  plaintext_bytes INTEGER NOT NULL CHECK (plaintext_bytes >= 0),
-  blob_role       TEXT NOT NULL CHECK (blob_role IN ('original','thumbnail')),
-  created_at      TEXT NOT NULL
-) STRICT;
-
--- table backup_blob_placement on backup_blob_placement
-CREATE TABLE backup_blob_placement (
-  plaintext_hash TEXT NOT NULL REFERENCES backup_blob_custody(plaintext_hash) ON DELETE CASCADE,
-  part_index     INTEGER NOT NULL CHECK (part_index >= 0),
-  object_name    TEXT NOT NULL CHECK (length(object_name) = 64 AND object_name NOT GLOB '*[^0-9a-f]*'),
-  byte_offset    INTEGER NOT NULL CHECK (byte_offset >= 0),
-  byte_length    INTEGER NOT NULL CHECK (byte_length >= 0),
-  PRIMARY KEY (plaintext_hash, part_index)
-) STRICT;
-
--- table backup_object_range on backup_object_range
-CREATE TABLE backup_object_range (
-  plaintext_hash  TEXT PRIMARY KEY CHECK (length(plaintext_hash) = 64),
-  object_name     TEXT NOT NULL CHECK (length(object_name) = 64),
-  object_bytes    INTEGER NOT NULL CHECK (object_bytes >= 0),
-  plaintext_bytes INTEGER NOT NULL CHECK (plaintext_bytes >= 0),
-  created_at      TEXT NOT NULL
 ) STRICT;
 
 -- table blob_access on blob_access

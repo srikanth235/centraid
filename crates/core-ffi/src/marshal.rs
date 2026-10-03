@@ -164,10 +164,10 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
 
 /// `{"vault": {"seed": "<128 lowercase hex>", "index": 0}}`.
 ///
-/// **Present and unreadable IS an error**, for the same reason `CONTRACT.md`
-/// §4a gives about the endpoint secret: carrying on without it would leave a
-/// shell believing it had unlocked a core that cannot seal a single byte, and
-/// the member would find that out on the day their phone is gone.
+/// **Present and unreadable IS an error** (`CONTRACT.md` §4b): carrying on
+/// without it would leave a shell believing it had unlocked a core that cannot
+/// seal a single byte, and the member would find that out on the day their
+/// phone is gone.
 fn vault_seed(parsed: &serde_json::Value) -> Result<Option<(Seed, u32)>, CoreError> {
     let Some(vault) = parsed.get("vault") else {
         return Ok(None);

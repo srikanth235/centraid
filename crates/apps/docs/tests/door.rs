@@ -32,7 +32,7 @@ use centraid_apps_kit::row::{Cell, Row};
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_media::format::content_hash_hex;
 use centraid_vault::access::Principal;
-use centraid_vault::backup::store::{BlobStore, FsBlobStore};
+use centraid_vault::bytes::{BlobStore, FsBlobStore};
 use centraid_vault::clock::{FixedClock, SeededIds};
 use centraid_vault::commands::Registry;
 use centraid_vault::{Command, CommandStatus, Vault};

@@ -111,6 +111,8 @@ public object BackupLines {
         WaitReason.ICLOUD -> SharedCopy.BACKUP_WAIT_ICLOUD
         WaitReason.BYTES -> SharedCopy.BACKUP_WAIT_BYTES
         WaitReason.WINDOW -> SharedCopy.BACKUP_WAIT_WINDOW
+        WaitReason.ASK -> SharedCopy.BACKUP_WAIT_ASK
+        WaitReason.UNTRUSTED -> SharedCopy.BACKUP_WAIT_UNTRUSTED
     }
 
     private fun wire(reason: WaitReason): BackupWaitingRow.Reason = when (reason) {
@@ -120,6 +122,8 @@ public object BackupLines {
         WaitReason.ICLOUD -> BackupWaitingRow.Reason.REASON_ICLOUD
         WaitReason.BYTES -> BackupWaitingRow.Reason.REASON_BYTES
         WaitReason.WINDOW -> BackupWaitingRow.Reason.REASON_WINDOW
+        WaitReason.ASK -> BackupWaitingRow.Reason.REASON_ASK
+        WaitReason.UNTRUSTED -> BackupWaitingRow.Reason.REASON_UNTRUSTED
     }
 
     /** The accessibility label is the line read aloud: sentence, detail, then what waits. */

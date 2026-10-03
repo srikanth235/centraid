@@ -1,0 +1,55 @@
+-- THE VAULT KEEPS NO BACKUP INDEX — RUNG TEN (#1080).
+--
+-- **ON THE LADDER.** `LADDER` in `crates/vault/src/migrations.rs` ends here.
+-- The file is both the migration and its fixture (D-1020-D1-13).
+--
+-- **NEVER EDITED FROM HERE ON.** A file in the field has already run this text;
+-- an edit changes what a fresh file gets and nothing else, which is two schemas
+-- with one number. A correction is rung eleven.
+--
+-- ## What this is for
+--
+-- Rungs three and four put the backup's index inside the vault: which object
+-- held each 4 MiB range of a base (`backup_object_range`,
+-- `backup_base_range`), and a random file key per blob with where its bytes
+-- sat (`backup_blob_custody`, `backup_blob_placement`). The plane that wrote
+-- them — WAL capture into `centraid-object/1` generations — is deleted, and
+-- its replacement keeps no index anywhere (#1080 rulings 4, 5):
+--
+-- - a part's name is a keyed hash of the plaintext it carries, so a phone
+--   holding the 24 words can NAME every part of every file the vault refers
+--   to, and asks the gateway which names it holds (`exists`) instead of
+--   remembering;
+-- - a part's key derives from the vault's root key and the part's own salt,
+--   so there is no per-blob key to keep;
+-- - what a device has uploaded, and what it still owes, is device-local and
+--   derived — `<stem>.backup.db` beside the vault, never inside it, so a
+--   snapshot of the vault never carries the state of its own upload.
+--
+-- A mechanical sweep of `crates/`, `mobile/`, `contracts/` and the scripts
+-- finds no statement that reads or writes the four tables once
+-- `crates/vault/src/backup` (the old plane) is gone: their only mentions are
+-- rungs three and four, which founded them, and this rung.
+--
+-- ## Why a plain `DROP`, and in this order
+--
+-- `backup_blob_placement` references `backup_blob_custody` (ON DELETE
+-- CASCADE), so the child goes first and no cascade runs. No trigger or view
+-- names any of the four, and each table's indexes
+-- (`backup_object_range_by_object`, `backup_base_range_by_hash`,
+-- `backup_blob_custody_by_role`, `backup_blob_placement_by_object`) and its
+-- primary key's implicit index go with it. Not `IF EXISTS`: every file at rung
+-- nine holds all four, and one that did not would be a file this ladder did
+-- not write.
+--
+-- ## What a member loses
+--
+-- Nothing they can see. The rows were the old plane's bookkeeping, and the
+-- old plane's generations cannot be restored by this build: the next backup
+-- is a first snapshot, which uploads the vault's ranges and every content
+-- file the gateway does not already hold under its new name.
+
+DROP TABLE backup_blob_placement;
+DROP TABLE backup_blob_custody;
+DROP TABLE backup_base_range;
+DROP TABLE backup_object_range;

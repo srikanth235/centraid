@@ -6,7 +6,7 @@ It holds **no key, no plaintext byte, no plaintext hash and no schema**. It can 
 
 **The phone opens a TLS connection straight to it.** No certificate authority, no domain, no relay and no DNS service sits in the path: the gateway mints its own certificate at its first `serve`, the pairing QR carries the certificate's BLAKE3 fingerprint, and the phone pins it. HTTPS rather than anything else because of iOS: the only transfer iOS continues while an app is suspended is a file upload handed to the system's background `URLSession`, and that talks to a URL ([R-1080-2](decisions.md#backups-from-first-principles-1080)).
 
-**The protocol is the rules, not the server.** [`crates/gateway`](../crates/gateway) holds the protocol's `rules` — every route's whole decision, with no I/O, no clock and no randomness — and a conformance suite of 30 named cases that runs against an in-memory state and again over the wire, through the phone's real client, against the real server. The server decides only how bytes arrive; the client is the phone's half.
+**The protocol is the rules, not the server.** [`crates/gateway`](../crates/gateway) holds the protocol's `rules` — every route's whole decision, with no I/O, no clock and no randomness — and a conformance suite of 31 named cases that runs against an in-memory state and again over the wire, through the phone's real client, against the real server. The server decides only how bytes arrive; the client is the phone's half.
 
 ## The protocol, v2
 
@@ -26,6 +26,7 @@ HTTPS, HTTP/1.1. JSON for small bodies ([R-1029-3](decisions.md#the-phone-is-the
 | `POST /v2/v/{vault}/fetch` | bearer | `{names: [...]}`, at most 1,000 → the held objects in the same framing, in the order asked, at most 256 MiB. |
 | `GET /v2/v/{vault}/objects?after=<name>&limit=1000` | bearer | `[{name, size, digest, stored_at_ms}]`, sorted by name, at most 1,000 a page; tombstones are left out. |
 | `POST /v2/v/{vault}/delete` | bearer, write | `{names: [...]}` → `{deleted, refused}`: a tombstone with a seven-day grace. The head's manifest is refused `HEAD_IN_USE`; a tombstoned manifest deregisters its snapshot; a name never stored, already tombstoned or already purged is `deleted`. |
+| `POST /v2/v/{vault}/revoke` | bearer | No body → `{revoked: true}`: the token that calls it is forgotten, so it is `UNAUTHORIZED` on every route after, a second `revoke` included. Any token of the vault may revoke itself, a superseded writer's too; a lost phone's token is revoked by the operator with `pairings revoke <token id>`. |
 
 A **bundle** is `name (64 ascii hex) ‖ digest (64 ascii hex) ‖ u64be(len) ‖ bytes`, frame after frame with nothing between them, and the same framing answers a `fetch` — it is how a phone uploads a snapshot's ranges and a library's thumbnails, and how a restore pulls every derivative, without a round trip per object. Neither end holds a whole bundle in memory.
 
@@ -99,7 +100,7 @@ The HTTP status exists only so that a proxy in between behaves. **A refusal is n
 ```sh
 centraid-gateway serve    --data-dir ~/centraid-gateway [--bind 0.0.0.0:8443] [--no-mdns]
 centraid-gateway pair     --data-dir ~/centraid-gateway [--port 8443]
-centraid-gateway pairings --data-dir ~/centraid-gateway
+centraid-gateway pairings --data-dir ~/centraid-gateway [revoke <token id>]
 centraid-gateway scrub    --data-dir ~/centraid-gateway
 centraid-gateway health   --data-dir ~/centraid-gateway        # or --addr <host:port> --pin <hex>
 centraid-gateway install  --data-dir ~/centraid-gateway [--bind 0.0.0.0:8443] [--dry-run]
@@ -142,7 +143,7 @@ The member compares a **safety number** — 60 digits in 12 groups of 5 — and 
 
 ### Discovery
 
-`serve` advertises `_centraid-gateway._tcp` on the LAN, with TXT `gw` (its id) and `v=2` (`--no-mdns` turns it off). The phone browses for it in the foreground to refresh a destination's addresses; the pairing record keeps the last addresses that answered, so an upload the OS runs in the background needs no browse. **LAN first** ([R-1080-9](decisions.md#backups-from-first-principles-1080)): v1 reaches a gateway on the LAN or at any address the phone can dial directly — a VPS, a VPN name. Hole punching is not rebuilt, and nothing relays.
+`serve` advertises `_centraid-gateway._tcp` on the LAN, with TXT `gw` (its id) and `v=2` (`--no-mdns` turns it off). No shell browses for it yet ([Q-1080-D3](decisions.md#backups-from-first-principles-1080)): the pairing payload lists the gateway's `<host>.local` name first, which iOS resolves through Bonjour, so a laptop whose address changed on the same network is still reached by name, and a gateway whose name changed is paired again. The pairing record keeps the addresses the payload listed and the last one that answered, so an upload the OS runs in the background needs no browse. **LAN first** ([R-1080-9](decisions.md#backups-from-first-principles-1080)): v1 reaches a gateway on the LAN or at any address the phone can dial directly — a VPS, a VPN name. Hole punching is not rebuilt, and nothing relays.
 
 ### The data directory
 

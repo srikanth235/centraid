@@ -2284,6 +2284,86 @@ Recorded 2026-10-03 by lane D of [#1080](https://github.com/srikanth235/centraid
 | **Q-1080-D2** | **"Back up now" under MANUAL.** `DrainRequest` carries `wants_snapshot` for "Back up now", leaving the screen and a restore alike, so the core cannot tell a member's tap from a schedule. | (a) MANUAL governs downloads only and uploads follow WIFI_ONLY (R-1080-D7, shell side); (b) a `member_asked` bit that lets "Back up now" move originals under MANUAL on any link the fixed rule allows. **Recommend (a)** for v1 (#1080). |
 | **Q-1080-D3** | **Finding a gateway whose address changed.** The pairing payload's addresses are the only ones the core keeps; `serve` advertises `_centraid-gateway._tcp` and iOS declares it, but no shell browses. | (a) A shared `GatewayBrowser` seam, browsed in the foreground, feeding the core's destination addresses; (b) pair again. **Recommend (a)** in a follow-up (#1080). |
 
+## The gateway v2 and the cut-over (#1080)
+
+Recorded 2026-10-03 by lane C of [#1080](https://github.com/srikanth235/centraid/issues/1080), which moved the phone's core onto the backup plane and deleted the planes it replaced: `crates/gateway-core`, `crates/gateway-server`, `crates/gateway-client`, the #1029 backup plane in `crates/vault/src/backup`, `centraid-object/1`, the identity network modules and iroh. `crates/gateway2` became `crates/gateway` and `crates/vault/src/backup2` became `crates/vault/src/backup`. The evidence is [`receipts/issue-1080-backups-v2.md`](../receipts/issue-1080-backups-v2.md), lane A's section and lane C's.
+
+### The gateway v2 (#1080 wave 1, lane A)
+
+Recorded by lane A with `crates/gateway` (then `crates/gateway2`), and entered here by the cut-over as its brief asked.
+
+| Id | Current decision |
+| --- | --- |
+| **R-1080-A1** — **a commit's trailers name the authoring model** | `Co-Authored-By` names the model the session ran on, not a model a brief guessed (#1080). |
+| **R-1080-A2** — **the gateway's SQL lives in `.sql` files** | `crates/gateway/src/server/sql/*.sql`, reached through `include_str!`, because `sql-confinement` scans `.rs` literals and the gateway is not one of the crates that may hold them (#1080). |
+| **R-1080-A3** — **a `read` grant at epoch 0 mints a token that never writes** | A restore checks a vault's snapshot under a read grant before it claims anything, so a phone that only looks cannot supersede the writer (#1080). |
+| **R-1080-A4** — **a claim on an unknown vault is `UNAUTHORIZED`, and `EPOCH_CONFLICT` carries the epoch and the head** | A claimant that lost a race learns what it lost to, and can check that head before claiming again (#1080). |
+| **R-1080-A5** — **`GET head` reports the writer epoch, and `NO_HEAD` carries it** | A phone deciding whether to claim needs the epoch whether or not a head exists (#1080). |
+| **R-1080-A6** — **a tombstone is missing to `exists`, absent from the listing, and brought back by a `PUT`; a delete is idempotent** | Deleting an absent name succeeds, so a retried collection never fails on what it already did (#1080). |
+| **R-1080-A7** — **the scrub marks damaged rows; a damaged name reads as missing, and a `PUT` replaces it** | The phone repairs rot by sending the part again, which `exists` asks it to (#1080). |
+| **R-1080-A8** — **`PUT head` needs the manifest held, and setting the standing head again succeeds** | A head never names a manifest the gateway cannot serve, and a retried settle is not an error (#1080). |
+| **R-1080-A9** — **`fetch` leaves out what `GET` would not serve; `TOO_LARGE` above 256 MiB, `TOO_MANY` above 1,000 names** | A bundle answer is bounded on both axes, and a missing name is an absent frame rather than a failed request (#1080). |
+| **R-1080-A10** — **the crate's default features are `server` and `client`** | The workspace's `cargo test` runs the wire conformance suite; a phone links `default-features = false, features = ["client"]` and gets no listener, SQLite or certificate minting (#1080). |
+| **R-1080-A11** — **the extra refusal codes, and the `centraid-code` header** | `BAD_REQUEST`, `EPOCH_CONFLICT`, `NOT_FOUND`, `TOO_MANY`, `BAD_RANGE`, `INTERNAL`, beside the issue's set; the code rides in a header so a body-less answer still carries it (#1080). |
+| **R-1080-A12** — **a bundle answer carries `already` per frame** | A part the gateway already held is an acknowledgement the phone records, frame by frame (#1080, R-1080-B4). |
+| **R-1080-A13** — **a refusal whose HTTP status is not its code's is a protocol error** | The client trusts neither half alone (#1080). |
+| **R-1080-A14** — **damaged objects are not served; tombstoned ones are, until the purge** | The root's ruling A16: a restore in the grace window still finds what a collection marked (#1080). |
+| **R-1080-A15** — **the user unit hides the home with `ProtectHome=tmpfs` and binds back the data directory and the binary** | `ProtectHome=true` drops every `ReadWritePaths=` under `/home`, so a unit whose data lived at home could never start (#1080). |
+| **R-1080-A16** — **sweeps are due by the wall clock, and a failed sweep is retried an hour later** | Due times live in `sweeps.json`, so a restart neither skips nor doubles a purge (#1080). |
+| **R-1080-A17** — **`bundle_parts` refuses `TOO_LARGE` before it sends** | The client never streams a body the gateway will refuse at its end (#1080). |
+
+### The phone core and the cut-over (#1080 lane C)
+
+| Id | Current decision |
+| --- | --- |
+| **R-1080-C1** — **the old plane's proto fields were removed at the cut-over, not before** | Reserving them while the old Rust flows still read them would have broken both at once; they are reserved now, number and name (#1080). |
+| **R-1080-C2** — **`BackupStatusResponse`'s new fields take 5–11** | Re-using 1–4 for new meanings would be number reuse; 1 and 4 are reserved (#1080). |
+| **R-1080-C3** — **`StageBegin` keeps `byte_size = 2`** | Renaming it to the contract's `declared_size` broke generated code for no wire gain; 0 means "not known" (#1080). |
+| ~~**R-1080-C4** — **the six new arms answer `NOT_YET_AVAILABLE`**~~ **Superseded by the phone core (slice 2): every arm answers.** | ~~Not `UNSUPPORTED`, because the build carries the type.~~ |
+| **R-1080-C5** — **`fetch_original` is unbounded; `handoff`, `settle`, `pins`, `reconcile`, `forget_destination`, `releasable` and `released` are bounded** | A fetch waits on the network for a whole original; the rest answer from the ledger or one short exchange (#1080). |
+| **R-1080-C6** — **a zero `limit` is refused** | `handoff` and `releasable` refuse `INVALID_REQUEST` rather than read zero as "no limit" (#1080). |
+| ~~**R-1080-C7** — **the restore payload and the stage door v2 fields are refused until the plane exists**~~ **Superseded by the phone core (slice 2).** | ~~Refused `NOT_YET_AVAILABLE` rather than ignored.~~ |
+| **R-1080-C8** — **`ContentUrl.source` is answered** | `STORE` beside a path, `OS_LIBRARY` with the identifier only the shell can open, `NONE` without (#1080 ruling 6). |
+| **R-1080-C9** — **commit trailers name Opus 5.5** | As the session's attribution instruction says (#1080, R-1080-A1). |
+| **R-1080-C10** — **the vault is held for the snapshot's copy and a pass's reads, never across the network** | A second drain while one runs is refused "a drain is already running", never queued (#1080). |
+| **R-1080-C11** — **records move and the head is set before any media is prepared** | The manifest is ordered after every other part, so a pass that moved everything at once would hold the head behind a whole library; the records' recovery point stays about an hour (#1080). |
+| **R-1080-C12** — **a file in the app's store is sealed part by part under names known before sealing** | A film larger than the spool still backs up; a store file whose length disagrees with its row is skipped (#1080). |
+| **R-1080-C13** — **a video's original waits for a charger unless the member asked; under `MANUAL` originals are sealed only when asked** | Once sealed they move under the Wi-Fi rule. "Asked" is `DrainRequest.asked`, the "Back up now" tap and nothing else, since the root's ruling A24, which answers [Q-1080-D2](#the-shared-halfs-questions-for-the-owner-1080); it was `wants_snapshot` before, which the shell also sends when the app leaves the screen. Product-visible (#1080). |
+| ~~**R-1080-C14** — **on a metered link a snapshot is taken only under `WIFI_AND_CELLULAR_PHOTOS`, "Back up now" included**~~ **Superseded by R-1080-C38: a tap sends the records under any rule.** | ~~The records are the vault, and the rule that lets photographs cross cellular is the only one that lets the vault. Product-visible (#1080).~~ |
+| **R-1080-C15** — **a snapshot is due when the shell asks (`wants_snapshot`) or an hour after the last head** | Not while a younger snapshot is whole and in flight; an older unfinished one is dropped when a newer one is taken (#1080). |
+| **R-1080-C16** — **names the gateway's `exists` says it holds are confirmed** | `snapshot::confirm_held`, plus one pre-check per pass before content is sealed; without it a restored phone's first snapshot never settles (#1080, R-1080-7). |
+| **R-1080-C17** — **pairing a gateway that answers `VAULT_KNOWN` takes the vault over by claim** | The phone it supersedes freezes (#1080). |
+| **R-1080-C18** — **a destination's label is the host of the payload's first address; the phone's label at the gateway is "phone"** | (#1080). |
+| **R-1080-C19** — **`reconcile` asks about every confirmed name on its first run per core, and about the queue after that** | A part handed to the operating system and unsettled for 25 hours is requeued as `LOST` (#1080, R-1080-7). |
+| **R-1080-C20** — **`settle`'s table** | 2xx or 409 `NAME_TAKEN` acknowledges; `DIGEST_MISMATCH` drops the part to be sealed again; `MOVED` freezes the phone at epoch + 1 as a lower bound; anything else requeues (#1080). |
+| **R-1080-C21** — **`handoff` goes to the most recently seen gateway, and a batch stops at the first part that does not fit** | (#1080). |
+| **R-1080-C22** — **the spool is opened once per core** | Opening it sweeps half-written files, and a second open would sweep a live writer's (#1080). |
+| **R-1080-C23** — **a volume that will not report its free space gets a spool budget of 0** | `statvfs` through `rustix`, with no `unsafe` (#1080). |
+| **R-1080-C24** — **`RestoredVault.txid` (4) is reserved** | A restored snapshot has no log txid (#1080). |
+| ~~**R-1080-C25** — **`RestoreResponse.device_secret` is answered empty**~~ **Superseded by the root's ruling A21: field 3 is reserved, number and name.** | ~~A gateway admits a restored phone by its token.~~ |
+| **R-1080-C26** — **a single `PUT` is read into memory, at most 80 MiB** | A part is at most 64 MiB plus its framing; larger moves through `bundle_parts` streaming (#1080). |
+| **R-1080-C27** — **a restore ignores the pairing payload's expiry** | It spends no pairing secret; the read grant and the claim are signed by the vault's identity key (#1080). |
+| **R-1080-C28** — **the core's own decoder stays the fallback for jpeg, png, gif and webp** | When the shell staged no derivative; narrowing it to jpeg and png would leave the other two without a thumbnail (#1080). |
+| **R-1080-C29** — **a staged rendition whose bytes the store does not hold is dropped, not promoted** | (#1080). |
+| **R-1080-C30** — **`fetch_original` also reads from a gateway that superseded this phone** | Reads still answer there (#1080). |
+| **R-1080-C31** — **`releasable` refuses a zero limit, offers only whole library items, and its `total_bytes` covers all of them** | A Live Photo's still and film share an identifier, and one confirmed half is not a releasable item (#1080, amendment A20). |
+| **R-1080-C32** — **`MOVED`'s `moved_at_ms` is the gateway's clock from the pass's `info` probe** | (#1080). |
+| **R-1080-C33** — **the `PERSIST_WAL` shim is deleted, and the vault returns to SQLite's checkpoint default** | The shim, `wal_autocheckpoint = 0` and `NO_CKPT_ON_CLOSE` existed so the WAL capture kept its generation across a relaunch. A snapshot is the online backup API's copy, which reads through the WAL in any state, so a last close folds the WAL into the file and `synchronous = FULL` stays (#1080). |
+| **R-1080-C34** — **rung ten's objects leave `LADDER_OBJECTS`, not `DROPPED_OBJECTS`** | Rungs three and four founded them above the corpus; `DROPPED_OBJECTS` is for corpus objects a rung drops (#1080). |
+| **R-1080-C35** — **`Vault::enrol_device` and the device allowlist are deleted** | The iroh gateway's peer admission was their one caller; `access_device` and `access_device_secret` stay as tables with no writer, an open item (#1080). |
+| **R-1080-C36** — **`centraid gateway install` is deleted** | Its units ran a `centraid gateway` verb that no longer existed, and `centraid-gateway install` writes the gateway's own; the `centraid` binary keeps `doctor` (#1080). |
+| **R-1080-C37** — **`ERROR_CODE_GATEWAY_*` 80–94 are reserved, number and name** | They were the #1029 gateway's refusals; nothing produces them (#1080). |
+| **A22** (the root's amendment) — **`centraid.core.v1` is held to buf's `WIRE_JSON` category, not `FILE`** | FILE was the #1029 gateway's promise to seats that spoke core.v1 to it over the wire. Nothing does any more: the gateway declares its own protocol (`crates/gateway/src/rules`) and does not depend on core.v1, which crosses only the C ABI between a shell and the core it links, shipped in one artifact. WIRE_JSON still refuses a changed number, wire type or JSON name and a deletion whose name and number are not both reserved. A policy change, flagged to the owner (#1080). |
+| **R-1080-C38** — **"Back up now" sends the records over a metered link under any rule** | `DrainRequest.asked` lets the snapshot be taken and its parts cross a metered link whatever the rule, `MANUAL` included; originals still follow the rule ([R-1080-C13](#the-phone-core-and-the-cut-over-1080-lane-c), `allows_cellular`), and without the tap the records do too. A snapshot of 64 KiB ranges is a few MB, the records are the vault, and the tap is the member's consent. Supersedes R-1080-C14, re-judged after the independent audit. Product-visible (#1080). |
+
+| Former decision | Current pointer |
+| --- | --- |
+| **`buf.yaml`'s `FILE` category for `centraid.core.v1`** (#1020, with [R-1020-12](#v1-platform--rust-core-kmp-shell-electron-seat-gateway-anywhere-1020)'s version window as its reason) | Superseded by A22 above: `WIRE_JSON`. |
+| **[D-1025-S7-15](#slice-s7--one-loop-one-file-one-page-one-report-1025)** — a seat refuses to open as an endpoint its gateway did not enrol (`ERROR_CODE_IDENTITY_MISMATCH`) | Retired with iroh: there is no endpoint and no enrolment; `CoreError::IdentityMismatch` is deleted and code 24 is reserved (#1080). |
+| **[D-1025-S7-80](#slice-s7--one-loop-one-file-one-page-one-report-1025)** and **D-1025-S7-81** — the gateway's allowlist is the vault's `access_device` rows; the gateway's endpoint identity is long-term | Retired with the iroh gateway: protocol v2 admits a phone by a bearer token and a gateway is pinned by its certificate (R-1080-C35). |
+| **[Q-1080-D2](#the-shared-halfs-questions-for-the-owner-1080)** — "Back up now" under MANUAL | Answered by the root's ruling A24: `DrainRequest.asked` (R-1080-C13). |
+| `Budget::admits_original` (`crates/blobs/src/plan.rs`), the one table of what each transfer rule admits | Replaced by `centraid_core::phone::drain::Conditions` (`may_prepare`, `may_move`, `allows_cellular`); `plan.rs` is deleted (#1080). |
+
 ## The native shells' library deleters (#1080)
 
 Recorded 2026-10-03 by lane E of [#1080](https://github.com/srikanth235/centraid/issues/1080) with the two `LibraryDeleter`s that free up space hands its releasable originals to (amendments A19 and A20). The core never deletes from the OS library; these are the only code that does, each behind the system's own confirmation. Neither has run on a device; [v1-handoffs.md](release/v1-handoffs.md#8-the-backups-native-halves-1080) rows 8.19 and 8.20 are the proof owed.

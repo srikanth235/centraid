@@ -91,19 +91,11 @@ updates:
     groups:
       cargo:
         patterns: ["*"]
-    ignore:
-      # iroh is the wire protocol. A minor bump can change ALPN/relay behaviour
-      # that only a real-network pairing run proves — upgrade deliberately,
-      # never as a batched dependency PR.
-      - dependency-name: iroh
-        update-types:
-          ["version-update:semver-minor", "version-update:semver-major"]
 
   # ----------------------------------------------------------------- docker --
   - package-ecosystem: docker
     directories:
-      - /deploy/docker
-      - /deploy/gateway-server
+      - /deploy/gateway
     schedule:
       interval: weekly
       day: monday

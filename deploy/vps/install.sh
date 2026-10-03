@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# THE VPS INSTALLER (#1020, D-1020-G1). One binary, one data directory, no
-# service unless you ask for one.
+# THE VPS INSTALLER (#1020, D-1020-G1; #1080). The release's binaries, one
+# data directory, no service unless you ask for one.
 #
 # Three rules, each carried from the v0 installer it replaces
 # (`scripts/install-gateway.sh`, `scripts/install-gateway.mjs`):
@@ -15,13 +15,17 @@
 #      mismatch is an abort, not a warning.
 #
 # Usage:
-#   install.sh --version v1.2.3 [--prefix /usr/local] [--data-dir /var/lib/centraid/default]
-#              [--with-service [--system] [--instance NAME]] [--yes]
+#   install.sh --version v1.2.3 [--prefix /usr/local] [--data-dir DIR]
+#              [--with-service] [--yes]
 #   install.sh --local ./centraid-x86_64-unknown-linux-gnu.tar.gz [--sums ./SHA256SUMS] …
 #
-# `--local` is how the release smoke installs the artifact it just built, so the
-# smoke exercises THIS script and not a second copy of its logic
-# (`cargo xtask gate --profile release`, step `vps-smoke`).
+# `--local` installs an artifact already on disk, so a smoke run exercises THIS
+# script and not a second copy of its logic.
+#
+# THE GATEWAY IS `centraid-gateway` (#1080). It is installed beside `centraid`
+# when the tarball carries it, and the service this script offers is the one
+# `centraid-gateway install` writes: a systemd user unit, which on a box nobody
+# logs in to needs `loginctl enable-linger` to keep running.
 
 set -euo pipefail
 
@@ -34,8 +38,6 @@ local_sums=""
 prefix="/usr/local"
 data_dir=""
 with_service=0
-system_unit=0
-instance="default"
 assume_yes=0
 
 die() {
@@ -52,11 +54,9 @@ while [ $# -gt 0 ]; do
     --sums) local_sums="${2:-}"; shift 2 ;;
     --prefix) prefix="${2:-}"; shift 2 ;;
     --data-dir) data_dir="${2:-}"; shift 2 ;;
-    --instance) instance="${2:-}"; shift 2 ;;
     --with-service) with_service=1; shift ;;
-    --system) system_unit=1; shift ;;
     --yes) assume_yes=1; shift ;;
-    -h|--help) sed -n '1,26p' "$0"; exit 0 ;;
+    -h|--help) sed -n '1,30p' "$0"; exit 0 ;;
     *) die "unknown argument $1 (--help)" ;;
   esac
 done
@@ -178,6 +178,15 @@ install -d "${prefix}/bin"
 install -m 0755 "${work}/centraid" "${prefix}/bin/centraid"
 say "installed ${prefix}/bin/centraid — $("${prefix}/bin/centraid" --version)"
 
+# THE GATEWAY, when this release's tarball carries it. Covered by the same
+# SHA256SUMS line as the tarball it came out of.
+gateway=""
+if [ -f "${work}/centraid-gateway" ]; then
+  install -m 0755 "${work}/centraid-gateway" "${prefix}/bin/centraid-gateway"
+  gateway="${prefix}/bin/centraid-gateway"
+  say "installed ${gateway}"
+fi
+
 # Symbols, when the release published them. Kept beside the binary so a crash
 # report from a member is readable at all; never required, because a stripped
 # binary still runs.
@@ -188,29 +197,27 @@ if [ -f "${work}/centraid.debug" ]; then
 fi
 
 if [ -z "$data_dir" ]; then
-  if [ "$system_unit" -eq 1 ]; then
-    data_dir="/var/lib/centraid/${instance}"
-  else
-    data_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/centraid"
-  fi
+  data_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/centraid-gateway"
 fi
-say "data directory ${data_dir} (bind-mount or back this up; it is the vault)"
+say "data directory ${data_dir} (back it up: it is the gateway's identity and every sealed object)"
+
+if [ -z "$gateway" ]; then
+  say ""
+  say "THIS TARBALL CARRIES NO centraid-gateway BINARY, so no gateway was installed."
+  [ "$with_service" -eq 0 ] || die "--with-service needs centraid-gateway in the release tarball; see docs/release.md"
+  exit 0
+fi
 
 if [ "$with_service" -eq 0 ]; then
   say ""
   say "NO SERVICE was installed. That is the default."
-  say "To run the gateway now:   ${prefix}/bin/centraid gateway --data-dir ${data_dir}"
-  say "To install a unit:        install.sh … --with-service --system --instance ${instance}"
+  say "To run the gateway now:   ${gateway} serve --data-dir ${data_dir}"
+  say "To install a unit:        install.sh … --with-service"
   exit 0
 fi
 
-service_cmd=("${prefix}/bin/centraid" gateway install --data-dir "${data_dir}")
-if [ "$system_unit" -eq 1 ]; then
-  service_cmd+=(--system --instance "${instance}")
-  enable_cmd="sudo systemctl enable --now centraid-gateway@${instance}"
-else
-  enable_cmd="systemctl --user enable --now centraid-gateway"
-fi
+service_cmd=("${gateway}" install --data-dir "${data_dir}")
+enable_cmd="systemctl --user enable --now dev.centraid.gateway"
 
 if [ "$assume_yes" -eq 0 ]; then
   say ""
@@ -220,6 +227,7 @@ if [ "$assume_yes" -eq 0 ]; then
   say "Then, if you agree with it:"
   say "  ${service_cmd[*]}"
   say "  ${enable_cmd}"
+  say "  loginctl enable-linger \"\$USER\"   # on a box nobody logs in to"
   exit 0
 fi
 
@@ -228,3 +236,4 @@ say "writing the unit (--yes)"
 say ""
 say "The unit is written and the service is NOT enabled. Enabling is yours:"
 say "  ${enable_cmd}"
+say "  loginctl enable-linger \"\$USER\"   # on a box nobody logs in to"
