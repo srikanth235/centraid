@@ -959,9 +959,13 @@ impl Handle {
                 }
                 Ok(response(wire::response::Kind::Reconcile(answer)))
             }
-            K::ForgetDestination(request) => Ok(response(wire::response::Kind::ForgetDestination(
-                crate::phone::forget_destination(&self.plane, request)?,
-            ))),
+            K::ForgetDestination(request) => {
+                let runtime = self.runtime_handle()?;
+                let vault = self.keys.as_ref().map(crate::phone::Keyring::vault_id);
+                Ok(response(wire::response::Kind::ForgetDestination(
+                    crate::phone::forget_destination(&self.plane, vault, &runtime, request)?,
+                )))
+            }
             K::Releasable(request) => {
                 let keyring = self.keyring()?;
                 Ok(response(wire::response::Kind::Releasable(
@@ -1243,11 +1247,11 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             | K::Phrase(_)
             // SEVEN OF THE BACKUP PLANE'S DOORS ARE BOUNDED (#1080).
             // `handoff` answers at most the batch it was asked for, `settle`
-            // records what the shell already heard, `pins` and
-            // `forget_destination` are one read and one write of the device's
-            // ledger, `reconcile` asks `exists` once per thousand names the
-            // ledger holds — a count the ledger bounds, and the network is not
-            // the same question, as with `pair_phone` — `releasable` reads
+            // records what the shell already heard, `pins` is one read of the
+            // device's ledger and `forget_destination` one read, one revoke
+            // and one write, `reconcile` asks `exists` once per thousand names
+            // the ledger holds — a count the ledger bounds, and the network is
+            // not the same question, as with `pair_phone` — `releasable` reads
             // the ledger and the rows up to its limit, and `released` forgets
             // the hashes it was handed.
             | K::Handoff(_)

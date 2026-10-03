@@ -441,6 +441,10 @@ message Destination {
 // FORGET ONE GATEWAY (#1080). The destination and every confirmation it gave
 // leave the device's ledger. What that gateway stores is left as it is: this
 // phone stops writing to it, and the member's disk is the member's to clear.
+// First, best-effort, the core asks the gateway to revoke this phone's token
+// (`POST /v2/v/{vault}/revoke`, the audit's finding 2), so a forgotten
+// gateway stops answering this phone; a gateway that cannot be reached does
+// not keep its row, and says so in `revoked`.
 message ForgetDestinationRequest {
   // `Destination.gateway_id`.
   string gateway_id = 1;
@@ -450,6 +454,12 @@ message ForgetDestinationResponse {
   // False when the ledger held no such gateway, which is an answer and not a
   // refusal.
   bool forgotten = 1;
+  // True when the gateway answered that this phone's token opens nothing
+  // there any more. False when it could not be reached, answered as another
+  // machine, or the core holds no vault keys to name the vault with: the row
+  // is forgotten all the same, and the token stays live on that gateway until
+  // its operator runs `centraid-gateway pairings revoke <token id>`.
+  bool revoked = 2;
 }
 
 // ---------------------------------------------------------------- handoff --

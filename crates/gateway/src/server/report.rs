@@ -17,7 +17,7 @@
 //! neither, so every gateway has a number, whatever its pin hashes to.
 
 use crate::rules::engine::Pairing;
-use crate::rules::ids::{Pin, VaultId};
+use crate::rules::ids::{Pin, TokenHash, VaultId};
 use crate::rules::payload::PairPayload;
 use crate::rules::wire::PairKind;
 use crate::server::Event;
@@ -109,7 +109,8 @@ pub fn pairing_lines(pairing: &Pairing, pin: &Pin) -> Vec<String> {
             "reads only"
         };
         lines.push(format!(
-            "  token   epoch {}  {}  {:?}  {}  ({standing})",
+            "  token   {}  epoch {}  {}  {:?}  {}  ({standing})",
+            token_id(&token.hash),
             token.epoch,
             token.kind.as_str(),
             token.label,
@@ -118,6 +119,17 @@ pub fn pairing_lines(pairing: &Pairing, pin: &Pin) -> Vec<String> {
     }
     lines
 }
+
+/// The id `pairings` prints for a token and `pairings revoke` takes: the first
+/// 12 hex characters of its hash. The gateway never held the token itself,
+/// and a hash prefix tells nobody the token (#1080, the audit's finding 2).
+#[must_use]
+pub fn token_id(hash: &TokenHash) -> String {
+    hash.hex()[..TOKEN_ID_HEX].to_owned()
+}
+
+/// How many hex characters of a token's hash name it to an operator.
+pub const TOKEN_ID_HEX: usize = 12;
 
 /// What `pair` prints: the payload, its QR and when it stops working.
 #[must_use]

@@ -170,7 +170,7 @@ Test: `the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault` (and, b
 | `fetch_original` (25) | one file back by its content hash, every part checked and the whole against the hash; already on this phone — the app's store, or the library — is answered without dialling | **unbounded**, cancellable |
 | `pins` (26) | every paired gateway's certificate DER, for a shell's own TLS to pin by byte equality | bounded |
 | `reconcile` (27) | the ledger squared with what the first reachable gateway holds; the first of a core's life asks about every confirmed name, later ones about the queue; `reachable: false` means hand nothing off | bounded |
-| `forget_destination` (28) | a gateway and its acknowledgements leave the ledger; what it stores is left | bounded |
+| `forget_destination` (28) | first, best-effort, the gateway is asked to revoke this phone's token, and `revoked` says whether it answered so; then the gateway and its acknowledgements leave the ledger whether or not it was reached; what it stores is left | bounded |
 | `releasable` (29) | originals only the library holds, every part acknowledged, not in a kept album, never edited in the library, a library item whole or not at all, oldest first | bounded |
 | `released` (30) | the library items the member deleted: the ledger forgets them in the library and a `media_asset` change event tells the grid they are fetchable | bounded |
 

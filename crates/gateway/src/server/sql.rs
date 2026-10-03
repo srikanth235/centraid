@@ -32,6 +32,11 @@ statement!(VAULT_UPSERT, "vault_upsert.sql");
 statement!(TOKEN_SELECT, "token_select.sql");
 statement!(TOKENS_SELECT, "tokens_select.sql");
 statement!(TOKEN_INSERT, "token_insert.sql");
+statement!(
+    /// A revoked token is forgotten, so it is unknown everywhere after.
+    TOKEN_DELETE,
+    "token_delete.sql"
+);
 statement!(SECRET_SELECT, "secret_select.sql");
 statement!(SECRETS_SELECT, "secrets_select.sql");
 statement!(SECRET_UPSERT, "secret_upsert.sql");

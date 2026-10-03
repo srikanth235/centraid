@@ -209,6 +209,13 @@ pub struct DeleteAnswer {
     pub refused: Vec<NameRefusal>,
 }
 
+/// What `POST revoke` answers: the calling token is gone, and every route
+/// answers it `UNAUTHORIZED` from now on.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Revoked {
+    pub revoked: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

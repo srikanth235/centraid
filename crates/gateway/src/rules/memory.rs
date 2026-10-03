@@ -68,6 +68,10 @@ impl State for MemoryState {
         Ok(())
     }
 
+    fn remove_token(&mut self, hash: &TokenHash) -> Result<bool, StoreFault> {
+        Ok(self.tokens.remove(hash).is_some())
+    }
+
     fn tokens(&self) -> Result<Vec<TokenRecord>, StoreFault> {
         let mut tokens: Vec<TokenRecord> = self.tokens.values().cloned().collect();
         tokens.sort_by_key(|token| (token.vault, token.created_at_ms, token.hash));
@@ -517,5 +521,9 @@ impl Target for MemoryTarget {
         self.gateway
             .delete(vault, token, names, self.now_ms)
             .map_err(failure)
+    }
+
+    async fn revoke(&mut self, token: &Token, vault: &VaultId) -> Result<(), Failure> {
+        self.gateway.revoke(vault, token).map_err(failure)
     }
 }

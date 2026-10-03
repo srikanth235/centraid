@@ -4,7 +4,7 @@
 //! ```text
 //! centraid-gateway serve    --data-dir ~/centraid-gateway [--bind 0.0.0.0:8443] [--no-mdns]
 //! centraid-gateway pair     --data-dir ~/centraid-gateway [--port 8443]
-//! centraid-gateway pairings --data-dir ~/centraid-gateway
+//! centraid-gateway pairings --data-dir ~/centraid-gateway [revoke <token id>]
 //! centraid-gateway scrub    --data-dir ~/centraid-gateway
 //! centraid-gateway health   --data-dir ~/centraid-gateway [--addr 127.0.0.1:8443] [--pin <hex>]
 //! centraid-gateway install  --data-dir ~/centraid-gateway [--bind 0.0.0.0:8443] [--dry-run]
@@ -65,10 +65,13 @@ enum Command {
         #[arg(long)]
         port: Option<u16>,
     },
-    /// List the paired vaults, their safety numbers and their tokens.
+    /// List the paired vaults, their safety numbers and their tokens; or
+    /// revoke one token by the id the list prints.
     Pairings {
-        #[arg(long, env = "CENTRAID_GATEWAY_DATA_DIR")]
+        #[arg(long, env = "CENTRAID_GATEWAY_DATA_DIR", global = true)]
         data_dir: PathBuf,
+        #[command(subcommand)]
+        action: Option<PairingsAction>,
     },
     /// Re-hash every stored object now. No key is involved.
     Scrub {
@@ -102,6 +105,16 @@ enum Command {
     },
 }
 
+#[derive(Subcommand, Debug)]
+enum PairingsAction {
+    /// Revoke one token, for a phone that is lost and cannot revoke itself:
+    /// every route answers it `UNAUTHORIZED` from now on.
+    Revoke {
+        /// The token's id, as `pairings` lists it (at least 8 hex characters).
+        id: String,
+    },
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     match Cli::parse().command {
@@ -111,7 +124,14 @@ async fn main() -> anyhow::Result<()> {
             no_mdns,
         } => run(&data_dir, &bind, no_mdns).await,
         Command::Pair { data_dir, port } => pair(&data_dir, port),
-        Command::Pairings { data_dir } => pairings(&data_dir),
+        Command::Pairings {
+            data_dir,
+            action: None,
+        } => pairings(&data_dir),
+        Command::Pairings {
+            data_dir,
+            action: Some(PairingsAction::Revoke { id }),
+        } => revoke(&data_dir, &id),
         Command::Scrub { data_dir } => scrub(&data_dir),
         Command::Health {
             data_dir,
@@ -281,6 +301,47 @@ fn pairings(data_dir: &Path) -> anyhow::Result<()> {
         .count();
     let expired = secrets.len() - waiting - spent;
     println!("secrets   {waiting} waiting, {spent} spent, {expired} expired");
+    Ok(())
+}
+
+/// `pairings revoke <id>`: the lost-phone case (#1080, the audit's finding
+/// 2). The id is a prefix of the token's hash, as `pairings` prints it; it
+/// must name exactly one token.
+fn revoke(data_dir: &Path, id: &str) -> anyhow::Result<()> {
+    let id = id.trim().to_ascii_lowercase();
+    anyhow::ensure!(
+        id.len() >= 8 && id.chars().all(|c| c.is_ascii_hexdigit()),
+        "a token id is at least 8 hex characters, as `pairings` lists it"
+    );
+    let shared = open(data_dir)?;
+    let pairings = shared.rules(|gateway| gateway.pairings())?;
+    let matches: Vec<_> = pairings
+        .iter()
+        .flat_map(|pairing| {
+            pairing
+                .tokens
+                .iter()
+                .map(move |token| (pairing.vault.vault, token))
+        })
+        .filter(|(_, token)| token.hash.hex().starts_with(&id))
+        .collect();
+    let [(vault, token)] = matches.as_slice() else {
+        anyhow::bail!(
+            "{} tokens start with {id}; `pairings` lists each token's id",
+            matches.len()
+        );
+    };
+    let hash = token.hash;
+    let removed = shared.rules(|gateway| gateway.revoke_hash(&hash))?;
+    anyhow::ensure!(removed, "token {id} was revoked while this ran");
+    println!(
+        "revoked   token {}  epoch {}  {:?}  of vault {}",
+        report::token_id(&hash),
+        token.epoch,
+        token.label,
+        report::short(vault)
+    );
+    println!("The phone holding it is refused on every route from now on.");
     Ok(())
 }
 

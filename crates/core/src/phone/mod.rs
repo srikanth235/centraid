@@ -316,23 +316,63 @@ pub fn pins(plane: &Plane) -> Result<wire::PinsResponse> {
 /// row and every acknowledgement it gave leave the ledger, so what it held is
 /// prepared again for the gateways left; what it stores is left as it is.
 ///
+/// **First it revokes this phone's token there, best-effort** (#1080, the
+/// audit's finding 2): a forgotten gateway that still honoured the token would
+/// keep answering anyone who copied the ledger. Any answer from the pinned
+/// gateway that the token opens nothing — the revoke, or `UNAUTHORIZED`
+/// because its operator already revoked it — is `revoked`; an unreachable
+/// gateway, a machine that is not the pinned one, or a core with no vault keys
+/// to name the vault with is not, and the row goes anyway.
+///
 /// # Errors
 /// The ledger's refusal.
 pub fn forget_destination(
     plane: &Plane,
+    vault: Option<VaultId>,
+    runtime: &tokio::runtime::Handle,
     request: &wire::ForgetDestinationRequest,
 ) -> Result<wire::ForgetDestinationResponse> {
     let ledger = plane.ledger()?;
-    let known = ledger
+    let Some(destination) = ledger
         .destination(&request.gateway_id)
         .map_err(plane_error)?
-        .is_some();
-    if known {
-        ledger
-            .remove_destination(&request.gateway_id)
-            .map_err(plane_error)?;
+    else {
+        return Ok(wire::ForgetDestinationResponse::default());
+    };
+    let revoked = vault.is_some_and(|vault| revoke(&destination, vault, runtime));
+    ledger
+        .remove_destination(&request.gateway_id)
+        .map_err(plane_error)?;
+    Ok(wire::ForgetDestinationResponse {
+        forgotten: true,
+        revoked,
+    })
+}
+
+/// Ask `destination` to revoke this phone's token for `vault`. Whether the
+/// pinned gateway answered that the token opens nothing there now.
+fn revoke(destination: &Destination, vault: VaultId, runtime: &tokio::runtime::Handle) -> bool {
+    use centraid_gateway::client::ClientError;
+    use centraid_gateway::rules::Refusal;
+    let store = match link::GatewayStore::for_destination(destination, vault, runtime) {
+        Ok(store) => store,
+        Err(error) => {
+            tracing::debug!(%error, "a forgotten gateway's token does not read");
+            return false;
+        }
+    };
+    match runtime.block_on(store.client().revoke(&vault)) {
+        Ok(answer) => answer.revoked,
+        Err(ClientError::Refused(Refusal::Unauthorized)) => true,
+        Err(error) => {
+            tracing::debug!(
+                gateway = %destination.gateway_id,
+                %error,
+                "a forgotten gateway did not revoke this phone's token"
+            );
+            false
+        }
     }
-    Ok(wire::ForgetDestinationResponse { forgotten: known })
 }
 
 // ─── status ─────────────────────────────────────────────────────────────────

@@ -68,7 +68,7 @@ use crate::rules::limits::{MAX_BUNDLE_BYTES, MAX_OBJECT_BYTES};
 use crate::rules::range::ByteRange;
 use crate::rules::wire::{
     BundleAnswer, CODE_HEADER, DIGEST_HEADER, DeleteAnswer, HeadView, Info, Missing, Names,
-    ObjectEntry, PairRequest, Paired, SetHead, SnapshotView,
+    ObjectEntry, PairRequest, Paired, Revoked, SetHead, SnapshotView,
 };
 
 /// How long one address gets to accept a TCP connection.
@@ -726,6 +726,17 @@ impl Client {
             true,
         )
         .await
+    }
+
+    /// `POST revoke`: this client's token revokes itself, and every route
+    /// answers it `UNAUTHORIZED` after.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`].
+    pub async fn revoke(&self, vault: &VaultId) -> Result<Revoked, ClientError> {
+        self.call(Method::POST, &route(vault, "revoke"), None::<&()>, true)
+            .await
     }
 
     /// A `PUT` for the platform to perform: no network here, only the URL and

@@ -264,6 +264,17 @@ impl Target for WireTarget {
             .await
             .map_err(failure)
     }
+
+    async fn revoke(&mut self, token: &Token, vault: &VaultId) -> Result<(), Failure> {
+        let revoked = self.phone(token).revoke(vault).await.map_err(failure)?;
+        if revoked.revoked {
+            Ok(())
+        } else {
+            Err(Failure::Broken(
+                "the gateway answered revoked: false".to_owned(),
+            ))
+        }
+    }
 }
 
 /// Every case, over the wire, named; a failure prints which.
