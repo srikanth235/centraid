@@ -2,7 +2,7 @@
 //! first principles ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
 //!
 //! A snapshot is the live vault copied page for page into a scratch file, cut
-//! into 4 MiB ranges, each range a file in `centraid-sealed/2`
+//! into 64 KiB ranges, each range a file in `centraid-sealed/2`
 //! ([`centraid_media::sealed`]) named from its own BLAKE3, plus one manifest
 //! naming the ranges. An unchanged range has an unchanged name, so a snapshot
 //! uploads only the ranges that changed since one the gateway already holds,

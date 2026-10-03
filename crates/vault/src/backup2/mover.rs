@@ -12,18 +12,29 @@
 //! confirms it. Every other paired destination reaches it by mirroring
 //! (#1080 ruling 8) or by its own `exists` answer on a later pass.
 //!
+//! ## RANGES AND DERIVATIVES TRAVEL IN BUNDLES
+//!
+//! A snapshot is hundreds of 64 KiB ranges and a photograph brings a
+//! thumbnail and a preview of a few dozen KiB each, so a request per part
+//! would spend the pass on round trips. A run of them in queue order goes as
+//! one [`Store::put_many`] of up to [`BUNDLE_BYTES`], answered part by part
+//! exactly as each `put` would be (the root's rulings A14 and A15). An
+//! original's part — up to 64 MiB — goes alone, and so does a manifest, which
+//! the queue orders after every range, so it can never ride in a bundle ahead
+//! of one.
+//!
 //! [`reconcile`] makes the ledger a cache of the destination's truth: every
 //! queued and every confirmed name is asked about, and the ledger follows the
 //! answer in both directions.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 
 use super::Result;
-use super::ledger::Ledger;
+use super::ledger::{Ledger, PartKind, Queued};
 use super::naming::Name;
 use super::spool::Spool;
-use super::store::{self, Refusal, Store, StoreError};
+use super::store::{self, BUNDLE_BYTES, FRAME_HEADER_BYTES, Outgoing, Refusal, Store, StoreError};
 use crate::clock::Clock;
 
 /// Why a pass stopped moving.
@@ -56,9 +67,156 @@ fn now(clock: &dyn Clock) -> u64 {
     u64::try_from(clock.now_ms()).unwrap_or(0)
 }
 
+/// Whether `part` rides in a bundle: a range or a derivative small enough
+/// for one. Everything else goes as its own `put`.
+fn bundled(part: &Queued) -> bool {
+    matches!(part.kind, PartKind::Range | PartKind::Derivative)
+        && part.size.saturating_add(FRAME_HEADER_BYTES) <= BUNDLE_BYTES
+}
+
+/// One pass's bookkeeping: what the destination's answers did to the ledger
+/// and the spool.
+struct Pass<'a> {
+    ledger: &'a Ledger,
+    spool: &'a Spool,
+    gateway: String,
+    clock: &'a dyn Clock,
+    moved: Moved,
+}
+
+impl Pass<'_> {
+    /// The destination holds a sealing of `part`: confirm it and free the
+    /// spool.
+    fn acknowledged(&mut self, part: &Queued) -> Result<()> {
+        self.ledger
+            .confirm(&part.name, &self.gateway, now(self.clock), part.size)?;
+        self.ledger.dequeue(&part.name)?;
+        self.spool.remove(&part.name)?;
+        self.moved.confirmed.push(part.name);
+        Ok(())
+    }
+
+    /// The spool file is gone or is not the bytes queued: drop the part, to
+    /// be sealed again.
+    fn torn(&mut self, part: &Queued) -> Result<()> {
+        self.ledger.dequeue(&part.name)?;
+        self.spool.remove(&part.name)?;
+        self.moved.dropped.push(part.name);
+        Ok(())
+    }
+
+    /// Act on one part's answer; a refusal that stops the pass is returned.
+    fn answered(
+        &mut self,
+        part: &Queued,
+        answer: std::result::Result<(), Refusal>,
+    ) -> Result<Option<Stop>> {
+        match answer {
+            Ok(()) | Err(Refusal::NameTaken) => self.acknowledged(part)?,
+            Err(Refusal::DigestMismatch) => self.torn(part)?,
+            Err(Refusal::TooLarge) => {
+                // Not this pass's to fix: no part of this format is past the
+                // cap, so the attempt is recorded for the status line and the
+                // queue moves on.
+                self.ledger
+                    .record_attempt(&part.name, Refusal::TooLarge.code())?;
+            }
+            Err(refusal) => {
+                self.ledger.record_attempt(&part.name, refusal.code())?;
+                return Ok(Some(Stop::Refused(refusal)));
+            }
+        }
+        Ok(None)
+    }
+
+    /// A request that was not answered at all: every part in it waits.
+    fn unanswered(&mut self, parts: &[&Queued], error: StoreError) -> Result<Stop> {
+        Ok(match error {
+            StoreError::Moved { epoch } => Stop::Moved { epoch },
+            StoreError::Refused(refusal) => {
+                for part in parts {
+                    self.ledger.record_attempt(&part.name, refusal.code())?;
+                }
+                Stop::Refused(refusal)
+            }
+            error => {
+                let detail = error.to_string();
+                for part in parts {
+                    self.ledger.record_attempt(&part.name, &detail)?;
+                }
+                Stop::Unreachable(detail)
+            }
+        })
+    }
+
+    /// Send one part as its own `put`.
+    fn single(&mut self, store: &dyn Store, part: &Queued) -> Result<Option<Stop>> {
+        let mut body = match self.spool.read(&part.name) {
+            Ok(file) => file,
+            Err(_) if !self.spool.contains(&part.name) => {
+                self.ledger.dequeue(&part.name)?;
+                self.moved.dropped.push(part.name);
+                return Ok(None);
+            }
+            Err(error) => return Err(error),
+        };
+        let put = store.put(&part.name, &part.digest, part.size, &mut body);
+        drop(body);
+        match put {
+            Ok(_) => self.answered(part, Ok(())),
+            Err(StoreError::Refused(refusal)) => self.answered(part, Err(refusal)),
+            Err(error) => self.unanswered(&[part], error).map(Some),
+        }
+    }
+
+    /// Send a run of parts as one bundle. A part whose spool file is gone is
+    /// dropped before the request; the rest are answered one by one.
+    fn bundle(&mut self, store: &dyn Store, run: &[&Queued]) -> Result<Option<Stop>> {
+        let mut sent: Vec<&Queued> = Vec::with_capacity(run.len());
+        for part in run {
+            if self.spool.contains(&part.name) {
+                sent.push(part);
+            } else {
+                self.ledger.dequeue(&part.name)?;
+                self.moved.dropped.push(part.name);
+            }
+        }
+        if sent.is_empty() {
+            return Ok(None);
+        }
+        let outgoing: Vec<Outgoing> = sent
+            .iter()
+            .map(|part| Outgoing {
+                name: part.name,
+                digest: part.digest,
+                len: part.size,
+                path: self.spool.path(&part.name),
+            })
+            .collect();
+        let answers = match store.put_many(&outgoing) {
+            Ok(answers) => answers,
+            Err(error) => return self.unanswered(&sent, error).map(Some),
+        };
+        let by_name: BTreeMap<Name, &Queued> = sent.iter().map(|part| (part.name, *part)).collect();
+        let mut stop = None;
+        for (name, answer) in answers {
+            // An answer for a name this bundle did not carry says nothing
+            // about the queue; a part left unanswered waits for the next pass.
+            let Some(part) = by_name.get(&name) else {
+                continue;
+            };
+            if let Some(refused) = self.answered(part, answer.map(|_| ()))? {
+                stop.get_or_insert(refused);
+            }
+        }
+        Ok(stop)
+    }
+}
+
 /// Send queued parts to `store` in queue order until the queue is empty, the
-/// deadline passes or the destination stops answering. The deadline is checked
-/// between parts, never inside one.
+/// deadline passes or the destination stops answering: runs of ranges and
+/// derivatives as bundles of up to [`BUNDLE_BYTES`], every other part alone.
+/// The deadline is checked between requests, never inside one.
 ///
 /// # Errors
 /// The ledger's or the spool's refusal; a destination's refusal is a [`Stop`].
@@ -69,64 +227,47 @@ pub fn move_queue(
     deadline: Instant,
     clock: &dyn Clock,
 ) -> Result<Moved> {
-    let gateway = store.gateway_id().to_owned();
-    let mut moved = Moved {
-        confirmed: Vec::new(),
-        dropped: Vec::new(),
-        stopped: Stop::Empty,
+    let queue = ledger.queued()?;
+    let mut pass = Pass {
+        ledger,
+        spool,
+        gateway: store.gateway_id().to_owned(),
+        clock,
+        moved: Moved {
+            confirmed: Vec::new(),
+            dropped: Vec::new(),
+            stopped: Stop::Empty,
+        },
     };
-    for part in ledger.queued()? {
+    let mut next = 0;
+    while let Some(part) = queue.get(next) {
         if Instant::now() >= deadline {
-            moved.stopped = Stop::Deadline;
-            return Ok(moved);
+            pass.moved.stopped = Stop::Deadline;
+            return Ok(pass.moved);
         }
-        let mut body = match spool.read(&part.name) {
-            Ok(file) => file,
-            Err(_) if !spool.contains(&part.name) => {
-                ledger.dequeue(&part.name)?;
-                moved.dropped.push(part.name);
-                continue;
+        let stop = if bundled(part) {
+            let mut run: Vec<&Queued> = Vec::new();
+            let mut bytes = 0_u64;
+            while let Some(part) = queue.get(next).filter(|part| bundled(part)) {
+                let cost = part.size.saturating_add(FRAME_HEADER_BYTES);
+                if bytes.saturating_add(cost) > BUNDLE_BYTES {
+                    break;
+                }
+                bytes = bytes.saturating_add(cost);
+                run.push(part);
+                next += 1;
             }
-            Err(error) => return Err(error),
+            pass.bundle(store, &run)?
+        } else {
+            next += 1;
+            pass.single(store, part)?
         };
-        match store.put(&part.name, &part.digest, part.size, &mut body) {
-            Ok(_) | Err(StoreError::Refused(Refusal::NameTaken)) => {
-                drop(body);
-                ledger.confirm(&part.name, &gateway, now(clock), part.size)?;
-                ledger.dequeue(&part.name)?;
-                spool.remove(&part.name)?;
-                moved.confirmed.push(part.name);
-            }
-            Err(StoreError::Refused(Refusal::DigestMismatch)) => {
-                drop(body);
-                ledger.dequeue(&part.name)?;
-                spool.remove(&part.name)?;
-                moved.dropped.push(part.name);
-            }
-            Err(StoreError::Refused(Refusal::TooLarge)) => {
-                // Not this pass's to fix: no part of this format is past the
-                // cap, so the attempt is recorded for the status line and the
-                // queue moves on.
-                ledger.record_attempt(&part.name, Refusal::TooLarge.code())?;
-            }
-            Err(StoreError::Moved { epoch }) => {
-                moved.stopped = Stop::Moved { epoch };
-                return Ok(moved);
-            }
-            Err(StoreError::Refused(refusal)) => {
-                ledger.record_attempt(&part.name, refusal.code())?;
-                moved.stopped = Stop::Refused(refusal);
-                return Ok(moved);
-            }
-            Err(error) => {
-                let detail = error.to_string();
-                ledger.record_attempt(&part.name, &detail)?;
-                moved.stopped = Stop::Unreachable(detail);
-                return Ok(moved);
-            }
+        if let Some(stop) = stop {
+            pass.moved.stopped = stop;
+            return Ok(pass.moved);
         }
     }
-    Ok(moved)
+    Ok(pass.moved)
 }
 
 /// What [`reconcile`] changed.
@@ -261,6 +402,54 @@ mod tests {
                 .expect("asks")
                 .is_empty()
         );
+    }
+
+    /// **A14.** A run of ranges and derivatives goes as one bundle; an
+    /// original and the manifest go alone, in queue order, the manifest
+    /// after every range.
+    #[test]
+    fn ranges_and_derivatives_travel_in_bundles_and_the_rest_alone() {
+        let rig = rig();
+        let ranges: Vec<Name> = (0..40)
+            .map(|index| queue(&rig, &format!("range {index}"), PartKind::Range))
+            .collect();
+        let thumbnail = queue(&rig, "thumbnail", PartKind::Derivative);
+        let manifest = queue(&rig, "manifest", PartKind::Manifest);
+        let moved =
+            move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
+        assert_eq!(moved.stopped, Stop::Empty);
+        assert_eq!(
+            rig.store.bundles(),
+            1,
+            "forty ranges and a thumbnail, one request"
+        );
+        assert_eq!(moved.confirmed.last(), Some(&manifest));
+        assert_eq!(moved.confirmed.len(), ranges.len() + 2);
+        assert!(moved.confirmed.contains(&thumbnail));
+        assert!(rig.ledger.queued().expect("reads").is_empty());
+        assert!(rig.spool.names().expect("lists").is_empty());
+
+        let original = queue(&rig, "original", PartKind::Original);
+        let moved =
+            move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
+        assert_eq!(moved.confirmed, vec![original]);
+        assert_eq!(rig.store.bundles(), 1, "an original goes as its own put");
+    }
+
+    /// A bundle refused whole leaves every part in it queued, each with the
+    /// attempt recorded; nothing is assumed stored.
+    #[test]
+    fn a_bundle_refused_whole_keeps_every_part_queued() {
+        let rig = rig();
+        let first = queue(&rig, "first", PartKind::Range);
+        let second = queue(&rig, "second", PartKind::Range);
+        let _taken_over = rig.store.claim();
+        let moved =
+            move_queue(&rig.ledger, &rig.spool, &rig.store, far(), &rig.clock).expect("moves");
+        assert_eq!(moved.stopped, Stop::Moved { epoch: 2 });
+        assert!(moved.confirmed.is_empty());
+        assert!(rig.spool.contains(&first) && rig.spool.contains(&second));
+        assert_eq!(rig.ledger.queued().expect("reads").len(), 2);
     }
 
     #[test]

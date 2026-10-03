@@ -20,6 +20,7 @@ use centraid_vault::backup2::snapshot::{self, APP, Manifest, Settled, Snapshot};
 use centraid_vault::backup2::spool::{SPOOL_CEILING_BYTES, Spool};
 use centraid_vault::backup2::store::{
     Deleted, Head, MemoryStore, ObjectEntry, Put, SnapshotEntry, Store, StoreError,
+    TOMBSTONE_GRACE_MS,
 };
 use centraid_vault::clock::SystemClock;
 
@@ -375,12 +376,19 @@ fn a_restore_refuses_every_file_that_is_not_the_snapshots_and_leaves_nothing() {
     );
     assert!(!scratch.join("restored.db.partial").exists());
 
-    // A missing range is named, and a restore never writes over a file.
+    // A tombstoned range is still served until its purge (A16): a restore
+    // that began before retention dropped it reads on. Once purged it is
+    // missing, and named; and a restore never writes over a file.
     let fresh = MemoryStore::new("other");
+    fresh.set_clock_ms(1_000);
     let _ = back_up(&scratch.vault, &scratch.join("again"), &fresh);
     fresh
         .delete(&[snapshot.ranges[0].name])
         .expect("tombstones");
+    let served = restore_head(&fresh, &keys, &out).expect("a tombstone is still served");
+    std::fs::remove_file(&served.path).expect("clears the way");
+    fresh.set_clock_ms(1_000 + TOMBSTONE_GRACE_MS);
+    assert_eq!(fresh.purge(), 1, "the tombstone's bytes go");
     assert!(matches!(
         restore_head(&fresh, &keys, &out),
         Err(RestoreError::Range { i: 0, .. })
