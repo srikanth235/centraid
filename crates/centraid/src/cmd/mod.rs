@@ -41,7 +41,7 @@ use std::path::{Path, PathBuf};
 /// `keys_dir_in`, `blobs_dir_in` and `parse_iso_ms` stood here and are deleted
 /// with their only consumers (#1029 §5): the first two were read by `backup
 /// now` and `export`, and `parse_iso_ms` existed for `recover --at`. A
-/// point-in-time restore is now "pick a base and a txid" (F10) rather than a
+/// restore brings back the snapshot the gateway's head names (#1080), never a
 /// wall-clock instant, and nothing in this binary parses a date any more.
 pub fn vault_dir_in(data_dir: &Path) -> PathBuf {
     data_dir.join("vault")
