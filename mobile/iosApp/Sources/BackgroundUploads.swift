@@ -524,7 +524,9 @@ extension BackgroundUploader: BackgroundUploads {
                 path: part.path,
                 url: part.url,
                 method: part.method,
-                headers: part.headers.map { UploadOrder.Header(name: $0.name, value: $0.value) },
+                // `value_`: Wire spells the proto's `value` with a trailing
+                // underscore, and Kotlin/Native exports it as Wire spells it.
+                headers: part.headers.map { UploadOrder.Header(name: $0.name, value: $0.value_) },
                 size: UInt64(bitPattern: part.size),
                 gateway: part.gateway_id,
                 vault: part.vault_id

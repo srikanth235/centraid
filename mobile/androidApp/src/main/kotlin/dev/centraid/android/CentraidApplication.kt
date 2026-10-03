@@ -40,8 +40,10 @@ public class CentraidApplication : Application() {
         }
         // "BACK UP NOW" AND A BACKLOG: what `BackgroundTasks.backlog(start)`
         // drives on Android — the user-initiated job, or the `dataSync`
-        // foreground service below API 34 (`BackupNow`). The hook is this
-        // lane's assumption of the `androidMain` seam (lane E report, E-A4).
+        // foreground service below API 34 (`BackupNow`). Seam contract A11's
+        // hook: `HomeSession.backUpNow` starts it with `true` as the member's
+        // run begins and stops it with `false` however the run ends, so the
+        // job keeps the process alive for exactly that run.
         SyncPass.installBacklog { start ->
             if (start) BackupNow.start(app) else BackupNow.stop(app)
         }

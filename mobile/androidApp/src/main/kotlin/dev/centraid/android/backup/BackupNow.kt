@@ -50,10 +50,14 @@ import kotlinx.coroutines.launch
  * [BUDGET_MS]. What the pass does not finish, the periodic worker and the next
  * open carry on with: the spool never loses a sealed part.
  *
- * **Started from a visible app, or not at all.** A user-initiated job may only
- * be scheduled while the app is visible and a foreground service may not be
- * started from the background on Android 12 and up; a refusal answers `false`
- * and the periodic worker remains the backstop. Starting twice is a no-op.
+ * **Started and stopped by the member's run, from a visible app.**
+ * `HomeSession.backUpNow` calls [start] as the run begins and [stop] however
+ * it ends (seam contract A11's `SyncPass.installBacklog`, installed by
+ * `CentraidApplication`); the Backup sheet only sends the event, once the
+ * notification grant is answered. A user-initiated job may only be scheduled
+ * while the app is visible and a foreground service may not be started from
+ * the background on Android 12 and up; a refusal answers `false` and the
+ * periodic worker remains the backstop. Starting twice is a no-op.
  */
 public object BackupNow {
     /**
@@ -65,9 +69,10 @@ public object BackupNow {
 
     /**
      * When another pass in this process already holds a vault's lock
-     * ([DrainPass.Outcome.Busy] — the screen's own pass, typically), the job
-     * waits this long and asks again rather than ending: the job is what keeps
-     * the process alive for that pass to finish.
+     * ([DrainPass.Outcome.Busy] — the member's own run, which started this
+     * job, typically), the job waits this long and asks again rather than
+     * ending: the job is what keeps the process alive for that run to finish,
+     * and [stop] ends it when the run does.
      */
     internal const val BUSY_RETRY_MS: Long = 5_000L
 

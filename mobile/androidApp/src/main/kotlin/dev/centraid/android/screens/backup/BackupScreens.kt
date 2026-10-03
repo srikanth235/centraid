@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -36,10 +37,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -49,7 +53,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import centraid.screen.v1.BackupLine
 import centraid.screen.v1.BackupScreenEvent
 import centraid.screen.v1.BackupScreenState
-import dev.centraid.android.backup.BackupNow
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.screens.words.WordsHead
@@ -64,31 +67,39 @@ import dev.centraid.shared.sync.BackupBridge
 import dev.centraid.shared.sync.TransferRule
 import kotlinx.coroutines.launch
 
-// THE BACKUP SCREEN AND THE HOME LINE (#1080, the shells; seam contract §3).
+// THE BACKUP SCREEN AND THE HOME LINE (#1080, the shells; seam contract A11).
 //
-// **THESE VIEWS DECIDE NOTHING** (R-1047-K1). Every sentence — the line, each
-// reason something waits, each gateway's last word, every control's label —
-// arrives in the state. What is the shell's is what only a platform can do:
-// ask for the notification grant when "Back up now" is tapped and start the
-// job that keeps the process alive (`BackupNow`), say whether the system is
-// holding Centraid back to save battery, and hand pairing a new gateway to
-// `pair.laptop`'s scanner.
+// **THESE VIEWS DECIDE NOTHING** (R-1047-K1). Every sentence — the line and
+// its detail, each reason something waits, each gateway's last word, every
+// control's label, what the last act did, why the phone will not wake
+// Centraid — arrives in the state, and so do the line's tone and whether
+// "Back up now" may be pressed. What is the shell's is what only a platform
+// can do: ask for the notification grant when "Back up now" is tapped, say
+// whether the system is holding Centraid back to save battery, and hand
+// pairing a new gateway to `pair.laptop`'s scanner. The job that keeps the
+// process alive while a run goes is started and stopped by the session's own
+// "Back up now" (`HomeSession.backUpNow` through `SyncPass.installBacklog`,
+// installed by `CentraidApplication`), never by this sheet.
 //
-// **EVERY PROTO NAME THIS FILE READS IS IN [BackupScreenModel.of] AND
-// [BackupEvents]**, so reconciling with `screen.proto`'s `// --- Backup ---`
-// block (lane D's, A9) is an edit to those two places. The iOS twin is
+// **EVERY PROTO NAME THIS FILE READS IS IN [BackupScreenModel.of],
+// [BackupLineRow] AND [BackupEvents]**, so a change to `screen.proto`'s
+// `// --- Backup ---` block is an edit to those places. The iOS twin is
 // `mobile/iosApp/Sources/BackupViews.swift`; the two read the same names.
 //
-// The rule control is the member's existing transfer rule, read and written
-// through `TransferRule` over the secure store, so the Home header's sheet and
-// this screen are one setting with one store.
+// The rule control is the member's existing transfer rule, written through
+// [writeTransferRule] by this screen and the Home header's sheet alike, so the
+// two are one setting with one store and both re-ask the background windows.
 
 /** What the Backup screen draws, copied out of `BackupScreenState`. */
 internal data class BackupScreenModel(
     val title: String = "",
     val line: String = "",
+    val lineDetail: String = "",
     val waiting: List<String> = emptyList(),
-    val frozen: Boolean = false,
+    /** Why the phone will not wake Centraid in the background, or empty. */
+    val backgroundNotice: String = "",
+    /** What the last act did, or why it could not: one clause, never a toast. */
+    val notice: String = "",
     val destinations: List<Destination> = emptyList(),
     val addLabel: String = "",
     val forgetLabel: String = "",
@@ -96,28 +107,39 @@ internal data class BackupScreenModel(
     val videosLabel: String = "",
     val includeVideos: Boolean = true,
     val backUpNowLabel: String = "",
-    val backingUpNow: Boolean = false,
+    /** The machine's verdict: a gateway, a vault that has not moved, no run going. */
+    val backUpNowEnabled: Boolean = false,
+    /** Non-empty only while a run is in progress. */
     val progress: String = "",
     /** Non-empty when the machine judges a backlog has stood for a day. */
     val batterySentence: String = "",
     val batteryLabel: String = "",
 ) {
-    internal data class Destination(val id: String, val label: String, val detail: String)
+    internal data class Destination(
+        val id: String,
+        val label: String,
+        val detail: String,
+        val accessibilityLabel: String,
+    )
 
     internal companion object {
         fun of(state: BackupScreenState): BackupScreenModel = BackupScreenModel(
             title = state.title,
             line = state.line?.sentence.orEmpty(),
+            lineDetail = state.line?.detail.orEmpty(),
             waiting = state.line?.waiting.orEmpty().map { it.sentence }.filter { it.isNotEmpty() },
-            frozen = state.line?.frozen ?: false,
-            destinations = state.destinations.map { Destination(it.gateway_id, it.label, it.detail) },
+            backgroundNotice = state.background_notice,
+            notice = state.notice,
+            destinations = state.destinations.map {
+                Destination(it.gateway_id, it.label, it.detail, it.accessibility_label)
+            },
             addLabel = state.add_destination_label,
             forgetLabel = state.forget_label,
             ruleLabel = state.rule_label,
             videosLabel = state.include_videos_label,
             includeVideos = state.include_videos,
             backUpNowLabel = state.back_up_now_label,
-            backingUpNow = state.backing_up_now,
+            backUpNowEnabled = state.back_up_now_enabled,
             progress = state.progress,
             batterySentence = state.battery_sentence,
             batteryLabel = state.battery_label,
@@ -147,26 +169,67 @@ internal object BackupEvents {
 }
 
 /**
- * THE HOME LINE: one sentence under the vault, the door to the screen.
- * Empty draws nothing.
+ * THE MEMBER CHANGED THE RULE, from the Backup screen or the Home header's
+ * sheet (#1080): written, answered as what the store HOLDS, and the
+ * background windows asked for again (`HomeSession.ruleChanged`), so the
+ * periodic worker's network constraint follows the rule. `HomeBridge.setTransferRule`
+ * is the iOS twin.
+ */
+internal suspend fun writeTransferRule(session: HomeSession?, picked: String): String {
+    val settled = TransferRule.of(picked)
+    TransferRule.write(platformServices().secureStore, settled)
+    session?.ruleChanged()
+    return settled.stored
+}
+
+/**
+ * THE HOME LINE: one sentence under the vault, its second clause, and the
+ * door to the screen. Empty draws nothing.
+ *
+ * The tone is drawn the way Home's status ribbon draws its own: a quiet line
+ * is ignorable and earns no rule; one that wants the member gets one rule in
+ * the tone's colour, never a filled plate.
  */
 @Composable
 internal fun BackupLineRow(line: BackupLine?, onOpen: () -> Unit) {
     val sentence = line?.sentence.orEmpty()
-    if (sentence.isEmpty()) return
-    Text(
-        sentence,
-        style = centraidType("mono"),
-        color = centraidColor(if (line?.frozen == true) "net" else "textFaint"),
-        maxLines = 2,
-        modifier = Modifier
+    if (line == null || sentence.isEmpty()) return
+    val loud = line.tone == BackupLine.Tone.TONE_ATTENTION || line.tone == BackupLine.Tone.TONE_URGENT
+    Row(
+        Modifier
             .fillMaxWidth()
             .heightIn(min = 44.dp)
             .clickable(onClick = onOpen)
             .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 8.dp)
             .testTag("home-backup-line")
-            .semantics { role = Role.Button },
-    )
+            .semantics {
+                role = Role.Button
+                // THE LINE READ ALOUD is the machine's: sentence, detail, then what waits.
+                contentDescription = line.accessibility_label.ifEmpty { sentence }
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (loud) {
+            Box(
+                Modifier
+                    .width(2.dp)
+                    .height(24.dp)
+                    .background(centraidColor(if (line.tone == BackupLine.Tone.TONE_URGENT) "danger" else "attention")),
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                sentence,
+                style = centraidType(if (loud) "small" else "mono"),
+                color = centraidColor(if (loud) "text" else "textFaint"),
+                maxLines = 2,
+            )
+            if (line.detail.isNotEmpty()) {
+                Text(line.detail, style = centraidType("mono"), color = centraidColor("textFaint"), maxLines = 1)
+            }
+        }
+    }
 }
 
 /**
@@ -175,9 +238,9 @@ internal fun BackupLineRow(line: BackupLine?, onOpen: () -> Unit) {
  * bridge for the activity's life (`ChangeStream.route` has no removal).
  */
 public class BackupSheets {
-    // E-A6: every kit bridge's shape — `attach`, `states`, `open`, `forward`.
+    // Seam contract A11: every kit bridge's shape — `attach`, `states`, `open`, `forward`.
     private val bridge = BackupBridge()
-    private var attached = false
+    private var session: HomeSession? = null
 
     /** Whether the sheet is up. */
     public var showing: Boolean by mutableStateOf(false)
@@ -185,12 +248,12 @@ public class BackupSheets {
 
     public fun attach(session: HomeSession) {
         bridge.attach(session)
-        attached = true
+        this.session = session
     }
 
     /** Home's backup line. */
     public fun open() {
-        if (!attached) return
+        if (session == null) return
         bridge.open()
         showing = true
     }
@@ -208,19 +271,20 @@ public class BackupSheets {
         val model = BackupScreenModel.of(state)
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
-        // "BACK UP NOW": the event to the machine, and the job that keeps the
-        // process alive while the pass runs. The notification grant is asked
-        // for here, at the tap and never before; either answer starts it — a
-        // refused grant hides the notification, not the backup.
+        // "BACK UP NOW" IS THE MACHINE'S: the event starts the session's run,
+        // and the session starts and stops the job around it. The shell's part
+        // is the notification grant, asked for here, at the tap and never
+        // before; the event goes once the grant is answered, either way — a
+        // refused grant hides the notification, not the backup — so the job
+        // is started from a visible app.
         val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-            BackupNow.start(context)
+            bridge.forward(BackupEvents.backUpNow())
         }
         val backUpNow: () -> Unit = {
-            bridge.forward(BackupEvents.backUpNow())
             if (needsNotificationGrant(context)) {
                 notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
             } else {
-                BackupNow.start(context)
+                bridge.forward(BackupEvents.backUpNow())
             }
         }
         // THE RULE, read from the store as the sheet opens: the store is the
@@ -229,11 +293,7 @@ public class BackupSheets {
         LaunchedEffect(Unit) { rule = TransferRule.read(platformServices().secureStore).stored }
         val choices = remember { TransferRule.entries.map { TransferRuleChoice(it.stored, it.sentence) } }
         val pickRule: (String) -> Unit = { picked ->
-            scope.launch {
-                val settled = TransferRule.of(picked)
-                TransferRule.write(platformServices().secureStore, settled)
-                rule = settled.stored
-            }
+            scope.launch { rule = writeTransferRule(session, picked) }
         }
         ModalBottomSheet(onDismissRequest = ::close, containerColor = centraidColor("bg")) {
             BackupScreen(
@@ -294,21 +354,32 @@ private fun BackupScreen(
 ) {
     WordsPage(testTag = "backup-screen", description = "") {
         WordsHead(model.title, model.line)
-        model.waiting.forEach { reason ->
-            Text(reason, style = centraidType("small"), color = centraidColor("textSoft"))
-        }
+        if (model.lineDetail.isNotEmpty()) Sentence(model.lineDetail)
+        model.waiting.forEach { reason -> Sentence(reason) }
+        // WHY THE PHONE WILL NOT WAKE CENTRAID, when it will not: a reason the
+        // backup waits for the app to be opened.
+        if (model.backgroundNotice.isNotEmpty()) Sentence(model.backgroundNotice, "backup-background-notice")
         if (batteryHeld) {
-            Text(model.batterySentence, style = centraidType("small"), color = centraidColor("textSoft"))
+            Sentence(model.batterySentence)
             if (model.batteryLabel.isNotEmpty()) {
                 QuietButton(label = model.batteryLabel, testTag = "backup-battery", onPress = onBattery)
             }
         }
-        // BACK UP NOW, offered while nothing runs; while it runs, the
-        // machine's progress sentence stands in its place.
-        if (model.backUpNowLabel.isNotEmpty() && !model.frozen && !model.backingUpNow) {
-            InkButton(label = model.backUpNowLabel, testTag = "backup-now", onPress = onBackUpNow)
+        // BACK UP NOW, pressable when the machine says so — the shared primary
+        // control's dimmed form otherwise (`WordsControls`). While a run goes,
+        // its progress sentence stands beside it.
+        if (model.backUpNowLabel.isNotEmpty()) {
+            val enabled = model.backUpNowEnabled
+            InkButton(
+                label = model.backUpNowLabel,
+                testTag = "backup-now",
+                modifier = Modifier
+                    .alpha(if (enabled) 1f else 0.4f)
+                    .semantics { if (!enabled) disabled() },
+                onPress = { if (enabled) onBackUpNow() },
+            )
         }
-        if (model.backingUpNow && model.progress.isNotEmpty()) {
+        if (model.progress.isNotEmpty()) {
             Row(
                 Modifier.testTag("backup-progress").semantics(mergeDescendants = true) { },
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -318,6 +389,8 @@ private fun BackupScreen(
                 Text(model.progress, style = centraidType("small"), color = centraidColor("textSoft"))
             }
         }
+        // WHAT THE LAST ACT DID, in place: one clause, never a toast.
+        if (model.notice.isNotEmpty()) Sentence(model.notice, "backup-notice")
         Destinations(model, onEvent, onAddDestination)
         if (model.ruleLabel.isNotEmpty()) {
             Text(model.ruleLabel, style = centraidType("smallStrong"), color = centraidColor("text"))
@@ -367,6 +440,17 @@ private fun BackupScreen(
     }
 }
 
+/** One of the machine's sentences, drawn quietly. */
+@Composable
+private fun Sentence(text: String, testTag: String? = null) {
+    Text(
+        text,
+        style = centraidType("small"),
+        color = centraidColor("textSoft"),
+        modifier = if (testTag == null) Modifier else Modifier.testTag(testTag),
+    )
+}
+
 @Composable
 private fun Destinations(
     model: BackupScreenModel,
@@ -383,7 +467,12 @@ private fun Destinations(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clearAndSetSemantics { contentDescription = row.accessibilityLabel.ifEmpty { row.label } },
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
                     Text(row.label, style = centraidType("smallStrong"), color = centraidColor("text"))
                     if (row.detail.isNotEmpty()) {
                         Text(row.detail, style = centraidType("mono"), color = centraidColor("textFaint"))

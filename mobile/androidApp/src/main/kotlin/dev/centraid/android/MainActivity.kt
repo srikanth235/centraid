@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import centraid.screen.v1.HomeEvent
 import dev.centraid.android.backup.ProcessSession
 import dev.centraid.android.screens.backup.BackupSheets
+import dev.centraid.android.screens.backup.writeTransferRule
 import dev.centraid.android.kit.MakeVaultSheet
 import dev.centraid.android.kit.TransferRulesSheet
 import dev.centraid.android.screens.HomeScreen
@@ -481,19 +482,16 @@ public class MainActivity : FragmentActivity() {
                                 selected = rule,
                                 onPick = { picked ->
                                     scope.launch {
-                                        val settled = TransferRule.of(picked)
-                                        TransferRule.write(
-                                            platformServices().secureStore,
-                                            settled,
-                                        )
                                         // WHAT THE STORE HOLDS, and not
                                         // what was tapped: an unknown word
                                         // settles to the conservative
                                         // default, and a tick the next
                                         // launch would not draw is worse
                                         // than a tap that appears to do
-                                        // nothing.
-                                        rule = settled.stored
+                                        // nothing. The background windows
+                                        // are asked for again under it
+                                        // (#1080), as from the Backup screen.
+                                        rule = writeTransferRule(session, picked)
                                     }
                                 },
                             )
