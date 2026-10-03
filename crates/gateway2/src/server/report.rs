@@ -10,12 +10,11 @@
 //! # THE SAFETY NUMBER
 //!
 //! The digits a member may compare between the phone and the gateway are
-//! `centraid_identity::pairing_safety_number` over the vault's identity key
+//! `centraid_identity::safety_number_of_bytes` over the vault's identity key
 //! (its id) and the certificate's pin, the one function both screens render
-//! with. **The pin is what the phone checks; the number is a display.** That
-//! function takes both inputs as Ed25519 keys and declines bytes that do not
-//! decode as one — and a pin is a BLAKE3 output, about half of which do not —
-//! so a gateway whose pin it declines shows its pin to compare instead.
+//! with (#1080, the root's ruling A17). **The pin is what the phone checks;
+//! the number is a display.** The function reads both as 32 bytes and decodes
+//! neither, so every gateway has a number, whatever its pin hashes to.
 
 use crate::rules::engine::Pairing;
 use crate::rules::ids::{Pin, VaultId};
@@ -39,21 +38,17 @@ pub fn short(vault: &VaultId) -> String {
     format!("{}…", &vault.hex()[..8])
 }
 
-/// The safety number's digits for this vault on this gateway, or `None` when
-/// `pairing_safety_number` declines the pin. See the module header.
+/// The safety number's digits for this vault on this gateway, twelve groups
+/// of five. See the module header.
 #[must_use]
-pub fn safety_digits(vault: &VaultId, pin: &Pin) -> Option<String> {
-    centraid_identity::pairing_safety_number(vault.as_bytes(), pin.as_bytes())
-        .map(|number| number.grouped())
+pub fn safety_digits(vault: &VaultId, pin: &Pin) -> String {
+    centraid_identity::safety_number_of_bytes(vault.as_bytes(), pin.as_bytes()).grouped()
 }
 
 /// The `safety` line.
 #[must_use]
 pub fn safety_line(vault: &VaultId, pin: &Pin) -> String {
-    safety_digits(vault, pin).map_or_else(
-        || format!("safety    none for this certificate; compare its pin instead: {pin}"),
-        |digits| format!("safety    {digits}"),
-    )
+    format!("safety    {}", safety_digits(vault, pin))
 }
 
 /// What `serve` prints when a pairing lands.
@@ -151,43 +146,50 @@ mod tests {
             .to_bytes()
     }
 
-    /// THE PRINTED DIGITS ARE THE FUNCTION'S (the root's ruling A7): for a
-    /// known vault and a pin the function accepts, the `safety` line carries
-    /// exactly `pairing_safety_number`'s grouped digits, and both orders of
-    /// the pair give the same number.
+    /// THE PRINTED DIGITS ARE THE FUNCTION'S (the root's rulings A7 and
+    /// A17): for a known vault and a known certificate the `safety` line
+    /// carries exactly `safety_number_of_bytes`' grouped digits over the
+    /// vault id and the pin — the bytes the phone's `pair` hands the same
+    /// function — and both orders of the pair give the same number.
     #[test]
-    fn the_printed_safety_number_is_pairing_safety_number() {
+    fn the_printed_safety_number_is_the_one_both_ends_compute() {
         let vault = VaultId::from_bytes(key(3));
-        let pin = Pin::from_bytes(key(4));
-        let expected = centraid_identity::pairing_safety_number(&key(3), &key(4))
-            .expect("both are keys")
-            .grouped();
+        let pin = Pin::of(b"the DER of a known certificate");
+        let expected =
+            centraid_identity::safety_number_of_bytes(vault.as_bytes(), pin.as_bytes()).grouped();
         assert_eq!(safety_line(&vault, &pin), format!("safety    {expected}"));
         assert_eq!(
-            centraid_identity::pairing_safety_number(&key(4), &key(3))
-                .expect("both are keys")
-                .grouped(),
+            centraid_identity::safety_number_of_bytes(pin.as_bytes(), vault.as_bytes()).grouped(),
             expected,
             "the number does not depend on which side is first"
         );
         assert_eq!(expected.len(), 12 * 5 + 11, "twelve groups of five");
     }
 
-    /// A pin the function declines prints the pin to compare, never a number
-    /// nobody else could reproduce.
+    /// **A17.** A pin that is no curve point — about half of them — still
+    /// prints digits, never the pin in their place.
     #[test]
-    fn a_pin_the_function_declines_prints_the_pin_instead() {
+    fn every_pin_prints_a_number() {
         let vault = VaultId::from_bytes(key(3));
-        let declined = (0_u8..=255)
+        let off_the_curve = (0_u8..=255)
             .map(|first| {
                 let mut bytes = [0_u8; 32];
                 bytes[0] = first;
-                Pin::from_bytes(bytes)
+                bytes
             })
-            .find(|pin| safety_digits(&vault, pin).is_none())
+            .find(|bytes| ed25519_dalek::VerifyingKey::from_bytes(bytes).is_err())
             .expect("some 32 bytes are not a key");
-        let line = safety_line(&vault, &declined);
-        assert!(line.contains(&declined.hex()), "{line}");
+        let pin = Pin::from_bytes(off_the_curve);
+        let line = safety_line(&vault, &pin);
+        assert!(!line.contains(&pin.hex()), "{line}");
+        assert_eq!(
+            line,
+            format!(
+                "safety    {}",
+                centraid_identity::safety_number_of_bytes(vault.as_bytes(), &off_the_curve)
+                    .grouped()
+            )
+        );
     }
 
     #[test]
