@@ -699,28 +699,6 @@ public class Shelf(
         holdings.value.count { it.keyed }
     }
 
-    /**
-     * CLOSE AND REOPEN ONE HOLDING, KEYED AS IT CAN BE (#1047 E4, pairing).
-     *
-     * A pair mints the device key in the core it runs on and hands the secret
-     * back once; the open core's keyring was built at open, before the key
-     * existed, so its next drain would not sign. Reopening hands the stored
-     * secret to a fresh open. Answers whether the holding is keyed after.
-     */
-    public suspend fun reopen(vaultId: String): Boolean = gate.withLock {
-        val holding = holdings.value.firstOrNull { it.vaultId == vaultId } ?: return@withLock false
-        holding.core?.close()
-        val (core, keyed) =
-            openCore(holding.path, create = false, index = keyedIndex(vaultId), vaultId = vaultId)
-                ?: openCore(holding.path, create = false, index = null, vaultId = null)
-                ?: (null to false)
-        holdings.value = holdings.value.map {
-            if (it.vaultId == vaultId) it.copy(core = core, keyed = keyed) else it
-        }
-        publish()
-        keyed
-    }
-
     /** How many holdings have an index recorded on this phone. */
     public suspend fun indexedHoldings(): Int =
         holdings.value.count { secrets.vaultIndex(it.vaultId) != null }

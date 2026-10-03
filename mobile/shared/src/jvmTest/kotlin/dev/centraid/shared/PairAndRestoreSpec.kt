@@ -41,8 +41,11 @@ class PairAndRestoreSpec : StringSpec({
     // shape the core hands over, 60 digits in 12 groups of 5.
     val number = "38394 36422 07209 27357 06879 57260 38834 97705 12477 24050 94056 44949"
 
-    fun paired(id: String, safety: String = number): PairInput =
-        PairInput.Answered(PairResult.Paired(PairAnswer(id, safetyNumber = safety)))
+    fun paired(label: String = "Home laptop", safety: String = number): PairInput = PairInput.Answered(
+        PairResult.Paired(
+            PairAnswer(safetyNumber = safety, destinationLabel = label, destinationAddress = "192.168.1.20:7443"),
+        ),
+    )
 
     fun refused(why: PairRefusal): PairInput = PairInput.Answered(PairResult.Refused(why))
 
@@ -127,15 +130,15 @@ class PairAndRestoreSpec : StringSpec({
         step.effects.single().shouldBeInstanceOf<PairEffect.Pair>()
     }
 
-    "paired shows the core's safety number to compare, never the hex id; unreachable and nothing-to-compare are failures to retry" {
+    "paired shows the core's safety number to compare and names the gateway; unreachable and nothing-to-compare are failures to retry" {
         val pairing = reduce(reduce(waiting(), typed("eyJ2")).model, primary).model
-        val id = "0123456789abcdef".repeat(4)
-        val paired = reduce(pairing, paired(id)).model.state
+        val paired = reduce(pairing, paired()).model.state
         paired.phase shouldBe PairLaptopState.Phase.PHASE_PAIRED
         // W15-D5: THE DIGITS, VERBATIM — every group, as the laptop prints them.
         paired.safety_number shouldBe number
-        paired.body shouldNotContain id
-        paired.body shouldNotContain id.take(8)
+        // v2 CARRIES NO HEX ID TO LEAK: the answer is the gateway's own label
+        // and the address it was reached at, and the body names both.
+        paired.body shouldContain "Paired with Home laptop at 192.168.1.20:7443."
         paired.payload shouldBe ""
         paired.primary_label shouldBe CustodyCopy.DONE
 
@@ -147,7 +150,7 @@ class PairAndRestoreSpec : StringSpec({
 
         // THE COMPARISON IS THE WHOLE SECURITY PROPERTY. A screen asking a
         // member to compare a blank is worse than one that refused.
-        reduce(pairing, paired(id, safety = " ")).model.state.notice shouldBe
+        reduce(pairing, paired(safety = " ")).model.state.notice shouldBe
             CustodyCopy.PAIR_NOTHING_TO_COMPARE
     }
 
@@ -168,7 +171,7 @@ class PairAndRestoreSpec : StringSpec({
     "running: a pair that answered stores through the door and reopens the vault, once; a failed one reopens nothing" {
         runTest {
             val after = mutableListOf<String>()
-            var answer: PairResult = PairResult.Paired(PairAnswer("ab".repeat(32), safetyNumber = number))
+            var answer: PairResult = PairResult.Paired(PairAnswer(safetyNumber = number))
             val seen = mutableListOf<String>()
             val flow = PairLaptopFlow(
                 readiness = { Readiness.READY },
@@ -192,23 +195,21 @@ class PairAndRestoreSpec : StringSpec({
         }
     }
 
-    "the paired line says where the laptop's number is and what a mismatch means" {
-        val id = "0123456789abcdef".repeat(4)
-        val line = CustodyCopy.pairedLine(PairAnswer(id, safetyNumber = number, laptopName = "the kitchen laptop"))
+    "the paired line names the gateway and where it is, and what a mismatch means" {
+        val line = CustodyCopy.pairedLine(
+            PairAnswer(safetyNumber = number, destinationLabel = "the kitchen laptop", destinationAddress = "192.168.1.20:7443"),
+        )
         line shouldContain "safety number"
-        line shouldContain "centraid-gateway serve"
-        line shouldContain "the kitchen laptop"
+        line shouldContain "centraid-gateway"
+        line shouldContain "the kitchen laptop at 192.168.1.20:7443"
         line shouldContain "do not carry on"
-        // The digits are the state's own field, drawn apart; the id is never shown.
-        line shouldNotContain id.take(8)
+        // The digits are the state's own field, drawn apart.
+        line shouldNotContain number
     }
 
-    "an unpublished record is a warning about RESTORE, not a failed pairing" {
-        // `phone.proto`: false is not a failure of the pairing. The sentence
-        // says what it actually costs instead of alarming a member about a
-        // backup that works.
-        val line = CustodyCopy.pairedLine(PairAnswer("ab".repeat(32), recordPublished = false))
-        line shouldContain "Paired with"
-        line shouldContain "restoring on a new phone"
+    "a gateway with no label is still named, and no address is left out rather than blank" {
+        val line = CustodyCopy.pairedLine(PairAnswer(safetyNumber = number))
+        line shouldContain "Paired with your laptop."
+        line shouldNotContain " at ."
     }
 })

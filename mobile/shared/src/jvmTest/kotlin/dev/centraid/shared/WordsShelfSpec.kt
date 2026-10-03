@@ -248,13 +248,17 @@ class WordsShelfSpec : StringSpec({
                     Envelope(response = Response(restore = RestoreResponse(vaults = listOf(RestoredVault(index = 1, path = "/v/y/vault.db")))))
                 }
             }
-            val answer = door.restoreStayed("cd".repeat(64), "ab".repeat(32), listOf(1, 3))
+            val code = """{"v":2,"gw":"gw-1"}"""
+            val answer = door.restoreStayed("cd".repeat(64), code, listOf(1, 3))
                 .shouldBeInstanceOf<RestoreResult.Restored>().answer
             answer.vaults.single().index shouldBe 1
             asked?.indices shouldBe listOf(1, 3)
             asked?.phrase shouldBe ""
             asked?.seed?.size shouldBe 64
-            asked?.endpoint?.size shouldBe 32
+            // THE PAIRING CODE CROSSES AS THE TEXT IT IS (#1080 A1); the
+            // iroh endpoint the cut-over removes is never set.
+            asked?.payload shouldBe code
+            asked?.endpoint shouldBe null
             // THE HELD-SEED RESTORE rides the same 64 bytes, and reached the core
             // too: a seed read as a 32-byte endpoint id never did.
             door.restoreSeed("cd".repeat(64), null).shouldBeInstanceOf<RestoreResult.Restored>()
@@ -289,26 +293,32 @@ class WordsShelfSpec : StringSpec({
         }
     }
 
-    "the pair door keeps the secret the core hands over once" {
+    "the pair door answers the safety number and the destination, and nothing secret" {
         runTest {
-            val kept = mutableListOf<String>()
             val door = CorePairDoor(
                 core = {
                     CentraidCore.answering(Dispatchers.Unconfined) {
                         Envelope(
                             response = Response(
                                 pair_phone = centraid.core.v1.PairResponse(
-                                    gateway_endpoint = ByteArray(32) { 1 }.toByteString(),
+                                    safety_number = "12345 67890",
+                                    destination = centraid.core.v1.Destination(
+                                        label = "Home laptop",
+                                        addrs = listOf("192.168.1.20:7443", "10.0.0.2:7443"),
+                                    ),
+                                    // THE FIELDS THAT LEAVE AT THE CUT-OVER ARE NOT READ:
+                                    // a device secret here is ignored, never stored.
                                     device_secret = ByteArray(32) { 0xcd.toByte() }.toByteString(),
                                 ),
                             ),
                         )
                     }
                 },
-                keep = { kept += it },
             )
-            door.pair("ticket").shouldBeInstanceOf<PairResult.Paired>()
-            kept shouldBe listOf(secret)
+            val answer = door.pair("ticket").shouldBeInstanceOf<PairResult.Paired>().answer
+            answer.safetyNumber shouldBe "12345 67890"
+            answer.destinationLabel shouldBe "Home laptop"
+            answer.destinationAddress shouldBe "192.168.1.20:7443"
         }
     }
 
@@ -320,7 +330,6 @@ class WordsShelfSpec : StringSpec({
                         Envelope(error = code?.let { centraid.core.v1.Error(code = it, detail = "logs only") })
                     }
                 },
-                keep = { error("a refusal keeps no secret") },
             )
             refusing(ErrorCode.ERROR_CODE_UNAUTHORIZED).pair("t") shouldBe PairResult.Refused(PairRefusal.NOT_TAKEN)
             refusing(ErrorCode.ERROR_CODE_INVALID_REQUEST).pair("t") shouldBe PairResult.Refused(PairRefusal.NOT_A_CODE)
