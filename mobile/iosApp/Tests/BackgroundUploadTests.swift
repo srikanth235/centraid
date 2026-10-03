@@ -3,14 +3,16 @@ import XCTest
 
 @testable import CentraidApp
 
-/// THE BACKGROUND MOVER'S PURE HALF (#1080 rulings 1, 2; A6).
+/// THE BACKGROUND MOVER'S PURE HALF (#1080 rulings 1, 2; A6, A10).
 ///
 /// Everything here runs without a gateway, a network or the core: the pin
 /// verdict, the tag a relaunch recovers a task by, the code a finished task
-/// reports, the host a pinned address answers for, and the refusal of an
-/// upload outside TLS. Each law has its NEGATIVE case beside it — a pin that
-/// differs by one byte is refused, a path the protocol did not shape names no
-/// part — because a gate shown only green is a gate nobody saw refuse. The
+/// reports, the host a pinned address answers for, the refusal of an upload
+/// outside TLS, and the link each part may cross. Each law has its NEGATIVE
+/// case beside it — a pin that differs by one byte is refused, a path the
+/// protocol did not shape names no part, a part the core did not allow
+/// cellular never gets it — because a gate shown only green is a gate nobody
+/// saw refuse. The
 /// session itself, the relaunch and the OS carrying the files are device
 /// hand-offs (`docs/release/v1-handoffs.md`, section 8).
 final class BackgroundUploadTests: XCTestCase {
@@ -89,17 +91,53 @@ final class BackgroundUploadTests: XCTestCase {
 
     // MARK: the request
 
-    func testTheRequestIsThePresignedOneAndNeverMetered() throws {
+    func testTheRequestIsThePresignedOneAndCarriesThePartsVerdict() throws {
         let order = UploadOrder(
             name: name, path: "/tmp/part", url: "https://gw.local:8443/v2/v/\(vault)/o/\(name)", method: "PUT",
-            headers: [.init(name: "Content-Digest", value: "blake3=00")], size: 12, gateway: "gw-1", vault: vault
+            headers: [.init(name: "Content-Digest", value: "blake3=00")], size: 12, gateway: "gw-1", vault: vault,
+            allowsCellular: true
         )
         let request = try order.request().get()
         XCTAssertEqual(request.httpMethod, "PUT")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Digest"), "blake3=00")
-        XCTAssertFalse(request.allowsCellularAccess)
-        XCTAssertFalse(request.allowsExpensiveNetworkAccess)
+        // A10: the core allowed this part cellular, so the request does — and
+        // an expensive link with it, or cellular would still be refused.
+        XCTAssertTrue(request.allowsCellularAccess)
+        XCTAssertTrue(request.allowsExpensiveNetworkAccess)
+        // Low Data Mode is the member's own, and no part overrides it.
         XCTAssertFalse(request.allowsConstrainedNetworkAccess)
+    }
+
+    func testAPartTheCoreDidNotAllowNeverCrossesCellular() throws {
+        // THE NEGATIVE CASE, twice: an order with no verdict at all — a part
+        // from a core that never set `allows_cellular` — and one refused.
+        let url = "https://gw.local:8443/v2/v/\(vault)/o/\(name)"
+        let silent = UploadOrder(
+            name: name, path: "/tmp/part", url: url, method: "PUT",
+            headers: [], size: 12, gateway: "gw-1", vault: vault
+        )
+        let refused = UploadOrder(
+            name: name, path: "/tmp/part", url: url, method: "PUT",
+            headers: [], size: 12, gateway: "gw-1", vault: vault, allowsCellular: false
+        )
+        for order in [silent, refused] {
+            let request = try order.request().get()
+            XCTAssertFalse(request.allowsCellularAccess)
+            XCTAssertFalse(request.allowsExpensiveNetworkAccess)
+            XCTAssertFalse(request.allowsConstrainedNetworkAccess)
+        }
+    }
+
+    func testTheSessionLetsEachRequestDecideAndRefusesLowDataMode() {
+        // A request can only narrow its session, so a session that refused
+        // cellular would refuse every part's allowance.
+        let configuration = BackgroundUploader.configuration()
+        XCTAssertEqual(configuration.identifier, BackgroundUploader.identifier)
+        XCTAssertTrue(configuration.allowsCellularAccess)
+        XCTAssertTrue(configuration.allowsExpensiveNetworkAccess)
+        XCTAssertFalse(configuration.allowsConstrainedNetworkAccess)
+        XCTAssertTrue(configuration.sessionSendsLaunchEvents)
+        XCTAssertFalse(configuration.isDiscretionary)
     }
 
     func testAnUploadOutsideTLSIsRefusedBeforeATaskExists() {

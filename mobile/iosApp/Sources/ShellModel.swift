@@ -1017,10 +1017,19 @@ final class ShellModel: ObservableObject {
     /// the store holds rather than what was tapped — an unknown word is the
     /// conservative default, and a selection the next launch would not have is
     /// worse than a tap that appears to do nothing.
+    ///
+    /// **A CHANGED RULE CANCELS WHAT iOS HOLDS** (#1080 A10). Each handed-off
+    /// part carries the verdict of the rule it was handed off under, and iOS
+    /// keeps a task for up to a day: a member who has just chosen to spend less
+    /// must not be spent by an upload handed off before. Every task ends
+    /// `CANCELLED`, the core requeues it, and the next handoff carries the new
+    /// rule's verdict. A tap on the rule already held cancels nothing.
     func setTransferRule(_ stored: String) {
         #if canImport(CentraidShared)
+        let before = transferRule
         home.setTransferRule(stored: stored) { [weak self] settled in
             self?.transferRule = settled
+            if settled != before { BackgroundUploader.shared.cancelEverything() }
         }
         #endif
     }

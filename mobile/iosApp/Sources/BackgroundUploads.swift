@@ -7,7 +7,7 @@ import UIKit
 import CentraidShared
 #endif
 
-// THE BACKGROUND MOVER (#1080 rulings 1, 2, 7; seam contract §2, A6).
+// THE BACKGROUND MOVER (#1080 rulings 1, 2, 7; seam contract §2, A6, A10).
 //
 // iOS continues exactly one kind of transfer while an app is suspended: a file
 // upload or download handed to a background `URLSession`. That is why the
@@ -34,11 +34,18 @@ import CentraidShared
 //    when its bytes equal the DER pinned for THAT task's gateway — no
 //    certificate authority, no hostname rule, no trust-on-first-use, and a
 //    plain `http` URL is refused before a task exists.
-// 3. **A WIFI LINK ONLY** (R-1080-E1). A handed-off part carries no media kind,
-//    so this session cannot keep the fixed rule that a video never crosses a
-//    metered link. Every OS-moved upload therefore refuses expensive and
-//    constrained networks; the member's cellular allowance is honoured by the
-//    in-process pass, where the core decides per item.
+// 3. **EACH PART CARRIES THE MEMBER'S RULE** (#1080 A10, R-1080-E11). The core
+//    marks every part it hands off `allows_cellular`, from the rule and the
+//    part's kind: a photograph's original under `WIFI_AND_CELLULAR_PHOTOS`,
+//    thumbnails and previews always, a video's original never. The request's
+//    cellular and expensive-network flags are that verdict, so the rule holds
+//    for the uploads iOS runs with the app suspended. The session allows both,
+//    because a request can only narrow its session: a session that refused
+//    cellular would refuse every part's allowance. Low Data Mode is refused
+//    on the session and on every request, and a part from a core that never
+//    set the flag stays on Wi-Fi. A changed rule cancels what iOS holds
+//    (`ShellModel.setTransferRule`); the core requeues each part, and the
+//    next handoff carries the new verdict.
 // 4. **A SETTLE THAT CANNOT BE DELIVERED IS HELD, NEVER DROPPED, AND NEVER THE
 //    TRUTH.** The OS may relaunch the app to report a task before the vaults
 //    are open; reports wait in order until the core's sink is attached. And a
@@ -121,6 +128,10 @@ struct UploadOrder: Equatable {
     let size: UInt64
     let gateway: String
     let vault: String
+    /// RULE 3: whether this part may cross cellular, as the core decided it.
+    /// False unless the core said so — a part from a core that never set the
+    /// flag stays on Wi-Fi.
+    var allowsCellular = false
 
     struct Header: Equatable {
         let name: String
@@ -147,10 +158,13 @@ struct UploadOrder: Equatable {
         for header in headers {
             request.setValue(header.value, forHTTPHeaderField: header.name)
         }
-        // RULE 3: never a metered or constrained link, on the request as well
-        // as the session, so a configuration change cannot widen one alone.
-        request.allowsCellularAccess = false
-        request.allowsExpensiveNetworkAccess = false
+        // RULE 3: the part's own verdict. An expensive link (cellular, a
+        // personal hotspot) follows it too: a request that allowed cellular
+        // and refused expensive links would still never cross cellular. Low
+        // Data Mode is the member asking the phone itself to save data, and
+        // no part overrides it.
+        request.allowsCellularAccess = allowsCellular
+        request.allowsExpensiveNetworkAccess = allowsCellular
         request.allowsConstrainedNetworkAccess = false
         return .success(request)
     }
@@ -344,8 +358,10 @@ final class BackgroundUploader: NSObject, @unchecked Sendable {
         let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
         configuration.sessionSendsLaunchEvents = true
         configuration.isDiscretionary = false
-        configuration.allowsCellularAccess = false
-        configuration.allowsExpensiveNetworkAccess = false
+        // RULE 3: what any part may be allowed; each request narrows it to its
+        // own part. Low Data Mode stays refused here as on every request.
+        configuration.allowsCellularAccess = true
+        configuration.allowsExpensiveNetworkAccess = true
         configuration.allowsConstrainedNetworkAccess = false
         configuration.timeoutIntervalForResource = resourceTimeoutSeconds
         configuration.httpMaximumConnectionsPerHost = 2
@@ -529,7 +545,8 @@ extension BackgroundUploader: BackgroundUploads {
                 headers: part.headers.map { UploadOrder.Header(name: $0.name, value: $0.value_) },
                 size: UInt64(bitPattern: part.size),
                 gateway: part.gateway_id,
-                vault: part.vault_id
+                vault: part.vault_id,
+                allowsCellular: part.allows_cellular
             )
         })
     }
