@@ -11424,3 +11424,175 @@ message PairLaptopEvent {
 
   message WordsTapped {}
 }
+
+// ---------------------------------------------------------------------------
+// --- Backup ---
+// ---------------------------------------------------------------------------
+
+// ONE HONEST LINE AND THREE CONTROLS (#1080, the shells).
+//
+// `BackupLine` is what Home draws under the vault lockup and what the Backup
+// screen (`backup.home`) draws at its top; tapping it opens the screen. Every
+// count and time on it is the core's `backup_status`, and a thing is "backed
+// up" only once a gateway acknowledged it and the phone recorded that (#1080
+// ruling 7): the line never says more than the ledger holds. The screen adds
+// the paired gateways and the three controls — Wi-Fi only or cellular,
+// include videos, back up now. Every word is finished in `commonMain`
+// (`BackupLines`, `BackupScreenMachine`); a view draws and decides nothing.
+
+// One reason items wait, with how many.
+message BackupWaitingRow {
+  Reason reason = 1;
+  uint64 count = 2;
+  // "12 waiting for Wi-Fi".
+  string label = 3;
+
+  enum Reason {
+    REASON_UNSPECIFIED = 0;
+    REASON_WIFI = 1;
+    REASON_CHARGER = 2;
+    REASON_GATEWAY = 3;
+    // iCloud-only originals, fetched only under the rule and inside a window.
+    REASON_ICLOUD = 4;
+    // The core is waiting for the shell to stream an item's bytes.
+    REASON_BYTES = 5;
+    REASON_WINDOW = 6;
+  }
+}
+
+message BackupLine {
+  // When a gateway last acknowledged this vault's records (the snapshot's
+  // head), on the GATEWAY's clock. Zero: never.
+  int64 records_as_of_ms = 1;
+  // Photos, videos, documents and their derivatives a gateway acknowledged,
+  // and how many the vault knows.
+  uint64 confirmed = 2;
+  uint64 total = 3;
+  repeated BackupWaitingRow waiting = 4;
+  // The vault moved to another phone; this one is read-only.
+  bool frozen = 5;
+  // No gateway is paired: the line offers pairing instead of a status.
+  bool unpaired = 6;
+  // The line, finished: "Backed up 2 minutes ago".
+  string sentence = 7;
+  // Its second clause, or empty: "1,203 of 1,240 photos and files".
+  string detail = 8;
+  Tone tone = 9;
+  string accessibility_label = 10;
+
+  enum Tone {
+    TONE_UNSPECIFIED = 0;
+    // Backed up, or catching up on its own.
+    TONE_QUIET = 1;
+    // Something waits on the member: a gateway, a setting.
+    TONE_ATTENTION = 2;
+    // Moved to another phone, or nothing is backed up at all.
+    TONE_URGENT = 3;
+  }
+}
+
+// One gateway this vault backs up to.
+message BackupDestinationRow {
+  string gateway_id = 1;
+  string label = 2;
+  // Where it was last reached, for display: "192.168.1.20:7443".
+  string address = 3;
+  // "Answered 2 minutes ago", "Not reached yet".
+  string seen_label = 4;
+  int64 last_seen_ms = 5;
+  int64 last_ack_ms = 6;
+  string forget_label = 7;
+  string accessibility_label = 8;
+}
+
+// One choice of the member's transfer rule. `stored` is what `SetRule` sends.
+message BackupRuleChoice {
+  string stored = 1;
+  string label = 2;
+  string detail = 3;
+  bool selected = 4;
+}
+
+message BackupScreenState {
+  string title = 1;
+  BackupLine line = 2;
+  repeated BackupDestinationRow destinations = 3;
+  string destinations_heading = 4;
+  string add_destination_label = 5;
+  // The rule as stored, and its choices.
+  string rule = 6;
+  string rule_heading = 7;
+  repeated BackupRuleChoice rule_choices = 8;
+  bool include_videos = 9;
+  string include_videos_label = 10;
+  string include_videos_detail = 11;
+  // A "Back up now" run is in progress.
+  bool backing_up_now = 12;
+  string back_up_now_label = 13;
+  bool back_up_now_enabled = 14;
+  int64 last_snapshot_ms = 15;
+  int64 last_ack_ms = 16;
+  uint64 spool_bytes = 17;
+  // "Ready to upload: 120 MB", empty when nothing waits.
+  string spool_label = 18;
+  // What the last act did, or why it could not: one clause, never a toast.
+  string notice = 19;
+  // The phone will not wake Centraid in the background, and why.
+  string background_notice = 20;
+  // Set while a forget waits for the member's yes.
+  optional Confirm confirm = 21;
+  // The gateway a pending `confirm` would forget.
+  string confirming_gateway_id = 22;
+  Phase phase = 23;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_LOADING = 1;
+    PHASE_READY = 2;
+    // A pairing from `AddDestination` is in flight.
+    PHASE_PAIRING = 3;
+    PHASE_CLOSED = 4;
+  }
+}
+
+message BackupScreenEvent {
+  oneof kind {
+    Opened opened = 1;
+    BackUpNow back_up_now = 2;
+    SetRule set_rule = 3;
+    SetIncludeVideos set_include_videos = 4;
+    // A pairing payload the shell scanned or the member pasted.
+    AddDestination add_destination = 5;
+    // Asks for the member's yes; nothing is forgotten until `ForgetConfirmed`.
+    ForgetDestination forget_destination = 6;
+    ForgetConfirmed forget_confirmed = 7;
+    ForgetCancelled forget_cancelled = 8;
+    Dismissed dismissed = 9;
+  }
+
+  message Opened {}
+
+  message BackUpNow {}
+
+  message SetRule {
+    string stored = 1;
+  }
+
+  message SetIncludeVideos {
+    bool include = 1;
+  }
+
+  message AddDestination {
+    string payload = 1;
+  }
+
+  message ForgetDestination {
+    string gateway_id = 1;
+  }
+
+  message ForgetConfirmed {}
+
+  message ForgetCancelled {}
+
+  message Dismissed {}
+}
