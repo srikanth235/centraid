@@ -74,6 +74,12 @@ public sealed interface CoreFailure {
         val detail: String,
         val diagnosticId: String,
         override val sentence: String,
+        /**
+         * `VaultMoved.moved_at_ms` when the refusal is `VAULT_MOVED`, on the
+         * GATEWAY's clock; null otherwise. The freeze line dates the move with
+         * it, so it is carried rather than re-decoded from bytes nobody kept.
+         */
+        val movedAtMs: Long? = null,
     ) : CoreFailure
 
     /**

@@ -123,3 +123,19 @@ internal fun movedFrom(error: Error, unacked: Long): Moved? {
 
 /** What a `VAULT_MOVED` refusal says, in the two terms `Shelf.freeze` takes. */
 internal data class Moved(val atIso: String, val unacked: Long)
+
+/**
+ * THE SAME TWO TERMS FROM A PASS OR THE LEDGER (#1080): a pass that stopped
+ * `MOVED` at [movedAtMs], or a `backup_status` whose `frozen` the core
+ * remembered. Null when neither says the vault moved.
+ *
+ * The count is what is ONLY on this phone — the items no gateway acknowledged
+ * ([BackupReading.unconfirmed]) — and the date is the last acknowledgement on
+ * the GATEWAY's clock, so the line reads "N changes since the last backup";
+ * the move's own time stands in when nothing was ever acknowledged.
+ */
+internal fun freezeFor(reading: BackupReading?, movedAtMs: Long?): Moved? {
+    if (movedAtMs == null && reading?.frozen != true) return null
+    val sinceMs = reading?.lastAckMs ?: movedAtMs ?: 0L
+    return Moved(atIso = rfc3339FromEpochMillis(sinceMs), unacked = reading?.unconfirmed ?: 0L)
+}

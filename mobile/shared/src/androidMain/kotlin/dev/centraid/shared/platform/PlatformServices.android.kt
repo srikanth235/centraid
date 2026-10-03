@@ -11,19 +11,11 @@ import android.os.Build
 import android.provider.MediaStore
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import androidx.work.Constraints
-import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.WorkerParameters
 import centraid.screen.v1.MediaPermission
 import com.google.android.gms.auth.blockstore.Blockstore
 import com.google.android.gms.auth.blockstore.RetrieveBytesRequest
 import com.google.android.gms.auth.blockstore.StoreBytesData
 import java.security.KeyStore
-import java.util.concurrent.TimeUnit
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import kotlinx.coroutines.Dispatchers
@@ -40,8 +32,9 @@ import kotlinx.coroutines.withContext
  *
  * The mapping is v0's, module for module: `centraid-network-status` becomes
  * [AndroidNetworkStatus], `centraid-upload`'s enumeration becomes
- * [AndroidMediaLibrary], `expo-background-task` becomes WorkManager, and
- * `expo-secure-store` becomes the Keystore-backed [AndroidSecureStore].
+ * [AndroidMediaLibrary], `expo-background-task` becomes WorkManager
+ * ([AndroidBackgroundTasks]), and `expo-secure-store` becomes the
+ * Keystore-backed [AndroidSecureStore].
  */
 public actual fun platformServices(): PlatformServices = AndroidPlatform.services()
 
@@ -82,8 +75,9 @@ public object AndroidPlatform {
 public class AndroidPlatformServices(context: Context) : PlatformServices {
     override val secureStore: SecureStore = AndroidSecureStore(context)
     override val syncedSecrets: SyncedSecrets = AndroidSyncedSecrets(context)
-    override val backgroundTasks: BackgroundTasks = AndroidBackgroundTasks(context)
+    override val backgroundTasks: BackgroundTasks = AndroidBackgroundTasks(context, secureStore)
     override val networkStatus: NetworkStatus = AndroidNetworkStatus(context)
+    override val powerAndLink: PowerAndLink = AndroidPowerAndLink(context)
     override val mediaLibrary: MediaLibrary = AndroidMediaLibrary(context)
     override val ocr: Ocr = AndroidOcr()
     override val secureRandom: SecureRandom = AndroidSecureRandom()
@@ -189,123 +183,6 @@ public class AndroidSecureStore(private val context: Context) : SecureStore {
             }
 
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
-    }
-}
-
-/**
- * **THE PASS THE OS RUNS, AND IT IS A CONCRETE CLASS** (#1029 W5B-2).
- *
- * What stood here scheduled `PeriodicWorkRequestBuilder<androidx.work.Worker>`
- * — the ABSTRACT base class. WorkManager instantiates a worker reflectively by
- * name and `androidx.work.Worker` has no runnable body, so that request could
- * never run: it was accepted, it appeared in `WorkManager`'s own diagnostics as
- * enqueued, and every execution failed inside the framework. A registration
- * that reports success and can never do the work is worse than no registration,
- * because the member is told Centraid catches up in the background.
- *
- * A `CoroutineWorker` rather than a `Worker`: the pass is suspending all the
- * way down (the ABI door, the gateway client, the spool), and a `Worker` would
- * mean blocking a WorkManager thread on a network round trip.
- *
- * ## WHAT IT ACTUALLY DOES IS INSTALLED, NOT HARD-CODED
- *
- * [SyncPass.install] is what the shell calls at launch. This class owns being
- * runnable, being retried and reporting a verdict; it does not own what a pass
- * IS — that would put the sync policy inside an Android class where no JVM test
- * can reach it.
- *
- * A pass with nothing installed is `Result.success()` and not a failure: an app
- * that has not finished launching has nothing to catch up on, and a failure
- * would make WorkManager back off the schedule for a reason that is not real.
- */
-public class CentraidSyncWorker(
-    context: Context,
-    parameters: WorkerParameters,
-) : CoroutineWorker(context, parameters) {
-
-    override suspend fun doWork(): Result {
-        val pass = SyncPass.installed ?: return Result.success()
-        return try {
-            if (pass()) Result.success() else Result.retry()
-        } catch (error: Exception) {
-            // RETRY, NOT FAILURE. `Result.failure()` takes the work out of the
-            // queue for good, and a phone that lost its network mid-pass would
-            // never back up again until the app was opened.
-            Result.retry()
-        }
-    }
-}
-
-/** The pass body, installed by the shell at launch. See [CentraidSyncWorker]. */
-public object SyncPass {
-
-    /**
-     * WHAT A WORKER MAY SPEND, AND IT IS WORKMANAGER'S NUMBER (#1029 W18-6).
-     *
-     * WorkManager gives a worker about ten minutes before it calls `onStopped`
-     * and stops caring what happens next. This is that, minus a minute, so the
-     * object in flight finishes and the pass stops at a boundary rather than
-     * being killed mid-upload.
-     *
-     * **A drain of a full generation may not fit, and does not need to.** The
-     * spool never loses a sealed object and the periodic work is every fifteen
-     * minutes, so a pass that stops short resumes at the next window from the
-     * txid the laptop acked. A foreground service would buy uninterrupted
-     * minutes at the cost of a permanent notification for a backup nobody asked
-     * to watch — the honest shape only if a resumable drain turns out to make
-     * no progress across windows, which is a measurement nobody has taken.
-     */
-    public const val WORK_MANAGER_BUDGET_MS: Long = 9L * 60L * 1_000L
-    internal var installed: (suspend () -> Boolean)? = null
-        private set
-
-    /** Install the body. Replacing it is how a test drives one. */
-    public fun install(pass: suspend () -> Boolean) {
-        installed = pass
-    }
-}
-
-public class AndroidBackgroundTasks(private val context: Context) : BackgroundTasks {
-
-    override suspend fun register(): BackgroundTasks.Registration = try {
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            WORK_NAME,
-            // **UPDATE, NOT KEEP, AND THAT IS THE MIGRATION.** The unique name
-            // is unchanged — a rename would orphan whatever a shipped build
-            // scheduled under the old one — but every device that ran the
-            // previous build has an unrunnable `androidx.work.Worker` enqueued
-            // under it, and `KEEP` would keep exactly that. `UPDATE` replaces
-            // the request in place, keeping the work's id and its schedule.
-            ExistingPeriodicWorkPolicy.UPDATE,
-            PeriodicWorkRequestBuilder<CentraidSyncWorker>(15, TimeUnit.MINUTES)
-                .setConstraints(
-                    Constraints.Builder()
-                        // Wi-Fi and charger rules are queried before each item
-                        // as well; these are WorkManager's own floor.
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .build(),
-                )
-                .build(),
-        )
-        BackgroundTasks.Registration(
-            registered = true,
-            sentence = "Centraid catches up in the background.",
-        )
-    } catch (error: IllegalStateException) {
-        // OBSERVABLE, NOT ASSUMED (`docs/mobile-offline.md:214`).
-        BackgroundTasks.Registration(
-            registered = false,
-            sentence = "Centraid cannot catch up in the background on this device.",
-            refusal = error.message ?: "WorkManager refused",
-        )
-    }
-
-    internal companion object {
-        /**
-         * v0's name, kept. Nothing scheduled under it is orphaned by this
-         * change — see the `UPDATE` above, which is what migrates it.
-         */
-        const val WORK_NAME = "centraid-sync-pass"
     }
 }
 

@@ -23,6 +23,7 @@ public class FakePlatformServices(
     override val backgroundTasks: FakeBackgroundTasks = FakeBackgroundTasks(),
     override val syncedSecrets: FakeSyncedSecrets = FakeSyncedSecrets(),
     override val networkStatus: FakeNetworkStatus = FakeNetworkStatus(),
+    override val powerAndLink: FakePowerAndLink = FakePowerAndLink(),
     override val mediaLibrary: FakeMediaLibrary = FakeMediaLibrary(),
     override val ocr: FakeOcr = FakeOcr(),
     // NOT A FAKE, and it is the one member here that must not be. A fake CSPRNG
@@ -63,13 +64,48 @@ public class FakeBackgroundTasks(
         sentence = "Centraid catches up in the background.",
     ),
 ) : BackgroundTasks {
+    /** How many times launch registered. `BackgroundSchedulingSpec` holds it at one per open. */
     public var registrations: Int = 0
         private set
+
+    public var resubmits: Int = 0
+        private set
+
+    public var nudges: Int = 0
+        private set
+
+    /** Every `backlog(start)` call, in order: a run is `[true, false]`. */
+    public val backlogs: MutableList<Boolean> = mutableListOf()
 
     override suspend fun register(): BackgroundTasks.Registration {
         registrations += 1
         return answer
     }
+
+    override fun resubmit() {
+        resubmits += 1
+    }
+
+    override fun nudge() {
+        nudges += 1
+    }
+
+    override fun backlog(start: Boolean) {
+        backlogs += start
+    }
+}
+
+/**
+ * A link and a charger a test sets. Null is the platform refusing to say,
+ * which the pass must read as the expensive answer.
+ */
+public class FakePowerAndLink(
+    public var metered: Boolean? = false,
+    public var charging: Boolean? = true,
+) : PowerAndLink {
+    override fun metered(): Boolean? = metered
+
+    override fun charging(): Boolean? = charging
 }
 
 /**
