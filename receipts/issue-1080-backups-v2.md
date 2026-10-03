@@ -146,6 +146,31 @@ grep -rn "sha256" crates/media/src/sealed.rs crates/vault/src/backup2
 - **Q-1080-D1** can stay open. It is copy only; "computer" fits a VPS or a NAS.
 - **Q-1080-D3** should not be a follow-up. The Decision names the browse, iOS already asks for the local network and declares the type, and four documents promise it. Build (a) for v1, or fix finding 3 now. Q-1080-1, 2 and 4 remain the owner's.
 
+### Re-audit on `b916aea42`
+
+**PASS.** The claim that refuted the first verdict is gone, and each of the seven findings is fixed in the tree or recorded where the round said it would be.
+- An opened original now reaches `fetch_original` and settles its cell.
+- The documents promise neither a refill by rule nor a browse.
+- A phone revokes its own token when it forgets a gateway, and an operator can revoke a lost phone's token.
+
+Lane E's deleters section, at the end of this receipt, was re-read. Its three shell fixes are in the tree. Its "found" items are resolved in the documents, except the camera string, which waits on Q-1080-D1. C14 is superseded by R-1080-C38, as recommended. The first table's `sha256` row undercounted: a `head` cut the grep short. The full grep matches 13 files under `crates/`, each with the same count at `23e46810`, and none in the #1080 plane.
+
+| Finding | Command | Result | Verdict |
+| --- | --- | --- | --- |
+| 1. An original back on demand | `mobile/gradlew -p mobile :shared:jvmTest --rerun --offline`; consumers of `ScreenEffect.FetchOriginal` | 1,112 tests in 75 suites, 0 failed (`PhotoLightboxSpec` 45, `CoreBackupDoorsSpec` 11, `FreeUpSpec` 9). `ScreenRuntime.serveFetch` serves the grid's and the lightbox's taps, and both settle `FetchSettled` | PASS |
+| 2. Revocation | `cargo test --workspace --test conformance --test conformance_wire --test revoke --test phone_backup`; a throwaway revoke-then-read against the harness | 31 cases each way; `revoke` 2 passed; `forgetting_a_gateway_revokes_this_phones_token_there` passed. Throwaway: a phone's forget answered `revoked true`, then `UNAUTHORIZED` on its `PUT` and head. A superseded token read the new writer's object; after `revoke_hash` from a second open of the served data directory (the CLI's path), it got `UNAUTHORIZED`. An epoch-0 token revoked itself; another vault's token cannot revoke here; the writer still writes | PASS |
+| 3. No browse claimed | `grep -rn -i browse` over the state documents and `project.yml` | every one says no shell browses; the payload lists `<host>.local` last (`addrs.rs:38`) | PASS |
+| 4. MANUAL waits for a tap | `cargo test --workspace --lib -- phone::drain::` | 7 passed, `an_original_manual_holds_waits_for_the_members_tap` among them; `WAIT_REASON_ASK` is mapped (`CoreBackupDoors.kt:162`) | PASS |
+| 5. Damage and impostors | `phone_backup` (8 passed, `a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_damaged` among them); `-- backup::mover::` (10 passed); the first audit's tamper run, again | a stale digest gives `FETCH_OUTCOME_DAMAGED`, and so does a forged one, with nothing landed; canary, 0 of 68 needles; a tampered head range: the restore is refused and the epoch stays 2 | PASS |
+| 6. Stale names | greps for `irohBlobs`, `backup2`, `backup_blob_placement`, `custody::open_blob`, `txid` | none | PASS |
+| 7. Budget and the twice-run drill | `QUALITY.md:6`; `cargo xtask gate --profile local` | recorded as pre-existing. Every step ok; 288.8 s against 120 s; `FAIL — over budget` as before | PASS (recorded) |
+| C38, gates | `a_tap_sends_the_records_over_a_metered_link_under_any_rule`; `cargo xtask gate --profile mobile-jvm`; `bash .governance/run.sh < /dev/null` | passed; `PASS`, 71.8 s of 420 s; all 6 directives pass, the law included | PASS |
+
+Two small items remain. No receipt claims otherwise.
+
+1. **The `.local` name can be cut from the payload.** `crates/gateway/src/server/addrs.rs:38-40` pushes the name after every interface address and then calls `truncate(MAX_ADDRS)` (8). A host with eight or more IPv4 addresses, such as one with Docker networks or a VPN, loses the name the documents say is listed. Fix: cap the interface addresses at `MAX_ADDRS - 1` before pushing the name.
+2. **A damaged head reports `INTERNAL`.** `crates/core/src/phone/restore.rs:313` answers a restore that meets a damaged head with `INTERNAL` ("core invariant … does not open"). The restore is refused and claims nothing, as it should, but the member hears an internal error. Fix: give `StoreError::Damaged` and an unopenable range their own refusal.
+
 ### Lane F — the docs
 
 Every state document #1080 names now describes the new plane as current state, and the old one only as history cited by issue link: gateways the member controls reached over direct HTTPS with a pinned certificate, snapshots in 64 KiB ranges, sealed originals and derivatives, the ledger and the spool, the pass, and the restore that reads, checks, then claims. Written from the issue, the root's seam contract (A1–A18), lane B's merged plane, lane A's merged crate and its README (the source of truth for the gateway, on the root's word), lane D's merged shared module, and lane E's and lane C's work in flight. No build was run: the lane's checks are the docs' own.
