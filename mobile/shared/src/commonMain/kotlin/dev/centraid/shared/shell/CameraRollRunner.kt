@@ -46,6 +46,12 @@ public class CameraRollRunner(
     private val scope: CoroutineScope,
     /** Which vault the roll is being offered to. See [CameraRoll.cursorKey]. */
     private val vaultId: () -> String?,
+    /**
+     * A pass imported something: `ShelfDrain.afterImport`. The import seals
+     * into the spool in the same stream when a destination is paired, so
+     * what was just staged moves now rather than at the next window.
+     */
+    private val afterImport: suspend () -> Unit = {},
 ) {
     private val passing = Mutex()
 
@@ -146,9 +152,11 @@ public class CameraRollRunner(
     public suspend fun pass() {
         val vault = vaultId() ?: return
         if (!passing.tryLock()) return
+        var imported = 0
         try {
             repeat(MAX_PASSES) {
                 val report = roll.pass(vault) { state -> scope.launch { publish(state) } }
+                imported += report.queued - report.alreadyHeld
                 if (report.enumerated == 0 ||
                     report.state.phase != BackupState.Phase.PHASE_TRANSFERRING
                 ) {
@@ -157,6 +165,7 @@ public class CameraRollRunner(
             }
         } finally {
             passing.unlock()
+            if (imported > 0) scope.launch { afterImport() }
         }
     }
 
@@ -173,10 +182,13 @@ public class CameraRollRunner(
     private suspend fun once() {
         val vault = vaultId() ?: return
         if (!passing.tryLock()) return
+        var imported = 0
         try {
-            roll.pass(vault) { state -> scope.launch { publish(state) } }
+            val report = roll.pass(vault) { state -> scope.launch { publish(state) } }
+            imported = report.queued - report.alreadyHeld
         } finally {
             passing.unlock()
+            if (imported > 0) scope.launch { afterImport() }
         }
     }
 
