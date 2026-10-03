@@ -387,6 +387,11 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
             // derived once, there.
             event.free_up_counted != null -> Step(state.copy(free_up = event.free_up_counted.free_up))
 
+            // "FREE UP 2 GB" TAPPED (#1080 A19): the row holds still while the
+            // system's confirmation is up, and `KeepOriginals.attachGrid` runs it.
+            event.free_up_tapped != null ->
+                Step(KeepOriginals.tapped(state.free_up)?.let { state.copy(free_up = it) } ?: state)
+
             // A COMMITTED WRITE IS A RE-READ, and the change feed is what
             // carries it — so a commit changes nothing here. A REFUSAL lands on
             // `write_failure`, its own slot: a denied favourite must not

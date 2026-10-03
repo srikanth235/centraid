@@ -240,6 +240,17 @@ public class FakeMediaLibrary(
         )
     }
 
+    /** What [deleteFromLibrary] answers; null deletes every ref it was handed. */
+    public var deleting: ((List<String>) -> MediaLibrary.DeleteOutcome)? = null
+
+    /** Every list [deleteFromLibrary] was handed, in order. */
+    public val deletions: MutableList<List<String>> = mutableListOf()
+
+    override suspend fun deleteFromLibrary(refs: List<String>): MediaLibrary.DeleteOutcome {
+        deletions += refs
+        return deleting?.invoke(refs) ?: MediaLibrary.DeleteOutcome.Deleted(refs)
+    }
+
     /** Whether [open] states a length before the read, as Android does and Photos does not. */
     public var statesSize: Boolean = true
 
