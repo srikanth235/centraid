@@ -192,8 +192,17 @@ impl Plane {
     #[must_use]
     pub fn budget(&self) -> u64 {
         let dir = self.spool_dir();
+        // `statvfs` is POSIX, which covers both phones; on any other target
+        // the volume is read as full, which gives the spool nothing (C-D23)
+        // rather than a budget the target cannot vouch for.
+        #[cfg(unix)]
         let free =
             rustix::fs::statvfs(&dir).map_or(0, |stat| stat.f_bavail.saturating_mul(stat.f_frsize));
+        #[cfg(not(unix))]
+        let free = {
+            let _ = &dir;
+            0_u64
+        };
         Spool::budget(free)
     }
 }
