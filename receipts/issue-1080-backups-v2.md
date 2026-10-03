@@ -113,3 +113,90 @@ grep -rn "sha256" crates/media/src/sealed.rs crates/vault/src/backup2
 ## Audit
 
 No verdict from the author. The umbrella's independent review records one for lane B's section, against the diff and the commands above, at the close.
+
+### Lane F — the docs
+
+Every state document #1080 names now describes the new plane as current state, and the old one only as history cited by issue link: gateways the member controls reached over direct HTTPS with a pinned certificate, snapshots in 64 KiB ranges, sealed originals and derivatives, the ledger and the spool, the pass, and the restore that reads, checks, then claims. Written from the issue, the root's seam contract (A1–A18), lane B's merged plane, lane A's merged crate and its README (the source of truth for the gateway, on the root's word), lane D's merged shared module, and lane E's and lane C's work in flight. No build was run: the lane's checks are the docs' own.
+
+Branch `worktree-agent-ad555fbcf690bfe7d`, cut from `23e46810` and fast-forwarded to the umbrella tip `1e620bf7` before its first commit; the umbrella was merged in again at `e0079c08` when lanes A and D landed.
+
+| Commit | Subject |
+| --- | --- |
+| `c056362c` | docs(gateway): protocol v2, its runbooks and the deploy READMEs (#1080) |
+| `734d285f` | docs: architecture, threat model and README describe backup v2 (#1080) |
+| `0da954e9` | docs: the pass, glossary, traps and gate docs describe backup v2 (#1080) |
+| `e0079c08` | Merge branch 'ccr-ffb8b956-lwxeta' into worktree-agent-ad555fbcf690bfe7d |
+| `9378b364` | docs(gateway): follow the merged gateway2 README and A16 to A18 (#1080) |
+| this commit | docs(decisions): what #1080 superseded, and the lane F receipt (#1080) |
+
+| File | Change |
+| --- | --- |
+| `docs/gateway.md` | rewritten: protocol v2's routes, objects, tokens and writer epochs, the three pairing kinds, refusal codes, the six commands, the certificate, pairing and the safety number, discovery, the data directory and what a stolen copy yields, the sweeps, self-hosting, mirroring as designed-not-built, versioning |
+| `docs/recovery/backup-restore.md` | rewritten: what a backup is, the pass, retention, invariants, restore step by step, the symptoms with the v2 codes, the drill, the schema-change checklist with rung 010 as its example, what not to do |
+| `docs/recovery/pairing.md` | rewritten: pairing v2, more than one gateway, durable state with `tls.key` as the identity, `node.key` as history, recovery steps including `PIN_MISMATCH` and a stolen data directory |
+| `deploy/README.md` | rewritten: one gateway, one way in; the service units; the container on the host's network; the installer |
+| `deploy/gateway-server/README.md` | rewritten: running a gateway on a box you own |
+| `ARCHITECTURE.md` | the shape, the two programs, the crate table (`gateway`, `media`, `blobs`, `identity`), the shell, what crosses to a gateway, authorization, on-disk layouts, at-rest formats, backup and recovery |
+| `SECURITY.md` | the threat model and the claim register rewritten; the threat-model heading kept byte-identical for the three decisions rows that link it |
+| `README.md` | the pitch, the diagram, getting started, gateway install, the command list, the Devices row |
+| `docs/mobile-offline.md` | current sections first (files, the pass, the rule, the spool budget, the per-state promise); #1029's seat-plane record kept below a rule |
+| `docs/photos/README.md` | Derivatives; Keeping originals, and freeing space; the Backup row |
+| `docs/glossary.md` | a Backup section; pairing, gateway, transport, byte plane, drain, drill, daemon, the Owners section and five synonym rows rewritten; the pair ticket, custody state and the generation vocabulary retired |
+| `docs/traps/wal-checkpoint.md` | rewritten around the online backup API |
+| `docs/traps/README.md` | four rows removed, the WAL row rewritten |
+| `docs/traps/worktrees.md` | the seat socket and seat processes |
+| `docs/traps/byte-store-lock.md` | deleted: iroh-blobs leaves |
+| `docs/traps/census-around-the-guard.md` | deleted: the census is counted on the scratch copy |
+| `docs/traps/first-dial-readiness.md` | deleted: iroh leaves |
+| `docs/traps/migration-header-is-a-format.md` | deleted: no dictionary |
+| `TESTING.md` | profiles as `gate.rs` has them, the drill row, no `vps-smoke`, the vectors, the `backup-measurement` device lane, no `no_listener.rs` |
+| `docs/toolchain.md` | the same profile facts and the device lane |
+| `docs/release.md` | installing a gateway and the real-VPS hand-off |
+| `docs/dev-environment.md` | the gateway loop and the profile rows |
+| `docs/logs.md` | the two binaries, where a gateway's output lands, the phone's backup state and settle codes, the drill's timing path, what is not a log |
+| `docs/protocol.md` | the gateway transport section, the version paragraph, the queued-backup paragraph |
+| `docs/external-review-scope.md` | the covered table, Review A's gateway plane and sealed format, Review C's egress list |
+| `docs/decisions.md` | appended: four open questions and Q-1080-B1's answer to lane B's table; `### Supersessions closed by #1080` |
+| `CHANGELOG.md` | one line under Unreleased for the docs |
+| `receipts/issue-1080-backups-v2.md` | this section |
+
+**Rulings this lane took** (the root records them):
+
+| Id | Ruling and reason |
+| --- | --- |
+| **F-D1** | Commit trailers name the model that wrote them, as the root accepted for C-D9 and A-D1 (#1080). |
+| **F-D2** | #1029's seat-plane record stays in `docs/mobile-offline.md`, below a rule and after every current section, because `docs/blueprint-seats.md` links `#one-stream-three-occasions` and an append-only decisions row links `#background-work-and-push-privacy`; its two links into the deleted `crates/seat` became text (#1080). |
+| **F-D3** | The gate docs follow `crates/xtask/src/gate.rs`, which they had drifted from before #1080: `restore-drill` is in `local` and so in every profile, there is no `vps-smoke`, and `artifact-identity` and `prebuilt-core-required` are `release`'s (#1080). |
+| **F-D4** | The write claim's wire kind is written `claim`, as lane A's `PairKind` and README spell it; A18 calls the two claims `read` and `write` (#1080). |
+| **F-D5** | The open questions continue lane B's `### Open questions for the owner (#1080)` table, the file's last lines, instead of a second subsection whose anchor would collide; Q-1080-B1's answer is a new row (#1080). |
+| **F-D6** | `no-listening-socket` is registered as enforced statically, with no runtime half, because `crates/centraid/tests/no_listener.rs` went with the seat plane in #1029 and three documents still cited it (#1080). |
+
+**Found outside this lane's files**, for the root:
+
+- `mobile/README.md` (lane D): `:186` the iOS transfer experiment row; `:316` pairing by `centraid-gateway invite`, "claims the lease"; `:327` and `:329` the device secret; `:330` "grant the lease", "moved no lease"; `:333` "No Bonjour and no local-network permission" — `grep -n "ios-transfer\|invite\|lease\|device secret\|No Bonjour" mobile/README.md`.
+- No lane owns: `AGENTS.md:35` (the vocabulary still defines a generation as a base plus its segments); `docs/enrollment.md:85,89,90,99` (invites, `node.key`, and a link to the `#nodekey` section `docs/gateway.md` no longer has); `docs/config-ownership.md:36` (the device key and `backup/laptop.json`); `docs/vault-ontology.md:32` (generation, base, segments, dictionary, `object-vectors.json`); `docs/blueprint-seats.md` (links into the seat record); `scripts/docs-site/src/content/{learn,index,understand,devices,start}.html` name iroh — `grep -rlni iroh scripts/docs-site/src/content/`.
+- Lane C's: `contracts/README.md:20` and `crates/core/README.md:16` link the deleted traps; `contracts/README.md:21,22,24` describe `object-vectors.json`, the gateway schema's leases and invites, and the old units' tests; `crates/core/src/app_query/docs_tests.rs:483` cites `byte-store-lock.md`; the `ios-transfer-experiment` device lane in `gate.rs`, `gate-nightly.yml:193` and `contracts/handoff/E/device-lane-bodies.md`; the deploy tree beside the new image (`deploy/docker`, `deploy/gateway-server/Dockerfile`, `deploy/systemd`, `deploy/launchd`, `deploy/vps/install.sh`), whose units run `centraid gateway --data-dir`, a verb `centraid` no longer has.
+- `docs/decisions.md:1821` (T-1029-1) and `:2077` (R-1047-R1) link two deleted traps; both rows are append-only, so the supersessions table records the links as history.
+- Lane E's Photos More sheet offers no "Free up space" verb, while #1080's shell scope and this lane's brief describe one; R-1080-E1 ("never cross a metered link") predates A10's `allows_cellular`.
+- `CHANGELOG.md`'s first #1080 line says 4 MiB ranges; A14 made them 64 KiB, which the cut-over's own line can say.
+
+**Waiting on another lane.** Twelve links resolve when the cut-over renames `crates/gateway2` to `crates/gateway` (four) and lane E's `mobile/maestro/backup-measurement.md` and its decisions section land (eight). Facts written from the contract and checked when lane C reports: the drill the `restore-drill` step runs, the pragmas, `centraid`'s verbs, the identity files that leave, `local_bytes`, and the restore's multi-vault claim test the claim register names.
+
+#### Verification
+
+Run in this worktree on 2026-10-03, at this commit's tree. No cargo command: the lane changes no code.
+
+```sh
+bun run format && bun run format:check
+grep -rln "internal-doc-links\|markdown-link\|checkLinks\|broken internal link" scripts .governance/law crates/xtask package.json
+python3 <scratchpad>/linkcheck.py . <the 23 touched markdown files>
+grep -n "iroh\|pkarr\|iroh-dns\|gateway-core\|gateway-client\|gateway-server\|invite\b\|GATEWAY_HEAD_CONFLICT\|acked_txid\|backup_blob_custody\|ios-transfer" <the owned state docs>
+git diff 9378b364 -- docs/decisions.md | grep -c "^-[^-]"
+bash .governance/run.sh
+```
+
+- `bun run format` then `bun run format:check` — "All matched files use the correct format", 525 files.
+- The link-checker grep — `scripts/docs-site/smoke.mjs` and its README (the built site's smoke) and one law fixture: the repo has no committed checker for markdown links, so a scratch one resolved every relative path and GitHub anchor in the 23 files. 14 unresolved: the twelve forward links above, and the two decisions rows above.
+- The old-names grep — nine lines, eight citing history by issue link (`ARCHITECTURE.md:45`, `README.md:145`, `docs/recovery/backup-restore.md:74`, `docs/recovery/pairing.md:34`, `docs/mobile-offline.md:215`, `docs/glossary.md:58,62,287`); the ninth, `deploy/README.md:15`, is the path of `deploy/gateway-server/README.md` itself, which the cut-over can move beside `deploy/gateway/`.
+- `docs/decisions.md` is a pure append: 0 removed lines.
+- `bash .governance/run.sh` — one finding, `receipt-per-issue`: this receipt's `## Audit` records no verdict, which the close pass writes. Every other directive and rule green.
