@@ -1,6 +1,5 @@
 package dev.centraid.shared.sync
 
-import centraid.core.v1.BackupStatusRequest
 import centraid.core.v1.DrainRequest
 import centraid.core.v1.DrainStop
 import centraid.core.v1.Envelope
@@ -24,33 +23,42 @@ import dev.centraid.shared.custody.UnclaimedVaultAt
 import okio.ByteString.Companion.toByteString
 
 /**
- * THE FOUR REQUEST KINDS, AS THE SHELL'S DOORS (#1029 W18-2, over W15-1).
+ * THE PASS, PAIRING AND RESTORE, AS THE SHELL'S DOORS (#1080; #1029 W15).
  *
- * W15 landed `drain = 15`, `pair_phone = 16`, `restore = 17` and
- * `backup_status = 18` on `Request.kind`, each answered at the same field
- * number on `Response.kind` (`crates/api-proto/proto/centraid/core/v1/phone.proto`).
- * This file is the whole of what crosses: one `Envelope` per call over the ABI
- * `CentraidCore` already holds, and a `when` over the answer.
+ * `drain = 15`, `pair_phone = 16` and `restore = 17` on `Request.kind`, each
+ * answered at the same number on `Response.kind` (`phone.proto`). One
+ * `Envelope` per call over the ABI `CentraidCore` already holds, and a `when`
+ * over the answer. The backup plane's own doors — status and the six beside
+ * the pass — are `CoreBackupDoors`.
  *
- * **Every door never throws, and drain is nullable-on-unreachable.** "Your
- * laptop did not answer" is a sentence a member reads, not an exception a pass
- * has to guess the meaning of, and `DrainPass` is written against exactly that.
- * Pair and restore answer a typed refusal instead (`PairResult`, #1047 E5;
- * `RestoreResult`, #1047 R3), because their screens have a different sentence
- * for a laptop that answered and refused, and restore one more for a backup
- * this phone would not accept.
+ * **No door throws.** "The gateway did not answer" is a sentence a member
+ * reads, so the pass answers a [DrainAnswer.Stopped] and pair and restore a
+ * typed refusal (`PairResult`, #1047 E5; `RestoreResult`, #1047 R3).
  *
- * **The core is asked of a SUPPLIER and not held.** The shelf moves the
- * foreground holding on a vault switch, and a door bound to one handle would go
- * on draining a vault the member has left — the same reason `HomeRuntime` takes
- * its core as a supplier (R-HOME-2).
+ * **The core is asked of a SUPPLIER and not held**: a vault switch moves the
+ * foreground, and a door bound to one handle would go on asking a vault the
+ * member has left (R-HOME-2).
  */
 public class CoreDrainDoor(private val core: () -> CentraidCore?) : DrainDoor {
 
     override suspend fun drain(input: DrainInput): DrainAnswer? {
         val open = core() ?: return null
         val answer = open.call(
-            Envelope(request_id = 0, request = Request(drain = DrainRequest(deadline_ms = input.deadlineMs))),
+            Envelope(
+                request_id = 0,
+                request = Request(
+                    drain = DrainRequest(
+                        deadline_ms = input.deadlineMs,
+                        rule = input.rule.toWire(),
+                        metered = input.metered,
+                        charging = input.charging,
+                        wants_snapshot = input.wantsSnapshot,
+                        // THE WIRE CARRIES THE NEGATION (A3), so proto3's zero
+                        // value is the complete backup.
+                        exclude_videos = !input.includeVideos,
+                    ),
+                ),
+            ),
         )
         return when (answer) {
             is CoreOutcome.Answered -> answer.value.response?.drain?.let { drained ->
@@ -65,6 +73,13 @@ public class CoreDrainDoor(private val core: () -> CentraidCore?) : DrainDoor {
                         else -> DrainAnswer.Stopped.UNREACHABLE
                     },
                     ackedAtMs = drained.acked_at_ms,
+                    confirmedParts = drained.confirmed_parts,
+                    waitingBytesParts = drained.waiting_bytes_parts,
+                    needBytes = drained.need_bytes.mapNotNull { need ->
+                        ContentHash.hex(need.content_hash).takeIf { it.isNotEmpty() }?.let { hash ->
+                            NeededBytes(hash, need.os_ref, need.media_type, need.size)
+                        }
+                    },
                 )
             }
             is CoreOutcome.Failed -> {
@@ -88,18 +103,16 @@ public class CoreDrainDoor(private val core: () -> CentraidCore?) : DrainDoor {
 }
 
 /**
- * `pair_phone = 16`.
+ * `pair_phone = 16`: the scanned pairing payload, as the member read it off
+ * `centraid-gateway pair` (`{v: 2, …}` as JSON, or its square).
  *
- * **The device secret on the answer is kept, here, before anything else**
- * (#1047 E1, R-1047-E4): the core mints it at pair and hands it over exactly
- * once, and the certificate it wrote beside the vault names that key and no
- * other. [keep] stores it in the device-only store for this vault; the next
- * keyed open carries it.
+ * The answer the member checks is the gateway's label and address and the
+ * safety number the core computed over the vault's identity key and the
+ * certificate's fingerprint (A7) — the digits the gateway prints when the
+ * pairing lands. Nothing secret comes back: the bearer token stays in the
+ * core's ledger.
  */
-public class CorePairDoor(
-    private val core: () -> CentraidCore?,
-    private val keep: suspend (deviceSecretHex: String) -> Unit = {},
-) : PairDoor {
+public class CorePairDoor(private val core: () -> CentraidCore?) : PairDoor {
 
     override suspend fun pair(payload: String): PairResult {
         val open = core() ?: return PairResult.Refused(PairRefusal.UNREACHABLE)
@@ -119,14 +132,12 @@ public class CorePairDoor(
                 },
             )
         } ?: return PairResult.Refused(PairRefusal.UNREACHABLE)
-        if (paired.device_secret.size == DEVICE_SECRET_BYTES) keep(paired.device_secret.hex())
+        val destination = paired.destination
         return PairResult.Paired(
             PairAnswer(
-                gatewayEndpoint = paired.gateway_endpoint.hex(),
-                // WHAT THE MEMBER COMPARES (W15-D5): the core's digits, which
-                // `centraid-gateway serve` prints once the invite is redeemed.
                 safetyNumber = paired.safety_number,
-                recordPublished = paired.record_published,
+                destinationLabel = destination?.label.orEmpty(),
+                destinationAddress = destination?.addrs?.firstOrNull().orEmpty(),
             ),
         )
     }
@@ -136,16 +147,18 @@ public class CorePairDoor(
  * `restore = 17`, over a core that holds NO VAULT (#1047 E1).
  *
  * The core lays each vault down under the directory it was opened in, so the
- * supplier is the shelf's custody core, opened over the vault directory.
+ * supplier is the shelf's custody core, opened over the vault directory. The
+ * gateway to restore from is named by the same pairing payload pairing reads
+ * (`RestoreRequest.payload`, A1).
  */
 public class CoreRestoreDoor(private val core: suspend () -> CentraidCore?) : RestoreDoor {
 
-    override suspend fun restore(words: List<String>, endpoint: String?): RestoreResult = ask(
+    override suspend fun restore(words: List<String>, payload: String?): RestoreResult = ask(
         RestoreRequest(
             // THE WORDS AS ONE STRING, because `RecoveryPhrase::parse` owns
             // what a phrase is and a second parser here would disagree with it.
             phrase = words.joinToString(" "),
-            endpoint = endpoint?.let { hexToBytes(it) },
+            payload = payload.orEmpty(),
         ),
     )
 
@@ -153,15 +166,15 @@ public class CoreRestoreDoor(private val core: suspend () -> CentraidCore?) : Re
      * THE SEED IN PLACE OF THE WORDS (Q-1047-18). `phrase` is left empty:
      * the core refuses a request carrying both.
      */
-    override suspend fun restoreSeed(seedHex: String, endpoint: String?): RestoreResult {
+    override suspend fun restoreSeed(seedHex: String, payload: String?): RestoreResult {
         val seed = hexToBytes(seedHex, SEED_BYTES) ?: return RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
-        return ask(RestoreRequest(seed = seed, endpoint = endpoint?.let { hexToBytes(it) }))
+        return ask(RestoreRequest(seed = seed, payload = payload.orEmpty()))
     }
 
     /** The vaults that stayed, by index, from the stored seed (R-1047-R6). */
-    override suspend fun restoreStayed(seedHex: String, endpoint: String?, indices: List<Int>): RestoreResult {
+    override suspend fun restoreStayed(seedHex: String, payload: String?, indices: List<Int>): RestoreResult {
         val seed = hexToBytes(seedHex, SEED_BYTES) ?: return RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
-        return ask(RestoreRequest(seed = seed, endpoint = endpoint?.let { hexToBytes(it) }, indices = indices))
+        return ask(RestoreRequest(seed = seed, payload = payload.orEmpty(), indices = indices))
     }
 
     private suspend fun ask(request: RestoreRequest): RestoreResult {
@@ -203,54 +216,19 @@ private const val DEVICE_SECRET_BYTES: Int = 32
 /** What `RecoveryPhrase::seed` makes of the 24 words (`RestoreRequest.seed`). */
 private const val SEED_BYTES: Int = 64
 
-/**
- * `backup_status = 18` — what the backup line draws.
- *
- * **It dials nothing**, which is `phone.proto`'s own rule: drawing a screen
- * must not depend on somebody else's network.
- */
-public class CoreBackupStatus(private val core: () -> CentraidCore?) : BackupStatusDoor {
-
-    override suspend fun read(): BackupReading? {
-        val open = core() ?: return null
-        val answer = open.call(
-            Envelope(request_id = 0, request = Request(backup_status = BackupStatusRequest())),
-        )
-        val status = (answer as? CoreOutcome.Answered)?.value?.response?.backup_status ?: return null
-        return BackupReading(
-            // ONE UNNAMED DESTINATION FOR "A LAPTOP IS PAIRED": the wire names
-            // no gateway until `Destination` lands with the cut-over (§1).
-            destinations = if (status.laptop_paired) {
-                listOf(DestinationReading("", "", emptyList(), lastSeenMs = null, lastAckMs = status.acked_at_ms))
-            } else {
-                emptyList()
-            },
-            lastSnapshotMs = null,
-            lastAckMs = status.acked_at_ms,
-            contentTotal = 0,
-            contentConfirmed = 0,
-            pendingBytes = status.pending_bytes,
-            spoolBytes = status.pending_bytes,
-            waiting = emptyMap(),
-            frozen = false,
-        )
-    }
-}
-
 /** Whether a failure is the core refusing with this code. */
 internal fun CoreFailure.isRefusedWith(code: ErrorCode): Boolean =
     this is CoreFailure.Refused && this.code == code.value
 
 /**
- * [bytes] bytes from hex, or null: a 32-byte endpoint id a member typed, or
- * the 64-byte seed ([SEED_BYTES]) the secure store holds.
+ * [bytes] bytes from hex, or null: a 32-byte hash, or the 64-byte seed
+ * ([SEED_BYTES]) the secure store holds.
  *
- * **Null rather than a throw, and null rather than a partial read.** A member
- * copying an id off a laptop screen mistypes it, and the core refusing a
- * malformed endpoint would be a refusal arriving as a crash. The length is the
- * caller's: a seed read as an endpoint id was null, so every restore from the
- * seed answered "could not reach your laptop" without asking the core
- * (#1047 T1).
+ * **Null rather than a throw, and null rather than a partial read.** A value
+ * read off a screen is mistyped, and the core refusing a malformed one would be
+ * a refusal arriving as a crash. The length is the caller's: a seed read as a
+ * 32-byte value was null, so every restore from the seed answered "could not
+ * reach your laptop" without asking the core (#1047 T1).
  */
 internal fun hexToBytes(text: String, bytes: Int = 32): okio.ByteString? {
     val hex = text.trim().lowercase().filterNot { it == ' ' || it == '-' }

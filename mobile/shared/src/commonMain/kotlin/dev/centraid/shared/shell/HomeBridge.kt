@@ -4,8 +4,12 @@ import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.HomeState
 import dev.centraid.shared.custody.DevSeed
 import dev.centraid.shared.platform.platformServices
+import dev.centraid.shared.sync.BackgroundUploads
 import dev.centraid.shared.sync.ShelfDrain
 import dev.centraid.shared.sync.TransferRule
+import dev.centraid.shared.sync.UploadEvents
+import dev.centraid.shared.sync.UploadLoop
+import dev.centraid.shared.sync.UploadPin
 import dev.centraid.shared.sync.allDrained
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -104,9 +108,7 @@ public class HomeBridge {
      */
     public fun open(vaultDir: String, devSeedHex: String?) {
         scope.launch {
-            // THE PROCESS'S ONE SESSION: a background relaunch reaches the same
-            // vaults through `ShellProcess`, never a second handle.
-            val session = ShellProcess.open(
+            val session = HomeSession.open(
                 vaultDir = vaultDir,
                 services = platformServices(),
                 dispatcher = Dispatchers.Default,
@@ -116,6 +118,7 @@ public class HomeBridge {
                 devSeed = DevSeed.parse(devSeedHex),
             )
             this@HomeBridge.session = session
+            uploadLoop?.let { session.attachUploads(it) }
             opened.complete(session)
             // THE WAITERS BEFORE THE COLLECT, because `collect` on a
             // `StateFlow` never returns: a screen attached after this line
@@ -206,6 +209,37 @@ public class HomeBridge {
     }
 
     /**
+     * THE iOS MOVER, INSTALLED (#1080 ruling 2; seam contract A11).
+     *
+     * The shell hands over its background `URLSession`'s [BackgroundUploads]
+     * at construction — before any vault is open, because iOS relaunches the
+     * app just to deliver finished tasks — and takes back the [UploadEvents]
+     * it reports them to. From then on every pass ends with reconcile →
+     * handoff → enqueue, and a drained session hands the next batch off.
+     */
+    public fun installUploads(uploads: BackgroundUploads): UploadEvents {
+        val loop = UploadLoop(uploads)
+        uploadLoop = loop
+        session?.attachUploads(loop)
+        return loop
+    }
+
+    private var uploadLoop: UploadLoop? = null
+
+    /**
+     * THE CERTIFICATES THE SHELL'S OWN TLS PINS, by DER equality (`pins`).
+     * [onPins] is called on the main queue with every held vault's gateways;
+     * a refusal — no core, no answer — never calls it, so a shell keeps the
+     * pins it has rather than being told to trust nothing.
+     */
+    public fun uploadPins(onPins: (List<UploadPin>) -> Unit) {
+        scope.launch {
+            val open = awaitSession() ?: return@launch
+            open.uploadPins()?.let(onPins)
+        }
+    }
+
+    /**
      * A commit landed, debounced ([ShelfDrain.afterCommit]). Fire-and-forget:
      * its caller has nothing to do with the answer and must not wait on a
      * network.
@@ -274,12 +308,15 @@ public class HomeBridge {
      * **No pass is started from here.** A member changing a rule has not asked
      * for a sync; what the new rule governs is the NEXT window, and a rule
      * change that spent data immediately would be the opposite of the setting
-     * on a member who has just chosen to spend less.
+     * on a member who has just chosen to spend less. The windows themselves are
+     * asked for again ([HomeSession.ruleChanged]): on Android their network
+     * constraint is derived from the rule.
      */
     public fun setTransferRule(stored: String, onRule: (String) -> Unit = {}) {
         scope.launch {
             val rule = TransferRule.of(stored)
             TransferRule.write(platformServices().secureStore, rule)
+            session?.ruleChanged()
             onRule(rule.stored)
         }
     }

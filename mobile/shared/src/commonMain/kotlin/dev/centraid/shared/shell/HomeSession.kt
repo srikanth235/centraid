@@ -16,6 +16,7 @@ import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.sync.BackupReading
 import dev.centraid.shared.sync.BackupStatusStore
 import dev.centraid.shared.sync.ChangeStream
+import dev.centraid.shared.sync.CoreBackupDoors
 import dev.centraid.shared.sync.CoreBackupStatus
 import dev.centraid.shared.sync.CoreDrainDoor
 import dev.centraid.shared.sync.DrainAnswer
@@ -28,6 +29,8 @@ import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenRuntime
 import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.sync.StrandedWrites
+import dev.centraid.shared.sync.UploadLoop
+import dev.centraid.shared.sync.UploadPin
 import dev.centraid.shared.sync.freezeFor
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -118,9 +121,9 @@ public class HomeSession private constructor(
      *
      * On the session and not on either shell, because a pass is over the
      * SHELF — every held vault — and the shelf is this object's. iOS reaches it
-     * through `HomeBridge`, Android directly and from its workers through
-     * [ShellProcess]. The session's own triggers are wired in [open]: the
-     * first pass, every commit, and the radio moving.
+     * through `HomeBridge`, Android directly and from its workers. The
+     * session's own triggers are wired in [open]: the first pass, every
+     * commit, and the radio moving.
      *
      * The member's rule and the platform's reading are read at the start of
      * every run ([PassConditions.read]); the next window is asked for after
@@ -188,6 +191,48 @@ public class HomeSession private constructor(
         freezeIfMoved(outcome.vaultId, reading, movedAtMs = answer?.movedAtMs?.takeIf {
             answer.stopped == DrainAnswer.Stopped.MOVED
         })
+        // EVERY iOS PASS ENDS WITH RECONCILE → HANDOFF → ENQUEUE (A11): what
+        // the pass sealed but did not move goes to the OS to carry while the
+        // app is suspended. No loop is installed on Android.
+        uploads?.afterPass(outcome.vaultId)
+    }
+
+    /** The iOS mover's Kotlin half, once the shell installed one ([attachUploads]). */
+    private var uploads: UploadLoop? = null
+
+    /**
+     * Bind the iOS mover's loop to this session's vaults (`HomeBridge`). A
+     * frozen vault hands nothing off: the gateway would refuse its writes.
+     */
+    public fun attachUploads(loop: UploadLoop) {
+        uploads = loop
+        fun drainable() = shelf.all().filter { it.core != null && it.moved == null }
+        loop.attach(
+            UploadLoop.Binding(
+                vaults = { drainable().map { it.vaultId } },
+                doorsFor = { vaultId ->
+                    if (drainable().none { it.vaultId == vaultId }) {
+                        null
+                    } else {
+                        CoreBackupDoors { shelf.all().firstOrNull { it.vaultId == vaultId }?.core }
+                    }
+                },
+                resubmit = { services.backgroundTasks.resubmit() },
+            ),
+        )
+    }
+
+    /**
+     * Every held vault's pinned gateway certificates (`pins`), for the shell's
+     * own TLS. Null when no vault's core answered — a refusal is never an
+     * empty list, which would read as "trust nothing".
+     */
+    public suspend fun uploadPins(): List<UploadPin>? {
+        val answers = shelf.all().mapNotNull { holding ->
+            holding.core?.let { core -> CoreBackupDoors { core }.pins() }
+        }
+        if (answers.isEmpty()) return null
+        return answers.flatten().distinctBy { it.gateway to it.certDer.toList() }
     }
 
     /** Freeze [vaultId] once, when a pass or the ledger says it moved ([freezeFor]). */
@@ -199,12 +244,16 @@ public class HomeSession private constructor(
     }
 
     /**
-     * Stop backing [shelf]'s foreground vault up to [destinationId] (seam contract
-     * A5). True when forgotten, false when refused, null when there was no core
-     * to ask. Null until `envelope.proto` carries `forget_destination = 28`.
+     * Stop backing [shelf]'s foreground vault up to [gatewayId] (seam
+     * contract A5): the ledger drops the destination and its confirmations,
+     * and what that gateway holds stays there. True when forgotten, false when
+     * the core knew no such destination, null when there was no core to ask.
      */
-    @Suppress("UNUSED_PARAMETER", "RedundantSuspendModifier")
-    public suspend fun forgetDestination(destinationId: String): Boolean? = null
+    public suspend fun forgetDestination(gatewayId: String): Boolean? {
+        val forgotten = CoreBackupDoors { shelf.core() }.forget(gatewayId)
+        backupStatus.refreshForeground()
+        return forgotten
+    }
 
     /** The member changed the rule: the windows' constraints follow it. */
     public fun ruleChanged() {
@@ -470,17 +519,6 @@ public class HomeSession private constructor(
     }
 
     /**
-     * THE FOREGROUND VAULT JUST PAIRED (#1047 E4): its device secret is
-     * stored, so its core is reopened to carry it, and the screens rebind to
-     * the new core. Answers whether the vault is keyed after.
-     */
-    public suspend fun paired(vaultId: String): Boolean {
-        val keyed = shelf.reopen(vaultId)
-        rebind()
-        return keyed
-    }
-
-    /**
      * THIS VAULT MOVED TO THE MEMBER'S OTHER PHONE (#1029 F1).
      *
      * Freezes it: writes are refused with [Shelf.MOVED_SENTENCE] and reads go
@@ -585,7 +623,6 @@ public class HomeSession private constructor(
      * closed app still holds its vaults. Only [forget] removes one.
      */
     public suspend fun close() {
-        ShellProcess.closed(this)
         shelf.closeAll()
         scope.cancel()
     }
@@ -831,6 +868,13 @@ public class HomeSession private constructor(
             // that arrives only on the next change.
             session.serveRoster()
             session.serveStranded()
+            // HOME DRAWS THE BACKUP LINE FROM ITS OWN STATE (A11): every line
+            // the store draws becomes a `BackupLineChanged`.
+            scope.launch {
+                session.backupStatus.line.collect { line ->
+                    host.send(HomeEvent(backup_line = HomeEvent.BackupLineChanged(line = line)))
+                }
+            }
             session.rebind()
             host.send(HomeEvent(opened = HomeEvent.Opened()))
             // THE ONE LAUNCH REGISTRATION, here and nowhere else in commonMain

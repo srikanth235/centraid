@@ -42,7 +42,7 @@ public data class BackupReading(
 
 /** One paired gateway, as the ledger remembers it. */
 public data class DestinationReading(
-    public val destinationId: String,
+    public val gatewayId: String,
     public val label: String,
     public val addrs: List<String>,
     /** When it last answered, gateway clock; null when never. */

@@ -11511,7 +11511,7 @@ message BackupDestinationRow {
   string gateway_id = 1;
   string label = 2;
   // Where it was last reached and when, finished:
-  // "192.168.1.20:7443 · reached 2 minutes ago".
+  // "192.168.1.20:7443 · Reached 2 minutes ago".
   string detail = 3;
   int64 last_seen_ms = 4;
   int64 last_ack_ms = 5;
@@ -11522,7 +11522,7 @@ message BackupScreenState {
   string title = 1;
   BackupLine line = 2;
   repeated BackupDestinationRow destinations = 3;
-  // "Add a gateway": the shell opens `pair.laptop`.
+  // "Add a laptop": the shell opens `pair.laptop`.
   string add_destination_label = 4;
   // One label for every row's forget control.
   string forget_label = 5;
@@ -11538,8 +11538,9 @@ message BackupScreenState {
   bool back_up_now_enabled = 12;
   string progress = 13;
   // Why a phone's battery saving can hold backups back, and the label of the
-  // control that lets Centraid run. A shell draws them only where the
-  // platform says the app is held back (Android's battery optimisation).
+  // control that lets Centraid run. Empty until a backlog has stood for a
+  // day; a shell draws them only where the platform says the app is held
+  // back (Android's battery optimisation).
   string battery_sentence = 14;
   string battery_label = 15;
   int64 last_snapshot_ms = 16;

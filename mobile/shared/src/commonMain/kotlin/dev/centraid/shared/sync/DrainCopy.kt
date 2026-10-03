@@ -37,22 +37,26 @@ public object DrainClaim {
 public object DrainCopy {
 
     /**
-     * **THE POSTURE.** Centraid drains from inside this process, in the
-     * foreground and in the background window the OS grants.
+     * **THE POSTURE** (#1080 ruling 2). A pass seals and moves bytes while the
+     * app runs; on iOS what it leaves sealed is handed to the operating
+     * system, whose uploads go on while the app is suspended.
      */
     public const val POSTURE_SENTENCE: String =
-        "Centraid backs up while it is open and in the background windows your phone gives it, " +
-            "the same way iCloud Backup works. It does not upload while the app is closed."
+        "Centraid backs up while it is open, and your phone goes on uploading what was ready " +
+            "after you leave it."
 
-    /** iOS: force-quitting stops background passes until the next launch. */
+    /**
+     * iOS: a force-quit cancels the uploads handed to the system until the
+     * next launch, and Low Power Mode pauses them.
+     */
     public const val FORCE_QUIT_SENTENCE: String =
-        "If you swipe Centraid away from the app switcher, backing up stops until you open it " +
-            "again. Your phone stops giving Centraid background time until then."
+        "If you swipe Centraid away from the app switcher, your phone cancels those uploads until " +
+            "you open it again. Low Power Mode pauses them."
 
-    /** Android's floor, before the member's own rule is applied. */
+    /** Android's floor: the periodic window's network follows the member's rule ([BackgroundWindows]). */
     public const val ANDROID_UNMETERED_SENTENCE: String =
-        "Centraid uploads in the background when this phone has a network. " +
-            "Your Downloads setting still decides what crosses cellular."
+        "Centraid backs up in the background on Wi-Fi, and on cellular too when your setting lets " +
+            "full-size photos cross it."
 
     /** What a member reads while a pass is running. */
     public const val IN_FLIGHT_TITLE: String = "Backing up"
@@ -64,7 +68,9 @@ public object DrainCopy {
      * with bytes left is the ordinary case for a first backup of a camera roll.
      */
     public fun stoppedSentence(answer: DrainAnswer): String = when (answer.stopped) {
-        DrainAnswer.Stopped.EMPTY -> "Backed up. Your laptop holds this vault's records; photos and files stay only on this phone."
+        // EMPTY IS THE SPOOL'S, NOT THE LIBRARY'S: an item still waiting for
+        // Wi-Fi or a charger was never sealed, so "everything" would be a claim.
+        DrainAnswer.Stopped.EMPTY -> "Your laptop has everything this phone had ready to send."
         DrainAnswer.Stopped.DEADLINE ->
             "Still backing up — ${bytes(answer.pendingBytes)} to go. It will finish on its own."
         DrainAnswer.Stopped.UNREACHABLE ->

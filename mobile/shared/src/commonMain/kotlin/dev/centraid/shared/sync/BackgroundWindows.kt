@@ -61,19 +61,12 @@ public object BackgroundWindows {
     public fun nudge(rule: TransferRule): Window = periodic(rule).copy(name = NUDGE, periodMinutes = 0)
 
     /**
-     * "Back up now" and backlogs: the member asked, so any network starts it
-     * and the core applies the rule to each item.
-     */
-    public val BACKLOG: Window = Window(name = BACKLOG_NAME, link = Link.CONNECTED, requiresCharging = false)
-
-    /**
      * v0's unique name for the periodic work, kept: a rename would orphan what a
      * shipped build scheduled, and `UPDATE` migrates the request in place.
      */
     public const val PERIODIC: String = "centraid-sync-pass"
     public const val NIGHT: String = "centraid-night-shift"
     public const val NUDGE: String = "centraid-nudge"
-    public const val BACKLOG_NAME: String = "centraid-backlog"
 
     /** WorkManager's periodic floor. */
     public const val PERIOD_MINUTES: Long = 15
