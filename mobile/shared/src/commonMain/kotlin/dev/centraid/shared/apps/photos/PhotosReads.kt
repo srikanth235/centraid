@@ -176,6 +176,12 @@ public object PhotosReads :
     override fun refused(failure: ReadFailure): PhotosGridEvent =
         PhotosGridEvent(refused = PhotosGridEvent.ReadRefused(failure = failure))
 
+    /** A tapped original's fetch, settled (#1080). */
+    override fun fetchSettled(assetId: String, fetched: Boolean, sentence: String): PhotosGridEvent =
+        PhotosGridEvent(
+            fetch_settled = PhotosGridEvent.FetchSettled(asset_id = assetId, fetched = fetched, sentence = sentence),
+        )
+
     override val appId: String = "photos"
 
     /**

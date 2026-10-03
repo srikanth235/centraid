@@ -59,6 +59,12 @@ public enum class WaitReason {
     ICLOUD,
     BYTES,
     WINDOW,
+
+    /** An original MANUAL holds until the member taps "Back up now" (#1080 A24). */
+    ASK,
+
+    /** The machine that answered at a gateway's address is not the pinned gateway. */
+    UNTRUSTED,
 }
 
 /** The `backup_status` door, as a seam. Null when there is no core to ask. */

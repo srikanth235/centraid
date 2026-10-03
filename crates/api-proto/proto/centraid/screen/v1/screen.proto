@@ -11488,6 +11488,12 @@ message BackupWaitingRow {
     // The core is waiting for the shell to stream an item's bytes.
     REASON_BYTES = 5;
     REASON_WINDOW = 6;
+    // An original the MANUAL rule holds until the member taps "Back up now"
+    // (#1080 A24).
+    REASON_ASK = 7;
+    // The machine that answered at a gateway's address is not the gateway
+    // this phone pinned (#1080).
+    REASON_UNTRUSTED = 8;
   }
 }
 
