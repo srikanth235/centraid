@@ -18,7 +18,7 @@ Everything here stands beside the plane it replaces and nothing a member runs ca
 - `store` — the synchronous `Store` trait (the protocol v2 object and head routes as Rust calls) and `MemoryStore`, which models the compare-and-set head, the tombstone grace, `HEAD_IN_USE` and the epoch fence;
 - `ledger` — `<stem>.backup.db` with #1080's five tables, `application_id` `CBL1`, a version that refuses a newer ledger;
 - `spool` — `<stem>.spool/`, one sealed part per name, written as a `.partial`, fsynced and renamed, under a budget of 2 GiB or a tenth of the free space;
-- `snapshot` — the page-identical copy in one `sqlite3_backup` step, the census, 4 MiB ranges and their names, the manifest in #1080's key order; `plan`, `spool` and `settle`;
+- `snapshot` — the page-identical copy in one `sqlite3_backup` step, under a scratch name no other copy can share, the census, 4 MiB ranges and their names, the manifest in #1080's key order; `plan`, `spool` (which re-checks each range's bytes against its name before sealing) and `settle`;
 - `mover` — the `PUT`s, the confirmations they earn, and `reconcile` against `exists`;
 - `retention` — 7 daily, 4 weekly and 6 monthly snapshots, live names and garbage as pure functions;
 - `restore` — the file rebuilt from a head and refused unless its `db_hash`, `integrity_check`, header and census are the snapshot's;
@@ -36,6 +36,8 @@ Everything here stands beside the plane it replaces and nothing a member runs ca
 | `d182e01f` | feat(vault): backup2 snapshot, mover and restore (#1080) |
 | `9c2861c3` | feat(vault): the backup2 drill, end to end against MemoryStore (#1080) |
 | `af60ff2b` | fix(media): keep SQL out of the sealed vectors' samples (#1080) |
+| `2a2a12a8` | docs(receipts): open the #1080 receipt with lane B's wave 1 (#1080) |
+| `42454fd4` | fix(vault): never share a scratch copy, and verify a range before sealing (#1080) |
 
 | File | Change |
 | --- | --- |
@@ -51,7 +53,7 @@ Everything here stands beside the plane it replaces and nothing a member runs ca
 | `crates/vault/src/backup2/store.rs` | new |
 | `crates/vault/src/backup2/ledger.rs` | new |
 | `crates/vault/src/backup2/spool.rs` | new |
-| `crates/vault/src/backup2/snapshot.rs` | new |
+| `crates/vault/src/backup2/snapshot.rs` | new; 7 unit tests |
 | `crates/vault/src/backup2/mover.rs` | new |
 | `crates/vault/src/backup2/retention.rs` | new |
 | `crates/vault/src/backup2/restore.rs` | new |
@@ -86,7 +88,7 @@ Findings outside lane B's files:
 
 ## Verification
 
-Run in this worktree with `CARGO_TARGET_DIR=/home/user/cargo-target-lane-b`, on 2026-10-03, at `af60ff2b` plus this commit's registry files.
+Run in this worktree with `CARGO_TARGET_DIR=/home/user/cargo-target-lane-b`, on 2026-10-03, at `42454fd4`.
 
 ```sh
 cargo fmt --all --check
@@ -101,11 +103,11 @@ grep -rn "sha256" crates/media/src/sealed.rs crates/vault/src/backup2
 - `cargo fmt --all --check` — exit 0, clean.
 - `cargo clippy … -D warnings` — exit 0, no warnings.
 - `cargo test -p centraid-media` — passed, exit 0: lib 84 (18 in `sealed`), `object` 7, `object_vectors` 1, `primitives` 2, `sealed_vectors` 1, doc-tests 0.
-- `cargo test -p centraid-vault` — passed, exit 0: 517 tests in 35 binaries, 0 failed; the lib's 270 include the plane's 32, `backup2_snapshot` 3, `backup2_drill` 1 (13.9 s to 17.8 s); the old plane's tests, `baseline`, `ladder_ddl` and `one_hash` all green. The base commit `23e46810` ran 481 in the same binaries less the two new ones.
+- `cargo test -p centraid-vault` — passed, exit 0: 519 tests in 35 binaries, 0 failed; the lib's 272 include the plane's 34, `backup2_snapshot` 3, `backup2_drill` 1 (8.7 s to 17.8 s across runs); the old plane's tests, `baseline`, `ladder_ddl` and `one_hash` all green. The base commit `23e46810` ran 481 in the same binaries less the two new ones.
 - `export-ladder-ddl` and `diff` — exit 0, no diff: the ladder did not move.
 - `cargo xtask rules` — exit 0: `sql-confinement` green after `af60ff2b` (it was red on the vectors' sample, the finding that commit fixes), `abi-five-symbols`, `no-listening-socket`, `commonmain-no-platform-import` green.
 - `grep -rn "sha256" …` — no match, exit 1.
-- Red first, each recorded at the test that holds it: a flipped byte in every header field, a nonce, a ciphertext and a tag refuses; a part under another salt or another vault's keys does not open; the `!Sync` assertion fails to compile for a `Sync` type; a manifest forged with the vault's own keys is refused by the census and by `db_hash`; the vectors test failed on the changed sample before it was regenerated.
+- Red first, each recorded at the test that holds it: a flipped byte in every header field, a nonce, a ciphertext and a tag refuses; a part under another salt or another vault's keys does not open; the `!Sync` assertion fails to compile for a `Sync` type; a manifest forged with the vault's own keys is refused by the census and by `db_hash`; the vectors test failed on the changed sample before it was regenerated; `a_scratch_copy_that_changed_after_it_was_named_is_not_spooled` failed with the check disabled.
 - `cargo build -p centraid-core` — not run: the root dropped it from lane B's exit list, because nothing lane B changed is visible to `crates/core`.
 
 ## Audit
