@@ -31,6 +31,7 @@ import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.sync.StrandedWrites
 import dev.centraid.shared.sync.UploadLoop
 import dev.centraid.shared.sync.UploadPin
+import dev.centraid.shared.sync.LibraryDeleter
 import dev.centraid.shared.sync.freezeFor
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -206,6 +207,23 @@ public class HomeSession private constructor(
 
     /** The iOS mover's Kotlin half, once the shell installed one ([attachUploads]). */
     private var uploads: UploadLoop? = null
+
+    /**
+     * THE SHELL'S HAND ON THE OS LIBRARY, or null (#1080 A20). Free up space
+     * reads it at each use: Android installs one when its activity is created
+     * and clears it when the activity is destroyed, because the deleter holds
+     * that activity's launcher for the system's confirmation, and a rotation
+     * must not leave a destroyed activity here. iOS installs one, once,
+     * through `HomeBridge`.
+     */
+    public val libraryDeleter: LibraryDeleter? get() = deleter
+
+    private var deleter: LibraryDeleter? = null
+
+    /** Install the shell's deleter, or clear it with null. See [libraryDeleter]. */
+    public fun installLibraryDeleter(deleter: LibraryDeleter?) {
+        this.deleter = deleter
+    }
 
     /**
      * Bind the iOS mover's loop to this session's vaults (`HomeBridge`). A

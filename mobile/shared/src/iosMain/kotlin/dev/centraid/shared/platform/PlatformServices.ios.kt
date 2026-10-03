@@ -90,6 +90,7 @@ import platform.Photos.PHAsset
 import platform.Photos.PHAssetMediaSubtypePhotoLive
 import platform.Photos.PHAssetMediaTypeVideo
 import platform.Photos.PHAssetResource
+import platform.Photos.PHAssetResourceTypeFullSizePairedVideo
 import platform.Photos.PHAssetResourceTypeFullSizePhoto
 import platform.Photos.PHAssetResourceTypeFullSizeVideo
 import platform.Photos.PHAssetResourceTypePairedVideo
@@ -738,8 +739,9 @@ public class IosMediaLibrary : MediaLibrary {
      * (`t|<token>|<offered>`). A keyset alone missed every asset that arrives
      * with an old capture date — an AirDropped photograph from last year sorts
      * behind the cursor and was never offered — and the token is what Photos
-     * keeps for exactly this question. An edit adds nothing: the walker stages
-     * the camera's original, which an edit does not change. A token Photos
+     * keeps for exactly this question. An edit after the walk is not
+     * re-offered: the asset is backed up as it was, and marked edited only if
+     * it already was. A token Photos
      * will no longer answer for (it expired while the app was not opened)
      * starts the first walk again, and `already_held` makes that walk cheap to
      * the gateway.
@@ -758,8 +760,8 @@ public class IosMediaLibrary : MediaLibrary {
      *
      * ## One asset, its resources
      *
-     * A Live Photo is ONE asset with two resources: the camera's still and its
-     * paired movie, whose ref carries the [PAIRED_VIDEO] suffix. Burst members
+     * A Live Photo is ONE asset with two resources: the still and its paired
+     * movie, whose ref carries the [PAIRED_VIDEO] suffix. Burst members
      * and RAW get no grouping: grouping on `burstIdentifier` would invent a
      * relationship the owner never made (`NATIVE_V0.md:11-19`).
      */
@@ -872,7 +874,7 @@ public class IosMediaLibrary : MediaLibrary {
             .firstObject as? PHAsset ?: return MediaLibrary.Opened.Gone
         val resources = PHAssetResource.assetResourcesForAsset(asset)
             .filterIsInstance<PHAssetResource>()
-        val resource = (if (paired) resources.firstOrNull(::isPairedVideo) else originalOf(resources))
+        val resource = (if (paired) pairedVideoOf(resources) else originalOf(resources))
             ?: return MediaLibrary.Opened.Gone
         return streamResource(resource, mimeOf(resource.uniformTypeIdentifier), allowNetwork)
     }
@@ -943,33 +945,34 @@ public class IosMediaLibrary : MediaLibrary {
                 }
             },
             after = after,
+            // THE NEXT EDIT REPLACES AN EDITED ASSET'S BYTES (A20).
+            edited = asset.hasAdjustments,
         )
     }
 
     /**
-     * THE CAMERA'S OWN BYTES (#1080, the walker).
+     * THE CURRENT RENDITION (#1080 A20, the ruling for v1).
      *
-     * `PHAssetResourceTypePhoto` and `…Video` are what the camera wrote — the
-     * RAW itself for a ProRAW capture — and they are the answer even on an
-     * edited asset. `…FullSizePhoto` is an edit's RENDER, and it changes every
-     * time the member edits again: a ref that named it could not find the
-     * same bytes when the core asks for them a second time (`need_bytes`).
-     * The edit reaches the backup through the derivatives, which Photos draws
-     * from the current edit; its adjustment data has no home in the vault yet
-     * (#1080 receipt, lane D).
+     * `…FullSizePhoto` and `…FullSizeVideo` are what an EDIT produces and are
+     * preferred when present: on an edited asset the member's photograph is
+     * the rendered one. Otherwise `PHAssetResourceTypePhoto` and `…Video` —
+     * what the camera wrote, the RAW itself for a ProRAW capture. An edited
+     * asset is marked ([MediaLibrary.Asset.edited], `StageBegin.os_edited`),
+     * because the next edit replaces these bytes: the core never offers it for
+     * deletion, so nothing is lost. Backing up the camera original and the
+     * edit's adjustment data beside it is an owner question.
      */
     private fun originalOf(resources: List<PHAssetResource>): PHAssetResource? =
         resources.firstOrNull {
-            it.type == PHAssetResourceTypePhoto || it.type == PHAssetResourceTypeVideo
-        } ?: resources.firstOrNull {
-            // AN ASSET PHOTOS STORES ONLY AS A RENDER (some imports) has no
-            // camera resource; its render is then the only original there is.
             it.type == PHAssetResourceTypeFullSizePhoto || it.type == PHAssetResourceTypeFullSizeVideo
+        } ?: resources.firstOrNull {
+            it.type == PHAssetResourceTypePhoto || it.type == PHAssetResourceTypeVideo
         }
 
-    /** The camera's movie half of a Live Photo, never an edit's render of it. */
-    private fun isPairedVideo(resource: PHAssetResource): Boolean =
-        resource.type == PHAssetResourceTypePairedVideo
+    /** A Live Photo's movie half, as rendered when the asset was edited. */
+    private fun pairedVideoOf(resources: List<PHAssetResource>): PHAssetResource? =
+        resources.firstOrNull { it.type == PHAssetResourceTypeFullSizePairedVideo }
+            ?: resources.firstOrNull { it.type == PHAssetResourceTypePairedVideo }
 
     /** `creationDate` as epoch milliseconds, with nil reading as the floor. */
     private fun epochMillisOf(asset: PHAsset): Long {

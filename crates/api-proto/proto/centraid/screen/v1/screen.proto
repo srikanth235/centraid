@@ -1737,8 +1737,9 @@ message PhotoShelfState {
 //
 // A VERB SINCE #1080: originals are backed up now, and the core's
 // `releasable` door names the library originals every part of which a
-// gateway confirmed (R-1029-PH-1 is superseded). The shell deletes them from
-// the OS library behind the system's own confirmation and reports what went.
+// gateway confirmed, never an edited one (R-1029-PH-1 is superseded). The
+// shell's installed `LibraryDeleter` removes them from the OS library behind
+// the system's own confirmation and reports which went (A19, A20).
 message FreeUpSpace {
   // False until a census answered. `meta` then says the phone is counting.
   bool counted = 1;
@@ -1757,6 +1758,10 @@ message FreeUpSpace {
   bool freeing = 8;
   // What the last free-up came to, in one clause; empty before the first.
   string notice = 9;
+  // The platform can delete from its library behind the system's own
+  // confirmation (A20). False draws no row at all: an action this phone
+  // cannot take is not offered.
+  bool offered = 10;
 }
 
 // ONE ALBUM'S PLACE ON THIS PHONE'S KEEP LIST (`originals.proto`).

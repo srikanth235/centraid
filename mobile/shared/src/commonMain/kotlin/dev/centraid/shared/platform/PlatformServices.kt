@@ -318,37 +318,6 @@ public interface MediaLibrary {
      */
     public suspend fun render(ref: String, tier: Tier): ByteArray? = null
 
-    /**
-     * DELETE FROM THE OS LIBRARY, BEHIND THE SYSTEM'S OWN CONFIRMATION (#1080
-     * A19: "free up space").
-     *
-     * [refs] are [Resource.ref]s the core named releasable: every part of each
-     * is on a gateway. The platform deletes an ASSET only when every one of its
-     * resources is in [refs] — a Live Photo whose movie is not yet confirmed
-     * stays whole — and leaves one carrying an edit the vault cannot hold (iOS
-     * adjustment data). It shows the system's confirmation (`PHAssetChangeRequest
-     * .deleteAssets` on iOS, `MediaStore.createDeleteRequest` on Android) and
-     * answers which refs went. **The core never deletes from the library**;
-     * this is the one place anything does.
-     *
-     * The default refuses: a platform that has not implemented it frees
-     * nothing rather than pretending to.
-     */
-    public suspend fun deleteFromLibrary(refs: List<String>): DeleteOutcome =
-        DeleteOutcome.Refused("This phone cannot remove photos from its library yet.")
-
-    /** What [deleteFromLibrary] came to. */
-    public sealed interface DeleteOutcome {
-        /** The member confirmed and these refs are gone from the library. */
-        public data class Deleted(public val refs: List<String>) : DeleteOutcome
-
-        /** The member said no in the system's dialog. Nothing changed. */
-        public data object Declined : DeleteOutcome
-
-        /** The platform could not, in words a member reads. */
-        public data class Refused(public val sentence: String) : DeleteOutcome
-    }
-
     /** The two derivatives `crates/media/src/renditions.rs` names, at its sizes. */
     public enum class Tier(public val wire: String, public val longEdge: Int) {
         THUMB("thumb", 360),
@@ -438,15 +407,24 @@ public interface MediaLibrary {
          * mid-page; the page's own [Page.nextCursor] then covers it.
          */
         public val after: String? = null,
+        /**
+         * THE MEMBER EDITED IT (`PHAsset.hasAdjustments`; always false on
+         * Android). Its resources are the current rendition, which the next
+         * edit replaces, so the core never offers it for deletion
+         * (`StageBegin.os_edited`, seam contract A20).
+         */
+        public val edited: Boolean = false,
     )
 
     /** One file of an [Asset]. */
     public data class Resource(public val role: Role, public val ref: String) {
         public enum class Role {
             /**
-             * The camera's own bytes — never an edit's render, which changes
-             * when the member edits again and so could not be found by its
-             * `os_ref` a second time.
+             * The asset's CURRENT RENDITION: the camera's bytes, or the edit's
+             * render once the member edited it (A20). Backing up the camera
+             * original and the edit's adjustment data beside it is an owner
+             * question; until then an edited asset is never deleted, so
+             * nothing is lost.
              */
             ORIGINAL,
 

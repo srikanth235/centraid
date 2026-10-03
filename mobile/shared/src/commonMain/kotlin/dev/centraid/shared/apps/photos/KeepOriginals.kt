@@ -7,15 +7,18 @@ import centraid.screen.v1.PhotoShelfEvent
 import centraid.screen.v1.PhotoShelfState
 import centraid.screen.v1.PhotosGridEvent
 import centraid.screen.v1.PhotosGridState
-import dev.centraid.shared.platform.MediaLibrary
-import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.sync.CoreFreeUpDoors
 import dev.centraid.shared.sync.CoreOriginals
+import dev.centraid.shared.sync.DeleteCapability
+import dev.centraid.shared.sync.DeleteOutcome
 import dev.centraid.shared.sync.DrainCopy
 import dev.centraid.shared.sync.FreeUpDoors
+import dev.centraid.shared.sync.LibraryDeleter
 import dev.centraid.shared.sync.ReleasableList
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -157,17 +160,26 @@ public object KeepOriginals {
     // -----------------------------------------------------------------------
 
     /** The row while the census runs. */
-    public fun counting(): FreeUpSpace = FreeUpSpace(counted = false, meta = COUNTING)
+    public fun counting(): FreeUpSpace = FreeUpSpace(offered = true, counted = false, meta = COUNTING)
 
     /**
      * The row from what the core counted. [census] null is [NOT_COUNTED], never
      * zero; [releasable] null is [NOT_CHECKED], which offers nothing. The
      * action frees exactly what [releasable] lists, so its size is theirs.
      */
-    public fun freeUp(census: CoreOriginals.Census?, releasable: ReleasableList?, notice: String = ""): FreeUpSpace {
-        if (census == null) return FreeUpSpace(counted = false, meta = NOT_COUNTED, notice = notice)
+    public fun freeUp(
+        census: CoreOriginals.Census?,
+        releasable: ReleasableList?,
+        capability: DeleteCapability = DeleteCapability.SYSTEM_CONFIRMATION,
+        notice: String = "",
+    ): FreeUpSpace {
+        // NO ROW AT ALL where nothing can delete (A20): an action this phone
+        // cannot take is not offered, and the count alone is no help to a
+        // member deciding whether to free anything.
+        if (capability != DeleteCapability.SYSTEM_CONFIRMATION) return FreeUpSpace(offered = false)
+        if (census == null) return FreeUpSpace(offered = true, counted = false, meta = NOT_COUNTED, notice = notice)
         if (census.onPhoneCount <= 0L) {
-            return FreeUpSpace(counted = true, meta = "No originals on this phone", notice = notice)
+            return FreeUpSpace(offered = true, counted = true, meta = "No originals on this phone", notice = notice)
         }
         val noun = if (census.onPhoneCount == 1L) "original" else "originals"
         val kept = when {
@@ -176,6 +188,7 @@ public object KeepOriginals {
             else -> " ${census.keptCount} of them are in albums you keep on this phone."
         }
         val row = FreeUpSpace(
+            offered = true,
             counted = true,
             meta = "${census.onPhoneCount} $noun · ${DrainCopy.bytes(census.onPhoneBytes)} on this phone",
             notice = notice,
@@ -254,10 +267,11 @@ public object KeepOriginals {
         session: HomeSession,
         host: ScreenHost<PhotosGridState, PhotosGridEvent>,
         scope: CoroutineScope,
-        library: MediaLibrary = platformServices().mediaLibrary,
     ) {
         val door = CoreOriginals { session.shelf.core() }
-        val flow = FreeUpFlow(CoreFreeUpDoors { session.shelf.core() }, { door.census()?.census }, library)
+        val flow = FreeUpFlow(CoreFreeUpDoors { session.shelf.core() }, { door.census()?.census }) {
+            session.libraryDeleter
+        }
         fun counted(row: FreeUpSpace) = PhotosGridEvent(free_up_counted = PhotosGridEvent.FreeUpCounted(row))
         scope.launch {
             host.state
@@ -265,7 +279,8 @@ public object KeepOriginals {
                 .distinctUntilChanged()
                 .filter { it }
                 .collect {
-                    host.send(counted(counting()))
+                    // NOTHING TO COUNT FOR where nothing can delete: no row.
+                    if (flow.capability() == DeleteCapability.SYSTEM_CONFIRMATION) host.send(counted(counting()))
                     host.send(counted(flow.count()))
                 }
         }
@@ -280,41 +295,47 @@ public object KeepOriginals {
 }
 
 /**
- * FREE UP SPACE, RUN (#1080 A19).
+ * FREE UP SPACE, RUN (#1080 A19, A20).
  *
- * Ask the core what is safe to free, hand those library references to the
- * platform — which shows the system's own confirmation and deletes only whole
- * assets — then tell the core which went, and count again. Every answer is a
- * row ([KeepOriginals.freeUp]) carrying what happened as its `notice`.
+ * Ask the core what is safe to free, hand those items to the shell's installed
+ * [LibraryDeleter] — which shows the system's own confirmation and removes
+ * whole assets — then tell the core exactly the hashes that went, and count
+ * again. Every answer is a row ([KeepOriginals.freeUp]) carrying what happened
+ * as its `notice`. The deleter is read at each use: Android installs and
+ * clears its own with the activity.
  */
 public class FreeUpFlow(
     private val doors: FreeUpDoors,
     private val census: suspend () -> CoreOriginals.Census?,
-    private val library: MediaLibrary,
+    private val deleter: () -> LibraryDeleter?,
 ) {
+    /** What the installed deleter can do; NONE when none is installed. */
+    public fun capability(): DeleteCapability = deleter()?.capability() ?: DeleteCapability.NONE
+
     /** The row as it stands, with [notice] on it. */
-    public suspend fun count(notice: String = ""): FreeUpSpace =
-        KeepOriginals.freeUp(census(), doors.releasable(LIMIT), notice)
+    public suspend fun count(notice: String = ""): FreeUpSpace {
+        val capability = capability()
+        if (capability != DeleteCapability.SYSTEM_CONFIRMATION) return KeepOriginals.freeUp(null, null, capability)
+        return KeepOriginals.freeUp(census(), doors.releasable(LIMIT), capability, notice)
+    }
 
     /** Free what is safe; answers the row recounted, saying what happened. */
     public suspend fun free(): FreeUpSpace {
+        val hand = deleter()?.takeIf { it.capability() == DeleteCapability.SYSTEM_CONFIRMATION } ?: return count()
         val list = doors.releasable(LIMIT) ?: return count(KeepOriginals.NOT_CHECKED)
-        val refs = list.items.map { it.osRef }.filter { it.isNotEmpty() }.distinct()
-        if (refs.isEmpty()) return count(KeepOriginals.NOTHING_REMOVED)
-        val notice = when (val outcome = library.deleteFromLibrary(refs)) {
-            is MediaLibrary.DeleteOutcome.Deleted -> {
-                val gone = outcome.refs.toSet()
-                // ONLY WHAT THE PLATFORM SAYS WENT is reported: an asset it left
-                // whole (a movie not yet confirmed, an edit) stays on the phone.
-                val freed = list.items.filter { it.osRef in gone }
-                when {
-                    freed.isEmpty() -> KeepOriginals.NOTHING_REMOVED
-                    doors.released(freed.map { it.contentHash }) == null -> KeepOriginals.NOT_RECORDED
-                    else -> KeepOriginals.FREED.replace("{size}", DrainCopy.bytes(freed.sumOf { it.size }))
-                }
-            }
-            MediaLibrary.DeleteOutcome.Declined -> KeepOriginals.NOTHING_REMOVED
-            is MediaLibrary.DeleteOutcome.Refused -> outcome.sentence
+        val items = list.items.filter { it.osRef.isNotEmpty() }
+        if (items.isEmpty()) return count(KeepOriginals.NOTHING_REMOVED)
+        val outcome = suspendCancellableCoroutine<DeleteOutcome> { asked ->
+            hand.delete(items) { answer -> if (asked.isActive) asked.resume(answer) }
+        }
+        // ONLY WHAT THE PLATFORM SAYS WENT is reported, by the hash it named.
+        val gone = outcome.deleted.map { it.toList() }.toSet()
+        val freed = items.filter { it.contentHash.toList() in gone }
+        val notice = when {
+            freed.isNotEmpty() && doors.released(freed.map { it.contentHash }) == null -> KeepOriginals.NOT_RECORDED
+            freed.isNotEmpty() -> KeepOriginals.FREED.replace("{size}", DrainCopy.bytes(freed.sumOf { it.size }))
+            outcome.error != null -> outcome.error
+            else -> KeepOriginals.NOTHING_REMOVED
         }
         return count(notice)
     }

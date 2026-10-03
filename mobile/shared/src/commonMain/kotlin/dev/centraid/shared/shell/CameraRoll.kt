@@ -38,8 +38,10 @@ import okio.ByteString.Companion.encodeUtf8
  * gateway is paired and the spool has room, seals them in the same stream,
  * and keeps no plaintext copy — the library already holds one. When the spool
  * had no room the core asks for the bytes again later (`DrainResponse.need_bytes`,
- * `LibraryFeed`), which is why a ref must find the same bytes after a relaunch
- * and why the ORIGINAL is the camera's and never an edit's render.
+ * `LibraryFeed`), which is why a ref must find the same bytes after a relaunch.
+ * The bytes are the asset's CURRENT RENDITION (A20): an edited asset's render,
+ * which the next edit replaces, so it is staged marked edited and the core
+ * never offers it for deletion.
  *
  * **The platform renders the derivatives.** The core cannot decode HEIC and
  * keeps no library original to decode later, so after an original is staged
@@ -319,6 +321,7 @@ public class CameraRoll(
                     byteSize = opened.bytes,
                     source = Staging.Source.OS_LIBRARY,
                     osRef = resource.ref,
+                    osEdited = asset.edited,
                     read = opened::read,
                 )
             } catch (why: IllegalStateException) {
