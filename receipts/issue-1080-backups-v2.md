@@ -503,3 +503,32 @@ bash .governance/run.sh
 - The emitters — only `limited-selection.bin` changed (126 bytes to 124); `bun run format:check` — clean.
 - Red first: `ScreenFixtureSpec` failed against the old `.bin` and passed against the new one.
 - `bash .governance/run.sh` — every directive passes but `law`, whose one finding is still `receipt-per-issue`: the `## Audit` verdict the umbrella's independent review writes at the close.
+
+### Round three — A23, and nothing left naming what lane C's 3a deletes
+
+On the umbrella at `217c876b`; Kotlin only, no cargo command.
+
+| File | Change |
+| --- | --- |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/custody/WordsEntry.kt` | #1080 A23: `Entry.restores` is true for every purpose but a re-key, and for a re-key that offers the restore instead; such a screen draws the pairing code's field, keeps `primary_enabled` false until a non-blank code is pasted, and does nothing on a tap without one. |
+| `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/WordsEntrySpec.kt` | The negative case (valid words, no code: closed, a tap asks nothing, blank is no code), the re-key path's field and gate, and the held-seed restore's gate. |
+| `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/VaultMovedProducerSpec.kt` | Names no `ERROR_CODE_GATEWAY_*`: the near misses are `UNAUTHORIZED` and `PEER_UNREACHABLE`, which stay. |
+| `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/{shell/Shelf,shell/HomeSession,sync/ReadFailures,sync/Instants,sync/TransferRule,apps/photos/PhotosReads,custody/PairAndRestore,custody/Enrollment,custody/PairLaptop}.kt`, `mobile/core/src/commonMain/kotlin/dev/centraid/core/CentraidCore.kt`, `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/{VaultMovedSpec,PhotoCellStateSpec,WordsShelfSpec,EnrollmentSpec,PairAndRestoreSpec,WordsEntrySpec}.kt` | Comments: `VaultMoved` is `error.proto`'s; the core's `phone::drain::Conditions` replaces `Budget::admits_original`; `safety_number_of_bytes` replaces `pairing_safety_number`; the lease, generations and the invite code give way to writer epochs, snapshots and the pairing code. |
+| `crates/api-proto/proto/centraid/screen/v1/screen.proto`, `mobile/README.md` | The code's field is drawn wherever the primary restores, and the control waits for it. |
+
+#### Verification, round three
+
+```sh
+mobile/gradlew -p mobile :shared:jvmTest :core:compileTestKotlinJvm
+grep -rn "ERROR_CODE_GATEWAY_" mobile/ --include=*.kt --include=*.swift
+grep -rn -E "lease\.proto|pair\.proto|gateway\.proto|backup\.proto|admin\.proto|pairing_safety_number|admits_original" mobile/shared/src mobile/core/src --include=*.kt
+buf lint
+bun run format && bun run format:check
+bash .governance/run.sh
+```
+
+- `:shared:jvmTest` — 1,103 tests in 75 suites, 0 failures (the A23 negative case is the one added); `:core:compileTestKotlinJvm` compiled.
+- Both greps — no match.
+- `buf lint` — exit 0; `bun run format:check` — clean.
+- Red first: against the machine at `217c876b`, the three A23 cases in `WordsEntrySpec` failed; against this one they pass.
+- `bash .governance/run.sh < /dev/null` — every directive passes but `law`, whose one finding is still the `## Audit` verdict for the close. (Without `< /dev/null`, `pre-push-gate` waits on stdin for the refs a push would send.)

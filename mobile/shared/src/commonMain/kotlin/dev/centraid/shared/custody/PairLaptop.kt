@@ -218,7 +218,7 @@ public object PairLaptopMachine {
 /** Whether the foreground vault can pair. */
 public enum class Readiness { READY, NEEDS_WORDS, NO_VAULT }
 
-/** The machine's model. The ticket's invite code is spent on first use; it is still not printed. */
+/** The machine's model. The pairing code's secret is spent on first use, and the code is still never printed. */
 public data class Pairing(
     public val phase: PairLaptopState.Phase = PairLaptopState.Phase.PHASE_UNSPECIFIED,
     public val state: PairLaptopState = PairLaptopState(),
