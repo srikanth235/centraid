@@ -194,6 +194,26 @@ class ShelfDrainSpec : StringSpec({
         }
     }
 
+    "only the button is the member asking: leaving the screen times a snapshot and asks nothing (#1080 A24)" {
+        runTest {
+            val seen = mutableListOf<DrainInput>()
+            val shelf = drain(listOf(holding("a")), seen = seen)
+            shelf.enteredBackground(25_000)
+            shelf.backUpNow()
+            shelf.afterRestore()
+            shelf.scheduled(30_000)
+            // LEAVING SENDS THE SNAPSHOT WITHOUT THE ASK: under MANUAL it must
+            // not seal an original, nor a video off the charger.
+            seen.map { it.wantsSnapshot to it.asked } shouldBe listOf(
+                true to false,
+                true to true,
+                true to false,
+                false to false,
+            )
+            WakeReason.entries.filter { it.asked } shouldBe listOf(WakeReason.BACK_UP_NOW)
+        }
+    }
+
     "a link that went down runs nothing, and a flapping one runs once per debounce" {
         runTest {
             val clock = AtomicInteger(0)
@@ -241,6 +261,8 @@ class ShelfDrainSpec : StringSpec({
             ).backUpNow()
             fed shouldBe listOf(listOf(need))
             seen.map { it.wantsSnapshot } shouldBe listOf(true, false)
+            // THE MEMBER'S ASK COVERS THE WHOLE PASS, every round of it (A24).
+            seen.map { it.asked } shouldBe listOf(true, true)
         }
     }
 

@@ -53,6 +53,8 @@ public class CoreDrainDoor(private val core: () -> CentraidCore?) : DrainDoor {
                         metered = input.metered,
                         charging = input.charging,
                         wants_snapshot = input.wantsSnapshot,
+                        // THE MEMBER'S TAP AND NOTHING ELSE (#1080 A24).
+                        asked = input.asked,
                         // THE WIRE CARRIES THE NEGATION (A3), so proto3's zero
                         // value is the complete backup.
                         exclude_videos = !input.includeVideos,

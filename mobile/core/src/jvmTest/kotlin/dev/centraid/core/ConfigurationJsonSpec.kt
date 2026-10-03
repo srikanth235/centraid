@@ -16,7 +16,7 @@ import io.kotest.matchers.string.shouldContain
  */
 class ConfigurationJsonSpec : StringSpec({
 
-    "a plain open carries neither secret, and absent is not an empty string" {
+    "a plain open carries no seed, and absent is not an empty string" {
         val json = CoreConfiguration(databasePath = "/v/a.sqlite3").toJson("main")
         json shouldBe """{"path":"/v/a.sqlite3","create":true,"uiThreadName":"main"}"""
     }
