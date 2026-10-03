@@ -178,27 +178,29 @@
         <h2 class="r" style="--d: 0.06s">One QR code, <em>no sync service.</em></h2>
         <div class="prose r" style="--d: 0.12s">
           <p>
-            <b>Settings → Phone → Connect a phone</b> shows a QR code — a one-time pairing ticket
-            that expires in minutes. Scan it with the Centraid mobile companion and the two devices
-            hold a direct, encrypted peer-to-peer line (iroh QUIC) from then on: live updates, no
-            relay account, no cloud copy. Revoke a device any time from the same screen.
+            Your phone is the vault; what you pair it with is a <b>gateway</b> — the machine that
+            keeps its sealed backup. On the laptop at home, a spare box or a VPS, run
+            <code>centraid-gateway serve</code>: while nothing has paired, it prints a QR code
+            holding the gateway's addresses, the fingerprint of its certificate, and a secret that
+            admits one vault, once, within a day. On the phone, open <b>Pair with your laptop</b> on
+            the More sheet — or <b>Add a gateway</b> on the Backup screen — and scan it. The phone
+            dials the gateway directly over HTTPS, refuses any certificate whose fingerprint is not
+            the one in the QR, and backs up to it from then on: no relay account, no cloud copy.
           </p>
           <p>
-            The phone isn't a thin window on the desktop. <b>Photos</b>, <b>Docs</b>, and
-            <b>Agenda</b> run as native mobile apps over a consent-scoped <b>offline replica</b> — a
-            private copy of just what your grants allow, kept on the phone, so the timeline and
-            your files stay usable in airplane mode; the apps you built on the desktop still render
-            over the tunnel in a WebView. How the replica stays honest to one canonical writer:
-            <a href="../devices/#replica">Devices § replica →</a>
+            Then compare the <b>safety number</b>: 60 digits on the phone, and the same 60 in the
+            <code>safety</code> line <code>serve</code> prints once the pairing lands. Every group
+            must match. A second gateway pairs the same way, with its own QR, and the phone backs up
+            to whichever it can reach.
           </p>
           <p>
-            Being pre-release, the companion builds from source too:
-            <code>bun run dev:mobile</code> runs the Expo project in <code>apps/mobile</code> (a
-            native dev build — the native tunnel module means Expo Go won't do).
+            Being pre-release, the phone app builds from source, from the repository's
+            <code>mobile/</code> directory — SwiftUI on iOS, Jetpack Compose on Android, over one
+            Rust core that holds the vault, so everything works in airplane mode.
           </p>
           <p class="aside">
-            What's inside the ticket, how devices are enrolled per-vault, and what the tunnel
-            carries: <a href="../devices/#pairing">Devices § pairing →</a>
+            What's inside the QR, what the pin protects against, and what a gateway can never see:
+            <a href="../devices/#pairing">Devices § pairing →</a>
           </p>
         </div>
       </section>
@@ -209,115 +211,99 @@
         <h2 class="r" style="--d: 0.06s">A gateway that <em>outlives the laptop lid.</em></h2>
         <div class="prose r" style="--d: 0.12s">
           <p>
-            The desktop shell embeds a gateway, but automations only fire while it's open. The
-            long-term shape is <b>one always-on gateway</b> — a spare machine, a home server — with
-            every device, desktop included, as a client of it. Three client homes reach it: the
-            desktop renderer, the mobile companion, and an installable <b>web PWA</b> that pairs
-            with only a one-time ticket over a relay (iroh over WASM) — no gateway URL to type, no
-            open port to expose.
+            A laptop that sleeps is a gateway the phone waits for. The long-term shape is a gateway
+            on something that stays up — a spare machine, a NAS, a small VPS — or two of them: a
+            second gateway somewhere else is your off-site copy. The gateway is one binary, and it
+            needs no account, no domain and no certificate authority:
           </p>
         </div>
         <div class="term r" style="--d: 0.18s; margin-top: 26px; max-width: 760px">
           <div class="term-bar"><span>on the always-on machine</span></div>
           <div class="term-body">
-            <div class="ln"><span class="p">$</span> <code>bun run build</code></div>
+            <div class="cm"># built from source: cargo build --release -p centraid-gateway</div>
             <div class="ln">
               <span class="p">$</span>
-              <code
-                >centraid-gateway serve --data-dir ~/centraid-data --host 127.0.0.1 --port
-                8765</code
-              >
+              <code>centraid-gateway serve --data-dir ~/centraid-gateway</code>
             </div>
             <div class="cm" style="margin-top: 10px">
-              # admin from the same shell — pairing, devices, vaults, keys
+              # beside a running serve — another QR, and what has paired
             </div>
             <div class="ln">
               <span class="p">$</span>
-              <code>centraid-gateway pair --data-dir ~/centraid-data --vault Local</code>
+              <code>centraid-gateway pair --data-dir ~/centraid-gateway</code>
             </div>
             <div class="ln">
               <span class="p">$</span>
-              <code>centraid-gateway devices list --data-dir ~/centraid-data</code>
+              <code>centraid-gateway pairings --data-dir ~/centraid-gateway</code>
             </div>
           </div>
         </div>
         <p class="aside r" style="--d: 0.24s">
-          Administration is deliberately shell-only — vault create/delete, device enrollment, and
-          key custody never ride HTTP. <a href="../devices/#topology">Devices § topology →</a>
+          The data directory is the whole gateway — its identity, its index and the sealed objects
+          — so copying it copies the gateway. <a href="../devices/#topology">Devices § topology →</a>
         </p>
         <div class="prose r" style="--d: 0.3s; margin-top: 18px">
           <p>
-            "Always-on" only holds if something brings the daemon back — after a crash, after a
-            reboot. <code>centraid-gateway service</code> generates and installs a real OS service
-            unit for it: a <b>LaunchAgent</b> on macOS, a <b>systemd --user</b> unit on Linux —
-            both restart on crash and start on login/boot, with stdout/stderr landing in the same
-            <code>gateway-logs/</code> directory the daemon's own persisted log ring writes to.
+            "Always-on" only holds if something brings the gateway back after a reboot.
+            <code>centraid-gateway install</code> writes a <b>systemd user unit</b> on Linux or a
+            <b>LaunchAgent</b> on macOS and prints the command that starts it — it never enables
+            what it writes, because a service that starts because a file was unpacked is one nobody
+            chose to run. <code>health</code> asks a running gateway whether it is up and is the one
+            your phone pinned.
           </p>
         </div>
         <div class="term r" style="--d: 0.36s; margin-top: 18px; max-width: 760px">
           <div class="term-bar"><span>on the always-on machine</span></div>
           <div class="term-body">
-            <div class="ln">
-              <span class="p">$</span>
-              <code>centraid-gateway service install --data-dir ~/centraid-data</code>
-            </div>
             <div class="cm"># preview first — writes and runs nothing</div>
             <div class="ln">
               <span class="p">$</span>
-              <code>centraid-gateway service install --data-dir ~/centraid-data --dry-run</code>
+              <code>centraid-gateway install --data-dir ~/centraid-gateway --dry-run</code>
             </div>
             <div class="ln">
               <span class="p">$</span>
-              <code>centraid-gateway service status</code>
+              <code>centraid-gateway install --data-dir ~/centraid-gateway</code>
             </div>
             <div class="ln">
               <span class="p">$</span>
-              <code>centraid-gateway service uninstall</code>
+              <code>centraid-gateway health --data-dir ~/centraid-gateway</code>
             </div>
           </div>
         </div>
         <p class="aside r" style="--d: 0.4s">
-          Unsupported platforms are refused politely rather than half-installed — front the daemon
-          with your own supervisor there instead.
+          A container works too — the repository's <code>deploy/gateway/Dockerfile</code>, run on
+          the host's network with a volume at the data directory. Put a port forward in front of a
+          gateway if you like, never a proxy that terminates TLS: the phone pins the gateway's own
+          certificate.
         </p>
       </section>
 
       <!-- 08 BACKUP -->
       <section class="sec wrap" id="backup">
         <p class="eyebrow r">§08 · back up the keys</p>
-        <h2 class="r" style="--d: 0.06s">One file is the vault. <em>One key seals it.</em></h2>
+        <h2 class="r" style="--d: 0.06s">Twenty-four words <em>are the key.</em></h2>
         <div class="prose r" style="--d: 0.12s">
           <p>
-            Backing up a vault is copying its directory — <code>vault.db</code> travels as an
-            ordinary file. But secrets (passwords in Locker,
-            OAuth tokens, card numbers) are <b>sealed</b>: encrypted at rest under a key that
-            deliberately lives <i>outside</i> the vault directory, so a copied backup can't reveal
-            them. That key is yours to custody:
+            Every key your vault has derives from the <b>24 words</b> the phone showed you once, when
+            it founded the vault — there is no key file to export and no password to reset. The
+            phone keeps the seed in your platform's synced keychain (iCloud Keychain, Android Block
+            Store), so a new phone on the same account can restore without your typing anything; the
+            words you wrote down are the way back when neither the phone nor the keychain survives.
+            Write them on paper, and keep them somewhere that is not the phone.
+          </p>
+          <p>
+            The backup itself runs on its own. The phone takes a <b>snapshot</b> of the vault —
+            hourly on an unmetered link while a gateway is in reach, and whenever you tap <b>Back up
+            now</b> — and seals it, with your photos, documents and, if you include them, videos,
+            before anything leaves the phone; on an iPhone the system keeps uploading while the app
+            is closed. Locker's secrets are sealed once more inside the vault, under a key derived
+            from the words when the vault opens and never written to a file.
           </p>
         </div>
-        <div class="term r" style="--d: 0.18s; margin-top: 26px; max-width: 760px">
-          <div class="term-bar"><span>key custody · receipted, shell-only</span></div>
-          <div class="term-body">
-            <div class="ln">
-              <span class="p">$</span>
-              <code>centraid-gateway key status --data-dir ~/centraid-data --vault Local</code>
-            </div>
-            <div class="ln">
-              <span class="p">$</span>
-              <code
-                >centraid-gateway key export --data-dir ~/centraid-data --vault Local --out
-                seal-key.backup</code
-              >
-            </div>
-            <div class="cm"># store seal-key.backup somewhere that isn't the same disk</div>
-          </div>
-        </div>
         <p class="aside r" style="--d: 0.24s">
-          Lose the vault, keep the key → restore and reveal. Lose the key → the sealed cells are
-          gone; everything unsealed remains. <a href="../data/#sealed">Data § sealed columns →</a>
-          This is the manual version. Automated, offsite, provider-backed backup — and the
-          blank-machine <code>recover</code> flow that rebuilds the whole vault from a recovery kit
-          on a fresh box — is <a href="../backups/">its own chapter →</a>.
+          Lose the phone, keep the words → restore onto a new phone from any gateway you paired.
+          Lose the words and the keychain → nothing on a gateway opens, by design. What a restore
+          does to the old phone: <a href="../devices/#replica">Devices § one writer →</a>
         </p>
 
         <div class="chapter-next r">
