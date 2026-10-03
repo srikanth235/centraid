@@ -415,16 +415,13 @@ async fn restore_onto_a_fresh_phone(
         // proved here is the other case: a device that IS meant to hold a
         // member's bytes is asked, and answers.
         let member_bytes = centraid_blobs::ByteStore::open(dir.join("member.bytes"))
-            .await
             .expect("the member's own byte store opens");
         for index in 0..24_usize {
             member_bytes
-                .add_bytes(format!("drill content {index}").into_bytes())
-                .await
+                .put_bytes(format!("drill content {index}").as_bytes())
                 .expect("the store takes the drill's own bytes");
         }
-        let door =
-            centraid_blobs::ContentBytes::new(member_bytes, tokio::runtime::Handle::current());
+        let door = centraid_blobs::ContentBytes::new(member_bytes);
 
         let report = backup::restore_drill(&file, Some(&door), Some(&expected))
             .expect("the restore check runs");

@@ -46,7 +46,6 @@ image.workspace = true
 # it implements — which cargo allows and which is the honest direction: the
 # door belongs beside the store, and these tests want the real one.
 centraid-blobs = { path = "../blobs" }
-tokio = { workspace = true }
 base64.workspace = true
 proptest.workspace = true
 tempfile.workspace = true

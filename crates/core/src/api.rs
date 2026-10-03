@@ -43,14 +43,14 @@ pub fn content_urls(vault: &Vault, request: &wire::ContentUrlRequest) -> Result<
                 &reference.owner_type,
                 &reference.owner_id,
             )?;
-            // THE STORE OR NOWHERE (#1080). Every byte this core holds is in
-            // its own content store, so a path is `STORE` and its absence is
-            // `NONE`; an item in the operating system's library arrives with
-            // the plane that stops copying the library in.
-            let source = if found.path.is_some() {
-                wire::ContentSource::Store
-            } else {
-                wire::ContentSource::None
+            // THE STORE, THE LIBRARY, OR NOWHERE (#1080 ruling 6). A path is
+            // answered for the store only; an original the operating system's
+            // library holds is named by the library's identifier, for the
+            // shell to resolve.
+            let (source, os_ref) = match (&found.path, found.os_ref) {
+                (Some(_), _) => (wire::ContentSource::Store, String::new()),
+                (None, Some(os_ref)) => (wire::ContentSource::OsLibrary, os_ref),
+                (None, None) => (wire::ContentSource::None, String::new()),
             };
             Ok(wire::ContentUrl {
                 content_id: found.content_id,
@@ -63,7 +63,7 @@ pub fn content_urls(vault: &Vault, request: &wire::ContentUrlRequest) -> Result<
                 embeddable: found.embeddable,
                 absent_reason: found.absent_reason,
                 source: source as i32,
-                os_ref: String::new(),
+                os_ref,
             })
         })
         .collect::<Result<Vec<_>>>()?;

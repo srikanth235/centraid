@@ -50,9 +50,7 @@ export const RUST_SUPPLY_CHAIN_TOOLS = Object.freeze([
       "audit",
       "--deny",
       "warnings",
-      // Same two unmaintained iroh transitives as deny.toml [advisories].ignore.
-      "--ignore",
-      "RUSTSEC-2023-0089",
+      // The same unmaintained iroh transitive as deny.toml [advisories].ignore.
       "--ignore",
       "RUSTSEC-2024-0436",
     ],

@@ -54,31 +54,15 @@ impl Scratch {
     /// It is **the real store**, `<vault>.bytes` behind
     /// `centraid_blobs::ContentBytes`, and not a stand-in. A device holds one
     /// content store (D-1025-S3-1), so a test fixture that attached a second
-    /// kind would be testing an arrangement no device has — which is precisely
-    /// how the flat CAS these tests used to open went a year without anyone
-    /// noticing that nothing else on a device read it.
-    ///
-    /// The runtime is the fixture's own and is leaked with it: these vaults
-    /// live for the length of one test binary, and shutting an iroh store down
-    /// from a `Drop` that may run on a runtime thread is the deadlock this note
-    /// exists to avoid.
+    /// kind would be testing an arrangement no device has.
     pub fn founded_with_blobs(seed: &str) -> Result<Self> {
         let dir = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&dir)?;
         let clock = Arc::new(FixedClock::frozen());
         let file = dir.join("vault.db");
-        let runtime = Box::leak(Box::new(
-            tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .expect("a runtime"),
-        ));
-        let store = runtime
-            .block_on(centraid_blobs::ByteStore::open(
-                file.with_extension("bytes"),
-            ))
+        let store = centraid_blobs::ByteStore::open(file.with_extension("bytes"))
             .expect("a content store opens");
-        let blobs = centraid_blobs::ContentBytes::new(store, runtime.handle().clone());
+        let blobs = centraid_blobs::ContentBytes::new(store);
         let vault = Vault::create_with(
             file,
             Box::new(Arc::clone(&clock)),
@@ -87,6 +71,38 @@ impl Scratch {
         .with_blobs(Box::new(blobs));
         vault.found("Test", "Test Owner")?;
         Ok(Self { dir, vault, clock })
+    }
+
+    /// The same store, its door reading the backup ledger beside the vault —
+    /// what a phone's core attaches (#1080 ruling 6). The ledger is handed
+    /// back so a test can record what the operating system's library holds.
+    pub fn founded_with_library(
+        seed: &str,
+    ) -> Result<(
+        Self,
+        Arc<std::sync::Mutex<centraid_vault::backup2::ledger::Ledger>>,
+    )> {
+        let dir = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&dir)?;
+        let clock = Arc::new(FixedClock::frozen());
+        let file = dir.join("vault.db");
+        let store = centraid_blobs::ByteStore::open(file.with_extension("bytes"))
+            .expect("a content store opens");
+        let ledger = Arc::new(std::sync::Mutex::new(
+            centraid_vault::backup2::ledger::Ledger::open(
+                centraid_vault::backup2::ledger::Ledger::path_for(&file),
+            )
+            .expect("the ledger opens"),
+        ));
+        let blobs = centraid_blobs::ContentBytes::new(store).with_ledger(Arc::clone(&ledger));
+        let vault = Vault::create_with(
+            file,
+            Box::new(Arc::clone(&clock)),
+            Box::new(SeededIds::new(seed)),
+        )?
+        .with_blobs(Box::new(blobs));
+        vault.found("Test", "Test Owner")?;
+        Ok((Self { dir, vault, clock }, ledger))
     }
 
     #[must_use]

@@ -1,6 +1,6 @@
 //! WHICH bytes to move, and in what order (#1020, D-1020-B5).
 //!
-//! [`crate::lane`] answers "move these bytes, as far as this window gets".
+//! A transfer answers "move these bytes, as far as this window gets".
 //! This module answers the question in front of it: *given a window that may
 //! last thirty seconds and may last ten minutes, which blobs should a seat ask
 //! for, and in what order?*
@@ -91,7 +91,7 @@ pub struct Want {
     pub tier: Tier,
     /// The whole blob's size.
     pub size: u64,
-    /// Verified bytes this device already holds — [`crate::Holding::held_bytes`].
+    /// Bytes of it this device already holds.
     pub held: u64,
     /// Higher is newer. The vault's `created_at` as a sortable integer; the
     /// caller decides the unit, this only compares.

@@ -153,15 +153,11 @@ pub unsafe extern "C" fn centraid_open(
         // copy from and no inbound endpoint on this device, so the open is the
         // open: the file, the migrations, the handle.
         //
-        // **THE BYTE STORE CAME BACK, AND THE CORE OWNS IT** (#1029 W6,
-        // hand-off 2). `SeatLink` also opened `<vault>.bytes` and handed it to
-        // `Handle::attach_bytes`, and when it went a core over this ABI held
-        // text and refused binary bytes by name. `ByteStore::open` is
-        // asynchronous and `ContentBytes` holds a runtime handle, so somebody
-        // has to own a runtime for the life of the core; on a phone there is no
-        // longer anybody else, so it is the core.
-        // `Handle::open_own_bytes` says why the runtime is multi-threaded and
-        // what the alternatives were.
+        // **THE CORE OWNS ITS BYTE STORE** (#1029 W6, hand-off 2; #1080).
+        // `<vault>.bytes` beside the file, a directory of files named by their
+        // hash, with the backup ledger beside the vault behind the same door —
+        // see `Handle::open_own_bytes`. On a phone there is nobody else to
+        // open it.
         //
         // **A STORE THAT WILL NOT OPEN IS NOT A FAILED OPEN.** The vault's rows
         // are readable and every text write still lands; what a shell gets is

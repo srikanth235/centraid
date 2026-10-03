@@ -6,15 +6,14 @@
 //! row keeps `blob:blake3-<hex>`. This is the read half, and it exists because
 //! a row naming bytes is not a photograph a member can see.
 //!
-//! ## ONE STORE, AND THE PATH IS THE STORE'S TO GIVE (#1025 S3, D-1025-S3-1)
+//! ## ONE DOOR, AND THE LOCATION IS THE DOOR'S TO GIVE (#1025 S3, #1080)
 //!
-//! This used to compose the answer itself — `Vault::blobs_root_for(path).join(sha)`
-//! — which was correct for the flat CAS it was written against and wrong the
-//! moment a device had a second store. A seat FETCHED bytes into iroh's store
-//! and this reader looked for them in a directory nothing wrote, so a synced
-//! photograph could not be displayed. The path now comes from
-//! [`crate::backup::store::BlobStore::path_of`], so there is one store and it
-//! is the one that answers where its own bytes are.
+//! The answer comes from [`crate::bytes::BlobStore::locate`], never from a
+//! path this reader composes: a file in the device's one content store, an
+//! original the operating system's library holds under an identifier only the
+//! shell can resolve (#1080 ruling 6), or nowhere on this device. The door
+//! knows where its own bytes are; a reader that guessed would look in a
+//! directory nothing writes.
 //!
 //! ## It answers a LOCATION, never the bytes
 //!
@@ -35,6 +34,7 @@
 //! which is `ServedUrl::of`'s rule in `crates/apps/docs/src/bytes.rs` and the
 //! reason it is phrased that way round.
 
+use crate::bytes::Located;
 use crate::error::Result;
 use crate::file::Vault;
 
@@ -57,13 +57,10 @@ pub const BLOB_URI_PREFIX: &str = "blob:blake3-";
 /// import that hashed another would file the same photograph as two items, and
 /// the column's own constraint would not catch it.
 ///
-/// **Why not SHA-256.** SHA-256 is all-or-nothing — the only way to know a stream
-/// of bytes is the file it claims to be is to receive every one of them. On a
-/// phone that means a thirty-second window which moved 60% of a video produces
-/// nothing that may be kept, and a large file never crosses at all. BLAKE3 is a
-/// Merkle tree, so with bao every 16 KiB chunk group is verified as it arrives
-/// and an interrupted transfer leaves proven bytes behind. That property is
-/// what `crates/blobs` is built on and it is not reachable from SHA-256.
+/// **BLAKE3 because everything Centraid names is BLAKE3** (D-1025-S4-1): this
+/// hash, the content store's file names, and the `h` the sealed backup format
+/// names a file's parts from (#1080 ruling 4) are one function, so a row, its
+/// file and its backup always agree about which bytes they mean.
 ///
 /// **The column's SHAPE does not move, and its NAME did** (#1025 S4,
 /// D-1025-S4-7). Both hashes are 32 bytes and render as 64 lowercase hex, so
@@ -109,18 +106,28 @@ pub struct NeededBytes {
 }
 
 /// Where one content item's bytes are, and how this reader reads them.
+///
+/// At most one of [`Self::path`] and [`Self::os_ref`] is set: the bytes are in
+/// the app's own store, or in the operating system's library, or not on this
+/// device at all.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContentLocation {
     pub content_id: String,
-    /// The file, when this device holds the bytes. `None` is a real answer.
+    /// The file, when this device's content store holds the bytes. `None` is a
+    /// real answer.
     pub path: Option<std::path::PathBuf>,
+    /// The operating system library's identifier for the bytes, when the
+    /// library holds them and the store does not (#1080 ruling 6). Only the
+    /// shell can open it.
+    pub os_ref: Option<String>,
     /// What the named owner reads these bytes as. Empty when it has no
     /// representation, which is also when [`Self::embeddable`] is false.
     pub media_type: String,
     pub byte_size: i64,
     /// Whether a surface may EMBED this rather than only offer it.
     pub embeddable: bool,
-    /// A member-facing sentence, set only when `path` is absent.
+    /// A member-facing sentence, set only when the bytes are on no path and
+    /// in no library.
     pub absent_reason: String,
 }
 
@@ -152,9 +159,9 @@ impl Vault {
     /// two are v0's upload door and the extension's capture; this is a gateway
     /// that has just PULLED a seat's blob over the connection the seat opened,
     /// before executing the intent that names it. The bytes are already in this
-    /// vault's content store and verified against their own name by bao; what
-    /// the staging row adds is the two facts the store cannot answer — the
-    /// media type the seat read, and the size it declared.
+    /// vault's content store, hashed as they were written; what the staging row
+    /// adds is the two facts the store cannot answer — the media type the
+    /// caller read, and the size it declared.
     ///
     /// The media type is why this exists at all. `promote_staged_blob` falls
     /// back to `application/octet-stream` without a row, and a photograph
@@ -254,6 +261,7 @@ impl Vault {
         let absent = |reason: &str| ContentLocation {
             content_id: content_id.to_owned(),
             path: None,
+            os_ref: None,
             media_type: media_type.clone(),
             byte_size: 0,
             embeddable,
@@ -282,21 +290,33 @@ impl Vault {
         let Some(blobs) = self.blobs() else {
             return Ok(absent("This copy of Centraid has no file store."));
         };
-        match blobs.path_of(sha) {
-            Ok(Some(path)) => Ok(ContentLocation {
+        match blobs.locate(sha) {
+            Ok(Located::Store(path)) => Ok(ContentLocation {
                 content_id: content_id.to_owned(),
                 path: Some(path),
+                os_ref: None,
                 media_type,
                 byte_size,
                 embeddable,
                 absent_reason: String::new(),
             }),
-            // A ROW WITHOUT ITS BYTES IS THE NORMAL SEAT STATE, not a fault:
-            // rows replicate first and bytes follow. It is also the answer for
-            // a blob this device holds PART of, which is the same thing to a
-            // member. The sentence is the one they can act on and it never
-            // names the sha.
-            Ok(None) => Ok(absent("This file has not reached this device yet.")),
+            // THE LIBRARY HOLDS IT, and the phone never copied it in (#1080
+            // ruling 6). The bytes are on this device, so nothing is absent:
+            // the shell opens them by the library's own identifier.
+            Ok(Located::OsLibrary(os_ref)) => Ok(ContentLocation {
+                content_id: content_id.to_owned(),
+                path: None,
+                os_ref: Some(os_ref),
+                media_type,
+                byte_size,
+                embeddable,
+                absent_reason: String::new(),
+            }),
+            // A ROW WITHOUT ITS BYTES ON THIS DEVICE is a state, not a fault:
+            // a restored phone shows its grid before it fetches an original.
+            // The sentence is the one a member can act on and it never names
+            // the sha.
+            Ok(Located::Nowhere) => Ok(absent("This file has not reached this device yet.")),
             Err(error) => {
                 // The store itself is unhappy — a corrupt blob, a permission.
                 // Logged with its detail and reported without it, because a
