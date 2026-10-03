@@ -390,6 +390,11 @@ final class ShellModel: ObservableObject {
         // THE BACKGROUND MOVER'S SEAM (#1080 §2), before the core opens, so a
         // relaunch's reports have somewhere to wait.
         wireUploads()
+        // FREE UP SPACE'S HAND ON THE PHOTO LIBRARY (#1080 A20), installed once;
+        // `HomeBridge` hands it to the session when the session opens.
+        #if canImport(CentraidShared)
+        home.installLibraryDeleter(deleter: PhotoLibraryDeleter())
+        #endif
         // THE DEVICE MAKES ITS OWN VAULT (#1025 S5; #1029 §1).
         //
         // This used to hand over every `.db` file that had been PLACED in the

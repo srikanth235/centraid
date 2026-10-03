@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import centraid.screen.v1.HomeEvent
+import dev.centraid.android.backup.MediaStoreDeleter
 import dev.centraid.android.backup.ProcessSession
 import dev.centraid.android.screens.backup.BackupSheets
 import dev.centraid.android.screens.backup.writeTransferRule
@@ -127,6 +128,14 @@ public class MainActivity : FragmentActivity() {
 
     /** THE BACKUP SCREEN'S SHEET (#1080), over every screen. See `BackupSheets`. */
     private val backupSheet: BackupSheets by lazy { BackupSheets() }
+
+    /**
+     * FREE UP SPACE'S HAND ON MEDIASTORE (#1080 A20). A FIELD, NEVER `lazy`: its
+     * activity result launcher must be registered before this activity starts.
+     * Installed on the session when it opens and cleared when this activity
+     * goes (`produceState` below). See `MediaStoreDeleter`.
+     */
+    private val libraryDeleter: MediaStoreDeleter = MediaStoreDeleter(this)
 
     /**
      * THE OS ASKING FOR MEMORY BACK (#1025 S7-13, ruling F).
@@ -278,6 +287,7 @@ public class MainActivity : FragmentActivity() {
                         routes.forEach { it.attach(opened, scope) }
                         words.attach(opened, scope)
                         backupSheet.attach(opened)
+                        opened.installLibraryDeleter(libraryDeleter)
                         value = opened
                         // AND THE FIRST FOREGROUND PASS, which `onResume` would
                         // otherwise miss: the activity resumed before the session
@@ -288,6 +298,9 @@ public class MainActivity : FragmentActivity() {
                         kotlinx.coroutines.awaitCancellation()
                     } finally {
                         session = null
+                        // CLEARED ONLY IF STILL THIS ACTIVITY'S: after a rotation
+                        // the new activity may have installed its own first.
+                        if (opened.libraryDeleter === libraryDeleter) opened.installLibraryDeleter(null)
                         ProcessSession.release()
                     }
                 }

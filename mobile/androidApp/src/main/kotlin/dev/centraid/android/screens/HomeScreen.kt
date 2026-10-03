@@ -307,8 +307,10 @@ private fun CustodyRow(label: String, tag: String, onPress: () -> Unit) {
  *
  * **It used to be a LOCAL removal** — the gateway kept the vault and kept this
  * device enrolled, so a forget cost a copy and a re-pair got it back. The phone
- * is the vault (#1029 §1). There is no copy anywhere else, so the dialog has to
- * say what it now does.
+ * is the vault (#1029 §1): forgetting removes the only live copy. What can
+ * survive it is the sealed backup on each gateway the vault was paired with
+ * (#1080), as far as a gateway acknowledged it, and only the vault's 24 words
+ * bring that back — so the dialog has to say what it now does.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
