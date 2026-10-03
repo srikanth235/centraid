@@ -35,7 +35,7 @@ import Foundation
 /// |---|---|---|
 /// | `vault.db`, `-wal`, `-shm` | `Shelf` (Kotlin) names it; SQLite | the vault |
 /// | `vault.bytes` | the core's content store | originals with no OS-library home, and every derivative |
-/// | `vault.backup.db`, `-wal`, `-shm` | the core's backup ledger (`backup2/ledger.rs`) | destinations, confirmations, the queue — device-local and derived |
+/// | `vault.backup.db`, `-wal`, `-shm` | the core's backup ledger (`crates/vault/src/backup/ledger.rs`) | destinations, confirmations, the queue — device-local and derived |
 /// | `vault.spool/` | the core's spool | sealed parts waiting for a gateway, which the OS reads while the app is suspended |
 ///
 /// and the directory itself holds `.centraid-upload-pins.plist`, the gateway
