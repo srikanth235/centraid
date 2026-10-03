@@ -20,24 +20,33 @@
 //! Requests on one client share one connection, re-dialled when the gateway
 //! closed it. A request is sent again on a fresh connection only when hyper
 //! hands it back unsent; a request that may have reached the gateway is
-//! never repeated here — `PUT`s and the head's compare-and-set are idempotent
-//! by the rules, and the caller decides about the rest.
+//! never repeated here — `PUT`s, deletes and the head's compare-and-set are
+//! idempotent by the rules, and the caller decides about the rest.
+//!
+//! # BUNDLES AND FETCHES STREAM
+//!
+//! [`Client::bundle_parts`] sends parts from memory or straight from spool
+//! files, and [`Client::fetch_each`] hands the answer over one frame at a
+//! time, so a body of [`MAX_BUNDLE_BYTES`] never sits in memory at either end
+//! (#1080, the root's ruling A14). `tests/store_client.rs` holds a process
+//! sending a quarter-gibibyte up and back to a few MiB of growth.
 //!
 //! # WHAT THIS CLIENT NEVER SAYS
 //!
-//! That something is backed up. It returns what the gateway acknowledged and
-//! nothing more; "backed up" is a word the phone may use only over an
-//! acknowledgement it recorded.
+//! That something is backed up. It returns what the gateway acknowledged —
+//! a [`Put`], whose every variant is one, and
+//! [`BundleAnswer::acknowledged`] — and nothing more; "backed up" is a word
+//! the phone may use only over an acknowledgement it recorded.
 
 pub mod tls;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bytes::Bytes;
-use futures::TryStreamExt as _;
+use futures::{StreamExt as _, TryStreamExt as _};
 use http_body_util::combinators::UnsyncBoxBody;
 use http_body_util::{BodyExt as _, Full, StreamBody};
 use hyper::body::{Frame as BodyFrame, Incoming};
@@ -52,11 +61,10 @@ use tokio_rustls::rustls::ClientConfig;
 use tokio_rustls::rustls::pki_types::ServerName;
 
 use crate::client::tls::{Trust, client_config, is_untrusted};
-use crate::rules::bundle::{Frame, decode, encode};
+use crate::rules::bundle::{Decoder, Frame, HEADER_LEN, Step, header as frame_header};
 use crate::rules::code::{Code, Refusal, RefusalBody};
-use crate::rules::engine::PutOutcome;
 use crate::rules::ids::{Digest, Name, Pin, Token, VaultId};
-use crate::rules::limits::MAX_BUNDLE_BYTES;
+use crate::rules::limits::{MAX_BUNDLE_BYTES, MAX_OBJECT_BYTES};
 use crate::rules::range::ByteRange;
 use crate::rules::wire::{
     BundleAnswer, CODE_HEADER, DIGEST_HEADER, DeleteAnswer, HeadView, Info, Missing, Names,
@@ -71,6 +79,9 @@ pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The largest JSON answer read: a page of a thousand objects is far less.
 const MAX_ANSWER_BYTES: u64 = 16 * 1024 * 1024;
+
+/// How much of a file is read for one piece of a body.
+const FILE_CHUNK: u64 = 256 * 1024;
 
 /// Where a paired gateway is and how to talk to it: what the phone's ledger
 /// keeps per destination.
@@ -140,6 +151,44 @@ pub struct ObjectStat {
 pub struct HeadState {
     pub epoch: u64,
     pub head: Option<HeadView>,
+}
+
+/// What the gateway answered a `PUT` with. **Every variant is an
+/// acknowledgement**: the gateway holds a sealing of these bytes under this
+/// name, durably. Anything else is a [`ClientError`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Put {
+    /// `201`: new bytes, now held.
+    Stored(ObjectEntry),
+    /// `200`: held already with this digest; nothing moved.
+    AlreadyStored(ObjectEntry),
+    /// `409 NAME_TAKEN`: held already under another digest. A name is a
+    /// function of the plaintext and sealing is salted, so this is the same
+    /// bytes sealed again — an acknowledgement, not a refusal (#1080, the
+    /// root's ruling A15).
+    NameTaken {
+        /// The digest the gateway holds.
+        held: Digest,
+    },
+}
+
+/// Where a bundled part's bytes come from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Source {
+    /// Bytes already in memory: a sealed range, a thumbnail.
+    Bytes(Bytes),
+    /// A spool file, opened when its turn comes and read as the body is
+    /// sent, never held whole.
+    File(PathBuf),
+}
+
+/// One part of a bundle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Part {
+    pub name: Name,
+    /// BLAKE3 of the part's bytes.
+    pub digest: Digest,
+    pub source: Source,
 }
 
 /// A `PUT` prepared for someone else to perform: the iPhone's background
@@ -364,7 +413,7 @@ impl Client {
         name: &Name,
         digest: &Digest,
         bytes: impl Into<Bytes>,
-    ) -> Result<PutOutcome, ClientError> {
+    ) -> Result<Put, ClientError> {
         let bytes = bytes.into();
         let length = bytes.len() as u64;
         let body = Full::new(bytes)
@@ -384,18 +433,9 @@ impl Client {
         name: &Name,
         digest: &Digest,
         path: &Path,
-    ) -> Result<PutOutcome, ClientError> {
-        let file = tokio::fs::File::open(path).await?;
-        let length = file.metadata().await?.len();
-        let chunks = futures::stream::try_unfold(file, |mut file| async move {
-            let mut buffer = vec![0_u8; 256 * 1024];
-            let read = file.read(&mut buffer).await?;
-            if read == 0 {
-                return Ok(None);
-            }
-            buffer.truncate(read);
-            Ok(Some((BodyFrame::data(Bytes::from(buffer)), file)))
-        });
+    ) -> Result<Put, ClientError> {
+        let length = tokio::fs::metadata(path).await?.len();
+        let chunks = file_chunks(path.to_path_buf(), length).map_ok(BodyFrame::data);
         let body = StreamBody::new(chunks).boxed_unsync();
         self.put_body(vault, name, digest, length, body).await
     }
@@ -407,7 +447,7 @@ impl Client {
         digest: &Digest,
         length: u64,
         body: Body,
-    ) -> Result<PutOutcome, ClientError> {
+    ) -> Result<Put, ClientError> {
         let mut request = self.request(Method::PUT, &object_route(vault, name), body, true)?;
         let headers = request.headers_mut();
         headers.insert(header::CONTENT_LENGTH, HeaderValue::from(length));
@@ -418,10 +458,16 @@ impl Client {
         headers.insert(DIGEST_HEADER, header_value(&digest.header())?);
         let response = self.send(request).await?;
         let status = response.status();
-        let entry: ObjectEntry = read_answer(response).await?;
-        match status {
-            StatusCode::CREATED => Ok(PutOutcome::Stored(entry)),
-            _ => Ok(PutOutcome::AlreadyStored(entry)),
+        match read_answer::<ObjectEntry>(response).await {
+            Ok(entry) if status == StatusCode::CREATED => Ok(Put::Stored(entry)),
+            Ok(entry) if status == StatusCode::OK => Ok(Put::AlreadyStored(entry)),
+            Ok(_) => Err(ClientError::Protocol(format!(
+                "a PUT answered {status}, which is neither 201 nor 200"
+            ))),
+            Err(ClientError::Refused(Refusal::NameTaken { digest })) => {
+                Ok(Put::NameTaken { held: digest })
+            }
+            Err(error) => Err(error),
         }
     }
 
@@ -497,26 +543,68 @@ impl Client {
         }
     }
 
-    /// `POST bundle`: many objects in one body.
+    /// `POST bundle` of frames already in memory: [`Self::bundle_parts`].
     ///
     /// # Errors
     ///
-    /// [`ClientError`].
+    /// As [`Self::bundle_parts`].
     pub async fn bundle(
         &self,
         vault: &VaultId,
         frames: &[Frame],
     ) -> Result<BundleAnswer, ClientError> {
-        let body = Bytes::from(encode(frames));
-        let length = body.len() as u64;
-        let mut request = self.request(
-            Method::POST,
-            &route(vault, "bundle"),
-            Full::new(body)
-                .map_err(|never| match never {})
-                .boxed_unsync(),
-            true,
-        )?;
+        let parts = frames
+            .iter()
+            .map(|frame| Part {
+                name: frame.name,
+                digest: frame.digest,
+                source: Source::Bytes(Bytes::copy_from_slice(&frame.bytes)),
+            })
+            .collect();
+        self.bundle_parts(vault, parts).await
+    }
+
+    /// `POST bundle`: many parts in one body, each answered as its own `PUT`
+    /// would be ([`BundleAnswer`]; [`BundleAnswer::acknowledged`] is what a
+    /// phone may record).
+    ///
+    /// **The body streams.** Each part's header is written as its turn
+    /// comes, and a [`Source::File`] is read 256 KiB at a time as the body
+    /// is sent, so a bundle of [`MAX_BUNDLE_BYTES`] never sits in memory
+    /// (#1080, the root's ruling A14). The gateway stages each frame to its
+    /// own file as it arrives in the same way.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`]. `TOO_LARGE`, before a byte is sent, for parts whose
+    /// frames pass [`MAX_BUNDLE_BYTES`] — the answer the gateway would give,
+    /// given here so the bundle is not sent to be refused. [`ClientError::Io`]
+    /// for a file that cannot be read, or ends before the length it had when
+    /// the bundle was measured: the request fails rather than send a short
+    /// frame.
+    pub async fn bundle_parts(
+        &self,
+        vault: &VaultId,
+        parts: Vec<Part>,
+    ) -> Result<BundleAnswer, ClientError> {
+        let mut measured = Vec::with_capacity(parts.len());
+        let mut length = 0_u64;
+        for part in parts {
+            let len = match &part.source {
+                Source::Bytes(bytes) => bytes.len() as u64,
+                Source::File(path) => tokio::fs::metadata(path).await?.len(),
+            };
+            length = length.saturating_add(HEADER_LEN as u64).saturating_add(len);
+            measured.push((part, len));
+        }
+        if length > MAX_BUNDLE_BYTES {
+            return Err(Refusal::TooLarge {
+                limit: MAX_BUNDLE_BYTES,
+            }
+            .into());
+        }
+        let body = StreamBody::new(parts_stream(measured).map_ok(BodyFrame::data)).boxed_unsync();
+        let mut request = self.request(Method::POST, &route(vault, "bundle"), body, true)?;
         let headers = request.headers_mut();
         headers.insert(header::CONTENT_LENGTH, HeaderValue::from(length));
         headers.insert(
@@ -527,14 +615,45 @@ impl Client {
         read_answer(response).await
     }
 
-    /// `POST fetch`: the objects the gateway holds of `names`, in order, each
-    /// checked against its digest.
+    /// `POST fetch`, collected: every frame [`Self::fetch_each`] hands over,
+    /// in order. The whole answer is in memory at the end; a restore reading
+    /// a large one uses [`Self::fetch_each`].
     ///
     /// # Errors
     ///
-    /// [`ClientError`]; [`ClientError::Protocol`] for a frame that does not
-    /// hash to its digest.
+    /// As [`Self::fetch_each`].
     pub async fn fetch(&self, vault: &VaultId, names: &[Name]) -> Result<Vec<Frame>, ClientError> {
+        let mut frames = Vec::new();
+        self.fetch_each(vault, names, |frame| {
+            frames.push(frame);
+            Ok(())
+        })
+        .await?;
+        Ok(frames)
+    }
+
+    /// `POST fetch`, frame by frame: `each` is handed every object the
+    /// gateway holds of `names`, in the order asked, as soon as its bytes are
+    /// complete and hash to its digest. One frame is in memory at a time,
+    /// never the answer (#1080, the root's ruling A14). Answers how many
+    /// frames came; a name that did not come is one the gateway does not
+    /// hold.
+    ///
+    /// While this runs the client's connection is busy with the answer;
+    /// `each` is synchronous and cannot use the client.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`]; [`ClientError::Protocol`] for an answer that is not a
+    /// bundle, a frame over [`MAX_OBJECT_BYTES`], or a frame that does not
+    /// hash to its digest; [`ClientError::Io`] for an error `each` returns,
+    /// which ends the fetch.
+    pub async fn fetch_each(
+        &self,
+        vault: &VaultId,
+        names: &[Name],
+        mut each: impl FnMut(Frame) -> std::io::Result<()>,
+    ) -> Result<usize, ClientError> {
         let body = json_body(&Names {
             names: names.to_vec(),
         })?;
@@ -546,20 +665,28 @@ impl Client {
             let body = read_capped(response, MAX_ANSWER_BYTES).await?;
             return Err(refusal_of(status, &headers, &body));
         }
-        let bytes = read_capped(response, MAX_BUNDLE_BYTES).await?;
-        let frames = decode(&bytes).map_err(|refusal| {
-            ClientError::Protocol(format!("a fetch answer that is not a bundle: {refusal}"))
-        })?;
-        if let Some(frame) = frames
-            .iter()
-            .find(|frame| Digest::of(&frame.bytes) != frame.digest)
+        let mut stream = response.into_body().into_data_stream();
+        let mut decoder = Decoder::new();
+        let mut current = None;
+        let mut count = 0;
+        while let Some(chunk) = stream
+            .try_next()
+            .await
+            .map_err(|error| ClientError::Unreachable(error.to_string()))?
         {
-            return Err(ClientError::Protocol(format!(
-                "{} does not hash to its digest",
-                frame.name
-            )));
+            let mut rest: &[u8] = &chunk;
+            loop {
+                let (step, used) = decoder.step(rest).map_err(not_a_bundle)?;
+                rest = &rest[used..];
+                let Some(step) = step else { break };
+                count += usize::from(take(step, &mut current, &mut each)?);
+            }
         }
-        Ok(frames)
+        while let (Some(step), _) = decoder.step(&[]).map_err(not_a_bundle)? {
+            count += usize::from(take(step, &mut current, &mut each)?);
+        }
+        decoder.finish().map_err(not_a_bundle)?;
+        Ok(count)
     }
 
     /// `GET objects`: one page, sorted by name.
@@ -794,6 +921,107 @@ fn object_route(vault: &VaultId, name: &Name) -> String {
     format!("/v2/v/{vault}/o/{name}")
 }
 
+/// Exactly `length` bytes of the file at `path`, opened on first poll and
+/// read [`FILE_CHUNK`] at a time. A file that ends early fails the stream,
+/// and with it the request: a short body is never sent as a whole one.
+fn file_chunks(
+    path: PathBuf,
+    length: u64,
+) -> impl futures::Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static {
+    futures::stream::try_unfold(
+        (None::<tokio::fs::File>, path, length),
+        |(file, path, remaining)| async move {
+            if remaining == 0 {
+                return Ok(None);
+            }
+            let mut file = match file {
+                Some(file) => file,
+                None => tokio::fs::File::open(&path).await?,
+            };
+            let want = usize::try_from(remaining.min(FILE_CHUNK)).unwrap_or(0);
+            let mut buffer = vec![0_u8; want];
+            let read = file.read(&mut buffer).await?;
+            if read == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    format!("{} ended {remaining} bytes early", path.display()),
+                ));
+            }
+            buffer.truncate(read);
+            Ok(Some((
+                Bytes::from(buffer),
+                (Some(file), path, remaining - read as u64),
+            )))
+        },
+    )
+}
+
+/// A bundle's body: each part's frame header, then its bytes, one part after
+/// the other, each file opened only when its turn comes.
+fn parts_stream(
+    parts: Vec<(Part, u64)>,
+) -> impl futures::Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static {
+    futures::stream::iter(parts)
+        .map(|(part, len)| {
+            let header = Bytes::copy_from_slice(&frame_header(&part.name, &part.digest, len));
+            let bytes = match part.source {
+                Source::Bytes(bytes) => futures::stream::once(async move { Ok(bytes) }).boxed(),
+                Source::File(path) => file_chunks(path, len).boxed(),
+            };
+            futures::stream::once(async move { Ok(header) }).chain(bytes)
+        })
+        .flatten()
+}
+
+/// One step of a fetch answer: a frame begins, grows, or is complete —
+/// checked against its digest and handed to `each`. Answers whether a frame
+/// was handed over.
+fn take(
+    step: Step<'_>,
+    current: &mut Option<Frame>,
+    each: &mut impl FnMut(Frame) -> std::io::Result<()>,
+) -> Result<bool, ClientError> {
+    match step {
+        Step::Header(header) => {
+            if header.len > MAX_OBJECT_BYTES {
+                return Err(ClientError::Protocol(format!(
+                    "a fetched frame of {} bytes, over the object cap",
+                    header.len
+                )));
+            }
+            *current = Some(Frame {
+                name: header.name,
+                digest: header.digest,
+                bytes: Vec::with_capacity(usize::try_from(header.len).unwrap_or(0)),
+            });
+            Ok(false)
+        }
+        Step::Body(bytes) => {
+            if let Some(frame) = current {
+                frame.bytes.extend_from_slice(bytes);
+            }
+            Ok(false)
+        }
+        Step::End => {
+            let Some(frame) = current.take() else {
+                return Ok(false);
+            };
+            if Digest::of(&frame.bytes) != frame.digest {
+                return Err(ClientError::Protocol(format!(
+                    "{} does not hash to its digest",
+                    frame.name
+                )));
+            }
+            each(frame)?;
+            Ok(true)
+        }
+    }
+}
+
+fn not_a_bundle(refusal: Refusal) -> ClientError {
+    ClientError::Protocol(format!("a fetch answer that is not a bundle: {refusal}"))
+}
+
 fn empty() -> Body {
     Full::new(Bytes::new())
         .map_err(|never| match never {})
@@ -861,6 +1089,13 @@ fn refusal_of(status: StatusCode, headers: &hyper::HeaderMap, body: &[u8]) -> Cl
             })
         });
     match parsed {
+        // Every code has one status (`Code::status`); a refusal under another
+        // breaks the protocol, and is not acted on as its code.
+        Some(body) if body.code.status() != status.as_u16() => ClientError::Protocol(format!(
+            "{} answered with status {status}, not {}",
+            body.code,
+            body.code.status()
+        )),
         Some(body) if body.code == Code::Internal => ClientError::GatewayFault,
         Some(body) => Refusal::from_body(&body).map_or_else(
             || {

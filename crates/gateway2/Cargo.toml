@@ -32,6 +32,10 @@ required-features = ["server"]
 name = "pair_from_payload"
 required-features = ["server"]
 
+[[test]]
+name = "store_client"
+required-features = ["server"]
+
 # TWO FEATURES, SO THE PHONE LINKS NO SERVER (#1080). `rules` is always built
 # and reaches no runtime, no socket, no file and no clock; `client` adds the
 # pinned HTTPS client a phone links; `server` adds the gateway a member runs.

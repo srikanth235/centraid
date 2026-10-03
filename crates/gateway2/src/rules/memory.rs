@@ -465,7 +465,8 @@ impl Target for MemoryTarget {
         let mut answer = BundleAnswer::default();
         for frame in frames {
             match self.put_one(token, vault, &frame.name, &frame.digest, &frame.bytes) {
-                Ok(_) => answer.stored.push(frame.name),
+                Ok(PutOutcome::Stored(_)) => answer.stored.push(frame.name),
+                Ok(PutOutcome::AlreadyStored(_)) => answer.already.push(frame.name),
                 Err(Fault::Refused(refusal)) => answer.refused.push(NameRefusal {
                     name: frame.name,
                     code: refusal.code(),

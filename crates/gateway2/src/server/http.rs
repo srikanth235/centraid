@@ -514,9 +514,10 @@ fn file_stream(
 }
 
 /// `POST bundle`: authorise once, then each frame is staged, judged and
-/// admitted on its own. A frame the rules refuse is in `refused` with its
-/// code; a body that is malformed or over the cap is refused whole, and the
-/// frames admitted before it stay admitted — each was verified on its own.
+/// admitted on its own as it arrives, and answered as its own `PUT` would be:
+/// `stored`, `already`, or in `refused` with its code. A body that is
+/// malformed or over the cap is refused whole, and the frames admitted before
+/// it stay admitted — each was verified on its own.
 async fn bundle(
     State(shared): State<Handle>,
     path: Result<Path<String>, PathRejection>,
@@ -627,7 +628,8 @@ async fn advance(
                 })
             });
             match outcome {
-                Ok(_) => answer.stored.push(header.name),
+                Ok(PutOutcome::Stored(_)) => answer.stored.push(header.name),
+                Ok(PutOutcome::AlreadyStored(_)) => answer.already.push(header.name),
                 Err(Fault::Refused(refusal)) => answer.refused.push(NameRefusal {
                     name: header.name,
                     code: refusal.code(),
