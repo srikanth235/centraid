@@ -910,6 +910,12 @@ impl Handle {
             // vault it is about does not exist on this device yet. That is the
             // whole of what it is for (F2).
             K::Restore(request) => {
+                // A RESTORE FROM A GATEWAY'S PAIRING PAYLOAD IS #1080's, and
+                // ignoring the payload would restore from whichever laptop
+                // the words resolve to rather than the one the member scanned.
+                if !request.payload.is_empty() {
+                    return Err(not_yet_on_the_new_plane("a restore from a pairing payload"));
+                }
                 let runtime = self.runtime_handle()?;
                 Ok(response(wire::response::Kind::Restore(
                     crate::phone::restore::run(&self.path, request, &runtime)?,
@@ -937,6 +943,16 @@ impl Handle {
             K::AppQuery(request) => Ok(response(wire::response::Kind::AppQuery(Box::new(
                 self.with_vault(|vault| crate::app_query::answer(vault, request))?,
             )))),
+            // THE BACKUP PLANE'S SIX DOORS (#1080), answered before the plane
+            // behind them exists: a typed `NOT_YET_AVAILABLE`, never an empty
+            // answer a shell would draw as "nothing to hand off" or "no
+            // gateway paired". See `phone.proto`.
+            K::Handoff(_) => Err(not_yet_on_the_new_plane("handoff")),
+            K::Settle(_) => Err(not_yet_on_the_new_plane("settle")),
+            K::FetchOriginal(_) => Err(not_yet_on_the_new_plane("fetch_original")),
+            K::Pins(_) => Err(not_yet_on_the_new_plane("pins")),
+            K::Reconcile(_) => Err(not_yet_on_the_new_plane("reconcile")),
+            K::ForgetDestination(_) => Err(not_yet_on_the_new_plane("forget_destination")),
         }
         .map_err(|error| {
             tracing::debug!(request_id, %error, "the core refused a request");
@@ -964,9 +980,12 @@ impl Handle {
     fn stage(&self, frame: &wire::StageRequest) -> Result<wire::StageResponse> {
         use wire::stage_request::Kind as S;
         let kind = match frame.kind.as_ref() {
-            Some(S::Begin(begin)) => wire::stage_response::Kind::Begun(
-                self.staging.begin(&begin.media_type, begin.byte_size)?,
-            ),
+            Some(S::Begin(begin)) => {
+                refuse_the_new_stage_sources(begin)?;
+                wire::stage_response::Kind::Begun(
+                    self.staging.begin(&begin.media_type, begin.byte_size)?,
+                )
+            }
             Some(S::Chunk(chunk)) => wire::stage_response::Kind::Chunked(self.staging.chunk(
                 &chunk.staging_id,
                 chunk.seq,
@@ -1080,6 +1099,51 @@ fn response(kind: wire::response::Kind) -> wire::Response {
     wire::Response { kind: Some(kind) }
 }
 
+/// The refusal for a door or a field whose plane is #1080's, said once.
+///
+/// `NOT_YET_AVAILABLE`, because it is the truth a shell can draw: an empty
+/// handoff would read as "nothing waiting", and an empty pin list as "no
+/// gateway paired".
+fn not_yet_on_the_new_plane(what: &'static str) -> CoreError {
+    CoreError::NotYetAvailable {
+        what,
+        lands_in: "the #1080 cut-over (the phone core on the new backup plane)",
+    }
+}
+
+/// THE STAGE DOOR'S #1080 FIELDS, refused until the plane that honours them.
+///
+/// Each changes what `end` means, so taking the bytes and ignoring the field
+/// would answer a different question from the one asked: an item in the
+/// operating system's library would be kept as a second plaintext copy in the
+/// app's store — the copy #1080 ruling 6 exists to remove — and a derivative
+/// would be filed as an original of its own. Owned bytes with neither field are
+/// what this door has always taken, so they still are.
+fn refuse_the_new_stage_sources(begin: &wire::StageBegin) -> Result<()> {
+    match wire::StageSource::try_from(begin.source) {
+        Ok(wire::StageSource::Unspecified | wire::StageSource::Owned) => {}
+        Ok(wire::StageSource::OsLibrary) => {
+            return Err(not_yet_on_the_new_plane(
+                "staging from the operating system's library",
+            ));
+        }
+        Err(_) => {
+            return Err(CoreError::InvalidRequest {
+                detail: format!("{} is not a stage source", begin.source),
+            });
+        }
+    }
+    if !begin.os_ref.is_empty() {
+        return Err(not_yet_on_the_new_plane(
+            "staging from the operating system's library",
+        ));
+    }
+    if !begin.for_hash.is_empty() || !begin.tier.is_empty() {
+        return Err(not_yet_on_the_new_plane("staging a derivative"));
+    }
+    Ok(())
+}
+
 /// Whether a request is cancellable.
 ///
 /// A paged read, a command and a handshake are **bounded**: they finish on
@@ -1128,7 +1192,19 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // A LOCKER STEP IS BOUNDED: one key load, one receipt, one cell.
             | K::Locker(_)
             // A PHRASE STEP IS 24 WORDS AND ONE PBKDF2 (#1047 E1).
-            | K::Phrase(_),
+            | K::Phrase(_)
+            // FIVE OF THE BACKUP PLANE'S SIX DOORS ARE BOUNDED (#1080).
+            // `handoff` answers at most the batch it was asked for, `settle`
+            // records what the shell already heard, `pins` and
+            // `forget_destination` are one read and one write of the device's
+            // ledger, and `reconcile` asks `exists` once per thousand names the
+            // ledger holds unconfirmed — a count the ledger bounds, and the
+            // network is not the same question, as with `pair_phone`.
+            | K::Handoff(_)
+            | K::Settle(_)
+            | K::Pins(_)
+            | K::Reconcile(_)
+            | K::ForgetDestination(_),
         )
         | None => RequestKind::Bounded,
         // A DRAIN IS AS LONG AS THE SPOOL IS and a RESTORE as long as the
@@ -1136,7 +1212,11 @@ fn request_kind(request: &wire::Request) -> RequestKind {
         // own besides — the two are different stops and a shell may use
         // either: `Cancel` is the member leaving the screen, the deadline is
         // the operating system taking the window back.
-        Some(K::Drain(_) | K::Restore(_)) => RequestKind::Unbounded,
+        //
+        // AND A FETCHED ORIGINAL IS AS LONG AS THE ORIGINAL IS (#1080): a
+        // film can be gigabytes, and a member who leaves the lightbox has
+        // stopped wanting it.
+        Some(K::Drain(_) | K::Restore(_) | K::FetchOriginal(_)) => RequestKind::Unbounded,
     }
 }
 
@@ -1400,13 +1480,14 @@ mod tests {
     fn an_unbounded_request_is_cancellable_and_a_bounded_one_is_not() {
         // The classification, directly: it lives in one function so a call site
         // cannot choose wrongly.
-        // THE TWO UNBOUNDED ONES ARE THE PHONE'S TWO FLOWS (#1029 W15).
-        // `backup_now` was the only one and it is retired; `snapshot_head` was
-        // the other and went in #1025 S7, item 5.
+        // THE PHONE'S TWO FLOWS ARE UNBOUNDED (#1029 W15). `backup_now` was
+        // the only one and it is retired; `snapshot_head` was the other and
+        // went in #1025 S7, item 5.
         assert_eq!(
             request_kind(&wire::Request {
                 kind: Some(wire::request::Kind::Drain(wire::DrainRequest {
-                    deadline_ms: 0
+                    deadline_ms: 0,
+                    ..wire::DrainRequest::default()
                 })),
             }),
             RequestKind::Unbounded
@@ -1417,6 +1498,31 @@ mod tests {
             }),
             RequestKind::Unbounded
         );
+        // A FETCHED ORIGINAL IS AS LONG AS THE ORIGINAL (#1080), and the
+        // backup plane's other five doors are bounded.
+        assert_eq!(
+            request_kind(&wire::Request {
+                kind: Some(wire::request::Kind::FetchOriginal(
+                    wire::FetchOriginalRequest::default()
+                )),
+            }),
+            RequestKind::Unbounded
+        );
+        for bounded in [
+            wire::request::Kind::Handoff(wire::HandoffRequest::default()),
+            wire::request::Kind::Settle(wire::SettleRequest::default()),
+            wire::request::Kind::Pins(wire::PinsRequest {}),
+            wire::request::Kind::Reconcile(wire::ReconcileRequest {}),
+            wire::request::Kind::ForgetDestination(wire::ForgetDestinationRequest::default()),
+        ] {
+            assert_eq!(
+                request_kind(&wire::Request {
+                    kind: Some(bounded.clone()),
+                }),
+                RequestKind::Bounded,
+                "{bounded:?} is one batch, one ledger read or write, or a ledger-bounded ask"
+            );
+        }
         // AND THE TWO BESIDE THEM ARE BOUNDED. A status read is a spool
         // measurement; a pairing is one ticket and one redemption. Talking to
         // the network is not the same question as being unbounded.
@@ -1447,6 +1553,115 @@ mod tests {
             request_kind(&wire::Request { kind: None }),
             RequestKind::Bounded
         );
+    }
+
+    /// THE BACKUP PLANE'S SIX DOORS ANSWER `NOT_YET_AVAILABLE` (#1080), and so
+    /// do the new request fields that need the plane behind them — never an
+    /// empty answer, and never an old door quietly ignoring the field. Owned
+    /// bytes with no new field still stage, so each refusal is the field's and
+    /// not the door's.
+    #[test]
+    fn the_new_backup_doors_and_fields_are_not_yet_available() {
+        let scratch = Scratch::founded();
+        for kind in [
+            wire::request::Kind::Handoff(wire::HandoffRequest {
+                max_bytes: 1 << 20,
+                max_parts: 8,
+            }),
+            wire::request::Kind::Settle(wire::SettleRequest::default()),
+            wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
+                content_hash: vec![7; 32],
+            }),
+            wire::request::Kind::Pins(wire::PinsRequest {}),
+            wire::request::Kind::Reconcile(wire::ReconcileRequest {}),
+            wire::request::Kind::ForgetDestination(wire::ForgetDestinationRequest {
+                gateway_id: "a-gateway".to_owned(),
+            }),
+            // Refused before anything is derived or dialled: ignoring the
+            // payload would restore from a laptop the member did not scan.
+            wire::request::Kind::Restore(wire::RestoreRequest {
+                payload: "a gateway's pairing payload".to_owned(),
+                ..wire::RestoreRequest::default()
+            }),
+        ] {
+            let refusal = scratch
+                .handle
+                .call(&wire::Request {
+                    kind: Some(kind.clone()),
+                })
+                .expect_err("a door whose plane has not landed refuses");
+            assert_eq!(
+                refusal.code(),
+                wire::ErrorCode::NotYetAvailable,
+                "{kind:?} answered {refusal}"
+            );
+        }
+
+        let begin = |begin: wire::StageBegin| {
+            scratch.handle.call(&wire::Request {
+                kind: Some(wire::request::Kind::Stage(wire::StageRequest {
+                    kind: Some(wire::stage_request::Kind::Begin(begin)),
+                })),
+            })
+        };
+        let owned = wire::StageBegin {
+            media_type: "image/jpeg".to_owned(),
+            byte_size: 3,
+            ..wire::StageBegin::default()
+        };
+        for not_yet in [
+            wire::StageBegin {
+                source: wire::StageSource::OsLibrary as i32,
+                os_ref: "library-item-1".to_owned(),
+                ..owned.clone()
+            },
+            wire::StageBegin {
+                os_ref: "library-item-1".to_owned(),
+                ..owned.clone()
+            },
+            wire::StageBegin {
+                for_hash: vec![7; 32],
+                tier: "thumb".to_owned(),
+                ..owned.clone()
+            },
+            wire::StageBegin {
+                tier: "preview".to_owned(),
+                ..owned.clone()
+            },
+        ] {
+            let refusal = begin(not_yet.clone()).expect_err("a v2 stage source is refused");
+            assert_eq!(
+                refusal.code(),
+                wire::ErrorCode::NotYetAvailable,
+                "{not_yet:?} answered {refusal}"
+            );
+        }
+        let unknown = begin(wire::StageBegin {
+            source: 9,
+            ..owned.clone()
+        })
+        .expect_err("a source this build has no name for is refused");
+        assert_eq!(unknown.code(), wire::ErrorCode::InvalidRequest);
+
+        // OWNED BYTES, SAID OR LEFT UNSAID, ARE THE DOOR IT ALWAYS WAS.
+        for taken in [
+            owned.clone(),
+            wire::StageBegin {
+                source: wire::StageSource::Owned as i32,
+                ..owned
+            },
+        ] {
+            let answer = begin(taken).expect("owned bytes still stage").kind;
+            assert!(
+                matches!(
+                    answer,
+                    Some(wire::response::Kind::Stage(wire::StageResponse {
+                        kind: Some(wire::stage_response::Kind::Begun(_)),
+                    }))
+                ),
+                "a begin is answered begun: {answer:?}"
+            );
+        }
     }
 
     #[test]

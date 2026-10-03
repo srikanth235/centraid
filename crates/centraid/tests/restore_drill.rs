@@ -1365,7 +1365,10 @@ mod phone_shaped {
                     &vault,
                     &file,
                     Some(&keys),
-                    &wire::DrainRequest { deadline_ms: 0 },
+                    &wire::DrainRequest {
+                        deadline_ms: 0,
+                        ..wire::DrainRequest::default()
+                    },
                     &runtime,
                 )
             })
@@ -1403,6 +1406,7 @@ mod phone_shaped {
                     seed: None,
                     // EVERY INDEX: the ordinary restore scans to the gap.
                     indices: Vec::new(),
+                    payload: String::new(),
                 },
                 &runtime,
             )
@@ -1455,7 +1459,10 @@ mod phone_shaped {
                 vault,
                 file,
                 Some(keys),
-                &wire::DrainRequest { deadline_ms: 0 },
+                &wire::DrainRequest {
+                    deadline_ms: 0,
+                    ..wire::DrainRequest::default()
+                },
                 &runtime,
             )
         })
