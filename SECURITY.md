@@ -26,7 +26,7 @@ In scope: code in this repository (`crates/`, `mobile/`, `packages/`, `deploy/`,
 
 Out of scope: third-party dependencies (report upstream), generic phishing or social-engineering reports against the maintainer's accounts, denial-of-service against personal infrastructure.
 
-## Threat model — the phone is the vault (2026-09-21), and its backup (2026-10-03)
+## Threat model — the phone is the vault (2026-09-21)
 
 **Rewritten for v0** under [#1029](https://github.com/srikanth235/centraid/issues/1029) and the [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795), and for the backup plane rebuilt from first principles by [#1080](https://github.com/srikanth235/centraid/issues/1080). The rulings are in [decisions.md](docs/decisions.md#the-phone-is-the-vault--v0-1029-ruled-2026-09-21) and [decisions.md](docs/decisions.md#backups-from-first-principles-1080); the protocol is [docs/gateway.md](docs/gateway.md).
 
@@ -131,7 +131,7 @@ Every security claim this document makes, what enforces it, and — where nothin
 
 | Claim | Status | Enforced by |
 | --- | --- | --- |
-| The phone owns no listening socket and never accepts | ENFORCED-BY-RULE | `no-listening-socket` in `cargo xtask rules`, over every crate and every file of `crates/gateway` but `src/server/serve.rs`; `crates/centraid/tests/no_listener.rs` reads the kernel's own socket table for the runtime half |
+| The phone owns no listening socket and never accepts | ENFORCED-BY-RULE, statically | `no-listening-socket` in `cargo xtask rules`, over every crate and every file of `crates/gateway` but `src/server/serve.rs`. There is no runtime half: a dependency that listened without the string appearing in this repository would not be caught |
 | No plaintext, plaintext hash or key reaches a gateway | ENFORCED-BY-TEST | `canary/no-plaintext-plaintext-hash-or-key-is-at-rest` in `crates/gateway`'s conformance suite, run against the in-memory state and over the wire; `the_sealed_bytes_carry_neither_the_plaintext_nor_its_hash`, `crates/media/src/sealed.rs` |
 | A gateway keeps no token or pairing secret it could hand back | ENFORCED-BY-TEST | `canary/no-token-or-pairing-secret-is-at-rest`, the same suite |
 | The phone trusts exactly the certificate it pinned | ENFORCED-BY-TEST for the core's client; **IMPLEMENTED and unverified on a device** for the iOS background session | `a_client_trusts_its_pin_and_refuses_any_other`, `the_pinned_certificate_without_its_key_is_refused`, `crates/gateway/tests/tls.rs`; the background session's exact-DER check ([R-1080-E3](docs/decisions.md#the-native-shells-backup-half-1080)) is [v1-handoffs](docs/release/v1-handoffs.md) §8 |
