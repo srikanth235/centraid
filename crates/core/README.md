@@ -8,7 +8,7 @@ Everything a shell can ask for goes through `call` and everything the core volun
 
 | Function | Contract |
 | --- | --- |
-| `Core::open(config)` | opens the file, runs migrations, **returns**. The endpoint starts afterwards, on a core thread. |
+| `Core::open(config)` | opens the file, runs migrations, **returns**. Nothing dials: a gateway is reached only by a pass a shell asks for. |
 | `handle.call(request)` | synchronous from the caller's view. **Never from a UI thread** — a debug assertion fires when the shell named one. |
 | `handle.next_event(timeout)` | blocks on a **bounded** queue (`EVENT_QUEUE_CAP = 1024`). `Ok(None)` is a timeout, not an error. |
 | `handle.close()` | unblocks every waiter with `CoreError::Closed`, then releases. Idempotent. Calls afterwards are typed errors. |
@@ -55,6 +55,22 @@ A new query is a new arm inside its app's range, appended ([R-1047-Q1](../../doc
 `Request::Locker` (`locker.proto`, [#1047](https://github.com/srikanth235/centraid/issues/1047), D-5) is Locker's session, `crate::locker::phone`: `unlock` — sent by the shell after the phone's biometric or passcode prompt succeeded — puts `K` in the session — the seed's `locker'` leaf, derived at open into the `Keyring` and never written down, so a restore from the 24 words reopens sealed secrets ([Q-1047-11](../../docs/decisions.md#locker-on-the-phone-1047-d-5)); a core opened without the seed refuses as `Unavailable` — and receipts the unlock; `relock` zeroes the session's copy; `state` answers whether idle has ended it; `reveal` receipts one sealed item cell and answers its plaintext with a thirty-second life, or a typed refusal (`LOCKED` never prompts). `Request::Command` for `locker.add_item` / `locker.edit_item` passes through `seal_command` first: every typed secret is sealed under the live generation against the item's id and `password_rotated` is decided by opening the stored password; a secret-bearing write while locked is refused ([R-1047-L1…L4](../../docs/decisions.md#locker-on-the-phone-1047-d-5)).
 
 `app_query.rs` holds the door (`VaultDoor`, the app kit's `PageDoor` over `Vault::keyset_page` — the page door's own call — plus the kit's grammar), the dispatch, and Agenda's conversion; each other app's module converts its crate's rows to its answer. `app_query/docs.rs` also adds the size phrase, whether the head's bytes are on this device and, when they are and may be drawn inline, the file's path for the media stage (`Vault::content_location`, [R-1047-Q4](../../docs/decisions.md#the-owners-rulings-of-2026-09-25-1047)). Agenda's `search` names each repeating hit's next occurrence and `event` carries the event's calendar row ([R-1047-Q6](../../docs/decisions.md#the-owners-rulings-of-2026-09-25-1047)); Tally's `export` renders its CSV and file name ([R-1047-Q5](../../docs/decisions.md#the-owners-rulings-of-2026-09-25-1047)). A denial is an arm of the answer; a vault failure the door saw is answered as itself and never as a denial; a read that reaches its own stated ceiling is `CoreError::ReadBoundReached` (`ERROR_CODE_READ_BOUND_REACHED`). Search arms reach `crates/search`'s FTS door over `Vault::read`'s connection, so the core writes no SQL for them. Each query answers its civil readings — an occurrence's local wall clock and days, today, now, a row's local day — in the request's `tz`, else the vault's own zone (`Vault::time_zone`), else refuses with `InvalidRequest`; never the host's clock and never UTC by default. Where the readings only decorate the answer (People's search and trash, Notes' search and editor note, Tally's export file name) a request with no zone on a vault that names none answers them EMPTY rather than refusing (`zone_if_any`); an unknown zone is still refused. A page read asks for local days through `PageQuery.local_day_columns` + `tz`, one appended `YYYY-MM-DD` column per named instant after every other computed column ([R-1047-Q3](../../docs/decisions.md#the-owners-rulings-of-2026-09-25-1047)).
+
+## The backup plane (`phone`)
+
+The phone is the vault's only writer and backs it up to the gateways its member paired, over pinned HTTPS ([#1080](https://github.com/srikanth235/centraid/issues/1080)). The doors are arms of `call`, documented clause by clause in [`crates/core-ffi/CONTRACT.md`](../core-ffi/CONTRACT.md) §4c–4g; the plane underneath is `centraid_vault::backup` and the client is `centraid_gateway`'s.
+
+| Module | What it does |
+| --- | --- |
+| `phone/mod.rs` | The `Keyring` (vault keys and backup keys, from the seed at an index), the `Plane` (the ledger `<stem>.backup.db`, the spool `<stem>.spool/` opened once per core, the scratch copies), `backup_status`, `releasable`/`released`. |
+| `phone/pair.rs` | `pair_phone` from a gateway's QR payload: first contact trusting only the pin, a claim (or a takeover by claim when the gateway already holds the vault), and the safety number both ends print. |
+| `phone/drain.rs` | One pass: the records first (snapshot when due, its ranges, the head), then derivatives and originals under the member's rule (`Conditions`: `may_prepare`, `may_move`, `allows_cellular`); `handoff`, `settle` and `reconcile` for the parts the operating system moves. |
+| `phone/link.rs` | The plane's `Store` over the async client, and reaching the first paired gateway that answers as itself. |
+| `phone/fetch.rs` | Derivatives in bundles, and one original by name, assembled and verified against its hash. |
+| `phone/restore.rs` | From the words and a payload: check every vault's snapshot under a read grant, claim each at the next writer epoch, adopt the ledger, bring every derivative back. |
+| `stage.rs` | The stage door v2: owned bytes into the content store, library items hashed (and sealed into the spool in the same stream), derivatives staged `for_hash` with their `tier`. |
+
+A gateway that answers `MOVED` freezes the vault on this phone: every later pass is refused `ERROR_CODE_VAULT_MOVED`, and `backup_status.frozen` says so. `tests/phone_backup.rs` drives every door against the real gateway harness, and `crates/centraid/tests/restore_drill.rs` is the drill.
 
 ## One mutex over the vault (D-1020-D2-9)
 
