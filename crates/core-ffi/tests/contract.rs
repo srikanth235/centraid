@@ -1011,7 +1011,10 @@ fn the_phones_four_flows_round_trip_through_call() {
         opened.handle,
         &envelope(
             12,
-            wire::request::Kind::Drain(wire::DrainRequest { deadline_ms: 0 }),
+            wire::request::Kind::Drain(wire::DrainRequest {
+                deadline_ms: 0,
+                ..wire::DrainRequest::default()
+            }),
         ),
     );
     assert_eq!(code, CENTRAID_OK, "a drain answers");
@@ -1060,6 +1063,7 @@ fn the_phones_four_flows_round_trip_through_call() {
                 direct_addrs: Vec::new(),
                 seed: None,
                 indices: Vec::new(),
+                payload: String::new(),
             }),
         ),
     );
@@ -1246,7 +1250,10 @@ fn a_locked_core_refuses_to_drain_rather_than_inventing_a_key() {
         opened.handle,
         &envelope(
             21,
-            wire::request::Kind::Drain(wire::DrainRequest { deadline_ms: 0 }),
+            wire::request::Kind::Drain(wire::DrainRequest {
+                deadline_ms: 0,
+                ..wire::DrainRequest::default()
+            }),
         ),
     );
     // `CENTRAID_OK` AND A REFUSING BODY is this ABI's shape for everything
@@ -1434,4 +1441,65 @@ fn the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault() {
     // SAFETY: the handle came from `centraid_open` and is closed once.
     unsafe { centraid_close(handle) };
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// CLAUSE 4g. The backup plane's six doors (#1080) are request kinds: each is
+/// encoded, handed to the C symbol and answered, and until the plane behind
+/// them lands the answer is a typed `NOT_YET_AVAILABLE` body on a successful
+/// call — never an empty response and never a hang. A `restore` carrying a
+/// gateway's `payload`, and a stage `begin` naming the operating system's
+/// library, are refused the same way rather than read as the old request.
+#[test]
+fn the_backup_plane_doors_are_request_kinds_and_not_yet_available() {
+    let opened = Opened::unlocked();
+    let doors = [
+        wire::request::Kind::Handoff(wire::HandoffRequest {
+            max_bytes: 8 << 20,
+            max_parts: 16,
+        }),
+        wire::request::Kind::Settle(wire::SettleRequest {
+            settled: vec![wire::Settled {
+                name: "ab".repeat(32),
+                http_status: 201,
+                ..wire::Settled::default()
+            }],
+        }),
+        wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
+            content_hash: vec![0xAB; 32],
+        }),
+        wire::request::Kind::Pins(wire::PinsRequest {}),
+        wire::request::Kind::Reconcile(wire::ReconcileRequest {}),
+        wire::request::Kind::ForgetDestination(wire::ForgetDestinationRequest {
+            gateway_id: "a-gateway".to_owned(),
+        }),
+        wire::request::Kind::Restore(wire::RestoreRequest {
+            payload: "a gateway's pairing payload".to_owned(),
+            ..wire::RestoreRequest::default()
+        }),
+        wire::request::Kind::Stage(wire::StageRequest {
+            kind: Some(wire::stage_request::Kind::Begin(wire::StageBegin {
+                media_type: "image/heic".to_owned(),
+                byte_size: 4096,
+                source: wire::StageSource::OsLibrary as i32,
+                os_ref: "library-item-1".to_owned(),
+                ..wire::StageBegin::default()
+            })),
+        }),
+    ];
+    for (id, door) in (41_u64..).zip(doors) {
+        let (code, bytes) = call(opened.handle, &envelope(id, door.clone()));
+        assert_eq!(
+            code, CENTRAID_OK,
+            "{door:?}: a refusing answer is a successful call"
+        );
+        let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
+            panic!("{door:?} is answered by an Error body, never an empty response");
+        };
+        assert_eq!(
+            error.code,
+            wire::ErrorCode::NotYetAvailable as i32,
+            "{door:?}: {}",
+            error.detail
+        );
+    }
 }

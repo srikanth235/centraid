@@ -451,6 +451,7 @@ impl Scratch {
             frame(wire::stage_request::Kind::Begin(wire::StageBegin {
                 media_type: media_type.to_owned(),
                 byte_size: bytes.len() as u64,
+                ..wire::StageBegin::default()
             }))
         else {
             panic!("begin answers begun");
