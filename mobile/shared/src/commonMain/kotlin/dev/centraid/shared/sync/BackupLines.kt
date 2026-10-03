@@ -74,7 +74,9 @@ public object BackupLines {
                 sentence = (if (whole) SharedCopy.BACKUP_LINE_DONE else SharedCopy.BACKUP_LINE_RECORDS)
                     .replace("{when}", ago(acked, nowMs)),
                 detail = counts,
-                tone = if (stale) BackupLine.Tone.TONE_ATTENTION else BackupLine.Tone.TONE_QUIET,
+                // A MACHINE THAT IS NOT THE GATEWAY answered at its address
+                // (#1080): the member is owed a look, however recent the ack.
+                tone = if (stale || untrusted(reading)) BackupLine.Tone.TONE_ATTENTION else BackupLine.Tone.TONE_QUIET,
             ),
         )
     }
@@ -88,6 +90,8 @@ public object BackupLines {
             .replace("{confirmed}", CustodyCopy.grouped(reading.contentConfirmed))
             .replace("{total}", CustodyCopy.grouped(reading.contentTotal))
     }
+
+    private fun untrusted(reading: BackupReading): Boolean = (reading.waiting[WaitReason.UNTRUSTED] ?: 0L) > 0L
 
     /** One row per reason that holds items, in [WaitReason]'s order. */
     internal fun waitingRows(reading: BackupReading): List<BackupWaitingRow> =

@@ -69,10 +69,12 @@ public class CoreDrainDoor(private val core: () -> CentraidCore?) : DrainDoor {
                     stopped = when (drained.stopped) {
                         DrainStop.DRAIN_STOP_EMPTY -> DrainAnswer.Stopped.EMPTY
                         DrainStop.DRAIN_STOP_DEADLINE -> DrainAnswer.Stopped.DEADLINE
+                        DrainStop.DRAIN_STOP_UNREACHABLE -> DrainAnswer.Stopped.UNREACHABLE
+                        DrainStop.DRAIN_STOP_UNTRUSTED -> DrainAnswer.Stopped.UNTRUSTED
                         // UNSPECIFIED IS READ AS UNREACHABLE, DELIBERATELY: the
                         // safe reading of "I do not know why it stopped" leaves
                         // the claim behind rather than ahead.
-                        else -> DrainAnswer.Stopped.UNREACHABLE
+                        DrainStop.DRAIN_STOP_UNSPECIFIED -> DrainAnswer.Stopped.UNREACHABLE
                     },
                     ackedAtMs = drained.acked_at_ms,
                     confirmedParts = drained.confirmed_parts,

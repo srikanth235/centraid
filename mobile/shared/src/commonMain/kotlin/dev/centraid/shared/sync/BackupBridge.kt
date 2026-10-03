@@ -108,7 +108,7 @@ internal class SessionBackupDoors(
     override val backingUp: StateFlow<Boolean>
         get() = session()?.drain?.backingUp ?: MutableStateFlow(false)
 
-    override suspend fun forget(gatewayId: String): Boolean? = session()?.forgetDestination(gatewayId)
+    override suspend fun forget(gatewayId: String): ForgetAnswer? = session()?.forgetDestination(gatewayId)
 
     override fun nowMs(): Long = services.clock.read().epochMillis
 }

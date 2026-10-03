@@ -877,6 +877,8 @@ class PhotoLightboxSpec : StringSpec({
             FetchOutcome.FETCH_OUTCOME_ALREADY_HELD to null,
             FetchOutcome.FETCH_OUTCOME_NOT_IN_BACKUP to SharedCopy.FETCH_NOT_IN_BACKUP,
             FetchOutcome.FETCH_OUTCOME_UNREACHABLE to SharedCopy.FETCH_UNREACHABLE,
+            FetchOutcome.FETCH_OUTCOME_UNTRUSTED to SharedCopy.FETCH_UNTRUSTED,
+            FetchOutcome.FETCH_OUTCOME_DAMAGED to SharedCopy.FETCH_DAMAGED,
             null to SharedCopy.FETCH_NO_ANSWER,
         )
         for ((outcome, line) in rows) {

@@ -83,24 +83,38 @@ public class CoreBackupDoors(private val core: () -> CentraidCore?) : UploadDoor
             FetchOutcome.FETCH_OUTCOME_LANDED -> FetchedOriginal.LANDED
             FetchOutcome.FETCH_OUTCOME_ALREADY_HELD -> FetchedOriginal.ALREADY_HELD
             FetchOutcome.FETCH_OUTCOME_NOT_IN_BACKUP -> FetchedOriginal.NOT_IN_BACKUP
-            // LANE C'S TWO OUTCOMES ARE MATCHED BY NAME, so this compiles on
-            // both sides of the merge that adds them to `phone.proto`; before
-            // it, Wire decodes either as UNSPECIFIED. UNSPECIFIED READS AS
-            // UNREACHABLE: "try again" is never a harmful remedy.
-            else -> when (fetched.outcome.name) {
-                "FETCH_OUTCOME_UNTRUSTED" -> FetchedOriginal.UNTRUSTED
-                "FETCH_OUTCOME_DAMAGED" -> FetchedOriginal.DAMAGED
-                else -> FetchedOriginal.UNREACHABLE
-            }
+            FetchOutcome.FETCH_OUTCOME_UNTRUSTED -> FetchedOriginal.UNTRUSTED
+            FetchOutcome.FETCH_OUTCOME_DAMAGED -> FetchedOriginal.DAMAGED
+            FetchOutcome.FETCH_OUTCOME_UNREACHABLE -> FetchedOriginal.UNREACHABLE
+            // UNSPECIFIED READS AS UNREACHABLE: "try again" is never a harmful remedy.
+            FetchOutcome.FETCH_OUTCOME_UNSPECIFIED -> FetchedOriginal.UNREACHABLE
         }
         return outcome to fetched.path
     }
 
-    /** `forget_destination = 28` (A5). True when forgotten; false when the core knew no such gateway. */
-    public suspend fun forget(gatewayId: String): Boolean? =
+    /**
+     * `forget_destination = 28` (A5): whether the ledger dropped the gateway,
+     * and whether the gateway confirmed this phone's token opens nothing there
+     * any more. Null for no core and every refusal.
+     */
+    public suspend fun forget(gatewayId: String): ForgetAnswer? =
         askDoor(core, Request(forget_destination = ForgetDestinationRequest(gateway_id = gatewayId)))
-            ?.forget_destination?.forgotten
+            ?.forget_destination?.let { ForgetAnswer(forgotten = it.forgotten, revoked = it.revoked) }
 }
+
+/** What forgetting a gateway came to (`ForgetDestinationResponse`). */
+public data class ForgetAnswer(
+    /** The ledger held the gateway and dropped it. False: it held no such gateway. */
+    public val forgotten: Boolean,
+    /**
+     * The gateway confirmed this phone's token opens nothing there any more,
+     * an operator's earlier revoke included. False when it could not be
+     * reached, another machine answered, or the core had no keys to name the
+     * vault with: the token then stays live there until its operator runs
+     * `centraid-gateway pairings revoke`.
+     */
+    public val revoked: Boolean,
+)
 
 /**
  * How fetching one original back by its content hash went (`FetchOutcome`),
@@ -145,14 +159,7 @@ private fun reasonOf(reason: WireWaitReason): WaitReason? = when (reason) {
     WireWaitReason.WAIT_REASON_ICLOUD -> WaitReason.ICLOUD
     WireWaitReason.WAIT_REASON_BYTES -> WaitReason.BYTES
     WireWaitReason.WAIT_REASON_WINDOW -> WaitReason.WINDOW
+    WireWaitReason.WAIT_REASON_ASK -> WaitReason.ASK
+    WireWaitReason.WAIT_REASON_UNTRUSTED -> WaitReason.UNTRUSTED
     WireWaitReason.WAIT_REASON_UNSPECIFIED -> null
-    // LANE C'S TWO REASONS (`WAIT_REASON_ASK = 7`, `WAIT_REASON_UNTRUSTED = 8`)
-    // ARE MATCHED BY NAME, so this file compiles on both sides of the merge
-    // that adds them to `phone.proto`. Before it, Wire decodes either number
-    // as UNSPECIFIED and nothing reaches here.
-    else -> when (reason.name) {
-        "WAIT_REASON_ASK" -> WaitReason.ASK
-        "WAIT_REASON_UNTRUSTED" -> WaitReason.UNTRUSTED
-        else -> null
-    }
 }

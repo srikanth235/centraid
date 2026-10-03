@@ -6,6 +6,8 @@ import centraid.core.v1.DrainResponse
 import centraid.core.v1.DrainStop
 import centraid.core.v1.Envelope
 import centraid.core.v1.ErrorCode
+import centraid.core.v1.FetchOriginalResponse
+import centraid.core.v1.FetchOutcome
 import centraid.core.v1.ForgetDestinationResponse
 import centraid.core.v1.HandoffPart as WireHandoffPart
 import centraid.core.v1.HandoffResponse
@@ -19,12 +21,12 @@ import centraid.core.v1.Request
 import centraid.core.v1.Response
 import centraid.core.v1.SettleResponse
 import centraid.core.v1.Settled
-import centraid.core.v1.StageResponse
 import centraid.core.v1.StageBegun
 import centraid.core.v1.StageHandle
+import centraid.core.v1.StageResponse
 import centraid.core.v1.StageSource
-import centraid.core.v1.Waiting
 import centraid.core.v1.WaitReason as WireWaitReason
+import centraid.core.v1.Waiting
 import dev.centraid.core.CentraidCore
 import dev.centraid.shared.shell.Staging
 import dev.centraid.shared.sync.ContentHash
@@ -34,6 +36,8 @@ import dev.centraid.shared.sync.CoreDrainDoor
 import dev.centraid.shared.sync.CoreFreeUpDoors
 import dev.centraid.shared.sync.DrainAnswer
 import dev.centraid.shared.sync.DrainInput
+import dev.centraid.shared.sync.FetchedOriginal
+import dev.centraid.shared.sync.ForgetAnswer
 import dev.centraid.shared.sync.LedgerChange
 import dev.centraid.shared.sync.ReleasableItem
 import dev.centraid.shared.sync.TransferRule
@@ -174,6 +178,8 @@ class CoreBackupDoorsSpec : StringSpec({
                                 waiting = listOf(
                                     Waiting(reason = WireWaitReason.WAIT_REASON_WIFI, count = 2),
                                     Waiting(reason = WireWaitReason.WAIT_REASON_ICLOUD, count = 1),
+                                    Waiting(reason = WireWaitReason.WAIT_REASON_ASK, count = 4),
+                                    Waiting(reason = WireWaitReason.WAIT_REASON_UNTRUSTED, count = 3),
                                     Waiting(reason = WireWaitReason.WAIT_REASON_UNSPECIFIED, count = 9),
                                 ),
                                 frozen = false,
@@ -186,7 +192,13 @@ class CoreBackupDoorsSpec : StringSpec({
             reading.lastSnapshotMs shouldBe 1_789_999_000_000L
             reading.unconfirmed shouldBe 3L
             reading.spoolBytes shouldBe 4_096L
-            reading.waiting shouldBe mapOf(WaitReason.WIFI to 2L, WaitReason.ICLOUD to 1L)
+            // LANE C'S TWO REASONS ARE READ TOO (#1080 A24, the pinned gateway).
+            reading.waiting shouldBe mapOf(
+                WaitReason.WIFI to 2L,
+                WaitReason.ICLOUD to 1L,
+                WaitReason.ASK to 4L,
+                WaitReason.UNTRUSTED to 3L,
+            )
             val destination = reading.destinations.single()
             destination.gatewayId shouldBe "gw-1"
             destination.lastSeenMs shouldBe 5L
@@ -240,7 +252,9 @@ class CoreBackupDoorsSpec : StringSpec({
                     when {
                         request.settle != null -> Envelope(response = Response(settle = SettleResponse(confirmed = 1, requeued = 1)))
                         request.reconcile != null -> Envelope(response = Response(reconcile = ReconcileResponse(confirmed = 2, reachable = false)))
-                        else -> Envelope(response = Response(forget_destination = ForgetDestinationResponse(forgotten = true)))
+                        else -> Envelope(
+                            response = Response(forget_destination = ForgetDestinationResponse(forgotten = true, revoked = true)),
+                        )
                     }
                 }
             }
@@ -250,7 +264,7 @@ class CoreBackupDoorsSpec : StringSpec({
             settled.http_status shouldBe 201
             settled.vault_id shouldBe "vlt"
             doors.reconcile() shouldBe LedgerChange(confirmed = 2, requeued = 0, reachable = false)
-            doors.forget("gw-1") shouldBe true
+            doors.forget("gw-1") shouldBe ForgetAnswer(forgotten = true, revoked = true)
             seen.last().forget_destination!!.gateway_id shouldBe "gw-1"
             val unready = CoreBackupDoors { refusing(ErrorCode.ERROR_CODE_NOT_YET_AVAILABLE) }
             unready.handoff(1, 1).shouldBeNull()
@@ -306,6 +320,48 @@ class CoreBackupDoorsSpec : StringSpec({
             derivative.tier shouldBe "thumb"
             // AN OWNED FILE IS NO LIBRARY ITEM: the edit mark is never sent with it.
             derivative.os_edited shouldBe false
+        }
+    }
+
+    "a forgotten gateway that was not told reads forgotten and not revoked" {
+        runTest {
+            CoreBackupDoors {
+                core { Envelope(response = Response(forget_destination = ForgetDestinationResponse(forgotten = true))) }
+            }.forget("gw-1") shouldBe ForgetAnswer(forgotten = true, revoked = false)
+        }
+    }
+
+    "every fetch outcome on the wire reads as its own outcome, the two lane C added included" {
+        runTest {
+            val rows = mapOf(
+                FetchOutcome.FETCH_OUTCOME_LANDED to FetchedOriginal.LANDED,
+                FetchOutcome.FETCH_OUTCOME_ALREADY_HELD to FetchedOriginal.ALREADY_HELD,
+                FetchOutcome.FETCH_OUTCOME_UNREACHABLE to FetchedOriginal.UNREACHABLE,
+                FetchOutcome.FETCH_OUTCOME_NOT_IN_BACKUP to FetchedOriginal.NOT_IN_BACKUP,
+                FetchOutcome.FETCH_OUTCOME_UNTRUSTED to FetchedOriginal.UNTRUSTED,
+                FetchOutcome.FETCH_OUTCOME_DAMAGED to FetchedOriginal.DAMAGED,
+                FetchOutcome.FETCH_OUTCOME_UNSPECIFIED to FetchedOriginal.UNREACHABLE,
+            )
+            rows.keys shouldBe FetchOutcome.entries.toSet()
+            for ((wire, outcome) in rows) {
+                CoreBackupDoors {
+                    core { Envelope(response = Response(fetch_original = FetchOriginalResponse(outcome = wire))) }
+                }.fetchOriginal(hash).shouldNotBeNull().first shouldBe outcome
+            }
+        }
+    }
+
+    "a pass that met a machine that is not the gateway says so, and an unknown stop is unreachable" {
+        runTest {
+            fun stopped(stop: DrainStop) = CoreDrainDoor {
+                core { Envelope(response = Response(drain = DrainResponse(stopped = stop))) }
+            }
+            stopped(DrainStop.DRAIN_STOP_UNTRUSTED)
+                .drain(DrainInput(0, TransferRule.WIFI_ONLY, true, false, true, false)).shouldNotBeNull()
+                .stopped shouldBe DrainAnswer.Stopped.UNTRUSTED
+            stopped(DrainStop.DRAIN_STOP_UNSPECIFIED)
+                .drain(DrainInput(0, TransferRule.WIFI_ONLY, true, false, true, false)).shouldNotBeNull()
+                .stopped shouldBe DrainAnswer.Stopped.UNREACHABLE
         }
     }
 

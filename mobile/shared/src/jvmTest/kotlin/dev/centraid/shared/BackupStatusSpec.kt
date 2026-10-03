@@ -104,6 +104,11 @@ class BackupStatusSpec : StringSpec({
         // `WAIT_REASON_UNTRUSTED = 8`), so a shell reading either sees one value.
         BackupWaitingRow.Reason.REASON_ASK.value shouldBe 7
         BackupWaitingRow.Reason.REASON_UNTRUSTED.value shouldBe 8
+        // AN IMPOSTOR AT THE GATEWAY'S ADDRESS earns a look, however recent
+        // the acknowledgement; waiting for the member's tap does not.
+        line.tone shouldBe BackupLine.Tone.TONE_ATTENTION
+        BackupLines.line(reading(confirmed = 1_203, waiting = mapOf(WaitReason.ASK to 4L)), frozen = false, nowMs = now)
+            .tone shouldBe BackupLine.Tone.TONE_QUIET
     }
 
     "everything acknowledged is backed up, quietly, at the gateway's time" {

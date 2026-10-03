@@ -15,10 +15,12 @@ import dev.centraid.shared.sync.BackupScreenFlow
 import dev.centraid.shared.sync.BackupScreenMachine
 import dev.centraid.shared.sync.BackupStep
 import dev.centraid.shared.sync.DestinationReading
+import dev.centraid.shared.sync.ForgetAnswer
 import dev.centraid.shared.sync.TransferRule
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
@@ -183,15 +185,23 @@ class BackupScreenSpec : StringSpec({
         off.model.state.include_videos shouldBe false
     }
 
-    "forgetting asks nothing, reaches only a gateway the screen draws, and says what it did" {
+    "forgetting asks nothing, reaches only a gateway the screen draws, and says whether the gateway will refuse this phone" {
         val forget = { id: String -> BackupScreenEvent(forget_destination = BackupScreenEvent.ForgetDestination(gateway_id = id)) }
         ready().on(forget("gw-1")).effects shouldBe listOf(BackupEffect.Forget("gw-1", "Home laptop"))
         ready().on(forget("gw-2")).effects shouldBe listOf(BackupEffect.Forget("gw-2", SharedCopy.BACKUP_UNNAMED))
         ready().on(forget("gw-9")).effects.shouldBeEmpty()
 
-        val forgot = BackupScreenMachine.reduce(ready(), BackupInput.Forgot("gw-1", "Home laptop", forgotten = true))
-        forgot.model.state.notice shouldBe "This phone no longer backs up to Home laptop."
-        forgot.effects shouldBe listOf(BackupEffect.Read)
+        val revoked = BackupScreenMachine.reduce(
+            ready(),
+            BackupInput.Forgot("gw-1", "Home laptop", forgotten = true, revoked = true),
+        )
+        revoked.model.state.notice shouldBe
+            "This phone no longer backs up to Home laptop. Your laptop will refuse this phone from now on."
+        revoked.effects shouldBe listOf(BackupEffect.Read)
+        // NOT TOLD: the token stays live there, so the member is told how to end it.
+        BackupScreenMachine.reduce(ready(), BackupInput.Forgot("gw-1", "Home laptop", forgotten = true, revoked = false))
+            .model.state.notice shouldBe SharedCopy.BACKUP_FORGOTTEN_NOT_REVOKED.replace("{name}", "Home laptop")
+        SharedCopy.BACKUP_FORGOTTEN_NOT_REVOKED shouldContain "centraid-gateway pairings revoke"
         BackupScreenMachine.reduce(ready(), BackupInput.Forgot("gw-1", "Home laptop", forgotten = false))
             .model.state.notice shouldBe "Centraid could not forget Home laptop. Try again."
     }
@@ -230,7 +240,8 @@ class BackupScreenSpec : StringSpec({
             testScheduler.advanceUntilIdle()
             doors.forgets shouldBe listOf("gw-1")
             doors.reads shouldBe 3
-            flow.state.value.notice shouldBe "This phone no longer backs up to Home laptop."
+            // THE DOOR'S `revoked` REACHES THE SCREEN (#1080).
+            flow.state.value.notice shouldBe SharedCopy.BACKUP_FORGOTTEN_REVOKED.replace("{name}", "Home laptop")
         }
     }
 })
@@ -265,9 +276,9 @@ private class RecordingDoors(private val reading: BackupReading) : BackupScreenD
 
     override val backingUp: StateFlow<Boolean> = MutableStateFlow(false)
 
-    override suspend fun forget(gatewayId: String): Boolean {
+    override suspend fun forget(gatewayId: String): ForgetAnswer {
         forgets += gatewayId
-        return true
+        return ForgetAnswer(forgotten = true, revoked = true)
     }
 
     override fun nowMs(): Long = 0

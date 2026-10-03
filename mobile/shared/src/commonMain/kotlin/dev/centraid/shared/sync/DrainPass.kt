@@ -169,6 +169,12 @@ public data class DrainAnswer(
         UNREACHABLE,
 
         /**
+         * The machine that answered at a gateway's address is not the gateway
+         * this phone pinned (#1080). Nothing was sent to it; nothing was lost.
+         */
+        UNTRUSTED,
+
+        /**
          * A gateway refused this phone's writes: the vault was restored onto
          * another phone, which claimed the next writer epoch (#1029 F1, #1080).
          * The shell freezes the vault read-only; nothing is deleted.

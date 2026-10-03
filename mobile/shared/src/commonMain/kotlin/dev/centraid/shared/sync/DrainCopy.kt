@@ -75,6 +75,8 @@ public object DrainCopy {
             "Still backing up — ${bytes(answer.pendingBytes)} to go. It will finish on its own."
         DrainAnswer.Stopped.UNREACHABLE ->
             "Your laptop didn't answer. Nothing was lost; we'll pick up where we left off."
+        DrainAnswer.Stopped.UNTRUSTED ->
+            "The machine that answered is not your laptop, so this phone sent it nothing. Nothing was lost."
         DrainAnswer.Stopped.MOVED ->
             "This vault moved to another phone. This phone keeps what it has, read-only."
     }
