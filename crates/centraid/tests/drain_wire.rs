@@ -253,7 +253,10 @@ fn drain(
         vault,
         file,
         Some(keyring),
-        &wire::DrainRequest { deadline_ms },
+        &wire::DrainRequest {
+            deadline_ms,
+            ..wire::DrainRequest::default()
+        },
         runtime,
     )
     .expect("a drain answers")
@@ -599,7 +602,10 @@ fn command(handle: &centraid_core::Handle, name: &str, input: &serde_json::Value
 fn drain_handle(handle: &centraid_core::Handle) -> wire::DrainResponse {
     match call(
         handle,
-        wire::request::Kind::Drain(wire::DrainRequest { deadline_ms: 0 }),
+        wire::request::Kind::Drain(wire::DrainRequest {
+            deadline_ms: 0,
+            ..wire::DrainRequest::default()
+        }),
     ) {
         wire::response::Kind::Drain(answer) => answer,
         other => panic!("a drain answered as {other:?}"),
@@ -931,6 +937,7 @@ fn write_and_drain(old: &OldVault, row: usize) -> bool {
         match old.handle.call(&wire::Request {
             kind: Some(wire::request::Kind::Drain(wire::DrainRequest {
                 deadline_ms: 0,
+                ..wire::DrainRequest::default()
             })),
         }) {
             Ok(wire::Response {

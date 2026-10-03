@@ -43,6 +43,15 @@ pub fn content_urls(vault: &Vault, request: &wire::ContentUrlRequest) -> Result<
                 &reference.owner_type,
                 &reference.owner_id,
             )?;
+            // THE STORE OR NOWHERE (#1080). Every byte this core holds is in
+            // its own content store, so a path is `STORE` and its absence is
+            // `NONE`; an item in the operating system's library arrives with
+            // the plane that stops copying the library in.
+            let source = if found.path.is_some() {
+                wire::ContentSource::Store
+            } else {
+                wire::ContentSource::None
+            };
             Ok(wire::ContentUrl {
                 content_id: found.content_id,
                 // A PATH AND NOT BYTES. See `centraid_vault::content`: the
@@ -53,6 +62,8 @@ pub fn content_urls(vault: &Vault, request: &wire::ContentUrlRequest) -> Result<
                 byte_size: found.byte_size,
                 embeddable: found.embeddable,
                 absent_reason: found.absent_reason,
+                source: source as i32,
+                os_ref: String::new(),
             })
         })
         .collect::<Result<Vec<_>>>()?;

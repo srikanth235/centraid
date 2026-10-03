@@ -167,6 +167,12 @@ fn answer(
         pending_bytes,
         stopped: stopped as i32,
         acked_at_ms,
+        // THE #1080 FIELDS ARE THE NEW PLANE'S: this pass moves the vault's
+        // own objects, which are not parts, and never asks the shell for
+        // bytes. Zero and empty until the cut-over replaces this pass.
+        confirmed_parts: 0,
+        waiting_bytes_parts: 0,
+        need_bytes: Vec::new(),
     })
 }
 
