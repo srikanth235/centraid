@@ -222,3 +222,37 @@ Rows 8.1–8.15 of [v1-handoffs.md](../docs/release/v1-handoffs.md#8-the-backups
 | `oxfmt --check mobile/iosApp/project.yml` | formatted |
 | the manifest parsed as XML, every comment checked for `--` | parses; none |
 | the commit hooks on every commit | green: `format-check`, `lint-check`, `law` (6 rules), `commit-message-format`, `estate-separation` |
+
+## Wave 3, reconciled — the native shells on lane D's seam (lane E)
+
+Lane E's second round on [#1080](https://github.com/srikanth235/centraid/issues/1080), after lane D's interim seam (`20dfdfd5`) and lane B's receipt reached the umbrella branch. Like lane E's first section, it was written with no Xcode and no Android SDK in the container, so neither shell has been compiled; every device claim is a row of [v1-handoffs.md §8](../docs/release/v1-handoffs.md#8-the-backups-native-halves-1080).
+
+### What changed
+
+| Commit | What |
+| --- | --- |
+| `16b5f798f` | The umbrella branch merged, never rebased. This receipt and `docs/decisions.md` keep the upstream text first and lane E's sections after it, byte for byte. |
+| `88a9399e0` | Both shells matched to lane D's seam, in the five places lane D found: a header's value is Wire's `value_`; leaving the app on iOS calls `enteredBackground(graceMs:onDone:)`, which forces a snapshot, not `drain(deadlineMs:)`; both Backup screens draw `notice` and `background_notice`; "Back up now" follows `back_up_now_enabled`, dimmed and disabled like the shared primary control, where the views had decided from `frozen` and `backing_up_now`; Android's rule writes, from the Backup screen and the Home header's sheet, go through one `writeTransferRule` that calls `HomeSession.ruleChanged()`. `battery_sentence` and `battery_label` needed nothing. Home's line now draws lane D's `tone`, `detail` and `accessibility_label`. |
+| `d33340545` | #1080 A10 on iOS: `UploadOrder.allowsCellular` from `HandoffPart.allows_cellular`, false when absent; each request's cellular and expensive-network flags follow it; the session allows both, so the request decides; Low Data Mode is refused on both; a changed rule cancels every task iOS holds. `BackgroundUploadTests` go from 13 to 15, the negative case among them. |
+| this section's commit | `docs/decisions.md`: R-1080-E1 struck and **superseded by R-1080-E11 (#1080 A10)**; E5, E7 and E9 brought to the reconciled behaviour. `docs/release/v1-handoffs.md`: row 8.6 rewritten, 8.1 expects 15 tests, rows 8.16–8.18 new. |
+
+Three things lane D's seam made redundant are gone, each a second owner of one job. The Backup screen set the idle timer, and its `onDisappear` let the phone lock mid-run; the core's `backlog` hook (`IosBackgroundTasks`) now owns it for the whole run. Android's sheet started the job itself as well as through `installBacklog`; it now only sends the event, once the notification grant is answered. iOS held a grace while `backing_up_now`, which ended early because the screen's state stops describing a run once the screen is dismissed; `enteredBackground` waits for a running pass inside its own grace.
+
+### Found, for the root
+
+1. **`allows_cellular` is not on the umbrella branch yet.** `grep -rn allows_cellular crates/api-proto` finds nothing. `BackgroundUploads.swift`'s Kotlin-visible extension reads `part.allows_cellular`, so the Xcode build waits on lane C's A10 field (`HandoffPart`, field 9) and the core that sets it. The XCTests do not depend on it.
+2. **A changed rule did not reach tasks iOS already held**, for up to a day. The iOS shell now cancels them (`ShellModel.setTransferRule`). The same call could live in `HomeSession.ruleChanged()` through `BackgroundUploads.cancelAll()`, lane D's files; the shell's call would then be redundant and harmless.
+3. **`SyncPass.installNotice` stays uninstalled**, so an Android nudge is an ordinary one-off rather than expedited. Installing it needs WorkManager's `SystemForegroundService` declared with a `dataSync` type for API 34, which this lane would not add without a compiler.
+
+### Verification
+
+| Command | Result |
+| --- | --- |
+| `./mobile/gradlew -p mobile :shared:jvmTest` | BUILD SUCCESSFUL: 1,085 tests in 72 suites, 0 failed, 0 skipped, lane D's narrowed `NavigationAndMountSpec` and positive `BackgroundPassLawSpec` row 3 among them |
+| `grep -rn "background(withIdentifier" mobile/iosApp/Sources` | one: `BackgroundUploads.swift:358` |
+| `grep -rn "beginBackgroundTask" mobile/iosApp/Sources` | one: `BackgroundUploads.swift:693`, in `ForegroundGrace` |
+| `grep -rn "idleTimerDisabled" mobile/iosApp/Sources mobile/shared/src/iosMain` | one: `PlatformServices.ios.kt:346`, the core's `backlog` hook |
+| `grep -rn "BackupNow.start\|BackupNow.stop" mobile/androidApp/src` | one: `CentraidApplication.kt:48`, the `installBacklog` body |
+| `grep -n "requiresExternalPower\|requiresNetworkConnectivity"` over `BackgroundPasses.swift` and `PlatformServices.ios.kt` | both `true` in both submitters (#1080 A12) |
+| `oxfmt --check` over the three Markdown files this round touched | formatted |
+| the commit hooks on every commit | green |
