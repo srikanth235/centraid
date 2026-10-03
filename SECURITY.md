@@ -53,7 +53,7 @@ That is a security property and also the shape of v0: with no client but the pho
 
 ### No third party in the path
 
-**There is no relay, no DNS service, no certificate authority and no Centraid-operated service between a phone and its gateway** ([R-1080-1](docs/decisions.md#backups-from-first-principles-1080)). The phone dials an address the pairing QR listed or a LAN browse found, and trusts exactly the certificate whose fingerprint it scanned; a proxy that terminates TLS is refused like any impostor. What the network path sees is TLS between two addresses, its timing and its volume.
+**There is no relay, no DNS service, no certificate authority and no Centraid-operated service between a phone and its gateway** ([R-1080-1](docs/decisions.md#backups-from-first-principles-1080)). The phone dials an address the pairing QR listed, its `.local` name first, and trusts exactly the certificate whose fingerprint it scanned; a proxy that terminates TLS is refused like any impostor. What the network path sees is TLS between two addresses, its timing and its volume.
 
 ### What a malicious gateway can do
 

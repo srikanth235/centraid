@@ -142,7 +142,7 @@ The member compares a **safety number** — 60 digits in 12 groups of 5 — and 
 
 ### Discovery
 
-`serve` advertises `_centraid-gateway._tcp` on the LAN, with TXT `gw` (its id) and `v=2` (`--no-mdns` turns it off). The phone browses for it in the foreground to refresh a destination's addresses; the pairing record keeps the last addresses that answered, so an upload the OS runs in the background needs no browse. **LAN first** ([R-1080-9](decisions.md#backups-from-first-principles-1080)): v1 reaches a gateway on the LAN or at any address the phone can dial directly — a VPS, a VPN name. Hole punching is not rebuilt, and nothing relays.
+`serve` advertises `_centraid-gateway._tcp` on the LAN, with TXT `gw` (its id) and `v=2` (`--no-mdns` turns it off). No shell browses for it yet ([Q-1080-D3](decisions.md#backups-from-first-principles-1080)): the pairing payload lists the gateway's `<host>.local` name first, which iOS resolves through Bonjour, so a laptop whose address changed on the same network is still reached by name, and a gateway whose name changed is paired again. The pairing record keeps the addresses the payload listed and the last one that answered, so an upload the OS runs in the background needs no browse. **LAN first** ([R-1080-9](decisions.md#backups-from-first-principles-1080)): v1 reaches a gateway on the LAN or at any address the phone can dial directly — a VPS, a VPN name. Hole punching is not rebuilt, and nothing relays.
 
 ### The data directory
 
