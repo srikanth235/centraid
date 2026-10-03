@@ -47,8 +47,8 @@ import dev.centraid.shared.shell.TransferRuleChoice
  * **"On this phone", never "synced" or "connected".** [VaultLockup.State.STATE_ONLINE]
  * says the vault is here and whole — the phone is the vault. "Connected"
  * would promise a live link this state has not checked, and "synced" claimed
- * a backup over a vault that was never paired (#1047 walk); whether a laptop
- * holds a copy is the backup line's to say, not this one's.
+ * a backup over a vault that was never paired (#1047 walk); what a gateway
+ * holds is the backup line's to say (`BackupLineRow`, #1080), not this one's.
  *
  * EXHAUSTIVE and with no `else`, deliberately: a case added to `State` must
  * fail to compile here rather than fall quietly into somebody else's sentence,

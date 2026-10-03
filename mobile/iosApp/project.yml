@@ -183,12 +183,18 @@ targets:
         # invite` prints (#1047 E5). One key, so the sentence names both;
         # Upload runs out of process and needs none.
         NSCameraUsageDescription: Centraid uses the camera to scan paper documents into Docs, and to read the square your laptop shows when you pair it.
-        # WHY CENTRAID ASKS FOR THE LOCAL NETWORK (#1047 E5). The laptop's
-        # gateway is dialled at the addresses its pairing ticket names, which
-        # are usually on the member's own Wi-Fi; iOS asks before an app reaches
-        # a device on the local network. No Bonjour: the ticket carries the
-        # addresses, so nothing is browsed and no `NSBonjourServices` is needed.
-        NSLocalNetworkUsageDescription: Centraid reaches your laptop on this network to back up your vault and to bring it back.
+        # WHY CENTRAID ASKS FOR THE LOCAL NETWORK (#1047 E5; #1080). A gateway
+        # is dialled at the addresses its pairing record keeps, which are
+        # usually on the member's own Wi-Fi; iOS asks before an app reaches a
+        # device on the local network. And the phone BROWSES for it: `serve`
+        # advertises `_centraid-gateway._tcp`, and the shell browses that type
+        # in the foreground to refresh a destination's addresses (#1080,
+        # Discovery). iOS refuses to browse a type the bundle does not list in
+        # `NSBonjourServices`, so the type is declared below. The background
+        # uploads never browse: they use the addresses the record last kept.
+        NSLocalNetworkUsageDescription: Centraid finds and reaches your laptop on this network to back up your vault and to bring it back.
+        NSBonjourServices:
+          - _centraid-gateway._tcp
         # iCloud is EXCLUDED from the replica directory in code; this is the
         # declaration that goes with it (`docs/mobile-offline.md:240-247`).
         ITSAppUsesNonExemptEncryption: false
