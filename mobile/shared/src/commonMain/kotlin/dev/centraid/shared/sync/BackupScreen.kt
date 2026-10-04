@@ -129,7 +129,11 @@ public object BackupScreenMachine {
                 title = SharedCopy.BACKUP_TITLE,
                 line = model.line,
                 destinations = model.destinations().map { row(it, model.nowMs) },
-                add_destination_label = SharedCopy.BACKUP_ADD_DESTINATION,
+                // A VAULT THAT MOVED IS NOT PAIRED FROM HERE: pairing its gateway
+                // would take the vault over with this phone's older copy and set
+                // the head over the newer phone's (#1080, the simulator edge
+                // cases). It comes back by a restore, which starts from the head.
+                add_destination_label = if (model.line.frozen) "" else SharedCopy.BACKUP_ADD_DESTINATION,
                 forget_label = SharedCopy.BACKUP_FORGET,
                 rule = model.rule.stored,
                 rule_label = SharedCopy.BACKUP_RULE_HEADING,

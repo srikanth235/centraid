@@ -152,6 +152,14 @@ class BackupScreenSpec : StringSpec({
             .background_notice shouldBe ""
     }
 
+    "a vault that moved offers no Add a laptop (#1080, the simulator edge cases)" {
+        // ON THE SIMULATOR, the frozen old phone paired its gateway from this
+        // button, took the vault over with its stale copy, and set the head
+        // over the newer phone's: a superseded phone comes back by restoring.
+        ready(read(frozen = true)).state.add_destination_label shouldBe ""
+        ready(read()).state.add_destination_label shouldBe SharedCopy.BACKUP_ADD_DESTINATION
+    }
+
     "back up now needs a gateway, a vault that has not moved, and no run already going" {
         val unpaired = ready(read(reading(destinations = emptyList())))
         unpaired.state.back_up_now_enabled shouldBe false
