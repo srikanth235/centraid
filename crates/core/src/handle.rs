@@ -1019,8 +1019,10 @@ impl Handle {
             });
         }
         let runtime = self.runtime_handle();
+        let asked = request.asked.then(|| self.plane.ask());
         let answer =
             runtime.and_then(|runtime| crate::phone::drain::run(self, keyring, request, &runtime));
+        drop(asked);
         self.draining.store(false, Ordering::SeqCst);
         answer
     }

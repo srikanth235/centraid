@@ -1524,6 +1524,27 @@ mod tests {
         );
     }
 
+    /// **WHILE THE MEMBER'S TAP RUNS, A VIDEO IS BEING PREPARED, NOT WAITING
+    /// FOR A CHARGER** (#1080, the simulator smoke): the tap lets a video
+    /// through off the charger, so the status read during it must say so. A
+    /// library video's bytes are the shell's to stream; a sealed one waits for
+    /// its window.
+    #[test]
+    fn during_the_members_tap_a_video_is_prepared_not_held_for_a_charger() {
+        let tapped = Conditions {
+            asked: true,
+            ..conditions(wire::TransferRule::WifiOnly, false)
+        };
+        assert_eq!(
+            tapped.waits_for(Kind::Original { video: true }, false, true),
+            wire::WaitReason::Bytes
+        );
+        assert_eq!(
+            tapped.waits_for(Kind::Original { video: true }, false, false),
+            wire::WaitReason::Window
+        );
+    }
+
     /// **AN ORIGINAL `MANUAL` HOLDS WAITS FOR THE TAP, NOT FOR TIME** (the
     /// audit's finding 4): no pass moves it until the member taps Back up now,
     /// so its reason is `ASK` — a video off the charger included, since the

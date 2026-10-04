@@ -7,7 +7,9 @@ import centraid.screen.v1.BackupScreenState
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.platform.BackgroundTasks
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -53,6 +55,14 @@ public object BackupScreenMachine {
             is BackupInput.Running -> step(
                 model.copy(backingUpNow = input.backingUp),
                 if (model.backingUpNow && !input.backingUp) listOf(BackupEffect.Read) else emptyList(),
+            )
+            // A RUN THAT IS GOING IS RE-READ AS IT GOES: a pass over a big
+            // library runs for minutes, and a count that stood at "0 of 47"
+            // while gigabytes reached the gateway was a screen not saying what
+            // it knew (#1080, the simulator smoke).
+            is BackupInput.Tick -> step(
+                model,
+                if (model.backingUpNow) listOf(BackupEffect.Read) else emptyList(),
             )
             // WHETHER THE GATEWAY WILL REFUSE THIS PHONE NOW is said either
             // way (#1080): a token the gateway was not told about stays live
@@ -213,6 +223,9 @@ public sealed interface BackupInput {
     /** A "Back up now" run started or ended, wherever it was asked for. */
     public data class Running(public val backingUp: Boolean) : BackupInput
 
+    /** Time passed while a run goes on ([BackupScreenFlow.PROGRESS_READ_MS]). */
+    public data object Tick : BackupInput
+
     public data class Forgot(
         public val gatewayId: String,
         public val label: String,
@@ -275,13 +288,30 @@ public class BackupScreenFlow(
     /** The model, for specs. */
     public val current: BackupModel get() = model.value
 
-    /** Follow "Back up now" runs started anywhere — this screen, a second press, an Android job. */
+    /**
+     * Follow "Back up now" runs started anywhere — this screen, a second press,
+     * an Android job — and, while one goes on, re-read every
+     * [PROGRESS_READ_MS] so its count moves as the gateway confirms.
+     */
     public fun start() {
         scope.launch { doors.backingUp.collect { reduce(BackupInput.Running(it)) } }
+        scope.launch {
+            doors.backingUp.collectLatest { running ->
+                while (running) {
+                    delay(PROGRESS_READ_MS)
+                    reduce(BackupInput.Tick)
+                }
+            }
+        }
     }
 
     public fun send(event: BackupScreenEvent) {
         scope.launch { reduce(BackupInput.View(event)) }
+    }
+
+    public companion object {
+        /** How often a running "Back up now" is re-read: a status read dials nothing, so it is cheap. */
+        public const val PROGRESS_READ_MS: Long = 2_000L
     }
 
     public suspend fun reduce(input: BackupInput) {

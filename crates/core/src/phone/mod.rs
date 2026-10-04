@@ -130,6 +130,10 @@ pub struct Plane {
     /// The most the spool may hold whatever the free space
     /// (`CoreConfig::spool_ceiling`).
     ceiling: u64,
+    /// Whether a pass the member asked for ("Back up now") is running now.
+    /// The status read draws a video it is sealing as being prepared, not as
+    /// waiting for a charger the tap already let it past ([`Plane::ask`]).
+    asked: std::sync::atomic::AtomicBool,
 }
 
 impl Plane {
@@ -140,7 +144,22 @@ impl Plane {
             vault_file: vault_file.to_path_buf(),
             spool: std::sync::Mutex::new(None),
             ceiling: centraid_vault::backup::spool::SPOOL_CEILING_BYTES,
+            asked: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    /// Mark a pass the member asked for as running until the answer drops.
+    /// One pass runs at a time (`Handle::drain`), so a flag is enough.
+    #[must_use]
+    pub fn ask(&self) -> Asked<'_> {
+        self.asked.store(true, std::sync::atomic::Ordering::SeqCst);
+        Asked(self)
+    }
+
+    /// Whether a pass the member asked for is running now.
+    #[must_use]
+    pub fn asking(&self) -> bool {
+        self.asked.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// The same plane, its spool held under `ceiling` bytes.
@@ -218,6 +237,19 @@ impl Plane {
             0_u64
         };
         Spool::budget_under(self.ceiling, free)
+    }
+}
+
+/// A pass the member asked for, running ([`Plane::ask`]). Dropping it, on
+/// any path out of the pass, is what ends it.
+#[derive(Debug)]
+pub struct Asked<'plane>(&'plane Plane);
+
+impl Drop for Asked<'_> {
+    fn drop(&mut self) {
+        self.0
+            .asked
+            .store(false, std::sync::atomic::Ordering::SeqCst);
     }
 }
 
@@ -408,6 +440,7 @@ pub(crate) fn standing(
     ledger: &Ledger,
     files: &[ContentFile],
     keys: &BackupKeys,
+    asking: bool,
 ) -> Result<Standing> {
     let confirmed = ledger.confirmed_anywhere().map_err(plane_error)?;
     let queued: BTreeMap<Name, centraid_vault::backup::ledger::Queued> = ledger
@@ -416,7 +449,13 @@ pub(crate) fn standing(
         .into_iter()
         .map(|part| (part.name, part))
         .collect();
-    let conditions = drain::Conditions::remembered(ledger)?;
+    // WHILE THE MEMBER'S TAP RUNS, its pass is the one that answers: it lets
+    // a video through off the charger (`may_prepare`), and a status that
+    // still said "waiting for a charger" would contradict the upload under it.
+    let conditions = drain::Conditions {
+        asked: asking,
+        ..drain::Conditions::remembered(ledger)?
+    };
     let unreached = drain::last_reach(ledger)?;
     let paired = !ledger.destinations().map_err(plane_error)?.is_empty();
     let mut out = Standing::default();
@@ -489,7 +528,7 @@ pub fn backup_status(
     let standing = match (vault, keys) {
         (Some(vault), Some(keys)) => {
             let files = content_files(vault).map_err(plane_error)?;
-            standing(&ledger, &files, &keys.backup)?
+            standing(&ledger, &files, &keys.backup, plane.asking())?
         }
         _ => Standing::default(),
     };
@@ -657,6 +696,22 @@ pub fn released(
     let assets =
         centraid_vault::originals::assets_for_hashes(vault, &gone.into_iter().collect::<Vec<_>>())?;
     Ok((wire::ReleasedResponse { recorded }, assets))
+}
+
+#[cfg(test)]
+mod asked_tests {
+    /// **THE TAP IS HELD FOR EXACTLY AS LONG AS ITS PASS** (#1080, the
+    /// simulator smoke): the status read follows a running "Back up now", and
+    /// a pass that ends on any path stops being one.
+    #[test]
+    fn the_members_tap_is_held_for_exactly_its_pass() {
+        let plane = super::Plane::of(std::path::Path::new("vault.db"));
+        assert!(!plane.asking(), "no pass runs on a fresh plane");
+        let asked = plane.ask();
+        assert!(plane.asking());
+        drop(asked);
+        assert!(!plane.asking(), "a pass that ended is not still asking");
+    }
 }
 
 #[cfg(test)]

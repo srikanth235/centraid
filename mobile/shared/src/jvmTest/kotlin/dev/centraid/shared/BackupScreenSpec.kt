@@ -21,6 +21,9 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
@@ -179,6 +182,37 @@ class BackupScreenSpec : StringSpec({
         BackupScreenMachine.reduce(ready(), BackupInput.Running(false)).effects.shouldBeEmpty()
     }
 
+    "a run that is going is re-read as it goes, and nothing else is" {
+        val going = BackupScreenMachine.reduce(ready(), BackupInput.Running(true)).model
+        BackupScreenMachine.reduce(going, BackupInput.Tick).effects shouldBe listOf(BackupEffect.Read)
+        BackupScreenMachine.reduce(ready(), BackupInput.Tick).effects.shouldBeEmpty()
+        // A CLOSED SCREEN reads nothing, run or no run.
+        val closed = going.on(BackupScreenEvent(dismissed = BackupScreenEvent.Dismissed())).model
+        BackupScreenMachine.reduce(closed, BackupInput.Tick).effects.shouldBeEmpty()
+    }
+
+    "the flow re-reads a running pass every interval and stops when it ends (#1080, the simulator smoke)" {
+        runTest {
+            val doors = RecordingDoors(reading(confirmed = 7))
+            val scope = CoroutineScope(coroutineContext + Job())
+            val flow = BackupScreenFlow(doors, scope)
+            flow.start()
+            flow.reduce(BackupInput.View(BackupScreenEvent(opened = BackupScreenEvent.Opened())))
+            testScheduler.runCurrent()
+            doors.reads shouldBe 1
+            doors.running.value = true
+            testScheduler.advanceTimeBy(BackupScreenFlow.PROGRESS_READ_MS * 3 + 1)
+            doors.reads shouldBe 4
+            doors.running.value = false
+            testScheduler.runCurrent()
+            // THE ENDED RUN READ ONCE MORE, AND THE TICKS STOPPED.
+            doors.reads shouldBe 5
+            testScheduler.advanceTimeBy(BackupScreenFlow.PROGRESS_READ_MS * 5)
+            doors.reads shouldBe 5
+            scope.cancel()
+        }
+    }
+
     "include videos is written as the member set it" {
         val off = ready().on(BackupScreenEvent(set_include_videos = BackupScreenEvent.SetIncludeVideos(include = false)))
         off.effects shouldBe listOf(BackupEffect.WriteIncludeVideos(false))
@@ -274,7 +308,9 @@ private class RecordingDoors(private val reading: BackupReading) : BackupScreenD
         backUps += 1
     }
 
-    override val backingUp: StateFlow<Boolean> = MutableStateFlow(false)
+    val running = MutableStateFlow(false)
+
+    override val backingUp: StateFlow<Boolean> = running
 
     override suspend fun forget(gatewayId: String): ForgetAnswer {
         forgets += gatewayId
