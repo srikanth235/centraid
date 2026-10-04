@@ -207,6 +207,19 @@ impl GatewayStore {
         }
         Ok(info)
     }
+
+    /// The vault's writer epoch at this gateway, as its head answers it — a
+    /// head or `NO_HEAD`, both carry it. A token minted below it is one
+    /// another phone's claim superseded.
+    ///
+    /// # Errors
+    /// As [`Self::info`], and a refusal by its code.
+    pub fn writer_epoch(&self) -> std::result::Result<u64, StoreError> {
+        self.runtime
+            .block_on(self.client.head_state(&self.vault))
+            .map(|state| state.epoch)
+            .map_err(store_error)
+    }
 }
 
 impl Store for GatewayStore {

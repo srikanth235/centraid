@@ -70,7 +70,7 @@ use centraid_vault::backup::naming::{BackupKeys, Name, name as part_name, names_
 use centraid_vault::backup::retention;
 use centraid_vault::backup::snapshot::{self, Manifest, Settled};
 use centraid_vault::backup::spool::Spool;
-use centraid_vault::backup::store::{self as plane_store, Store};
+use centraid_vault::backup::store::{self as plane_store, Store, StoreError};
 use centraid_vault::clock::SystemClock;
 
 use super::link::{self, GatewayStore, Reached, Unreached};
@@ -597,6 +597,33 @@ fn pass_over(
     pass: &mut Pass,
 ) -> Result<()> {
     let store = &reached.store;
+
+    // THE WRITER EPOCH, AT CONTACT (#1080, the sweep's R6). Another phone
+    // that restored the vault claimed a later epoch; this phone's token is
+    // refused `MOVED` only when it writes, and a pass with nothing to write —
+    // no snapshot due, no new file — would never learn it, and go on reading
+    // as alive while every edit made on it is stranded. The head answers the
+    // writer epoch on every read, so the pass asks it first, and freezes as a
+    // refused write would (`run`).
+    match store.writer_epoch() {
+        Ok(epoch) if epoch > reached.destination.epoch => {
+            return Err(CoreError::VaultMoved {
+                current_epoch: epoch,
+                moved_at_ms: 0,
+            });
+        }
+        Ok(_) => {}
+        Err(StoreError::Unreachable(reason)) => {
+            pass.stopped_by(&Stop::Unreachable(reason))?;
+            return Ok(());
+        }
+        Err(StoreError::Untrusted(reason)) => {
+            pass.stopped_by(&Stop::Untrusted(reason))?;
+            return Ok(());
+        }
+        Err(error) => return Err(store_error(error)),
+    }
+
     let budget = plane.budget();
     let files = handle.with_vault(|vault| content_files(vault).map_err(plane_error))?;
 

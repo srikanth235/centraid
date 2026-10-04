@@ -133,3 +133,37 @@ fn a_damaged_thumbnail_costs_a_restore_that_thumbnail_alone() {
         }
     }
 }
+
+/// **AN OLD PHONE LEARNS IT WAS SUPERSEDED AT ITS FIRST CONTACT, NOT ITS
+/// FIRST WRITE** (#1080, R6; the root's simulator repro). Another phone
+/// restored the vault and claimed the next writer epoch. The old phone's next
+/// pass has nothing to write — no snapshot due, no new file — so no `PUT` is
+/// ever refused `MOVED`; it reached the gateway and read as alive, taking
+/// edits that could only ever be stranded. The gateway's head answers the
+/// writer epoch on every read, and a pass now asks it at contact.
+#[test]
+fn an_old_phone_learns_it_moved_at_its_first_contact() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old_path = old_dir.path().join("vault.db");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    note(&old, "Before", "written before the move");
+    drain(&old, at_home());
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let restored = restore(new_dir.path(), &gateway);
+    assert_eq!(restored.vaults.len(), 1);
+    assert_eq!(gateway.writer(&vault_id()).0, 2);
+
+    // THE OLD PHONE'S NEXT PASS: nothing to write.
+    let refused = try_drain(&old, quietly()).expect_err("superseded, learned at contact");
+    assert_eq!(refused.code(), wire::ErrorCode::VaultMoved, "{refused}");
+    assert!(status(&old).frozen, "the old phone says it is frozen");
+    drop(old);
+
+    // AND A RELAUNCH OF IT KNOWS AT ONCE.
+    let old = reopen(&old_path);
+    assert!(status(&old).frozen);
+    let again = try_drain(&old, quietly()).expect_err("still superseded");
+    assert_eq!(again.code(), wire::ErrorCode::VaultMoved, "{again}");
+}
