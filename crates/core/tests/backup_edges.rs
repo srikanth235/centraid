@@ -308,3 +308,80 @@ fn a_gateway_that_goes_away_mid_question_is_an_unreachable_pass() {
     let backed = status(&phone);
     assert_eq!(backed.content_confirmed, 50);
 }
+
+/// The whole parts in a spool directory: files named by 64 hex characters.
+fn spooled(dir: &std::path::Path) -> Vec<(String, u64)> {
+    std::fs::read_dir(dir.join("vault.spool"))
+        .expect("lists the spool")
+        .map(|entry| entry.expect("an entry"))
+        .filter(|entry| entry.file_name().len() == 64)
+        .map(|entry| {
+            (
+                entry.file_name().to_string_lossy().into_owned(),
+                entry.metadata().expect("measures").len(),
+            )
+        })
+        .collect()
+}
+
+/// **A PART A CRASH LEFT IN THE SPOOL DOES NOT WAIT THERE FOREVER** (#1080,
+/// B2). A pass that was killed between confirming a part and deleting its
+/// file, or between sealing a part under its name and queuing it, leaves a
+/// whole part no queue row names. Nothing would ever move or delete it: it
+/// would read as bytes left to back up on every pass and hold the spool's
+/// room from every later one.
+#[test]
+fn a_part_a_crash_left_in_the_spool_is_swept_by_the_next_core() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let id = pair(&phone, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    let photo = bytes_of("a photograph the crash interrupted", 200_000);
+    let photo_handle = stage(&phone, owned("image/heic", &photo), &photo);
+    add_asset(&phone, &photo_handle, "photo");
+    drain(&phone, at_home());
+    assert!(spooled(dir.path()).is_empty(), "the pass emptied the spool");
+
+    // WHAT THE CRASH LEFT: a confirmed part's file, and a sealed part whose
+    // queue row never landed.
+    let confirmed = *ledger(&path)
+        .confirmed_names(&id)
+        .expect("reads")
+        .iter()
+        .next()
+        .expect("a confirmed name");
+    let spool = dir.path().join("vault.spool");
+    std::fs::write(
+        spool.join(confirmed.to_hex()),
+        bytes_of("a sealed part the crash kept", 70_000),
+    )
+    .expect("plants");
+    std::fs::write(
+        spool.join(Name::from_bytes([7; 32]).to_hex()),
+        bytes_of("a part sealed and never queued", 50_000),
+    )
+    .expect("plants");
+    drop(phone);
+
+    let phone = reopen(&path);
+    let drained = drain(&phone, quietly());
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Empty as i32,
+        "{drained:?}"
+    );
+    assert_eq!(
+        drained.pending_bytes, 0,
+        "nothing is left to send: {drained:?}"
+    );
+    assert_eq!(status(&phone).spool_bytes, 0);
+    assert!(
+        spooled(dir.path()).is_empty(),
+        "no part outlives the queue: {:?}",
+        spooled(dir.path())
+    );
+}

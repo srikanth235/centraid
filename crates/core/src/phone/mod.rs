@@ -199,11 +199,12 @@ impl Plane {
         Ledger::open(self.ledger_path()).map_err(plane_error)
     }
 
-    /// The spool, opened — and swept of a part a crash left half-written —
-    /// the first time it is asked for, and only then.
+    /// The spool, opened — and swept of a part a crash left half-written, and
+    /// of a whole part no queue row names — the first time it is asked for,
+    /// and only then.
     ///
     /// # Errors
-    /// The filesystem's refusal.
+    /// The filesystem's or the ledger's refusal.
     pub fn spool(&self) -> Result<Spool> {
         let mut held = self
             .spool
@@ -213,6 +214,21 @@ impl Plane {
             return Ok(spool.clone());
         }
         let opened = Spool::open(self.spool_dir()).map_err(plane_error)?;
+        // WHAT A CRASH LEFT BETWEEN A PART'S FILE AND ITS QUEUE ROW goes now,
+        // before anything this core runs can be halfway through writing one
+        // (`Spool::sweep_unqueued`). A part handed to the operating system is
+        // queued, so one the OS is still uploading by path stays.
+        let queued: BTreeSet<Name> = self
+            .ledger()?
+            .queued()
+            .map_err(plane_error)?
+            .into_iter()
+            .map(|part| part.name)
+            .collect();
+        let freed = opened.sweep_unqueued(&queued).map_err(plane_error)?;
+        if freed > 0 {
+            tracing::info!(freed, "the spool held parts no queue row names; they went");
+        }
         *held = Some(opened.clone());
         Ok(opened)
     }

@@ -6,7 +6,9 @@
 //! by path while the app is suspended. A part reaches its real name only by
 //! rename after an fsync, so a crash leaves a whole part or a `.partial` that
 //! [`Spool::open`] sweeps away — never a short file under a name the queue
-//! trusts.
+//! trusts. A whole part whose queue row a crash kept from landing, or whose
+//! file a crash kept from going, is swept by the opener against the queue
+//! ([`Spool::sweep_unqueued`]).
 //!
 //! ## THE BUDGET
 //!
@@ -180,6 +182,36 @@ impl Spool {
         Ok(names)
     }
 
+    /// Remove every whole part `queued` does not name, and answer the bytes
+    /// that freed.
+    ///
+    /// **A CRASH CAN LEAVE A WHOLE PART NO QUEUE ROW NAMES.** A part's file and
+    /// its queue row are two writes: a pass killed between confirming a part
+    /// and deleting its file, or between giving a sealed part its name and
+    /// queuing it, leaves a file nothing will ever move or delete. Kept, it
+    /// would read as bytes waiting to back up on every pass and hold the
+    /// spool's room from every later one. Only the opener calls this, before
+    /// anything writes: a part being queued right now has its name and not yet
+    /// its row.
+    ///
+    /// # Errors
+    /// The filesystem's refusal.
+    pub fn sweep_unqueued(&self, queued: &std::collections::BTreeSet<Name>) -> Result<u64> {
+        let mut freed = 0_u64;
+        for name in self.names()? {
+            if queued.contains(&name) {
+                continue;
+            }
+            let path = self.path(&name);
+            let len = fs::metadata(&path).map_or(0, |meta| meta.len());
+            match fs::remove_file(&path) {
+                Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error.into()),
+                _ => freed = freed.saturating_add(len),
+            }
+        }
+        Ok(freed)
+    }
+
     /// The bytes the spool holds in whole parts.
     ///
     /// # Errors
@@ -337,6 +369,25 @@ mod tests {
         Spool::open(spool.dir()).expect("reopens");
         assert!(!lost.exists(), "the sweep removed it");
         assert!(spool.contains(&name));
+    }
+
+    /// A whole part no queue row names goes; a queued one, and a part still
+    /// being written, stay.
+    #[test]
+    fn a_whole_part_no_queue_row_names_is_swept() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let spool = Spool::open(dir.path().join("s.spool")).expect("opens");
+        let (kept, stray) = (name_of("queued"), name_of("a crash kept it"));
+        spool.write(&kept, &[1; 30]).expect("writes");
+        spool.write(&stray, &[2; 70]).expect("writes");
+        let mut writing = spool.writer(&name_of("being written")).expect("begins");
+        writing.write_all(&[3; 10]).expect("streams");
+        let freed = spool
+            .sweep_unqueued(&std::collections::BTreeSet::from([kept]))
+            .expect("sweeps");
+        assert_eq!(freed, 70);
+        assert_eq!(spool.names().expect("lists"), vec![kept]);
+        writing.finish().expect("a part being written is not swept");
     }
 
     #[test]
