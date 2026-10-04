@@ -631,3 +631,83 @@ fn a_snapshot_copy_a_crash_left_goes_with_the_next_core() {
         "no copy of the vault outlives the crash"
     );
 }
+
+/// **THE PLANE'S PAGES ARE THE GATEWAY'S** (#1080, B6). The vault restates
+/// the protocol's batch sizes rather than importing them (it does not depend
+/// on the gateway's crate), so a batch of names or a page of the listing
+/// that outgrew the gateway's cap would be refused — or, for the listing,
+/// cut short, so a collection would stop at the first page.
+#[test]
+fn the_planes_batches_are_the_gateways_caps() {
+    use centraid_gateway::rules::limits::{LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_NAMES};
+    use centraid_vault::backup::store::{BUNDLE_BYTES, LIST_PAGE, NAMES_PER_CALL};
+    const {
+        assert!(NAMES_PER_CALL <= MAX_NAMES);
+        assert!(
+            LIST_PAGE == LIST_LIMIT,
+            "a full page is how the listing goes on"
+        );
+        assert!(BUNDLE_BYTES <= MAX_BUNDLE_BYTES);
+    }
+}
+
+/// **A LEDGER PAST A THOUSAND NAMES** (#1080, B6). A large library's ledger
+/// confirms tens of thousands of names; a relaunch's first pass asks the
+/// gateway about every one, a thousand at a time, and nothing is refused
+/// for its size. Here the ledger confirms 2,500 names the gateway never
+/// held, which costs a test none of a large library's hours of disk: they
+/// come back missing and are unconfirmed, the library's own names stay
+/// confirmed, and nothing is sent again. Collection keeps the ledger true
+/// too: a name retention deletes is no longer confirmed. (The 2,000-item
+/// run at nightly scale is the owner's hand-off H-5.)
+#[test]
+fn a_ledger_past_a_thousand_names_is_asked_about_a_thousand_at_a_time() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let id = pair(&phone, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    originals(&phone, "one of a small library", 20, 64);
+    drain(&phone, at_home());
+    // A SECOND HEAD DROPS THE FIRST, and what only it named is collected.
+    note(&phone, "Another", "a second head");
+    let second = drain(&phone, at_home());
+    assert!(second.acked_at_ms.is_some(), "{second:?}");
+    assert_eq!(
+        ledger(&path).confirmed_names(&id).expect("reads"),
+        gateway.held(&vault_id()),
+        "the ledger confirms what the gateway holds, and no more"
+    );
+
+    let strangers: Vec<(Name, u64)> = (0..2_500)
+        .map(|index| {
+            (
+                Name::from_bytes(
+                    *blake3::hash(format!("never held {index}").as_bytes()).as_bytes(),
+                ),
+                64,
+            )
+        })
+        .collect();
+    ledger(&path)
+        .confirm_many(&strangers, &id, 1)
+        .expect("confirms");
+    drop(phone);
+    let phone = reopen(&path);
+    let relaunched = drain(&phone, quietly());
+    assert_eq!(
+        relaunched.stopped,
+        wire::DrainStop::Empty as i32,
+        "{relaunched:?}"
+    );
+    assert_eq!(relaunched.confirmed_parts, 0, "nothing is sent again");
+    assert_eq!(
+        ledger(&path).confirmed_names(&id).expect("reads"),
+        gateway.held(&vault_id())
+    );
+    let backed = status(&phone);
+    assert_eq!((backed.content_confirmed, backed.content_total), (20, 20));
+}

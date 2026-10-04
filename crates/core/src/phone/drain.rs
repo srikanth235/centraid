@@ -881,7 +881,7 @@ fn retain(
     if decided.drop.is_empty() {
         return Ok(());
     }
-    plane_store::delete_all(store, &decided.drop).map_err(store_error)?;
+    let dropped = plane_store::delete_all(store, &decided.drop).map_err(store_error)?;
     for name in &decided.drop {
         ledger.forget_snapshot(name).map_err(plane_error)?;
     }
@@ -902,6 +902,18 @@ fn retain(
     let listed = plane_store::list_all(store).map_err(store_error)?;
     let garbage = retention::garbage(listed.iter().map(|entry| entry.name), &live);
     let deleted = plane_store::delete_all(store, &garbage).map_err(store_error)?;
+    // WHAT THE GATEWAY DELETED IS NOT HELD THERE ANY MORE, so the ledger — a
+    // cache of the gateway's truth (#1080 ruling 7) — stops confirming it now
+    // rather than at the next launch's reconcile.
+    let gone: Vec<Name> = dropped
+        .deleted
+        .iter()
+        .chain(&deleted.deleted)
+        .copied()
+        .collect();
+    ledger
+        .unconfirm_many(&gone, store.gateway_id())
+        .map_err(plane_error)?;
     tracing::info!(
         dropped = decided.drop.len(),
         collected = deleted.deleted.len(),
