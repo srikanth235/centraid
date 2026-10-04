@@ -978,3 +978,12 @@ Run in this worktree on 2026-10-03, at this commit's tree. No cargo command: the
 - **H-6 (minSdk).** Android below API 30 gets no library deleter (A20); decide whether to raise minSdk.
 - **H-7 (docs site).** `scripts/docs-site`'s backups and data chapters, and the desktop-shell leftovers from #1029 (QUALITY.md).
 - **H-8 (issue).** Reconcile the issue body to what shipped (the boxes above) and close it when the PR merges; no PR was opened by the root.
+
+### Addendum after the close
+
+The first lane E agent, stalled for hours, reported after the close with four findings from writing the deleters; its files were identical to what the relaunched agent had committed. One is fixed on this branch, three are open items:
+
+- **Fixed.** `releasable` grouped library rows by their full ref, and iOS names a Live Photo's movie `<identifier>#pairedVideo` beside the still's `<identifier>`, so a still could be counted and offered while its film was not backed up (the shell refused to delete half). The core now groups by the part before the `#`; `phone_backup`'s live photo carries the suffix and was red with the grouping reverted.
+- **Open: freed space on iOS returns later.** PhotoKit moves deleted assets to Recently Deleted for 30 days, so the "Freed {size}" notice is true only once that album is emptied; the iOS notice should say so (hand-off row 8.19 measures it).
+- **Open: the platform's error text reaches the member.** `FreeUpFlow` shows `outcome.error`, the platform's own words; the house keeps platform text for logs and shows a fixed sentence.
+- **Open: deletions made outside the app are never learned.** An original the member deletes in Photos or Files, or one deleted while the process died mid-dialog, stays releasable and counted; the core needs to learn library deletions, by comparing `local_bytes` rows with source `os` against the library each pass.
