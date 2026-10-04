@@ -7,6 +7,7 @@ import centraid.screen.v1.PhotosGridState
 import dev.centraid.shared.platform.PlatformServices
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
+import dev.centraid.shared.sync.ShelfDrain
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -152,6 +153,35 @@ public class CameraRollRunner(
     public suspend fun pass() {
         val vault = vaultId() ?: return
         if (!passing.tryLock()) return
+        walk(vault)
+    }
+
+    /**
+     * THE WALK A PASS ASKS FOR: to the end of the roll, and AFTER a walk
+     * already going rather than instead of it. "Back up now" that returned
+     * while an earlier walk was still importing would run its asked pass
+     * without what that walk brings in.
+     */
+    public suspend fun walkToEnd() {
+        val vault = vaultId() ?: return
+        passing.lock()
+        walk(vault)
+    }
+
+    /**
+     * FOLLOW THE SESSION'S PASSES (#1080, the simulator edge cases;
+     * R-1029-PH-4): the app opening, the app becoming active and "Back up now"
+     * walk the roll first ([ShelfDrain.installWalk]), and the roll is walked
+     * once now — the app has just opened, and a roll the member filled while
+     * Centraid was closed is this walk's to bring in.
+     */
+    public fun follow(drain: ShelfDrain) {
+        drain.installWalk { walkToEnd() }
+        scope.launch { walkToEnd() }
+    }
+
+    /** Passes until the roll is walked. [passing] is held on entry and released here. */
+    private suspend fun walk(vault: String) {
         var imported = 0
         try {
             repeat(MAX_PASSES) {

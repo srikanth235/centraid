@@ -11,19 +11,27 @@ import centraid.core.v1.StageSource
 import centraid.screen.v1.BackupState
 import centraid.screen.v1.MediaPermission
 import dev.centraid.core.CentraidCore
+import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.platform.FakePlatformServices
 import dev.centraid.shared.platform.MediaLibrary
 import dev.centraid.shared.platform.NetworkStatus
+import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.CameraRoll
+import dev.centraid.shared.shell.CameraRollRunner
 import dev.centraid.shared.shell.LibraryFeed
+import dev.centraid.shared.shell.Shelf
 import dev.centraid.shared.sync.ContentHash
+import dev.centraid.shared.sync.DrainAnswer
+import dev.centraid.shared.sync.DrainDoor
 import dev.centraid.shared.sync.NeededBytes
+import dev.centraid.shared.sync.ShelfDrain
 import dev.centraid.shared.sync.TransferRule
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import java.security.MessageDigest
 
@@ -118,6 +126,35 @@ class CameraRollStreamSpec : StringSpec({
 
     val still = "a still, nine bytes".encodeToByteArray()
     val movie = "a movie".encodeToByteArray()
+
+    "a runner that follows the session walks the roll now, and before Back up now's pass (#1080, R-1029-PH-4)" {
+        runTest(UnconfinedTestDispatcher()) {
+            // A PHOTOGRAPH TAKEN WHILE CENTRAID WAS CLOSED: on the simulator it
+            // was not in the vault after the app opened, nor after "Back up now".
+            val services = library(asset("A"), bytes = mapOf("A" to still, "B" to movie))
+            val core = StagingCore()
+            val asked = mutableListOf<Boolean>()
+            val drain = ShelfDrain(
+                holdings = { listOf(Shelf.Holding(vaultId = "vault-1", path = "/v", name = "v", core = core.core)) },
+                doorFor = { DrainDoor { input -> asked += input.asked; DrainAnswer(0, DrainAnswer.Stopped.EMPTY) } },
+                nowMs = { 0 },
+            )
+            val runner = CameraRollRunner(
+                services = services,
+                roll = CameraRoll(services, core = { core.core }),
+                host = ScreenHost(PhotosGridMachine),
+                scope = backgroundScope,
+                vaultId = { "vault-1" },
+            )
+            runner.follow(drain)
+            core.landed.map { it.decodeToString() } shouldBe listOf(still.decodeToString(), "thumb:A", "preview:A")
+            services.mediaLibrary.assets = listOf(asset("A"), asset("B"))
+            drain.backUpNow()
+            // B WALKED IN BEFORE THE ASKED PASS, and A was not offered again.
+            core.landed.map { it.decodeToString() }.drop(3) shouldBe listOf(movie.decodeToString(), "thumb:B", "preview:B")
+            asked shouldBe listOf(true)
+        }
+    }
 
     "a photograph streams from the library under its os_ref, commits, then stages its two derivatives" {
         runTest {

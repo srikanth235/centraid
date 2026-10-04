@@ -214,6 +214,36 @@ class ShelfDrainSpec : StringSpec({
         }
     }
 
+    "opening, becoming active and Back up now walk the camera roll before their pass (#1080, R-1029-PH-4)" {
+        runTest {
+            // ON THE SIMULATOR, a photograph added while Centraid was closed was
+            // still not in the vault after a launch and a "Back up now", and the
+            // screen said "All 63 photos and files": nothing walked the roll but
+            // "Import now", a grant, or a library change while the app was open.
+            val order = mutableListOf<String>()
+            val shelf = drain(
+                listOf(holding("a")),
+                answers = { input -> order += if (input.asked) "pass asked" else "pass"; empty },
+            )
+            shelf.installWalk { order += "walk" }
+            shelf.onSessionOpened()
+            shelf.onBecameActive()
+            shelf.backUpNow()
+            order shouldBe listOf("walk", "pass", "walk", "pass", "walk", "pass asked")
+            // NOTHING ELSE WALKS: an import's own pass would walk itself in a
+            // loop, and a window or the grace has no time for a camera roll.
+            order.clear()
+            val up = NetworkStatus.Reading(online = true, metered = false, charging = false)
+            shelf.afterCommit()
+            shelf.afterImport()
+            shelf.onConnectivity(up)
+            shelf.scheduled(60_000)
+            shelf.enteredBackground(5_000)
+            shelf.afterRestore()
+            order.filter { it == "walk" } shouldBe emptyList()
+        }
+    }
+
     "a link that went down runs nothing, and a flapping one runs once per debounce" {
         runTest {
             val clock = AtomicInteger(0)

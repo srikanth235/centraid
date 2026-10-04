@@ -35,6 +35,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  * "Asked" is `DrainRequest.asked` (#1080 A24): the member's own tap, which
  * alone lets originals through under MANUAL and a video off the charger.
  *
+ * The app opening, the app becoming active and "Back up now" first walk the
+ * camera roll to its end ([installWalk]), so what the walk brings in is in
+ * their pass.
+ *
  * ## EVERY HELD VAULT, AND THE DEADLINE IS DIVIDED
  *
  * A window backs up the device, not the screen the member left open, and a
@@ -90,6 +94,25 @@ public class ShelfDrain(
     /** True while a "Back up now" run is in progress. The Backup screen draws it. */
     public val backingUp: StateFlow<Boolean> get() = backingUpNow.asStateFlow()
 
+    /** The camera roll's walk to its end. See [installWalk]. */
+    private var walk: (suspend () -> Unit)? = null
+
+    /**
+     * THE WALK THAT BRINGS NEW PHOTOGRAPHS IN (#1080, the simulator edge cases;
+     * R-1029-PH-4).
+     *
+     * A pass backs up what the vault holds; the camera roll's walk is what puts
+     * a photograph into the vault at all. It ran only on "Import now", a grant,
+     * or a library change while the app was on screen — so a photograph taken
+     * while Centraid was closed was still not in the vault after the app opened
+     * and after "Back up now", and the line said "All 63 photos and files" over
+     * it. The runner that owns the walk installs it here
+     * (`CameraRollRunner.follow`); null until one does.
+     */
+    public fun installWalk(walk: (suspend () -> Unit)?) {
+        this.walk = walk
+    }
+
     /**
      * Run one pass over every held vault inside [deadlineMs]; `0` is "no
      * deadline" and is passed through rather than divided. A bare deadline is
@@ -105,11 +128,20 @@ public class ShelfDrain(
         }
     }
 
-    /** The session opened. */
-    public suspend fun onSessionOpened(): List<Outcome> = run(FOREGROUND_DEADLINE_MS, WakeReason.SESSION_OPENED)
+    /** The session opened: the camera roll is walked, then the pass. */
+    public suspend fun onSessionOpened(): List<Outcome> {
+        walk?.invoke()
+        return run(FOREGROUND_DEADLINE_MS, WakeReason.SESSION_OPENED)
+    }
 
-    /** The app became active. Not debounced: opening the app is worth a pass. */
-    public suspend fun onBecameActive(): List<Outcome> = run(FOREGROUND_DEADLINE_MS, WakeReason.BECAME_ACTIVE)
+    /**
+     * The app became active. Not debounced: opening the app is worth a pass,
+     * and the photographs taken while it was closed are walked in first.
+     */
+    public suspend fun onBecameActive(): List<Outcome> {
+        walk?.invoke()
+        return run(FOREGROUND_DEADLINE_MS, WakeReason.BECAME_ACTIVE)
+    }
 
     /**
      * A commit landed. **Debounced, and a dropped call is not queued**: the
@@ -174,6 +206,9 @@ public class ShelfDrain(
         if (!mine) return run.await()
         backingUpNow.value = true
         try {
+            // THE ROLL FIRST: "Back up now" means the photograph the member
+            // just took, and the asked pass is what lets its original through.
+            walk?.invoke()
             val outcomes = run(FOREGROUND_DEADLINE_MS, WakeReason.BACK_UP_NOW)
             run.complete(outcomes)
             return outcomes

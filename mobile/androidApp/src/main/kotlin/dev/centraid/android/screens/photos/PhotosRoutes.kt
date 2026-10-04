@@ -181,7 +181,12 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
             host = photos,
             scope = scope,
             vaultId = { opened.shelf.foregroundHolding()?.vaultId },
-        ).also { it.start() }
+        ).also {
+            it.start()
+            // AND THE SESSION'S PASSES WALK IT (R-1029-PH-4): opening the app
+            // and "Back up now" bring in what the member took while it was closed.
+            it.follow(opened.drain)
+        }
     }
 
     /**
