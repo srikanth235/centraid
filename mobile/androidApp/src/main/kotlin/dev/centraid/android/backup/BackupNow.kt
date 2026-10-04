@@ -76,7 +76,15 @@ public object BackupNow {
      */
     internal const val BUSY_RETRY_MS: Long = 5_000L
 
-    /** One id for the job and its notification: there is one "Back up now". */
+    /**
+     * One id for the job and its notification: there is one "Back up now".
+     *
+     * NO CLASH WITH WORKMANAGER'S JOBS, though lint's
+     * `SpecifyJobSchedulerIdRange` warns of one: from API 34, the only place
+     * this job is scheduled, WorkManager (2.10 and up) schedules in its own
+     * `JobScheduler` namespace (`androidx.work.systemjobscheduler`), so its
+     * ids never meet this one.
+     */
     internal const val JOB_ID: Int = 1080
     internal const val NOTIFICATION_ID: Int = 1080
 
@@ -107,7 +115,8 @@ public object BackupNow {
         val job = JobInfo.Builder(JOB_ID, ComponentName(context, BackupJobService::class.java))
             .setUserInitiated(true)
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-            .setEstimatedNetworkBytes(JobInfo.NETWORK_BYTES_UNKNOWN, JobInfo.NETWORK_BYTES_UNKNOWN)
+            // NETWORK_BYTES_UNKNOWN is an Int constant, and Kotlin does not widen it.
+            .setEstimatedNetworkBytes(JobInfo.NETWORK_BYTES_UNKNOWN.toLong(), JobInfo.NETWORK_BYTES_UNKNOWN.toLong())
             .build()
         return try {
             scheduler.schedule(job) == JobScheduler.RESULT_SUCCESS
@@ -153,13 +162,18 @@ public object BackupNow {
 
 /**
  * The user-initiated data transfer job (API 34 and up). See [BackupNow].
+ *
+ * NOT `@RequiresApi` ON THE CLASS: the manifest declares it for every API the
+ * app installs on, and lint refuses a component the manifest names below its
+ * floor (`NewApi`). Only [BackupNow.startJob] schedules it, from 34 up, so
+ * the guards below never refuse a job the system really started.
  */
-@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 public class BackupJobService : JobService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var running: Job? = null
 
     override fun onStartJob(params: JobParameters): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
         // THE NOTIFICATION IS OWED AT ONCE: a user-initiated job that has not
         // posted one within seconds of starting is stopped by the system.
         setNotification(
@@ -182,6 +196,7 @@ public class BackupJobService : JobService() {
      */
     override fun onStopJob(params: JobParameters): Boolean {
         running?.cancel()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
         return params.stopReason != JobParameters.STOP_REASON_USER
     }
 
