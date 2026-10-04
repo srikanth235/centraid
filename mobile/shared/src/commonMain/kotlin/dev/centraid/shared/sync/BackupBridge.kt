@@ -89,7 +89,8 @@ internal class SessionBackupDoors(
 ) : BackupScreenDoors {
     override suspend fun read(): BackupReading? = session()?.backupStatus?.refreshForeground()
 
-    override fun line(): BackupLine = session()?.backupStatus?.line?.value ?: BackupLine()
+    override val line: StateFlow<BackupLine>
+        get() = session()?.backupStatus?.line ?: MutableStateFlow(BackupLine())
 
     override suspend fun rule(): TransferRule = TransferRule.read(services.secureStore)
 

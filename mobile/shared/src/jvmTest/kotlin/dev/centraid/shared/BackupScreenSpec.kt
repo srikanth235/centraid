@@ -213,6 +213,35 @@ class BackupScreenSpec : StringSpec({
         }
     }
 
+    "an open screen re-reads when a pass it did not start moves the line, and a closed one does not" {
+        BackupScreenMachine.reduce(ready(), BackupInput.Moved).effects shouldBe listOf(BackupEffect.Read)
+        val closed = ready().on(BackupScreenEvent(dismissed = BackupScreenEvent.Dismissed())).model
+        BackupScreenMachine.reduce(closed, BackupInput.Moved).effects.shouldBeEmpty()
+    }
+
+    "the flow follows the line a pass moved while the screen is open (#1080, the simulator edge cases)" {
+        runTest {
+            // A VIDEO THE WALKER IMPORTED and a pass backed up while the screen
+            // stood open: Home read "All 60" while this screen kept "All 59".
+            val doors = RecordingDoors(reading(confirmed = 7))
+            val scope = CoroutineScope(coroutineContext + Job())
+            val flow = BackupScreenFlow(doors, scope)
+            flow.start()
+            flow.reduce(BackupInput.View(BackupScreenEvent(opened = BackupScreenEvent.Opened())))
+            testScheduler.runCurrent()
+            doors.reads shouldBe 1
+            doors.lines.value = BackupLine(confirmed = 8, total = 8, sentence = "Backed up just now.")
+            testScheduler.runCurrent()
+            doors.reads shouldBe 2
+            // CLOSED, it hears the line and reads nothing.
+            flow.reduce(BackupInput.View(BackupScreenEvent(dismissed = BackupScreenEvent.Dismissed())))
+            doors.lines.value = BackupLine(confirmed = 9, total = 9, sentence = "Backed up just now.")
+            testScheduler.runCurrent()
+            doors.reads shouldBe 2
+            scope.cancel()
+        }
+    }
+
     "include videos is written as the member set it" {
         val off = ready().on(BackupScreenEvent(set_include_videos = BackupScreenEvent.SetIncludeVideos(include = false)))
         off.effects shouldBe listOf(BackupEffect.WriteIncludeVideos(false))
@@ -292,8 +321,6 @@ private class RecordingDoors(private val reading: BackupReading) : BackupScreenD
         return reading
     }
 
-    override fun line(): BackupLine = BackupLines.line(reading, frozen = false, nowMs = 0)
-
     override suspend fun rule(): TransferRule = TransferRule.DEFAULT
 
     override suspend fun includeVideos(): Boolean = videos.lastOrNull() ?: true
@@ -311,6 +338,10 @@ private class RecordingDoors(private val reading: BackupReading) : BackupScreenD
     val running = MutableStateFlow(false)
 
     override val backingUp: StateFlow<Boolean> = running
+
+    val lines = MutableStateFlow(BackupLines.line(reading, frozen = false, nowMs = 0))
+
+    override val line: StateFlow<BackupLine> = lines
 
     override suspend fun forget(gatewayId: String): ForgetAnswer {
         forgets += gatewayId

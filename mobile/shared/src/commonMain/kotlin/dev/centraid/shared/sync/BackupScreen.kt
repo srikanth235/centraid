@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -64,6 +65,12 @@ public object BackupScreenMachine {
                 model,
                 if (model.backingUpNow) listOf(BackupEffect.Read) else emptyList(),
             )
+            // A PASS THIS SCREEN DID NOT START IS RE-READ TOO: the walker
+            // imports a video while the screen stands open, a pass backs it
+            // up, and Home's line moves; a screen that stayed at "All 59"
+            // while Home said "All 60" was telling the member the new video
+            // was not theirs to count (#1080, the simulator edge cases).
+            is BackupInput.Moved -> step(model, listOf(BackupEffect.Read))
             // WHETHER THE GATEWAY WILL REFUSE THIS PHONE NOW is said either
             // way (#1080): a token the gateway was not told about stays live
             // there until its operator revokes it.
@@ -226,6 +233,9 @@ public sealed interface BackupInput {
     /** Time passed while a run goes on ([BackupScreenFlow.PROGRESS_READ_MS]). */
     public data object Tick : BackupInput
 
+    /** A pass this screen did not start moved the store's line. */
+    public data object Moved : BackupInput
+
     public data class Forgot(
         public val gatewayId: String,
         public val label: String,
@@ -253,8 +263,8 @@ public interface BackupScreenDoors {
     /** Re-read the foreground vault's status; null when there is no core. */
     public suspend fun read(): BackupReading?
 
-    /** The line as the store last drew it. */
-    public fun line(): BackupLine
+    /** The line as the store draws it, after every pass on this phone. */
+    public val line: StateFlow<BackupLine>
 
     public suspend fun rule(): TransferRule
 
@@ -291,10 +301,13 @@ public class BackupScreenFlow(
     /**
      * Follow "Back up now" runs started anywhere — this screen, a second press,
      * an Android job — and, while one goes on, re-read every
-     * [PROGRESS_READ_MS] so its count moves as the gateway confirms.
+     * [PROGRESS_READ_MS] so its count moves as the gateway confirms. And follow
+     * the store's line, which every pass on this phone moves: the line's first
+     * value is the one an open reads anyway, so it is skipped.
      */
     public fun start() {
         scope.launch { doors.backingUp.collect { reduce(BackupInput.Running(it)) } }
+        scope.launch { doors.line.drop(1).collect { reduce(BackupInput.Moved) } }
         scope.launch {
             doors.backingUp.collectLatest { running ->
                 while (running) {
@@ -331,7 +344,7 @@ public class BackupScreenFlow(
     private suspend fun run(effect: BackupEffect): BackupInput? = when (effect) {
         BackupEffect.Read -> BackupInput.Read(
             reading = doors.read(),
-            line = doors.line(),
+            line = doors.line.value,
             rule = doors.rule(),
             includeVideos = doors.includeVideos(),
             registration = doors.registration(),
