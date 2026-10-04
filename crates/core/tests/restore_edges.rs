@@ -380,6 +380,107 @@ fn a_gateway_that_dies_mid_fetch_is_restored_from_next_time() {
     assert_eq!(gateway.writer(&vault_id()).0, 2, "one claim");
 }
 
+/// **A RESTORE KILLED AFTER ITS CLAIM, BEFORE IT KEPT THE VAULT, IS FINISHED
+/// BY THE NEXT ONE** (#1080, R3). The claim landed and the ledger holds the
+/// token it answered, but the phone died before the vault was named
+/// `vault.db`. The next restore lays the vault down again over what was left
+/// and claims once more, since nothing tells it the first claim's ledger was
+/// finished; the half-kept ledger does not survive into the vault it keeps.
+#[test]
+fn a_restore_killed_after_its_claim_is_finished_by_the_next_one() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old_path = old_dir.path().join("vault.db");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    note(&old, "Before", "written before the phone was lost");
+    drain(&old, at_home());
+
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let first = restore(new_dir.path(), &gateway);
+    assert_eq!(first.vaults.len(), 1, "{first:?}");
+    assert_eq!(gateway.writer(&vault_id()).0, 2);
+    // KILLED BEFORE ITS LAST STEP: what adopt() leaves before the rename.
+    let kept = PathBuf::from(&first.vaults[0].path);
+    std::fs::rename(&kept, kept.with_file_name("vault.db.restoring")).expect("renames");
+
+    let again = restore(new_dir.path(), &gateway);
+    assert_eq!(again.vaults.len(), 1, "the vault comes back: {again:?}");
+    assert_eq!(PathBuf::from(&again.vaults[0].path), kept);
+    assert_eq!(gateway.writer(&vault_id()).0, 3, "claimed once more");
+    assert_eq!(rows(&kept), rows(&old_path), "row for row");
+    let refused = try_drain(&old, quietly()).expect_err("the old phone is fenced");
+    assert_eq!(refused.code(), wire::ErrorCode::VaultMoved, "{refused}");
+    let phone = reopen(&kept);
+    note(&phone, "After", "written on the restored phone");
+    let next = drain(&phone, at_home());
+    assert!(next.acked_at_ms.is_some(), "it backs up: {next:?}");
+}
+
+/// **A GATEWAY THAT DIES AFTER THE CLAIM LEAVES THE RESTORED VAULT** (#1080,
+/// R3). The claim landed, so the old phone is fenced; the vault was checked
+/// before it, so it is kept, and the grid the gateway took with it is fetched
+/// on demand. Neither phone is left without the vault, and once the gateway
+/// is back the restored phone backs up at the epoch it claimed — no second
+/// claim is spent.
+#[test]
+fn a_gateway_that_dies_after_the_claim_leaves_the_restored_vault() {
+    let gateway = gateway();
+    let relay = Relay::to(gateway.spawned.addr);
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old_path = old_dir.path().join("vault.db");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    let mut thumbs = Vec::new();
+    for index in 0..12 {
+        let photo = bytes_of(&format!("photograph {index}"), 20_000);
+        let staged = stage(&old, owned("image/heic", &photo), &photo);
+        let thumb = bytes_of(&format!("thumbnail {index}"), 30_000);
+        thumbs.push(stage(&old, thumb_of(&staged, &thumb), &thumb).content_hash);
+        add_asset(&old, &staged, "photo");
+    }
+    drain(&old, at_home());
+
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let runtime = runtime();
+    let restored = centraid_core::phone::restore::run_observed(
+        &new_dir.path().join("custody.db"),
+        &wire::RestoreRequest {
+            phrase: WORDS.to_owned(),
+            payload: gateway.payload_at(relay.addr),
+            ..wire::RestoreRequest::default()
+        },
+        runtime.handle(),
+        // THE GATEWAY GOES once the claim's answer is through, before the
+        // grid's 360 KB.
+        &mut |_| relay.cut_after_answers(8 * 1024),
+    )
+    .unwrap_or_else(|error| panic!("the claim landed and the vault is kept: {error}"));
+    assert_eq!(restored.vaults.len(), 1, "{restored:?}");
+    assert_eq!(gateway.writer(&vault_id()).0, 2, "one claim");
+    let path = PathBuf::from(&restored.vaults[0].path);
+    assert_eq!(rows(&path), rows(&old_path), "row for row");
+    let bytes = centraid_blobs::ByteStore::open(path.with_extension("bytes")).expect("opens");
+    let landed = thumbs
+        .iter()
+        .filter(|hash| {
+            bytes
+                .read(centraid_blobs::ContentHash::parse_hex(hash).expect("hex"))
+                .is_ok()
+        })
+        .count();
+    assert!(landed < thumbs.len(), "the gateway went mid-grid");
+    let refused = try_drain(&old, quietly()).expect_err("the old phone is fenced");
+    assert_eq!(refused.code(), wire::ErrorCode::VaultMoved, "{refused}");
+
+    relay.mend();
+    let phone = reopen(&path);
+    note(&phone, "After", "written on the restored phone");
+    let next = drain(&phone, at_home());
+    assert!(next.acked_at_ms.is_some(), "it backs up: {next:?}");
+    assert_eq!(gateway.writer(&vault_id()).0, 2, "at the epoch it claimed");
+}
+
 /// **TWO PHONES RESTORING ONE VAULT AT ONCE END WITH ONE WRITER** (#1080,
 /// R4). Each checks the head and claims it; whichever claims last is the
 /// writer, and the other's first pass is refused `MOVED` and freezes, saying
