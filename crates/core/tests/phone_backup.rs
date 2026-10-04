@@ -621,6 +621,14 @@ fn a_library_item_larger_than_the_spool_backs_up_a_window_at_a_time() {
             answers.len() < 8,
             "two windows take a few passes: {answers:?}"
         );
+        // WHAT THE PASS ASKED FOR WAITS FOR THE SHELL'S BYTES (#1080, B9).
+        let waits = status(&phone);
+        assert_eq!(
+            waiting(&waits, wire::WaitReason::Bytes),
+            1,
+            "{:?}",
+            waits.waiting
+        );
         for need in &answer.need_bytes {
             assert_eq!(need.os_ref, "lib-film");
             assert_eq!(hex::encode(&need.content_hash), staged.content_hash);

@@ -618,6 +618,21 @@ fn the_spool_never_holds_more_than_its_ceiling() {
         spool_bytes(dir.path())
     );
     assert!(spool_bytes(dir.path()) > 0, "what fits was sealed");
+    // WHAT WAITS, AND FOR WHAT: what was sealed waits for the Wi-Fi the rule
+    // keeps originals to; what found no room waits for time, a later window
+    // once the spool has room. These are the core's own bytes: `BYTES` is a
+    // library item the shell has not streamed.
+    let sealed = spooled(dir.path()).len() as u64;
+    let waits = status(&phone);
+    assert_eq!(
+        (
+            waiting(&waits, wire::WaitReason::Wifi),
+            waiting(&waits, wire::WaitReason::Window)
+        ),
+        (sealed, 4 - sealed),
+        "{:?}",
+        waits.waiting
+    );
 
     let home = drain(&phone, quietly());
     assert_eq!(home.stopped, wire::DrainStop::Empty as i32, "{home:?}");
