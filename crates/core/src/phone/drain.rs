@@ -105,6 +105,9 @@ const EXCLUDE_VIDEOS_KEY: &str = "pass.exclude_videos";
 const METERED_KEY: &str = "pass.metered";
 const CHARGING_KEY: &str = "pass.charging";
 const REACHABLE_KEY: &str = "pass.reachable";
+/// A snapshot the shell asked for that no pass has taken yet: the app left
+/// the screen while the gateway was out of reach. See [`snapshot_owed`].
+const SNAPSHOT_OWED_KEY: &str = "pass.snapshot_owed";
 
 // ─── the rule ───────────────────────────────────────────────────────────────
 
@@ -476,6 +479,11 @@ pub fn run(
     let plane = handle.plane();
     let ledger = plane.ledger()?;
     conditions.remember(&ledger)?;
+    if conditions.snapshot {
+        ledger
+            .set_meta(SNAPSHOT_OWED_KEY, "1")
+            .map_err(plane_error)?;
+    }
     let spool = plane.spool()?;
     if let Some((_, epoch)) = super::moved(&ledger)? {
         return Err(CoreError::VaultMoved {
@@ -646,8 +654,11 @@ fn pass_over(
 
     // 1. THE RECORDS, when the link may carry them.
     if conditions.may_move(Kind::Records) {
-        if snapshot_due(ledger, store.gateway_id(), conditions.snapshot)? {
+        if snapshot_due(ledger, store.gateway_id(), snapshot_owed(ledger)?)? {
             take_snapshot(handle, keyring, plane, ledger, spool, store, budget)?;
+            ledger
+                .set_meta(SNAPSHOT_OWED_KEY, "0")
+                .map_err(plane_error)?;
         }
         let moved =
             mover::move_queue_where(ledger, spool, store, deadline, &SystemClock, &|part| {
@@ -722,8 +733,21 @@ fn names_of_snapshot(snapshot: &LedgerSnapshot) -> Result<BTreeSet<Name>> {
     Ok(names)
 }
 
-/// Whether a snapshot is due. One the shell asked for (`wants_snapshot`)
-/// always is; otherwise
+/// **A SNAPSHOT THE SHELL ASKED FOR IS OWED UNTIL ONE IS TAKEN** (#1080, the
+/// Android emulator smoke). `wants_snapshot` arrives on the pass the app
+/// leaving the screen runs, and a pass that reaches no gateway takes nothing;
+/// the next pass is a background window's, which asks for none. The request
+/// is kept in the ledger by [`run`] and spent here, so the window that next
+/// reaches the gateway takes it — not the hour after the last head.
+fn snapshot_owed(ledger: &Ledger) -> Result<bool> {
+    Ok(ledger
+        .meta(SNAPSHOT_OWED_KEY)
+        .map_err(plane_error)?
+        .is_some_and(|text| text == "1"))
+}
+
+/// Whether a snapshot is due. One the shell asked for (`wants_snapshot`,
+/// kept until taken: [`snapshot_owed`]) always is; otherwise
 /// one is due an hour after the newest a head named, and not while a younger
 /// one is still on its way whole — every part of it queued or held; and one
 /// is due at once at a gateway this phone has set no head at.

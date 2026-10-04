@@ -375,6 +375,52 @@ fn records_written_after_the_last_snapshot_wait_for_the_next() {
     assert_eq!(headed(&path), Some(3));
 }
 
+/// **A SNAPSHOT ASKED FOR WHILE THE GATEWAY IS AWAY IS TAKEN WHEN IT IS
+/// BACK** (#1080, the Android emulator smoke). The app leaving the screen asks
+/// for a snapshot; with the laptop asleep that pass reaches nothing and takes
+/// none. The next pass is the periodic worker's, which asks for none — and it
+/// used to take none, so a note written just before leaving waited for the
+/// hour after the last head while passes reached the gateway every window.
+#[test]
+fn a_snapshot_asked_for_while_the_gateway_sleeps_is_taken_when_it_wakes() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    let headed = |path: &Path| head_manifest(path).1.census.get("knowledge_note").copied();
+    run(
+        &phone,
+        "knowledge.create_note",
+        &json!({ "title": "First", "body_text": "before the head", "format": "plain" }),
+        "first",
+    );
+    drain(&phone, at_home());
+    assert_eq!(headed(&path), Some(1));
+
+    // A NOTE, THEN THE APP LEAVES THE SCREEN WITH THE LAPTOP ASLEEP.
+    run(
+        &phone,
+        "knowledge.create_note",
+        &json!({ "title": "Second", "body_text": "written before leaving", "format": "plain" }),
+        "second",
+    );
+    gateway.cable().cut();
+    let away = drain(&phone, at_home());
+    assert_eq!(away.stopped, wire::DrainStop::Unreachable as i32, "{away:?}");
+    assert_eq!(headed(&path), Some(1));
+
+    // AWAKE: THE WORKER'S PASS, WHICH ASKS FOR NO SNAPSHOT, TAKES THE OWED ONE.
+    let _awake = gateway.restart();
+    let window = drain(&phone, quietly());
+    assert!(window.acked_at_ms.is_some(), "the owed snapshot: {window:?}");
+    assert_eq!(headed(&path), Some(2), "a restore now brings back both notes");
+
+    // OWED ONCE: the next window is an ordinary one again.
+    let next = drain(&phone, quietly());
+    assert!(next.acked_at_ms.is_none(), "no second snapshot: {next:?}");
+}
+
 /// **A SNAPSHOT TAKEN WHILE THE APPS WRITE IS ONE MOMENT** (#1080, S3). A
 /// writer commits notes as fast as it can while passes snapshot; whatever
 /// head a restore brings back opens, passes `integrity_check` and
