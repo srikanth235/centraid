@@ -711,3 +711,49 @@ fn a_ledger_past_a_thousand_names_is_asked_about_a_thousand_at_a_time() {
     let backed = status(&phone);
     assert_eq!((backed.content_confirmed, backed.content_total), (20, 20));
 }
+
+/// **A GATEWAY FORGOTTEN WHILE A PASS RUNS** (#1080, B10). The member
+/// forgets it from the Backup screen during Back up now: the pass ends with
+/// an answer, not an internal error, and the ledger keeps nothing about the
+/// forgotten gateway — no row, no acknowledgement — so nothing it confirmed
+/// counts afterwards.
+#[test]
+fn a_gateway_forgotten_mid_pass_ends_the_pass_and_keeps_nothing() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = std::sync::Arc::new(phone(dir.path()));
+    let id = pair(&phone, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    drain(&phone, at_home());
+    originals(
+        &phone,
+        "a photograph moving when its gateway is forgotten",
+        120,
+        2_048,
+    );
+    let running = std::sync::Arc::clone(&phone);
+    let pass = std::thread::spawn(move || try_drain(&running, quietly()));
+    while ledger(&path).confirmed_names(&id).expect("reads").len() < 30 && !pass.is_finished() {
+        std::thread::yield_now();
+    }
+    assert!(forget(&phone, &id).forgotten);
+    let answered = pass.join().expect("the pass thread");
+    assert!(
+        answered.as_ref().is_ok_and(|drained| drained.stopped
+            == wire::DrainStop::Unreachable as i32
+            || drained.stopped == wire::DrainStop::Empty as i32),
+        "the pass answers: {answered:?}"
+    );
+    let book = ledger(&path);
+    assert!(book.destinations().expect("reads").is_empty());
+    assert!(book.confirmed_names(&id).expect("reads").is_empty());
+    let after = status(&phone);
+    assert!(after.destinations.is_empty());
+    assert_eq!(
+        after.content_confirmed, 0,
+        "nothing a forgotten gateway held counts"
+    );
+}

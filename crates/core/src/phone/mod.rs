@@ -389,13 +389,18 @@ pub fn pins(plane: &Plane) -> Result<wire::PinsResponse> {
 /// row and every acknowledgement it gave leave the ledger, so what it held is
 /// prepared again for the gateways left; what it stores is left as it is.
 ///
-/// **First it revokes this phone's token there, best-effort** (#1080, the
+/// **It also revokes this phone's token there, best-effort** (#1080, the
 /// audit's finding 2): a forgotten gateway that still honoured the token would
 /// keep answering anyone who copied the ledger. Any answer from the pinned
 /// gateway that the token opens nothing — the revoke, or `UNAUTHORIZED`
 /// because its operator already revoked it — is `revoked`; an unreachable
 /// gateway, a machine that is not the pinned one, or a core with no vault keys
 /// to name the vault with is not, and the row goes anyway.
+///
+/// **The row goes before the token is revoked**, with the token read first: a
+/// pass running meanwhile is refused only once the gateway forgot the token,
+/// and by then finds its gateway forgotten here too, which it answers as a
+/// pass with nothing paired (`drain::run`) rather than as a refusal.
 ///
 /// # Errors
 /// The ledger's refusal.
@@ -412,10 +417,10 @@ pub fn forget_destination(
     else {
         return Ok(wire::ForgetDestinationResponse::default());
     };
-    let revoked = vault.is_some_and(|vault| revoke(&destination, vault, runtime));
     ledger
         .remove_destination(&request.gateway_id)
         .map_err(plane_error)?;
+    let revoked = vault.is_some_and(|vault| revoke(&destination, vault, runtime));
     Ok(wire::ForgetDestinationResponse {
         forgotten: true,
         revoked,

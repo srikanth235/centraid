@@ -553,6 +553,22 @@ pub fn run(
             pass.stopped = wire::DrainStop::Unreachable;
             answer(&spool, pass)
         }
+        // THE GATEWAY WAS FORGOTTEN UNDER THE PASS (`forget_destination`
+        // from the Backup screen while Back up now runs): its token is
+        // revoked and its row gone, so whatever the pass asked of it next was
+        // refused or had nowhere in the ledger to land. That is a pass with
+        // nothing paired left to reach, answered as one, not an error.
+        Err(_)
+            if ledger
+                .destination(&reached.destination.gateway_id)
+                .map_err(plane_error)?
+                .is_none() =>
+        {
+            tracing::info!("the gateway this pass reached was forgotten under it");
+            handle.plan_library(std::mem::take(&mut pass.planned));
+            pass.stopped = wire::DrainStop::Unreachable;
+            answer(&spool, pass)
+        }
         Err(CoreError::VaultMoved { current_epoch, .. }) => {
             // FROZEN, AND REMEMBERED: the ledger keeps the refusal, so status
             // draws the phone read-only and every pass refuses at once.
