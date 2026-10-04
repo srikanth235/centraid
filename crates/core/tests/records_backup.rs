@@ -407,14 +407,25 @@ fn a_snapshot_asked_for_while_the_gateway_sleeps_is_taken_when_it_wakes() {
     );
     gateway.cable().cut();
     let away = drain(&phone, at_home());
-    assert_eq!(away.stopped, wire::DrainStop::Unreachable as i32, "{away:?}");
+    assert_eq!(
+        away.stopped,
+        wire::DrainStop::Unreachable as i32,
+        "{away:?}"
+    );
     assert_eq!(headed(&path), Some(1));
 
     // AWAKE: THE WORKER'S PASS, WHICH ASKS FOR NO SNAPSHOT, TAKES THE OWED ONE.
     let _awake = gateway.restart();
     let window = drain(&phone, quietly());
-    assert!(window.acked_at_ms.is_some(), "the owed snapshot: {window:?}");
-    assert_eq!(headed(&path), Some(2), "a restore now brings back both notes");
+    assert!(
+        window.acked_at_ms.is_some(),
+        "the owed snapshot: {window:?}"
+    );
+    assert_eq!(
+        headed(&path),
+        Some(2),
+        "a restore now brings back both notes"
+    );
 
     // OWED ONCE: the next window is an ordinary one again.
     let next = drain(&phone, quietly());
