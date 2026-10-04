@@ -1140,7 +1140,11 @@ fn seal_store_file(
                 .map_err(|error| invariant("seek", &error))?;
             continue;
         }
-        if Instant::now() >= deadline || *held_bytes >= budget {
+        // THE SPOOL NEVER HOLDS MORE THAN ITS BUDGET: a part that would pass
+        // it waits for the room the mover frees (`Spool`'s "admits").
+        if Instant::now() >= deadline
+            || !centraid_vault::backup::spool::admits(*held_bytes, len, budget)
+        {
             break;
         }
         let name = part_name(keys, &file.h, index);

@@ -13,10 +13,12 @@
 //! ## THE BUDGET
 //!
 //! The spool holds at most [`Spool::budget`] bytes: 2 GiB, or a tenth of the
-//! free space, whichever is smaller. Preparing stops when [`Spool::room`] says
-//! no and resumes once moving has drained it, so a backlog never fills the
-//! phone. Free space is the caller's to measure: the plane has no platform
-//! call for it.
+//! free space, whichever is smaller. A part is sealed into it only when it
+//! fits what is left ([`admits`]), and preparing resumes once moving has
+//! drained it, so a backlog never fills the phone. One part larger than the
+//! whole budget is sealed only into an empty spool, alone: it still backs up
+//! a part at a time rather than never. Free space is the caller's to measure:
+//! the plane has no platform call for it.
 //!
 //! **The budget bounds what waits, never what can back up.** A file larger
 //! than it is sealed a window of parts at a time, each window moved before
@@ -32,6 +34,30 @@ use super::naming::Name;
 
 /// The spool's ceiling, whatever the free space.
 pub const SPOOL_CEILING_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+/// The most a part of `plaintext_len` bytes seals to: its header, a nonce, a
+/// length and a tag for every chunk, and what zstd may add to a compressed
+/// part that would not compress.
+#[must_use]
+pub fn sealed_bound(plaintext_len: u64) -> u64 {
+    use centraid_media::sealed::{CHUNK_BYTES, CHUNK_FRAME_BYTES, HEADER_BYTES, TAG_BYTES};
+    let chunks = plaintext_len / CHUNK_BYTES as u64 + 1;
+    plaintext_len
+        .saturating_add(plaintext_len >> 8)
+        .saturating_add(64)
+        .saturating_add(HEADER_BYTES as u64)
+        .saturating_add(chunks.saturating_mul((CHUNK_FRAME_BYTES + TAG_BYTES) as u64))
+}
+
+/// Whether a part of `plaintext_len` bytes may be sealed into a spool that
+/// holds `held` sealed bytes under `budget`: when it fits, or when the spool
+/// is empty and the part is larger than the whole budget, alone (the module
+/// header's "a part at a time rather than never"). A budget of nothing — a
+/// volume that would not say how much is free — admits nothing.
+#[must_use]
+pub fn admits(held: u64, plaintext_len: u64, budget: u64) -> bool {
+    budget > 0 && (held == 0 || held.saturating_add(sealed_bound(plaintext_len)) <= budget)
+}
 
 const PARTIAL: &str = "partial";
 
@@ -395,6 +421,20 @@ mod tests {
         assert_eq!(freed, 70);
         assert_eq!(spool.names().expect("lists"), vec![kept]);
         writing.finish().expect("a part being written is not swept");
+    }
+
+    /// A part joins the spool when it fits; one larger than the whole budget
+    /// goes alone into an empty spool; a budget of nothing takes nothing.
+    #[test]
+    fn a_part_is_admitted_when_it_fits_or_goes_alone() {
+        let part = 400 * 1024;
+        assert!(admits(0, part, 1 << 20));
+        assert!(admits(sealed_bound(part), part, 1 << 20));
+        assert!(!admits(2 * sealed_bound(part), part, 1 << 20));
+        assert!(admits(0, 64 << 20, 1 << 20), "alone, into an empty spool");
+        assert!(!admits(1, 64 << 20, 1 << 20));
+        assert!(!admits(0, 1, 0), "a budget of nothing takes nothing");
+        assert!(sealed_bound(0) > 0 && sealed_bound(part) > part);
     }
 
     #[test]

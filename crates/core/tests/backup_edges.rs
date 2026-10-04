@@ -561,3 +561,44 @@ fn a_status_read_while_a_pass_runs_always_answers() {
     assert_eq!(held, ledger(&path).confirmed_names(&id).expect("reads"));
     assert!(ledger(&path).queued().expect("reads").is_empty());
 }
+
+/// The sealed bytes the spool holds: its whole parts.
+fn spool_bytes(dir: &std::path::Path) -> u64 {
+    spooled(dir).iter().map(|(_, len)| len).sum()
+}
+
+/// **THE SPOOL NEVER HOLDS MORE THAN ITS CEILING, AND PROGRESS STILL HAPPENS
+/// A WINDOW AT A TIME** (#1080, B9). On a metered link under Wi-Fi only, a
+/// pass seals what fits and moves no original; what does not fit waits for
+/// the room, and a pass at home moves everything, a window at a time.
+#[test]
+fn the_spool_never_holds_more_than_its_ceiling() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let ceiling = 1_u64 << 20;
+    let phone = phone_with(dir.path(), |config| config.with_spool_ceiling(ceiling));
+    pair(&phone, &gateway);
+    drain(&phone, at_home());
+    originals(&phone, "a photograph a third of the spool", 4, 400 * 1024);
+
+    let metered = drain(
+        &phone,
+        wire::DrainRequest {
+            metered: true,
+            ..quietly()
+        },
+    );
+    assert_eq!(metered.confirmed_parts, 0, "{metered:?}");
+    assert!(
+        spool_bytes(dir.path()) <= ceiling,
+        "{} bytes spooled under a ceiling of {ceiling}",
+        spool_bytes(dir.path())
+    );
+    assert!(spool_bytes(dir.path()) > 0, "what fits was sealed");
+
+    let home = drain(&phone, quietly());
+    assert_eq!(home.stopped, wire::DrainStop::Empty as i32, "{home:?}");
+    let backed = status(&phone);
+    assert_eq!((backed.content_confirmed, backed.content_total), (4, 4));
+    assert_eq!(spool_bytes(dir.path()), 0);
+}
