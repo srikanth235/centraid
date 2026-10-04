@@ -15,6 +15,7 @@
 //! | [`a_head_set_between_the_check_and_the_claim_is_checked_before_it_is_claimed`] | #1047 L1 on the new plane: the claim names the head it checked, and a head the old phone set in that window is laid down and checked first |
 //! | [`pairing_a_gateway_that_holds_the_vault_takes_it_over`] | `VAULT_KNOWN` at pairing is a takeover by claim, and the phone it supersedes freezes |
 //! | [`a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_damaged`] | a flipped bit in the gateway's copy is `FETCH_OUTCOME_DAMAGED` and lands nothing; another machine at the gateway's address is `FETCH_OUTCOME_UNTRUSTED`, a pass that stops `DRAIN_STOP_UNTRUSTED`, and a status that waits `WAIT_REASON_UNTRUSTED` |
+//! | [`a_library_item_larger_than_the_spool_backs_up_a_window_at_a_time`] | R-1080-C39: a film twice the spool, hashed on its first read and sealed a window per later read under names known before each; a pass that moved a window asks for the next; an edit between reads keeps nothing; the spool never holds more than its ceiling |
 //! | [`forgetting_a_gateway_revokes_this_phones_token_there`] | `forget_destination` revokes the phone's token on the gateway first, and a gateway that cannot be reached is forgotten anyway and says it was not revoked |
 
 use std::path::{Path, PathBuf};
@@ -88,9 +89,16 @@ impl Gateway {
 
 /// A founded phone holding the vault's keys and its content store.
 fn phone(dir: &Path) -> Handle {
+    phone_with(dir, |config| config)
+}
+
+/// [`phone`], opened with a configuration of the test's own.
+fn phone_with(dir: &Path, configure: impl FnOnce(CoreConfig) -> CoreConfig) -> Handle {
     std::fs::create_dir_all(dir).expect("a directory");
-    let handle = Core::open(CoreConfig::new(dir.join("vault.db")).with_seed(seed(), 0))
-        .expect("the core opens");
+    let handle = Core::open(configure(
+        CoreConfig::new(dir.join("vault.db")).with_seed(seed(), 0),
+    ))
+    .expect("the core opens");
     handle
         .with_vault(|vault| Ok(vault.found("Household", "Ada")?))
         .expect("it founds");
@@ -792,6 +800,118 @@ fn an_original_comes_back_by_name_and_a_safe_library_item_is_offered_whole() {
         wire::FetchOutcome::Landed as i32,
         "and it comes back from the gateway"
     );
+}
+
+/// **R-1080-C39: A LIBRARY ITEM LARGER THAN THE SPOOL BACKS UP A WINDOW AT A
+/// TIME.** The spool holds one part; the film is two. Its first read only
+/// hashes it, and every later read seals the parts its pass planned, under
+/// names known before the read began. A pass that moved one window asks for
+/// the next before it answers, an edit in the library between two reads keeps
+/// nothing, and the spool never holds more than its ceiling.
+#[test]
+fn a_library_item_larger_than_the_spool_backs_up_a_window_at_a_time() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let part = centraid_media::sealed::PART_BYTES;
+    let phone = phone_with(dir.path(), |config| config.with_spool_ceiling(part));
+    pair(&phone, &gateway);
+    let spool = dir.path().join("vault.spool");
+    // The sealed parts the spool holds; a part is its plaintext plus a
+    // header and a tag per 4 MiB, never 64 KiB more.
+    let spooled = || -> u64 {
+        std::fs::read_dir(&spool)
+            .expect("lists")
+            .map(|entry| entry.expect("an entry"))
+            .filter(|entry| entry.file_name().len() == 64)
+            .map(|entry| entry.metadata().expect("measures").len())
+            .sum()
+    };
+    let ceiling = part + 64 * 1024;
+
+    let film = bytes_of(
+        "a film twice the spool",
+        usize::try_from(part).expect("fits") + 4_096,
+    );
+    let begin = || wire::StageBegin {
+        media_type: "video/quicktime".to_owned(),
+        byte_size: film.len() as u64,
+        source: wire::StageSource::OsLibrary as i32,
+        os_ref: "lib-film".to_owned(),
+        ..wire::StageBegin::default()
+    };
+    // THE FIRST READ ONLY HASHES IT: two parts cannot wait in a spool of one.
+    let staged = stage(&phone, begin(), &film);
+    add_asset(&phone, &staged, "video");
+    assert_eq!(spooled(), 0, "nothing sealed that could not be kept");
+
+    // THE SHELL'S HALF, as `LibraryFeed` does it: stream what a pass asks for.
+    let mut feeds = 0;
+    let mut answers = Vec::new();
+    loop {
+        let answer = drain(&phone, at_home());
+        assert!(spooled() <= ceiling, "{} bytes spooled", spooled());
+        answers.push((answer.need_bytes.len(), answer.confirmed_parts));
+        if answer.need_bytes.is_empty() {
+            break;
+        }
+        assert!(
+            answers.len() < 8,
+            "two windows take a few passes: {answers:?}"
+        );
+        for need in &answer.need_bytes {
+            assert_eq!(need.os_ref, "lib-film");
+            assert_eq!(hex::encode(&need.content_hash), staged.content_hash);
+            assert_eq!(need.size, film.len() as u64);
+            feeds += 1;
+            if feeds == 1 {
+                // EDITED IN THE LIBRARY BETWEEN TWO READS, past the window:
+                // the whole is another file, so the window is not kept.
+                let mut edited = film.clone();
+                edited[film.len() - 1] ^= 1;
+                let other = stage(&phone, begin(), &edited);
+                assert_ne!(other.content_hash, staged.content_hash);
+                assert_eq!(
+                    spooled(),
+                    0,
+                    "an edited item lends no part to the old names"
+                );
+                continue;
+            }
+            let again = stage(&phone, begin(), &film);
+            assert_eq!(again.content_hash, staged.content_hash);
+            assert!(spooled() <= ceiling, "{} bytes spooled", spooled());
+            assert!(spooled() > 0, "the window was sealed");
+        }
+    }
+    assert_eq!(
+        feeds, 3,
+        "an edited read, then one read per window: {answers:?}"
+    );
+    // A PASS THAT MOVED A WINDOW ASKED FOR THE NEXT ONE BEFORE IT ANSWERED.
+    assert!(
+        answers
+            .iter()
+            .any(|(asked, confirmed)| *asked == 1 && *confirmed > 0),
+        "{answers:?}"
+    );
+    // BOTH PARTS ARE AT THE GATEWAY: the film counts as backed up.
+    let backed = status(&phone);
+    assert!(backed.content_total >= 1, "{backed:?}");
+    assert_eq!(backed.content_confirmed, backed.content_total, "{backed:?}");
+    // AND IT IS NOT OFFERED FOR FREEING: the read that came back edited is
+    // what the library holds under its identifier now, and no gateway has
+    // that version (the root's ruling A20).
+    let wire::response::Kind::Releasable(offered) = ask(
+        &phone,
+        wire::request::Kind::Releasable(wire::ReleasableRequest { limit: 10 }),
+    ) else {
+        panic!("releasable answers");
+    };
+    assert!(
+        offered.items.iter().all(|item| item.os_ref != "lib-film"),
+        "{offered:?}"
+    );
+    assert_eq!(spooled(), 0, "the spool is empty once both moved");
 }
 
 /// What a vault is, for comparing two of them through the vault's own

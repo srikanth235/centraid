@@ -149,6 +149,11 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
         // gateway now admits a phone by the bearer token the ledger keeps, so
         // nothing reads one. It is IGNORED rather than refused, for the reason
         // `role` is above.
+        //
+        // THE SPOOL'S CEILING IS NOT SETTABLE ACROSS THE ABI: a phone's spool
+        // is bounded by its free space and 2 GiB, and a smaller ceiling is a
+        // drill's (`CoreConfig::with_spool_ceiling`).
+        spool_ceiling: None,
     };
     // DEFAULTS TO CREATING, because a shell that named a path and said nothing
     // else is founding a vault there — which is what the phone does now

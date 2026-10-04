@@ -127,6 +127,11 @@ pub struct Handle {
     /// Open staging sessions: bytes a shell is streaming in so this core can
     /// name them (#1025 S4). See [`crate::stage`].
     staging: crate::stage::Staging,
+    /// THE LIBRARY ITEMS THE LAST PASS ASKED FOR, by the library's own
+    /// identifier (R-1080-C39): the parts it planned to seal from each one's
+    /// stream. A `begin` for one takes its plan; the next pass replaces them
+    /// all.
+    library_plan: Mutex<std::collections::BTreeMap<String, crate::stage::Planned>>,
     /// THE FILE THIS CORE WAS OPENED ON, KEPT (#1029 W15).
     ///
     /// The backup plane's files sit **beside the vault file**
@@ -183,6 +188,7 @@ impl Core {
             ids,
             expected_digest,
             seed,
+            spool_ceiling,
         } = config;
         // BEFORE THE FILE IS TOUCHED. A stale core that opened the vault and
         // then refused would have already run whatever migration its own
@@ -244,7 +250,7 @@ impl Core {
             Some((seed, index)) => Some(crate::phone::Keyring::derive(&seed, index)?),
         };
         Ok(Handle {
-            plane: crate::phone::Plane::of(&path),
+            plane: crate::phone::Plane::of(&path).with_ceiling(spool_ceiling),
             path,
             keys,
             vault: Mutex::new(vault),
@@ -252,6 +258,7 @@ impl Core {
             ui_thread_name,
             events: Arc::new(EventQueue::new()),
             staging: crate::stage::Staging::default(),
+            library_plan: Mutex::new(std::collections::BTreeMap::new()),
             closed: AtomicBool::new(false),
             poison: Mutex::new(None),
             session: Mutex::new(Session::new()),
@@ -1025,9 +1032,9 @@ impl Handle {
     fn stage(&self, frame: &wire::StageRequest) -> Result<wire::StageResponse> {
         use wire::stage_request::Kind as S;
         let kind = match frame.kind.as_ref() {
-            Some(S::Begin(begin)) => {
-                wire::stage_response::Kind::Begun(self.staging.begin(begin, self.stage_doors()?)?)
-            }
+            Some(S::Begin(begin)) => wire::stage_response::Kind::Begun(
+                self.staging.begin(begin, self.stage_doors(begin)?)?,
+            ),
             Some(S::Chunk(chunk)) => wire::stage_response::Kind::Chunked(self.staging.chunk(
                 &chunk.staging_id,
                 chunk.seq,
@@ -1047,8 +1054,9 @@ impl Handle {
 
     /// What a staging session may write to: the content store, and — for an
     /// item from the library, when a gateway is paired and the keys are here —
-    /// the spool, under its budget.
-    fn stage_doors(&self) -> Result<crate::stage::Doors> {
+    /// the spool, under its budget, with what the last pass planned for the
+    /// item if it asked for it.
+    fn stage_doors(&self, begin: &wire::StageBegin) -> Result<crate::stage::Doors> {
         let store = self.bytes().map(|door| door.store().clone());
         let plane = &self.plane;
         let paired = !plane
@@ -1061,10 +1069,36 @@ impl Handle {
                 keys: keys.backup.clone(),
                 spool: plane.spool()?,
                 budget: plane.budget(),
+                planned: if begin.os_ref.is_empty() {
+                    None
+                } else {
+                    self.take_planned(&begin.os_ref)
+                },
             }),
             _ => None,
         };
         Ok(crate::stage::Doors { store, seal })
+    }
+
+    /// The plan the last pass made for the library item `os_ref`, taken: one
+    /// stream uses it (R-1080-C39).
+    fn take_planned(&self, os_ref: &str) -> Option<crate::stage::Planned> {
+        self.library_plan
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(os_ref)
+    }
+
+    /// What a pass planned for the library items it asked for, in place of
+    /// the last pass's plan (R-1080-C39).
+    pub(crate) fn plan_library(
+        &self,
+        plan: std::collections::BTreeMap<String, crate::stage::Planned>,
+    ) {
+        *self
+            .library_plan
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = plan;
     }
 
     /// Record a closed session: owned bytes are staged for the command that

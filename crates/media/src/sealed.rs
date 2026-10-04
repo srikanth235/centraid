@@ -35,6 +35,13 @@
 //! length is known: a local rewrite of one part, never a second read of the
 //! source.
 //!
+//! **One read holds every part until the last byte**, because no part has a
+//! name before `h` does. A file larger than the room a phone gives its spool
+//! is therefore hashed on its first read and sealed on later ones, a window of
+//! parts at a time, under the names that first read made known
+//! ([`WindowSealer`], R-1080-C39): one more read per window, instead of a file
+//! that never backs up.
+//!
 //! ## EVERY CONSTANT HERE IS A FORMAT DECISION
 //!
 //! The three `derive_key` contexts and their key material, the name preimage
@@ -53,6 +60,7 @@
 //! missing final chunk, bytes after the final chunk, a non-final chunk shorter
 //! than 4 MiB, and a payload that opens to a length other than `part_len`.
 
+use std::collections::{BTreeSet, VecDeque};
 use std::fmt;
 use std::fs::File;
 use std::io::{self, BufWriter, Read, Write};
@@ -969,6 +977,200 @@ impl<F: FnMut(u32) -> PathBuf> Drop for FileSealer<F> {
         }
         // An abandoned file: its temp parts are all there is to undo, and a
         // failure to remove one is the caller's sweep to make.
+        if let Some(part) = self.current.take() {
+            drop(part.sealer);
+            let _ = std::fs::remove_file(&part.path);
+        }
+        for (path, _) in &self.done {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+// ─── sealing a window of a file whose hash is known ─────────────────────────
+
+/// Seals **chosen parts of a file whose hash and length are already known**,
+/// as the whole file streams through (#1080, R-1080-C39). Every part's name is
+/// known before the first byte, so the parts that fit the spool now are
+/// sealed from one read and the rest from later ones: a library item larger
+/// than the spool backs up a window at a time instead of never. The bytes
+/// outside the window only pass by.
+///
+/// Nothing it wrote is a part until [`WindowSealer::finish`] is shown the
+/// hash and length of what actually streamed, and they are the file's: a
+/// library item edited between two reads would otherwise put two versions'
+/// bytes under one file's names, and only a restore would find out. Dropped
+/// unfinished, or finished with another file's hash, it removes its temp
+/// files.
+pub struct WindowSealer<F: FnMut(u32) -> PathBuf> {
+    keys: BackupKeys,
+    compress: bool,
+    h: PlaintextHash,
+    file_len: u64,
+    /// The window's parts not yet begun, ascending.
+    window: VecDeque<u32>,
+    temp_path: F,
+    /// The stream's bytes so far, inside the window or not.
+    fed: u64,
+    current: Option<OpenPart>,
+    done: Vec<(PathBuf, PartSeal)>,
+    finished: bool,
+}
+
+impl<F: FnMut(u32) -> PathBuf> WindowSealer<F> {
+    /// Begin streaming the `file_len`-byte file `h`, sealing the parts in
+    /// `window` to `temp_path(part_index)`.
+    ///
+    /// # Errors
+    /// [`SealedError::PartIndexOutOfRange`] for a part the file does not have,
+    /// and [`SealedError::BadHeader`] for a file past [`MAX_FILE_BYTES`].
+    pub fn new(
+        keys: &BackupKeys,
+        compress: bool,
+        h: PlaintextHash,
+        file_len: u64,
+        window: impl IntoIterator<Item = u32>,
+        temp_path: F,
+    ) -> Result<Self, SealedError> {
+        let window: BTreeSet<u32> = window.into_iter().collect();
+        for index in &window {
+            part_len(file_len, *index)?;
+        }
+        Ok(Self {
+            keys: keys.clone(),
+            compress,
+            h,
+            file_len,
+            window: window.into_iter().collect(),
+            temp_path,
+            fed: 0,
+            current: None,
+            done: Vec::new(),
+            finished: false,
+        })
+    }
+
+    /// Feed the next bytes of the stream.
+    ///
+    /// # Errors
+    /// [`SealedError::HashMismatch`] for a stream longer than the file, which
+    /// is therefore not the file; otherwise the filesystem, zstd or the cipher
+    /// refused. Either way nothing it sealed will be kept.
+    pub fn update(&mut self, mut data: &[u8]) -> Result<(), SealedError> {
+        if self.fed.saturating_add(data.len() as u64) > self.file_len {
+            return Err(SealedError::HashMismatch);
+        }
+        while !data.is_empty() {
+            let index =
+                u32::try_from(self.fed / PART_BYTES).map_err(|_| SealedError::BadHeader {
+                    reason: "the file is longer than u32::MAX parts",
+                })?;
+            let start = u64::from(index) * PART_BYTES;
+            let end = start + part_len(self.file_len, index)?;
+            if self.current.is_none() && self.fed == start && self.window.front() == Some(&index) {
+                self.window.pop_front();
+                self.start_part(index)?;
+            }
+            let take =
+                usize::try_from((end - self.fed).min(data.len() as u64)).unwrap_or(data.len());
+            if let Some(part) = self.current.as_mut() {
+                part.sealer.update(&data[..take])?;
+                part.fed += take as u64;
+            }
+            self.fed += take as u64;
+            data = &data[take..];
+            if self.fed == end {
+                self.close_part()?;
+            }
+        }
+        Ok(())
+    }
+
+    fn start_part(&mut self, index: u32) -> Result<(), SealedError> {
+        let path = (self.temp_path)(index);
+        let sealer = PartSealer::new(
+            &self.keys,
+            index,
+            part_len(self.file_len, index)?,
+            self.compress,
+            BufWriter::new(File::create(&path)?),
+        )?;
+        self.current = Some(OpenPart {
+            index,
+            path,
+            fed: 0,
+            sealer,
+        });
+        Ok(())
+    }
+
+    /// Close the open part: every part here is sealed at the length its
+    /// header was written with, so none is ever re-sealed.
+    fn close_part(&mut self) -> Result<(), SealedError> {
+        let Some(part) = self.current.take() else {
+            return Ok(());
+        };
+        let (writer, seal) = part.sealer.finish()?;
+        let file = writer.into_inner().map_err(|error| error.into_error())?;
+        file.sync_all()?;
+        drop(file);
+        self.done.push((part.path, seal));
+        Ok(())
+    }
+
+    /// Keep the window, if what streamed was the file. `streamed` and
+    /// `streamed_len` are the hash and length of the whole stream, which the
+    /// caller measured; `None`, with no temp file left, when they are another
+    /// file's or a part of the window never streamed whole.
+    ///
+    /// # Errors
+    /// The filesystem, zstd or the cipher refused the empty part of an empty
+    /// file.
+    pub fn finish(
+        mut self,
+        streamed: &PlaintextHash,
+        streamed_len: u64,
+    ) -> Result<Option<FileSeal>, SealedError> {
+        if *streamed != self.h || streamed_len != self.file_len || self.fed != self.file_len {
+            return Ok(None);
+        }
+        if self.file_len == 0 && self.window.front() == Some(&0) {
+            // An empty file is one empty part, and no byte arrived to begin it.
+            self.window.pop_front();
+            self.start_part(0)?;
+            self.close_part()?;
+        }
+        if self.current.is_some() || !self.window.is_empty() {
+            return Ok(None);
+        }
+        let parts = self
+            .done
+            .iter()
+            .map(|(path, seal)| FilePart {
+                name: name(&self.keys, &self.h, seal.header.part_index),
+                part_index: seal.header.part_index,
+                part_len: u64::from(seal.header.part_len),
+                digest: seal.digest,
+                len: seal.len,
+                path: path.clone(),
+            })
+            .collect();
+        self.finished = true;
+        Ok(Some(FileSeal {
+            h: self.h,
+            len: self.file_len,
+            parts,
+        }))
+    }
+}
+
+impl<F: FnMut(u32) -> PathBuf> Drop for WindowSealer<F> {
+    fn drop(&mut self) {
+        if self.finished {
+            return;
+        }
+        // A window not kept: its temp parts are all there is to undo, and a
+        // failure to remove one is the spool's sweep to make.
         if let Some(part) = self.current.take() {
             drop(part.sealer);
             let _ = std::fs::remove_file(&part.path);
@@ -1954,6 +2156,98 @@ mod tests {
             assert!(dir.path().join("part-0.tmp").exists());
         }
         assert_eq!(std::fs::read_dir(dir.path()).expect("lists").count(), 0);
+    }
+
+    fn windowed(
+        dir: &Path,
+        streamed: &[u8],
+        h: PlaintextHash,
+        len: u64,
+        window: &[u32],
+    ) -> Option<FileSeal> {
+        // COMPRESSED, as `one_pass` is: `pattern` then keeps the AEAD's work
+        // small in an unoptimised build.
+        let mut sealer =
+            WindowSealer::new(&keys(), true, h, len, window.iter().copied(), |index| {
+                dir.join(format!("window-{index}.tmp"))
+            })
+            .expect("a window of the file");
+        for piece in streamed.chunks(3_000_017) {
+            sealer.update(piece).expect("seals what is in the window");
+        }
+        sealer
+            .finish(&PlaintextHash::of(streamed), streamed.len() as u64)
+            .expect("finishes")
+    }
+
+    /// **R-1080-C39: a file larger than the spool backs up a window at a
+    /// time.** The parts of two windows, sealed from two reads under the names
+    /// the file's hash gave before either began, are the parts one pass makes:
+    /// they open and assemble into the file.
+    #[test]
+    fn windows_of_a_known_file_are_its_parts_under_its_names() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let plaintext = pattern(usize::try_from(2 * PART_BYTES).expect("fits") + 4_321);
+        let h = PlaintextHash::of(&plaintext);
+        let len = plaintext.len() as u64;
+        // THE MIDDLE ALONE: the stream passes the head and the tail by.
+        let middle = windowed(dir.path(), &plaintext, h, len, &[1]).expect("the file's bytes");
+        assert_eq!(middle.parts.len(), 1);
+        assert_eq!(middle.parts[0].part_index, 1);
+        // THE REST, from another read, in any order asked.
+        let rest = windowed(dir.path(), &plaintext, h, len, &[2, 0]).expect("the file's bytes");
+        let mut parts: Vec<FilePart> = middle.parts.into_iter().chain(rest.parts).collect();
+        parts.sort_by_key(|part| part.part_index);
+        let names: Vec<Name> = parts.iter().map(|part| part.name).collect();
+        assert_eq!(names, names_of(&keys(), &h, len));
+        assert_eq!(parts[2].part_len, 4_321);
+        assert_eq!(reassembled(&FileSeal { h, len, parts }), plaintext);
+        // AN EMPTY FILE is one empty part, sealed though no byte streamed.
+        let nothing = PlaintextHash::of(b"");
+        let empty = windowed(dir.path(), b"", nothing, 0, &[0]).expect("the empty file");
+        assert_eq!(empty.parts.len(), 1);
+        assert!(reassembled(&empty).is_empty());
+    }
+
+    /// **A FILE EDITED BETWEEN TWO READS KEEPS NOTHING**: its window was
+    /// sealed from bytes that are not the file its names are derived from.
+    #[test]
+    fn a_window_streamed_from_another_file_keeps_nothing() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let plaintext = noise(300_000, 9);
+        let h = PlaintextHash::of(&plaintext);
+        let len = plaintext.len() as u64;
+        let mut edited = plaintext.clone();
+        edited[150_000] ^= 1;
+        assert!(windowed(dir.path(), &edited, h, len, &[0]).is_none());
+        // A SHORTER STREAM is not the file either; a longer one is refused as
+        // it arrives, and one abandoned part-way keeps nothing.
+        assert!(windowed(dir.path(), &plaintext[..299_999], h, len, &[0]).is_none());
+        let mut sealer = WindowSealer::new(&keys(), false, h, len, [0], |index| {
+            dir.path().join(format!("abandoned-{index}.tmp"))
+        })
+        .expect("a window");
+        sealer.update(&plaintext[..1_000]).expect("seals");
+        assert!(dir.path().join("abandoned-0.tmp").exists());
+        assert!(matches!(
+            sealer.update(&noise(len as usize, 3)),
+            Err(SealedError::HashMismatch)
+        ));
+        drop(sealer);
+        assert_eq!(
+            std::fs::read_dir(dir.path()).expect("lists").count(),
+            0,
+            "no temp part is left behind"
+        );
+        // A PART THE FILE DOES NOT HAVE is refused before a byte streams.
+        assert!(matches!(
+            WindowSealer::new(&keys(), false, h, len, [1], |_| dir.path().join("x")),
+            Err(SealedError::PartIndexOutOfRange {
+                index: 1,
+                count: 1,
+                ..
+            })
+        ));
     }
 
     #[test]

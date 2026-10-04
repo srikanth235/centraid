@@ -64,11 +64,11 @@ The phone is the vault's only writer and backs it up to the gateways its member 
 | --- | --- |
 | `phone/mod.rs` | The `Keyring` (vault keys and backup keys, from the seed at an index), the `Plane` (the ledger `<stem>.backup.db`, the spool `<stem>.spool/` opened once per core, the scratch copies), `backup_status`, `releasable`/`released`. |
 | `phone/pair.rs` | `pair_phone` from a gateway's QR payload: first contact trusting only the pin, a claim (or a takeover by claim when the gateway already holds the vault), and the safety number both ends print. |
-| `phone/drain.rs` | One pass: the records first (snapshot when due, its ranges, the head), then derivatives and originals under the member's rule (`Conditions`: `may_prepare`, `may_move`, `allows_cellular`); `handoff`, `settle` and `reconcile` for the parts the operating system moves. |
+| `phone/drain.rs` | One pass: the records first (snapshot when due, its ranges, the head), then derivatives and originals under the member's rule (`Conditions`: `may_prepare`, `may_move`, `allows_cellular`), asking the shell for library originals with a plan of the parts the spool has room for (R-1080-C39); `handoff`, `settle` and `reconcile` for the parts the operating system moves. |
 | `phone/link.rs` | The plane's `Store` over the async client, and reaching the first paired gateway that answers as itself. |
 | `phone/fetch.rs` | Derivatives in bundles, and one original by name, assembled and verified against its hash. |
 | `phone/restore.rs` | From the words and a payload: check every vault's snapshot under a read grant, claim each at the next writer epoch, adopt the ledger, bring every derivative back. |
-| `stage.rs` | The stage door v2: owned bytes into the content store, library items hashed (and sealed into the spool in the same stream), derivatives staged `for_hash` with their `tier`. |
+| `stage.rs` | The stage door v2: owned bytes into the content store, library items hashed (and sealed into the spool in the same stream, or, for an item a pass asked for, the parts its plan names under names known before the first byte), derivatives staged `for_hash` with their `tier`. |
 
 A gateway that answers `MOVED` freezes the vault on this phone: every later pass is refused `ERROR_CODE_VAULT_MOVED`, and `backup_status.frozen` says so. `tests/phone_backup.rs` drives every door against the real gateway harness, and `crates/centraid/tests/restore_drill.rs` is the drill.
 

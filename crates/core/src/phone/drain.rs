@@ -46,6 +46,15 @@
 //! app (#1080 ruling 6). A pass cannot read it, so it names it in `need_bytes`
 //! and the shell streams it through the stage door, which seals it in the same
 //! stream (A8); the next round moves it.
+//!
+//! **What a pass asks for, it plans** (R-1080-C39). The item's hash is known
+//! from its first read, so every part's name is too: the pass asks for each
+//! item that fits the spool's room whole, then for as many parts of the first
+//! larger one as the rest leave, and hands the stage door that plan. The room
+//! is promised until the shell streams, so a later round cannot spend it. A
+//! round that moved parts freed room, so the pass plans once more before it
+//! answers: an original larger than the spool backs up a window at a time,
+//! one read of it per window, instead of never.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
@@ -68,6 +77,7 @@ use super::link::{self, GatewayStore, Reached, Unreached};
 use super::{Keyring, Plane, now_ms, plane_error, store_error};
 use crate::error::{CoreError, Result};
 use crate::handle::Handle;
+use crate::stage::{Planned, bytes_of_parts, window_within};
 
 /// A snapshot is taken at most this often unless the member asks: an hour,
 /// the recovery point for records at home (#1080 ruling 5).
@@ -326,6 +336,13 @@ struct Pass {
     need: Vec<wire::NeedBytes>,
     asked_for: BTreeSet<Name>,
     waiting_bytes: BTreeSet<Name>,
+    /// The spool's bytes promised to the library items asked for: the shell
+    /// streams them after the pass answers, so no later round of this pass
+    /// may spend them first.
+    promised: u64,
+    /// What each asked-for item's stream is to seal, by its identifier in
+    /// the library (R-1080-C39).
+    planned: BTreeMap<String, Planned>,
 }
 
 impl Pass {
@@ -337,7 +354,41 @@ impl Pass {
             need: Vec::new(),
             asked_for: BTreeSet::new(),
             waiting_bytes: BTreeSet::new(),
+            promised: 0,
+            planned: BTreeMap::new(),
         }
+    }
+
+    /// Whether this pass already asked for the item, under its hash or its
+    /// identifier.
+    fn has_asked(&self, ask: &LibraryAsk<'_>) -> bool {
+        self.planned.contains_key(&ask.os_ref)
+            || self
+                .need
+                .iter()
+                .any(|need| need.content_hash == ask.file.h.as_bytes())
+    }
+
+    /// Ask the shell to stream the item, planning `parts` from it and
+    /// promising their room.
+    fn ask_for(&mut self, ask: &LibraryAsk<'_>, parts: Vec<u32>) {
+        self.promised = self
+            .promised
+            .saturating_add(bytes_of_parts(ask.file.len, &parts));
+        self.need.push(wire::NeedBytes {
+            content_hash: ask.file.h.as_bytes().to_vec(),
+            os_ref: ask.os_ref.clone(),
+            media_type: ask.file.media_type.clone(),
+            size: ask.file.len,
+        });
+        self.planned.insert(
+            ask.os_ref.clone(),
+            Planned {
+                h: ask.file.h,
+                len: ask.file.len,
+                parts,
+            },
+        );
     }
 
     fn count(&mut self, confirmed: usize) {
@@ -394,6 +445,9 @@ pub fn run(
     request: &wire::DrainRequest,
     runtime: &tokio::runtime::Handle,
 ) -> Result<wire::DrainResponse> {
+    // THE LAST PASS'S PLAN IS SPENT: a pass that answers early asks for
+    // nothing, and a stream with no plan seals the way a first read does.
+    handle.plan_library(BTreeMap::new());
     let started = Instant::now();
     let deadline = deadline_of(request.deadline_ms, started);
     let conditions = Conditions::of(request);
@@ -452,6 +506,7 @@ pub fn run(
     );
     match outcome {
         Ok(()) => {
+            handle.plan_library(std::mem::take(&mut pass.planned));
             if pass.stopped == wire::DrainStop::Untrusted {
                 // PART-WAY THROUGH, ANOTHER MACHINE ANSWERED: status says so
                 // until a pass reaches the pinned gateway again.
@@ -540,7 +595,11 @@ fn pass_over(
             pass.stopped = stop;
             return Ok(());
         }
-        if sealed == 0 {
+        // A ROUND THAT MOVED PARTS FREED ROOM, so one more prepare asks for
+        // the next window of a library item larger than the spool
+        // (R-1080-C39) before the pass answers; a round that did neither is
+        // the end.
+        if sealed == 0 && moved.confirmed.is_empty() {
             return Ok(());
         }
     }
@@ -842,8 +901,12 @@ fn prepare(
         confirmed.extend(held.iter().map(|(name, _)| *name));
     }
 
-    let mut held_bytes = spool.bytes().map_err(plane_error)?;
+    let mut held_bytes = spool
+        .bytes()
+        .map_err(plane_error)?
+        .saturating_add(pass.promised);
     let mut sealed = 0_usize;
+    let mut library: Vec<LibraryAsk<'_>> = Vec::new();
     for file in candidates {
         if Instant::now() >= deadline {
             break;
@@ -878,34 +941,68 @@ fn prepare(
             )?;
             continue;
         }
-        let library = ledger.local(&file.h).map_err(plane_error)?;
-        if let Some(local) = library.filter(|local| local.source == LocalSource::Os) {
+        let local = ledger.local(&file.h).map_err(plane_error)?;
+        if let Some(local) = local.filter(|local| local.source == LocalSource::Os) {
             let first = names_of(keys, &file.h, file.len)
                 .first()
                 .copied()
                 .unwrap_or_else(|| part_name(keys, &file.h, 0));
             pass.waiting_bytes.insert(first);
-            // ASKED FOR ONLY WHILE THE SPOOL HAS ROOM: the stage door seals as
-            // the bytes stream, and with no room it could only hash them.
-            if held_bytes < budget
-                && pass.need.len() < MAX_NEED_BYTES
-                && !pass
-                    .need
-                    .iter()
-                    .any(|need| need.content_hash == file.h.as_bytes())
-            {
-                pass.need.push(wire::NeedBytes {
-                    content_hash: file.h.as_bytes().to_vec(),
-                    os_ref: local.os_ref.unwrap_or_default(),
-                    media_type: file.media_type.clone(),
-                    size: file.len,
+            if let Some(os_ref) = local.os_ref.filter(|os_ref| !os_ref.is_empty()) {
+                library.push(LibraryAsk {
+                    file,
+                    os_ref,
+                    parts: parts.iter().map(|(index, _)| *index).collect(),
                 });
             }
         }
         // NOWHERE ON THIS PHONE: a restored phone that has not fetched an
         // original, or bytes a member released. Nothing here can send them.
     }
+    plan_library(&library, budget.saturating_sub(held_bytes), pass);
     Ok(sealed)
+}
+
+/// One library item a pass could ask the shell to stream.
+struct LibraryAsk<'a> {
+    file: &'a ContentFile,
+    os_ref: String,
+    /// The parts no gateway holds and nothing queued, ascending.
+    parts: Vec<u32>,
+}
+
+/// **Ask for the library items the spool has room for** (`NeedBytes`,
+/// R-1080-C39): each that fits whole, in the order given; then the first that
+/// did not, for as many of its parts as the room the others left will hold.
+/// An item is asked for only when at least one of its parts fits, so a shell
+/// never reads an item the stage door could only hash. What is asked for is
+/// promised, so a later round of the same pass cannot spend it before the
+/// shell streams.
+fn plan_library(asks: &[LibraryAsk<'_>], mut room: u64, pass: &mut Pass) {
+    let mut larger: Option<&LibraryAsk<'_>> = None;
+    for ask in asks {
+        if pass.need.len() >= MAX_NEED_BYTES {
+            return;
+        }
+        if pass.has_asked(ask) {
+            continue;
+        }
+        let whole = bytes_of_parts(ask.file.len, &ask.parts);
+        if whole <= room {
+            room -= whole;
+            pass.ask_for(ask, ask.parts.clone());
+        } else if larger.is_none() {
+            // THE FIRST ITEM LARGER THAN THE ROOM waits for what the rest
+            // leave, so photographs keep moving past a film.
+            larger = Some(ask);
+        }
+    }
+    if let Some(ask) = larger {
+        let window = window_within(room, ask.file.len, &ask.parts);
+        if !window.is_empty() {
+            pass.ask_for(ask, window);
+        }
+    }
 }
 
 /// Seal the parts `indices` of a file the app's own store holds, one part at

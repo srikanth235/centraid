@@ -289,6 +289,35 @@ class ShelfDrainSpec : StringSpec({
         }
     }
 
+    "an original larger than the spool is fed again while its windows move, and stops when one does not" {
+        runTest {
+            val need = NeededBytes("ef".repeat(32), osRef = "L/3", mediaType = "video/quicktime", size = 0)
+            val seen = mutableListOf<DrainInput>()
+            var round = 0
+            drain(
+                listOf(holding("a")),
+                seen = seen,
+                answers = {
+                    round += 1
+                    // THE SAME ASK EACH ROUND; rounds two and three moved the
+                    // window the round before them sealed, round four did not.
+                    empty.copy(needBytes = listOf(need), confirmedParts = if (round in 2..3) 1 else 0)
+                },
+                feed = { _, needs -> needs.size },
+            ).backUpNow()
+            seen.size shouldBe 4
+            // A WINDOW THAT KEEPS MOVING STILL ENDS AT THE ROUND LIMIT.
+            val bounded = mutableListOf<DrainInput>()
+            drain(
+                listOf(holding("a")),
+                seen = bounded,
+                answers = { empty.copy(needBytes = listOf(need), confirmedParts = 1) },
+                feed = { _, needs -> needs.size },
+            ).backUpNow()
+            bounded.size shouldBe ShelfDrain.MAX_ROUNDS
+        }
+    }
+
     "a second 'Back up now' joins the first, and both answer when it ends" {
         runTest {
             val entered = CompletableDeferred<Unit>()

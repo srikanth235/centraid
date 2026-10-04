@@ -127,6 +127,9 @@ impl Keyring {
 pub struct Plane {
     vault_file: PathBuf,
     spool: std::sync::Mutex<Option<Spool>>,
+    /// The most the spool may hold whatever the free space
+    /// (`CoreConfig::spool_ceiling`).
+    ceiling: u64,
 }
 
 impl Plane {
@@ -136,7 +139,17 @@ impl Plane {
         Self {
             vault_file: vault_file.to_path_buf(),
             spool: std::sync::Mutex::new(None),
+            ceiling: centraid_vault::backup::spool::SPOOL_CEILING_BYTES,
         }
+    }
+
+    /// The same plane, its spool held under `ceiling` bytes.
+    #[must_use]
+    pub fn with_ceiling(mut self, ceiling: Option<u64>) -> Self {
+        if let Some(ceiling) = ceiling {
+            self.ceiling = ceiling;
+        }
+        self
     }
 
     /// `<stem>.backup.db`.
@@ -185,10 +198,11 @@ impl Plane {
         Ok(opened)
     }
 
-    /// How many sealed bytes the spool may hold: 2 GiB, or a tenth of the
-    /// free space on its volume, whichever is smaller (`Spool::budget`). A
-    /// volume that will not say how much is free is read as full: the spool
-    /// is then given nothing, and the phone fills no disk on a guess.
+    /// How many sealed bytes the spool may hold: 2 GiB (or the configured
+    /// ceiling), or a tenth of the free space on its volume, whichever is
+    /// smaller (`Spool::budget_under`). A volume that will not say how much is
+    /// free is read as full: the spool is then given nothing, and the phone
+    /// fills no disk on a guess.
     #[must_use]
     pub fn budget(&self) -> u64 {
         let dir = self.spool_dir();
@@ -203,7 +217,7 @@ impl Plane {
             let _ = &dir;
             0_u64
         };
-        Spool::budget(free)
+        Spool::budget_under(self.ceiling, free)
     }
 }
 

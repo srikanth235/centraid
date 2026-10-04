@@ -74,6 +74,15 @@ pub struct CoreConfig {
     /// beside the vault it protects, in a place no shell asked for and no
     /// backup excludes.
     pub seed: Option<(centraid_identity::Seed, u32)>,
+    /// THE MOST THE SPOOL MAY EVER HOLD (#1080). `None` is
+    /// `centraid_vault::backup::spool::SPOOL_CEILING_BYTES`, 2 GiB; a tenth of
+    /// the free space still bounds it below either way.
+    ///
+    /// Injectable for the reason the clock is: a drill that proves a library
+    /// item many times the spool backs up a window at a time (R-1080-C39)
+    /// needs a spool of one part, not gigabytes of test data. A shell passes
+    /// nothing, and the C ABI cannot set it.
+    pub spool_ceiling: Option<u64>,
 }
 
 impl CoreConfig {
@@ -87,6 +96,7 @@ impl CoreConfig {
             ids: None,
             expected_digest: None,
             seed: None,
+            spool_ceiling: None,
         }
     }
 
@@ -132,6 +142,14 @@ impl CoreConfig {
     ) -> Self {
         self.clock = Some(clock);
         self.ids = Some(ids);
+        self
+    }
+
+    /// Hold the spool under `bytes`, whatever the free space. For a drill;
+    /// see [`CoreConfig::spool_ceiling`].
+    #[must_use]
+    pub fn with_spool_ceiling(mut self, bytes: u64) -> Self {
+        self.spool_ceiling = Some(bytes);
         self
     }
 }

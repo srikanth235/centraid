@@ -28,9 +28,17 @@
 //!   spool **in the same stream** (`centraid_media::sealed::FileSealer`, the
 //!   root's ruling A8). No plaintext copy is kept: the library has the bytes,
 //!   and the ledger records where (`local_bytes`), so a grid asks the shell
-//!   for them by the library's own identifier. When room runs out mid-file
-//!   the sealed parts are dropped and the bytes are only hashed; the item
-//!   waits, and a pass asks for it again (`NeedBytes`).
+//!   for them by the library's own identifier. An item whose declared size
+//!   cannot fit the room is only hashed, and when room runs out mid-file the
+//!   sealed parts are dropped; either way the item waits, and a pass asks for
+//!   it again (`NeedBytes`).
+//! - **An item a pass asked for** has a hash the core already knows, so every
+//!   part's name is known before its first byte. The pass planned which of its
+//!   parts the spool has room for ([`Planned`]); those are sealed under their
+//!   names as the whole item streams past (`centraid_media::sealed::
+//!   WindowSealer`), and kept only if what streamed hashes to the item. An
+//!   item larger than the spool backs up a window at a time, one read per
+//!   window (R-1080-C39), instead of never.
 //!
 //! ## The refusals, each a real failure mode
 //!
@@ -61,7 +69,9 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_media::sealed::{BackupKeys, FileSeal, FileSealer, PlaintextHash};
+use centraid_media::sealed::{
+    BackupKeys, FileSeal, FileSealer, PlaintextHash, WindowSealer, part_len,
+};
 use centraid_vault::backup::spool::Spool;
 
 use crate::error::{CoreError, Result};
@@ -99,12 +109,60 @@ pub struct SealInto {
     pub keys: BackupKeys,
     pub spool: Spool,
     pub budget: u64,
+    /// What the last pass planned for this item, when it asked for it.
+    pub planned: Option<Planned>,
 }
 
-struct LibrarySeal {
-    sealer: FileSealer<PartPaths>,
-    held: u64,
-    budget: u64,
+/// **A library item a pass asked for** (`NeedBytes`, R-1080-C39): its hash
+/// and length, which the core recorded when the item first streamed, and the
+/// parts the pass planned to seal from this stream — every one no gateway
+/// holds and nothing queued when it fits the spool, else as many from the
+/// first as fit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Planned {
+    pub h: PlaintextHash,
+    pub len: u64,
+    /// Part indices, ascending.
+    pub parts: Vec<u32>,
+}
+
+/// The parts of a `file_len`-byte file, from `parts` in their order, that fit
+/// `room` bytes of plaintext: the first that does not fit ends the window, so
+/// a window is always the earliest parts still owed.
+#[must_use]
+pub fn window_within(room: u64, file_len: u64, parts: &[u32]) -> Vec<u32> {
+    let mut left = room;
+    parts
+        .iter()
+        .copied()
+        .map_while(|index| {
+            let len = part_len(file_len, index).ok()?;
+            left = left.checked_sub(len)?;
+            Some(index)
+        })
+        .collect()
+}
+
+/// The plaintext bytes of `parts` of a `file_len`-byte file.
+#[must_use]
+pub fn bytes_of_parts(file_len: u64, parts: &[u32]) -> u64 {
+    parts
+        .iter()
+        .filter_map(|index| part_len(file_len, *index).ok())
+        .fold(0, u64::saturating_add)
+}
+
+enum LibrarySeal {
+    /// An item no pass asked for: hashed and sealed in the one stream, its
+    /// parts named when it ends.
+    Whole {
+        sealer: Box<FileSealer<PartPaths>>,
+        held: u64,
+        budget: u64,
+    },
+    /// An item a pass asked for: the planned parts, under names known before
+    /// the first byte.
+    Window(Box<WindowSealer<PartPaths>>),
 }
 
 enum Holding {
@@ -118,9 +176,10 @@ enum Holding {
         os_ref: String,
         edited: bool,
         // BOXED: a hasher and a sealer are kilobytes of state, and a session
-        // table of owned writers should not be sized for them.
+        // table of owned writers should not be sized for them. Each sealer is
+        // boxed inside its variant.
         hasher: Box<blake3::Hasher>,
-        seal: Option<Box<LibrarySeal>>,
+        seal: Option<LibrarySeal>,
     },
 }
 
@@ -130,6 +189,10 @@ struct Session {
     next_seq: u64,
     received: u64,
     holding: Holding,
+    /// The sealed bytes this session may still add to the spool: its window's,
+    /// or its declared size. Another session's room is the budget less these,
+    /// so two streams at once cannot each fill the same room.
+    reserved: u64,
 }
 
 /// Every open staging session on one core.
@@ -237,26 +300,67 @@ impl Staging {
             format!("stage-{minted}")
         };
         let declared = (begin.byte_size > 0).then_some(begin.byte_size);
+        let mut reserved = 0;
         let holding = if library {
+            let elsewhere = sessions
+                .values()
+                .map(|session| session.reserved)
+                .fold(0, u64::saturating_add);
             Holding::Library {
                 os_ref: begin.os_ref.clone(),
                 edited: begin.os_edited,
                 hasher: Box::new(blake3::Hasher::new()),
                 seal: doors.seal.and_then(|into| {
-                    let held = into.spool.bytes().ok()?;
-                    if held >= into.budget {
-                        return None;
-                    }
+                    let held = into.spool.bytes().ok()?.saturating_add(elsewhere);
+                    let room = into.budget.saturating_sub(held);
                     let spool = into.spool.clone();
                     let tag = staging_id.clone();
                     let paths: PartPaths = Box::new(move |index| spool.temp_path(&tag, index));
-                    Some(Box::new(LibrarySeal {
-                        // MEDIA IS NOT COMPRESSED (#1080, the sealed format):
-                        // a photograph or a film is already compressed.
-                        sealer: FileSealer::new(&into.keys, false, declared, paths),
-                        held,
-                        budget: into.budget,
-                    }))
+                    // MEDIA IS NOT COMPRESSED (#1080, the sealed format): a
+                    // photograph or a film is already compressed.
+                    let seal = match into.planned {
+                        Some(planned) => {
+                            // ASKED FOR, SO ITS NAMES ARE KNOWN (R-1080-C39):
+                            // the planned parts, as many as the spool still has
+                            // room for now. A size that contradicts the plan's
+                            // is another file, and gets no window.
+                            if declared.is_some_and(|size| size != planned.len) {
+                                return None;
+                            }
+                            let window = window_within(room, planned.len, &planned.parts);
+                            if window.is_empty() {
+                                return None;
+                            }
+                            let bytes = bytes_of_parts(planned.len, &window);
+                            let sealer = WindowSealer::new(
+                                &into.keys,
+                                false,
+                                planned.h,
+                                planned.len,
+                                window,
+                                paths,
+                            )
+                            .ok()?;
+                            reserved = bytes;
+                            LibrarySeal::Window(Box::new(sealer))
+                        }
+                        None => {
+                            // A SIZE THAT CANNOT FIT IS ONLY HASHED: sealing it
+                            // would write its parts only to delete them.
+                            if room == 0 || declared.is_some_and(|size| size > room) {
+                                return None;
+                            }
+                            reserved = declared.unwrap_or(0);
+                            LibrarySeal::Whole {
+                                sealer: Box::new(FileSealer::new(
+                                    &into.keys, false, declared, paths,
+                                )),
+                                held,
+                                budget: into.budget,
+                            }
+                        }
+                    };
+                    Some(seal)
                 }),
             }
         } else {
@@ -278,6 +382,7 @@ impl Staging {
                 next_seq: 0,
                 received: 0,
                 holding,
+                reserved,
             },
         );
         Ok(wire::StageBegun {
@@ -328,14 +433,23 @@ impl Staging {
             }
             Holding::Library { hasher, seal, .. } => {
                 hasher.update(payload);
-                if let Some(open) = seal {
+                let kept = match seal.as_mut() {
                     // ROOM, AS IT GOES: when the parts sealed so far would
                     // pass the spool's budget they are dropped — the sealer
                     // removes its temp files — and the bytes are only hashed.
-                    let fits = open.held.saturating_add(after) <= open.budget;
-                    if !fits || open.sealer.update(payload).is_err() {
-                        *seal = None;
-                    }
+                    Some(LibrarySeal::Whole {
+                        sealer,
+                        held,
+                        budget,
+                    }) => held.saturating_add(after) <= *budget && sealer.update(payload).is_ok(),
+                    // A WINDOW WAS SIZED BEFORE THE FIRST BYTE; a stream that
+                    // outgrows the item is not the item.
+                    Some(LibrarySeal::Window(sealer)) => sealer.update(payload).is_ok(),
+                    None => true,
+                };
+                if !kept {
+                    *seal = None;
+                    session.reserved = 0;
                 }
                 Ok(())
             }
@@ -385,9 +499,19 @@ impl Staging {
                 seal,
             } => {
                 let h = PlaintextHash::from_bytes(*hasher.finalize().as_bytes());
-                let sealed = seal
-                    .and_then(|open| open.sealer.finish().ok())
-                    .filter(|sealed| sealed.h == h && sealed.len == session.received);
+                let sealed = match seal {
+                    Some(LibrarySeal::Whole { sealer, .. }) => (*sealer)
+                        .finish()
+                        .ok()
+                        .filter(|sealed| sealed.h == h && sealed.len == session.received),
+                    // KEPT ONLY IF WHAT STREAMED IS THE ITEM: a photograph
+                    // edited since its first read must not lend its bytes to
+                    // the names of the one the pass asked for.
+                    Some(LibrarySeal::Window(sealer)) => {
+                        sealer.finish(&h, session.received).ok().flatten()
+                    }
+                    None => None,
+                };
                 Staged::Library {
                     h,
                     len: session.received,
@@ -459,12 +583,51 @@ mod tests {
             Doors {
                 store: Some(self.store.clone()),
                 seal: budget.map(|budget| SealInto {
-                    keys: BackupKeys::from_root(&[7; 32]),
+                    keys: keys(),
                     spool: self.spool.clone(),
                     budget,
+                    planned: None,
                 }),
             }
         }
+
+        /// The doors a stream the last pass asked for opens with.
+        fn planned(&self, budget: u64, planned: Planned) -> Doors {
+            Doors {
+                store: Some(self.store.clone()),
+                seal: Some(SealInto {
+                    keys: keys(),
+                    spool: self.spool.clone(),
+                    budget,
+                    planned: Some(planned),
+                }),
+            }
+        }
+
+        fn leftovers(&self) -> Vec<std::fs::DirEntry> {
+            std::fs::read_dir(self.spool.dir())
+                .expect("lists")
+                .map(|entry| entry.expect("an entry"))
+                .collect()
+        }
+    }
+
+    fn keys() -> BackupKeys {
+        BackupKeys::from_root(&[7; 32])
+    }
+
+    /// Stream `bytes` as a library item through `doors`, and close it.
+    fn stream(staging: &Staging, begin: &wire::StageBegin, doors: Doors, bytes: &[u8]) -> Staged {
+        let begun = staging.begin(begin, doors).expect("begun");
+        send(staging, &begun.staging_id, bytes).expect("chunked");
+        staging.end(&begun.staging_id).expect("ended")
+    }
+
+    fn sealed_of(staged: Staged) -> (PlaintextHash, Option<FileSeal>) {
+        let Staged::Library { h, sealed, .. } = staged else {
+            panic!("a library item stages as one");
+        };
+        (h, sealed)
     }
 
     fn owned(media_type: &str, size: u64) -> wire::StageBegin {
@@ -699,30 +862,156 @@ mod tests {
         );
     }
 
-    /// ROOM RUNS OUT MID-FILE: the parts are dropped, the bytes are still
-    /// hashed, and the item waits to be asked for again.
+    /// ROOM RUNS OUT: a declared size past the room is only hashed, and one
+    /// that was not declared drops its parts when it outgrows the room. The
+    /// item waits either way, to be asked for again.
     #[test]
     fn a_library_item_past_the_spool_budget_is_hashed_and_not_sealed() {
         let rig = rig();
         let staging = Staging::default();
         let bytes = payload(MAX_CHUNK_BYTES * 3);
-        let begun = staging
-            .begin(
-                &library(bytes.len() as u64),
+        for declared in [bytes.len() as u64, 0] {
+            let (h, sealed) = sealed_of(stream(
+                &staging,
+                &library(declared),
                 rig.doors(Some(MAX_CHUNK_BYTES as u64)),
-            )
-            .expect("begun");
-        send(&staging, &begun.staging_id, &bytes).expect("chunked");
-        let Staged::Library { h, sealed, .. } = staging.end(&begun.staging_id).expect("ended")
-        else {
-            panic!("library");
+                &bytes,
+            ));
+            assert_eq!(h, PlaintextHash::of(&bytes));
+            assert!(sealed.is_none(), "nothing sealed past the budget");
+            assert!(
+                rig.leftovers().is_empty(),
+                "the temp parts were dropped: {:?}",
+                rig.leftovers()
+            );
+        }
+    }
+
+    /// **R-1080-C39: an item a pass asked for is sealed under names known
+    /// before its first byte**, the parts the pass planned and no others.
+    #[test]
+    fn a_planned_library_item_seals_its_window_under_known_names() {
+        let rig = rig();
+        let staging = Staging::default();
+        let bytes = payload(1_500_000);
+        let h = PlaintextHash::of(&bytes);
+        let planned = Planned {
+            h,
+            len: bytes.len() as u64,
+            parts: vec![0],
         };
-        assert_eq!(h, PlaintextHash::of(&bytes));
-        assert!(sealed.is_none(), "nothing sealed past the budget");
-        let leftovers: Vec<_> = std::fs::read_dir(rig.spool.dir()).expect("lists").collect();
-        assert!(
-            leftovers.is_empty(),
-            "the temp parts were dropped: {leftovers:?}"
+        for declared in [bytes.len() as u64, 0] {
+            let (streamed, sealed) = sealed_of(stream(
+                &staging,
+                &library(declared),
+                rig.planned(u64::MAX, planned.clone()),
+                &bytes,
+            ));
+            assert_eq!(streamed, h);
+            let sealed = sealed.expect("the window is kept");
+            assert_eq!(sealed.parts.len(), 1);
+            assert_eq!(
+                sealed.parts[0].name,
+                centraid_media::sealed::name(&keys(), &h, 0)
+            );
+            let sealed_bytes = std::fs::read(&sealed.parts[0].path).expect("the temp part");
+            assert_eq!(
+                centraid_media::sealed::open_whole(&keys(), &sealed.parts[0].name, &sealed_bytes)
+                    .expect("opens"),
+                bytes
+            );
+            std::fs::remove_file(&sealed.parts[0].path).expect("removes");
+        }
+    }
+
+    /// **AN ITEM EDITED SINCE ITS FIRST READ LENDS NO BYTES TO ITS OLD
+    /// NAMES**, and a plan the spool has no room for, or a size that
+    /// contradicts it, seals nothing: each stream is only hashed.
+    #[test]
+    fn a_planned_window_is_kept_only_for_the_item_and_only_with_room() {
+        let rig = rig();
+        let staging = Staging::default();
+        let bytes = payload(700_000);
+        let planned = Planned {
+            h: PlaintextHash::of(&bytes),
+            len: bytes.len() as u64,
+            parts: vec![0],
+        };
+        let mut edited = bytes.clone();
+        edited[350_000] ^= 1;
+        let (h, sealed) = sealed_of(stream(
+            &staging,
+            &library(0),
+            rig.planned(u64::MAX, planned.clone()),
+            &edited,
+        ));
+        assert_eq!(
+            h,
+            PlaintextHash::of(&edited),
+            "the stream is named for what it is"
+        );
+        assert!(sealed.is_none(), "an edited item keeps nothing");
+        let (_, no_room) = sealed_of(stream(
+            &staging,
+            &library(0),
+            rig.planned(1_000, planned.clone()),
+            &bytes,
+        ));
+        assert!(no_room.is_none(), "no room, no window");
+        let (_, contradicted) = sealed_of(stream(
+            &staging,
+            &library(bytes.len() as u64 + 1),
+            rig.planned(u64::MAX, planned),
+            &[bytes.as_slice(), b"!"].concat(),
+        ));
+        assert!(contradicted.is_none(), "another size is another file");
+        assert!(rig.leftovers().is_empty(), "{:?}", rig.leftovers());
+    }
+
+    /// **TWO STREAMS AT ONCE CANNOT EACH FILL THE SAME ROOM**: a session
+    /// that knows its size holds that much of the budget until it closes.
+    #[test]
+    fn an_open_session_holds_its_room_from_the_next() {
+        let rig = rig();
+        let staging = Staging::default();
+        let first = payload(2 * MAX_CHUNK_BYTES);
+        let second = payload(2 * MAX_CHUNK_BYTES + 1);
+        let budget = 3 * MAX_CHUNK_BYTES as u64;
+        let a = staging
+            .begin(&library(first.len() as u64), rig.doors(Some(budget)))
+            .expect("begun");
+        let b = staging
+            .begin(&library(second.len() as u64), rig.doors(Some(budget)))
+            .expect("begun");
+        send(&staging, &a.staging_id, &first).expect("chunked");
+        send(&staging, &b.staging_id, &second).expect("chunked");
+        let (_, kept) = sealed_of(staging.end(&a.staging_id).expect("ended"));
+        let (_, crowded) = sealed_of(staging.end(&b.staging_id).expect("ended"));
+        assert!(kept.is_some(), "the first fits and holds its room");
+        assert!(crowded.is_none(), "the second does not fit what is left");
+    }
+
+    /// A WINDOW IS THE EARLIEST PARTS STILL OWED that fit, and the first that
+    /// does not fit ends it.
+    #[test]
+    fn a_window_is_the_earliest_parts_that_fit() {
+        use centraid_media::sealed::PART_BYTES;
+        let len = 3 * PART_BYTES + 5;
+        assert_eq!(window_within(PART_BYTES, len, &[0, 1, 2, 3]), vec![0]);
+        assert_eq!(
+            window_within(2 * PART_BYTES + 5, len, &[1, 2, 3]),
+            vec![1, 2, 3]
+        );
+        assert_eq!(
+            window_within(PART_BYTES - 1, len, &[1, 3]),
+            Vec::<u32>::new()
+        );
+        assert_eq!(window_within(PART_BYTES, len, &[3, 1]), vec![3]);
+        assert_eq!(bytes_of_parts(len, &[0, 3]), PART_BYTES + 5);
+        assert_eq!(
+            bytes_of_parts(len, &[9]),
+            0,
+            "a part the file lacks weighs nothing"
         );
     }
 }

@@ -227,8 +227,11 @@ public class ShelfDrain(
             if (answer.stopped != DrainAnswer.Stopped.EMPTY || answer.needBytes.isEmpty()) break
             val ask = answer.needBytes.map { it.contentHash }.toSet()
             // THE SAME ASK TWICE IS NO PROGRESS: the library would not produce
-            // those bytes, and asking again would spin the window away.
-            if (ask == asked) break
+            // those bytes, and asking again would spin the window away —
+            // unless the round moved parts. An original larger than the spool
+            // is asked for again, for its next window, once the last one
+            // moved (#1080, R-1080-C39).
+            if (ask == asked && answer.confirmedParts == 0) break
             asked = ask
             if (budgetMs > 0L && remaining() <= MIN_ROUND_MS) break
             if (feed(vaultId, answer.needBytes) == 0) break

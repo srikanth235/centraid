@@ -15,6 +15,11 @@
 //! no and resumes once moving has drained it, so a backlog never fills the
 //! phone. Free space is the caller's to measure: the plane has no platform
 //! call for it.
+//!
+//! **The budget bounds what waits, never what can back up.** A file larger
+//! than it is sealed a window of parts at a time, each window moved before
+//! the next is sealed: from the app's store part by part (R-1080-C12), and
+//! from the library one read per window (R-1080-C39).
 
 use std::fs::{self, File};
 use std::io::{self, Write};
@@ -44,7 +49,13 @@ impl Spool {
     /// The most the spool may hold, given the free space on its volume.
     #[must_use]
     pub fn budget(free_bytes: u64) -> u64 {
-        SPOOL_CEILING_BYTES.min(free_bytes / 10)
+        Self::budget_under(SPOOL_CEILING_BYTES, free_bytes)
+    }
+
+    /// The most the spool may hold under a `ceiling` other than 2 GiB.
+    #[must_use]
+    pub fn budget_under(ceiling: u64, free_bytes: u64) -> u64 {
+        ceiling.min(free_bytes / 10)
     }
 
     /// Open (creating) the spool, sweeping away any part a crash left
