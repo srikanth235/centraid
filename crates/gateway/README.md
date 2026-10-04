@@ -71,7 +71,7 @@ The `store/` cases of the suite hold these, and the vault's `MemoryStore` models
 - **A tombstone is not held.** `exists` lists it missing, the listing leaves it out, and a `PUT` stores the name again and clears the tombstone, so the purge leaves it alone. Until the purge, `GET` and `fetch` still serve its bytes: a restore that began from a snapshot keeps reading it while retention drops that snapshot.
 - **Deleting is idempotent.** A name never stored, already tombstoned or already purged is `deleted`.
 - **A head names a held manifest**, never one absent or tombstoned.
-- **A damaged object is not served.** The scrub marks what no longer hashes to its digest; `exists` lists it missing so the phone sends it again, `GET` answers `NOT_FOUND`, and `fetch` leaves it out.
+- **A damaged object is not served.** The scrub marks what no longer hashes to its digest; `exists` lists it missing so the phone sends it again, `GET` answers `NOT_FOUND`, and `fetch` leaves it out. A name whose file is gone from `objects/` is marked the same way the moment an `exists`, a `PUT` or a bundle frame meets it, without waiting for the scrub, so the `PUT` that brings it back stores it.
 
 ### Bodies stream at both ends
 
