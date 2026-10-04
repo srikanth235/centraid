@@ -630,7 +630,8 @@ fn names_of_snapshot(snapshot: &LedgerSnapshot) -> Result<BTreeSet<Name>> {
 /// Whether a snapshot is due. One the shell asked for (`wants_snapshot`)
 /// always is; otherwise
 /// one is due an hour after the newest a head named, and not while a younger
-/// one is still on its way whole — every part of it queued or held.
+/// one is still on its way whole — every part of it queued or held; and one
+/// is due at once at a gateway this phone has set no head at.
 fn snapshot_due(ledger: &Ledger, gateway_id: &str, wanted: bool) -> Result<bool> {
     if wanted {
         return Ok(true);
@@ -654,6 +655,17 @@ fn snapshot_due(ledger: &Ledger, gateway_id: &str, wanted: bool) -> Result<bool>
         {
             return Ok(false);
         }
+    }
+    // A GATEWAY THIS PHONE HAS SET NO HEAD AT — paired just now, or paired
+    // again after it lost the vault — is owed the records on this pass, not
+    // an hour after a head that another gateway, or another life of this one,
+    // acknowledged.
+    if ledger
+        .head_acked(gateway_id)
+        .map_err(plane_error)?
+        .is_none()
+    {
+        return Ok(true);
     }
     let last_set = snapshots
         .iter()
