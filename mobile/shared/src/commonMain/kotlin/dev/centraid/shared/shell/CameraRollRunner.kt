@@ -93,7 +93,11 @@ public class CameraRollRunner(
             // ordinary pass and never a second way to learn what is new: the
             // cursor is the durable answer, and a `PHChange` read here would be
             // a second opinion about it that a backgrounded app never gets.
-            scope.launch { once() }
+            // TO THE END, after a walk already going: a burst of a hundred
+            // photographs is more than one page, and a change that lands while
+            // the last page is read must not be dropped (#1080, the simulator
+            // edge cases).
+            scope.launch { walkToEnd() }
         }
         return scope.launch {
             syncPermission()
@@ -102,7 +106,7 @@ public class CameraRollRunner(
                     effect is ScreenEffect.RequestMediaPermission -> scope.launch { ask() }
                     effect is ScreenEffect.Backup &&
                         effect.action != ScreenEffect.Backup.Action.PAUSE ->
-                        scope.launch { once() }
+                        scope.launch { walkToEnd() }
                     // PAUSE STOPS THE NEXT PASS AND NEVER THE ONE RUNNING. A
                     // stage that is interrupted half way leaves the core a
                     // staging session nothing will ever end; the pass checks the
@@ -133,7 +137,7 @@ public class CameraRollRunner(
             // sit there is the failure.
             answer == MediaPermission.MEDIA_PERMISSION_LIMITED
         ) {
-            once()
+            walkToEnd()
         }
     }
 
@@ -148,7 +152,8 @@ public class CameraRollRunner(
      * cursor is what makes each one start where the last stopped, and
      * [MAX_PASSES] is the ceiling a cursor that failed to advance could never
      * run past. The automatic triggers — a grant, a library change, a
-     * `Backup` effect — stay one bounded pass each ([once]).
+     * `Backup` effect, and the session's passes ([follow]) — walk to the end
+     * too: only a background window needs a bounded page, and none walks.
      */
     public suspend fun pass() {
         val vault = vaultId() ?: return
@@ -180,7 +185,17 @@ public class CameraRollRunner(
         scope.launch { walkToEnd() }
     }
 
-    /** Passes until the roll is walked. [passing] is held on entry and released here. */
+    /**
+     * Passes until the roll is walked, with every state they publish reaching
+     * the screen as a `BackupChanged` event. [passing] is held on entry and
+     * released here.
+     *
+     * The states are sent through [ScreenHost.send] rather than written onto
+     * the state directly, because the reducer is the only thing that may decide
+     * what a state becomes — a runner that assigned `backup` would be a second
+     * writer of a screen's state and would lose whatever the reducer did
+     * between two of its own frames.
+     */
     private suspend fun walk(vault: String) {
         var imported = 0
         try {
@@ -193,29 +208,6 @@ public class CameraRollRunner(
                     return
                 }
             }
-        } finally {
-            passing.unlock()
-            if (imported > 0) scope.launch { afterImport() }
-        }
-    }
-
-    /**
-     * One pass, if one is not already running, with every state it publishes
-     * reaching the screen as a `BackupChanged` event.
-     *
-     * The states are sent through [ScreenHost.send] rather than written onto
-     * the state directly, because the reducer is the only thing that may decide
-     * what a state becomes — a runner that assigned `backup` would be a second
-     * writer of a screen's state and would lose whatever the reducer did
-     * between two of its own frames.
-     */
-    private suspend fun once() {
-        val vault = vaultId() ?: return
-        if (!passing.tryLock()) return
-        var imported = 0
-        try {
-            val report = roll.pass(vault) { state -> scope.launch { publish(state) } }
-            imported = report.queued - report.alreadyHeld
         } finally {
             passing.unlock()
             if (imported > 0) scope.launch { afterImport() }

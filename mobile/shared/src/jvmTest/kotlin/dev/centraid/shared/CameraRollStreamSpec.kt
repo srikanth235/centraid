@@ -156,6 +156,26 @@ class CameraRollStreamSpec : StringSpec({
         }
     }
 
+    "a library change walks the whole burst, not one page (#1080, the simulator edge cases)" {
+        runTest(UnconfinedTestDispatcher()) {
+            // ON THE SIMULATOR, 100 photographs added at once while Centraid was
+            // open: 35 were walked in and the rest waited for the next launch,
+            // while the line said "All".
+            val burst = (1..60).map { asset("P$it") }
+            val services = library(*burst.toTypedArray(), bytes = burst.associate { it.localId to "bytes of ${it.localId}".encodeToByteArray() })
+            val core = StagingCore()
+            CameraRollRunner(
+                services = services,
+                roll = CameraRoll(services, core = { core.core }),
+                host = ScreenHost(PhotosGridMachine),
+                scope = backgroundScope,
+                vaultId = { "vault-1" },
+            ).start()
+            services.mediaLibrary.libraryChanged()
+            core.commands.size shouldBe 60
+        }
+    }
+
     "a photograph streams from the library under its os_ref, commits, then stages its two derivatives" {
         runTest {
             val services = library(asset("A"), bytes = mapOf("A" to still))
