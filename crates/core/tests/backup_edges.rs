@@ -417,3 +417,84 @@ fn a_part_a_crash_left_in_the_spool_is_swept_by_the_next_core() {
         spooled(dir.path())
     );
 }
+
+/// **WHAT A GATEWAY LOST IS SENT AGAIN BY THE NEXT LAUNCH'S FIRST PASS**
+/// (#1080, B3; R-1080-7: the ledger "is reconciled against the gateway's own
+/// `exists` answer on every launch, so it … cannot drift"). Files went from
+/// the gateway's `objects/` behind its back: a photograph, its thumbnail and
+/// one range of the records' head. The ledger still confirms all of them.
+/// Only the iOS upload loop ever asked `reconcile`, so on any other shell the
+/// phone never asked again; the first pass of a core's life now asks about
+/// every name it confirmed, sends again what the gateway lost, and retakes a
+/// head the gateway no longer holds whole.
+#[test]
+fn what_the_gateway_lost_is_sent_again_by_the_next_launch() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let id = pair(&phone, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    let photo = bytes_of("a photograph the gateway's disk lost", 150_000);
+    let photo_handle = stage(&phone, owned("image/heic", &photo), &photo);
+    let thumb = bytes_of("its thumbnail, lost with it", 5_000);
+    stage(&phone, thumb_of(&photo_handle, &thumb), &thumb);
+    add_asset(&phone, &photo_handle, "photo");
+    note(&phone, "Kept", "a note in the records the head holds");
+    drain(&phone, at_home());
+
+    // THE FILES GO: the photograph's, the thumbnail's, and one range of the
+    // head. The gateway's index still lists all three.
+    let book = ledger(&path);
+    let head = book.head(&id).expect("reads").expect("a head");
+    let taken = book
+        .snapshots()
+        .expect("reads")
+        .into_iter()
+        .find(|snapshot| snapshot.name == head)
+        .expect("this phone took the head");
+    let manifest =
+        centraid_vault::backup::snapshot::Manifest::from_json(taken.manifest_json.as_bytes())
+            .expect("a manifest");
+    let range = manifest.ranges[0].name;
+    let lost: Vec<Name> = file_names(&phone).into_iter().chain([range]).collect();
+    assert_eq!(lost.len(), 3);
+    let store = gateway.spawned.shared().store();
+    let on_disk = |name: &Name| {
+        store.path(
+            &vault_id(),
+            &centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes()),
+        )
+    };
+    for name in &lost {
+        std::fs::remove_file(on_disk(name)).expect("a file goes");
+    }
+    drop(phone);
+
+    // THE NEXT LAUNCH: a new core, and an ordinary pass with nothing new.
+    let phone = reopen(&path);
+    let drained = drain(&phone, quietly());
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Empty as i32,
+        "{drained:?}"
+    );
+    for name in &lost {
+        assert!(
+            on_disk(name).is_file(),
+            "{name} is on the gateway's disk again"
+        );
+    }
+    let backed = status(&phone);
+    assert_eq!(backed.content_confirmed, backed.content_total);
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let restored = restore(new_dir.path(), &gateway);
+    assert_eq!(
+        restored.vaults.len(),
+        1,
+        "the head is whole again: {restored:?}"
+    );
+    assert_eq!(rows(&PathBuf::from(&restored.vaults[0].path)), rows(&path));
+}

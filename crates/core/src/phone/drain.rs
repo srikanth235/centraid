@@ -584,6 +584,23 @@ fn pass_over(
     let budget = plane.budget();
     let files = handle.with_vault(|vault| content_files(vault).map_err(plane_error))?;
 
+    // 0. ONCE A CORE'S LIFE, THE LEDGER IS SQUARED WITH THE GATEWAY (#1080
+    // ruling 7: reconciled "on every launch, so it … cannot drift"). Every
+    // name it confirmed there is asked about: one the gateway lost is
+    // unconfirmed, so this pass seals and sends it again, and a head no longer
+    // held whole is retaken (`snapshot_due`). Run here, not only from the
+    // `reconcile` door the iOS upload loop calls, so every shell gets it.
+    if handle.owes_full_reconcile() {
+        let squared = mover::reconcile(ledger, spool, store, &SystemClock).map_err(plane_error)?;
+        handle.reconciled_fully();
+        if !squared.unconfirmed.is_empty() {
+            tracing::warn!(
+                lost = squared.unconfirmed.len(),
+                "the gateway no longer holds names this phone confirmed; they go again"
+            );
+        }
+    }
+
     // 1. THE RECORDS, when the link may carry them.
     if conditions.may_move(Kind::Records) {
         if snapshot_due(ledger, store.gateway_id(), conditions.snapshot)? {
@@ -701,6 +718,20 @@ fn snapshot_due(ledger: &Ledger, gateway_id: &str, wanted: bool) -> Result<bool>
         .is_none()
     {
         return Ok(true);
+    }
+    // A HEAD THE GATEWAY NO LONGER HOLDS WHOLE — a range or its manifest a
+    // reconcile found gone — is retaken now: until it is, the records the
+    // status says are backed up do not restore.
+    if let Some(head) = ledger.head(gateway_id).map_err(plane_error)?
+        && let Some(taken) = snapshots.iter().find(|snapshot| snapshot.name == head)
+    {
+        let confirmed = ledger.confirmed_names(gateway_id).map_err(plane_error)?;
+        if !names_of_snapshot(taken)?
+            .iter()
+            .all(|name| confirmed.contains(name))
+        {
+            return Ok(true);
+        }
     }
     let last_set = snapshots
         .iter()
