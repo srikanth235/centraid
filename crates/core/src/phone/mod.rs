@@ -508,6 +508,15 @@ pub fn backup_status(
 
 // ─── free up space ──────────────────────────────────────────────────────────
 
+/// The library item a ref names. A shell may suffix a ref with `#<part>` for
+/// one part of a single item — iOS names a Live Photo's movie
+/// `<identifier>#pairedVideo` beside the still's `<identifier>` — and A20's
+/// "every hash under one item" groups by the part before the `#`, so a Live
+/// Photo is offered whole or not at all whichever of its halves is confirmed.
+fn item_of(os_ref: &str) -> &str {
+    os_ref.split('#').next().unwrap_or(os_ref)
+}
+
 /// **The originals a member may delete from the library** (`releasable`, the
 /// root's rulings A19 and A20). See `ReleasableRequest` for the rule; the
 /// kept albums are `<stem>.keep-originals.json` (`crate::originals`).
@@ -544,13 +553,16 @@ pub fn releasable(
         BTreeMap::new();
     for local in ledger.locals().map_err(plane_error)? {
         if local.source == LocalSource::Os
-            && let Some(os_ref) = local.os_ref.clone()
+            && let Some(os_ref) = local.os_ref.as_deref()
         {
-            by_ref.entry(os_ref).or_default().push(local);
+            by_ref
+                .entry(item_of(os_ref).to_owned())
+                .or_default()
+                .push(local);
         }
     }
     let mut items: Vec<(String, Vec<wire::Releasable>)> = Vec::new();
-    for (os_ref, locals) in by_ref {
+    for (item, locals) in by_ref {
         let mut group = Vec::with_capacity(locals.len());
         let mut created = String::new();
         let whole = locals.iter().all(|local| {
@@ -569,7 +581,7 @@ pub fn releasable(
                 }
                 group.push(wire::Releasable {
                     content_hash: file.h.as_bytes().to_vec(),
-                    os_ref: os_ref.clone(),
+                    os_ref: local.os_ref.clone().unwrap_or_else(|| item.clone()),
                     size: file.len,
                     media_type: file.media_type.clone(),
                 });
@@ -631,4 +643,17 @@ pub fn released(
     let assets =
         centraid_vault::originals::assets_for_hashes(vault, &gone.into_iter().collect::<Vec<_>>())?;
     Ok((wire::ReleasedResponse { recorded }, assets))
+}
+
+#[cfg(test)]
+mod item_tests {
+    #[test]
+    fn a_live_photo_is_one_item_under_both_its_refs() {
+        assert_eq!(super::item_of("ABC-123"), "ABC-123");
+        assert_eq!(super::item_of("ABC-123#pairedVideo"), "ABC-123");
+        assert_eq!(
+            super::item_of("content://media/external/images/media/42"),
+            "content://media/external/images/media/42"
+        );
+    }
 }

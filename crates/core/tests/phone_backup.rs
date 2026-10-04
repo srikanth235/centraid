@@ -654,7 +654,7 @@ fn an_original_comes_back_by_name_and_a_safe_library_item_is_offered_whole() {
     let live_film = bytes_of("a live photo's film", 90_000);
     let live_film_handle = stage(
         &phone,
-        library("video/quicktime", "lib-live", &live_film, false),
+        library("video/quicktime", "lib-live#pairedVideo", &live_film, false),
         &live_film,
     );
     add_asset(&phone, &live_film_handle, "video");
@@ -744,9 +744,16 @@ fn an_original_comes_back_by_name_and_a_safe_library_item_is_offered_whole() {
     let live: Vec<&wire::Releasable> = whole
         .items
         .iter()
-        .filter(|item| item.os_ref == "lib-live")
+        .filter(|item| item.os_ref.starts_with("lib-live"))
         .collect();
     assert_eq!(live.len(), 2, "a live photo is offered whole: {whole:?}");
+    // iOS NAMES THE FILM `<identifier>#pairedVideo`: one item, two refs, and
+    // the core groups by the identifier, so neither half is offered alone.
+    assert!(live.iter().any(|item| item.os_ref == "lib-live"));
+    assert!(
+        live.iter()
+            .any(|item| item.os_ref == "lib-live#pairedVideo")
+    );
     assert!(whole.items.iter().all(|item| item.os_ref != "lib-edited"));
 
     // RELEASED: the member deleted it from the library.
