@@ -92,6 +92,8 @@ cd mobile && ./gradlew -Pcentraid.android=true :androidApp:assembleDebug
 
 Without the flag, `:androidApp` **is not in the build at all** and `mobile/settings.gradle.kts` says so once, on every configuration. With the flag and no `ANDROID_HOME`, it refuses with the sentence that names this section. It never skips silently.
 
+**A JDK 21 Gradle can find.** `:core` and `:shared` compile with `jvmToolchain(21)`, and `:androidApp`'s unit tests run on JDK 21 for the same reason. Gradle looks for one where it is installed system-wide; a Homebrew `openjdk@21` is not there, and the build stops with "Cannot find a Java installation … matching languageVersion=21". Point `JAVA_HOME` at it (`export JAVA_HOME=$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home`), which the `mobile-jvm` gate needs as well, or pass `-Dorg.gradle.java.installations.paths=<that path>` to `./gradlew`.
+
 A **release** build (`assembleRelease`, and the release lane's `bundleRelease`) is shrunk and obfuscated by R8; a debug build is not. The keep rules are `androidApp/proguard-rules.pro`, and they exist for JNA: its native dispatcher reaches back into `com.sun.jna` by name, and `CentraidLibrary`'s method names are the C symbols. A class reached by name that a debug run exercises and a release run crashes on is a missing rule there.
 
 The AGP plugin is added to the build classpath **only** when the flag is set (`mobile/build.gradle.kts`'s `buildscript` block), so a machine with no SDK does not pay a download to reach a failure. The consequence is that `kotlin { androidLibrary { … } }` is configured **by name** rather than through typed accessors, and that block is therefore not type-checked here — the trade is stated in `mobile/core/build.gradle.kts` in full.

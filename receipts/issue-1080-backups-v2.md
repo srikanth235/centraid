@@ -1182,3 +1182,54 @@ On `1753bce70`, the tree the iOS run above built, 2026-10-04:
 - **Three `pr` scanners** (`actionlint`, `gitleaks`, `osv-scanner`) are not installed on this Mac and were skipped loudly.
 - **Xcode 27.0** built and tested everything here; the pin is 26.6.
 - Not run: the bad-checksum and typo restores on the simulator (automated typing on the words screen stalled; `phone::phrase`'s tests and `WordFieldTests` cover them), "Include videos" switched off, the background `URLSession` carrying parts while suspended (8.2, 8.5 — a local gateway moves 391 MB in seconds), Free up space (8.19).
+
+### Device hand-off results: the Android emulator
+
+Recorded 2026-10-04 by the root, on the same Mac, after the owner asked for Android too: an `sdk_gphone64_arm64` emulator (Android 15, API 35, Google APIs, 3 GB, `-gpu host`), the core built by `mobile/scripts/android-core.sh` at each core change, and `centraid-gateway serve` on the Mac, reached from the emulator at the pairing payload's LAN address. Every row is a smoke run, not a measurement (R-1020-20). Gradle found no JDK 21 on its own on this Mac (Homebrew's `openjdk@21` is not under `/Library/Java`), so every Android build passed `-Dorg.gradle.java.installations.paths=<openjdk@21>`.
+
+#### The rows
+
+| Row | Device and OS | Result | Evidence | Fix |
+| --- | --- | --- | --- | --- |
+| 8.8 | Android 15 emulator | pass, after three fixes | `:androidApp:assembleDebug :androidApp:lintDebug :androidApp:testDebugUnitTest` at `cf682f1df`: BUILD SUCCESSFUL, 8 unit tests and 0 failures, lint 0 errors and 28 warnings. On `backup/*.kt`, the manifest's two services and the new permissions, one finding: `SpecifyJobSchedulerIdRange` (warning, `BackupNow.kt`), not a clash — WorkManager 2.10 schedules in its own `JobScheduler` namespace (`androidx.work.systemjobscheduler`, seen in `dumpsys jobscheduler`) from API 34, the only place Back up now's job runs. Elsewhere: `MissingApplicationIcon` on the manifest | `3d64b348b`: the app did not compile (`NETWORK_BYTES_UNKNOWN` is an `Int`), lint refused `BackupJobService` (`NewApi`), and the unit tests failed with `UnsupportedClassVersionError` on the shared code's Java 21 classes |
+| 8.9 | Android 15 emulator (smoke) | pass, after two fixes | Centraid swiped from recents (no process left); the window's job forced with `cmd jobscheduler run -f -n androidx.work.systemjobscheduler dev.centraid <id>` once WorkManager's period was due — before it, WorkManager answers "Delaying execution … because it is being executed before schedule", so the row's command alone runs nothing, and the first forced run after a swipe is cancelled by WorkManager's own force-stop rescheduling. `CentraidSyncWorker` ran with no activity and answered SUCCESS; the snapshot it took holds the tasks written before leaving (head census `schedule_task` 15, the phone's 15) | `1d1f6a973`, `996f7317b` (below) |
+| 8.10 | Android 15 emulator (smoke) | pass in part | Back up now's job `#u0a213/1080 BackupJobService`: `userInitiatedApproved: true (started as UIJ: true)`, priority MAX, connectivity required. The notification was denied, so none showed; the 15 minutes with the screen off were not run (the emulator's pass ends in seconds) | |
+| 8.11 | — | not run | needs a phone below API 34; no such image here | |
+| 8.12 | — | not run | needs a camera photograph with location | |
+| 8.13 | Android 15 emulator (smoke) | pass | Back up now, then five rotations while "Backing up…" showed: the pass finished ("Backed up just now", a new head on the gateway), the same process throughout, Home drew "Demo vault" after each, no crash or ANR. One run rotated within a second of the tap and no pass started; not reproduced | `cf682f1df` (a rotation under the notification prompt, below) |
+| 8.14 | — | not run | needs a backlog a day old | |
+| 8.18 | Android 15 emulator (smoke) | pass | The periodic window's job: `NOT_METERED` with Wi-Fi only; the cellular rule chosen on the Backup screen dropped it (the night window, charger and Wi-Fi, kept it); "Wi-Fi only" chosen from Home's Download settings sheet, which showed the cellular rule selected, put it back | |
+| 8.20 | — | not run | needs a backed-up camera roll; photo access was not granted on the emulator | |
+
+#### The end-to-end smoke, Android half
+
+The demo vault (`mobile/scripts/demo-vault.sh android`: 19 photographs, 3 documents, 5 notes, 3 events, 10 tasks, people, a tally group, a locker) paired by typed code, the safety number matching the one `serve` printed. Back up now: "Backed up just now. All 37 photos and files", 94 live objects, every row with its file at its size. A note edited and a note written, a task completed and a task added, Back up now. The app's data cleared (a fresh phone), "Restore my vaults" with the demo vault's words and a new pairing code: the claim took the writer epoch from 1 to 2, "Your vaults are back. Vault 1: 1,456 rows.", the safety number matched, and Home drew the vault with its six notes and the new task. Against the phone's copy before the clear: `integrity_check` ok, foreign keys clean, **197 of 197 tables identical row for row**.
+
+#### Edge cases on the emulator
+
+| Case | What happened | Result |
+| --- | --- | --- |
+| Back up now with the notification grant refused | the job ran as a user-initiated job and the pass finished; the prompt came twice, as Android allows, then not again | pass |
+| A rotation while the notification prompt is up, then "Don't allow" | the backup never ran: the sheet's launcher was not registered in the recreated activity, so the answer carrying the tap was dropped | **bug**, fixed (`cf682f1df`): the same steps ran the pass, a new head on the gateway |
+| A task written with the gateway asleep, then the app left and swiped away; the gateway back; the worker's window | the window reached the gateway and took no snapshot: nothing on Android asked for one when the app left, and a snapshot asked for on a pass that reached nothing was dropped, so the task waited for the hour after the last head | **bug**, fixed in the core (`1d1f6a973`, red first in `records_backup.rs`) and the shell (`996f7317b`): the ledger read `pass.snapshot_owed 1` after leaving, the window took the snapshot, and the flag read 0 |
+| The app's data cleared and the debug build reinstalled after `demo-vault.sh` | `MainActivity` placed the stale demo copy from `assets/` beside the restored vault: two copies of one vault, the placed one unpaired | a debug fixture only (`assets/` is untracked and a clean checkout has none); the assets were removed for the rest of the run |
+| A cold launch of the debug build on the emulator | 61 s to the first frame once, and one ANR ("No response to onStartJob") while the main thread spent 11 s in Compose's content capture | not a loop (0% CPU after); debug build, software-loaded emulator |
+
+#### Gates
+
+Run by the root at `d4218b940`, 2026-10-04, with `JAVA_HOME` set to Homebrew's JDK 21 (the gate finds no JDK 21 on this Mac without it, the same gap as the Android builds):
+
+- `cargo xtask gate --profile pr`: **PASS**, 529.5 s of 1,500 s. Every step ok, `test` 361.6 s and `restore-drill` 36.4 s; `deny`, `ci-policy` (with `actionlint`), `secrets` (`gitleaks`) and `osv` ran, the scanners now installed on this Mac. A first run failed `fmt` on the new test alone (`d4218b940` formats it).
+- `cargo xtask gate --profile mobile-jvm`: **PASS**, 37.7 s of 420 s; 1,155 JVM tests in 85 suites, 0 failed. A first run without `JAVA_HOME` failed before compiling ("Cannot find a Java installation … matching languageVersion=21").
+- `:androidApp:assembleDebug :androidApp:lintDebug :androidApp:testDebugUnitTest` (row 8.8): BUILD SUCCESSFUL; no gate profile builds `:androidApp`.
+- `bash .governance/run.sh`: every directive passes.
+- The `local` gate and the iOS bundle were not re-run for these commits; the core change is covered by `pr`'s `test` and the restore drill.
+
+#### For the owner
+
+- **Snapshot timing, again**: with the two fixes, the app leaving the screen snapshots on Android, and the request survives an unreachable gateway. Edits made while the app stays open still wait for leaving, Back up now or the hour (the earlier **Snapshot cadence** item).
+- **Row 8.9's command** needs WorkManager's period to have elapsed, and the first forced run after a swipe is cancelled by WorkManager's own rescheduling; the row could say so.
+- **Row 8.18's job name**: `dumpsys jobscheduler` shows WorkManager's jobs by id under its namespace, not by `centraid-sync-pass`; the window is the one without a charging constraint.
+- **The demo fixture in `assets/`** is untracked and not ignored, so `git add -A` after `demo-vault.sh android` would commit a 3.7 MB vault.
+- **`MissingApplicationIcon`**: the app has no launcher icon of its own.
+- Not run on Android: 8.11, 8.12, 8.14, 8.20, the 15 minutes of 8.10, the bad-checksum and typo restores, "Include videos" switched off, and the old phone's freeze (one emulator; the iOS run showed it).
