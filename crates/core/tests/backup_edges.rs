@@ -498,3 +498,66 @@ fn what_the_gateway_lost_is_sent_again_by_the_next_launch() {
     );
     assert_eq!(rows(&PathBuf::from(&restored.vaults[0].path)), rows(&path));
 }
+
+/// **A STATUS READ WHILE A PASS RUNS ALWAYS ANSWERS, AND A SECOND PASS IS
+/// REFUSED, NOT RUN** (#1080, B8). The Backup screen reads the status while
+/// "Back up now" moves parts, and the mover deletes each acknowledged part's
+/// spool file as it goes; the status counts the spool's bytes. A second pass
+/// — another tap, a background window — is refused while one runs, the
+/// member's tap is held for exactly its own pass, and nothing is sealed or
+/// sent twice.
+#[test]
+fn a_status_read_while_a_pass_runs_always_answers() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = std::sync::Arc::new(phone(dir.path()));
+    let id = pair(&phone, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    drain(&phone, at_home());
+    originals(&phone, "a photograph the screen watches go", 120, 2_048);
+
+    let running = std::sync::Arc::clone(&phone);
+    let pass = std::thread::spawn(move || {
+        try_drain(
+            &running,
+            wire::DrainRequest {
+                asked: true,
+                ..quietly()
+            },
+        )
+    });
+    let mut reads = 0_u32;
+    let mut refused_second = false;
+    while !pass.is_finished() {
+        if let Err(error) = try_ask(
+            &phone,
+            wire::request::Kind::BackupStatus(wire::BackupStatusRequest {}),
+        ) {
+            panic!("a status read during a pass was refused: {error}");
+        }
+        reads += 1;
+        if phone.plane().asking() {
+            let second = try_drain(&phone, at_home());
+            if let Err(error) = second {
+                assert_eq!(error.code(), wire::ErrorCode::InvalidRequest, "{error}");
+                refused_second = true;
+            }
+        }
+    }
+    let drained = pass.join().expect("the pass thread").expect("the pass");
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Empty as i32,
+        "{drained:?}"
+    );
+    assert_eq!(drained.confirmed_parts, 120);
+    assert!(reads > 1, "the screen read the status while the pass ran");
+    assert!(refused_second, "a second pass is refused while one runs");
+    assert!(!phone.plane().asking(), "the tap ended with its pass");
+    let held = gateway.held(&vault_id());
+    assert_eq!(held, ledger(&path).confirmed_names(&id).expect("reads"));
+    assert!(ledger(&path).queued().expect("reads").is_empty());
+}

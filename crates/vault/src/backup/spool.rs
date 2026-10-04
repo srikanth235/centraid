@@ -219,7 +219,14 @@ impl Spool {
     pub fn bytes(&self) -> Result<u64> {
         let mut total = 0_u64;
         for name in self.names()? {
-            total = total.saturating_add(fs::metadata(self.path(&name))?.len());
+            // A PART DELETED BETWEEN THE LISTING AND THIS LOOK IS GONE, NOT AN
+            // ERROR: the status is read while a pass deletes every part a
+            // gateway acknowledged, and a screen's read must not fail for it.
+            match fs::metadata(self.path(&name)) {
+                Ok(meta) => total = total.saturating_add(meta.len()),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
         }
         Ok(total)
     }
