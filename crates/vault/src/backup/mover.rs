@@ -695,6 +695,110 @@ mod tests {
         assert_eq!(rig.ledger.queued().expect("reads").len(), 1);
     }
 
+    /// A destination whose disk is full until a test frees it: every write
+    /// is refused `DISK_FULL`, everything else is the memory store's.
+    struct Full<'a> {
+        inner: &'a MemoryStore,
+        full: std::cell::Cell<bool>,
+    }
+
+    impl Store for Full<'_> {
+        fn gateway_id(&self) -> &str {
+            self.inner.gateway_id()
+        }
+        fn exists(&self, names: &[Name]) -> std::result::Result<Vec<Name>, StoreError> {
+            self.inner.exists(names)
+        }
+        fn put(
+            &self,
+            name: &Name,
+            digest: &Digest,
+            len: u64,
+            body: &mut dyn std::io::Read,
+        ) -> std::result::Result<store::Put, StoreError> {
+            if self.full.get() {
+                return Err(StoreError::Refused(Refusal::DiskFull));
+            }
+            self.inner.put(name, digest, len, body)
+        }
+        fn get(
+            &self,
+            name: &Name,
+            sink: &mut dyn std::io::Write,
+        ) -> std::result::Result<u64, StoreError> {
+            self.inner.get(name, sink)
+        }
+        fn head(&self) -> std::result::Result<Option<store::Head>, StoreError> {
+            self.inner.head()
+        }
+        fn set_head(
+            &self,
+            name: &Name,
+            prev: Option<&Name>,
+            taken_at_ms: u64,
+        ) -> std::result::Result<store::Head, StoreError> {
+            self.inner.set_head(name, prev, taken_at_ms)
+        }
+        fn snapshots(&self) -> std::result::Result<Vec<store::SnapshotEntry>, StoreError> {
+            self.inner.snapshots()
+        }
+        fn list(
+            &self,
+            after: Option<&Name>,
+            limit: usize,
+        ) -> std::result::Result<Vec<store::ObjectEntry>, StoreError> {
+            self.inner.list(after, limit)
+        }
+        fn delete(&self, names: &[Name]) -> std::result::Result<store::Deleted, StoreError> {
+            self.inner.delete(names)
+        }
+    }
+
+    /// **A FULL DISK ON THE GATEWAY BACKS NOTHING UP, AND THE PASS AFTER
+    /// THE ROOM COMES BACK FINISHES** (#1080, the sweep's B4). Every part
+    /// stays queued and spooled with the refusal recorded as its attempt,
+    /// nothing is confirmed, and once the disk has room the next pass moves
+    /// them all.
+    #[test]
+    fn a_full_disk_confirms_nothing_and_the_pass_after_it_finishes() {
+        let rig = rig();
+        let ranges: Vec<Name> = (0..3)
+            .map(|index| queue(&rig, &format!("range {index}"), PartKind::Range))
+            .collect();
+        let original = queue(&rig, "original", PartKind::Original);
+        let full = Full {
+            inner: &rig.store,
+            full: std::cell::Cell::new(true),
+        };
+        let refused =
+            move_queue(&rig.ledger, &rig.spool, &full, far(), &rig.clock).expect("a pass");
+        assert_eq!(refused.stopped, Stop::Refused(Refusal::DiskFull));
+        assert!(refused.confirmed.is_empty());
+        assert!(rig.ledger.confirmed_names("gw").expect("reads").is_empty());
+        let queued = rig.ledger.queued().expect("reads");
+        assert_eq!(queued.len(), 4, "every part waits");
+        assert!(
+            queued
+                .iter()
+                .filter(|part| part.attempts > 0)
+                .all(|part| part.last_error.as_deref() == Some("DISK_FULL")),
+            "the refusal is the attempt's outcome"
+        );
+        assert!(
+            ranges
+                .iter()
+                .chain([&original])
+                .all(|name| rig.spool.contains(name))
+        );
+
+        full.full.set(false);
+        let moved = move_queue(&rig.ledger, &rig.spool, &full, far(), &rig.clock).expect("a pass");
+        assert_eq!(moved.stopped, Stop::Empty);
+        assert_eq!(moved.confirmed.len(), 4);
+        assert!(rig.ledger.queued().expect("reads").is_empty());
+        assert!(rig.spool.names().expect("lists").is_empty());
+    }
+
     #[test]
     fn reconcile_follows_the_destination_both_ways() {
         let rig = rig();
