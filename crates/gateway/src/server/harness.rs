@@ -5,10 +5,13 @@
 //! `127.0.0.1:0` through [`crate::server::serve::bind`], and serves on the
 //! caller's tokio runtime. What it adds is what only a test may do: mint a
 //! pairing secret without a terminal, move the gateway's clock, run a sweep
-//! now, and flip a stored bit. Nothing is faked below the socket: a phone's
-//! client talks TLS to it and the rules answer from SQLite and real files.
+//! now, flip a stored bit, and cut the [`Cable`] its listener's connections
+//! run through, part-way through whatever a phone is doing. Nothing is faked
+//! below the socket: a phone's client talks TLS to it and the rules answer
+//! from SQLite and real files.
 //!
-//! It advertises nothing on the LAN. Dropping the handle stops the server.
+//! It advertises nothing on the LAN. Dropping the handle stops the server;
+//! [`spawn_on`] starts it again where it was.
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -23,7 +26,7 @@ use crate::rules::engine::ScrubCounts;
 use crate::rules::ids::{GatewayId, Name, Pin, Secret, Token, VaultId};
 use crate::rules::payload::PairPayload;
 use crate::rules::state::{Fault, StoreFault};
-use crate::server::serve::{TlsListener, bind, run};
+use crate::server::serve::{Cable, TlsListener, bind, run};
 use crate::server::sweeps::{purge_once, scrub_once};
 use crate::server::{Announcer, Handle, OpenError, Shared, system_now_ms};
 
@@ -40,6 +43,7 @@ pub struct Spawned {
     pub gateway_id: GatewayId,
     shared: Handle,
     offset: Arc<AtomicI64>,
+    cable: Arc<Cable>,
     stop: Option<oneshot::Sender<()>>,
     task: Option<JoinHandle<std::io::Result<()>>>,
 }
@@ -63,6 +67,29 @@ pub async fn spawn_with(
     data_dir: &Path,
     announcer: Option<Announcer>,
 ) -> Result<Spawned, OpenError> {
+    serve_on(data_dir, announcer, "127.0.0.1:0", false).await
+}
+
+/// [`spawn`] on `address`, where a gateway that stopped was listening: the
+/// same gateway started again where its phones reach it, as `serve` is on its
+/// configured port.
+///
+/// # Errors
+///
+/// As [`spawn`].
+pub async fn spawn_on(data_dir: &Path, address: SocketAddr) -> Result<Spawned, OpenError> {
+    serve_on(data_dir, None, &address.to_string(), true).await
+}
+
+/// Open `data_dir` as `serve` does and serve it on `address`. `again` is a
+/// port a stopped gateway's runtime just freed, so a bind that finds it not
+/// yet free is tried again for a second.
+async fn serve_on(
+    data_dir: &Path,
+    announcer: Option<Announcer>,
+    address: &str,
+    again: bool,
+) -> Result<Spawned, OpenError> {
     let offset = Arc::new(AtomicI64::new(0));
     let clock_offset = Arc::clone(&offset);
     let clock =
@@ -76,14 +103,23 @@ pub async fn spawn_with(
         .store()
         .clear_staged()
         .map_err(|error| OpenError::Io(data_dir.display().to_string(), error))?;
-    let listener = bind("127.0.0.1:0")
-        .await
-        .map_err(|error| OpenError::Io("127.0.0.1:0".to_owned(), error))?;
+    let mut tries = 0;
+    let listener = loop {
+        match bind(address).await {
+            Ok(listener) => break listener,
+            Err(error) if again && tries < 50 && error.kind() == std::io::ErrorKind::AddrInUse => {
+                tries += 1;
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            Err(error) => return Err(OpenError::Io(address.to_owned(), error)),
+        }
+    };
     let config = shared
         .identity()
         .server_config()
         .map_err(|error| OpenError::Tls(error.to_string()))?;
-    let listener = TlsListener::new(listener, config)
+    let cable = Arc::new(Cable::default());
+    let listener = TlsListener::cabled(listener, config, Arc::clone(&cable))
         .map_err(|error| OpenError::Io("the bound socket".to_owned(), error))?;
     let addr = listener.local();
     let (stop, stopped) = oneshot::channel::<()>();
@@ -97,6 +133,7 @@ pub async fn spawn_with(
         gateway_id: shared.identity().gateway_id(),
         shared,
         offset,
+        cable,
         stop: Some(stop),
         task: Some(task),
     })
@@ -148,6 +185,14 @@ impl Spawned {
     /// Move the gateway's clock `ms` forward.
     pub fn advance_clock(&self, ms: i64) {
         self.offset.fetch_add(ms, Ordering::SeqCst);
+    }
+
+    /// The cable every connection to this gateway runs through: cut it, or
+    /// let a budget of bytes through and then cut it, to take the gateway
+    /// away part-way through what a phone is doing.
+    #[must_use]
+    pub fn cable(&self) -> &Cable {
+        &self.cable
     }
 
     /// The data directory.

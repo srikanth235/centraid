@@ -105,6 +105,24 @@ pub fn note_titles(connection: &Connection) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The calendar founding seeds and the party that owns it:
+/// `(calendar_id, owner_party_id)`.
+///
+/// A record test writing an event needs a calendar to put it on, and founding
+/// makes exactly one; `None` when there is none, which a fixture should not
+/// survive.
+#[must_use]
+pub fn the_founded_calendar(connection: &Connection) -> Option<(String, String)> {
+    connection
+        .query_row(
+            "SELECT calendar_id, owner_party_id FROM schedule_calendar
+              ORDER BY created_at, calendar_id LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .ok()
+}
+
 /// The one content item in a file, with the asset that names it:
 /// `(content_id, content_uri, asset_id)`.
 ///

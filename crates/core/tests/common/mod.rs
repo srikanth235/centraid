@@ -13,17 +13,14 @@
 #![allow(dead_code)]
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{Read, Write};
-use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_core::{Core, CoreConfig, Handle};
 use centraid_gateway::rules::ids::VaultId;
 use centraid_gateway::rules::state::{ObjectRecord, State as _};
 use centraid_gateway::server::harness::{self, Spawned};
+use centraid_gateway::server::serve::Cable;
 use centraid_vault::backup::ledger::Ledger;
 use centraid_vault::backup::naming::Name;
 
@@ -85,27 +82,36 @@ impl Gateway {
         self.spawned.payload().to_json()
     }
 
-    /// A fresh pairing payload naming `addr` instead of the gateway's own
-    /// socket: what a QR printed for a relay in front of it carries.
-    pub fn payload_at(&self, addr: SocketAddr) -> String {
-        self.spawned
-            .shared()
-            .payload(vec![addr.to_string()])
-            .expect("a payload")
-            .to_json()
+    /// The cable every connection to this gateway runs through: what a test
+    /// cuts to take the gateway away part-way through a pass or a restore.
+    /// TLS runs over it untouched — the phone still pins the gateway's own
+    /// certificate — so a cut is exactly a laptop that went to sleep or left
+    /// the network.
+    pub fn cable(&self) -> &Cable {
+        self.spawned.cable()
     }
 
-    /// Stop serving and start again over the same data directory, on a new
-    /// port: a laptop that went to sleep and woke up.
+    /// Stop serving and start again over the same data directory, at the same
+    /// address: a laptop that went to sleep and woke up, its `serve` on the
+    /// port it is configured with.
     pub fn restart(self) -> Self {
         let Self {
-            runtime,
+            runtime: asleep,
             dir,
             spawned,
         } = self;
-        runtime.block_on(spawned.shutdown());
-        drop(runtime);
-        gateway_in(dir)
+        let addr = spawned.addr;
+        asleep.block_on(spawned.shutdown());
+        drop(asleep);
+        let runtime = runtime();
+        let spawned = runtime
+            .block_on(harness::spawn_on(dir.path(), addr))
+            .expect("the gateway starts again where it was");
+        Gateway {
+            runtime,
+            dir,
+            spawned,
+        }
     }
 
     /// Every file under the gateway's data directory, read whole.
@@ -544,174 +550,4 @@ pub fn file_names(handle: &Handle) -> BTreeSet<Name> {
                 .collect())
         })
         .expect("reads")
-}
-
-// ─── a gateway that can be taken away mid-pass ──────────────────────────────
-
-/// A TCP relay between a phone and a gateway, which a test can cut.
-///
-/// TLS passes through it untouched — the phone still pins the gateway's own
-/// certificate — so what a cut looks like to the phone is exactly a laptop
-/// that went to sleep or left the network: connections reset mid-request,
-/// and new ones accepted and closed before a handshake.
-pub struct Relay {
-    pub addr: SocketAddr,
-    shared: Arc<RelayShared>,
-}
-
-struct RelayShared {
-    upstream: Mutex<SocketAddr>,
-    up: AtomicBool,
-    /// Bytes the phone may still send before the relay cuts.
-    budget: AtomicI64,
-    /// Bytes the gateway may still answer before the relay cuts.
-    answers: AtomicI64,
-    /// Bytes the phone has sent through the relay.
-    sent: AtomicU64,
-    live: Mutex<Vec<TcpStream>>,
-    stopping: AtomicBool,
-}
-
-impl RelayShared {
-    fn cut(&self) {
-        self.up.store(false, Ordering::SeqCst);
-        for socket in self.live.lock().expect("the relay's sockets").drain(..) {
-            let _ = socket.shutdown(Shutdown::Both);
-        }
-    }
-}
-
-impl Relay {
-    /// A relay to `upstream`, open.
-    pub fn to(upstream: SocketAddr) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("the relay binds");
-        let addr = listener.local_addr().expect("an address");
-        let shared = Arc::new(RelayShared {
-            upstream: Mutex::new(upstream),
-            up: AtomicBool::new(true),
-            budget: AtomicI64::new(i64::MAX),
-            answers: AtomicI64::new(i64::MAX),
-            sent: AtomicU64::new(0),
-            live: Mutex::new(Vec::new()),
-            stopping: AtomicBool::new(false),
-        });
-        let accepting = Arc::clone(&shared);
-        std::thread::spawn(move || {
-            for incoming in listener.incoming() {
-                if accepting.stopping.load(Ordering::SeqCst) {
-                    break;
-                }
-                let Ok(phone) = incoming else { continue };
-                if !accepting.up.load(Ordering::SeqCst) {
-                    let _ = phone.shutdown(Shutdown::Both);
-                    continue;
-                }
-                let upstream = *accepting.upstream.lock().expect("the upstream");
-                let Ok(gateway) = TcpStream::connect(upstream) else {
-                    let _ = phone.shutdown(Shutdown::Both);
-                    continue;
-                };
-                let _ = phone.set_nodelay(true);
-                let _ = gateway.set_nodelay(true);
-                let clones = (
-                    phone.try_clone().expect("clones"),
-                    gateway.try_clone().expect("clones"),
-                );
-                accepting.live.lock().expect("the relay's sockets").extend([
-                    phone.try_clone().expect("clones"),
-                    gateway.try_clone().expect("clones"),
-                ]);
-                let sending = Arc::clone(&accepting);
-                let answering = Arc::clone(&accepting);
-                std::thread::spawn(move || pump(phone, gateway, &sending, Way::Sent));
-                std::thread::spawn(move || pump(clones.1, clones.0, &answering, Way::Answered));
-            }
-        });
-        Self { addr, shared }
-    }
-
-    /// Cut every connection now, and close every new one before it says a
-    /// word: the gateway is gone.
-    pub fn cut(&self) {
-        self.shared.cut();
-    }
-
-    /// Let `bytes` more of the phone's bytes through, then cut.
-    pub fn cut_after(&self, bytes: i64) {
-        self.shared.budget.store(bytes, Ordering::SeqCst);
-    }
-
-    /// Let `bytes` more of the gateway's answers through, then cut: a
-    /// restore asks little and is answered a vault.
-    pub fn cut_after_answers(&self, bytes: i64) {
-        self.shared.answers.store(bytes, Ordering::SeqCst);
-    }
-
-    /// Every byte the phone has sent through the relay so far.
-    pub fn sent(&self) -> u64 {
-        self.shared.sent.load(Ordering::SeqCst)
-    }
-
-    /// The gateway is back.
-    pub fn mend(&self) {
-        self.shared.budget.store(i64::MAX, Ordering::SeqCst);
-        self.shared.answers.store(i64::MAX, Ordering::SeqCst);
-        self.shared.up.store(true, Ordering::SeqCst);
-    }
-
-    /// Relay to another socket from now on: a gateway that restarted.
-    pub fn retarget(&self, upstream: SocketAddr) {
-        *self.shared.upstream.lock().expect("the upstream") = upstream;
-    }
-}
-
-impl Drop for Relay {
-    fn drop(&mut self) {
-        self.shared.stopping.store(true, Ordering::SeqCst);
-        self.shared.cut();
-        let _ = TcpStream::connect(self.addr);
-    }
-}
-
-/// Which way a pump copies.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Way {
-    /// The phone to the gateway.
-    Sent,
-    /// The gateway to the phone.
-    Answered,
-}
-
-/// Copy `from` into `to` until either end goes, spending the relay's budget
-/// for this way and cutting every connection when it runs out.
-fn pump(mut from: TcpStream, mut to: TcpStream, shared: &Arc<RelayShared>, way: Way) {
-    let budget = match way {
-        Way::Sent => &shared.budget,
-        Way::Answered => &shared.answers,
-    };
-    let mut buffer = vec![0_u8; 64 * 1024];
-    loop {
-        let read = match from.read(&mut buffer) {
-            Ok(0) | Err(_) => break,
-            Ok(read) => read,
-        };
-        if way == Way::Sent {
-            shared.sent.fetch_add(read as u64, Ordering::SeqCst);
-        }
-        let size = i64::try_from(read).unwrap_or(i64::MAX);
-        let left = budget.fetch_sub(size, Ordering::SeqCst);
-        let (pass, cut) = if left < size {
-            (usize::try_from(left.max(0)).unwrap_or(0), true)
-        } else {
-            (read, false)
-        };
-        if pass > 0 && to.write_all(&buffer[..pass]).is_err() {
-            break;
-        }
-        if cut {
-            shared.cut();
-            break;
-        }
-    }
-    let _ = to.shutdown(Shutdown::Write);
 }

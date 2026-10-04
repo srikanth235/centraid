@@ -348,7 +348,6 @@ fn damage_on_the_gateway_is_refused_before_any_claim() {
 #[test]
 fn a_gateway_that_dies_mid_fetch_is_restored_from_next_time() {
     let gateway = gateway();
-    let relay = Relay::to(gateway.spawned.addr);
     let old_dir = tempfile::tempdir().expect("a directory");
     let old = phone(old_dir.path());
     pair(&old, &gateway);
@@ -362,9 +361,9 @@ fn a_gateway_that_dies_mid_fetch_is_restored_from_next_time() {
     drain(&old, at_home());
 
     let new_dir = tempfile::tempdir().expect("a directory");
-    relay.cut_after_answers(64 * 1024);
-    let cut = try_restore(new_dir.path(), &gateway.payload_at(relay.addr))
-        .expect_err("the gateway went mid-fetch");
+    gateway.cable().cut_after_answers(64 * 1024);
+    let cut =
+        try_restore(new_dir.path(), &gateway.payload()).expect_err("the gateway went mid-fetch");
     assert_eq!(cut.code(), wire::ErrorCode::PeerUnreachable, "{cut}");
     assert!(
         nothing_laid_down(new_dir.path()).is_empty(),
@@ -373,8 +372,8 @@ fn a_gateway_that_dies_mid_fetch_is_restored_from_next_time() {
     );
     assert_eq!(gateway.writer(&vault_id()).0, 1, "no epoch was spent");
 
-    relay.mend();
-    let restored = try_restore(new_dir.path(), &gateway.payload_at(relay.addr))
+    gateway.cable().mend();
+    let restored = try_restore(new_dir.path(), &gateway.payload())
         .unwrap_or_else(|error| panic!("the next restore finishes: {error}"));
     assert_eq!(restored.vaults.len(), 1, "{restored:?}");
     assert_eq!(gateway.writer(&vault_id()).0, 2, "one claim");
@@ -426,7 +425,6 @@ fn a_restore_killed_after_its_claim_is_finished_by_the_next_one() {
 #[test]
 fn a_gateway_that_dies_after_the_claim_leaves_the_restored_vault() {
     let gateway = gateway();
-    let relay = Relay::to(gateway.spawned.addr);
     let old_dir = tempfile::tempdir().expect("a directory");
     let old_path = old_dir.path().join("vault.db");
     let old = phone(old_dir.path());
@@ -447,13 +445,13 @@ fn a_gateway_that_dies_after_the_claim_leaves_the_restored_vault() {
         &new_dir.path().join("custody.db"),
         &wire::RestoreRequest {
             phrase: WORDS.to_owned(),
-            payload: gateway.payload_at(relay.addr),
+            payload: gateway.payload(),
             ..wire::RestoreRequest::default()
         },
         runtime.handle(),
         // THE GATEWAY GOES once the claim's answer is through, before the
         // grid's 360 KB.
-        &mut |_| relay.cut_after_answers(8 * 1024),
+        &mut |_| gateway.cable().cut_after_answers(8 * 1024),
     )
     .unwrap_or_else(|error| panic!("the claim landed and the vault is kept: {error}"));
     assert_eq!(restored.vaults.len(), 1, "{restored:?}");
@@ -470,10 +468,10 @@ fn a_gateway_that_dies_after_the_claim_leaves_the_restored_vault() {
         })
         .count();
     assert!(landed < thumbs.len(), "the gateway went mid-grid");
+
+    gateway.cable().mend();
     let refused = try_drain(&old, quietly()).expect_err("the old phone is fenced");
     assert_eq!(refused.code(), wire::ErrorCode::VaultMoved, "{refused}");
-
-    relay.mend();
     let phone = reopen(&path);
     note(&phone, "After", "written on the restored phone");
     let next = drain(&phone, at_home());
@@ -720,11 +718,10 @@ fn after_a_restore_only_what_is_new_is_sent() {
 #[test]
 fn a_records_only_vault_and_a_cut_short_pass_restore_what_was_acknowledged() {
     let gateway = gateway();
-    let relay = Relay::to(gateway.spawned.addr);
     let old_dir = tempfile::tempdir().expect("a directory");
     let old_path = old_dir.path().join("vault.db");
     let old = phone(old_dir.path());
-    pair_with(&old, &gateway.payload_at(relay.addr));
+    pair(&old, &gateway);
     note(&old, "Records", "a vault of records and no files");
     drain(&old, at_home());
     let acknowledged = rows(&old_path);
@@ -734,10 +731,11 @@ fn a_records_only_vault_and_a_cut_short_pass_restore_what_was_acknowledged() {
     let staged = stage(&old, owned("image/heic", &photo), &photo);
     add_asset(&old, &staged, "photo");
     note(&old, "Unsent", "written before the cut");
-    relay.cut_after(40 * 1024);
+    gateway.cable().cut_after(40 * 1024);
     let cut = drain(&old, at_home());
     assert_eq!(cut.stopped, wire::DrainStop::Unreachable as i32, "{cut:?}");
 
+    gateway.cable().mend();
     let new_dir = tempfile::tempdir().expect("a directory");
     let restored = restore(new_dir.path(), &gateway);
     let path = PathBuf::from(&restored.vaults[0].path);
