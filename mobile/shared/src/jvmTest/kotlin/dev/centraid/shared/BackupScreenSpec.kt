@@ -152,6 +152,17 @@ class BackupScreenSpec : StringSpec({
             .background_notice shouldBe ""
     }
 
+    "a vault that moved offers no Forget, and a forget sent anyway asks nothing (#1080, the sweep)" {
+        // THE CORE REFUSES IT (e91c2bd2b): forgetting would drop the moved mark
+        // with the gateway's row, and a later pairing would take the vault over
+        // with this phone's older copy. A button that can only fail is not drawn.
+        val frozen = ready(read(frozen = true))
+        frozen.state.forget_label shouldBe ""
+        frozen.on(BackupScreenEvent(forget_destination = BackupScreenEvent.ForgetDestination(gateway_id = "gw-1")))
+            .effects.shouldBeEmpty()
+        ready(read()).state.forget_label shouldBe SharedCopy.BACKUP_FORGET
+    }
+
     "a vault that moved offers no Add a laptop (#1080, the simulator edge cases)" {
         // ON THE SIMULATOR, the frozen old phone paired its gateway from this
         // button, took the vault over with its stale copy, and set the head

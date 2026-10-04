@@ -101,8 +101,9 @@ public object BackupScreenMachine {
             val include = event.set_include_videos.include
             step(model.copy(includeVideos = include, notice = ""), listOf(BackupEffect.WriteIncludeVideos(include)))
         }
-        // ONLY A GATEWAY THE SCREEN IS DRAWING can be forgotten from it.
-        event.forget_destination != null &&
+        // ONLY A GATEWAY THE SCREEN IS DRAWING can be forgotten from it, and
+        // none on a vault that moved.
+        event.forget_destination != null && !model.line.frozen &&
             model.destinations().any { it.gatewayId == event.forget_destination.gateway_id } -> {
             val gatewayId = event.forget_destination.gateway_id
             step(model.copy(notice = ""), listOf(BackupEffect.Forget(gatewayId, labelOf(model, gatewayId))))
@@ -134,7 +135,9 @@ public object BackupScreenMachine {
                 // the head over the newer phone's (#1080, the simulator edge
                 // cases). It comes back by a restore, which starts from the head.
                 add_destination_label = if (model.line.frozen) "" else SharedCopy.BACKUP_ADD_DESTINATION,
-                forget_label = SharedCopy.BACKUP_FORGET,
+                // NOR FORGOTTEN FROM HERE: the core refuses it, because the
+                // gateway's row is where the moved mark lives (#1080, the sweep).
+                forget_label = if (model.line.frozen) "" else SharedCopy.BACKUP_FORGET,
                 rule = model.rule.stored,
                 rule_label = SharedCopy.BACKUP_RULE_HEADING,
                 include_videos = model.includeVideos,
