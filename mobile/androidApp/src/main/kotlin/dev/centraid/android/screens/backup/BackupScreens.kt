@@ -65,6 +65,8 @@ import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.shell.TransferRuleChoice
 import dev.centraid.shared.sync.BackupBridge
 import dev.centraid.shared.sync.TransferRule
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 // THE BACKUP SCREEN AND THE HOME LINE (#1080, the shells; seam contract A11).
@@ -246,9 +248,20 @@ public class BackupSheets {
     public var showing: Boolean by mutableStateOf(false)
         private set
 
+    /**
+     * A "Back up now" whose notification answer arrived before a session was
+     * attached: the activity was recreated under the system's dialog. See
+     * [answered].
+     */
+    private var owedBackUpNow = false
+
     public fun attach(session: HomeSession) {
         bridge.attach(session)
         this.session = session
+        if (owedBackUpNow) {
+            owedBackUpNow = false
+            run(session)
+        }
     }
 
     /** Home's backup line. */
@@ -263,23 +276,50 @@ public class BackupSheets {
         bridge.forward(BackupEvents.dismissed())
     }
 
+    /**
+     * The notification grant was answered, either way — a refused grant hides
+     * the notification, not the backup. With the sheet up the tap goes to the
+     * machine as ever. With it down, the activity was recreated under the
+     * system's dialog (a rotation): the new sheet is closed and has read no
+     * gateway, so the machine would refuse the event, and the tap goes to the
+     * session's own run, which an opened screen follows like any other.
+     */
+    private fun answered() {
+        if (showing) {
+            bridge.forward(BackupEvents.backUpNow())
+            return
+        }
+        val open = session
+        if (open == null) owedBackUpNow = true else run(open)
+    }
+
+    private fun run(session: HomeSession) {
+        CoroutineScope(Dispatchers.IO).launch { session.backUpNow() }
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     public fun Sheet(onAddDestination: () -> Unit) {
+        // "BACK UP NOW" IS THE MACHINE'S: the event starts the session's run,
+        // and the session starts and stops the job around it. The shell's part
+        // is the notification grant, asked for here, at the tap and never
+        // before; the event goes once the grant is answered ([answered]), so
+        // the job is started from a visible app.
+        //
+        // REGISTERED WHETHER OR NOT THE SHEET IS UP (#1080, the Android
+        // emulator smoke). A rotation while the system's dialog is up
+        // recreates the activity with the sheet down; the answer is delivered
+        // to the launcher registered under the same key, and a launcher that
+        // only existed inside an open sheet was never registered again, so
+        // the member's tap was dropped without a word.
+        val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+            answered()
+        }
         if (!showing) return
         val state by bridge.states.collectAsStateWithLifecycle()
         val model = BackupScreenModel.of(state)
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
-        // "BACK UP NOW" IS THE MACHINE'S: the event starts the session's run,
-        // and the session starts and stops the job around it. The shell's part
-        // is the notification grant, asked for here, at the tap and never
-        // before; the event goes once the grant is answered, either way — a
-        // refused grant hides the notification, not the backup — so the job
-        // is started from a visible app.
-        val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-            bridge.forward(BackupEvents.backUpNow())
-        }
         val backUpNow: () -> Unit = {
             if (needsNotificationGrant(context)) {
                 notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
