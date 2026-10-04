@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use centraid_api_proto::core_v1 as wire;
@@ -564,6 +564,8 @@ struct RelayShared {
     up: AtomicBool,
     /// Bytes the phone may still send before the relay cuts.
     budget: AtomicI64,
+    /// Bytes the phone has sent through the relay.
+    sent: AtomicU64,
     live: Mutex<Vec<TcpStream>>,
     stopping: AtomicBool,
 }
@@ -586,6 +588,7 @@ impl Relay {
             upstream: Mutex::new(upstream),
             up: AtomicBool::new(true),
             budget: AtomicI64::new(i64::MAX),
+            sent: AtomicU64::new(0),
             live: Mutex::new(Vec::new()),
             stopping: AtomicBool::new(false),
         });
@@ -634,6 +637,11 @@ impl Relay {
         self.shared.budget.store(bytes, Ordering::SeqCst);
     }
 
+    /// Every byte the phone has sent through the relay so far.
+    pub fn sent(&self) -> u64 {
+        self.shared.sent.load(Ordering::SeqCst)
+    }
+
     /// The gateway is back.
     pub fn mend(&self) {
         self.shared.budget.store(i64::MAX, Ordering::SeqCst);
@@ -666,6 +674,7 @@ fn pump(mut from: TcpStream, mut to: TcpStream, budgeted: Option<&Arc<RelayShare
         let mut pass = read;
         let mut cut = false;
         if let Some(shared) = budgeted {
+            shared.sent.fetch_add(read as u64, Ordering::SeqCst);
             let left = shared
                 .budget
                 .fetch_sub(i64::try_from(read).unwrap_or(i64::MAX), Ordering::SeqCst);

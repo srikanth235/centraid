@@ -171,3 +171,140 @@ fn pairing_again_with_a_gateway_that_lost_the_vault_sends_everything_again() {
     assert_eq!(restored.vaults.len(), 1, "{restored:?}");
     assert_eq!(rows(&PathBuf::from(&restored.vaults[0].path)), rows(&path));
 }
+
+/// Pair through a relay in front of the gateway: the payload names the relay,
+/// so every later pass reaches the gateway through it. Answers the gateway's
+/// id.
+fn pair_through(handle: &centraid_core::Handle, gateway: &Gateway, relay: &Relay) -> String {
+    pair_with(handle, &gateway.payload_at(relay.addr))
+        .destination
+        .expect("a destination")
+        .gateway_id
+}
+
+/// `count` originals of `size` bytes each, owned by the app.
+fn originals(handle: &centraid_core::Handle, label: &str, count: usize, size: usize) {
+    for index in 0..count {
+        let bytes = bytes_of(&format!("{label} {index}"), size);
+        let staged = stage(handle, owned("image/heic", &bytes), &bytes);
+        add_asset(handle, &staged, "photo");
+    }
+}
+
+/// **A GATEWAY THAT GOES AWAY PART-WAY THROUGH A PASS** (#1080, B1; the
+/// root's simulator repro: a gateway killed while a film's parts moved).
+/// Nothing counts as backed up that the gateway did not acknowledge; what
+/// waits is counted as waiting for the gateway, not for time; and when it
+/// comes back the next pass sends only what is left, leaving the gateway
+/// holding exactly what the ledger confirms.
+#[test]
+fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
+    let gateway = gateway();
+    let relay = Relay::to(gateway.spawned.addr);
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let id = pair_through(&phone, &gateway, &relay);
+    drain(&phone, at_home());
+    // SIX ORIGINALS OF A MEBIBYTE: each part goes alone.
+    originals(&phone, "a photograph the gateway half took", 6, 1 << 20);
+
+    // THE GATEWAY GOES AWAY PART-WAY THROUGH THE THIRD.
+    relay.cut_after(2 * (1 << 20) + (1 << 19));
+    let cut = drain(&phone, quietly());
+    assert_eq!(cut.stopped, wire::DrainStop::Unreachable as i32, "{cut:?}");
+    assert!(
+        (1..6).contains(&cut.confirmed_parts),
+        "some moved before the gateway went: {cut:?}"
+    );
+    let held = gateway.held(&vault_id());
+    let confirmed = ledger(&path).confirmed_names(&id).expect("reads");
+    assert!(
+        confirmed.is_subset(&held),
+        "the ledger confirms nothing the gateway does not hold"
+    );
+    let left = 6 - u64::from(cut.confirmed_parts);
+    let waits = status(&phone);
+    assert_eq!(waits.content_confirmed, u64::from(cut.confirmed_parts));
+    assert_eq!(
+        (
+            waiting(&waits, wire::WaitReason::Gateway),
+            waiting(&waits, wire::WaitReason::Window)
+        ),
+        (left, 0),
+        "what waits, waits for the gateway: {:?}",
+        waits.waiting
+    );
+
+    // THE GATEWAY COMES BACK, and the next pass sends what is left.
+    relay.mend();
+    let resumed = drain(&phone, quietly());
+    assert_eq!(
+        resumed.stopped,
+        wire::DrainStop::Empty as i32,
+        "{resumed:?}"
+    );
+    assert_eq!(
+        u64::from(resumed.confirmed_parts),
+        left,
+        "nothing acknowledged is sent again"
+    );
+    let backed = status(&phone);
+    assert_eq!(backed.content_confirmed, backed.content_total);
+    assert!(backed.waiting.is_empty(), "{:?}", backed.waiting);
+    assert_eq!(
+        gateway.held(&vault_id()),
+        ledger(&path).confirmed_names(&id).expect("reads"),
+        "the gateway holds exactly what the ledger confirms"
+    );
+}
+
+/// **A GATEWAY THAT GOES AWAY WHILE A PASS ASKS IT A QUESTION** (#1080, B1).
+/// The pass reached the gateway and was asking it `exists` when it went.
+/// That is the same gateway out of reach as one that stops mid-upload: an
+/// answer that says so, and a status that waits for the gateway — never a
+/// refusal a shell reads as "no pass ran".
+#[test]
+fn a_gateway_that_goes_away_mid_question_is_an_unreachable_pass() {
+    let gateway = gateway();
+    let relay = Relay::to(gateway.spawned.addr);
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair_through(&phone, &gateway, &relay);
+    drain(&phone, at_home());
+    // WHAT A PASS WITH NOTHING TO DO SENDS: a handshake and `info`.
+    let before = relay.sent();
+    drain(&phone, quietly());
+    let reach = relay.sent() - before;
+    let seen = |phone: &centraid_core::Handle| status(phone).destinations[0].last_seen_ms;
+    let last_seen = seen(&phone);
+
+    // FIFTY ORIGINALS, and the gateway goes a few bytes into the question.
+    originals(&phone, "a small original", 50, 512);
+    relay.cut_after(i64::try_from(reach).expect("fits") + 64);
+    let cut = try_drain(&phone, quietly())
+        .unwrap_or_else(|error| panic!("a gateway out of reach is an answer: {error}"));
+    assert!(
+        seen(&phone) > last_seen,
+        "the pass reached the gateway first"
+    );
+    assert_eq!(cut.stopped, wire::DrainStop::Unreachable as i32, "{cut:?}");
+    let waits = status(&phone);
+    assert_eq!(
+        waiting(&waits, wire::WaitReason::Gateway),
+        50,
+        "{:?}",
+        waits.waiting
+    );
+
+    relay.mend();
+    let resumed = drain(&phone, quietly());
+    assert_eq!(
+        resumed.stopped,
+        wire::DrainStop::Empty as i32,
+        "{resumed:?}"
+    );
+    assert_eq!(resumed.confirmed_parts, 50);
+    let backed = status(&phone);
+    assert_eq!(backed.content_confirmed, 50);
+}

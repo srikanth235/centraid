@@ -343,6 +343,12 @@ struct Pass {
     /// What each asked-for item's stream is to seal, by its identifier in
     /// the library (R-1080-C39).
     planned: BTreeMap<String, Planned>,
+    /// What the gateway did part-way through, for the status to say until a
+    /// pass reaches it again: `REACH_SILENT` when it stopped answering,
+    /// `REACH_UNTRUSTED` when another machine answered in its place. `None`
+    /// when it answered to the end — a refusal included, which is the
+    /// gateway's answer and not its absence.
+    heard: Option<&'static str>,
 }
 
 impl Pass {
@@ -356,7 +362,23 @@ impl Pass {
             waiting_bytes: BTreeSet::new(),
             promised: 0,
             planned: BTreeMap::new(),
+            heard: None,
         }
+    }
+
+    /// The mover stopped this pass, or did not: answers whether it did, and
+    /// keeps why — what the pass answers, and what the gateway did.
+    fn stopped_by(&mut self, stop: &Stop) -> Result<bool> {
+        let Some(answer) = stop_of(stop)? else {
+            return Ok(false);
+        };
+        self.stopped = answer;
+        self.heard = match stop {
+            Stop::Unreachable(_) => Some(REACH_SILENT),
+            Stop::Untrusted(_) => Some(REACH_UNTRUSTED),
+            _ => None,
+        };
+        Ok(true)
     }
 
     /// Whether this pass already asked for the item, under its hash or its
@@ -507,13 +529,28 @@ pub fn run(
     match outcome {
         Ok(()) => {
             handle.plan_library(std::mem::take(&mut pass.planned));
-            if pass.stopped == wire::DrainStop::Untrusted {
-                // PART-WAY THROUGH, ANOTHER MACHINE ANSWERED: status says so
-                // until a pass reaches the pinned gateway again.
-                ledger
-                    .set_meta(REACHABLE_KEY, REACH_UNTRUSTED)
-                    .map_err(plane_error)?;
+            if let Some(heard) = pass.heard {
+                // PART-WAY THROUGH, THE GATEWAY WENT, OR ANOTHER MACHINE
+                // ANSWERED: status says so until a pass reaches the pinned
+                // gateway again, rather than counting what waits as waiting
+                // for time.
+                ledger.set_meta(REACHABLE_KEY, heard).map_err(plane_error)?;
             }
+            answer(&spool, pass)
+        }
+        // THE GATEWAY STOPPED ANSWERING WHILE THE PASS ASKED IT SOMETHING —
+        // `exists`, the head, retention's list. Inside a pass the store is
+        // the only thing that answers `Unavailable` (`super::store_error`),
+        // and a gateway out of reach is the pass's answer, `UNREACHABLE`, as
+        // when it goes mid-upload: never a refusal a shell reads as "no pass
+        // ran". Nothing it did not acknowledge was recorded.
+        Err(CoreError::Unavailable { reason }) => {
+            tracing::debug!(%reason, "the gateway stopped answering mid-pass");
+            handle.plan_library(std::mem::take(&mut pass.planned));
+            ledger
+                .set_meta(REACHABLE_KEY, REACH_SILENT)
+                .map_err(plane_error)?;
+            pass.stopped = wire::DrainStop::Unreachable;
             answer(&spool, pass)
         }
         Err(CoreError::VaultMoved { current_epoch, .. }) => {
@@ -558,8 +595,7 @@ fn pass_over(
             })
             .map_err(plane_error)?;
         pass.count(moved.confirmed.len());
-        if let Some(stop) = stop_of(&moved.stopped)? {
-            pass.stopped = stop;
+        if pass.stopped_by(&moved.stopped)? {
             return Ok(());
         }
         settle_newest(ledger, store, keyring, &files, pass)?;
@@ -591,8 +627,7 @@ fn pass_over(
             })
             .map_err(plane_error)?;
         pass.count(moved.confirmed.len());
-        if let Some(stop) = stop_of(&moved.stopped)? {
-            pass.stopped = stop;
+        if pass.stopped_by(&moved.stopped)? {
             return Ok(());
         }
         // A ROUND THAT MOVED PARTS FREED ROOM, so one more prepare asks for
