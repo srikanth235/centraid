@@ -209,13 +209,18 @@ fn the_operating_system_moves_a_handed_off_part_and_settle_records_it() {
         "the thumbnail alone: {metered:?}"
     );
     assert!(metered.pending_bytes > 0, "the original waits in the spool");
+    // BOTH WAIT FOR WI-FI: the original's bytes, and the thumbnail's row —
+    // its bytes crossed, but the snapshot that holds its row may not cross a
+    // metered link under Wi-Fi only, and a file is backed up once its bytes
+    // and its row are.
     let waiting = status(&phone);
     assert!(
         waiting
             .waiting
             .iter()
-            .any(|row| row.reason == wire::WaitReason::Wifi as i32 && row.count == 1),
-        "{waiting:?}"
+            .any(|row| row.reason == wire::WaitReason::Wifi as i32 && row.count == 2),
+        "{:?}",
+        waiting.waiting
     );
 
     let wire::response::Kind::Handoff(batch) = ask(

@@ -675,3 +675,79 @@ fn many_snapshots_keep_the_gateway_bounded() {
     let restored = restore(new_dir.path(), &gateway);
     assert_eq!(rows(&PathBuf::from(&restored.vaults[0].path)), rows(&path));
 }
+
+/// **A FILE IS BACKED UP ONCE ITS BYTES AND ITS ROW ARE** (#1080, S2; the
+/// root's simulator repro: "Backed up · All 75 photos and files" while the
+/// three newest photographs' rows were in no snapshot, so a restore then
+/// would have returned 72). Ordinary passes move a new file's bytes and take
+/// no snapshot within the hour; its row reaches the gateway only with the
+/// next one. Until then it is not counted as backed up, and Free up space
+/// does not offer to delete it from the library: lost with the phone, it
+/// would be bytes on a gateway that no restored vault names.
+#[test]
+fn a_file_is_backed_up_once_its_bytes_and_its_row_are() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    drain(&phone, at_home());
+
+    // A PHOTOGRAPH AND A LIBRARY STILL, MOVED BY AN ORDINARY PASS.
+    let photo = bytes_of("a photograph taken after the head", 60_000);
+    let photo_handle = stage(&phone, owned("image/heic", &photo), &photo);
+    add_asset(&phone, &photo_handle, "photo");
+    let still = bytes_of("a library still taken after the head", 50_001);
+    let still_handle = stage(
+        &phone,
+        library("image/heic", "lib-new", &still, false),
+        &still,
+    );
+    add_asset(&phone, &still_handle, "photo");
+    let quiet = drain(&phone, quietly());
+    assert!(quiet.acked_at_ms.is_none(), "no snapshot: {quiet:?}");
+    assert!(quiet.confirmed_parts >= 2, "the bytes moved: {quiet:?}");
+    let waits = status(&phone);
+    assert_eq!(
+        (waits.content_confirmed, waits.content_total),
+        (0, 2),
+        "bytes without a row a restore brings back are not a backup: {:?}",
+        waits.waiting
+    );
+    assert_eq!(
+        waiting(&waits, wire::WaitReason::Window),
+        2,
+        "{:?}",
+        waits.waiting
+    );
+    let releasable = |phone: &Handle| {
+        let wire::response::Kind::Releasable(offered) = ask(
+            phone,
+            wire::request::Kind::Releasable(wire::ReleasableRequest { limit: 10 }),
+        ) else {
+            panic!("releasable answers");
+        };
+        offered
+    };
+    assert!(
+        releasable(&phone).items.is_empty(),
+        "nothing is offered for deletion before its row is backed up"
+    );
+
+    // THE NEXT SNAPSHOT TAKES THE ROWS.
+    let tapped = drain(
+        &phone,
+        wire::DrainRequest {
+            asked: true,
+            ..at_home()
+        },
+    );
+    assert!(tapped.acked_at_ms.is_some(), "{tapped:?}");
+    let backed = status(&phone);
+    assert_eq!((backed.content_confirmed, backed.content_total), (2, 2));
+    assert!(backed.waiting.is_empty(), "{:?}", backed.waiting);
+    assert_eq!(
+        releasable(&phone).items.len(),
+        1,
+        "the still is offered now"
+    );
+}

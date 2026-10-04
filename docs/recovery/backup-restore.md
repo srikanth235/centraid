@@ -6,7 +6,7 @@ The rulings are [decisions.md](../decisions.md#backups-from-first-principles-108
 
 ## What a backup is
 
-"Backed up" means one thing: **the gateway acknowledged that object, and the phone recorded the acknowledgement durably** ([R-1080-7](../decisions.md#backups-from-first-principles-1080)). Every object is a sealed **part**, and the vault's database plus the 24 words is the whole index of them: a part's name and key derive from the vault's backup key and the BLAKE3 of the file's plaintext, which the vault already stores for every content item and derivative ([R-1080-4](../decisions.md#backups-from-first-principles-1080)).
+"Backed up" means one thing: **the gateway acknowledged that object, and the phone recorded the acknowledgement durably** ([R-1080-7](../decisions.md#backups-from-first-principles-1080)). A file is two such things — its bytes, by name, and its row, in a snapshot — and it is backed up once both are: bytes no acknowledged snapshot's row names come back with no restore, so until the next snapshot such a file waits. Every object is a sealed **part**, and the vault's database plus the 24 words is the whole index of them: a part's name and key derive from the vault's backup key and the BLAKE3 of the file's plaintext, which the vault already stores for every content item and derivative ([R-1080-4](../decisions.md#backups-from-first-principles-1080)).
 
 | Piece | What it is |
 | --- | --- |

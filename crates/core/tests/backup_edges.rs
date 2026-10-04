@@ -256,14 +256,16 @@ fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
         "the ledger confirms nothing the gateway does not hold"
     );
     let left = 6 - u64::from(cut.confirmed_parts);
+    // ALL SIX WAIT FOR THE GATEWAY: the bytes it did not take, and the rows
+    // of every one, which no snapshot has taken yet.
     let waits = status(&phone);
-    assert_eq!(waits.content_confirmed, u64::from(cut.confirmed_parts));
+    assert_eq!(waits.content_confirmed, 0);
     assert_eq!(
         (
             waiting(&waits, wire::WaitReason::Gateway),
             waiting(&waits, wire::WaitReason::Window)
         ),
-        (left, 0),
+        (6, 0),
         "what waits, waits for the gateway: {:?}",
         waits.waiting
     );
@@ -280,6 +282,20 @@ fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
         u64::from(resumed.confirmed_parts),
         left,
         "nothing acknowledged is sent again"
+    );
+    let rows_wait = status(&phone);
+    assert_eq!(
+        waiting(&rows_wait, wire::WaitReason::Window),
+        6,
+        "the bytes are there and the rows wait for the next snapshot: {:?}",
+        rows_wait.waiting
+    );
+    drain(
+        &phone,
+        wire::DrainRequest {
+            asked: true,
+            ..at_home()
+        },
     );
     let backed = status(&phone);
     assert_eq!(backed.content_confirmed, backed.content_total);
@@ -337,6 +353,13 @@ fn a_gateway_that_goes_away_mid_question_is_an_unreachable_pass() {
         "{resumed:?}"
     );
     assert_eq!(resumed.confirmed_parts, 50);
+    drain(
+        &phone,
+        wire::DrainRequest {
+            asked: true,
+            ..at_home()
+        },
+    );
     let backed = status(&phone);
     assert_eq!(backed.content_confirmed, 50);
 }
@@ -598,6 +621,13 @@ fn the_spool_never_holds_more_than_its_ceiling() {
 
     let home = drain(&phone, quietly());
     assert_eq!(home.stopped, wire::DrainStop::Empty as i32, "{home:?}");
+    drain(
+        &phone,
+        wire::DrainRequest {
+            asked: true,
+            ..at_home()
+        },
+    );
     let backed = status(&phone);
     assert_eq!((backed.content_confirmed, backed.content_total), (4, 4));
     assert_eq!(spool_bytes(dir.path()), 0);
@@ -914,6 +944,18 @@ fn a_gateway_asleep_when_the_pass_begins_is_waited_for() {
     let awake = drain(&phone, quietly());
     assert_eq!(awake.stopped, wire::DrainStop::Empty as i32, "{awake:?}");
     assert_eq!(awake.confirmed_parts, 3);
+    assert_eq!(
+        waiting(&status(&phone), wire::WaitReason::Window),
+        3,
+        "the rows wait"
+    );
+    drain(
+        &phone,
+        wire::DrainRequest {
+            asked: true,
+            ..at_home()
+        },
+    );
     assert!(status(&phone).waiting.is_empty());
 }
 
@@ -1023,13 +1065,26 @@ fn a_part_the_os_moved_unsettled_is_confirmed_by_the_next_core() {
     let next = drain(&phone, quietly());
     assert_eq!(next.stopped, wire::DrainStop::Empty as i32, "{next:?}");
     assert_eq!(next.confirmed_parts, 0, "nothing is sent again");
+    assert!(ledger(&path).queued().expect("reads").is_empty());
+    assert!(file_names(&phone).iter().all(|name| {
+        ledger(&path)
+            .confirmed_names(&id)
+            .expect("reads")
+            .contains(name)
+    }));
+    drain(
+        &phone,
+        wire::DrainRequest {
+            asked: true,
+            ..at_home()
+        },
+    );
     let backed = status(&phone);
     assert_eq!(
         backed.content_confirmed, backed.content_total,
         "{:?}",
         backed.waiting
     );
-    assert!(ledger(&path).queued().expect("reads").is_empty());
     assert!(spooled(dir.path()).is_empty());
 }
 
@@ -1119,6 +1174,19 @@ fn an_item_edited_after_backup_backs_up_beside_the_original() {
         drained.stopped,
         wire::DrainStop::Empty as i32,
         "{drained:?}"
+    );
+    let backed = status(&phone);
+    assert_eq!(
+        (backed.content_confirmed, backed.content_total),
+        (1, 2),
+        "the edit's row waits for the next snapshot"
+    );
+    drain(
+        &phone,
+        wire::DrainRequest {
+            asked: true,
+            ..at_home()
+        },
     );
     let backed = status(&phone);
     assert_eq!((backed.content_confirmed, backed.content_total), (2, 2));
@@ -1222,7 +1290,7 @@ fn two_vaults_on_one_gateway_cannot_reach_each_other() {
     assert!(forget(&one, &one_id).forgotten);
     assert_eq!(gateway.held(&two_vault), held_two);
     originals(&two, "vault two goes on", 1, 20_000);
-    let next = drain(&two, quietly());
+    let next = drain(&two, at_home());
     assert_eq!(next.stopped, wire::DrainStop::Empty as i32, "{next:?}");
     assert_eq!(status(&two).content_confirmed, 4);
 }
