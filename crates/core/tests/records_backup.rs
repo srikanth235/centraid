@@ -38,14 +38,11 @@ fn calendar_and_owner(phone: &Handle) -> (String, String) {
     phone
         .with_vault(|vault| {
             Ok(vault.read(|connection| {
-                Ok(connection.query_row(
-                    "SELECT calendar_id, owner_party_id FROM schedule_calendar LIMIT 1",
-                    [],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
-                )?)
+                Ok(centraid_vault::testdoor::the_founded_calendar(connection))
             })?)
         })
-        .expect("a calendar")
+        .expect("reads")
+        .expect("founding seeds a calendar")
 }
 
 /// The manifest of the head this phone set at its gateway.
@@ -302,11 +299,7 @@ fn records_written_after_the_last_snapshot_wait_for_the_next() {
         phone
             .with_vault(|vault| {
                 Ok(vault.read(|connection| {
-                    Ok(
-                        connection.query_row("SELECT count(*) FROM knowledge_note", [], |row| {
-                            row.get::<_, i64>(0)
-                        })?,
-                    )
+                    Ok(centraid_vault::testdoor::note_titles(connection).len())
                 })?)
             })
             .expect("counts")
@@ -360,15 +353,20 @@ fn records_written_after_the_last_snapshot_wait_for_the_next() {
         &json!({ "title": "Third", "body_text": "an hour later", "format": "plain" }),
         "third",
     );
-    let book = centraid_vault::rusqlite::Connection::open(
-        centraid_vault::backup::ledger::Ledger::path_for(&path),
-    )
-    .expect("opens the ledger");
-    book.execute(
-        "UPDATE snapshot SET taken_at_ms = taken_at_ms - 3700000",
-        [],
-    )
-    .expect("an hour passes");
+    let book = ledger(&path);
+    for snapshot in book.snapshots().expect("reads") {
+        book.forget_snapshot(&snapshot.name).expect("forgets");
+        book.record_snapshot(
+            &snapshot.name,
+            snapshot.taken_at_ms - 3_700_000,
+            &snapshot.manifest_json,
+        )
+        .expect("an hour passes");
+        if let Some(acked) = snapshot.acked_ms {
+            book.ack_snapshot(&snapshot.name, acked)
+                .expect("acknowledged");
+        }
+    }
     let hourly = drain(&phone, quietly());
     assert!(
         hourly.acked_at_ms.is_some(),
@@ -423,15 +421,11 @@ fn a_snapshot_taken_while_the_apps_write_is_one_moment() {
     let path = PathBuf::from(&restored.vaults[0].path);
     let report = centraid_vault::backup::restore::restore_check(&path).expect("checks");
     assert!(report.is_clean(), "{report:?}");
-    let titles: Vec<String> = centraid_vault::Vault::open(&path)
+    let mut titles: Vec<String> = centraid_vault::Vault::open(&path)
         .expect("opens")
-        .read(|connection| {
-            let mut statement =
-                connection.prepare("SELECT title FROM knowledge_note ORDER BY title")?;
-            let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
-            Ok(rows.collect::<centraid_vault::rusqlite::Result<Vec<_>>>()?)
-        })
+        .read(|connection| Ok(centraid_vault::testdoor::note_titles(connection)))
         .expect("reads");
+    titles.sort();
     let expected: Vec<String> = (0..titles.len())
         .map(|index| format!("n{index:05}"))
         .collect();

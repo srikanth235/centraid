@@ -21,6 +21,19 @@
 //! naming that head. Any other phone writing the vault there is then refused
 //! `MOVED` and freezes, which is what pairing a phone to its vault means.
 //!
+//! # A SUPERSEDED PHONE TAKES NOTHING OVER
+//!
+//! A claim makes the claiming phone's own copy the vault: its next pass sets
+//! that copy's snapshot as the head, and retention then collects every file
+//! the copy does not name. So a phone another phone superseded — its ledger
+//! carries a `MOVED` mark, or records this gateway at a writer epoch below
+//! the one the gateway answers — is refused `VAULT_MOVED` before anything is
+//! claimed or cleared, and a pairing that finds the higher epoch freezes it as
+//! a pass would. Its copy is older than the head by definition; claimed, it
+//! would put the vault back where it was and delete what the newer phone
+//! backed up (the root's simulator repro, #1080). The way back is a restore
+//! from the 24 words, which starts from the gateway's head.
+//!
 //! # THE NUMBER THE MEMBER READS ALOUD (#1029 W15-D5, the root's ruling A17)
 //!
 //! `safety_number_of_bytes` over the vault's identity key and the pin, both 32
@@ -200,15 +213,31 @@ pub(crate) fn try_claim(
     }
 }
 
+/// The refusal a superseded phone's pairing answers: another phone holds the
+/// vault at `current_epoch`, and this phone's copy is older than its head.
+const fn superseded(current_epoch: u64) -> CoreError {
+    CoreError::VaultMoved {
+        current_epoch,
+        moved_at_ms: 0,
+    }
+}
+
 /// Take this vault over at `gateway`: read its head under a read-only grant,
 /// then claim the writer epoch one past it, naming that head — retried when
 /// either moved under the claim. Answers the pairing and the head the claim
 /// named, which is the head the gateway holds as this phone becomes its
 /// writer.
+///
+/// `held` is the writer epoch this phone's token at `gateway` was minted at,
+/// when its ledger records the gateway. A writer epoch above it is another
+/// phone's claim since — a restore, or a takeover — and this phone's copy is
+/// older than the head that phone set, so it is refused
+/// [`CoreError::VaultMoved`] and nothing is claimed.
 pub(crate) fn take_over(
     client: &Client,
     keyring: &Keyring,
     gateway: &GatewayId,
+    held: Option<u64>,
     runtime: &tokio::runtime::Handle,
 ) -> Result<(Paired, Option<centraid_gateway::rules::ids::Name>)> {
     let Some(grant) = read_grant(client, keyring, gateway, runtime)? else {
@@ -222,6 +251,9 @@ pub(crate) fn take_over(
         .map_err(pairing_error)?;
     let (mut epoch, mut head) = (state.epoch, state.head.map(|head| head.name));
     for _ in 0..CLAIM_ATTEMPTS {
+        if held.is_some_and(|mine| epoch > mine) {
+            return Err(superseded(epoch));
+        }
         match try_claim(
             client,
             keyring,
@@ -266,6 +298,18 @@ pub fn pair(
                 .to_owned(),
         });
     };
+    // A SUPERSEDED PHONE PAIRS NOTHING (the module header's "superseded").
+    // Asked of the ledger before anything is dialled, claimed or cleared:
+    // clearing this gateway's row below would clear the mark that freezes it.
+    let ledger = plane.ledger()?;
+    if let Some((_, epoch)) = super::moved(&ledger)? {
+        return Err(superseded(epoch));
+    }
+    let gateway_hex = payload.gw.hex();
+    let held = ledger
+        .destination(&gateway_hex)
+        .map_err(plane_error)?
+        .map(|destination| destination.epoch);
     let client = first_contact(&payload, runtime)?;
     let secret = PairRequest {
         vault_id: keyring.vault_id(),
@@ -279,7 +323,16 @@ pub fn pair(
         // A SECRET ADMITS ONLY A VAULT THE GATEWAY HOLDS NOTHING OF: no head.
         Ok(paired) => (paired, None),
         Err(ClientError::Refused(Refusal::VaultKnown)) => {
-            take_over(&client, keyring, &payload.gw, runtime)?
+            match take_over(&client, keyring, &payload.gw, held, runtime) {
+                // LEARNED HERE, AS A PASS WOULD HAVE: the phone freezes.
+                Err(CoreError::VaultMoved { current_epoch, .. }) => {
+                    ledger
+                        .set_moved(&gateway_hex, current_epoch)
+                        .map_err(plane_error)?;
+                    return Err(superseded(current_epoch));
+                }
+                taken => taken?,
+            }
         }
         Err(error) => return Err(pairing_error(error)),
     };
@@ -300,15 +353,16 @@ pub fn pair(
         last_seen_ms: Some(now),
         last_ack_ms: None,
     };
-    let ledger = plane.ledger()?;
     // A PAIRING STARTS THIS GATEWAY'S RECORD OVER (#1080, the sweep's B3 and
     // R-1080-C17). Whatever the ledger kept under this gateway's id from an
     // earlier pairing — every acknowledgement, the head this phone last set
-    // there, when one was acknowledged, a `MOVED` — describes a gateway state
-    // this pairing replaced: a secret admits only a vault the gateway holds
+    // there, when one was acknowledged — describes a gateway state this
+    // pairing replaced: a secret admits only a vault the gateway holds
     // nothing of (its disk was replaced, or it was reinstalled with its
     // identity kept), and a claim makes this phone the writer over a head
-    // another phone may have set. Kept, the old acknowledgements would stop
+    // another phone may have set. A phone the gateway superseded never gets
+    // here (refused above), so this never clears the mark that freezes one.
+    // Kept, the old acknowledgements would stop
     // every file being sent again, and the old head would be the `prev` of a
     // compare-and-set the gateway refuses on every pass, so the records would
     // never be backed up again. So the row goes, and its acknowledgements and

@@ -52,7 +52,7 @@ Something answered at the gateway's address with a different certificate, and th
 
 ### The phone says `MOVED`
 
-A phone at a higher epoch has claimed the vault — normally a restore onto a new phone. This phone freezes read-only with everything it holds still visible. That is the design (F1): the gateway cannot _enforce_ one writer, because both phones can hold the seed, so it shows the conflict rather than hiding it. Taking the vault back is a deliberate takeover from the phone you want to keep, not a repair on the one that was superseded.
+A phone at a higher epoch has claimed the vault — normally a restore onto a new phone. This phone freezes read-only with everything it holds still visible. That is the design (F1): the gateway cannot _enforce_ one writer, because both phones can hold the seed, so it shows the conflict rather than hiding it. To make the superseded phone the writer again, restore the vault onto it from the 24 words: a restore starts from the gateway's head, so it brings back what the newer phone backed up. Pairing it again with a fresh code is refused `MOVED`, and so is a pairing that is the old phone's first contact since the move (its recorded epoch is below the gateway's): a takeover would make its older copy the head, and retention would then collect every file only the newer phone backed up. A phone whose backup ledger was lost — nothing on it records the gateway — still takes the vault over by pairing ([R-1080-C17](../decisions.md#backups-from-first-principles-1080)).
 
 ### A gateway's disk is gone
 

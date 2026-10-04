@@ -348,7 +348,6 @@ fn damage_on_the_gateway_is_refused_before_any_claim() {
 #[test]
 fn a_gateway_that_dies_mid_fetch_is_restored_from_next_time() {
     let gateway = gateway();
-    let relay = Relay::to(gateway.spawned.addr);
     let old_dir = tempfile::tempdir().expect("a directory");
     let old = phone(old_dir.path());
     pair(&old, &gateway);
@@ -362,9 +361,9 @@ fn a_gateway_that_dies_mid_fetch_is_restored_from_next_time() {
     drain(&old, at_home());
 
     let new_dir = tempfile::tempdir().expect("a directory");
-    relay.cut_after_answers(64 * 1024);
-    let cut = try_restore(new_dir.path(), &gateway.payload_at(relay.addr))
-        .expect_err("the gateway went mid-fetch");
+    gateway.cable().cut_after_answers(64 * 1024);
+    let cut =
+        try_restore(new_dir.path(), &gateway.payload()).expect_err("the gateway went mid-fetch");
     assert_eq!(cut.code(), wire::ErrorCode::PeerUnreachable, "{cut}");
     assert!(
         nothing_laid_down(new_dir.path()).is_empty(),
@@ -373,8 +372,8 @@ fn a_gateway_that_dies_mid_fetch_is_restored_from_next_time() {
     );
     assert_eq!(gateway.writer(&vault_id()).0, 1, "no epoch was spent");
 
-    relay.mend();
-    let restored = try_restore(new_dir.path(), &gateway.payload_at(relay.addr))
+    gateway.cable().mend();
+    let restored = try_restore(new_dir.path(), &gateway.payload())
         .unwrap_or_else(|error| panic!("the next restore finishes: {error}"));
     assert_eq!(restored.vaults.len(), 1, "{restored:?}");
     assert_eq!(gateway.writer(&vault_id()).0, 2, "one claim");
@@ -426,7 +425,6 @@ fn a_restore_killed_after_its_claim_is_finished_by_the_next_one() {
 #[test]
 fn a_gateway_that_dies_after_the_claim_leaves_the_restored_vault() {
     let gateway = gateway();
-    let relay = Relay::to(gateway.spawned.addr);
     let old_dir = tempfile::tempdir().expect("a directory");
     let old_path = old_dir.path().join("vault.db");
     let old = phone(old_dir.path());
@@ -447,13 +445,13 @@ fn a_gateway_that_dies_after_the_claim_leaves_the_restored_vault() {
         &new_dir.path().join("custody.db"),
         &wire::RestoreRequest {
             phrase: WORDS.to_owned(),
-            payload: gateway.payload_at(relay.addr),
+            payload: gateway.payload(),
             ..wire::RestoreRequest::default()
         },
         runtime.handle(),
         // THE GATEWAY GOES once the claim's answer is through, before the
         // grid's 360 KB.
-        &mut |_| relay.cut_after_answers(8 * 1024),
+        &mut |_| gateway.cable().cut_after_answers(8 * 1024),
     )
     .unwrap_or_else(|error| panic!("the claim landed and the vault is kept: {error}"));
     assert_eq!(restored.vaults.len(), 1, "{restored:?}");
@@ -470,10 +468,10 @@ fn a_gateway_that_dies_after_the_claim_leaves_the_restored_vault() {
         })
         .count();
     assert!(landed < thumbs.len(), "the gateway went mid-grid");
+
+    gateway.cable().mend();
     let refused = try_drain(&old, quietly()).expect_err("the old phone is fenced");
     assert_eq!(refused.code(), wire::ErrorCode::VaultMoved, "{refused}");
-
-    relay.mend();
     let phone = reopen(&path);
     note(&phone, "After", "written on the restored phone");
     let next = drain(&phone, at_home());
@@ -627,6 +625,164 @@ fn the_old_phone_after_a_move_changes_nothing_at_the_gateway() {
     assert_eq!(gateway.held(&vault_id()), held, "no object moved");
 }
 
+/// The vault restored from `gateway` onto a new phone in `dir`, which then
+/// took a photograph and wrote a note and backed both up: everything the old
+/// phone's copy does not hold. Answers the new phone and the photograph's
+/// object at the gateway.
+fn moved_on(
+    gateway: &Gateway,
+    dir: &std::path::Path,
+) -> (centraid_core::Handle, centraid_vault::backup::naming::Name) {
+    let new = reopen(&PathBuf::from(&restore(dir, gateway).vaults[0].path));
+    let photo = bytes_of("a photograph only the new phone took", 50_000);
+    let staged = stage(&new, owned("image/heic", &photo), &photo);
+    add_asset(&new, &staged, "photo");
+    note(&new, "Newer", "written on the new phone after the restore");
+    let backed = drain(&new, at_home());
+    assert!(backed.acked_at_ms.is_some(), "{backed:?}");
+    let object = centraid_vault::backup::naming::Name::from_bytes(
+        *gateway_name(&staged.content_hash, 0).as_bytes(),
+    );
+    assert!(gateway.held(&vault_id()).contains(&object));
+    (new, object)
+}
+
+/// The new phone is still the writer: it backs up what it writes next, at the
+/// writer epoch it holds, and the gateway still holds its photograph.
+fn goes_on_writing(
+    new: &centraid_core::Handle,
+    gateway: &Gateway,
+    object: &centraid_vault::backup::naming::Name,
+) {
+    let epoch = gateway.writer(&vault_id()).0;
+    note(new, "Newest", "written after the old phone tried to pair");
+    let next = drain(new, at_home());
+    assert!(
+        next.acked_at_ms.is_some(),
+        "the new phone backs up: {next:?}"
+    );
+    assert_eq!(gateway.writer(&vault_id()).0, epoch, "still its epoch");
+    assert!(gateway.held(&vault_id()).contains(object));
+}
+
+/// A pairing asked for through the core, as the Backup screen's "Add a
+/// laptop" does.
+fn try_pair(
+    handle: &centraid_core::Handle,
+    gateway: &Gateway,
+) -> centraid_core::Result<wire::response::Kind> {
+    try_ask(
+        handle,
+        wire::request::Kind::PairPhone(wire::PairRequest {
+            payload: gateway.payload(),
+        }),
+    )
+}
+
+/// **A SUPERSEDED PHONE CANNOT TAKE THE VAULT BACK BY PAIRING** (#1080, R6;
+/// the root's simulator repro). The new phone wrote after the restore; the
+/// old one, frozen, paired the same gateway with a fresh code. A takeover
+/// would have made its older copy the writer: its next pass set the head over
+/// the new phone's, and retention then collected every file only the new
+/// phone held. The pairing is refused `MOVED`, before anything is claimed or
+/// cleared, with the way back in its sentence; the gateway's writer and head
+/// stay the new phone's, the old phone stays frozen, and the new phone goes
+/// on backing up.
+#[test]
+fn a_superseded_phone_that_pairs_again_is_refused() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    note(&old, "Before", "written before the move");
+    drain(&old, at_home());
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let (new, object) = moved_on(&gateway, new_dir.path());
+    let learned = try_drain(&old, quietly()).expect_err("superseded");
+    assert_eq!(learned.code(), wire::ErrorCode::VaultMoved, "{learned}");
+    assert!(status(&old).frozen);
+    let writer = gateway.writer(&vault_id());
+
+    let refused = try_pair(&old, &gateway).expect_err("a frozen phone takes nothing back");
+    assert_eq!(refused.code(), wire::ErrorCode::VaultMoved, "{refused}");
+    assert!(
+        refused.sentence().contains("24 words"),
+        "the way back is a restore: {}",
+        refused.sentence()
+    );
+    assert_eq!(gateway.writer(&vault_id()), writer, "nothing was claimed");
+    assert!(status(&old).frozen, "it stays frozen");
+    let again = try_drain(&old, at_home()).expect_err("still superseded");
+    assert_eq!(again.code(), wire::ErrorCode::VaultMoved, "{again}");
+    assert_eq!(gateway.writer(&vault_id()), writer);
+    goes_on_writing(&new, &gateway, &object);
+}
+
+/// **AN OLD PHONE WHOSE PAIRING IS ITS FIRST CONTACT SINCE THE MOVE IS
+/// REFUSED TOO** (#1080, R6). Nothing told it yet that it moved: no pass of
+/// it has reached the gateway since the restore. Its ledger holds the gateway
+/// at the epoch its token was minted at, and the gateway answers a higher
+/// writer epoch — so its copy is older than the gateway's, and the pairing is
+/// refused `MOVED` and freezes it, rather than claiming over the new phone.
+#[test]
+fn an_old_phone_whose_first_contact_is_a_pairing_is_refused() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    note(&old, "Before", "written before the move");
+    drain(&old, at_home());
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let (new, object) = moved_on(&gateway, new_dir.path());
+    assert!(!status(&old).frozen, "it has not heard yet");
+    let writer = gateway.writer(&vault_id());
+
+    let refused = try_pair(&old, &gateway).expect_err("its copy is older than the gateway's");
+    assert_eq!(refused.code(), wire::ErrorCode::VaultMoved, "{refused}");
+    assert_eq!(gateway.writer(&vault_id()), writer, "nothing was claimed");
+    assert!(status(&old).frozen, "the pairing told it");
+    let again = try_drain(&old, at_home()).expect_err("superseded");
+    assert_eq!(again.code(), wire::ErrorCode::VaultMoved, "{again}");
+    goes_on_writing(&new, &gateway, &object);
+}
+
+/// **A PHONE THAT LOST ITS LEDGER STILL TAKES ITS VAULT OVER** (#1080,
+/// R-1080-C17). The vault's own phone lost its backup ledger — its record of
+/// the gateway, its token, every acknowledgement — and pairs again with a
+/// fresh code. Nothing on it says another phone superseded it, so it claims
+/// the vault as ruled, and backs up from there.
+#[test]
+fn a_phone_that_lost_its_ledger_takes_its_vault_over() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    note(&phone, "Before", "written before the ledger was lost");
+    drain(&phone, at_home());
+    drop(phone);
+    let lost = centraid_vault::backup::ledger::Ledger::path_for(&path);
+    for suffix in ["", "-wal", "-shm"] {
+        let mut file = lost.clone().into_os_string();
+        file.push(suffix);
+        let _ = std::fs::remove_file(PathBuf::from(file));
+    }
+
+    let phone = reopen(&path);
+    pair(&phone, &gateway);
+    assert_eq!(gateway.writer(&vault_id()).0, 2, "it claimed the vault");
+    note(&phone, "After", "written once it took the vault over");
+    let next = drain(&phone, at_home());
+    assert!(next.acked_at_ms.is_some(), "it backs up: {next:?}");
+    let restored_dir = tempfile::tempdir().expect("a directory");
+    let restored = restore(restored_dir.path(), &gateway);
+    assert_eq!(
+        rows(&PathBuf::from(&restored.vaults[0].path)),
+        rows(&path),
+        "the head is its vault, row for row"
+    );
+}
+
 /// **AFTER A RESTORE, NEW ITEMS GO AND NOTHING THE GATEWAY HOLDS GOES
 /// AGAIN; AN ORIGINAL COMES BACK AS IT WAS, AND ONE THAT IS GONE SAYS SO**
 /// (#1080, R7).
@@ -720,11 +876,10 @@ fn after_a_restore_only_what_is_new_is_sent() {
 #[test]
 fn a_records_only_vault_and_a_cut_short_pass_restore_what_was_acknowledged() {
     let gateway = gateway();
-    let relay = Relay::to(gateway.spawned.addr);
     let old_dir = tempfile::tempdir().expect("a directory");
     let old_path = old_dir.path().join("vault.db");
     let old = phone(old_dir.path());
-    pair_with(&old, &gateway.payload_at(relay.addr));
+    pair(&old, &gateway);
     note(&old, "Records", "a vault of records and no files");
     drain(&old, at_home());
     let acknowledged = rows(&old_path);
@@ -734,10 +889,11 @@ fn a_records_only_vault_and_a_cut_short_pass_restore_what_was_acknowledged() {
     let staged = stage(&old, owned("image/heic", &photo), &photo);
     add_asset(&old, &staged, "photo");
     note(&old, "Unsent", "written before the cut");
-    relay.cut_after(40 * 1024);
+    gateway.cable().cut_after(40 * 1024);
     let cut = drain(&old, at_home());
     assert_eq!(cut.stopped, wire::DrainStop::Unreachable as i32, "{cut:?}");
 
+    gateway.cable().mend();
     let new_dir = tempfile::tempdir().expect("a directory");
     let restored = restore(new_dir.path(), &gateway);
     let path = PathBuf::from(&restored.vaults[0].path);

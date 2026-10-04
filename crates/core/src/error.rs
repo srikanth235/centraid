@@ -330,10 +330,14 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
         // THE ONE WITH A BEHAVIOUR ATTACHED. The phone freezes this vault
         // read-only and keeps its unacked spool, so the sentence has to make
         // the freeze make sense — and it has to say the changes are still
-        // there, because they are and they are the only thing at stake.
+        // there, because they are and they are the only thing at stake. And
+        // it names the way back, since pairing again is refused the same way
+        // (`phone::pair`'s "superseded"): a restore starts from the gateway's
+        // head, never from this phone's older copy.
         C::VaultMoved => {
             "This vault has moved to another phone. It is read-only here, and any changes made on \
-             this phone since then are still on it."
+             this phone since then are still on it. To make this phone its writer again, restore \
+             the vault from your 24 words."
         }
     }
 }

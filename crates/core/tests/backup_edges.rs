@@ -204,11 +204,9 @@ fn pairing_again_with_a_gateway_that_lost_the_vault_sends_everything_again() {
     assert_eq!(rows(&PathBuf::from(&restored.vaults[0].path)), rows(&path));
 }
 
-/// Pair through a relay in front of the gateway: the payload names the relay,
-/// so every later pass reaches the gateway through it. Answers the gateway's
-/// id.
-fn pair_through(handle: &centraid_core::Handle, gateway: &Gateway, relay: &Relay) -> String {
-    pair_with(handle, &gateway.payload_at(relay.addr))
+/// Pair with the gateway; answers its id.
+fn pair_for_id(handle: &centraid_core::Handle, gateway: &Gateway) -> String {
+    pair(handle, gateway)
         .destination
         .expect("a destination")
         .gateway_id
@@ -232,17 +230,16 @@ fn originals(handle: &centraid_core::Handle, label: &str, count: usize, size: us
 #[test]
 fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
     let gateway = gateway();
-    let relay = Relay::to(gateway.spawned.addr);
     let dir = tempfile::tempdir().expect("a directory");
     let path = dir.path().join("vault.db");
     let phone = phone(dir.path());
-    let id = pair_through(&phone, &gateway, &relay);
+    let id = pair_for_id(&phone, &gateway);
     drain(&phone, at_home());
     // SIX ORIGINALS OF A MEBIBYTE: each part goes alone.
     originals(&phone, "a photograph the gateway half took", 6, 1 << 20);
 
     // THE GATEWAY GOES AWAY PART-WAY THROUGH THE THIRD.
-    relay.cut_after(2 * (1 << 20) + (1 << 19));
+    gateway.cable().cut_after(2 * (1 << 20) + (1 << 19));
     let cut = drain(&phone, quietly());
     assert_eq!(cut.stopped, wire::DrainStop::Unreachable as i32, "{cut:?}");
     assert!(
@@ -271,7 +268,7 @@ fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
     );
 
     // THE GATEWAY COMES BACK, and the next pass sends what is left.
-    relay.mend();
+    gateway.cable().mend();
     let resumed = drain(&phone, quietly());
     assert_eq!(
         resumed.stopped,
@@ -315,21 +312,20 @@ fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
 #[test]
 fn a_gateway_that_goes_away_mid_question_is_an_unreachable_pass() {
     let gateway = gateway();
-    let relay = Relay::to(gateway.spawned.addr);
     let dir = tempfile::tempdir().expect("a directory");
     let phone = phone(dir.path());
-    pair_through(&phone, &gateway, &relay);
+    pair(&phone, &gateway);
     drain(&phone, at_home());
-    // WHAT A PASS WITH NOTHING TO DO SENDS: a handshake and `info`.
-    let before = relay.sent();
+    // WHAT A PASS WITH NOTHING TO DO SENDS: `info` and the head.
+    let before = gateway.cable().sent();
     drain(&phone, quietly());
-    let reach = relay.sent() - before;
+    let reach = gateway.cable().sent() - before;
     let seen = |phone: &centraid_core::Handle| status(phone).destinations[0].last_seen_ms;
     let last_seen = seen(&phone);
 
     // FIFTY ORIGINALS, and the gateway goes a few bytes into the question.
     originals(&phone, "a small original", 50, 512);
-    relay.cut_after(i64::try_from(reach).expect("fits") + 64);
+    gateway.cable().cut_after(reach + 64);
     let cut = try_drain(&phone, quietly())
         .unwrap_or_else(|error| panic!("a gateway out of reach is an answer: {error}"));
     assert!(
@@ -345,7 +341,7 @@ fn a_gateway_that_goes_away_mid_question_is_an_unreachable_pass() {
         waits.waiting
     );
 
-    relay.mend();
+    gateway.cable().mend();
     let resumed = drain(&phone, quietly());
     assert_eq!(
         resumed.stopped,
@@ -923,21 +919,20 @@ fn a_pairing_code_that_does_not_pair_keeps_nothing() {
     assert_eq!(destinations(&phone), 1);
 }
 
-/// **A GATEWAY ASLEEP WHEN THE PASS BEGINS, THEN WOKEN UP ON ANOTHER PORT**
-/// (#1080, B1). Nothing is sealed for nobody, nothing is confirmed, and what
-/// waits waits for the gateway; the gateway restarts over the same data
-/// directory and the next pass finishes.
+/// **A GATEWAY ASLEEP WHEN THE PASS BEGINS, THEN WOKEN UP** (#1080, B1).
+/// Nothing is sealed for nobody, nothing is confirmed, and what waits waits
+/// for the gateway; the gateway restarts over the same data directory and the
+/// next pass finishes.
 #[test]
 fn a_gateway_asleep_when_the_pass_begins_is_waited_for() {
     let gateway = gateway();
-    let relay = Relay::to(gateway.spawned.addr);
     let dir = tempfile::tempdir().expect("a directory");
     let phone = phone(dir.path());
-    pair_through(&phone, &gateway, &relay);
+    pair(&phone, &gateway);
     drain(&phone, at_home());
     originals(&phone, "taken while the laptop slept", 3, 30_000);
 
-    relay.cut();
+    gateway.cable().cut();
     let asleep = drain(&phone, quietly());
     assert_eq!(
         asleep.stopped,
@@ -953,9 +948,8 @@ fn a_gateway_asleep_when_the_pass_begins_is_waited_for() {
         waits.waiting
     );
 
-    let gateway = gateway.restart();
-    relay.retarget(gateway.spawned.addr);
-    relay.mend();
+    // AWAKE, where the phone last reached it; kept for the passes below.
+    let _awake = gateway.restart();
     let awake = drain(&phone, quietly());
     assert_eq!(awake.stopped, wire::DrainStop::Empty as i32, "{awake:?}");
     assert_eq!(awake.confirmed_parts, 3);
