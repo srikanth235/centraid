@@ -536,6 +536,12 @@ public class HomeSession private constructor(
     public suspend fun adoptRestored(restored: List<Shelf.Restored>): Int {
         val added = shelf.adoptRestored(restored)
         rebind()
+        // A RESTORE THAT FINISHED IS A PASS'S REASON (`WakeReason.RESTORED`):
+        // the ledger beside a restored vault is new, so until a pass asks the
+        // gateway what it holds, the line counts "0 of 50" for a library that
+        // is all there (#1080, the simulator restore). Launched, not awaited:
+        // the restore's own answer is on screen first.
+        if (added > 0) scope.launch { drain.afterRestore() }
         return added
     }
 

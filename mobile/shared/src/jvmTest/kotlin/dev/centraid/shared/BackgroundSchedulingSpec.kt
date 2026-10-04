@@ -19,6 +19,7 @@ import dev.centraid.shared.sync.TransferRule
 import dev.centraid.shared.sync.UploadLoop
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
@@ -82,6 +83,25 @@ class BackgroundSchedulingSpec : StringSpec({
         withClue("call sites of backgroundTasks.register(): $sites") {
             sites shouldBe listOf("HomeSession.kt")
         }
+    }
+
+    "every reason ShelfDrain names a pass for is called by a shell (#1080, the simulator restore)" {
+        // A TRIGGER WITH NO CALLER IS A PASS THAT NEVER RUNS: `afterRestore`
+        // was written, documented and tabled, and nothing called it, so a
+        // restored phone counted its whole library as not backed up.
+        val drain = mobileRoot.resolve("shared/src/commonMain/kotlin/dev/centraid/shared/sync/ShelfDrain.kt")
+        val triggers = Regex("""public suspend fun (\w+)\(""").findAll(code(drain.readText()))
+            .map { it.groupValues[1] }
+            .filterNot { it == "run" }
+            .toList()
+        triggers.shouldNotBeEmpty()
+        val callers = listOf("shared/src/commonMain", "iosApp/Sources", "androidApp/src/main")
+            .map(mobileRoot::resolve)
+            .flatMap { root -> root.walkTopDown().filter { it.isFile && (it.extension == "kt" || it.extension == "swift") } }
+            .filterNot { it.name == "ShelfDrain.kt" || it.path.contains("/Generated/") }
+            .map { code(it.readText()) }
+        val uncalled = triggers.filterNot { name -> callers.any { ".$name(" in it } }
+        withClue("ShelfDrain triggers nothing calls: $uncalled") { uncalled shouldBe emptyList() }
     }
 
     "every pass asks for the next window, because a BGTaskRequest is one-shot" {
