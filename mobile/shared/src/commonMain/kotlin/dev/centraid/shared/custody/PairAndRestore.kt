@@ -63,6 +63,13 @@ public enum class PairRefusal {
 
     /** `UNAUTHORIZED`: the laptop answered and did not take the code (spent, or never minted). */
     NOT_TAKEN,
+
+    /**
+     * `VAULT_MOVED`: another phone holds this vault now, and pairing would have
+     * taken it over with this phone's older copy (#1080, the simulator edge
+     * cases). The way back is a restore from the words, never a pairing.
+     */
+    MOVED,
 }
 
 /**

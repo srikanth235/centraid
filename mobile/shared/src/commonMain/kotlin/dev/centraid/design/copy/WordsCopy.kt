@@ -34,6 +34,7 @@ public object WordsCopy {
     public const val NOT_A_PHRASE: String = "Centraid could not read these as 24 words. Check them and try again."
     public const val PAIR_NOT_A_CODE: String = "That is not a pairing code this phone can use, or it has run out. Run “centraid-gateway pair” on your laptop again and use the new one."
     public const val PAIR_NOT_TAKEN: String = "Your laptop answered and did not take this pairing code. Each code works once: run “centraid-gateway pair” on your laptop again and use the new one."
+    public const val PAIR_MOVED: String = "This vault moved to your other phone, so this phone cannot pair for it. To make this phone its writer again, restore the vault from your 24 words."
     public const val PAIR_WORDS_ACTION: String = "Enter your 24 words"
     public const val REKEYED_BODY: String = "Locker and backups open again for the vaults made with these words."
     public const val REKEYED_PAIR_BODY: String = "The vaults made with these words can pair with your laptop now."

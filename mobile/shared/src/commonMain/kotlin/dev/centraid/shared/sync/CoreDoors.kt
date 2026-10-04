@@ -132,6 +132,7 @@ public class CorePairDoor(private val core: () -> CentraidCore?) : PairDoor {
                 when {
                     answer.failure.isRefusedWith(ErrorCode.ERROR_CODE_INVALID_REQUEST) -> PairRefusal.NOT_A_CODE
                     answer.failure.isRefusedWith(ErrorCode.ERROR_CODE_UNAUTHORIZED) -> PairRefusal.NOT_TAKEN
+                    answer.failure.isRefusedWith(ErrorCode.ERROR_CODE_VAULT_MOVED) -> PairRefusal.MOVED
                     else -> PairRefusal.UNREACHABLE
                 },
             )

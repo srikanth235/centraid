@@ -314,6 +314,10 @@ class WordsShelfSpec : StringSpec({
             refusing(ErrorCode.ERROR_CODE_UNAUTHORIZED).pair("t") shouldBe PairResult.Refused(PairRefusal.NOT_TAKEN)
             refusing(ErrorCode.ERROR_CODE_INVALID_REQUEST).pair("t") shouldBe PairResult.Refused(PairRefusal.NOT_A_CODE)
             refusing(ErrorCode.ERROR_CODE_PEER_UNREACHABLE).pair("t") shouldBe PairResult.Refused(PairRefusal.UNREACHABLE)
+            // A SUPERSEDED PHONE IS NOT ONE WHOSE LAPTOP DID NOT ANSWER (#1080, the
+            // simulator edge cases): "did not answer" sent the member to retry a
+            // pairing the core will always refuse.
+            refusing(ErrorCode.ERROR_CODE_VAULT_MOVED).pair("t") shouldBe PairResult.Refused(PairRefusal.MOVED)
             // AN ANSWER WITH NO PAIR ON IT is read as silence, never as a pairing.
             refusing(null).pair("t") shouldBe PairResult.Refused(PairRefusal.UNREACHABLE)
             CorePairDoor({ null }).pair("t") shouldBe PairResult.Refused(PairRefusal.UNREACHABLE)

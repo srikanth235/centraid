@@ -164,6 +164,7 @@ class PairAndRestoreSpec : StringSpec({
         notTaken.primary_label shouldBe CustodyCopy.TRY_AGAIN
         reduce(pairing, refused(PairRefusal.NOT_A_CODE)).model.state.notice shouldBe WordsCopy.PAIR_NOT_A_CODE
         reduce(pairing, refused(PairRefusal.UNREACHABLE)).model.state.notice shouldBe CustodyCopy.PAIR_UNREACHABLE
+        reduce(pairing, refused(PairRefusal.MOVED)).model.state.notice shouldBe WordsCopy.PAIR_MOVED
         // THE MEMBER CAN PASTE A NEW CODE straight into the failed screen.
         reduce(reduce(pairing, refused(PairRefusal.NOT_TAKEN)).model, typed("new")).model.state.notice shouldBe ""
     }

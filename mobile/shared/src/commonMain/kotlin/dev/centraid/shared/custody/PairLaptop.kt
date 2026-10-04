@@ -137,6 +137,7 @@ public object PairLaptopMachine {
                             PairRefusal.UNREACHABLE -> CustodyCopy.PAIR_UNREACHABLE
                             PairRefusal.NOT_A_CODE -> WordsCopy.PAIR_NOT_A_CODE
                             PairRefusal.NOT_TAKEN -> WordsCopy.PAIR_NOT_TAKEN
+                            PairRefusal.MOVED -> WordsCopy.PAIR_MOVED
                         },
                     )
                     // A PAIRING WITH NOTHING TO COMPARE IS NOT ONE A MEMBER CAN
