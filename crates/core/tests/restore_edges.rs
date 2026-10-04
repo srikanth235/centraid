@@ -718,6 +718,45 @@ fn a_superseded_phone_that_pairs_again_is_refused() {
     goes_on_writing(&new, &gateway, &object);
 }
 
+/// **A SUPERSEDED PHONE CANNOT FORGET ITS WAY BACK EITHER** (#1080, R6).
+/// Forgetting the gateway would take the row that carries the phone's `MOVED`
+/// mark with it: the phone would read as no longer frozen, and its next
+/// pairing would find no record of the gateway — the lost-ledger takeover —
+/// and claim the vault with its older copy after all. The forget is refused
+/// `MOVED`, the phone stays frozen, and pairing again is still refused.
+#[test]
+fn a_superseded_phone_cannot_forget_its_way_back() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old = phone(old_dir.path());
+    let id = pair(&old, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    note(&old, "Before", "written before the move");
+    drain(&old, at_home());
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let (new, object) = moved_on(&gateway, new_dir.path());
+    let learned = try_drain(&old, quietly()).expect_err("superseded");
+    assert_eq!(learned.code(), wire::ErrorCode::VaultMoved, "{learned}");
+    let writer = gateway.writer(&vault_id());
+
+    let forgot = try_ask(
+        &old,
+        wire::request::Kind::ForgetDestination(wire::ForgetDestinationRequest { gateway_id: id }),
+    )
+    .expect_err("a frozen phone keeps the record that freezes it");
+    assert_eq!(forgot.code(), wire::ErrorCode::VaultMoved, "{forgot}");
+    assert!(status(&old).frozen, "it stays frozen");
+    drop(old);
+    let old = reopen(&old_dir.path().join("vault.db"));
+    assert!(status(&old).frozen, "and a relaunch knows it");
+    let refused = try_pair(&old, &gateway).expect_err("still nothing taken back");
+    assert_eq!(refused.code(), wire::ErrorCode::VaultMoved, "{refused}");
+    assert_eq!(gateway.writer(&vault_id()), writer, "nothing was claimed");
+    goes_on_writing(&new, &gateway, &object);
+}
+
 /// **AN OLD PHONE WHOSE PAIRING IS ITS FIRST CONTACT SINCE THE MOVE IS
 /// REFUSED TOO** (#1080, R6). Nothing told it yet that it moved: no pass of
 /// it has reached the gateway since the restore. Its ledger holds the gateway

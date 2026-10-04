@@ -402,8 +402,14 @@ pub fn pins(plane: &Plane) -> Result<wire::PinsResponse> {
 /// and by then finds its gateway forgotten here too, which it answers as a
 /// pass with nothing paired (`drain::run`) rather than as a refusal.
 ///
+/// **A superseded phone forgets nothing** (#1080, the sweep's R6): the row is
+/// what carries its `MOVED` mark. Gone, the phone would read as no longer
+/// frozen, and pairing again would find no record of the gateway and take
+/// the vault over with this phone's older copy (`pair`'s "superseded").
+///
 /// # Errors
-/// The ledger's refusal.
+/// [`CoreError::VaultMoved`] for a phone a gateway superseded; the ledger's
+/// refusal.
 pub fn forget_destination(
     plane: &Plane,
     vault: Option<VaultId>,
@@ -411,6 +417,12 @@ pub fn forget_destination(
     request: &wire::ForgetDestinationRequest,
 ) -> Result<wire::ForgetDestinationResponse> {
     let ledger = plane.ledger()?;
+    if let Some((_, epoch)) = moved(&ledger)? {
+        return Err(CoreError::VaultMoved {
+            current_epoch: epoch,
+            moved_at_ms: 0,
+        });
+    }
     let Some(destination) = ledger
         .destination(&request.gateway_id)
         .map_err(plane_error)?
