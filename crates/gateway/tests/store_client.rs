@@ -12,18 +12,27 @@
 //! goes up from files and comes back frame by frame while the process's
 //! resident memory grows by a fraction of it.
 
+// THE MEMORY PROOF READS `/proc`, so it and every piece only it uses are
+// Linux's; on a Mac they would be dead code under `-D warnings`.
+#[cfg(target_os = "linux")]
 use std::io::Write as _;
+#[cfg(target_os = "linux")]
 use std::path::Path;
+#[cfg(target_os = "linux")]
 use std::sync::Arc;
+#[cfg(target_os = "linux")]
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use centraid_gateway::client::tls::{Trust, client_config};
-use centraid_gateway::client::{Client, Part, Put, Source};
+use centraid_gateway::client::{Client, Put};
+#[cfg(target_os = "linux")]
+use centraid_gateway::client::{Part, Source};
 use centraid_gateway::rules::bundle::{Frame, HEADER_LEN, header as frame_header};
 use centraid_gateway::rules::code::Code;
 use centraid_gateway::rules::ids::{Digest, Name, Token, VaultId};
+#[cfg(target_os = "linux")]
 use centraid_gateway::rules::limits::MAX_BUNDLE_BYTES;
 use centraid_gateway::rules::wire::{BundleAnswer, PairKind, PairRequest};
 use centraid_gateway::server::harness::{Spawned, spawn};
@@ -209,6 +218,7 @@ async fn a_bundle_frame_is_held_before_the_rest_of_its_body_is_sent() {
     gateway.shutdown().await;
 }
 
+#[cfg(target_os = "linux")]
 /// This process's resident memory, in bytes.
 fn resident() -> u64 {
     let status = std::fs::read_to_string("/proc/self/status").expect("Linux exposes it");
@@ -221,6 +231,7 @@ fn resident() -> u64 {
         .expect("a VmRSS line")
 }
 
+#[cfg(target_os = "linux")]
 /// The highest resident size seen while `run` runs, sampled every
 /// millisecond on a thread of its own.
 async fn peak_resident<T>(run: impl Future<Output = T>) -> (T, u64) {
@@ -242,6 +253,7 @@ async fn peak_resident<T>(run: impl Future<Output = T>) -> (T, u64) {
     (out, peak.load(Ordering::SeqCst))
 }
 
+#[cfg(target_os = "linux")]
 /// Write `count` parts of `len` bytes into `dir`, one at a time.
 fn spool(dir: &Path, count: usize, len: usize) -> Vec<(Name, Digest, std::path::PathBuf)> {
     (0..count)

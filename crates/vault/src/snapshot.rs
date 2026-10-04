@@ -76,7 +76,8 @@ pub enum Fault {
     /// has nothing to refuse, and SQLite clamps a cap up to the current size
     /// anyway. The disk-full surface of a build is the two FILE writes — the
     /// `VACUUM INTO` and the gzip — and this redirects the SECOND. A test on
-    /// Linux points it at `/dev/full`, which returns ENOSPC on every write.
+    /// Linux points it at `/dev/full`, which returns ENOSPC on every write;
+    /// one on macOS, which has no `/dev/full`, at a file on a filled disk image.
     ///
     /// Not the first (#1047): SQLite creates a rollback journal BESIDE the
     /// `VACUUM INTO` target, so a copy aimed at `/dev/full` needs
