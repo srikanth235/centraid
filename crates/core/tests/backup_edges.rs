@@ -757,3 +757,472 @@ fn a_gateway_forgotten_mid_pass_ends_the_pass_and_keeps_nothing() {
         "nothing a forgotten gateway held counts"
     );
 }
+
+/// **AN EMPTY FILE BACKS UP AND COMES BACK** (#1080, B5): one empty part,
+/// sealed, acknowledged, and assembled into nothing.
+#[test]
+fn an_empty_file_backs_up_and_comes_back() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    let empty = stage(&phone, owned("application/octet-stream", &[]), &[]);
+    assert_eq!(empty.byte_size, 0);
+    add_asset(&phone, &empty, "photo");
+    let drained = drain(&phone, at_home());
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Empty as i32,
+        "{drained:?}"
+    );
+    let backed = status(&phone);
+    assert_eq!((backed.content_confirmed, backed.content_total), (1, 1));
+    let door = phone.bytes().expect("a door");
+    let hash = centraid_blobs::ContentHash::parse_hex(&empty.content_hash).expect("hex");
+    assert!(door.store().remove(hash).expect("removes"));
+    let wire::response::Kind::FetchOriginal(fetched) = ask(
+        &phone,
+        wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
+            content_hash: hex::decode(&empty.content_hash).expect("hex"),
+        }),
+    ) else {
+        panic!("a fetch answers");
+    };
+    assert_eq!(
+        fetched.outcome,
+        wire::FetchOutcome::Landed as i32,
+        "{fetched:?}"
+    );
+    assert!(std::fs::read(&fetched.path).expect("reads").is_empty());
+}
+
+/// **THE SAME BYTES UNDER TWO ASSETS ARE ONE FILE, STORED ONCE** (#1080,
+/// B5): a photograph imported twice is two assets over one content item.
+#[test]
+fn the_same_bytes_under_two_assets_are_stored_once() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    let photo = bytes_of("one photograph, imported twice", 90_000);
+    let first = stage(&phone, owned("image/heic", &photo), &photo);
+    let second = stage(&phone, owned("image/heic", &photo), &photo);
+    assert_eq!(first.content_hash, second.content_hash);
+    assert!(second.already_held, "the second import is held");
+    add_asset(&phone, &first, "photo");
+    let again = command(
+        &phone,
+        "media.add_asset",
+        &json!({ "staged_sha": second.content_hash, "kind": "photo" }),
+        "the-second-import",
+    );
+    assert!(again["asset_id"].is_string(), "{again}");
+    drain(&phone, at_home());
+    let backed = status(&phone);
+    assert_eq!((backed.content_confirmed, backed.content_total), (1, 1));
+    let names = file_names(&phone);
+    assert_eq!(names.len(), 1, "one file, one name");
+    assert!(gateway.held(&vault_id()).is_superset(&names));
+}
+
+/// **A PAIRING CODE IS REFUSED BEFORE ANYTHING IS KEPT** (#1080, B10): a
+/// code already spent, text that is not a code, and a code whose pin is not
+/// the certificate of the machine at its address each leave the ledger as
+/// it was.
+#[test]
+fn a_pairing_code_that_does_not_pair_keeps_nothing() {
+    let gateway = gateway();
+    let other = self::gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    let paired = |payload: &str| {
+        try_ask(
+            &phone,
+            wire::request::Kind::PairPhone(wire::PairRequest {
+                payload: payload.to_owned(),
+            }),
+        )
+    };
+    let destinations = |phone: &centraid_core::Handle| status(phone).destinations.len();
+
+    // TEXT THAT IS NOT A CODE.
+    let malformed = paired("{\"v\":2,\"gw\":\"nope\"}").expect_err("not a code");
+    assert_eq!(
+        malformed.code(),
+        wire::ErrorCode::InvalidRequest,
+        "{malformed}"
+    );
+    // ANOTHER MACHINE AT THE CODE'S ADDRESS: its certificate is not the pin.
+    let mut forged: serde_json::Value =
+        serde_json::from_str(&gateway.payload()).expect("a payload");
+    forged["addrs"] = json!([other.spawned.addr.to_string()]);
+    let impostor = paired(&forged.to_string()).expect_err("not the pinned gateway");
+    assert_eq!(impostor.code(), wire::ErrorCode::Unauthorized, "{impostor}");
+    assert_eq!(tokens(&other), 0, "nothing paired with the other machine");
+    assert_eq!(destinations(&phone), 0);
+
+    // A CODE SPENT BY ONE VAULT IS REFUSED TO ANOTHER.
+    let code = gateway.payload();
+    pair_with(&phone, &code);
+    let other_dir = tempfile::tempdir().expect("a directory");
+    let second = phone_with(other_dir.path(), |config| config.with_seed(seed(), 1));
+    let spent = try_ask(
+        &second,
+        wire::request::Kind::PairPhone(wire::PairRequest {
+            payload: code.clone(),
+        }),
+    )
+    .expect_err("a spent code");
+    assert_eq!(spent.code(), wire::ErrorCode::Unauthorized, "{spent}");
+    assert_eq!(destinations(&second), 0, "the refused phone keeps nothing");
+    assert_eq!(destinations(&phone), 1);
+}
+
+/// **A GATEWAY ASLEEP WHEN THE PASS BEGINS, THEN WOKEN UP ON ANOTHER PORT**
+/// (#1080, B1). Nothing is sealed for nobody, nothing is confirmed, and what
+/// waits waits for the gateway; the gateway restarts over the same data
+/// directory and the next pass finishes.
+#[test]
+fn a_gateway_asleep_when_the_pass_begins_is_waited_for() {
+    let gateway = gateway();
+    let relay = Relay::to(gateway.spawned.addr);
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair_through(&phone, &gateway, &relay);
+    drain(&phone, at_home());
+    originals(&phone, "taken while the laptop slept", 3, 30_000);
+
+    relay.cut();
+    let asleep = drain(&phone, quietly());
+    assert_eq!(
+        asleep.stopped,
+        wire::DrainStop::Unreachable as i32,
+        "{asleep:?}"
+    );
+    assert_eq!(asleep.confirmed_parts, 0);
+    let waits = status(&phone);
+    assert_eq!(
+        waiting(&waits, wire::WaitReason::Gateway),
+        3,
+        "{:?}",
+        waits.waiting
+    );
+
+    let gateway = gateway.restart();
+    relay.retarget(gateway.spawned.addr);
+    relay.mend();
+    let awake = drain(&phone, quietly());
+    assert_eq!(awake.stopped, wire::DrainStop::Empty as i32, "{awake:?}");
+    assert_eq!(awake.confirmed_parts, 3);
+    assert!(status(&phone).waiting.is_empty());
+}
+
+/// **KILLED AFTER SEALING, BEFORE MOVING** (#1080, B2). A metered pass seals
+/// originals it may not move; the phone dies; the next core moves exactly
+/// those parts, once each.
+#[test]
+fn a_phone_killed_after_sealing_moves_its_spool_next_time() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let id = pair(&phone, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    drain(&phone, at_home());
+    originals(&phone, "sealed on cellular", 3, 40_000);
+    let sealed = drain(
+        &phone,
+        wire::DrainRequest {
+            metered: true,
+            ..quietly()
+        },
+    );
+    assert_eq!(sealed.confirmed_parts, 0, "{sealed:?}");
+    assert_eq!(ledger(&path).queued().expect("reads").len(), 3);
+    drop(phone);
+
+    let phone = reopen(&path);
+    let moved = drain(&phone, quietly());
+    assert_eq!(moved.stopped, wire::DrainStop::Empty as i32, "{moved:?}");
+    assert_eq!(moved.confirmed_parts, 3, "each sealed part once");
+    assert!(ledger(&path).queued().expect("reads").is_empty());
+    assert_eq!(
+        gateway.held(&vault_id()),
+        ledger(&path).confirmed_names(&id).expect("reads")
+    );
+    assert!(spooled(dir.path()).is_empty());
+}
+
+/// **KILLED AFTER THE OPERATING SYSTEM MOVED A PART, BEFORE IT SETTLED**
+/// (#1080, B2). iOS uploaded a handed-off part while the app was dead and
+/// its report never reached the core. The next core's first pass asks the
+/// gateway, confirms the part and frees its spool file, sending nothing
+/// again.
+#[test]
+fn a_part_the_os_moved_unsettled_is_confirmed_by_the_next_core() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let id = pair(&phone, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    drain(&phone, at_home());
+    originals(&phone, "moved by the operating system", 2, 40_000);
+    drain(
+        &phone,
+        wire::DrainRequest {
+            metered: true,
+            ..quietly()
+        },
+    );
+    let wire::response::Kind::Handoff(batch) = ask(
+        &phone,
+        wire::request::Kind::Handoff(wire::HandoffRequest {
+            max_bytes: 64 << 20,
+            max_parts: 16,
+        }),
+    ) else {
+        panic!("a handoff answers");
+    };
+    assert_eq!(batch.parts.len(), 2);
+    // THE OPERATING SYSTEM UPLOADS EACH, as handed; nobody settles.
+    let token: centraid_gateway::rules::ids::Token = ledger(&path)
+        .destination(&id)
+        .expect("reads")
+        .expect("paired")
+        .token
+        .parse()
+        .expect("a token");
+    let client = gateway.spawned.client(token);
+    for part in &batch.parts {
+        let digest = part
+            .headers
+            .iter()
+            .find(|header| header.name == "content-digest")
+            .map(|header| {
+                centraid_gateway::rules::ids::Digest::from_header(&header.value).expect("a digest")
+            })
+            .expect("a digest header");
+        gateway
+            .runtime
+            .block_on(client.put_file(
+                &vault_id(),
+                &part.name.parse().expect("a name"),
+                &digest,
+                std::path::Path::new(&part.path),
+            ))
+            .expect("the gateway takes it");
+    }
+    drop(phone);
+
+    let phone = reopen(&path);
+    let next = drain(&phone, quietly());
+    assert_eq!(next.stopped, wire::DrainStop::Empty as i32, "{next:?}");
+    assert_eq!(next.confirmed_parts, 0, "nothing is sent again");
+    let backed = status(&phone);
+    assert_eq!(
+        backed.content_confirmed, backed.content_total,
+        "{:?}",
+        backed.waiting
+    );
+    assert!(ledger(&path).queued().expect("reads").is_empty());
+    assert!(spooled(dir.path()).is_empty());
+}
+
+/// **KILLED IN THE MIDDLE OF STAGING A LIBRARY ITEM** (#1080, B2). The item
+/// was half streamed and half sealed into the spool's temp files when the
+/// phone died; the next core sweeps them, the shell streams the item again,
+/// and it backs up.
+#[test]
+fn a_phone_killed_mid_stage_leaves_nothing_and_stages_again() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    let film = bytes_of("a film the phone died streaming", 3 << 20);
+    let begin = || library("video/mp4", "lib-film-cut", &film, false);
+    let wire::stage_response::Kind::Begun(begun) =
+        stage_frame(&phone, wire::stage_request::Kind::Begin(begin()))
+    else {
+        panic!("begun");
+    };
+    for (seq, window) in film.chunks(512 * 1024).take(3).enumerate() {
+        stage_frame(
+            &phone,
+            wire::stage_request::Kind::Chunk(wire::StageChunk {
+                staging_id: begun.staging_id.clone(),
+                seq: seq as u64,
+                payload: window.to_vec(),
+            }),
+        );
+    }
+    drop(phone);
+    let temps = || {
+        std::fs::read_dir(dir.path().join("vault.spool"))
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .filter(|entry| entry.file_name().to_string_lossy().ends_with(".partial"))
+                    .count()
+            })
+            .unwrap_or(0)
+    };
+
+    let phone = reopen(&path);
+    status(&phone);
+    assert_eq!(temps(), 0, "the next core swept what the stream left");
+    let staged = stage(&phone, begin(), &film);
+    add_asset(&phone, &staged, "video");
+    let drained = drain(&phone, at_home());
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Empty as i32,
+        "{drained:?}"
+    );
+    let backed = status(&phone);
+    assert_eq!((backed.content_confirmed, backed.content_total), (1, 1));
+}
+
+/// **AN ITEM EDITED IN THE LIBRARY AFTER IT WAS BACKED UP** (#1080, B5). The
+/// edit is another file, streamed again under the same identifier and marked
+/// edited: it backs up beside the original, the original stays backed up,
+/// and an edited item is never offered for deletion from the library.
+#[test]
+fn an_item_edited_after_backup_backs_up_beside_the_original() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    let original = bytes_of("a photograph before the member edited it", 70_001);
+    let first = stage(
+        &phone,
+        library("image/heic", "lib-edit", &original, false),
+        &original,
+    );
+    add_asset(&phone, &first, "photo");
+    drain(&phone, at_home());
+    let edited = bytes_of("the same photograph, edited in the library", 69_001);
+    let second = stage(
+        &phone,
+        library("image/heic", "lib-edit", &edited, true),
+        &edited,
+    );
+    assert_ne!(first.content_hash, second.content_hash);
+    add_asset(&phone, &second, "photo");
+    let drained = drain(&phone, quietly());
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Empty as i32,
+        "{drained:?}"
+    );
+    let backed = status(&phone);
+    assert_eq!((backed.content_confirmed, backed.content_total), (2, 2));
+    let wire::response::Kind::Releasable(offered) = ask(
+        &phone,
+        wire::request::Kind::Releasable(wire::ReleasableRequest { limit: 10 }),
+    ) else {
+        panic!("releasable answers");
+    };
+    assert!(
+        offered.items.iter().all(|item| item.os_ref != "lib-edit"),
+        "an edited item is never offered: {offered:?}"
+    );
+}
+
+/// **TWO VAULTS ON ONE PHONE, ONE GATEWAY** (#1080, B7). Each vault's token
+/// opens its own objects and none of the other's; the counts are each its
+/// own; forgetting the gateway for one leaves the other's backup intact.
+#[test]
+fn two_vaults_on_one_gateway_cannot_reach_each_other() {
+    let gateway = gateway();
+    let (one_dir, two_dir) = (
+        tempfile::tempdir().expect("a directory"),
+        tempfile::tempdir().expect("a directory"),
+    );
+    let one = phone(one_dir.path());
+    let two = phone_with(two_dir.path(), |config| config.with_seed(seed(), 1));
+    let one_id = pair(&one, &gateway)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    pair(&two, &gateway);
+    originals(&one, "vault one's photograph", 2, 20_000);
+    originals(&two, "vault two's photograph", 3, 20_000);
+    drain(&one, at_home());
+    drain(&two, at_home());
+    let two_vault = centraid_core::phone::Keyring::derive(&seed(), 1)
+        .expect("keys")
+        .vault_id();
+    assert_ne!(two_vault, vault_id());
+    assert_eq!(status(&one).content_confirmed, 2);
+    assert_eq!(status(&two).content_confirmed, 3);
+
+    // VAULT ONE'S TOKEN AGAINST VAULT TWO'S OBJECTS.
+    let token: centraid_gateway::rules::ids::Token = ledger(&one_dir.path().join("vault.db"))
+        .destination(&one_id)
+        .expect("reads")
+        .expect("paired")
+        .token
+        .parse()
+        .expect("a token");
+    let client = gateway.spawned.client(token);
+    let theirs: Vec<centraid_gateway::rules::ids::Name> = gateway
+        .held(&two_vault)
+        .iter()
+        .map(|name| centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes()))
+        .collect();
+    let unauthorized = |outcome: Result<(), centraid_gateway::client::ClientError>| {
+        matches!(
+            outcome,
+            Err(centraid_gateway::client::ClientError::Refused(
+                centraid_gateway::rules::code::Refusal::Unauthorized
+            ))
+        )
+    };
+    let runtime = &gateway.runtime;
+    assert!(unauthorized(
+        runtime
+            .block_on(client.exists(&two_vault, &theirs))
+            .map(|_| ())
+    ));
+    assert!(unauthorized(
+        runtime
+            .block_on(client.get(&two_vault, &theirs[0], None))
+            .map(|_| ())
+    ));
+    assert!(unauthorized(
+        runtime
+            .block_on(client.objects(&two_vault, None, 10))
+            .map(|_| ())
+    ));
+    assert!(unauthorized(
+        runtime
+            .block_on(client.delete(&two_vault, &theirs))
+            .map(|_| ())
+    ));
+    let planted = bytes_of("planted in another vault", 100);
+    assert!(unauthorized(
+        runtime
+            .block_on(client.put(
+                &two_vault,
+                &theirs[0],
+                &centraid_gateway::rules::ids::Digest::of(&planted),
+                planted.clone(),
+            ))
+            .map(|_| ())
+    ));
+    let held_two = gateway.held(&two_vault);
+
+    // FORGETTING THE GATEWAY FOR VAULT ONE LEAVES VAULT TWO'S BACKUP.
+    assert!(forget(&one, &one_id).forgotten);
+    assert_eq!(gateway.held(&two_vault), held_two);
+    originals(&two, "vault two goes on", 1, 20_000);
+    let next = drain(&two, quietly());
+    assert_eq!(next.stopped, wire::DrainStop::Empty as i32, "{next:?}");
+    assert_eq!(status(&two).content_confirmed, 4);
+}

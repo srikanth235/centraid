@@ -564,6 +564,8 @@ struct RelayShared {
     up: AtomicBool,
     /// Bytes the phone may still send before the relay cuts.
     budget: AtomicI64,
+    /// Bytes the gateway may still answer before the relay cuts.
+    answers: AtomicI64,
     /// Bytes the phone has sent through the relay.
     sent: AtomicU64,
     live: Mutex<Vec<TcpStream>>,
@@ -588,6 +590,7 @@ impl Relay {
             upstream: Mutex::new(upstream),
             up: AtomicBool::new(true),
             budget: AtomicI64::new(i64::MAX),
+            answers: AtomicI64::new(i64::MAX),
             sent: AtomicU64::new(0),
             live: Mutex::new(Vec::new()),
             stopping: AtomicBool::new(false),
@@ -618,9 +621,10 @@ impl Relay {
                     phone.try_clone().expect("clones"),
                     gateway.try_clone().expect("clones"),
                 ]);
-                let budgeted = Arc::clone(&accepting);
-                std::thread::spawn(move || pump(phone, gateway, Some(&budgeted)));
-                std::thread::spawn(move || pump(clones.1, clones.0, None));
+                let sending = Arc::clone(&accepting);
+                let answering = Arc::clone(&accepting);
+                std::thread::spawn(move || pump(phone, gateway, &sending, Way::Sent));
+                std::thread::spawn(move || pump(clones.1, clones.0, &answering, Way::Answered));
             }
         });
         Self { addr, shared }
@@ -637,6 +641,12 @@ impl Relay {
         self.shared.budget.store(bytes, Ordering::SeqCst);
     }
 
+    /// Let `bytes` more of the gateway's answers through, then cut: a
+    /// restore asks little and is answered a vault.
+    pub fn cut_after_answers(&self, bytes: i64) {
+        self.shared.answers.store(bytes, Ordering::SeqCst);
+    }
+
     /// Every byte the phone has sent through the relay so far.
     pub fn sent(&self) -> u64 {
         self.shared.sent.load(Ordering::SeqCst)
@@ -645,6 +655,7 @@ impl Relay {
     /// The gateway is back.
     pub fn mend(&self) {
         self.shared.budget.store(i64::MAX, Ordering::SeqCst);
+        self.shared.answers.store(i64::MAX, Ordering::SeqCst);
         self.shared.up.store(true, Ordering::SeqCst);
     }
 
@@ -662,34 +673,43 @@ impl Drop for Relay {
     }
 }
 
-/// Copy `from` into `to` until either end goes; the phone's half spends the
-/// relay's budget and cuts every connection when it runs out.
-fn pump(mut from: TcpStream, mut to: TcpStream, budgeted: Option<&Arc<RelayShared>>) {
+/// Which way a pump copies.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Way {
+    /// The phone to the gateway.
+    Sent,
+    /// The gateway to the phone.
+    Answered,
+}
+
+/// Copy `from` into `to` until either end goes, spending the relay's budget
+/// for this way and cutting every connection when it runs out.
+fn pump(mut from: TcpStream, mut to: TcpStream, shared: &Arc<RelayShared>, way: Way) {
+    let budget = match way {
+        Way::Sent => &shared.budget,
+        Way::Answered => &shared.answers,
+    };
     let mut buffer = vec![0_u8; 64 * 1024];
     loop {
         let read = match from.read(&mut buffer) {
             Ok(0) | Err(_) => break,
             Ok(read) => read,
         };
-        let mut pass = read;
-        let mut cut = false;
-        if let Some(shared) = budgeted {
+        if way == Way::Sent {
             shared.sent.fetch_add(read as u64, Ordering::SeqCst);
-            let left = shared
-                .budget
-                .fetch_sub(i64::try_from(read).unwrap_or(i64::MAX), Ordering::SeqCst);
-            if left < i64::try_from(read).unwrap_or(i64::MAX) {
-                pass = usize::try_from(left.max(0)).unwrap_or(0);
-                cut = true;
-            }
         }
+        let size = i64::try_from(read).unwrap_or(i64::MAX);
+        let left = budget.fetch_sub(size, Ordering::SeqCst);
+        let (pass, cut) = if left < size {
+            (usize::try_from(left.max(0)).unwrap_or(0), true)
+        } else {
+            (read, false)
+        };
         if pass > 0 && to.write_all(&buffer[..pass]).is_err() {
             break;
         }
         if cut {
-            if let Some(shared) = budgeted {
-                shared.cut();
-            }
+            shared.cut();
             break;
         }
     }

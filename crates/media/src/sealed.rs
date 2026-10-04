@@ -1697,6 +1697,34 @@ mod tests {
         open_part(&keys(), sealed).map(|opened| opened.plaintext)
     }
 
+    /// **A FILE AT A PART'S EDGE** (#1080, the sweep's B5): a byte under a
+    /// part is one part, exactly a part is one part of every byte — never a
+    /// second, empty one — a byte over is a full part and a part of one
+    /// byte, and an empty file is one empty part. The names follow the parts.
+    #[test]
+    fn a_file_at_a_parts_edge_has_the_parts_it_should() {
+        let h = PlaintextHash::of(b"a film at the edge");
+        for (len, parts) in [
+            (0, vec![0]),
+            (PART_BYTES - 1, vec![PART_BYTES - 1]),
+            (PART_BYTES, vec![PART_BYTES]),
+            (PART_BYTES + 1, vec![PART_BYTES, 1]),
+            (2 * PART_BYTES, vec![PART_BYTES, PART_BYTES]),
+        ] {
+            let count = part_count(len);
+            assert_eq!(count as usize, parts.len(), "{len} bytes");
+            let lengths: Vec<u64> = (0..count)
+                .map(|index| part_len(len, index).expect("a part"))
+                .collect();
+            assert_eq!(lengths, parts, "{len} bytes");
+            assert!(
+                part_len(len, count).is_err(),
+                "{len} bytes has no part {count}"
+            );
+            assert_eq!(names_of(&keys(), &h, len).len(), parts.len());
+        }
+    }
+
     #[test]
     fn keys_names_and_part_keys_are_derived_and_distinct() {
         let keys = keys();
