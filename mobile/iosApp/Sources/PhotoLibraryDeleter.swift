@@ -61,7 +61,7 @@ enum LibraryDeletion {
 
     /// RULE 3. The member's no is PhotoKit's `userCancelled`, or Cocoa's
     /// `NSUserCancelledError` on an older path; both are code 3072.
-    static func answer(success: Bool, error: Error?) -> Answer {
+    static func answer(success: Bool, error: Swift.Error?) -> Answer {
         if success { return .deleted }
         guard let error else { return .failed(nil) }
         let failure = error as NSError

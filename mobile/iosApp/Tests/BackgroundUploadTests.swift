@@ -17,7 +17,7 @@ import XCTest
 /// hand-offs (`docs/release/v1-handoffs.md`, section 8).
 final class BackgroundUploadTests: XCTestCase {
     private let vault = String(repeating: "ab", count: 32)
-    private let name = String(repeating: "0f", count: 32)
+    private let part = String(repeating: "0f", count: 32)
 
     // MARK: the pin
 
@@ -43,23 +43,23 @@ final class BackgroundUploadTests: XCTestCase {
     // MARK: the tag a relaunch recovers
 
     func testTheTagRoundTripsThroughTheTaskDescription() {
-        let tag = UploadTag(name: name, gateway: "gw-1", vault: vault)
+        let tag = UploadTag(name: part, gateway: "gw-1", vault: vault)
         XCTAssertEqual(UploadTag.decode(tag.encoded), tag)
     }
 
     func testTheProtocolPathNamesTheVaultAndThePart() throws {
-        let url = URL(string: "https://192.168.1.4:8443/v2/v/\(vault)/o/\(name)")
+        let url = URL(string: "https://192.168.1.4:8443/v2/v/\(vault)/o/\(part)")
         let parsed = try XCTUnwrap(UploadTag.parse(url: url))
         XCTAssertEqual(parsed.vault, vault)
-        XCTAssertEqual(parsed.name, name)
+        XCTAssertEqual(parsed.name, part)
     }
 
     func testAPathThisFileDidNotBuildNamesNothing() {
         // The head, a short name, upper-case hex and a foreign prefix.
         XCTAssertNil(UploadTag.parse(url: URL(string: "https://h/v2/v/\(vault)/head")))
         XCTAssertNil(UploadTag.parse(url: URL(string: "https://h/v2/v/\(vault)/o/abc")))
-        XCTAssertNil(UploadTag.parse(url: URL(string: "https://h/v2/v/\(vault)/o/\(name.uppercased())")))
-        XCTAssertNil(UploadTag.parse(url: URL(string: "https://h/v1/v/\(vault)/o/\(name)")))
+        XCTAssertNil(UploadTag.parse(url: URL(string: "https://h/v2/v/\(vault)/o/\(part.uppercased())")))
+        XCTAssertNil(UploadTag.parse(url: URL(string: "https://h/v1/v/\(vault)/o/\(part)")))
         XCTAssertNil(UploadTag.decode("not a tag"))
     }
 
@@ -93,7 +93,7 @@ final class BackgroundUploadTests: XCTestCase {
 
     func testTheRequestIsThePresignedOneAndCarriesThePartsVerdict() throws {
         let order = UploadOrder(
-            name: name, path: "/tmp/part", url: "https://gw.local:8443/v2/v/\(vault)/o/\(name)", method: "PUT",
+            name: part, path: "/tmp/part", url: "https://gw.local:8443/v2/v/\(vault)/o/\(part)", method: "PUT",
             headers: [.init(name: "Content-Digest", value: "blake3=00")], size: 12, gateway: "gw-1", vault: vault,
             allowsCellular: true
         )
@@ -111,13 +111,13 @@ final class BackgroundUploadTests: XCTestCase {
     func testAPartTheCoreDidNotAllowNeverCrossesCellular() throws {
         // THE NEGATIVE CASE, twice: an order with no verdict at all — a part
         // from a core that never set `allows_cellular` — and one refused.
-        let url = "https://gw.local:8443/v2/v/\(vault)/o/\(name)"
+        let url = "https://gw.local:8443/v2/v/\(vault)/o/\(part)"
         let silent = UploadOrder(
-            name: name, path: "/tmp/part", url: url, method: "PUT",
+            name: part, path: "/tmp/part", url: url, method: "PUT",
             headers: [], size: 12, gateway: "gw-1", vault: vault
         )
         let refused = UploadOrder(
-            name: name, path: "/tmp/part", url: url, method: "PUT",
+            name: part, path: "/tmp/part", url: url, method: "PUT",
             headers: [], size: 12, gateway: "gw-1", vault: vault, allowsCellular: false
         )
         for order in [silent, refused] {
@@ -142,7 +142,7 @@ final class BackgroundUploadTests: XCTestCase {
 
     func testAnUploadOutsideTLSIsRefusedBeforeATaskExists() {
         let order = UploadOrder(
-            name: name, path: "/tmp/part", url: "http://gw.local:8443/v2/v/\(vault)/o/\(name)", method: "PUT",
+            name: part, path: "/tmp/part", url: "http://gw.local:8443/v2/v/\(vault)/o/\(part)", method: "PUT",
             headers: [], size: 12, gateway: "gw-1", vault: vault
         )
         guard case let .failure(refusal) = order.request() else {

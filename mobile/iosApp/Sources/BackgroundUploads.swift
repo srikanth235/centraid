@@ -141,7 +141,7 @@ struct UploadOrder: Equatable {
     var tag: UploadTag { UploadTag(name: name, gateway: gateway, vault: vault) }
 
     /// Why an order never became a task. Codes, for the core's log.
-    enum Refusal: String, Error {
+    enum Refusal: String, Swift.Error {
         /// Not `https`, or not a URL at all: an upload outside TLS would skip the pin.
         case notHTTPS = "HANDOFF_NOT_HTTPS"
         /// The spool file the core named is not on disk.
@@ -197,7 +197,7 @@ enum UploadPinning {
 
 /// What a finished task reports as its `error` (see [SettledUpload.error]).
 enum UploadOutcome {
-    static func reason(status: Int, error: Error?, reply: Data, pinRefused: Bool) -> String? {
+    static func reason(status: Int, error: Swift.Error?, reply: Data, pinRefused: Bool) -> String? {
         if pinRefused { return "PIN_MISMATCH" }
         if let error {
             let failure = error as NSError
@@ -503,7 +503,7 @@ extension BackgroundUploader: URLSessionDataDelegate {
     }
 
     /// ONE TASK FINISHED: report it, in order, to the core's `settle`.
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Swift.Error)?) {
         let left = finish(task.taskIdentifier)
         guard let tag = left.tag ?? UploadTag.recover(task, pins: pins) else {
             NSLog("centraid: an upload finished that names no part")
