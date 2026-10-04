@@ -199,11 +199,12 @@ impl Plane {
         Ledger::open(self.ledger_path()).map_err(plane_error)
     }
 
-    /// The spool, opened — and swept of a part a crash left half-written —
-    /// the first time it is asked for, and only then.
+    /// The spool, opened — and swept of a part a crash left half-written, and
+    /// of a whole part no queue row names — the first time it is asked for,
+    /// and only then.
     ///
     /// # Errors
-    /// The filesystem's refusal.
+    /// The filesystem's or the ledger's refusal.
     pub fn spool(&self) -> Result<Spool> {
         let mut held = self
             .spool
@@ -213,6 +214,31 @@ impl Plane {
             return Ok(spool.clone());
         }
         let opened = Spool::open(self.spool_dir()).map_err(plane_error)?;
+        // WHAT A CRASH LEFT BETWEEN A PART'S FILE AND ITS QUEUE ROW goes now,
+        // before anything this core runs can be halfway through writing one
+        // (`Spool::sweep_unqueued`). A part handed to the operating system is
+        // queued, so one the OS is still uploading by path stays.
+        let queued: BTreeSet<Name> = self
+            .ledger()?
+            .queued()
+            .map_err(plane_error)?
+            .into_iter()
+            .map(|part| part.name)
+            .collect();
+        let freed = opened.sweep_unqueued(&queued).map_err(plane_error)?;
+        if freed > 0 {
+            tracing::info!(freed, "the spool held parts no queue row names; they went");
+        }
+        // AND A SNAPSHOT'S COPY A CRASH LEFT in `<stem>.scratch/`: the vault's
+        // whole size, which the next snapshot would clear but which may be an
+        // hour away. No snapshot of this core's has begun: every pass opens
+        // the spool before it takes one.
+        match std::fs::remove_dir_all(self.scratch_dir()) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(plane_error(error.into()));
+            }
+            _ => {}
+        }
         *held = Some(opened.clone());
         Ok(opened)
     }
@@ -363,13 +389,18 @@ pub fn pins(plane: &Plane) -> Result<wire::PinsResponse> {
 /// row and every acknowledgement it gave leave the ledger, so what it held is
 /// prepared again for the gateways left; what it stores is left as it is.
 ///
-/// **First it revokes this phone's token there, best-effort** (#1080, the
+/// **It also revokes this phone's token there, best-effort** (#1080, the
 /// audit's finding 2): a forgotten gateway that still honoured the token would
 /// keep answering anyone who copied the ledger. Any answer from the pinned
 /// gateway that the token opens nothing — the revoke, or `UNAUTHORIZED`
 /// because its operator already revoked it — is `revoked`; an unreachable
 /// gateway, a machine that is not the pinned one, or a core with no vault keys
 /// to name the vault with is not, and the row goes anyway.
+///
+/// **The row goes before the token is revoked**, with the token read first: a
+/// pass running meanwhile is refused only once the gateway forgot the token,
+/// and by then finds its gateway forgotten here too, which it answers as a
+/// pass with nothing paired (`drain::run`) rather than as a refusal.
 ///
 /// # Errors
 /// The ledger's refusal.
@@ -386,10 +417,10 @@ pub fn forget_destination(
     else {
         return Ok(wire::ForgetDestinationResponse::default());
     };
-    let revoked = vault.is_some_and(|vault| revoke(&destination, vault, runtime));
     ledger
         .remove_destination(&request.gateway_id)
         .map_err(plane_error)?;
+    let revoked = vault.is_some_and(|vault| revoke(&destination, vault, runtime));
     Ok(wire::ForgetDestinationResponse {
         forgotten: true,
         revoked,
@@ -423,6 +454,34 @@ fn revoke(destination: &Destination, vault: VaultId, runtime: &tokio::runtime::H
 }
 
 // ─── status ─────────────────────────────────────────────────────────────────
+
+/// When the newest snapshot a gateway acknowledged was taken, on the vault's
+/// clock: every row committed before it is in a backup a restore brings back.
+///
+/// # Errors
+/// The ledger's refusal.
+pub(crate) fn records_backed_up_at(ledger: &Ledger) -> Result<Option<u64>> {
+    Ok(ledger
+        .snapshots()
+        .map_err(plane_error)?
+        .iter()
+        .filter(|snapshot| snapshot.acked_ms.is_some())
+        .map(|snapshot| snapshot.taken_at_ms)
+        .max())
+}
+
+/// **A FILE'S ROW IS BACKED UP** when it was written before the newest
+/// snapshot a gateway acknowledged (#1080, the sweep's S2). A file's bytes
+/// and its row travel apart — the bytes by name, the row in a snapshot,
+/// which ordinary passes take at most hourly — and a restore brings back
+/// only the files the restored rows name: bytes on a gateway that no
+/// snapshot's row names come back nowhere. A row written in the same
+/// millisecond as the copy is read as after it.
+pub(crate) fn row_backed_up(file: &ContentFile, records_at: Option<u64>) -> bool {
+    let written =
+        centraid_vault::clock::parse_iso_ms(&file.created_at).and_then(|at| u64::try_from(at).ok());
+    matches!((written, records_at), (Some(written), Some(taken)) if written < taken)
+}
 
 /// Where every file the vault knows stands, against the ledger.
 #[derive(Debug, Default)]
@@ -458,15 +517,20 @@ pub(crate) fn standing(
     };
     let unreached = drain::last_reach(ledger)?;
     let paired = !ledger.destinations().map_err(plane_error)?.is_empty();
+    let records_at = records_backed_up_at(ledger)?;
     let mut out = Standing::default();
     for file in files {
         out.total += 1;
         let names = names_of(keys, &file.h, file.len);
-        if names.iter().all(|name| confirmed.contains(name)) {
+        let bytes_held = names.iter().all(|name| confirmed.contains(name));
+        // BACKED UP IS THE BYTES AND THE ROW: either alone restores nothing.
+        if bytes_held && row_backed_up(file, records_at) {
             out.confirmed += 1;
             continue;
         }
-        out.pending_bytes = out.pending_bytes.saturating_add(file.len);
+        if !bytes_held {
+            out.pending_bytes = out.pending_bytes.saturating_add(file.len);
+        }
         let kind = drain::Kind::of_file(file);
         if !conditions.counts(kind) {
             // A video the member left out of the backup is not waiting: it
@@ -478,6 +542,13 @@ pub(crate) fn standing(
             wire::WaitReason::Gateway
         } else if let Some(reason) = unreached {
             reason
+        } else if bytes_held {
+            // ONLY THE ROW WAITS, for the next snapshot: time, or the link.
+            if conditions.may_move(drain::Kind::Records) {
+                wire::WaitReason::Window
+            } else {
+                wire::WaitReason::Wifi
+            }
         } else {
             let spooled = names
                 .iter()
@@ -592,6 +663,7 @@ pub fn releasable(
     }
     let ledger = plane.ledger()?;
     let confirmed = ledger.confirmed_anywhere().map_err(plane_error)?;
+    let records_at = records_backed_up_at(&ledger)?;
     let kept_albums = crate::originals::KeptAlbums::read(vault_file)?.album_ids;
     let kept = centraid_vault::originals::kept_hashes(vault, &kept_albums)?;
     let files: BTreeMap<PlaintextHash, ContentFile> = content_files(vault)
@@ -623,8 +695,12 @@ pub fn releasable(
                 // A hash the vault no longer names is no original of it.
                 return false;
             };
+            // BACKED UP, ROW AND BYTES (`row_backed_up`): an original whose
+            // row is in no acknowledged snapshot would, deleted from the
+            // library and lost with the phone, come back nowhere.
             let safe = !local.edited
                 && !kept.contains(&local.hash.to_hex())
+                && row_backed_up(file, records_at)
                 && names_of(&keys.backup, &file.h, file.len)
                     .iter()
                     .all(|name| confirmed.contains(name));

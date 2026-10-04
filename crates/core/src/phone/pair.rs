@@ -202,13 +202,15 @@ pub(crate) fn try_claim(
 
 /// Take this vault over at `gateway`: read its head under a read-only grant,
 /// then claim the writer epoch one past it, naming that head — retried when
-/// either moved under the claim.
+/// either moved under the claim. Answers the pairing and the head the claim
+/// named, which is the head the gateway holds as this phone becomes its
+/// writer.
 pub(crate) fn take_over(
     client: &Client,
     keyring: &Keyring,
     gateway: &GatewayId,
     runtime: &tokio::runtime::Handle,
-) -> Result<Paired> {
+) -> Result<(Paired, Option<centraid_gateway::rules::ids::Name>)> {
     let Some(grant) = read_grant(client, keyring, gateway, runtime)? else {
         return Err(CoreError::GatewayRefused {
             reason: "the gateway does not hold this vault".to_owned(),
@@ -228,7 +230,7 @@ pub(crate) fn take_over(
             head,
             runtime,
         )? {
-            ClaimAnswer::Claimed(paired) => return Ok(paired),
+            ClaimAnswer::Claimed(paired) => return Ok((paired, head)),
             ClaimAnswer::Conflict {
                 epoch: now,
                 head: seen,
@@ -273,8 +275,9 @@ pub fn pair(
         claim: None,
         read: None,
     };
-    let paired = match runtime.block_on(client.pair(&secret)) {
-        Ok(paired) => paired,
+    let (paired, head) = match runtime.block_on(client.pair(&secret)) {
+        // A SECRET ADMITS ONLY A VAULT THE GATEWAY HOLDS NOTHING OF: no head.
+        Ok(paired) => (paired, None),
         Err(ClientError::Refused(Refusal::VaultKnown)) => {
             take_over(&client, keyring, &payload.gw, runtime)?
         }
@@ -298,8 +301,32 @@ pub fn pair(
         last_ack_ms: None,
     };
     let ledger = plane.ledger()?;
+    // A PAIRING STARTS THIS GATEWAY'S RECORD OVER (#1080, the sweep's B3 and
+    // R-1080-C17). Whatever the ledger kept under this gateway's id from an
+    // earlier pairing — every acknowledgement, the head this phone last set
+    // there, when one was acknowledged, a `MOVED` — describes a gateway state
+    // this pairing replaced: a secret admits only a vault the gateway holds
+    // nothing of (its disk was replaced, or it was reinstalled with its
+    // identity kept), and a claim makes this phone the writer over a head
+    // another phone may have set. Kept, the old acknowledgements would stop
+    // every file being sent again, and the old head would be the `prev` of a
+    // compare-and-set the gateway refuses on every pass, so the records would
+    // never be backed up again. So the row goes, and its acknowledgements and
+    // its meta with it; the head is the one the claim named. Nothing is sent
+    // again blindly: a pass asks `exists` about every name before it seals
+    // one, which moves no bytes.
+    ledger
+        .remove_destination(&gateway_id)
+        .map_err(plane_error)?;
     ledger.put_destination(&destination).map_err(plane_error)?;
-    ledger.clear_moved(&gateway_id).map_err(plane_error)?;
+    if let Some(head) = head {
+        ledger
+            .set_head(
+                &gateway_id,
+                &centraid_vault::backup::naming::Name::from_bytes(*head.as_bytes()),
+            )
+            .map_err(plane_error)?;
+    }
     Ok(wire::PairResponse {
         safety_number: safety_number(keyring, &payload.pin),
         destination: Some(wire_destination(&destination)),

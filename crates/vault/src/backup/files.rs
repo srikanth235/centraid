@@ -9,6 +9,22 @@
 //! what the vault reads it as, and how recent it is (newest first, so the
 //! photograph just taken is safe before last year's). The SQL stays here
 //! because SQL is confined to this crate.
+//!
+//! **A BODY THAT LIVES IN THE VAULT'S OWN ROW IS NOT A FILE HERE.** Text —
+//! a note, a document, a person's note, a message — stays in its content
+//! item's row as a `data:` URI (the full-text index decodes it in the
+//! transaction that writes it), so its bytes are the vault file's own and
+//! travel in every snapshot of it. No pass could seal it by name: it is not
+//! in the content store or the library. Listed as a file, it would wait
+//! forever and keep the status from ever saying "backed up".
+//!
+//! **NOR IS AN ITEM PAST ITS PURGE INSTANT, OR WHAT WAS DERIVED FROM IT.**
+//! Deleted forever, a content item keeps its row with `purge_at` collapsed
+//! to the moment the member said so (`release_content_now`; nothing on the
+//! phone deletes the row), and a trashed one past its window can no longer
+//! come back from the trash. Either way its bytes are the store's to
+//! reclaim, not the member's: listed, they would be counted in the status
+//! and kept by every collection forever.
 
 use std::collections::BTreeSet;
 
@@ -41,16 +57,20 @@ impl ContentFile {
     }
 }
 
-/// Every content item and every derivative with bytes of its own, each hash
-/// once, newest first. Trashed rows are included: their bytes are restorable
-/// until the row is purged, exactly as [`super::naming::content_hashes`]
-/// counts them.
+/// Every content item and every derivative with bytes of its own outside the
+/// vault file, each hash once, newest first. A body kept in its own row (a
+/// `data:` URI) is the snapshot's to carry and is left out (the module
+/// header's reason). Trashed rows are included while their window runs:
+/// their bytes are restorable until `purge_at`. An item past it is left out
+/// with its derivatives (the module header's reason), exactly as
+/// [`super::naming::content_hashes`] counts them.
 ///
 /// # Errors
 /// [`super::PlaneError`] when the vault will not read, or a row holds a hash
 /// that is not 64 lowercase hex characters or a negative size.
 pub fn content_files(vault: &Vault) -> Result<Vec<ContentFile>> {
     type Row = (String, i64, Option<String>, Option<String>, i64, String);
+    let now = vault.clock().now_text();
     let rows: Vec<Row> = vault.read(|connection| {
         let mut statement = connection.prepare(
             "SELECT i.content_hash, i.byte_size,
@@ -62,13 +82,17 @@ pub fn content_files(vault: &Vault) -> Result<Vec<ContentFile>> {
                              WHERE a.content_id = i.content_id AND a.kind = 'video'),
                     i.created_at
                FROM core_content_item i
+              WHERE substr(i.content_uri, 1, 5) <> 'data:'
+                AND (i.purge_at IS NULL OR i.purge_at > ?1)
              UNION ALL
              SELECT d.content_hash, d.byte_size, d.media_type, d.variant, 0, d.created_at
                FROM core_content_derivative d
               WHERE d.content_hash IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM core_content_item p
+                                 WHERE p.content_id = d.content_id AND p.purge_at <= ?1)
              ORDER BY 6 DESC, 4 IS NOT NULL, 1",
         )?;
-        let rows = statement.query_map([], |row| {
+        let rows = statement.query_map([&now], |row| {
             Ok((
                 row.get(0)?,
                 row.get(1)?,
@@ -108,6 +132,99 @@ pub fn content_files(vault: &Vault) -> Result<Vec<ContentFile>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A note's body is in its own row, so it is the snapshot's and not a
+    /// file to send; a photograph's bytes are in the store, so they are.
+    #[test]
+    fn a_body_kept_in_its_row_is_not_a_file_to_send() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = Vault::create(dir.path().join("vault.db")).expect("a vault");
+        vault.found("Household", "Ada").expect("founds");
+        let body = PlaintextHash::from_hex(&crate::content::content_digest(b"milk, bread"))
+            .expect("a digest is a hash");
+        let photo = PlaintextHash::from_hex(&crate::content::content_digest(b"a photograph"))
+            .expect("a digest is a hash");
+        let now = vault.clock().now_text();
+        let (note, picture) = (vault.ids().next(), vault.ids().next());
+        vault
+            .commit(|tx| {
+                let connection = tx.connection();
+                for (id, uri, hash, size) in [
+                    (&note, "data:text/plain;charset=utf-8,milk%2C%20bread", body, 11),
+                    (&picture, "blob:blake3-x", photo, 12),
+                ] {
+                    connection.execute(
+                        "INSERT INTO core_content_item
+                           (content_id, content_uri, content_hash, byte_size, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+                        rusqlite::params![id, uri, hash.to_hex(), size, now],
+                    )?;
+                }
+                Ok(())
+            })
+            .expect("commits");
+        let files = content_files(&vault).expect("reads");
+        assert_eq!(
+            files.iter().map(|file| file.h).collect::<Vec<_>>(),
+            vec![photo]
+        );
+    }
+
+    /// A photograph in the trash is still a file to send until its window
+    /// runs out; one deleted forever is not, nor is its thumbnail, and
+    /// garbage collection counts exactly the same.
+    #[test]
+    fn an_item_past_its_purge_instant_is_not_a_file_to_send() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = Vault::create(dir.path().join("vault.db")).expect("a vault");
+        vault.found("Household", "Ada").expect("founds");
+        let hash = |bytes: &[u8]| {
+            PlaintextHash::from_hex(&crate::content::content_digest(bytes))
+                .expect("a digest is a hash")
+        };
+        let (trashed, gone, its_thumb) = (
+            hash(b"in the trash"),
+            hash(b"deleted forever"),
+            hash(b"its thumbnail"),
+        );
+        let now = vault.clock().now_text();
+        let (in_trash, deleted, derivative) =
+            (vault.ids().next(), vault.ids().next(), vault.ids().next());
+        vault
+            .commit(|tx| {
+                let connection = tx.connection();
+                for (id, hash, purge_at) in [
+                    (&in_trash, trashed, "2999-01-01T00:00:00.000Z"),
+                    (&deleted, gone, now.as_str()),
+                ] {
+                    connection.execute(
+                        "INSERT INTO core_content_item
+                           (content_id, content_uri, content_hash, byte_size, deleted_at,
+                            purge_at, created_at, updated_at)
+                         VALUES (?1, 'blob:x', ?2, 12, ?3, ?4, ?3, ?3)",
+                        rusqlite::params![id, hash.to_hex(), now, purge_at],
+                    )?;
+                }
+                connection.execute(
+                    "INSERT INTO core_content_derivative
+                       (derivative_id, content_id, variant, content_hash, media_type, byte_size,
+                        created_at, updated_at)
+                     VALUES (?1, ?2, 'thumb', ?3, 'image/jpeg', 30, ?4, ?4)",
+                    rusqlite::params![derivative, deleted, its_thumb.to_hex(), now],
+                )?;
+                Ok(())
+            })
+            .expect("commits");
+        let files = content_files(&vault).expect("reads");
+        assert_eq!(
+            files.iter().map(|file| file.h).collect::<Vec<_>>(),
+            vec![trashed]
+        );
+        assert_eq!(
+            crate::backup::naming::content_hashes(&vault).expect("reads"),
+            vec![(trashed, 12)]
+        );
+    }
 
     #[test]
     fn an_original_and_its_thumbnail_are_two_files_newest_first() {

@@ -563,7 +563,7 @@ pub fn spool(
             out.spooled.push(range.name);
             continue;
         }
-        if held >= budget {
+        if !super::spool::admits(held, range.len, budget) {
             out.deferred.push(range.name);
             continue;
         }
@@ -587,7 +587,9 @@ pub fn spool(
         let name = snapshot.manifest_name;
         if queued.contains(&name) && spool.contains(&name) {
             out.spooled.push(name);
-        } else if !out.deferred.is_empty() || held >= budget {
+        } else if !out.deferred.is_empty()
+            || !super::spool::admits(held, snapshot.manifest_json.len() as u64, budget)
+        {
             out.deferred.push(name);
         } else {
             let sealed = sealed::seal_part(keys, 0, &snapshot.manifest_json, true)?;
@@ -890,6 +892,38 @@ mod tests {
         assert_eq!(first.taken_at_ms, second.taken_at_ms);
         assert_ne!(first.path, second.path);
         assert!(first.path.exists() && second.path.exists());
+    }
+
+    /// **The spool never holds more than its budget.** Ranges past what fits
+    /// wait for the next snapshot, and the manifest waits with them.
+    #[test]
+    fn a_snapshot_spools_no_more_than_the_budget() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = founded(dir.path());
+        let keys = BackupKeys::from_root(&[3; 32]);
+        let snapshot = take(
+            &vault,
+            &keys,
+            &dir.path().join("scratch"),
+            &"ab".repeat(32),
+            APP,
+        )
+        .expect("takes");
+        assert!(snapshot.ranges.len() > 3, "a founded vault is a few ranges");
+        let store = super::super::store::MemoryStore::new("gw");
+        let planned = plan(&snapshot, &store).expect("plans");
+        let ledger = Ledger::open(dir.path().join("vault.backup.db")).expect("a ledger");
+        let spool_dir = Spool::open(dir.path().join("vault.spool")).expect("a spool");
+        let budget = 150 * 1024;
+        let spooled =
+            spool(&snapshot, &planned, &spool_dir, &ledger, &keys, budget, 1).expect("spools");
+        assert!(
+            spool_dir.bytes().expect("sums") <= budget,
+            "{} bytes under a budget of {budget}",
+            spool_dir.bytes().expect("sums")
+        );
+        assert!(!spooled.spooled.is_empty(), "what fits was spooled");
+        assert!(spooled.deferred.contains(&snapshot.manifest_name));
     }
 
     /// **Verify before sealing.** A range is sealed under the name its bytes

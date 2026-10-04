@@ -32,23 +32,29 @@ pub fn keys_from_root(root_key: &[u8; 32]) -> BackupKeys {
 
 /// Every file the vault knows by hash, with its length: each content item, and
 /// each derivative that has bytes of its own (a thumbnail, a preview, a
-/// poster). Trashed rows are included — their bytes are restorable until the
-/// row is purged.
+/// poster). Trashed rows are included while their window runs — their bytes
+/// are restorable until `purge_at`. An item past it, deleted forever or
+/// trashed longer than its window, is not the member's any more and is left
+/// out with its derivatives (`super::files`' module header).
 ///
 /// # Errors
 /// [`super::PlaneError`] when the vault will not read, or when a row holds a
 /// hash that is not 64 lowercase hex characters: garbage collection must
 /// account for every file, so a row it cannot name stops it.
 pub fn content_hashes(vault: &Vault) -> Result<Vec<(PlaintextHash, u64)>> {
+    let now = vault.clock().now_text();
     let rows: Vec<(String, i64)> = vault.read(|connection| {
         let mut statement = connection.prepare(
             "SELECT content_hash, byte_size FROM core_content_item
+              WHERE purge_at IS NULL OR purge_at > ?1
              UNION
-             SELECT content_hash, byte_size FROM core_content_derivative
-              WHERE content_hash IS NOT NULL
+             SELECT d.content_hash, d.byte_size FROM core_content_derivative d
+              WHERE d.content_hash IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM core_content_item p
+                                 WHERE p.content_id = d.content_id AND p.purge_at <= ?1)
              ORDER BY 1",
         )?;
-        let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        let rows = statement.query_map([&now], |row| Ok((row.get(0)?, row.get(1)?)))?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     })?;
     rows.into_iter()

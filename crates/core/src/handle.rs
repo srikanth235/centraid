@@ -115,7 +115,10 @@ pub struct Handle {
     draining: AtomicBool,
     /// THE FIRST RECONCILE OF THIS CORE'S LIFE HAS RUN (#1080 ruling 7: "on
     /// every launch"). It asks the gateway about every name the ledger
-    /// confirms; every later one only about the queue.
+    /// confirms; every later one only about the queue. The first pass that
+    /// reaches a gateway runs it when no `reconcile` call has
+    /// ([`Handle::owes_full_reconcile`]), so the ledger is squared on every
+    /// shell, not only on the one whose upload loop calls the door.
     reconciled: AtomicBool,
     /// THE STORE THIS CORE OPENED ITSELF.
     ///
@@ -958,11 +961,11 @@ impl Handle {
             )?))),
             K::Reconcile(_) => {
                 let runtime = self.runtime_handle()?;
-                let full = !self.reconciled.load(Ordering::SeqCst);
+                let full = self.owes_full_reconcile();
                 let answer =
                     crate::phone::drain::reconcile(&self.plane, self.keyring()?, &runtime, full)?;
                 if full && answer.reachable {
-                    self.reconciled.store(true, Ordering::SeqCst);
+                    self.reconciled_fully();
                 }
                 Ok(response(wire::response::Kind::Reconcile(answer)))
             }
@@ -1001,6 +1004,17 @@ impl Handle {
             reason: "this core holds no vault keys, so it cannot back up; open it with a seed"
                 .to_owned(),
         })
+    }
+
+    /// Whether this core has yet to ask a gateway about every name its ledger
+    /// confirms (#1080 ruling 7, "on every launch").
+    pub(crate) fn owes_full_reconcile(&self) -> bool {
+        !self.reconciled.load(Ordering::SeqCst)
+    }
+
+    /// This core asked a gateway about every name its ledger confirms.
+    pub(crate) fn reconciled_fully(&self) {
+        self.reconciled.store(true, Ordering::SeqCst);
     }
 
     /// One pass, one at a time.

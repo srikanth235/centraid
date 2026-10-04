@@ -721,6 +721,27 @@ impl Ledger {
         Ok(())
     }
 
+    /// `gateway_id` no longer holds any of `names`: one transaction, as
+    /// [`Self::confirm_many`] is.
+    ///
+    /// # Errors
+    /// SQLite's refusal; nothing is changed then.
+    pub fn unconfirm_many(&self, names: &[Name], gateway_id: &str) -> Result<()> {
+        if names.is_empty() {
+            return Ok(());
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        {
+            let mut statement =
+                transaction.prepare("DELETE FROM confirmed WHERE name = ?1 AND gateway_id = ?2")?;
+            for name in names {
+                statement.execute(params![name.to_hex(), gateway_id])?;
+            }
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
     /// Every name `gateway_id` acknowledged.
     ///
     /// # Errors

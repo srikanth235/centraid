@@ -11,6 +11,7 @@
 //! time into a file; and a restore, which brings back every derivative so the
 //! grid is whole, a thousand names to a fetch.
 
+use std::collections::BTreeSet;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -129,11 +130,12 @@ fn sealed_bound(len: u64) -> u64 {
 /// `bytes`: one-part files a thousand names to a `fetch` whose answer fits a
 /// bundle, a larger file a part at a time. Answers how many landed. A file the
 /// gateway does not hold is skipped — the grid falls back for it as for any
-/// missing tier.
+/// missing tier — and so is one whose copy does not open: **one damaged copy
+/// costs the grid that file alone**, never every file fetched after it.
 ///
 /// # Errors
-/// A gateway that stopped answering, or anything that would not open as the
-/// file its name derives from.
+/// A gateway that stopped answering, or a content store that will not keep a
+/// file.
 pub(crate) fn fetch_all(
     store: &dyn Store,
     keys: &BackupKeys,
@@ -148,29 +150,59 @@ pub(crate) fn fetch_all(
     let mut landed = 0_usize;
     let mut batch: Vec<Name> = Vec::new();
     let mut batch_bytes = 0_u64;
+    // Keep one fetched copy, or skip it when it does not open as its name.
+    let keep = |name: &Name, sealed_bytes: &[u8]| -> Result<bool> {
+        let plaintext = match sealed::open_whole(keys, name, sealed_bytes) {
+            Ok(plaintext) => plaintext,
+            Err(error) => {
+                tracing::warn!(%name, %error, "a fetched copy does not open; it is skipped");
+                return Ok(false);
+            }
+        };
+        bytes
+            .put_bytes(&plaintext)
+            .map_err(|error| CoreError::Invariant {
+                context: format!("the content store would not keep {name}: {error}"),
+            })?;
+        Ok(true)
+    };
     let fetch_batch = |batch: &mut Vec<Name>, landed: &mut usize| -> Result<()> {
         if batch.is_empty() {
             return Ok(());
         }
+        let mut answered: BTreeSet<Name> = BTreeSet::new();
         let mut refused: Option<CoreError> = None;
-        store
-            .get_many(batch, &mut |name, sealed_bytes| {
-                let plaintext = sealed::open_whole(keys, name, sealed_bytes).map_err(|error| {
-                    refused = Some(CoreError::Invariant {
-                        context: format!("{name} would not open as the file it names: {error}"),
-                    });
-                    std::io::Error::other("refused")
-                })?;
-                bytes.put_bytes(&plaintext).map_err(|error| {
-                    refused = Some(CoreError::Invariant {
-                        context: format!("the content store would not keep {name}: {error}"),
-                    });
-                    std::io::Error::other("refused")
-                })?;
-                *landed += 1;
-                Ok(())
-            })
-            .map_err(|error| refused.take().unwrap_or_else(|| store_error(error)))?;
+        let fetched = store.get_many(batch, &mut |name, sealed_bytes| {
+            answered.insert(*name);
+            match keep(name, sealed_bytes) {
+                Ok(kept) => {
+                    *landed += usize::from(kept);
+                    Ok(())
+                }
+                Err(error) => {
+                    refused = Some(error);
+                    Err(std::io::Error::other("refused"))
+                }
+            }
+        });
+        match fetched {
+            Ok(_) => {}
+            // A FRAME OFF ITS DIGEST STOPS THE WHOLE FETCH at the client, so
+            // what it did not reach is asked for one at a time, and a copy
+            // that is damaged is skipped.
+            Err(StoreError::Damaged(reason)) => {
+                tracing::warn!(%reason, "a fetch met a damaged copy; the rest go one at a time");
+                for name in batch.iter().filter(|name| !answered.contains(name)) {
+                    let mut sealed_bytes = Vec::new();
+                    match store.get(name, &mut sealed_bytes) {
+                        Ok(_) => *landed += usize::from(keep(name, &sealed_bytes)?),
+                        Err(StoreError::Damaged(_) | StoreError::Missing(_)) => {}
+                        Err(error) => return Err(store_error(error)),
+                    }
+                }
+            }
+            Err(error) => return Err(refused.take().unwrap_or_else(|| store_error(error))),
+        }
         batch.clear();
         Ok(())
     };

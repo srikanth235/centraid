@@ -52,6 +52,16 @@
 //! has a `vault.db`, so it is not asked about, not laid down again under the
 //! core that has it open, and not answered.
 //!
+//! # A VAULT IS NAMED `vault.db` ONLY ONCE IT IS CLAIMED AND KEPT
+//!
+//! A vault is laid down and checked as `vault.db.restoring`, and renamed to
+//! `vault.db` last, after its claim landed and its ledger records the
+//! gateway, the token and the head. So a restore the phone did not live to
+//! finish — killed between the check and the claim, or after the claim and
+//! before the ledger — leaves nothing that reads as a held vault: the next
+//! restore lays it down and claims it again, rather than skipping a vault no
+//! gateway backs up while the old phone goes on as its writer.
+//!
 //! # NEVER REUSE AN INDEX, AND NEVER SKIP ONE SILENTLY
 //!
 //! Indices are scanned upward from zero and the scan stops after [`GAP`]
@@ -77,6 +87,13 @@ use super::link::GatewayStore;
 use super::pair::{self, ClaimAnswer};
 use super::{Keyring, Plane, now_ms, plane_error};
 use crate::error::{CoreError, Result};
+
+/// What a vault is called while it is laid down, checked and claimed: never
+/// `vault.db`, which is a vault this phone holds (the module header).
+const RESTORING: &str = "vault.db.restoring";
+
+/// What a vault this phone holds is called in its directory.
+const HELD: &str = "vault.db";
 
 /// Consecutive misses that end the scan: twenty, BIP-44's address gap limit.
 /// A member would have to skip twenty vault indices in a row for it to be
@@ -160,7 +177,7 @@ pub fn run_observed(
         let found = keyring.and_then(|keyring| {
             // A VAULT THIS PHONE ALREADY HOLDS IS NEVER TOUCHED (R-1047-R6),
             // and for the gap it is a hit.
-            if vault_dir(&root, &keyring).join("vault.db").exists() {
+            if vault_dir(&root, &keyring).join(HELD).exists() {
                 return Ok(true);
             }
             scan.check(keyring, &root, index)
@@ -277,6 +294,7 @@ struct Staged {
     head_set_ms: i64,
     /// The writer epoch the gateway last reported; the claim is one above.
     epoch: u64,
+    /// Where it is laid down: `vault.db.restoring` until it is kept.
     file: PathBuf,
     /// The vault's directory, when this restore made it: a refusal removes it
     /// whole, its content store and ledger with it (#1047 L7).
@@ -346,7 +364,7 @@ impl Scan<'_> {
         std::fs::create_dir_all(&dir).map_err(|error| CoreError::Invariant {
             context: format!("making {}: {error}", dir.display()),
         })?;
-        let file = dir.join("vault.db");
+        let file = dir.join(RESTORING);
         let store = GatewayStore::over(
             client,
             keyring.vault_id(),
@@ -432,14 +450,17 @@ impl Scan<'_> {
     }
 
     /// The claim landed: keep the gateway and the restored head beside the
-    /// file, bring every derivative back, and answer the vault.
+    /// file, bring every derivative back, name the file `vault.db`, and
+    /// answer the vault. The name is last: until then nothing here reads as a
+    /// held vault (the module header).
     fn adopt(
         &self,
         staged: &Staged,
         paired: &centraid_gateway::rules::wire::Paired,
     ) -> Result<wire::RestoredVault> {
         let gateway_id = paired.gateway_id.hex();
-        let plane = Plane::of(&staged.file);
+        let kept = staged.file.with_file_name(HELD);
+        let plane = Plane::of(&kept);
         let ledger = plane.ledger()?;
         ledger.reset().map_err(plane_error)?;
         let now = now_ms();
@@ -491,11 +512,12 @@ impl Scan<'_> {
         let files = files?;
         let derivatives: Vec<&ContentFile> =
             files.iter().filter(|file| file.variant.is_some()).collect();
-        let bytes = centraid_blobs::ByteStore::open(staged.file.with_extension("bytes")).map_err(
-            |error| CoreError::Invariant {
-                context: format!("the restored vault's content store: {error}"),
-            },
-        )?;
+        let bytes =
+            centraid_blobs::ByteStore::open(kept.with_extension("bytes")).map_err(|error| {
+                CoreError::Invariant {
+                    context: format!("the restored vault's content store: {error}"),
+                }
+            })?;
         match super::fetch::fetch_all(&staged.store, &staged.keyring.backup, &derivatives, &bytes) {
             Ok(landed) => tracing::info!(
                 landed,
@@ -505,10 +527,13 @@ impl Scan<'_> {
             Err(error) => tracing::warn!(%error, "a restore's derivatives did not all come back"),
         }
 
+        std::fs::rename(&staged.file, &kept).map_err(|error| CoreError::Invariant {
+            context: format!("keeping the restored vault as {}: {error}", kept.display()),
+        })?;
         Ok(wire::RestoredVault {
             vault_id: staged.keyring.vault_hex(),
             index: staged.index,
-            path: staged.file.to_string_lossy().into_owned(),
+            path: kept.to_string_lossy().into_owned(),
             rows: manifest.census.values().sum(),
             safety_number: pair::safety_number(&staged.keyring, &self.payload.pin),
         })

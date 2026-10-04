@@ -19,6 +19,19 @@
 //! The bytes are authorised before they are read, and admitted only after
 //! they are on disk and hashed.
 //!
+//! # A ROW WHOSE BYTES ARE GONE IS NOT HELD
+//!
+//! The object index is `state.db` and the bytes are files, and the two can
+//! disagree behind the gateway's back: a file removed by hand from
+//! `objects/`, a disk that lost it. The scrub finds that within a quarter; a
+//! phone asking now is told now. `exists`, a `PUT` and a bundle frame look at
+//! the file of a name the index holds, and one with no file is marked as the
+//! scrub marks it (`Finding::Missing`, through
+//! [`crate::rules::engine::Gateway::record_scrub`]): `exists` answers it
+//! missing, so the phone sends it again, and the `PUT` that brings it stores
+//! it rather than answering "already held" over nothing. The file is the
+//! fact this module reads; whether the name is held is still the rules'.
+//!
 //! # A REFUSAL A PHONE CAN READ IS ONE SENT AFTER ITS BODY
 //!
 //! An HTTP/1.1 client still writing a body when the answer arrives sees a
@@ -45,17 +58,40 @@ use tokio::io::{AsyncReadExt as _, AsyncSeekExt as _};
 
 use crate::rules::bundle::{Decoder, FrameHeader, HEADER_LEN, Step, header as frame_header};
 use crate::rules::code::{Code, Refusal, RefusalBody};
-use crate::rules::engine::{Access, Arrival, PutOutcome};
+use crate::rules::engine::{Access, Arrival, Finding, Gateway, PutOutcome};
 use crate::rules::ids::{Digest, Name, Token, VaultId};
-use crate::rules::limits::{LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_JSON_BYTES, MAX_OBJECT_BYTES};
+use crate::rules::limits::{
+    LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_JSON_BYTES, MAX_NAMES, MAX_OBJECT_BYTES,
+};
 use crate::rules::range::resolve;
-use crate::rules::state::{Fault, ObjectRecord};
+use crate::rules::state::{Fault, ObjectRecord, State as _};
 use crate::rules::wire::{
     BundleAnswer, CODE_HEADER, DIGEST_HEADER, Missing, NameRefusal, Names, PairRequest, Revoked,
     SetHead,
 };
-use crate::server::store::{Staged, StagedFile};
+use crate::server::state::SqliteState;
+use crate::server::store::{ObjectStore, Staged, StagedFile};
 use crate::server::{Event, Handle, Shared};
+
+/// Mark `name` as the scrub marks a file it cannot find, when the index holds
+/// it and its file is gone (the module header's "a row whose bytes are gone").
+/// Answers whether it did.
+fn mark_if_gone(
+    gateway: &mut Gateway<SqliteState>,
+    store: &ObjectStore,
+    vault: &VaultId,
+    name: &Name,
+    now_ms: i64,
+) -> Result<bool, Fault> {
+    let Some(record) = gateway.state.object(vault, name)? else {
+        return Ok(false);
+    };
+    if !record.is_held() || store.path(vault, name).is_file() {
+        return Ok(false);
+    }
+    gateway.record_scrub(vault, &record, Finding::Missing, now_ms)?;
+    Ok(true)
+}
 
 /// The routes.
 pub fn router(shared: Handle) -> Router {
@@ -278,10 +314,37 @@ async fn exists(
         Ok(names) => names,
         Err(refusal) => return refused(&refusal, shared.now()),
     };
-    let outcome = shared
-        .rules(|gateway| gateway.exists(&vault, &token, &names.names))
-        .map(|missing| Missing { missing });
-    answer(&shared, StatusCode::OK, outcome)
+    // THE NAMES THE INDEX HOLDS are asked of their files, outside the lock;
+    // one whose file is gone is marked, and the rules answer again (the
+    // module header). A request the rules refused is answered as refused.
+    let outcome = shared.rules(|gateway| gateway.exists(&vault, &token, &names.names));
+    let outcome = outcome.and_then(|missing| {
+        if names.names.len() > MAX_NAMES {
+            return Ok(missing);
+        }
+        let store = shared.store();
+        let gone: Vec<Name> = names
+            .names
+            .iter()
+            .filter(|name| !missing.contains(name) && !store.path(&vault, name).is_file())
+            .copied()
+            .collect();
+        if gone.is_empty() {
+            return Ok(missing);
+        }
+        let now = shared.now();
+        shared.rules(|gateway| {
+            for name in &gone {
+                mark_if_gone(gateway, store, &vault, name, now)?;
+            }
+            gateway.exists(&vault, &token, &names.names)
+        })
+    });
+    answer(
+        &shared,
+        StatusCode::OK,
+        outcome.map(|missing| Missing { missing }),
+    )
 }
 
 /// `PUT o/{name}`: authorise, stage while hashing, then let the rules admit.
@@ -325,6 +388,7 @@ async fn receive_object(
     let now = shared.now();
     let store = shared.store();
     shared.rules(|gateway| {
+        mark_if_gone(gateway, store, &vault, &name, now)?;
         gateway.put(&vault, &token, &arrival, now, || {
             store.commit(file, &vault, &name)
         })
@@ -625,6 +689,7 @@ async fn advance(
             let now = shared.now();
             let store = shared.store();
             let outcome = shared.rules(|gateway| {
+                mark_if_gone(gateway, store, vault, &header.name, now)?;
                 gateway.put(vault, token, &arrival, now, || {
                     store.commit(file, vault, &header.name)
                 })

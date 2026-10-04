@@ -6,15 +6,19 @@
 //! by path while the app is suspended. A part reaches its real name only by
 //! rename after an fsync, so a crash leaves a whole part or a `.partial` that
 //! [`Spool::open`] sweeps away — never a short file under a name the queue
-//! trusts.
+//! trusts. A whole part whose queue row a crash kept from landing, or whose
+//! file a crash kept from going, is swept by the opener against the queue
+//! ([`Spool::sweep_unqueued`]).
 //!
 //! ## THE BUDGET
 //!
 //! The spool holds at most [`Spool::budget`] bytes: 2 GiB, or a tenth of the
-//! free space, whichever is smaller. Preparing stops when [`Spool::room`] says
-//! no and resumes once moving has drained it, so a backlog never fills the
-//! phone. Free space is the caller's to measure: the plane has no platform
-//! call for it.
+//! free space, whichever is smaller. A part is sealed into it only when it
+//! fits what is left ([`admits`]), and preparing resumes once moving has
+//! drained it, so a backlog never fills the phone. One part larger than the
+//! whole budget is sealed only into an empty spool, alone: it still backs up
+//! a part at a time rather than never. Free space is the caller's to measure:
+//! the plane has no platform call for it.
 //!
 //! **The budget bounds what waits, never what can back up.** A file larger
 //! than it is sealed a window of parts at a time, each window moved before
@@ -30,6 +34,30 @@ use super::naming::Name;
 
 /// The spool's ceiling, whatever the free space.
 pub const SPOOL_CEILING_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+/// The most a part of `plaintext_len` bytes seals to: its header, a nonce, a
+/// length and a tag for every chunk, and what zstd may add to a compressed
+/// part that would not compress.
+#[must_use]
+pub fn sealed_bound(plaintext_len: u64) -> u64 {
+    use centraid_media::sealed::{CHUNK_BYTES, CHUNK_FRAME_BYTES, HEADER_BYTES, TAG_BYTES};
+    let chunks = plaintext_len / CHUNK_BYTES as u64 + 1;
+    plaintext_len
+        .saturating_add(plaintext_len >> 8)
+        .saturating_add(64)
+        .saturating_add(HEADER_BYTES as u64)
+        .saturating_add(chunks.saturating_mul((CHUNK_FRAME_BYTES + TAG_BYTES) as u64))
+}
+
+/// Whether a part of `plaintext_len` bytes may be sealed into a spool that
+/// holds `held` sealed bytes under `budget`: when it fits, or when the spool
+/// is empty and the part is larger than the whole budget, alone (the module
+/// header's "a part at a time rather than never"). A budget of nothing — a
+/// volume that would not say how much is free — admits nothing.
+#[must_use]
+pub fn admits(held: u64, plaintext_len: u64, budget: u64) -> bool {
+    budget > 0 && (held == 0 || held.saturating_add(sealed_bound(plaintext_len)) <= budget)
+}
 
 const PARTIAL: &str = "partial";
 
@@ -180,6 +208,36 @@ impl Spool {
         Ok(names)
     }
 
+    /// Remove every whole part `queued` does not name, and answer the bytes
+    /// that freed.
+    ///
+    /// **A CRASH CAN LEAVE A WHOLE PART NO QUEUE ROW NAMES.** A part's file and
+    /// its queue row are two writes: a pass killed between confirming a part
+    /// and deleting its file, or between giving a sealed part its name and
+    /// queuing it, leaves a file nothing will ever move or delete. Kept, it
+    /// would read as bytes waiting to back up on every pass and hold the
+    /// spool's room from every later one. Only the opener calls this, before
+    /// anything writes: a part being queued right now has its name and not yet
+    /// its row.
+    ///
+    /// # Errors
+    /// The filesystem's refusal.
+    pub fn sweep_unqueued(&self, queued: &std::collections::BTreeSet<Name>) -> Result<u64> {
+        let mut freed = 0_u64;
+        for name in self.names()? {
+            if queued.contains(&name) {
+                continue;
+            }
+            let path = self.path(&name);
+            let len = fs::metadata(&path).map_or(0, |meta| meta.len());
+            match fs::remove_file(&path) {
+                Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error.into()),
+                _ => freed = freed.saturating_add(len),
+            }
+        }
+        Ok(freed)
+    }
+
     /// The bytes the spool holds in whole parts.
     ///
     /// # Errors
@@ -187,7 +245,14 @@ impl Spool {
     pub fn bytes(&self) -> Result<u64> {
         let mut total = 0_u64;
         for name in self.names()? {
-            total = total.saturating_add(fs::metadata(self.path(&name))?.len());
+            // A PART DELETED BETWEEN THE LISTING AND THIS LOOK IS GONE, NOT AN
+            // ERROR: the status is read while a pass deletes every part a
+            // gateway acknowledged, and a screen's read must not fail for it.
+            match fs::metadata(self.path(&name)) {
+                Ok(meta) => total = total.saturating_add(meta.len()),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
         }
         Ok(total)
     }
@@ -337,6 +402,39 @@ mod tests {
         Spool::open(spool.dir()).expect("reopens");
         assert!(!lost.exists(), "the sweep removed it");
         assert!(spool.contains(&name));
+    }
+
+    /// A whole part no queue row names goes; a queued one, and a part still
+    /// being written, stay.
+    #[test]
+    fn a_whole_part_no_queue_row_names_is_swept() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let spool = Spool::open(dir.path().join("s.spool")).expect("opens");
+        let (kept, stray) = (name_of("queued"), name_of("a crash kept it"));
+        spool.write(&kept, &[1; 30]).expect("writes");
+        spool.write(&stray, &[2; 70]).expect("writes");
+        let mut writing = spool.writer(&name_of("being written")).expect("begins");
+        writing.write_all(&[3; 10]).expect("streams");
+        let freed = spool
+            .sweep_unqueued(&std::collections::BTreeSet::from([kept]))
+            .expect("sweeps");
+        assert_eq!(freed, 70);
+        assert_eq!(spool.names().expect("lists"), vec![kept]);
+        writing.finish().expect("a part being written is not swept");
+    }
+
+    /// A part joins the spool when it fits; one larger than the whole budget
+    /// goes alone into an empty spool; a budget of nothing takes nothing.
+    #[test]
+    fn a_part_is_admitted_when_it_fits_or_goes_alone() {
+        let part = 400 * 1024;
+        assert!(admits(0, part, 1 << 20));
+        assert!(admits(sealed_bound(part), part, 1 << 20));
+        assert!(!admits(2 * sealed_bound(part), part, 1 << 20));
+        assert!(admits(0, 64 << 20, 1 << 20), "alone, into an empty spool");
+        assert!(!admits(1, 64 << 20, 1 << 20));
+        assert!(!admits(0, 1, 0), "a budget of nothing takes nothing");
+        assert!(sealed_bound(0) > 0 && sealed_bound(part) > part);
     }
 
     #[test]

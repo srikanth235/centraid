@@ -18,257 +18,15 @@
 //! | [`a_library_item_larger_than_the_spool_backs_up_a_window_at_a_time`] | R-1080-C39: a film twice the spool, hashed on its first read and sealed a window per later read under names known before each; a pass that moved a window asks for the next; an edit between reads keeps nothing; the spool never holds more than its ceiling |
 //! | [`forgetting_a_gateway_revokes_this_phones_token_there`] | `forget_destination` revokes the phone's token on the gateway first, and a gateway that cannot be reached is forgotten anyway and says it was not revoked |
 
+mod common;
+
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_core::{Core, CoreConfig, Handle};
-use centraid_gateway::server::harness::{self, Spawned};
+use centraid_core::{Core, CoreConfig};
 
-/// The BIP-39 test vector: the whole input to a restore.
-const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
-                     abandon abandon abandon abandon abandon abandon abandon abandon \
-                     abandon abandon abandon abandon abandon abandon abandon art";
-
-fn seed() -> centraid_core::Seed {
-    centraid_identity::RecoveryPhrase::parse(WORDS)
-        .expect("the vector parses")
-        .seed()
-}
-
-fn runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .enable_all()
-        .build()
-        .expect("a runtime")
-}
-
-/// A gateway on its own runtime, kept alive for the test.
-struct Gateway {
-    runtime: tokio::runtime::Runtime,
-    _dir: tempfile::TempDir,
-    spawned: Spawned,
-}
-
-fn gateway() -> Gateway {
-    let runtime = runtime();
-    let dir = tempfile::tempdir().expect("a directory");
-    let spawned = runtime
-        .block_on(harness::spawn(dir.path()))
-        .expect("the gateway starts");
-    Gateway {
-        runtime,
-        _dir: dir,
-        spawned,
-    }
-}
-
-impl Gateway {
-    fn payload(&self) -> String {
-        self.spawned.payload().to_json()
-    }
-
-    /// Every file under the gateway's data directory, read whole.
-    fn files(&self) -> Vec<(PathBuf, Vec<u8>)> {
-        fn walk(dir: &Path, out: &mut Vec<(PathBuf, Vec<u8>)>) {
-            for entry in std::fs::read_dir(dir).expect("lists") {
-                let path = entry.expect("an entry").path();
-                if path.is_dir() {
-                    walk(&path, out);
-                } else if let Ok(bytes) = std::fs::read(&path) {
-                    out.push((path, bytes));
-                }
-            }
-        }
-        let mut out = Vec::new();
-        walk(self.spawned.data_dir(), &mut out);
-        out
-    }
-}
-
-/// A founded phone holding the vault's keys and its content store.
-fn phone(dir: &Path) -> Handle {
-    phone_with(dir, |config| config)
-}
-
-/// [`phone`], opened with a configuration of the test's own.
-fn phone_with(dir: &Path, configure: impl FnOnce(CoreConfig) -> CoreConfig) -> Handle {
-    std::fs::create_dir_all(dir).expect("a directory");
-    let handle = Core::open(configure(
-        CoreConfig::new(dir.join("vault.db")).with_seed(seed(), 0),
-    ))
-    .expect("the core opens");
-    handle
-        .with_vault(|vault| Ok(vault.found("Household", "Ada")?))
-        .expect("it founds");
-    handle
-        .open_own_bytes(dir.join("vault.bytes"))
-        .expect("the store opens");
-    handle
-}
-
-fn ask(handle: &Handle, kind: wire::request::Kind) -> wire::response::Kind {
-    handle
-        .call(&wire::Request {
-            kind: Some(kind.clone()),
-        })
-        .unwrap_or_else(|error| panic!("{kind:?} was refused: {error}"))
-        .kind
-        .expect("an answer has a kind")
-}
-
-fn pair(handle: &Handle, gateway: &Gateway) -> wire::PairResponse {
-    let wire::response::Kind::PairPhone(paired) = ask(
-        handle,
-        wire::request::Kind::PairPhone(wire::PairRequest {
-            payload: gateway.payload(),
-        }),
-    ) else {
-        panic!("a pairing answers");
-    };
-    paired
-}
-
-/// Bytes nobody else has: a label's hash, stretched.
-fn bytes_of(label: &str, size: usize) -> Vec<u8> {
-    let mut reader = blake3::Hasher::new()
-        .update(label.as_bytes())
-        .finalize_xof();
-    let mut out = vec![0_u8; size];
-    reader.fill(&mut out);
-    out
-}
-
-fn stage(handle: &Handle, begin: wire::StageBegin, bytes: &[u8]) -> wire::StageHandle {
-    let send = |kind: wire::stage_request::Kind| {
-        let wire::response::Kind::Stage(answer) = ask(
-            handle,
-            wire::request::Kind::Stage(wire::StageRequest { kind: Some(kind) }),
-        ) else {
-            panic!("a stage frame answers");
-        };
-        answer.kind.expect("a stage answer has a kind")
-    };
-    let wire::stage_response::Kind::Begun(begun) = send(wire::stage_request::Kind::Begin(begin))
-    else {
-        panic!("begun");
-    };
-    let ceiling = usize::try_from(begun.chunk_bytes).expect("fits");
-    for (seq, window) in bytes.chunks(ceiling).enumerate() {
-        send(wire::stage_request::Kind::Chunk(wire::StageChunk {
-            staging_id: begun.staging_id.clone(),
-            seq: seq as u64,
-            payload: window.to_vec(),
-        }));
-    }
-    let wire::stage_response::Kind::Handle(staged) =
-        send(wire::stage_request::Kind::End(wire::StageEnd {
-            staging_id: begun.staging_id,
-        }))
-    else {
-        panic!("a handle");
-    };
-    staged
-}
-
-fn owned(media_type: &str, bytes: &[u8]) -> wire::StageBegin {
-    wire::StageBegin {
-        media_type: media_type.to_owned(),
-        byte_size: bytes.len() as u64,
-        source: wire::StageSource::Owned as i32,
-        ..wire::StageBegin::default()
-    }
-}
-
-/// A library item's begin. Its length is "not known" (0) half the time, as
-/// the library answers it.
-fn library(media_type: &str, os_ref: &str, bytes: &[u8], edited: bool) -> wire::StageBegin {
-    wire::StageBegin {
-        media_type: media_type.to_owned(),
-        byte_size: if bytes.len().is_multiple_of(2) {
-            0
-        } else {
-            bytes.len() as u64
-        },
-        source: wire::StageSource::OsLibrary as i32,
-        os_ref: os_ref.to_owned(),
-        os_edited: edited,
-        ..wire::StageBegin::default()
-    }
-}
-
-fn thumb_of(parent: &wire::StageHandle, bytes: &[u8]) -> wire::StageBegin {
-    wire::StageBegin {
-        for_hash: hex::decode(&parent.content_hash).expect("hex"),
-        tier: "thumb".to_owned(),
-        ..owned("image/jpeg", bytes)
-    }
-}
-
-/// `media.add_asset` over staged bytes; answers the asset id.
-fn add_asset(handle: &Handle, staged: &wire::StageHandle, kind: &str) -> String {
-    let wire::response::Kind::Command(outcome) = ask(
-        handle,
-        wire::request::Kind::Command(wire::Command {
-            name: "media.add_asset".to_owned(),
-            input: serde_json::to_vec(&serde_json::json!({
-                "staged_sha": staged.content_hash,
-                "kind": kind,
-            }))
-            .expect("json"),
-            invoke_key: format!("media.add_asset:{}", staged.content_hash),
-            ..wire::Command::default()
-        }),
-    ) else {
-        panic!("a command answers");
-    };
-    assert_eq!(
-        outcome.status,
-        wire::CommandStatus::Executed as i32,
-        "{}",
-        outcome.reason
-    );
-    let output: serde_json::Value = serde_json::from_slice(&outcome.output).expect("json");
-    output["asset_id"].as_str().expect("an asset id").to_owned()
-}
-
-fn drain(handle: &Handle, request: wire::DrainRequest) -> wire::DrainResponse {
-    let wire::response::Kind::Drain(drained) = ask(handle, wire::request::Kind::Drain(request))
-    else {
-        panic!("a drain answers");
-    };
-    drained
-}
-
-/// A pass at home, on a charger, that the member asked for.
-fn at_home() -> wire::DrainRequest {
-    wire::DrainRequest {
-        deadline_ms: 0,
-        rule: wire::TransferRule::WifiOnly as i32,
-        metered: false,
-        charging: true,
-        wants_snapshot: true,
-        exclude_videos: false,
-        asked: false,
-    }
-}
-
-fn status(handle: &Handle) -> wire::BackupStatusResponse {
-    let wire::response::Kind::BackupStatus(status) = ask(
-        handle,
-        wire::request::Kind::BackupStatus(wire::BackupStatusRequest {}),
-    ) else {
-        panic!("a status answers");
-    };
-    status
-}
-
-fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    haystack
-        .windows(needle.len())
-        .any(|window| window == needle)
-}
+use common::*;
 
 #[test]
 fn a_phone_pairs_backs_up_and_its_gateway_holds_only_ciphertext() {
@@ -451,13 +209,18 @@ fn the_operating_system_moves_a_handed_off_part_and_settle_records_it() {
         "the thumbnail alone: {metered:?}"
     );
     assert!(metered.pending_bytes > 0, "the original waits in the spool");
+    // BOTH WAIT FOR WI-FI: the original's bytes, and the thumbnail's row —
+    // its bytes crossed, but the snapshot that holds its row may not cross a
+    // metered link under Wi-Fi only, and a file is backed up once its bytes
+    // and its row are.
     let waiting = status(&phone);
     assert!(
         waiting
             .waiting
             .iter()
-            .any(|row| row.reason == wire::WaitReason::Wifi as i32 && row.count == 1),
-        "{waiting:?}"
+            .any(|row| row.reason == wire::WaitReason::Wifi as i32 && row.count == 2),
+        "{:?}",
+        waiting.waiting
     );
 
     let wire::response::Kind::Handoff(batch) = ask(
@@ -858,6 +621,14 @@ fn a_library_item_larger_than_the_spool_backs_up_a_window_at_a_time() {
             answers.len() < 8,
             "two windows take a few passes: {answers:?}"
         );
+        // WHAT THE PASS ASKED FOR WAITS FOR THE SHELL'S BYTES (#1080, B9).
+        let waits = status(&phone);
+        assert_eq!(
+            waiting(&waits, wire::WaitReason::Bytes),
+            1,
+            "{:?}",
+            waits.waiting
+        );
         for need in &answer.need_bytes {
             assert_eq!(need.os_ref, "lib-film");
             assert_eq!(hex::encode(&need.content_hash), staged.content_hash);
@@ -912,44 +683,6 @@ fn a_library_item_larger_than_the_spool_backs_up_a_window_at_a_time() {
         "{offered:?}"
     );
     assert_eq!(spooled(), 0, "the spool is empty once both moved");
-}
-
-/// What a vault is, for comparing two of them through the vault's own
-/// doors: its id, and every file its rows name — each content item and each
-/// derivative, by hash, length and tier. A note's body is a content item, so
-/// a note the restore missed is a difference here.
-/// One file a vault's rows name: its hash, its length and its tier.
-type Named = (String, u64, Option<String>);
-
-fn census(path: &Path) -> (Option<String>, Vec<Named>) {
-    let vault = centraid_vault::Vault::open(path).expect("opens");
-    let id = vault.vault_id().expect("reads");
-    let mut files: Vec<Named> = centraid_vault::backup::files::content_files(&vault)
-        .expect("reads")
-        .into_iter()
-        .map(|file| (file.h.to_hex(), file.len, file.variant))
-        .collect();
-    files.sort();
-    vault.close().expect("closes");
-    (id, files)
-}
-
-fn restore(dir: &Path, gateway: &Gateway) -> wire::RestoreResponse {
-    std::fs::create_dir_all(dir).expect("a directory");
-    let shelf = Core::open(CoreConfig::new(dir.join("custody.db")).opening_existing())
-        .expect("a core with no vault opens");
-    assert!(!shelf.holds_a_replica());
-    let wire::response::Kind::Restore(restored) = ask(
-        &shelf,
-        wire::request::Kind::Restore(wire::RestoreRequest {
-            phrase: WORDS.to_owned(),
-            payload: gateway.payload(),
-            ..wire::RestoreRequest::default()
-        }),
-    ) else {
-        panic!("a restore answers");
-    };
-    restored
 }
 
 #[test]
@@ -1165,30 +898,6 @@ fn pairing_a_gateway_that_holds_the_vault_takes_it_over() {
     );
 }
 
-/// How many tokens the gateway holds, for every vault it knows.
-fn tokens(gateway: &Gateway) -> usize {
-    gateway
-        .spawned
-        .shared()
-        .rules(|rules| rules.pairings())
-        .expect("the gateway lists its pairings")
-        .iter()
-        .map(|pairing| pairing.tokens.len())
-        .sum()
-}
-
-fn forget(handle: &Handle, gateway_id: &str) -> wire::ForgetDestinationResponse {
-    let wire::response::Kind::ForgetDestination(forgot) = ask(
-        handle,
-        wire::request::Kind::ForgetDestination(wire::ForgetDestinationRequest {
-            gateway_id: gateway_id.to_owned(),
-        }),
-    ) else {
-        panic!("a forget answers");
-    };
-    forgot
-}
-
 #[test]
 fn forgetting_a_gateway_revokes_this_phones_token_there() {
     let kept = gateway();
@@ -1225,17 +934,6 @@ fn forgetting_a_gateway_revokes_this_phones_token_there() {
         !forget(&handle, &gone_id).forgotten,
         "a second forget finds nothing"
     );
-}
-
-/// The gateway's name for part `index` of the file `hash_hex`: what a test
-/// needs to damage one object on purpose.
-fn gateway_name(hash_hex: &str, index: u32) -> centraid_gateway::rules::ids::Name {
-    let keyring = centraid_core::phone::Keyring::derive(&seed(), 0).expect("the keys derive");
-    let h = centraid_vault::backup::naming::PlaintextHash::from_bytes(
-        <[u8; 32]>::try_from(hex::decode(hash_hex).expect("hex")).expect("32 bytes"),
-    );
-    let name = centraid_vault::backup::naming::name(&keyring.backup, &h, index);
-    centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes())
 }
 
 #[test]
