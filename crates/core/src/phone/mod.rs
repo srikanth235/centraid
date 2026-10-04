@@ -229,6 +229,16 @@ impl Plane {
         if freed > 0 {
             tracing::info!(freed, "the spool held parts no queue row names; they went");
         }
+        // AND A SNAPSHOT'S COPY A CRASH LEFT in `<stem>.scratch/`: the vault's
+        // whole size, which the next snapshot would clear but which may be an
+        // hour away. No snapshot of this core's has begun: every pass opens
+        // the spool before it takes one.
+        match std::fs::remove_dir_all(self.scratch_dir()) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(plane_error(error.into()));
+            }
+            _ => {}
+        }
         *held = Some(opened.clone());
         Ok(opened)
     }

@@ -602,3 +602,32 @@ fn the_spool_never_holds_more_than_its_ceiling() {
     assert_eq!((backed.content_confirmed, backed.content_total), (4, 4));
     assert_eq!(spool_bytes(dir.path()), 0);
 }
+
+/// **A SNAPSHOT A CRASH CUT SHORT LEAVES NO COPY OF THE VAULT BEHIND**
+/// (#1080, B2). A snapshot copies the whole vault into `<stem>.scratch/` and
+/// describes it there; a phone killed in between leaves that copy. The next
+/// snapshot clears it, but the next snapshot may be an hour away — and the
+/// copy is the vault's whole size, on a phone the spool's budget was cut to
+/// keep from filling.
+#[test]
+fn a_snapshot_copy_a_crash_left_goes_with_the_next_core() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    drain(&phone, at_home());
+    drop(phone);
+    // WHAT THE CRASH LEFT: a copy, mid-description.
+    let scratch = dir.path().join("vault.scratch");
+    std::fs::create_dir_all(&scratch).expect("a directory");
+    std::fs::copy(&path, scratch.join("snapshot-1-00000000deadbeef.db")).expect("copies");
+
+    let phone = reopen(&path);
+    let drained = drain(&phone, quietly());
+    assert!(drained.acked_at_ms.is_none(), "no snapshot was due");
+    assert!(
+        !scratch.exists() || std::fs::read_dir(&scratch).expect("lists").next().is_none(),
+        "no copy of the vault outlives the crash"
+    );
+}
