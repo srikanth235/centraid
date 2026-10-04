@@ -1294,3 +1294,72 @@ fn two_vaults_on_one_gateway_cannot_reach_each_other() {
     assert_eq!(next.stopped, wire::DrainStop::Empty as i32, "{next:?}");
     assert_eq!(status(&two).content_confirmed, 4);
 }
+
+/// **AN ITEM DELETED AFTER IT WAS BACKED UP** (#1080, B5). In the trash it
+/// is still the vault's, still counted and still held — restorable until its
+/// window runs out. Deleted forever, the status stops counting it, and the
+/// next collection deletes its object at the gateway (a tombstone with the
+/// gateway's week of grace) rather than keeping it forever.
+#[test]
+fn an_item_deleted_after_backup_is_collected_once_purged() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    let photo = bytes_of("a photograph the member deletes later", 70_000);
+    let staged = stage(&phone, owned("image/heic", &photo), &photo);
+    let asset = add_asset(&phone, &staged, "photo");
+    drain(&phone, at_home());
+    let object = Name::from_bytes(*gateway_name(&staged.content_hash, 0).as_bytes());
+    assert!(gateway.held(&vault_id()).contains(&object));
+
+    command(
+        &phone,
+        "media.delete_asset",
+        &json!({ "asset_id": asset }),
+        "to-the-trash",
+    );
+    let trashed = status(&phone);
+    assert_eq!(
+        (trashed.content_confirmed, trashed.content_total),
+        (1, 1),
+        "in the trash it is still backed up"
+    );
+
+    command(
+        &phone,
+        "media.purge_asset",
+        &json!({ "asset_id": asset }),
+        "deleted-forever",
+    );
+    let purged = status(&phone);
+    assert_eq!(
+        (purged.content_confirmed, purged.content_total),
+        (0, 0),
+        "deleted forever, it is not counted"
+    );
+    // Collection runs when retention drops a snapshot; two more snapshots
+    // drop one, wherever midnight falls between them.
+    for _ in 0..2 {
+        let next = drain(
+            &phone,
+            wire::DrainRequest {
+                asked: true,
+                ..at_home()
+            },
+        );
+        assert!(next.acked_at_ms.is_some(), "{next:?}");
+    }
+    assert!(
+        !gateway.held(&vault_id()).contains(&object),
+        "the purged photograph's object is collected"
+    );
+    assert!(
+        gateway
+            .objects(&vault_id())
+            .iter()
+            .any(|record| Name::from_bytes(*record.name.as_bytes()) == object
+                && record.tombstone.is_some()),
+        "as a tombstone, with the gateway's grace"
+    );
+}
