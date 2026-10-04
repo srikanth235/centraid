@@ -1,10 +1,49 @@
 # Receipt — backups from first principles ([#1080](https://github.com/srikanth235/centraid/issues/1080))
 
+<!-- governance:front-page start -->
+**Law** · window door · range `23e46810..f619515d` · law digest `a0140aaf3917` → `a0140aaf3917`
+
+| Rule | Door | Verdict | Findings |
+| --- | --- | --- | --- |
+| `amendment-pairing` | hook | ✓ pass | 0 |
+| `commit-message-format` | hook | ✓ pass | 0 |
+| `constitution-coverage` | window | ✓ pass | 0 |
+| `doc-integrity` | hook | ✓ pass | 0 |
+| `doctrine-citation` | window | ✓ pass | 0 |
+| `estate-separation` | hook | ✓ pass | 0 |
+| `managed-tree-integrity` | hook | ✓ pass | 0 |
+| `receipt-per-issue` | window | ✓ pass | 0 |
+| `registry-completeness` | window | ✓ pass | 0 |
+| `waiver-docket` | hook | ✓ pass | 0 |
+
+law estate: 11 paths, CODEOWNERS in sync
+
+### Registries
+
+- rulings recorded: #8, #1020, #1025, #1029, #1045, #1080 in `docs/decisions.md`
+- changelog entries: #1029, #1080
+- no gates moved
+- no waivers used
+- proposal link unverified (offline)
+- token cost: not recorded
+<!-- governance:front-page end -->
+
 Umbrella receipt. One receipt for the whole umbrella; each lane appends its own section below and never edits a section above it. The state this umbrella produces lives in [docs/decisions.md](../docs/decisions.md#backups-from-first-principles-1080) and, from the doc pass, in the state documents #1080 names; where this receipt and a doc disagree, the doc is current.
 
 The umbrella is worked by orchestration ([docs/multi-agent.md](../docs/multi-agent.md)): wave 1 runs lane A (the gateway protocol v2, `crates/gateway2`) and lane B (the sealed format and the vault snapshot plane) in parallel; wave 2 is the cut-over; wave 3 the shells; wave 4 the doc pass and the close. The root's amendments to #1080 are in its seam contract; the two that reached lane B are named where they apply.
 
 ## What changed
+
+### The umbrella, closed
+
+The phone's backup is a **snapshot plane over sealed objects, moved by direct HTTPS to gateways the member controls**; the log-shipping plane, the iroh carrier and its relay, the lease, the device certificate and the running census are gone. Each lane's section below records its own files and commands; this close records the whole.
+
+- **The gateway** (`crates/gateway`, lane A, renamed at the cut-over): protocol v2 over a self-signed P-256 certificate pinned at pairing, bearer tokens stored as BLAKE3, a writer epoch and `MOVED`, a filesystem store with tombstones, sweeps and a scrub, mDNS on the LAN, the `centraid-gateway` CLI (`serve`, `pair`, `pairings`, `scrub`, `health`, `install`), systemd and launchd units, the container image, and a 30-case conformance suite run in memory and over the wire.
+- **The sealed format and the snapshot plane** (`crates/media::sealed`, `crates/vault::backup`, lane B): `centraid-sealed/2`, 64 KiB ranges (A14), keyed names, the ledger `<stem>.backup.db`, the spool, the mover, retention 7/4/6 and garbage as pure functions, restore refusals, the drill.
+- **The phone core on the plane** (`crates/core::phone`, lane C): pair, drain, handoff, settle, reconcile, pins, fetch original, forget destination, releasable and released, restore from the 24 words with the old phone frozen; the stage door v2 that seals a library item in the same stream it hashes; the directory content store (`crates/blobs`); rung 010; the cut-over's deletions; the end-to-end drill across the real gateway in the gate.
+- **The shared half** (`mobile/shared`, lane D): the pass model (prepare, move, settle), the walker streaming from the OS library, the Backup screen and Home's line, pairing v2, free up space through an installed deleter, the Restore gate on a pairing code (A23), the ask bit (A24).
+- **The native shells** (`mobile/iosApp`, `mobile/androidApp`, lane E): the iOS background URLSession mover and its windows, the Android process session and jobs, the Backup screens, the library deleters behind the system's own confirmation, the device hand-off rows.
+- **The docs** (lane F, two rounds, stopped by the owner before its third): ARCHITECTURE, SECURITY, README, TESTING, docs/gateway.md, the recovery runbooks, mobile-offline, photos, glossary, the retired traps, decisions supersessions; the root's close pass covered what the gates needed after the cut-over.
 
 ### Wave 1, lane B — the sealed format and the vault snapshot plane
 
@@ -87,6 +126,24 @@ Findings outside lane B's files:
 - **F-B2** — `crates/media/README.md`'s conformance paragraph names two fixtures under `contracts/crypto/` and not `sealed-vectors.json`; the doc pass owns that file (#1080).
 
 ## Verification
+
+### On the closed tree
+
+Run by the root in `/home/user/centraid` on the umbrella branch at `7916e23d8`, 2026-10-04, `CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/home/user/cargo-target-shared`:
+
+```sh
+cargo xtask gate --profile pr
+cargo xtask gate --profile mobile-jvm
+cargo check --workspace --all-targets --target x86_64-pc-windows-gnu
+bash .governance/run.sh < /dev/null
+grep -c iroh Cargo.lock
+```
+
+- `cargo xtask gate --profile pr` — PASS. `fmt`, `clippy`, `test` (237.3 s, `cargo test --workspace`), `restore-drill` (30.0 s: back a vault up, lose it with its ledger and spool, restore it row for row; then lose the phone, restore from 24 words across the real gateway, and freeze the old one), `rules` (4 rules, clean), `ledgers` (5 hold against `23e46810`), `buf` (lint and breaking against `main`, 0 tags in the window), `release-build` (204.7 s of 1,400 s), `ts-static`, `emitters`, `advisory`, `lockfile`, `call-budget`, `fault-door` all ok. Loud skips, not passes: `deny`, `ci-policy`, `secrets` and `osv`, because `cargo-deny`, `actionlint`, `gitleaks` and `osv-scanner` are not installed in this container; `gate.yml` installs and runs them in CI.
+- `cargo xtask gate --profile mobile-jvm` — PASS, 49.1 s of a 420 s budget (the generated trees `design`, `copy`, `mobile` and `contracts/screens` unchanged after the emitters and the JVM tests).
+- The Windows type-check — exit 0 on `0a5a51b71`'s tree with a mingw cross-compiler (`gcc-mingw-w64-x86-64`), every workspace target; the MSVC target cannot be checked here because SQLite's and zstd's bundled C need MSVC, so CI's Windows legs are the proof for that triple.
+- `bash .governance/run.sh < /dev/null` — every directive passes; the law's window door runs 10 rules with no findings (the receipt staged).
+- `grep -c iroh Cargo.lock` — `0`.
 
 Run in this worktree with `CARGO_TARGET_DIR=/home/user/cargo-target-lane-b`, on 2026-10-03, at `42454fd4`.
 
@@ -867,3 +924,57 @@ Run in this worktree on 2026-10-03, at this commit's tree. No cargo command: the
 | `grep -rn "deleteAssets\|createDeleteRequest(" mobile/iosApp/Sources mobile/androidApp/src`, comments aside | one each: `PhotoLibraryDeleter.swift:120`, `MediaStoreDeleter.kt:94` |
 | `grep -rn "installLibraryDeleter" mobile/iosApp/Sources mobile/androidApp/src`, comments aside | `ShellModel.swift:396`; `MainActivity.kt:290` (install) and `:303` (clear) |
 | the commit hooks on every commit | green |
+
+## Close
+
+### The issue's acceptance boxes, reconciled
+
+| Box | State | Evidence |
+| --- | --- | --- |
+| A fresh vault with 2,000 content items of mixed sizes, one above 64 MiB, backed up to a harness gateway; no plaintext, plaintext hash or key in the store | **Met in kind, not in count.** The drill backs up a real JPEG with its derived tiers, the shell's own derivatives, a library photo and a film above 64 MiB (two parts), plus fifty notes; the blindness canary scans the gateway's whole data directory for every plaintext, every plaintext hash and every key. 2,000 items at drill scale would spend the local gate's budget on one test; a scale run is an owner hand-off (H-5). | `crates/centraid/tests/restore_drill.rs`; `crates/core/tests/phone_backup.rs` |
+| A second snapshot after 50 commits uploads only the changed ranges; the gateway's list shows exactly those names | Met. Lane B measured 13 of 15 ranges re-sealed at 4 MiB and ruled 64 KiB (A14); the vault drill asserts the second snapshot seals fewer ranges than it has, and the gateway drill checks what the gateway holds against the ledger by `exists`. | `crates/vault/tests/restore_drill.rs`; R-1080-B-measurement in lane B's section |
+| Destroy the vault, spool and ledger; restore passes `integrity_check`, census, `db_hash`, opens through the ladder, rows equal | Met. | `crates/vault/tests/restore_drill.rs`; `crates/centraid/tests/restore_drill.rs` (row for row) |
+| A restore claims the writer epoch only after the checks; the old phone's next write is refused `MOVED` and freezes | Met. | `phone_backup.rs` (restore, the head moved between check and claim, `VAULT_MOVED`); the gateway drill's last step |
+| Retention 7/4/6 under a fixed clock; GC deletes exactly the unreferenced names | Met. `retention::keep` and `garbage` are pure and tested under a fixed clock; `phone::drain::retain` applies them each pass and deletes the garbage through the store. | `crates/vault/src/backup/retention.rs` tests; `crates/core/src/phone/drain.rs` `retain` |
+| Rung 010 migrates a file holding the custody tables to a fresh file's schema with a clean `foreign_key_check` | Met. | `crates/vault/tests/backup_v2_rung.rs` |
+| `iroh`, `iroh-blobs`, `iroh-dns-server` absent from `Cargo.lock`; no listening socket | Met. | `grep -c iroh Cargo.lock` → 0; `cargo xtask rules` (`no-listening-socket`, one file on the allowlist: `crates/gateway/src/server/serve.rs`) |
+| Both shells schedule the pass at launch, carry the rule, Home reads `backup_status`; JVM specs prove it | Met on the JVM. | lane D's and lane E's sections (`BackupStatusSpec`, `UploadLoopSpec`, the scheduling specs); `cargo xtask gate --profile mobile-jvm` |
+| The iOS mover and the Android jobs are written and listed as device hand-offs with exact commands | Met as hand-offs: written, uncompiled here (no Xcode, no Android SDK). | `docs/release/v1-handoffs.md` §8; `mobile/maestro/backup-measurement.md` |
+| Docs describe the new plane only; every superseded ruling has a supersession row; the receipt records every file and command | Met for the state docs and decisions; **not met for the docs site**: lane F was stopped before its third round, so `scripts/docs-site` still describes the old gateway verbs in its backups and data chapters (QUALITY.md records it; H-7). | lane F's section; `docs/decisions.md` supersessions; this receipt |
+
+### Inherited red
+
+| Check | State | Why it is not this umbrella's |
+| --- | --- | --- |
+| `buf breaking` in CI against `main` | expected green | core.v1 is WIRE_JSON since A22 and every deleted field reserves its number and name; `buf breaking --against '.git#branch=main,subdir=crates/api-proto/proto'` exits 0 locally (lane C's section). |
+| The iOS test target | red until compiled | `ScreenFixtureTests.swift` lost its transport assertion in lane E's last round; the first real Xcode build is hand-off 8.x. |
+
+### Corrections to the plan
+
+- Rung 010 moved from lane B to lane C, because the old plane still wrote the tables it drops (F-B1).
+- Lanes C, D, E and F ran in parallel after the proto-first slice instead of as two waves; the seam contract (`A1…A24`, recorded as the `R-1080-*` rows) was the single source for cross-lane names.
+- The range size moved from 4 MiB to 64 KiB on lane B's measurement (A14, Q-1080-B1 answered).
+- Lane F was stopped by the owner after two rounds; the root's close pass took over only what the gates needed.
+- The lanes' early commits were authored under the owner's git identity by the container's environment; the root rewrote the branch's authorship to `Claude <noreply@anthropic.com>` before the final push (tree hashes unchanged).
+
+### Open items (not built here)
+
+- A library item larger than the spool budget (2 GiB) has no path through the one-pass sealer (lane C).
+- The spool syncs once per range; a first snapshot of ~900 ranges is ~900 syncs (lane C).
+- The drain does not poll `Cancel`; it is bounded by its deadline (as before).
+- `access_device` and `access_device_secret` have no writer and no rung drops them; `media::format::derive_data_key`, `change.proto` `ConnectivityState`, `command.proto` `SyncWindow`/`SyncBudget` have no consumer (lane C).
+- Old `device-secret.<vaultId>` keys from earlier builds stay in the secure stores; nothing reads them (D-D18).
+- The `custody` Kotlin package keeps its name; a rename reaches 11 lines of the shells (lane E).
+- A restore that meets a damaged snapshot is refused correctly but reported as `INTERNAL` (`crates/core/src/phone/restore.rs`, `restore_error`); a damaged copy wants its own refusal code (re-audit item 2).
+- Mirroring between gateways is designed, not built (R-1080-8).
+
+### Owner hand-offs
+
+- **H-1 (product).** R-1080-C13: a video's original waits for a charger unless the member tapped Back up now; R-1080-C14: on a metered link a snapshot is taken only under `WIFI_AND_CELLULAR_PHOTOS`, including on Back up now. Both are one-line policy changes if you want them otherwise.
+- **H-2 (policy).** A22: `centraid.core.v1` dropped from buf's FILE category to WIRE_JSON at the cut-over, because nothing in it crosses to another install any more. Veto reverts `buf.yaml` and un-reserves nothing (the fields stay reserved either way).
+- **H-3 (release).** The Linux and macOS tarballs now ship `centraid-gateway`; Windows tarballs do not, because `centraid-gateway install` has no Windows unit. Decide whether a Windows gateway is wanted for v1.
+- **H-4 (devices).** The first real Xcode and Android Studio builds, `BackgroundUploadTests`, and the device measurement in `mobile/maestro/backup-measurement.md` (hand-offs 8.1–8.18 and lane E's last rows).
+- **H-5 (scale).** A 2,000-item drill at nightly scale (box 1).
+- **H-6 (minSdk).** Android below API 30 gets no library deleter (A20); decide whether to raise minSdk.
+- **H-7 (docs site).** `scripts/docs-site`'s backups and data chapters, and the desktop-shell leftovers from #1029 (QUALITY.md).
+- **H-8 (issue).** Reconcile the issue body to what shipped (the boxes above) and close it when the PR merges; no PR was opened by the root.
