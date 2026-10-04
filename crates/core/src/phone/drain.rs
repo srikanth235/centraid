@@ -865,22 +865,24 @@ fn prepare(
             .map(|(name, index)| (index, name))
             .collect()
     };
-    let mut candidates: Vec<&ContentFile> = files
+    // ASK ABOUT EVERYTHING THE MEMBER BACKS UP, SEAL ONLY WHAT THE RULE
+    // ALLOWS NOW. Asking moves no bytes, so it is not the rule's to withhold:
+    // a restored phone whose first pass runs off the charger may not seal a
+    // video, and must still learn the gateway holds it — or the line says
+    // "waiting for a charger" for a film this phone does not even hold
+    // (#1080, the simulator restore).
+    let unconfirmed: Vec<&ContentFile> = files
         .iter()
         .filter(|file| {
-            let kind = Kind::of_file(file);
-            conditions.may_prepare(kind) && !wanted(file, &confirmed).is_empty()
+            conditions.counts(Kind::of_file(file)) && !wanted(file, &confirmed).is_empty()
         })
         .collect();
-    // DERIVATIVES FIRST: they are kilobytes and they are the grid. The sort
-    // is stable, so each half stays newest first.
-    candidates.sort_by_key(|file| file.variant.is_none());
 
     // ASK BEFORE SEALING (#1080 ruling 7): a name the gateway holds is
     // confirmed from its answer, never sealed again. Each name once a pass.
     let mut ask: Vec<Name> = Vec::new();
     let mut sizes: BTreeMap<Name, u64> = BTreeMap::new();
-    for file in &candidates {
+    for file in &unconfirmed {
         for (_, name) in wanted(file, &confirmed) {
             if pass.asked_for.insert(name) {
                 ask.push(name);
@@ -900,6 +902,14 @@ fn prepare(
             .map_err(plane_error)?;
         confirmed.extend(held.iter().map(|(name, _)| *name));
     }
+
+    let mut candidates: Vec<&ContentFile> = unconfirmed
+        .into_iter()
+        .filter(|file| conditions.may_prepare(Kind::of_file(file)))
+        .collect();
+    // DERIVATIVES FIRST: they are kilobytes and they are the grid. The sort
+    // is stable, so each half stays newest first.
+    candidates.sort_by_key(|file| file.variant.is_none());
 
     let mut held_bytes = spool
         .bytes()

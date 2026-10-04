@@ -1044,6 +1044,48 @@ fn a_restore_brings_every_vault_back_and_the_old_phone_freezes() {
     );
 }
 
+/// **A RESTORED PHONE ASKS ABOUT WHAT IT MAY NOT SEAL** (#1080, the
+/// simulator restore). The gateway holds a video the old phone sent on a
+/// charger; the restored phone's first pass runs off the charger and was not
+/// tapped, so it may not seal a video — and it does not need to, because it
+/// may still ASK. A pass that asked only about what it could seal left the
+/// video "waiting for a charger" on a phone that does not even hold its bytes.
+#[test]
+fn a_restored_phone_confirms_what_the_gateway_holds_even_what_it_may_not_seal() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    let film = bytes_of("a film the old phone sent on a charger", 200_000);
+    let film_handle = stage(&old, owned("video/mp4", &film), &film);
+    add_asset(&old, &film_handle, "video");
+    drain(&old, at_home());
+    let sent = status(&old);
+    assert_eq!(sent.content_confirmed, sent.content_total, "{sent:?}");
+
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let restored = restore(new_dir.path(), &gateway);
+    let path = PathBuf::from(&restored.vaults[0].path);
+    let phone = Core::open(CoreConfig::new(&path).with_seed(seed(), 0)).expect("opens");
+    phone
+        .open_own_bytes(path.with_extension("bytes"))
+        .expect("the store opens");
+    // THE PASS A FINISHED RESTORE RUNS: off the charger, not asked.
+    drain(
+        &phone,
+        wire::DrainRequest {
+            charging: false,
+            ..at_home()
+        },
+    );
+    let after = status(&phone);
+    assert_eq!(
+        after.content_confirmed, after.content_total,
+        "the gateway holds every file and the restored phone waits on {:?}",
+        after.waiting
+    );
+}
+
 #[test]
 fn a_head_set_between_the_check_and_the_claim_is_checked_before_it_is_claimed() {
     let gateway = gateway();
