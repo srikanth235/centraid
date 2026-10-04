@@ -15,7 +15,7 @@ mobile/
 
 This is the most important table in this file. **Nothing in the right-hand column reads green in CI**: there is no Android SDK, no Xcode, no simulator and no device on the machines that run `cargo xtask gate`, and every claim that needs one is an owner hand-off with a command below.
 
-**SEVERAL HAVE BEEN CASHED, AND BOTH SHELLS HAVE BEEN SEEN.** On an owner's Mac with Xcode 26.6 the iOS shell compiles, links the XCFramework, runs its test bundle green on a simulator (24 tests), and runs on a simulator drawing Home from the real `HomeMachine` over the real Rust core. **Android now does the same** on an `sdk_gphone64_arm64` emulator: same seeded vault, same tiles, same thumbnails, same vault switcher. The rows below say so where it is true.
+**SEVERAL HAVE BEEN CASHED, AND BOTH SHELLS HAVE BEEN SEEN.** On an owner's Mac the iOS shell compiles, links the XCFramework, runs its whole test bundle green on a simulator (96 tests, last run on Xcode 27.0 against the 26.6 pin, [#1080](https://github.com/srikanth235/centraid/issues/1080)'s device hand-off results), and runs on a simulator drawing Home from the real `HomeMachine` over the real Rust core. **Android now does the same** on an `sdk_gphone64_arm64` emulator: same seeded vault, same tiles, same thumbnails, same vault switcher. The rows below say so where it is true.
 
 | Provable on this machine (JVM) | An owner hand-off |
 | --- | --- |

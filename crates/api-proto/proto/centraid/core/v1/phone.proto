@@ -377,8 +377,13 @@ message BackupStatusResponse {
   // Absent: none yet.
   optional int64 last_snapshot_ms = 6;
   // CONTENT HASHES THE VAULT KNOWS, originals and derivatives alike (#1080).
+  // A body kept in its own row (a `data:` URI, as a note's is) is the
+  // records' and not counted here, nor is a file deleted forever or past its
+  // trash window.
   uint64 content_total = 7;
-  // Of those, the ones every part of which a gateway acknowledged.
+  // Of those, the ones every part of which a gateway acknowledged AND whose
+  // row is in the snapshot a gateway's head names: bytes no snapshot names
+  // would restore as nothing (#1080, the edge sweep).
   uint64 content_confirmed = 8;
   // Sealed bytes in the spool right now, waiting to move.
   uint64 spool_bytes = 9;

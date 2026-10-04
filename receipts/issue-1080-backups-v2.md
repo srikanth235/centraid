@@ -1039,3 +1039,146 @@ Gates, run by the root on `f5becbc59`, 2026-10-04: `cargo xtask gate --profile p
 - Each window costs one full read of the item, so reads grow with size over budget: a 4 GB video under a 1 GB budget is about five reads. A shell that can read from an offset, with per-part plaintext digests kept from the first read, would make it two reads in all. That needs the stage door, `NeedBytes` and both shells, and is not built.
 - An item edited in the library after its first read is still asked for once a pass and kept by no window: the library no longer holds those bytes. This is the open item above on deletions and edits the core never learns, now with a window instead of a whole re-seal.
 - How long a window's read takes on a phone is hand-off row 8.21.
+
+### Device hand-off results
+
+Recorded 2026-10-04 by the root, on an owner's Mac (Apple silicon, macOS 26.6.2, Xcode 27.0 27A266a against the `26.6` the repo's `.xcode-version` pins) with the iOS Simulator (iOS 26.5) and `centraid-gateway serve` on the same Mac. The owner narrowed the handover to the iOS simulator, then asked for every backup and restore edge case to be tested and its bugs fixed. Nothing here is a device number (R-1020-20): every simulator row is a smoke run. Android and every row that needs the reference iPhone are not run.
+
+#### The rows
+
+| Row | Device and OS | Result | Evidence | Fix |
+| --- | --- | --- | --- | --- |
+| 8.1 | iPhone 17 Pro simulator, iOS 26.5 | pass | Steps 0–4 at `1753bce70`: the whole bundle, 96 tests and 0 failures — `BackgroundUploadTests` 15, `LibraryDeletionTests` 6, `ScreenFixtureTests` 62, `FontRegistrationTests` 6, `IconSilhouetteTests` 3, `MoneyRenderTests` 2, `WordFieldTests` 2. `Resources/Info.plist` regenerated identical to the committed one | `9dfa29f16` (the Swift's first compile: `Swift.Error` shadowed by Wire's `Error`, a fixture named like `XCTestCase.name`) |
+| 8.2 | — | not run | needs the reference iPhone | |
+| 8.3 | iPhone 17 simulator, iOS 26.5 (smoke) | pass on the simulator; the device run is still owed | a fresh gateway (new identity and certificate) on the gateway's address: the Backup screen read "3 waiting: the machine that answered is not your laptop", and that gateway stored 0 objects | |
+| 8.4–8.7 | — | not run | device rows | |
+| 8.8–8.14, 8.18, 8.20 | — | not run | Android, outside this run | |
+| 8.15, 8.21 | — | not run | measured rows: the reference phones only | |
+| 8.16, 8.17 | — | not run | cellular device rows | |
+| 8.19 | — | not run | | |
+
+#### The end-to-end smoke, iOS half (handover §5)
+
+Paired by pasted code, the safety number matching the one `serve` printed. About 20 photographs, a video over 64 MiB and one of 2,505,103,810 bytes backed up; the video over 2 GiB confirmed within one tap, window by window (R-1080-C39). The spool's on-disk size peaked at 2,069,292 KiB (1.97 GiB) against a budget of 2 GiB with 42.3 GiB free, and was empty at the end. Restored from the 24 words onto a second simulator: every vault came back and the first phone froze. An original fetched on the restored phone was byte-identical to its source file, so its BLAKE3 is the source's. Free up space on the simulator was not run.
+
+#### Edge cases on the simulator
+
+Phone A is the iPhone 17 Pro simulator the smoke paired first, B (`Restore test 1080`) the phone A's vault was restored onto, C (`Restore C 1080`) the phone B's vault was restored onto, all iOS 26.5; the gateway is `centraid-gateway serve` on the same Mac. Every row is a smoke run, not a measurement (R-1020-20).
+
+| Case | What happened | Result |
+| --- | --- | --- |
+| Gateway stopped, then Back up now | "9 waiting for your laptop", "Reached 2 minutes ago", nothing sent; gateway restarted and Back up now: "Backed up just now. All 59", exactly 9 new objects (3 photographs × original, thumbnail, preview) | pass |
+| Gateway killed (`-9`) with 2 of a new video's 7 parts stored and 3 uploads in flight | no partial object committed (rows 257 = files 257, no size mismatch); the 3 `.part` files in `incoming/` removed at the gateway's restart; the phone's spool kept the 5 sealed parts; once the gateway was back the pass moved them unasked: "All 63", 7 parts and 2 previews, nothing stray | pass, but the status named the wrong wait (below) |
+| Status after a gateway dies mid-pass | "3 waiting for time in the background" and "Reached just now", where the gateway was the reason | **bug**, fixed in core (`d605d854a`, the sweep) |
+| App killed (`simctl terminate`) while sealing a new video into the spool | three `.partial` files (148 MiB) left; removed within 8 s of relaunch | pass |
+| Photograph added while Centraid was closed | not walked in after launch, nor after Back up now; the line said "All 63" over it | **bug**, fixed (`366b27472`): walked in and on the gateway 4 s after launch |
+| Backup screen open while a pass it did not start backed up a new video | stayed at "All 59" while Home read "All 60" | **bug**, fixed (`37ade7d0f`): an open screen moved from "All 72" to "All 75" on its own |
+| 100 photographs added at once with the app open | 35 walked in; the walk stopped | **bug**, fixed (`d052392a0`); on the merged build 30 added at once were all walked in within 15 s |
+| The same video added twice | sealed once to learn its hash, gateway already held every part, spool cleared, counts unchanged | pass |
+| An impostor gateway (new identity and certificate) on the gateway's address (row 8.3's case) | "3 waiting: the machine that answered is not your laptop"; the impostor stored 0 objects | pass |
+| A note written, then Back up now | "Records backed up just now · 78 of 80 · 2 waiting": the note's text bodies counted as files no pass can send, forever | **bug**, fixed in core (`cddfe0958`, the sweep); on the merged build: "Backed up just now · All 381 photos and files" |
+| Tasks written, then the app killed before any snapshot | the tasks were not in the backup until Back up now took one | by design; the line's honesty in that window is an owner question |
+| Restore with valid words of another seed (`abandon … art`) | "Those words are valid and your laptop is holding no backup for them"; writer epoch unchanged, nothing laid down on the phone, the pairing code not consumed | pass |
+| Restore with a bad checksum, and with a typo | not run on the simulator: automated typing stalled after 4 of 24 words; covered by `phone::phrase` tests and `WordFieldTests` | not run |
+| Restore with the real words, app killed 3 s after confirming | the claim had landed (epoch 5 → 6); relaunched, C showed the vault with its photographs, the note and the open task | pass |
+| Restored records against the old phone's copy | `integrity_check` ok, foreign keys clean; 192 of 197 tables identical row for row (tasks open, done and in Trash, the note, every media table); the 5 that differ are C's own receipts and commands after the restore, and 12 derivative rows re-made by C's first walk (finding below) | pass |
+| An original downloaded on the restored phone | byte-identical to the source file (`edge-i1.jpg`), so its BLAKE3 is the source's | pass |
+| The old phone after the restore | launched with nothing to write, it reached the gateway and read as alive ("Records backed up 20 minutes ago"); it froze only at Back up now: "This vault moved to another phone. This phone is read-only.", 0 bytes sent | **bug** (learns late), fixed in core (`aaa3c1a8d`, the sweep); on the merged build the superseded phone froze at launch |
+| A new video under the manual rule | walked in, sealed in its import's stream, and moved on Wi-Fi with no tap, as the rule's sentence says | pass |
+| The gateway lost three objects (their files deleted from its disk) | on the merged build the gateway reported them missing, and the phone's first pass after launch sent all three again within 6 s, byte sizes identical (rows 834 = files 834) | pass (`f3403ccac`, `668bd2225`) |
+| The frozen old phone paired its gateway again ("Add a laptop") | it took the vault over by claim (writer epoch 6 → 7), the pairing cleared its moved mark, and after a relaunch it set its stale copy's head over the newer phone's: the gateway's live objects fell from 598 to 194, the newer phone's 131 photographs tombstoned | **bug, data loss**, fixed in core (`659618d6b`, `e91c2bd2b`) and the screen (`306e65bdc`, `1753bce70`) |
+| The superseded phone pairs, on the final build | refused before anything is dialled: "This vault moved to your other phone, so this phone cannot pair for it. To make this phone its writer again, restore the vault from your 24 words."; writer epoch and head unchanged | pass (`659618d6b`, `cc80dbef1`; before `cc80dbef1` the screen said "Your laptop did not answer") |
+
+#### The core sweep
+
+A sub-agent swept the backup and restore planes at the core level, red first against the real gateway, on branch `edge-core-1080`, merged here. Its fixes:
+
+| Commit | What now holds |
+| --- | --- |
+| `b33f917b7` | pairing a gateway again (a takeover, or a gateway that lost the vault) starts its record over instead of failing every head |
+| `d605d854a` | a gateway that goes mid-pass is what the status waits for |
+| `18bf963df` | a part a crash left in the spool goes with the next core |
+| `cddfe0958` | a note (a `data:` body) is backed up with the records it lives in, not waited on forever as a file |
+| `2a292c3fb` | a restore cut short is finished by the next one (`vault.db.restoring` until the claim lands) |
+| `f3403ccac` | a gateway tells a phone a name whose file is gone is missing |
+| `668bd2225` | a launch's first pass sends again what the gateway lost |
+| `a3e3e3974` | a status read while a pass runs always answers |
+| `e56ed8f59` | the spool never holds more than its budget |
+| `cb6776738` | a snapshot copy a crash left goes with the next core |
+| `6e91d2d5c` | one damaged thumbnail costs a restore that thumbnail alone |
+| `5bbbe0274` | a name retention deletes is no longer confirmed |
+| `5d6ac0a00` | a gateway forgotten mid-pass ends the pass with an answer |
+| `aaa3c1a8d` | an old phone learns it was superseded at its first contact (the head's writer epoch, every pass) |
+| `21bd68513` | a file is backed up once its bytes and its row are; Free up space no longer offers an original whose row no snapshot holds |
+| `5343fb4a8` | a file deleted forever is not backed up or kept |
+| `659618d6b` | a superseded phone cannot take the vault back by pairing (R-1080-C17 narrowed) |
+
+and the cases that already held, in `53a763b2e`, `1b7f1bf73`, `0cd73df2b`, `b87e0590b`, `e30a5e345` and `db059cde8`. 
+
+The cases, as the sweep ran them (test names in `crates/core/tests/backup_edges.rs`, `restore_edges.rs`, `records_backup.rs` and `crates/gateway/tests/lost_bytes.rs`):
+
+| Case | Result |
+| --- | --- |
+| B1 a gateway unreachable at the start, mid-pass, mid-question | bug `d605d854a` (the status waited `WINDOW` where `GATEWAY` was owed; mid-question the pass came back an error) |
+| B2 a phone killed after sealing, after moving, mid-stage, mid-snapshot | bugs `18bf963df` (`pending_bytes` 120000 where 0 was owed) and `cb6776738` (a snapshot's scratch copy survived) |
+| B3 a gateway that lost files, or its whole store | bugs `f3403ccac` (`exists` and `PUT` trusted the index over a missing file), `668bd2225` (no reconcile at launch), `b33f917b7` (no head set again) |
+| B4 a gateway refusing for storage | holds (`a_full_disk_confirms_nothing_and_the_pass_after_it_finishes`); the status does not name the refusal (finding F1) |
+| B5 edited, deleted, the same bytes twice, empty, a part's edge | bugs `5343fb4a8` (a file deleted forever stayed counted and kept) and `cddfe0958` (a note's body waited forever) |
+| B6 2,500 names, batches, paging | bug `5bbbe0274` (names retention deleted stayed confirmed) |
+| B7 two vaults on one gateway | holds |
+| B8 a status read while a pass runs | bug `a3e3e3974` (`NotFound`, three runs of three) |
+| B9 the spool's ceiling | bug `e56ed8f59` (1,229,022 bytes under a 1,048,576 ceiling) |
+| B10 pairing codes, a gateway forgotten mid-pass | bug `5d6ac0a00` (the pass answered `Err(GatewayRefused)`) |
+| R1 words of another seed, a bad checksum, a wrong count | holds |
+| R2 damage at the gateway | flipped, truncated or missing ranges and manifests refused before any claim; bug `6e91d2d5c` (one bad thumbnail cost every one after it) |
+| R3 a restore cut short before and after its claim | bug `2a292c3fb` (a half-laid `vault.db` read as held: `vaults: []`) |
+| R4 two phones restoring at once | holds: the last claim is the writer, the other freezes and says so |
+| R5 a chain of restores | holds |
+| R6 the old phone | bugs `aaa3c1a8d` (it never learned it moved), `659618d6b` and `e91c2bd2b` (pairing and forgetting its way back with a stale copy) |
+| R7, R8 after a restore; a records-only vault, a cut-short pass | hold |
+| S1–S6 every app's records row for row, a write during the copy, the WAL, a snapshot cut short, many snapshots | hold; bug `21bd68513` for freshness (S2) |
+
+The sweep's own `local` gate on `e91c2bd2b`: every step ok (test 394.3 s), over budget at 441.6 s. Its `db059cde8` moved the tests' gateway cut into the product listener (`serve.rs`'s `Cable`, never cut by `serve`, two atomic loads a read or write uncut) rather than add a listener the `no-listening-socket` rule forbids: that change is the owner's to review.
+
+#### Fixes from the simulator runs
+
+Found on the simulator, fixed red first in the shells, the core, the build and the gate:
+
+| Commit | What now holds |
+| --- | --- |
+| `0936e203f` | the Backup screen's count moves while Back up now runs |
+| `f32788be7` | a finished restore runs its pass |
+| `9a119dfac` | a pass asks the gateway about every file it backs up, not only those it may seal now |
+| `44a9a1f79` | a rebuilt Rust core relinks the iOS framework |
+| `66e03b109` | the `local` gate is green on macOS (`disk_full` on a full HFS+ image, the memory proof's imports Linux-only) |
+| `37ade7d0f` | the Backup screen follows passes it did not start |
+| `366b27472` | opening the app, the app becoming active and Back up now walk the camera roll first (R-1029-PH-4) |
+| `d052392a0` | a library change and a grant walk the roll to its end, not one page |
+| `306e65bdc` | a vault that moved offers no Add a laptop |
+| `cc80dbef1` | a pairing refused because the vault moved says so, and names the restore |
+| `1753bce70` | a vault that moved offers no Forget |
+
+#### Gates
+
+On `1753bce70`, the tree the iOS run above built, 2026-10-04:
+
+- `cargo xtask gate --profile pr`: **PASS**, 420.4 s of 1,500 s. `fmt`, `clippy`, `test` (331.3 s), `restore-drill` (38.2 s), `rules` (`sql-confinement`, `abi-five-symbols`, `no-listening-socket`, `commonmain-no-platform-import` clean), `ledgers`, `buf`, `deny`, `release-build`, `ts-static`, `emitters`, `advisory`, `lockfile`, `call-budget` and `fault-door` ok; `ci-policy`, `secrets` and `osv` skipped loudly, their scanners not installed here.
+- `cargo xtask gate --profile mobile-jvm`: **PASS**, 34.9 s of 420 s; 1,154 JVM tests in 85 suites, 0 failed.
+- `cargo xtask gate --profile local`: every step ok (test 463.7 s after the merge's rebuild), **FAIL — over budget**, 513.4 s against 120 s (hand-off 6.5; the ledger was not touched).
+- iOS: hand-off steps 0–4, the whole bundle green (row 8.1 above).
+
+#### For the owner
+
+- **The stale takeover was a data-loss path, now closed.** With the sweep's `b33f917b7` and before `659618d6b`, a frozen old phone that paired its gateway again took the vault over with its older copy and set the head over the newer phone's: on the simulator the gateway's live objects fell from 598 to 194, the newer phone's 131 photographs tombstoned for purging after the week's grace. Before `b33f917b7` the same taps locked both phones out instead. R-1080-C17 still lets a phone with no record of the gateway (its ledger lost) take over, and that phone's copy can be older than the head too; whether a takeover should first compare the head with its own copy is open.
+- **Snapshot cadence.** A file now counts as backed up only once a snapshot holds its row (`21bd68513`), so photographs an ordinary pass moved read as waiting until the app leaves the screen, Back up now, or the hour. A pass that confirms such files could also take a snapshot (a cadence change to R-1080-C15); recommended, not built.
+- **A restored phone re-renders every preview.** Its first walk finds `already_held` false (the bytes are the gateway's, not the phone's), so it re-renders and re-stages each photograph's thumbnail and preview the vault already has: 12 derivative rows re-made for 6 photographs on the simulator, no data lost. Recommended: skip the derivatives when the vault already holds them for that hash.
+- **The grid reads the rule from the last pass** (`LinkConditions`), so the download arrows appear only after the next pass once the member changes it.
+- **Back up now with the gateway off** ends at once and the screen does not change; the only signal is "waiting for your laptop" and "Reached N minutes ago", as `docs/mobile-offline.md` documents.
+- **The core opened for the words leaves side files**: `custody-probe.backup.db` and `custody-probe.bytes` in Documents, though the probe "founds nothing".
+- **The `local` gate's budget** (hand-off 6.5): every step green, 513.4 s against 120 s; the ledger was not touched.
+- From the sweep, each with its options in its report: **F1** a gateway's `DISK_FULL`, `QUOTA` or `TOO_LARGE` refusal is reported as unreachable and waits `WINDOW` (recommend a `REFUSED` wait reason and drain stop); **F2** a gateway that lost its whole store but kept its identity reads "Backed up · All N" while every pass is refused `UNAUTHORIZED` (recommend a "pair again" status); **F4** a takeover by a phone with no record of the gateway can still regress the head with an older copy (recommend comparing the head's `taken_at` before claiming, then keeping every file a retained snapshot names); **F5** collection keeps only the files the current vault names, so the 7/4/6 snapshot history protects records, not photographs; **F6** a library item's part is never sealed when it is larger than the whole spool budget, so on a phone with under about 640 MiB free a library video waits `BYTES` forever (recommend the store files' rule, with a free-space floor); **F7** two restores at once both claim (keep); **F8** a restore's read-only grant token is never revoked (recommend revoking it after the claim); **F9** the core still accepts staging on a frozen phone; **F10** a snapshot's acknowledgement is recorded once, not per gateway, so "backed up" means at least one gateway has it; **F11** a restore never touches a vault the phone holds (R-1047-R6), so "restore from your 24 words" dead-ends on a frozen phone until its copy is removed, losing what was stranded on it (recommend letting a restore replace a frozen vault, keeping the old copy aside).
+- **The pairing screen's refusal for a moved vault** still offers "Try again" under its sentence.
+- **Tasks**: the quick-add field sat under the keyboard on the simulator, so the keyboard could not be dismissed from the screen.
+- **Three `pr` scanners** (`actionlint`, `gitleaks`, `osv-scanner`) are not installed on this Mac and were skipped loudly.
+- **Xcode 27.0** built and tested everything here; the pin is 26.6.
+- Not run: the bad-checksum and typo restores on the simulator (automated typing on the words screen stalled; `phone::phrase`'s tests and `WordFieldTests` cover them), "Include videos" switched off, the background `URLSession` carrying parts while suspended (8.2, 8.5 — a local gateway moves 391 MB in seconds), Free up space (8.19).
