@@ -1,7 +1,7 @@
 # Receipt — backups from first principles ([#1080](https://github.com/srikanth235/centraid/issues/1080))
 
 <!-- governance:front-page start -->
-**Law** · window door · range `23e46810..f619515d` · law digest `a0140aaf3917` → `a0140aaf3917`
+**Law** · window door · range `23e46810..2159d0d8` · law digest `a0140aaf3917` → `a0140aaf3917`
 
 | Rule | Door | Verdict | Findings |
 | --- | --- | --- | --- |
@@ -987,3 +987,55 @@ The first lane E agent, stalled for hours, reported after the close with four fi
 - **Open: freed space on iOS returns later.** PhotoKit moves deleted assets to Recently Deleted for 30 days, so the "Freed {size}" notice is true only once that album is emptied; the iOS notice should say so (hand-off row 8.19 measures it).
 - **Open: the platform's error text reaches the member.** `FreeUpFlow` shows `outcome.error`, the platform's own words; the house keeps platform text for logs and shows a fixed sentence.
 - **Open: deletions made outside the app are never learned.** An original the member deletes in Photos or Files, or one deleted while the process died mid-dialog, stays releasable and counted; the core needs to learn library deletions, by comparing `local_bytes` rows with source `os` against the library each pass.
+
+### Addendum: a library original larger than the spool (R-1080-C39)
+
+Recorded 2026-10-04 by the root, after the close, on the owner's question why the spool stops at 2 GiB.
+
+**What was wrong.** The close listed "a library item larger than the spool budget (2 GiB) has no path through the one-pass sealer" as an open item, and that understated it three ways:
+
+- A part's name needs the hash of the whole item, so `FileSealer` held every part of a library item in the spool until its last byte, and the limit was the spool's budget, not 2 GiB: 2 GiB or a tenth of the free space, whichever is smaller, so about 800 MB on a phone with 8 GB free (a 4K video at 60 fps of about two minutes).
+- `prepare` asked for such an item whenever the spool had any room, without comparing its size to the room, so every pass re-read and re-hashed the whole item, sealed up to the budget and threw it away.
+- The status called it waiting for bytes, never an error; the item never backed up, so it was never releasable either.
+
+**What changed.**
+
+- `centraid_media::sealed::WindowSealer` seals chosen parts of a file whose hash and length are already known, as the whole file streams past, and keeps them only when `finish` is shown the streamed hash and length and they are the file's. Dropped, or finished with another file's hash, it removes its temp files.
+- The stage door (`crates/core/src/stage.rs`) takes a pass's plan for an item it asked for (`Planned`: hash, length, part indices) and seals those parts, as many as the spool has room for at `begin`, under their names. A stream that does not hash to the item keeps nothing. An unplanned item whose declared size cannot fit is only hashed instead of sealed and deleted, and every open library session reserves its window or declared size, so two streams at once cannot fill the same room.
+- The drain (`crates/core/src/phone/drain.rs`) plans what it asks for (`plan_library`): every item that fits whole, then as many parts of the first larger one as the rest leave. It promises that room until the shell streams, and plans once more after a round that moved parts, so a pass that moved a window asks for the next before it answers. The handle keeps the last pass's plan by `os_ref`, and a `begin` for that ref takes it.
+- `CoreConfig::spool_ceiling` and `Plane::with_ceiling` let a drill run a spool of one part. The C ABI does not set it (`spool_ceiling: None` in `crates/core-ffi/src/marshal.rs`).
+- The shell's feed loop (`ShelfDrain.passOver`) lets a repeated ask continue when its round confirmed parts, up to `MAX_ROUNDS`, so one Back up now carries a large original through up to seven windows.
+- State docs: `docs/mobile-offline.md` (three places), `ARCHITECTURE.md`, `docs/glossary.md`, `docs/recovery/backup-restore.md`, `mobile/README.md`, `crates/media/README.md`, `crates/core/README.md`, and the spool's and the drain's module headers.
+- Registers: [R-1080-C39](../docs/decisions.md#the-phone-core-and-the-cut-over-1080-lane-c), with a pointer from R-1080-6's "once"; hand-off row 8.21 and a corpus video over 2 GiB in `mobile/maestro/backup-measurement.md`; one CHANGELOG line.
+
+**Verification.**
+
+| Test | What it proves |
+| --- | --- |
+| `sealed::tests::windows_of_a_known_file_are_its_parts_under_its_names` | two windows from two reads, the middle part alone and then the rest, are the file's parts under its names and assemble into it; an empty file is one empty part |
+| `sealed::tests::a_window_streamed_from_another_file_keeps_nothing` | an edited, a shorter and a longer stream keep nothing, an abandoned window leaves no temp file, a part the file lacks is refused |
+| `stage::tests::a_planned_library_item_seals_its_window_under_known_names` | a planned item, declared or not, is sealed under `name(h, 0)` and opens to its bytes |
+| `stage::tests::a_planned_window_is_kept_only_for_the_item_and_only_with_room` | an edited stream, a plan with no room and a contradicting size each seal nothing and leave nothing |
+| `stage::tests::an_open_session_holds_its_room_from_the_next` | two streams at once: the second does not fit the room the first holds |
+| `stage::tests::a_window_is_the_earliest_parts_that_fit` | the window arithmetic |
+| `stage::tests::a_library_item_past_the_spool_budget_is_hashed_and_not_sealed` | now for a declared and an undeclared size |
+| `phone_backup::a_library_item_larger_than_the_spool_backs_up_a_window_at_a_time` | against the real gateway, with a spool of one 64 MiB part and a film of two: the first read only hashes it; an edited read keeps nothing; each window is sealed from one read and the spool never holds more than one part; a pass that moved a window asked for the next; the film counts as backed up, and is not offered for freeing because the library now holds the edited version |
+| `ShelfDrainSpec`: "an original larger than the spool is fed again while its windows move, and stops when one does not" | the feed loop continues a repeated ask while the round confirmed parts, stops when one did not, and ends at `MAX_ROUNDS` |
+
+Red first. Each break below was made on the finished tree, its test run, and the file restored:
+
+| Break | Caught by |
+| --- | --- |
+| no plan reaches the stage door (the old door) | the drill: "the window was sealed" fails, since nothing of the film is ever sealed |
+| a window is kept whatever streamed | the drill ("an edited item lends no part to the old names") and the media test |
+| a pass ends when it sealed nothing (the old loop) | the drill: three reads expected, two made, because the film stalls after its first window |
+| an open session holds no room | `an_open_session_holds_its_room_from_the_next` |
+| the shell's old guard (`ask == asked` ends the loop) | the spec: 4 rounds expected, 2 run |
+
+Gates, run by the root on `f5becbc59`, 2026-10-04: `cargo xtask gate --profile pr` PASS. `fmt`, `clippy`, `test` (274.8 s), `restore-drill` (27.7 s), `rules`, `ledgers`, `buf`, `release-build`, `ts-static`, `emitters`, `advisory`, `lockfile`, `call-budget` and `fault-door` are ok. `deny`, `ci-policy`, `secrets` and `osv` were skipped loudly, because their scanners are not installed here. Before that run, every workspace crate's cached build was removed: one cached test binary (`centraid-design`'s `copy_routes`) still read its fixtures from a lane worktree deleted at the close, and failed once that worktree was gone. `cargo xtask gate --profile mobile-jvm` PASS in 68.9 s: 1,113 JVM tests in 75 suites. `bash .governance/run.sh < /dev/null`: every directive passes, with this addendum staged.
+
+**What stays open.**
+
+- Each window costs one full read of the item, so reads grow with size over budget: a 4 GB video under a 1 GB budget is about five reads. A shell that can read from an offset, with per-part plaintext digests kept from the first read, would make it two reads in all. That needs the stage door, `NeedBytes` and both shells, and is not built.
+- An item edited in the library after its first read is still asked for once a pass and kept by no window: the library no longer holds those bytes. This is the open item above on deletions and edits the core never learns, now with a window instead of a whole re-seal.
+- How long a window's read takes on a phone is hand-off row 8.21.
