@@ -1233,3 +1233,20 @@ Run by the root at `d4218b940`, 2026-10-04, with `JAVA_HOME` set to Homebrew's J
 - **The demo fixture in `assets/`** is untracked and not ignored, so `git add -A` after `demo-vault.sh android` would commit a 3.7 MB vault.
 - **`MissingApplicationIcon`**: the app has no launcher icon of its own.
 - Not run on Android: 8.11, 8.12, 8.14, 8.20, the 15 minutes of 8.10, the bad-checksum and typo restores, "Include videos" switched off, and the old phone's freeze (one emulator; the iOS run showed it).
+
+### Device hand-off results: Locker after a restore, on the iOS simulator
+
+Recorded 2026-10-04 by the root, at `3a4eb5054`, after the owner asked whether a restore brings Locker back with no key in the backup. Two new iPhone 17 Pro simulators (iOS 26.5) and a fresh `centraid-gateway serve`; a smoke run (R-1020-20).
+
+The demo vault (`demo-vault.sh ios`, sealed under the public all-`abandon` words) was paired on the first simulator, the safety number matching `serve`'s, and backed up: "Backed up just now", 94 objects, each row with its file at its size. On the second, "Restore my vaults" with the same words and a new pairing code: the claim took the writer epoch from 1 to 2 and "Your vaults are back. Vault 1: 1,353 rows." No key travelled: the gateway holds only sealed parts, and the vault holds only the Locker key's id; the restored core derived `K` from the words.
+
+| Check on the restored simulator | Result |
+| --- | --- |
+| Unlock (Face ID enrolled and matched through the simulator's BiometricKit notifications; no passcode typed) | the list of six items; the seventh, "Old router", is in the trash |
+| Reveal a login's password | `Granite-Lake-47-Pine`, the seeded value |
+| Show a login's one-time code | `866 964`, the code RFC 6238's test seed gives for that 30 s step, computed independently; the password concealed itself, one field at a time |
+| Reveal a card number | `4111111111111111`, the seeded value |
+| Receipts | one `access_receipt` per reveal (`password`, `otp_seed` per code shown, `card_number`), naming the column only; no receipt holds a revealed value |
+| Leave Centraid and return | "Locker is locked" |
+
+Under other words a sealed cell does not open: `app_query::locker::tests::a_restore_from_the_same_words_reopens_sealed_secrets` (passed at `3a4eb5054`). No defect was found.
