@@ -30,6 +30,38 @@ fn note(handle: &centraid_core::Handle, title: &str, body: &str) -> String {
         .to_owned()
 }
 
+/// **A NOTE IS BACKED UP WITH THE RECORDS IT LIVES IN.** A note's body is a
+/// content item whose bytes are the vault's own row (`data:` text), not a
+/// file in the content store or the library, so no pass can seal it by name —
+/// the snapshot carries it. A status that counted it as a file to send would
+/// wait on it forever and never say "backed up" to a member who writes notes.
+#[test]
+fn a_note_is_backed_up_with_the_records_it_lives_in() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    note(&phone, "Groceries", "milk, bread and the backup plane");
+    let drained = drain(&phone, at_home());
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Empty as i32,
+        "{drained:?}"
+    );
+    assert!(drained.acked_at_ms.is_some(), "the head moved: {drained:?}");
+    let backed = status(&phone);
+    assert_eq!(
+        backed.content_confirmed, backed.content_total,
+        "the note's body is in the snapshot the gateway acknowledged: {:?}",
+        backed.waiting
+    );
+    assert!(
+        backed.waiting.is_empty(),
+        "nothing waits: {:?}",
+        backed.waiting
+    );
+}
+
 /// **A PHONE THAT TOOK THE VAULT OVER MOVES THE HEAD** (R-1080-C17). Pairing a
 /// gateway that already holds the vault claims it; the claim names the head
 /// the gateway held, and the phone's next pass must set its own snapshot as

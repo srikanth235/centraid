@@ -9,6 +9,14 @@
 //! what the vault reads it as, and how recent it is (newest first, so the
 //! photograph just taken is safe before last year's). The SQL stays here
 //! because SQL is confined to this crate.
+//!
+//! **A BODY THAT LIVES IN THE VAULT'S OWN ROW IS NOT A FILE HERE.** Text —
+//! a note, a document, a person's note, a message — stays in its content
+//! item's row as a `data:` URI (the full-text index decodes it in the
+//! transaction that writes it), so its bytes are the vault file's own and
+//! travel in every snapshot of it. No pass could seal it by name: it is not
+//! in the content store or the library. Listed as a file, it would wait
+//! forever and keep the status from ever saying "backed up".
 
 use std::collections::BTreeSet;
 
@@ -41,8 +49,10 @@ impl ContentFile {
     }
 }
 
-/// Every content item and every derivative with bytes of its own, each hash
-/// once, newest first. Trashed rows are included: their bytes are restorable
+/// Every content item and every derivative with bytes of its own outside the
+/// vault file, each hash once, newest first. A body kept in its own row (a
+/// `data:` URI) is the snapshot's to carry and is left out (the module
+/// header's reason). Trashed rows are included: their bytes are restorable
 /// until the row is purged, exactly as [`super::naming::content_hashes`]
 /// counts them.
 ///
@@ -62,6 +72,7 @@ pub fn content_files(vault: &Vault) -> Result<Vec<ContentFile>> {
                              WHERE a.content_id = i.content_id AND a.kind = 'video'),
                     i.created_at
                FROM core_content_item i
+              WHERE substr(i.content_uri, 1, 5) <> 'data:'
              UNION ALL
              SELECT d.content_hash, d.byte_size, d.media_type, d.variant, 0, d.created_at
                FROM core_content_derivative d
@@ -108,6 +119,43 @@ pub fn content_files(vault: &Vault) -> Result<Vec<ContentFile>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A note's body is in its own row, so it is the snapshot's and not a
+    /// file to send; a photograph's bytes are in the store, so they are.
+    #[test]
+    fn a_body_kept_in_its_row_is_not_a_file_to_send() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = Vault::create(dir.path().join("vault.db")).expect("a vault");
+        vault.found("Household", "Ada").expect("founds");
+        let body = PlaintextHash::from_hex(&crate::content::content_digest(b"milk, bread"))
+            .expect("a digest is a hash");
+        let photo = PlaintextHash::from_hex(&crate::content::content_digest(b"a photograph"))
+            .expect("a digest is a hash");
+        let now = vault.clock().now_text();
+        let (note, picture) = (vault.ids().next(), vault.ids().next());
+        vault
+            .commit(|tx| {
+                let connection = tx.connection();
+                for (id, uri, hash, size) in [
+                    (&note, "data:text/plain;charset=utf-8,milk%2C%20bread", body, 11),
+                    (&picture, "blob:blake3-x", photo, 12),
+                ] {
+                    connection.execute(
+                        "INSERT INTO core_content_item
+                           (content_id, content_uri, content_hash, byte_size, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+                        rusqlite::params![id, uri, hash.to_hex(), size, now],
+                    )?;
+                }
+                Ok(())
+            })
+            .expect("commits");
+        let files = content_files(&vault).expect("reads");
+        assert_eq!(
+            files.iter().map(|file| file.h).collect::<Vec<_>>(),
+            vec![photo]
+        );
+    }
 
     #[test]
     fn an_original_and_its_thumbnail_are_two_files_newest_first() {
