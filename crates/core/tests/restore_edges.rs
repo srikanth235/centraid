@@ -84,3 +84,52 @@ fn a_restore_killed_before_its_claim_is_finished_by_the_next_one() {
         "the restored phone backs up: {next:?}"
     );
 }
+
+/// **ONE DAMAGED THUMBNAIL ON THE GATEWAY DOES NOT COST A RESTORE THE REST
+/// OF THE GRID** (#1080, R2). The claim landed and every derivative comes
+/// back in `fetch` bundles; a thumbnail whose object does not open is the one
+/// the grid draws without — as for any derivative the gateway does not hold
+/// — never the reason every derivative after it is not fetched.
+#[test]
+fn a_damaged_thumbnail_costs_a_restore_that_thumbnail_alone() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    let mut thumbs = Vec::new();
+    for index in 0..3 {
+        let photo = bytes_of(&format!("photograph {index}"), 60_000);
+        let staged = stage(&old, owned("image/heic", &photo), &photo);
+        let thumb = bytes_of(&format!("thumbnail {index}"), 4_000);
+        let thumb_handle = stage(&old, thumb_of(&staged, &thumb), &thumb);
+        add_asset(&old, &staged, "photo");
+        thumbs.push((thumb_handle.content_hash, thumb));
+    }
+    drain(&old, at_home());
+    // THE NEWEST THUMBNAIL'S OBJECT IS DAMAGED: it is fetched first.
+    let (damaged, _) = thumbs.last().expect("three").clone();
+    gateway
+        .spawned
+        .corrupt(&vault_id(), &gateway_name(&damaged, 0))
+        .expect("a bit flips");
+
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let restored = restore(new_dir.path(), &gateway);
+    assert_eq!(restored.vaults.len(), 1, "{restored:?}");
+    let path = PathBuf::from(&restored.vaults[0].path);
+    let bytes = centraid_blobs::ByteStore::open(path.with_extension("bytes")).expect("opens");
+    for (hash, thumb) in &thumbs {
+        let held = bytes
+            .read(centraid_blobs::ContentHash::parse_hex(hash).expect("hex"))
+            .ok();
+        if *hash == damaged {
+            assert!(held.is_none(), "nothing damaged lands");
+        } else {
+            assert_eq!(
+                held.as_ref(),
+                Some(thumb),
+                "an undamaged thumbnail came back"
+            );
+        }
+    }
+}
