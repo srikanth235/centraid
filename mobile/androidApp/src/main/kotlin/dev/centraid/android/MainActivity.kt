@@ -151,15 +151,12 @@ public class MainActivity : FragmentActivity() {
      * A phone the member is not looking at is exactly when giving the memory
      * back costs nothing.
      */
-    // `onResume` AND `onPause` ARE GONE FROM THIS ACTIVITY (#1029 §1). They
-    // ran `HomeSession.foreground()` and `leftTheForeground()`: catch every
+    // `onPause` IS GONE FROM THIS ACTIVITY (#1029 §1). With `onResume` it ran
+    // `HomeSession.foreground()` and `leftTheForeground()`: catch every
     // holding up and hold the foreground one's log stream open while the member
-    // is looking, close it when they leave. There is no gateway, no log stream
-    // and no pass, so arriving and leaving are not occasions this shell acts
-    // on. The vault is on the phone and it is already current.
-    //
-    // `onTrimMemory` STAYS, and it is now the only lifecycle hook here: giving
-    // the OS its memory back is a fact about a device, not about a link.
+    // is looking, close it when they leave. That shape left with the gateway;
+    // what arriving and leaving do now is the backup's (#1080): `onResume`
+    // runs a pass and `onStop` a pass with a snapshot, below.
 
     /**
      * THE FOREGROUND TRIGGER (#1029 W18-6).
@@ -178,6 +175,29 @@ public class MainActivity : FragmentActivity() {
         super.onResume()
         val open = session ?: return
         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { open.drain.onBecameActive() }
+    }
+
+    /**
+     * THE APP LEFT THE SCREEN (#1080): a pass that takes a snapshot now, as
+     * iOS's `wentToBackground` runs `enteredBackground`, so what the member
+     * just wrote is backed up rather than waiting for the hour after the last
+     * one. Without it, nothing on Android ever asked for that snapshot.
+     *
+     * A ROTATION IS NOT LEAVING: the activity stops and starts again with the
+     * member still looking, so a configuration change runs nothing.
+     *
+     * Android may freeze or end the process while this pass runs, and the
+     * laptop may be asleep. Neither loses the snapshot: the core keeps the
+     * request in the ledger the moment the pass begins, and the next pass
+     * that reaches a gateway — a WorkManager window — takes it.
+     */
+    override fun onStop() {
+        super.onStop()
+        if (isChangingConfigurations) return
+        val open = session ?: return
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            open.drain.enteredBackground(BACKGROUND_PASS_MS)
+        }
     }
 
     override fun onTrimMemory(level: Int) {
@@ -530,5 +550,12 @@ public class MainActivity : FragmentActivity() {
     private companion object {
         /** The launch extra a debug build reads its demo seed from. See `DevSeed`. */
         const val DEV_SEED_EXTRA: String = "dev.centraid.DEV_SEED"
+
+        /**
+         * The leaving pass's deadline, as iOS's `backgroundPassSeconds`: a
+         * stopped app is cached and soon frozen, so the pass finishes its
+         * part well inside that rather than counting on the process.
+         */
+        const val BACKGROUND_PASS_MS: Long = 20_000L
     }
 }
