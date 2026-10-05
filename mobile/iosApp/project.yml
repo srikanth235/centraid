@@ -179,16 +179,26 @@ targets:
         # the sentence says only that.
         NSFaceIDUsageDescription: Centraid uses Face ID to unlock Locker.
         # WHY CENTRAID ASKS FOR THE CAMERA (#1047): Docs' Scan is VisionKit's
-        # document camera, and pairing reads the square `centraid-gateway
-        # invite` prints (#1047 E5). One key, so the sentence names both;
-        # Upload runs out of process and needs none.
+        # document camera, and pairing reads the QR `centraid-gateway serve`
+        # or `centraid-gateway pair` prints (#1080). One key, so the sentence
+        # names both; Upload runs out of process and needs none.
         NSCameraUsageDescription: Centraid uses the camera to scan paper documents into Docs, and to read the square your laptop shows when you pair it.
-        # WHY CENTRAID ASKS FOR THE LOCAL NETWORK (#1047 E5). The laptop's
-        # gateway is dialled at the addresses its pairing ticket names, which
-        # are usually on the member's own Wi-Fi; iOS asks before an app reaches
-        # a device on the local network. No Bonjour: the ticket carries the
-        # addresses, so nothing is browsed and no `NSBonjourServices` is needed.
-        NSLocalNetworkUsageDescription: Centraid reaches your laptop on this network to back up your vault and to bring it back.
+        # WHY CENTRAID ASKS FOR THE LOCAL NETWORK (#1047 E5; #1080). A gateway
+        # is dialled at the addresses its pairing record keeps, which are
+        # usually on the member's own Wi-Fi; iOS asks before an app reaches a
+        # device on the local network. NO SHELL BROWSES YET (Q-1080-D3 in
+        # `docs/decisions.md`): `serve` advertises `_centraid-gateway._tcp`,
+        # and the type is declared in `NSBonjourServices` below only so that a
+        # foreground browse can be added without a bundle change, since iOS
+        # refuses to browse a type the bundle does not list. Today the pairing
+        # payload lists the gateway's interface addresses and then its
+        # `<host>.local` name (`crates/gateway/src/server/addrs.rs`), the
+        # core dials them in turn, and iOS resolves the name through Bonjour:
+        # an address change on the same network is survived by the name, and a
+        # gateway whose name changed is paired again.
+        NSLocalNetworkUsageDescription: Centraid finds and reaches your laptop on this network to back up your vault and to bring it back.
+        NSBonjourServices:
+          - _centraid-gateway._tcp
         # iCloud is EXCLUDED from the replica directory in code; this is the
         # declaration that goes with it (`docs/mobile-offline.md:240-247`).
         ITSAppUsesNonExemptEncryption: false

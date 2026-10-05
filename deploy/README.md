@@ -1,51 +1,44 @@
 # `deploy/` — every way a gateway gets onto a machine
 
-One home for the artifacts that put a Centraid gateway on a host: the container images, the OS service units, and the VPS installer ([#1020][issue], [#1029][gateway]).
+One home for the artifacts that put `centraid-gateway` on a host — the container image, the OS service units and the VPS installer ([#1080][issue]). The protocol the gateway serves, its commands and its data directory are [docs/gateway.md](../docs/gateway.md).
 
-**There are two gateways in this tree and they are not variants of each other.** `centraid` (#1020) served an iroh QUIC endpoint to paired seats on the same network; `centraid-gateway` (#1029 §3) is an HTTP server a phone dials over a name, run by the member on their own machine. Everything below that says "no listener" is about the first.
+**There is one gateway, and a phone reaches it one way**: HTTPS, straight to the machine, pinning the certificate the gateway minted at its first `serve` ([R-1080-1][r1]). A gateway is any machine the member controls — the laptop at home, a VPS, a NAS — and everything in this directory follows from that shape:
+
+- **It listens, on one TCP port** (8443 unless `--bind` says otherwise), and it is the only thing in the product that does. Its listener is confined to `crates/gateway/src/server/serve.rs`, the one file `cargo xtask rules`' `no-listening-socket` allows; a second listener anywhere, that crate included, is a finding.
+- **No reverse proxy that terminates TLS, no ACME, no certbot and no domain.** The phone compares the certificate it is shown against the pin it scanned, so a proxy that terminates TLS presents a certificate the phone refuses. A port forward or a TCP pass-through in front of a gateway is fine.
+- **No credential in any unit.** The gateway is blind: its data directory holds its own TLS identity and sealed objects, and nothing that opens a vault, so there is no keystore secret to hand a service at start.
+- **No backup cron.** The phone decides when to snapshot and what to upload; the gateway's purge and scrub sweeps run inside `serve` on their own timers.
 
 | Path | What it is |
 | --- | --- |
-| `gateway-server/Dockerfile` | **The gateway image** (#1029 §3): one `centraid-gateway` binary, an unprivileged user, a volume at `/var/lib/centraid` and an `EXPOSE`. |
-| `gateway-server/README.md` | Self-hosting it: a tunnel, a Funnel or a reverse proxy; ACME; a bucket; the defaults and what turning each one off means. |
-| `docker/Dockerfile` | The `centraid` image: a Rust build stage on the pinned toolchain, a debian-slim runtime carrying one stripped `centraid` binary. `lane-release-gateway-image.yml` builds and ships it. |
-| `systemd/centraid-gateway.service` | The per-**user** unit: a desktop or a laptop, where somebody logs in. |
-| `systemd/system/centraid-gateway@.service` | The templated **system** unit: `DynamicUser`, `StateDirectory`, `multi-user.target`. **This is the VPS default.** |
-| `launchd/dev.centraid.gateway.plist` | The macOS LaunchAgent. |
+| `gateway/Dockerfile` | **The gateway image**: one `centraid-gateway` binary, an unprivileged user, the data directory at `/var/lib/centraid`, and the gateway's own `health` as the health check. |
+| `gateway/README.md` | Running a gateway on a box you own: the shortest path, getting it reachable, a container, backing it up. |
 | `vps/install.sh` | Download, verify, install, and _offer_ a service. |
 
-## The reverse-proxy and TLS rule applies to `centraid` and not to `centraid-gateway`
+## The service units
 
-Nobody should add nginx, Caddy, certbot or a cron line to this directory **for `centraid`**, so the reason is written down rather than left to be rediscovered:
+`centraid-gateway install --data-dir <dir> [--bind <addr>] [--dry-run]` renders a **systemd user unit** on Linux or a **launchd agent** on macOS, creates a missing data directory with mode 0700, writes the unit, and prints the command that starts it. **It never enables what it writes**: a background service that starts because a file was unpacked is a service nobody chose to run. `--dry-run` prints the unit and its path and touches nothing, which is what makes it checkable before it runs.
 
-- **No reverse proxy and no TLS for `centraid`.** It binds **no TCP listener at all**. It is an [iroh][iroh] QUIC endpoint over UDP, dialled by node id, with its own transport encryption and its own authorisation (the device allowlist). There is no HTTP origin to put a proxy in front of, no certificate to terminate, and no port to publish — which is also why `docker/Dockerfile` has no `EXPOSE`. The claim is enforced, not asserted: `cargo xtask`'s `no-listening-socket` structural rule refuses a `TcpListener::bind` anywhere outside the `blob-door` feature and outside the one file named in its allowlist, and `crates/centraid/tests/no_listener.rs` spawns the real binary and reads `/proc/net/tcp*` to prove the process owns no LISTEN socket.
-- **`centraid-gateway` is the exception, and it is the whole point of it.** A gateway a household self-hosts has to be dialable from a phone on cellular, so it listens, and a reverse proxy or a tunnel in front of it is the ordinary shape rather than a thing to be talked out of. Its listener is confined to `crates/gateway-server/src/serve.rs`, which is the one file `no-listening-socket`'s allowlist names — a second listener anywhere, that crate included, is still a finding. TLS is `terminated` by default (a tunnel, a Funnel or a proxy holds the certificate) and ACME over TLS-ALPN-01 is the opt-in; see `gateway-server/README.md`.
-- **No backup cron.** Backup is the gateway's own scheduler, inside the process that holds the one writable connection and the keys (`crates/vault/src/backup`). An external cron job running `centraid backup now` against a live vault would be a second writer with its own idea of what is committed. `centraid backup now` exists for an operator who wants one _now_, not for a crontab.
+A user unit needs no root. The systemd unit sandboxes the process: it hides the home directory (`ProtectHome=tmpfs`) and binds back only the data directory and the binary, so a data directory under `~` works and nothing else in the member's home is visible to the process. It follows the login session, so on a headless Linux box that nobody logs in to, `loginctl enable-linger <user>` is what keeps it running. On macOS the agent runs while the member is logged in, which is when a laptop is awake to be backed up to.
 
-## The two systemd shapes
+## The container
 
-Everything in this section is about **`centraid`**'s units. `centraid-gateway` writes its own, from `crates/gateway-server/src/service.rs`, and they are deliberately different in one way: they carry no credential, because the standalone gateway is blind and has no key to hand over. There are therefore two service-unit generators in this tree today, and consolidating them is an open question the receipt for [#1029][gateway] carries.
+```sh
+docker build -f deploy/gateway/Dockerfile -t centraid-gateway .
+docker run -d --name centraid-gateway --network host \
+  -v centraid-gateway:/var/lib/centraid centraid-gateway
+docker logs centraid-gateway        # the first pairing QR, at the first start
+docker exec centraid-gateway centraid-gateway pair --data-dir /var/lib/centraid
+```
 
-They are different artifacts and neither is a variant of the other.
+The image runs `centraid-gateway serve --data-dir /var/lib/centraid` as an unprivileged user (uid 10001), and its health check is `centraid-gateway health` against the certificate in that directory. Two things about running it:
 
-The **user** unit lives at `~/.config/systemd/user/centraid-gateway.service` and is what `centraid gateway install` writes by default. It follows the session: on a host with no logged-in user it does not run at all unless `loginctl enable-linger` is set. That is correct for a desktop and wrong for a server.
+- **The data directory is the whole gateway** — its identity, its index and its objects. Mount a volume or a host path at `/var/lib/centraid`: a run without one loses all three when the container is removed, and every paired phone then refuses the gateway that replaces it. There is no anonymous `VOLUME` in the image, because an anonymous volume only makes that loss quieter.
+- **Run it on the host's network** (`--network host`). The phone dials the addresses in the pairing QR, `pair` lists the addresses the gateway itself sees, and `serve` advertises itself on the LAN from the same view. Behind Docker's bridge (`-p 8443:8443`, with `--no-mdns`) the gateway still serves, but its QR names the container's own address, which no phone can dial — so host networking is the supported shape.
 
-The **system** unit is a template at `/etc/systemd/system/centraid-gateway@.service`. `systemctl enable --now centraid-gateway@home` starts an instance whose data directory is `/var/lib/centraid/home`, under a uid systemd allocates (`DynamicUser=yes`) and a directory systemd owns (`StateDirectory=`). One host can run several vaults as several instances of one file. Its output goes to the journal rather than to a log path, because a `DynamicUser` service cannot write to a file it does not own — a unit with `StandardOutput=append:` under `DynamicUser` fails at start.
+## The VPS installer
 
-The keystore secret is in **neither** unit file. A unit file is world-readable and an `Environment=` value is in `/proc/<pid>/environ`, so the secret is sealed with `systemd-creds encrypt` and handed over at start through `LoadCredentialEncrypted=`. `centraid gateway install` prints the exact `systemd-creds` command; on macOS it prints the Keychain command instead, because there is no `systemd-creds` there and printing one would be a lie that looks like an instruction.
+`vps/install.sh` verifies **before** it unpacks (`SHA256SUMS`), checks the installed `centraid` binary's identity stamp against the release that claims to have published it, installs `centraid-gateway` beside it when the tarball carries it, and **never installs an OS service silently**: `--with-service` prints the `centraid-gateway install` commands, only `--yes` runs them, and enabling — `systemctl --user enable --now dev.centraid.gateway`, with `loginctl enable-linger` on a box nobody logs in to — is always left to the operator. A tarball without `centraid-gateway` installs no gateway and refuses `--with-service`; the release's prebuilt-core lane builds `--bin centraid` alone today ([#1080][issue] open item).
 
-## One generator, and a test that says so
-
-The unit files in this directory are **byte-identical copies** of what `centraid gateway install` emits — `crates/centraid/src/cmd/units.rs`'s `the_deploy_tree_copies_are_the_generator_output` test is what keeps them that way. Two copies of a unit, one documented and one installed, is how the documented one stops being true.
-
-The generator is proved by bytes rather than by reading: `contracts/deploy/units/` holds frozen goldens produced by an independent generator, and the Rust tests reproduce them exactly. See [`contracts/deploy/units/README.md`](../contracts/deploy/units/README.md).
-
-## Installing, and the one thing this tree never does
-
-`vps/install.sh` verifies before it unpacks (`SHA256SUMS`), checks the installed binary's identity stamp against the release that claims to have published it, and **never installs an OS service silently**. `--with-service` prints the commands; only `--yes` writes the unit, and even then enabling is left to the operator. `centraid gateway install --dry-run` writes nothing at all.
-
-That rule is the one the release smoke depends on: `cargo xtask gate --profile release`'s `vps-smoke` step installs through this very script inside a clean container, and a smoke that enabled services would be mutating the host it is measuring.
-
-[issue]: https://github.com/srikanth235/centraid/issues/1020
-[gateway]: https://github.com/srikanth235/centraid/issues/1029
-[iroh]: https://www.iroh.computer/
+[issue]: https://github.com/srikanth235/centraid/issues/1080
+[r1]: ../docs/decisions.md#backups-from-first-principles-1080

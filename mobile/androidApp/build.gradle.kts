@@ -97,3 +97,11 @@ dependencies {
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
 }
+
+// THE UNIT TESTS RUN ON JDK 21. `:shared` and `:core` compile with
+// `jvmToolchain(21)`, so their classes are Java 21 bytecode; a test task left
+// on the JVM that runs Gradle cannot load them where that JVM is older
+// (`UnsupportedClassVersionError` on every test, seen on a JDK 17 Mac).
+tasks.withType<Test>().configureEach {
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+}

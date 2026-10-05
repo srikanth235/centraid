@@ -3,8 +3,9 @@
 //!
 //! ## The defect this exists for
 //!
-//! The tier ladder in `centraid_blobs::plan` — every thumbnail, then every
-//! preview, then originals — was real, and **nothing in the product ever
+//! The tier ladder — every thumbnail, then every preview, then originals
+//! (`centraid_blobs::plan` then; the phone's drain since #1080, which moves
+//! derivatives before originals) — was real, and **nothing in the product ever
 //! produced a thumbnail**. `core_content_derivative` held `thumb`, `preview`
 //! and `poster` in the DDL; the seat's `needed_blobs` asked for them first; the
 //! page read's `held_thumbnail` fell back through `thumb` → `poster` →

@@ -586,11 +586,11 @@ message BackupState {
   uint32 assets_remaining = 2;
   uint32 assets_transferred_this_session = 3;
   uint64 bytes_transferred_this_session = 4;
-  // WHICH TRANSPORT carried them. The iOS background-transfer experiment
-  // (`mobile/maestro/ios-transfer-experiment.md`) decides which of these the
-  // product ships, and until it has run this field is what a diagnostics screen
-  // reports rather than a claim in a document.
-  Transport transport = 5;
+  // 5 was `transport`: which of the iroh blob transfer and the HTTPS blob door
+  // carried the bytes. Both left with #1080, whose backup has one protocol, and
+  // nothing set it.
+  reserved 5;
+  reserved "transport";
   // Why it is not running, when it is not. Never inferred from a radio: the
   // pass asks the platform for the real answer.
   string paused_reason = 6;
@@ -606,14 +606,6 @@ message BackupState {
     PHASE_WAITING_FOR_UNMETERED = 5;
     PHASE_PARKED_LOW_DISK = 6;
     PHASE_DONE = 7;
-  }
-
-  enum Transport {
-    TRANSPORT_UNSPECIFIED = 0;
-    TRANSPORT_IROH_BLOBS = 1;
-    // The HTTPS blob door, behind the `blob-door` feature — the one exception
-    // to `no-listening-socket`.
-    TRANSPORT_HTTPS_BLOB_DOOR = 2;
   }
 }
 
@@ -652,11 +644,15 @@ message PhotosGridEvent {
     ExportSettled export_settled = 31;
     // The originals census answered for the More sheet (`KeepOriginals`).
     FreeUpCounted free_up_counted = 40;
+    // The member tapped the row's action (#1080 A19).
+    FreeUpTapped free_up_tapped = 41;
   }
 
   message FreeUpCounted {
     FreeUpSpace free_up = 1;
   }
+
+  message FreeUpTapped {}
 
   // What the shell's "Send a copy" came to, in the one clause
   // `export_notice` shows.
@@ -1296,6 +1292,10 @@ message HomeState {
   // The vault switcher is a SHEET, exactly as the all-apps listing is: it is
   // not a second Home, it gets no route, and it survives no navigation.
   bool vault_sheet_open = 8;
+  // THE BACKUP LINE (#1080, seam contract A11): the foreground vault's, as
+  // `BackupLines` finished it from the core's `backup_status`. The shell told
+  // Home it (`BackupLineChanged`), so a reload carries it.
+  BackupLine backup_line = 9;
 }
 
 message HomeData {
@@ -1493,6 +1493,13 @@ message HomeEvent {
     VaultSwitchRequested vault_switch = 10;
     VaultPicked vault_picked = 12;
     RosterChanged roster_changed = 13;
+    BackupLineChanged backup_line = 14;
+  }
+
+  // The foreground vault's backup line moved: a pass ended, the foreground
+  // switched, or the vault froze. See `HomeState.backup_line`.
+  message BackupLineChanged {
+    BackupLine line = 1;
   }
 
   // `VaultsListed`, the one-shot survey. See `RosterChanged`.
@@ -1717,21 +1724,36 @@ message PhotoShelfState {
 }
 
 // WHAT FREEING SPACE ON THIS PHONE CAN DO, AS THE MORE SHEET SAYS IT
-// (`originals.proto`). Sentences and not numbers, derived once in
+// (`originals.proto`; #1080 A19). Sentences and not numbers, derived once in
 // `KeepOriginals` so the two shells cannot word one fact two ways.
+//
+// A VERB SINCE #1080: originals are backed up now, and the core's
+// `releasable` door names the library originals every part of which a
+// gateway confirmed, never an edited one (R-1029-PH-1 is superseded). The
+// shell's installed `LibraryDeleter` removes them from the OS library behind
+// the system's own confirmation and reports which went (A19, A20).
 message FreeUpSpace {
   // False until a census answered. `meta` then says the phone is counting.
   bool counted = 1;
   // The row's line: how many originals this phone holds, and their size.
   string meta = 2;
-  // Why nothing can be freed, and how much of it the member keeps here.
-  // Empty when there is nothing on this phone to speak of.
-  //
-  // THE ROW IS A STATEMENT AND NEVER A BUTTON, and there is no "releasable"
-  // flag to make it one: no build can prove the gateway holds an original
-  // until originals are backed up (R-1029-PH-1), and a flag that is always
-  // false is a control nobody can test the true half of.
+  // What the action would free, or why nothing can be freed, and how much of
+  // it the member keeps here. Empty when there is nothing to speak of.
   string reason = 3;
+  // "Free up 2 GB": the action, drawn as a control only while `enabled`.
+  string action_label = 4;
+  bool enabled = 5;
+  // The originals a gateway holds whole, and their size on this phone.
+  uint32 releasable_count = 6;
+  uint64 releasable_bytes = 7;
+  // The system's confirmation is up, or the deletion is running.
+  bool freeing = 8;
+  // What the last free-up came to, in one clause; empty before the first.
+  string notice = 9;
+  // The platform can delete from its library behind the system's own
+  // confirmation (A20). False draws no row at all: an action this phone
+  // cannot take is not offered.
+  bool offered = 10;
 }
 
 // ONE ALBUM'S PLACE ON THIS PHONE'S KEEP LIST (`originals.proto`).
@@ -11126,7 +11148,12 @@ message WordsEntryState {
   string body = 5;
   // Always 24 cells, in order.
   repeated WordEntry cells = 6;
-  // PURPOSE_RESTORE only: the optional laptop address, and what it is for.
+  // The pairing code of the gateway to restore from, and what it is for: the
+  // text its `centraid-gateway pair` printed (`RestoreRequest.payload`, #1080
+  // A1). Drawn wherever the primary restores — every purpose but
+  // PURPOSE_REKEY, and a re-key that offers the restore — and
+  // `primary_enabled` waits for it, because the core refuses a restore that
+  // names no gateway (#1080 A23).
   string endpoint_label = 7;
   string endpoint = 8;
   // The phrase's verdict or the refusal, as a sentence; empty for none.
@@ -11172,7 +11199,7 @@ message WordsEntryState {
     // Bring every vault back with the seed this phone ALREADY holds — the one
     // the synchronised keychain carried here, with no words (#1047,
     // Q-1047-18). `cells` is empty and `secure` is false: nothing secret is
-    // on the screen, only the optional laptop address.
+    // on the screen, only the gateway's pairing code.
     PURPOSE_RESTORE_HELD = 3;
   }
 
@@ -11325,18 +11352,20 @@ message WordsShowEvent {
 // --- Pair with the laptop (#1047) ---
 // ---------------------------------------------------------------------------
 //
-// `pair.laptop`. The laptop's owner runs `centraid-gateway invite` and it
-// prints a square and the same text beneath it: a pairing ticket (the laptop's
-// endpoint id, a one-time invite code and the addresses to dial). The phone
-// scans or pastes it; the core redeems the invite, claims the lease and hands
-// back the pairing's safety number (`PairResponse.safety_number`: 60 digits in
-// 12 groups of 5 over the vault's identity key and the laptop's endpoint key),
+// `pair.laptop`. The gateway's owner runs `centraid-gateway pair` and it
+// prints a square and the same text beneath it: the pairing code
+// (`{v: 2, gw, addrs, pin, secret, exp_ms}`, #1080). The phone scans or
+// pastes it; the core dials one of its addresses pinning the certificate the
+// code names, pairs with its one-use secret, keeps the gateway as a backup
+// destination and hands back the pairing's safety number
+// (`PairResponse.safety_number`: 60 digits in 12 groups of 5 over the vault's
+// identity key and the gateway certificate's fingerprint, #1080 A7 and A17),
 // which the member compares with the number `centraid-gateway serve` prints
-// once the invite is redeemed (W15-D5). That comparison is the whole security
+// when the pairing lands (W15-D5). That comparison is the whole security
 // property of the flow and it is the member's to make.
 //
-// The ticket is not a secret the way the words are — it is spent on first use
-// and expires — so pasting is allowed and the screen is not shielded.
+// The code is not a secret the way the words are — its secret is spent on
+// first use and expires — so pasting is allowed and the screen is not shielded.
 
 message PairLaptopState {
   Phase phase = 1;
@@ -11423,4 +11452,160 @@ message PairLaptopEvent {
   message Dismissed {}
 
   message WordsTapped {}
+}
+
+// ---------------------------------------------------------------------------
+// --- Backup ---
+// ---------------------------------------------------------------------------
+
+// ONE HONEST LINE AND THREE CONTROLS (#1080, the shells; seam contract A11).
+//
+// `BackupLine` is what Home draws (`HomeState.backup_line`) and what the
+// Backup screen draws at its top; tapping it opens the screen. Every count and
+// time on it is the core's `backup_status`, and a thing is "backed up" only
+// once a gateway acknowledged it and the phone recorded that (#1080 ruling 7):
+// the line never says more than the ledger holds. The screen adds the paired
+// gateways and the three controls — the member's transfer rule (drawn from
+// `HomeBridge`'s rule doors, one setting with one store), include videos, and
+// back up now; "add a gateway" opens `pair.laptop`. Every word is finished in
+// `commonMain` (`BackupLines`, `BackupScreenMachine`); a view draws and decides
+// nothing.
+
+// One reason items wait, with how many.
+message BackupWaitingRow {
+  Reason reason = 1;
+  uint64 count = 2;
+  // "12 waiting for Wi-Fi".
+  string sentence = 3;
+
+  enum Reason {
+    REASON_UNSPECIFIED = 0;
+    REASON_WIFI = 1;
+    REASON_CHARGER = 2;
+    REASON_GATEWAY = 3;
+    // iCloud-only originals, fetched only under the rule and inside a window.
+    REASON_ICLOUD = 4;
+    // The core is waiting for the shell to stream an item's bytes.
+    REASON_BYTES = 5;
+    REASON_WINDOW = 6;
+    // An original the MANUAL rule holds until the member taps "Back up now"
+    // (#1080 A24).
+    REASON_ASK = 7;
+    // The machine that answered at a gateway's address is not the gateway
+    // this phone pinned (#1080).
+    REASON_UNTRUSTED = 8;
+  }
+}
+
+message BackupLine {
+  // When a gateway last acknowledged this vault's records (the snapshot's
+  // head), on the GATEWAY's clock. Zero: never.
+  int64 records_as_of_ms = 1;
+  // Photos, videos, documents and their derivatives a gateway acknowledged,
+  // and how many the vault knows.
+  uint64 confirmed = 2;
+  uint64 total = 3;
+  repeated BackupWaitingRow waiting = 4;
+  // The vault moved to another phone; this one is read-only.
+  bool frozen = 5;
+  // No gateway is paired: the line offers pairing instead of a status.
+  bool unpaired = 6;
+  // The line, finished: "Backed up 2 minutes ago". Empty draws no line.
+  string sentence = 7;
+  // Its second clause, or empty: "1,203 of 1,240 photos and files".
+  string detail = 8;
+  Tone tone = 9;
+  string accessibility_label = 10;
+
+  enum Tone {
+    TONE_UNSPECIFIED = 0;
+    // Backed up, or catching up on its own.
+    TONE_QUIET = 1;
+    // Something waits on the member: a gateway, a setting.
+    TONE_ATTENTION = 2;
+    // Moved to another phone, or nothing is backed up at all.
+    TONE_URGENT = 3;
+  }
+}
+
+// One gateway this vault backs up to (#1080 ruling 8: the pairing record is a
+// list). A gateway id names a DESTINATION; a vault is mounted by its own id
+// and never by one (seam contract A13).
+message BackupDestinationRow {
+  string gateway_id = 1;
+  string label = 2;
+  // Where it was last reached and when, finished:
+  // "192.168.1.20:7443 · Reached 2 minutes ago".
+  string detail = 3;
+  int64 last_seen_ms = 4;
+  int64 last_ack_ms = 5;
+  string accessibility_label = 6;
+}
+
+message BackupScreenState {
+  string title = 1;
+  BackupLine line = 2;
+  repeated BackupDestinationRow destinations = 3;
+  // "Add a laptop": the shell opens `pair.laptop`.
+  string add_destination_label = 4;
+  // One label for every row's forget control.
+  string forget_label = 5;
+  // The rule as `TransferRule.stored` holds it, and the heading over its
+  // choices; the choices themselves are `HomeBridge.transferRuleChoices`.
+  string rule = 6;
+  string rule_label = 7;
+  bool include_videos = 8;
+  string include_videos_label = 9;
+  // A "Back up now" run is in progress; `progress` says so in words.
+  bool backing_up_now = 10;
+  string back_up_now_label = 11;
+  bool back_up_now_enabled = 12;
+  string progress = 13;
+  // Why a phone's battery saving can hold backups back, and the label of the
+  // control that lets Centraid run. Empty until a backlog has stood for a
+  // day; a shell draws them only where the platform says the app is held
+  // back (Android's battery optimisation).
+  string battery_sentence = 14;
+  string battery_label = 15;
+  int64 last_snapshot_ms = 16;
+  int64 last_ack_ms = 17;
+  uint64 spool_bytes = 18;
+  // What the last act did, or why it could not: one clause, never a toast.
+  string notice = 19;
+  // The phone will not wake Centraid in the background, and what that means.
+  string background_notice = 20;
+  Phase phase = 21;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_LOADING = 1;
+    PHASE_READY = 2;
+    PHASE_CLOSED = 3;
+  }
+}
+
+message BackupScreenEvent {
+  oneof kind {
+    Opened opened = 1;
+    BackUpNow back_up_now = 2;
+    SetIncludeVideos set_include_videos = 3;
+    // Forgets at once: it drops this phone's pairing and nothing the gateway
+    // holds, and pairing again undoes it.
+    ForgetDestination forget_destination = 4;
+    Dismissed dismissed = 5;
+  }
+
+  message Opened {}
+
+  message BackUpNow {}
+
+  message SetIncludeVideos {
+    bool include = 1;
+  }
+
+  message ForgetDestination {
+    string gateway_id = 1;
+  }
+
+  message Dismissed {}
 }

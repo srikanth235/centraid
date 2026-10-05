@@ -63,39 +63,18 @@ Test: `every_request_carries_a_request_id_and_cancel_names_one`
 ```json
 {
   "path": "/…/vault.db",
-  "role": "gateway" | "seat-replicated" | "seat-thin",
   "create": false,
   "uiThreadName": "main",
   "expectedIdentity": "<artifact digest>",
-  "pairing": {
-    "secret": "<64 lowercase hex characters>",
-    "gatewayAddress": "<64 lowercase hex characters>",
-    "vaultId": "…",
-    "vaultName": "…",
-    "relayUrl": "",
-    "directAddrs": ["10.0.0.2:41234"],
-    "enrolledPublicKey": "<64 lowercase hex characters>"
-  }
+  "vault": { "seed": "<128 lowercase hex characters>", "index": 0 }
 }
 ```
 
-`path` is the only required key. `expectedIdentity` is clause 9's stale-core refusal, made before a handle exists.
+`path` is the only required key. `create` defaults to `true` — a shell that names a path and says nothing else is founding a vault there — and `false` opens only a file that exists, which is what a shell opening the file a restore is about to write passes. `expectedIdentity` is clause 9's stale-core refusal, made before a handle exists. `vault` is the secret, and §4b is about it.
 
-**`pairing` is THE ENROLMENT RECORD the shell kept for this vault** ([#1025](https://github.com/srikanth235/centraid/issues/1025) S7-13, D-1025-S7-14). One object, because it is one fact: this device's relationship with one vault. It was three keys and three secure-store entries — `endpointSecretKey`, `endpointSecretKeyPath` and a `pairing` without a secret in it — settled one at a time under three names, which is three chances to settle by halves. **Those spellings are deleted** (v0, no legacy).
+**Three keys a shell may still send are ignored, never refused.** `role` named one of three kinds of core and there is one ([#1029](https://github.com/srikanth235/centraid/issues/1029) §1); `pairing` was the enrolment record an iroh endpoint was checked against at open, and `device` the device key a pair or a restore minted — a gateway now knows a phone by the bearer token its pairing minted, which the backup ledger beside the vault keeps ([#1080](https://github.com/srikanth235/centraid/issues/1080)). An older shell against a newer core is the version-skew case the handshake exists for, and refusing the open over a stale key would turn it into a product that will not start.
 
-**`secret` is this device's endpoint identity FOR THIS VAULT**: 32 bytes as 64 lowercase hex characters, the private half of the key the gateway enrolled when this seat paired.
-
-_Why the shell holds it and this library does not:_ a secret key belongs in the platform's secure store — the iOS Keychain, the Android Keystore — and a core that invented a file would put the one unrecoverable secret on the device next to the vault it protects, in a place no shell asked for and no backup excludes.
-
-**`enrolledPublicKey` is what the GATEWAY said it enrolled**, off the `PairOk` and derived there from the connection iroh's TLS proved. At open, the endpoint that comes up is compared against it, and a mismatch is refused (`BAD_ARGUMENT`, and `ERROR_CODE_IDENTITY_MISMATCH` wherever the condition reaches a `call`): the network is not attached and nothing is dialled. A seat whose secret is gone would otherwise dial as a stranger, be closed by its own gateway as an unenrolled peer, and render a version-window sentence over a lost credential.
-
-**`relayUrl` decides the relay mode, and it has three states.** A url is a relayed deployment; `""` is a deployment that STATED it has none, and the endpoint comes up in `RelayMode::Disabled`; the key being ABSENT is "not told", and relays stay on. The third is the transient record a device holds while it is redeeming a ticket — a device that read absent as "no relay" could not pair over the internet at all. There is no `relays` flag (D-1025-S7-16).
-
-**The pairing's ADDRESS half is also durable in the replica** (`seat_gateway`, `crates/seat/src/gateway.rs`) and is re-adopted by `centraid_open` the moment the network is attached; the replica is asked first. What is never in the file is the SECRET, which is why the record exists at all — and why a device that paired and could not take its copy still has something to dial.
-
-**Absent (or empty) `secret` is not an error**: the endpoint mints a fresh keypair, which is every first launch. **Present and unreadable IS an error** (`BAD_ARGUMENT`), because carrying on with a fresh key would silently un-enrol a device whose shell believed it had persisted one. Per vault: a device holding two vaults is two cores, two endpoints and two records (D-1025-S7-13).
-
-Tests: `the_endpoint_secret_crosses_the_abi_inside_the_enrolment_record`, `the_enrolment_record_carries_the_address_the_relay_and_the_enrolled_key`, `a_malformed_endpoint_secret_key_is_refused_rather_than_replaced`, and `crates/centraid/tests/seat_identity.rs`
+Test: `a_configuration_defaults_to_founding_and_an_explicit_choice_wins` (`src/marshal.rs`)
 
 ## 4b. The vault's seed crosses the ABI, and this library writes no key down
 
@@ -105,11 +84,13 @@ Tests: `the_endpoint_secret_crosses_the_abi_inside_the_enrolment_record`, `the_e
 { "vault": { "seed": "<128 lowercase hex characters>", "index": 0 } }
 ```
 
-`seed` is the **64-byte BIP-39 seed** the 24 words derive (`centraid_identity::phrase::Seed`), and `index` is the derivation index this vault was minted at. Together they are what [`centraid_vault::backup::ObjectKeys`] is built from, and sealing a generation is impossible without them.
+`seed` is the **64-byte BIP-39 seed** the 24 words derive (`centraid_identity::phrase::Seed`), and `index` is the derivation index this vault was minted at. Together they derive every key the backup plane uses ([#1080](https://github.com/srikanth235/centraid/issues/1080)): the backup keys every part is sealed and named under (`K_backup` and `K_name`, from the vault's root key), and the vault's identity key, which signs a claim. Sealing, naming and claiming are impossible without them.
 
-_Why the shell holds it and this library does not:_ the same answer clause 4a gives about the endpoint secret, with more force. `crates/vault/src/backup/mod.rs` deleted the scrypt-wrapped recovery kit under [#1029](https://github.com/srikanth235/centraid/issues/1029) §5 with one sentence — "a file that carries keys is a file that can be copied" — and a core that invented a key file beside the vault it protects would put the one unrecoverable secret in a place no shell asked for and no backup excludes. It belongs in the iOS Keychain or the Android Keystore, and it is borrowed for the length of `centraid_open` like every other input (clause 2).
+_Why the shell holds it and this library does not:_ a secret belongs in the platform's secure store, and this one most of all. The scrypt-wrapped recovery kit was deleted under [#1029](https://github.com/srikanth235/centraid/issues/1029) §5 with one sentence — "a file that carries keys is a file that can be copied" — and a core that invented a key file beside the vault it protects would put the one unrecoverable secret in a place no shell asked for and no backup excludes. It belongs in the iOS Keychain or the Android Keystore, and it is borrowed for the length of `centraid_open` like every other input (clause 2). The backup ledger beside the vault (`<stem>.backup.db`) holds gateway tokens and pinned certificates, never a key.
 
-**Absent is not an error.** A core opened without it reads and writes its vault perfectly well and refuses to drain, with `ERROR_CODE_PEER_UNREACHABLE` and a sentence naming the seed. That is a state a shell draws ("unlock to back up"), because a member who has not unlocked their phone has not lost anything.
+**Absent is not an error.** A core opened without it reads and writes its vault perfectly well and refuses every door that seals, names or signs — `drain`, `handoff`, `settle`, `reconcile`, `fetch_original`, `releasable` — with `ERROR_CODE_PEER_UNREACHABLE` and a sentence naming the seed, and `pair_phone` too. That is a state a shell draws ("unlock to back up"), because a member who has not unlocked their phone has not lost anything.
+
+**There is no device secret.** A pair or a restore used to mint a device key and hand its secret over for the shell to pass back here as `{"device": {"secret": …}}`; a gateway now admits a phone by the bearer token its pairing minted, which the ledger keeps (#1080). A `device` key is ignored, like `role`.
 
 **Present and unreadable IS an error** (`BAD_ARGUMENT`): a seed that is not 128 hex characters, or a `vault` object with no `index`. Carrying on would leave a shell believing it had unlocked a core that cannot seal a single byte, and the member would find that out on the day their phone is gone.
 
@@ -117,14 +98,18 @@ Tests: `the_vault_seed_crosses_the_abi_and_a_malformed_one_is_refused`
 
 ## 4c. The phone's four flows are request kinds, not symbols
 
-`centraid.core.v1.Request` gained four arms under [#1029](https://github.com/srikanth235/centraid/issues/1029) W15, and `BackupNow` — which answered `NotYetAvailable` for the whole of its life — left with them. Field number 10 is **reserved, not reused**.
+`centraid.core.v1.Request` gained four arms under [#1029](https://github.com/srikanth235/centraid/issues/1029) W15, and `BackupNow` — which answered `NotYetAvailable` for the whole of its life — left with them. Field number 10 is **reserved, not reused**. [#1080](https://github.com/srikanth235/centraid/issues/1080) rebuilt the plane behind them; the fields the old plane needed are **reserved, not reused**: `DrainResponse` 1 (`acked_txid`), `PairResponse` 1–3 (`gateway_endpoint`, `record_published`, `device_secret`), `RestoreRequest` 2–3 (`endpoint`, `direct_addrs`), `RestoreResponse` 3 (`device_secret`), `RestoredVault` 4 (`txid`) and `BackupStatusResponse` 1 and 4 (`acked_txid`, `laptop_paired`); and `ErrorCode` 24 (`ERROR_CODE_IDENTITY_MISMATCH`), which an iroh endpoint that was not the enrolled key produced.
 
 | Kind | Answer | Bounded? |
 | --- | --- | --- |
-| `drain` (15) | `DrainResponse { acked_txid, pending_bytes, stopped, acked_at_ms? }` | **unbounded**, cancellable; also carries its own `deadline_ms` |
-| `pair_phone` (16) | `PairResponse { gateway_endpoint, record_published }` | bounded |
-| `restore` (17) | `RestoreResponse { vaults[], gap_scanned }` | **unbounded**, cancellable |
-| `backup_status` (18) | `BackupStatusResponse { acked_txid?, acked_at_ms?, pending_bytes, laptop_paired }` | bounded |
+| `drain` (15) | `DrainResponse { pending_bytes, stopped, acked_at_ms?, confirmed_parts, waiting_bytes_parts, need_bytes[] }` | **unbounded**, cancellable; also carries its own `deadline_ms` |
+| `pair_phone` (16) | `PairResponse { safety_number, destination }` | bounded |
+| `restore` (17) | `RestoreResponse { vaults[], gap_scanned, unclaimed[] }` | **unbounded**, cancellable |
+| `backup_status` (18) | `BackupStatusResponse { destinations[], acked_at_ms?, last_snapshot_ms?, pending_bytes, content_total, content_confirmed, spool_bytes, waiting[], frozen }` | bounded |
+
+**A drain is one pass, and a second while one runs is refused** (`INVALID_REQUEST`, "a drain is already running"), never queued. It reaches the first paired gateway that answers as itself; takes a snapshot of the vault when one is due — an hour after the last head, or when `wants_snapshot` asks — and the link may carry the records; moves the records and sets the head first; then seals and moves derivatives and originals under the member's rule (`rule`, `metered`, `charging`, `exclude_videos`, `asked`). `asked` is the member's "Back up now" tap and nothing else (the root's ruling A24): under `TRANSFER_RULE_MANUAL` it is what lets originals be sealed, on any rule it lets a video's original be sealed off the charger, and on a metered link it sends the snapshot whatever the rule while originals still follow it (R-1080-C38). `wants_snapshot` — which a shell also sends when the app leaves the screen — decides only when the snapshot is taken. The vault is held for the snapshot's copy and the reads a pass makes, never across the network. An original only the operating system's library holds is named in `need_bytes` for the shell to stream through the stage door. A gateway that answers `MOVED` freezes the phone: the drain is refused `ERROR_CODE_VAULT_MOVED`, now and on every later pass, and `backup_status.frozen` is true.
+
+**A pair reads a gateway's pairing payload** (`{v: 2, gw, addrs, pin, secret, exp_ms}`), dials it trusting only the pinned certificate, and keeps the gateway in the ledger; a gateway that already holds the vault is taken over by a claim. **A restore takes the 24 words or the 64-byte seed, exactly one, and the pairing payload of the gateway to restore from** (`RestoreRequest.payload`, required): it fetches and checks each vault's snapshot under a read-only grant, claims each at the next writer epoch only once every vault checked, and brings every derivative back. Both the words and the seed is `INVALID_REQUEST`, and so is a seed that is not 64 bytes; no refusal quotes a word or a byte. **A restore never touches a vault this phone already holds**, and `RestoreRequest.indices` asks for only the indices an earlier restore answered as `unclaimed` (R-1047-R6): no gap is scanned. Nothing is minted: a restored phone is admitted by the token its claim answered, which the ledger keeps.
 
 _Why this is a clause and not a schema note:_ clause 10 says five symbols and means it, and "backing up" is exactly the kind of flow that grows a symbol — it has a background half, a foreground half and a status. All three are arms on `call`. A shell adds a flow by encoding a different message, never by resolving a new name, and `buf breaking` governs the churn.
 
@@ -138,7 +123,7 @@ Test: `the_phones_four_flows_round_trip_through_call`
 
 `originals` (19) answers `OriginalsResponse { kept_album_ids[], census? }` and is **bounded**. Its three ops are `kept` (read the keep list), `keep { album_id, keep }` (put one album on it or take it off) and `census` (the originals whole on this phone, and the share in kept albums). The keep list is `<stem>.keep-originals.json` beside the vault file, not a vault row: "keep these originals on this phone" is a fact about one device's disk, and a row would be sealed into the backup and restored onto the next phone as a promise about a disk it never had. An absent `census` is "not counted" — a core with no content store — and never zero.
 
-_Why there is no release op:_ the backup carries the vault's pages and never an original's bytes, so no original can be proved held by the gateway, and a verb that released one would release the only copy. It arrives with the plane that uploads originals ([`docs/decisions.md`](../../docs/decisions.md) R-1029-PH-1).
+_Where the release op is:_ the backup plane's, because the proof that makes an original releasable is a gateway's acknowledgement of every part of it, which the ledger records (clause 4g's `releasable` and `released`, #1080's ruling A19, superseding R-1029-PH-1). The keep list is what holds an album back from it.
 
 Test: `the_originals_on_this_phone_round_trip_through_call` (and, below the ABI, `crates/core/src/originals.rs` and `crates/vault/tests/originals.rs`)
 
@@ -173,6 +158,27 @@ Test: `the_app_queries_round_trip_through_call` (and, below the ABI, `crates/cor
 `seed` over words that are not a phrase is `BAD_ARGUMENT` with an `ERROR_CODE_INVALID_REQUEST` body whose detail names a count or bip39's own reason, **never a word**; `phrase` is not a command and writes no receipt. The words and the seed cross only between this library and its own shell on the same device, to be shown once and to be stored in the synchronised secure store (clause 4b).
 
 Test: `the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault` (and, below the ABI, `crates/core/src/phone/phrase.rs`)
+
+## 4g. The backup plane's doors beside the pass are request kinds
+
+[#1080](https://github.com/srikanth235/centraid/issues/1080) adds eight arms beside `drain`, and `phone.proto` states each one's shape:
+
+| Kind | What it does | Bounded? |
+| --- | --- | --- |
+| `handoff` (23) | a batch of sealed parts nobody is moving, each as a presigned `PUT` (`url`, `method`, every header, the spool file's `path`) to the gateway reached last, marked handed off; `allows_cellular` per part from the rule the last pass carried | bounded |
+| `settle` (24) | what the operating system reported per part: a `2xx` or `NAME_TAKEN` is the gateway's acknowledgement, `DIGEST_MISMATCH` drops a torn part to be sealed again, `MOVED` freezes the phone, anything else re-queues; a name the queue does not hold, or a part for another vault, is ignored and not counted | bounded |
+| `fetch_original` (25) | one file back by its content hash, every part checked and the whole against the hash; already on this phone — the app's store, or the library — is answered without dialling | **unbounded**, cancellable |
+| `pins` (26) | every paired gateway's certificate DER, for a shell's own TLS to pin by byte equality | bounded |
+| `reconcile` (27) | the ledger squared with what the first reachable gateway holds; the first of a core's life asks about every confirmed name, later ones about the queue; `reachable: false` means hand nothing off | bounded |
+| `forget_destination` (28) | first, best-effort, the gateway is asked to revoke this phone's token, and `revoked` says whether it answered so; then the gateway and its acknowledgements leave the ledger whether or not it was reached; what it stores is left | bounded |
+| `releasable` (29) | originals only the library holds, every part acknowledged, not in a kept album, never edited in the library, a library item whole or not at all, oldest first | bounded |
+| `released` (30) | the library items the member deleted: the ledger forgets them in the library and a `media_asset` change event tells the grid they are fetchable | bounded |
+
+A zero limit — `handoff`'s `max_bytes` or `max_parts`, `releasable`'s `limit` — is `INVALID_REQUEST`, never "no limit". **The core never deletes from the operating system's library**: the shell does, behind the system's own confirmation, and reports it through `released`.
+
+**The stage door v2** (`StageRequest`, arm 13): `begin` names where the bytes live. Owned bytes (`STAGE_SOURCE_OWNED`, the default) stream into the content store, and a derivative (`for_hash` and `tier`: `thumb`, `preview` or `poster`) is staged beside its parent, so the command that mints the parent takes the shell's rendition as the tier and the Rust decoder stays idle. A library item (`STAGE_SOURCE_OS_LIBRARY` with `os_ref`, and `os_edited` when the member edited it there) is hashed as it streams and, when a gateway is paired and the spool has room, sealed into the spool in the same stream; no plaintext copy is kept, and the ledger records where its bytes are. A `byte_size` of 0 is "not known" and the session takes what arrives. A begin that contradicts itself — a library item with no identifier, owned bytes with one, a derivative with half its fields or from the library — and a source this build has no name for are `INVALID_REQUEST`. `ContentUrl.source` answers `STORE` beside a path, `OS_LIBRARY` with `os_ref` for an original only the library holds, and `NONE` when the bytes are on this phone nowhere.
+
+Test: `the_backup_plane_doors_are_request_kinds_and_answer_an_unpaired_phone` (and, below the ABI, `crates/core/src/handle.rs` and `crates/core/tests/phone_backup.rs`, which drives every door against a real gateway)
 
 ## 5. `next_event` surfaces bounded-queue backpressure as a health event
 

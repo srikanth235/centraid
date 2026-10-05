@@ -126,7 +126,6 @@ final class ScreenFixtureTests: XCTestCase {
         )
         XCTAssertEqual(state.permission, .limited)
         XCTAssertEqual(state.backup.phase, .transferring)
-        XCTAssertEqual(state.backup.transport, .irohBlobs)
         // A Live Photo's still and its paired movie share one capture group.
         XCTAssertFalse(state.data.cells[0].captureGroupID.isEmpty)
     }

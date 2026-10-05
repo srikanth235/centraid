@@ -5,10 +5,9 @@
 //
 // Four hashes and a canonicalizer. The v0-derived seals that stood here — the
 // WAL-segment seal and the snapshot-manifest seal, with the AES-GCM primitives
-// under them — are deleted with their last callers: `centraid-object/1`
-// (`crate::object`) replaces both, and its nonces are random rather than
-// derived from an address, which is the defect they carried (#1029 B9,
-// `receipts/issue-1029-phone-is-the-vault.md`).
+// under them — are deleted with their last callers (#1029 B9: their nonces
+// were derived from an address). The one sealing format is now
+// `centraid-sealed/2` (`crate::sealed`, #1080), whose nonces are random.
 
 use anyhow::{Result, bail};
 use serde_json::Value;

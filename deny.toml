@@ -1,11 +1,9 @@
 # cargo-deny policy for Centraid's first-party Rust crates (issue #842 W7.2).
 #
 # One shared policy at the repo root rather than a copy beside each crate root —
-# copies would drift, and a per-crate relaxation would be invisible. There are
-# FOUR crate roots now: the three v0 byte-plane crates
-# (packages/tunnel/data-plane, packages/tunnel/native, apps/web/iroh-wasm) and
-# the v1 workspace at the repo root (#1020), which is all of `crates/*` behind
-# one Cargo.lock. Two consumers pass this file in:
+# copies would drift, and a per-crate relaxation would be invisible. There is
+# ONE crate root: the workspace at the repo root (#1020), which is all of
+# `crates/*` behind one Cargo.lock. Two consumers pass this file in:
 # `scripts/security/rust-supply-chain.mjs` walks the tree for lockfiles and
 # hands each crate `--config deny.toml`, and the v1 gate's `deny` step runs
 # `cargo deny --all-features --config deny.toml check` over the workspace.
@@ -30,14 +28,10 @@ all-features = true
 # findings, not notes. `cargo audit` covers the same database from the other
 # side — both are kept because `deny` also sees the yanked-crate signal.
 yanked = "deny"
-# Transitive via iroh. No crate here has a maintained successor that iroh
-# has switched to; ignoring is the honest exception, not a silent pass.
-# Tracked with RUSTSEC-2026-0258 (h2) which WAS upgraded in the lockfiles.
-ignore = [
-  "RUSTSEC-2023-0089", # atomic-polyfill unmaintained
-  "RUSTSEC-2024-0436", # paste unmaintained
-  "RUSTSEC-2024-0370", # proc-macro-error unmaintained — via genawaiter <- bao-tree <- iroh-blobs 0.103
-]
+# NO IGNORES. `RUSTSEC-2024-0436` (`paste`, unmaintained) stood here as the one
+# exception, transitive via iroh; iroh left the graph with #1080 and `paste`
+# with it, so there is no advisory left to excuse.
+ignore = []
 
 [licenses]
 # The product ships these binaries. Copyleft obligations are a shipping
@@ -75,7 +69,7 @@ exceptions = [
 
 [bans]
 # Duplicate major versions of one crate are a warning, not a failure: the
-# iroh/reqwest graph legitimately carries a few, and failing on them would
+# TLS and HTTP graph legitimately carries a few, and failing on them would
 # turn this gate into something people route around. Banned crates and
 # wildcard version requirements are failures, because both are how an
 # unreviewed dependency actually arrives.

@@ -9,18 +9,31 @@ import dev.centraid.core.CentraidCore
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.custody.DevSeed
+import dev.centraid.shared.platform.BackgroundTasks
 import dev.centraid.shared.platform.PlatformServices
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
+import dev.centraid.shared.sync.BackupReading
+import dev.centraid.shared.sync.BackupStatusStore
 import dev.centraid.shared.sync.ChangeStream
+import dev.centraid.shared.sync.CoreBackupDoors
+import dev.centraid.shared.sync.CoreBackupStatus
 import dev.centraid.shared.sync.CoreDrainDoor
-import dev.centraid.shared.sync.ShelfDrain
+import dev.centraid.shared.sync.DrainAnswer
+import dev.centraid.shared.sync.DrainPass
+import dev.centraid.shared.sync.ForgetAnswer
+import dev.centraid.shared.sync.LibraryDeleter
+import dev.centraid.shared.sync.PassConditions
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenQueryRuntime
 import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenRuntime
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.sync.ShelfDrain
 import dev.centraid.shared.sync.StrandedWrites
+import dev.centraid.shared.sync.UploadLoop
+import dev.centraid.shared.sync.UploadPin
+import dev.centraid.shared.sync.freezeFor
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -28,9 +41,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -104,27 +119,177 @@ public class HomeSession private constructor(
     private val sinceOpen: TimeMark = TimeSource.Monotonic.markNow()
 
     /**
-     * THE DRAIN OVER THIS DEVICE'S SHELF (#1029 W18-6).
+     * THE PASS OVER THIS DEVICE'S SHELF (#1080, the shells; #1029 W18-6).
      *
-     * It lives on the session and not on either shell, because a pass is over
-     * the SHELF — every held vault, not the one screen a member left open — and
-     * the shelf is this object's. Both shells reach it the same way: iOS
-     * through `HomeBridge.drain`/`becameActive`, Android by calling it
-     * directly, the way Android already collects the `StateFlow` directly.
+     * On the session and not on either shell, because a pass is over the
+     * SHELF — every held vault — and the shelf is this object's. iOS reaches it
+     * through `HomeBridge`, Android directly and from its workers. The
+     * session's own triggers are wired in [open]: the first pass, every
+     * commit, and the radio moving.
      *
-     * Its third trigger is wired here too ([open]): a `ChangeEvent` is the one
-     * signal in this process that says there is something new to send.
+     * The member's rule and the platform's reading are read at the start of
+     * every run ([PassConditions.read]); the next window is asked for after
+     * every pass, because a `BGTaskRequest` is one-shot.
      */
     public val drain: ShelfDrain = ShelfDrain(
         holdings = { shelf.all() },
         doorFor = { core -> CoreDrainDoor(core) },
-        // MONOTONIC, NOT THE WALL CLOCK. The only thing it measures is "how
-        // long since the last pass": a phone whose clock moves — a timezone, a
-        // network correction, a member setting it — would either debounce for
-        // hours or stop debouncing at all. It is never a backup claim; those
-        // moments are the gateway's.
+        // MONOTONIC, NOT THE WALL CLOCK: it measures only "how long since",
+        // and a phone whose clock moves would debounce for hours or never. It
+        // is never a backup claim; those moments are the gateway's.
         nowMs = { sinceOpen.elapsedNow().inWholeMilliseconds },
+        conditions = { PassConditions.read(services) },
+        reschedule = DrainPass.Rescheduler { services.backgroundTasks.resubmit() },
+        // WHAT THE SPOOL HAD NO ROOM FOR AT IMPORT, streamed from the library
+        // again when the core asks (`need_bytes`).
+        feed = { vaultId, needs -> libraryFeed.feed(vaultId, needs) },
+        onOutcome = { outcome -> settle(outcome) },
     )
+
+    private val libraryFeed: LibraryFeed = LibraryFeed(services) { vaultId ->
+        shelf.all().firstOrNull { it.vaultId == vaultId && it.moved == null }?.core
+    }
+
+    /**
+     * WHAT THE OS SAID WHEN THIS LAUNCH REGISTERED ITS WINDOWS, or null before
+     * it answered. A member reads it: "Background App Refresh is off" is a
+     * reason their backup waits for the app to be opened.
+     */
+    public val backgroundRegistration: StateFlow<BackgroundTasks.Registration?>
+        get() = registration.asStateFlow()
+
+    private val registration = MutableStateFlow<BackgroundTasks.Registration?>(null)
+
+    /**
+     * "BACK UP NOW" (#1080, the three controls): a snapshot and everything
+     * that can move, inside the platform's long-run envelope — a foreground
+     * notification on Android, an awake screen on iOS — which is released
+     * however the run ends. A second press joins the first ([ShelfDrain.backUpNow]).
+     */
+    public suspend fun backUpNow(): List<ShelfDrain.Outcome> {
+        services.backgroundTasks.backlog(start = true)
+        return try {
+            drain.backUpNow()
+        } finally {
+            services.backgroundTasks.backlog(start = false)
+        }
+    }
+
+    /**
+     * EVERY VAULT'S BACKUP READING AND THE FOREGROUND'S LINE (#1080). Re-read
+     * after each pass ([settle]) and on every rebind, so Home's line follows a
+     * switch; the Backup screen re-reads it when it opens.
+     */
+    public val backupStatus: BackupStatusStore = BackupStatusStore(
+        holdings = { shelf.all() },
+        foreground = { shelf.foregroundHolding()?.vaultId },
+        doorFor = { core -> CoreBackupStatus(core) },
+        // THE WALL CLOCK, for "2 minutes ago" only: every time it is compared
+        // with is the gateway's.
+        nowMs = { services.clock.read().epochMillis },
+    )
+
+    /**
+     * ONE VAULT'S PASS ENDED: re-read its status, and freeze a vault another
+     * phone claimed. The gateway's `MOVED` — on this pass, or remembered by the
+     * core's ledger — is the producer `Shelf.freeze` was waiting for (#1029 F1).
+     */
+    private suspend fun settle(outcome: ShelfDrain.Outcome) {
+        val reading = backupStatus.refresh(outcome.vaultId)
+        val answer = (outcome.outcome as? DrainPass.Outcome.Ran)?.answer
+        freezeIfMoved(outcome.vaultId, reading, movedAtMs = answer?.movedAtMs?.takeIf {
+            answer.stopped == DrainAnswer.Stopped.MOVED
+        })
+        // EVERY iOS PASS ENDS WITH RECONCILE → HANDOFF → ENQUEUE (A11): what
+        // the pass sealed but did not move goes to the OS to carry while the
+        // app is suspended. No loop is installed on Android.
+        uploads?.afterPass(outcome.vaultId)
+    }
+
+    /** The iOS mover's Kotlin half, once the shell installed one ([attachUploads]). */
+    private var uploads: UploadLoop? = null
+
+    /**
+     * THE SHELL'S HAND ON THE OS LIBRARY, or null (#1080 A20). Free up space
+     * reads it at each use: Android installs one when its activity is created
+     * and clears it when the activity is destroyed, because the deleter holds
+     * that activity's launcher for the system's confirmation, and a rotation
+     * must not leave a destroyed activity here. iOS installs one, once,
+     * through `HomeBridge`.
+     */
+    public val libraryDeleter: LibraryDeleter? get() = deleter
+
+    private var deleter: LibraryDeleter? = null
+
+    /** Install the shell's deleter, or clear it with null. See [libraryDeleter]. */
+    public fun installLibraryDeleter(deleter: LibraryDeleter?) {
+        this.deleter = deleter
+    }
+
+    /**
+     * Bind the iOS mover's loop to this session's vaults (`HomeBridge`). A
+     * frozen vault hands nothing off: the gateway would refuse its writes.
+     */
+    public fun attachUploads(loop: UploadLoop) {
+        uploads = loop
+        fun drainable() = shelf.all().filter { it.core != null && it.moved == null }
+        loop.attach(
+            UploadLoop.Binding(
+                vaults = { drainable().map { it.vaultId } },
+                doorsFor = { vaultId ->
+                    if (drainable().none { it.vaultId == vaultId }) {
+                        null
+                    } else {
+                        CoreBackupDoors { shelf.all().firstOrNull { it.vaultId == vaultId }?.core }
+                    }
+                },
+                resubmit = { services.backgroundTasks.resubmit() },
+            ),
+        )
+    }
+
+    /**
+     * Every held vault's pinned gateway certificates (`pins`), for the shell's
+     * own TLS. Null when no vault's core answered — a refusal is never an
+     * empty list, which would read as "trust nothing".
+     */
+    public suspend fun uploadPins(): List<UploadPin>? {
+        val answers = shelf.all().mapNotNull { holding ->
+            holding.core?.let { core -> CoreBackupDoors { core }.pins() }
+        }
+        if (answers.isEmpty()) return null
+        return answers.flatten().distinctBy { it.gateway to it.certDer.toList() }
+    }
+
+    /** Freeze [vaultId] once, when a pass or the ledger says it moved ([freezeFor]). */
+    private suspend fun freezeIfMoved(vaultId: String, reading: BackupReading?, movedAtMs: Long?) {
+        val moved = freezeFor(reading, movedAtMs) ?: return
+        if (shelf.all().any { it.vaultId == vaultId && it.moved != null }) return
+        vaultMoved(vaultId, moved.atIso, moved.unacked)
+        backupStatus.publish()
+    }
+
+    /**
+     * Stop backing [shelf]'s foreground vault up to [gatewayId] (seam
+     * contract A5): the ledger drops the destination and its confirmations,
+     * and what that gateway holds stays there. True when forgotten, false when
+     * the core knew no such destination, null when there was no core to ask.
+     */
+    public suspend fun forgetDestination(gatewayId: String): ForgetAnswer? {
+        val forgotten = CoreBackupDoors { shelf.core() }.forget(gatewayId)
+        backupStatus.refreshForeground()
+        return forgotten
+    }
+
+    /**
+     * The member changed the rule: the windows' constraints follow it, and on
+     * iOS every upload the OS holds is cancelled, because each keeps the
+     * cellular flag of the rule it was handed off under ([UploadLoop.cancelAll]).
+     */
+    public fun ruleChanged() {
+        services.backgroundTasks.resubmit()
+        uploads?.cancelAll()
+    }
 
     /**
      * THE FOREGROUND HOLDING'S CORE, ASKED OF THE SHELF EVERY TIME.
@@ -368,9 +533,15 @@ public class HomeSession private constructor(
      * HOLD WHAT A RESTORE BROUGHT BACK, and bind Home to it (#1047 E1).
      * See [Shelf.adoptRestored]; the seed is already stored.
      */
-    public suspend fun adoptRestored(restored: List<Shelf.Restored>, deviceSecretHex: String): Int {
-        val added = shelf.adoptRestored(restored, deviceSecretHex)
+    public suspend fun adoptRestored(restored: List<Shelf.Restored>): Int {
+        val added = shelf.adoptRestored(restored)
         rebind()
+        // A RESTORE THAT FINISHED IS A PASS'S REASON (`WakeReason.RESTORED`):
+        // the ledger beside a restored vault is new, so until a pass asks the
+        // gateway what it holds, the line counts "0 of 50" for a library that
+        // is all there (#1080, the simulator restore). Launched, not awaited:
+        // the restore's own answer is on screen first.
+        if (added > 0) scope.launch { drain.afterRestore() }
         return added
     }
 
@@ -380,17 +551,6 @@ public class HomeSession private constructor(
      */
     public suspend fun rekeyed(): Int {
         val keyed = shelf.rekey()
-        rebind()
-        return keyed
-    }
-
-    /**
-     * THE FOREGROUND VAULT JUST PAIRED (#1047 E4): its device secret is
-     * stored, so its core is reopened to carry it, and the screens rebind to
-     * the new core. Answers whether the vault is keyed after.
-     */
-    public suspend fun paired(vaultId: String): Boolean {
-        val keyed = shelf.reopen(vaultId)
         rebind()
         return keyed
     }
@@ -406,14 +566,13 @@ public class HomeSession private constructor(
      * The session republishes so the frozen holding's line is on screen without
      * waiting for the next touch.
      *
-     * ## Its one caller
+     * ## Who calls it
      *
-     * Whatever learns the vault moved, which is the gateway client: it holds
-     * the lease and hears the supersession. **The typed error exists now**
-     * (#1029 W5, hand-off 2) — `ERROR_CODE_VAULT_MOVED = 25`, with
-     * `lease.proto`'s `VaultMoved` riding beside it — and
-     * `dev.centraid.shared.sync.movedFrom` is the ONE place that reads a
-     * refusal and answers these two arguments. [Shelf.freeze] has the note.
+     * `freezeIfMoved`, when a pass stops `MOVED` or the core's `backup_status`
+     * says the vault is frozen (#1080): `dev.centraid.shared.sync.freezeFor`
+     * answers these two arguments, as `movedFrom` does for a refusal carrying
+     * `ERROR_CODE_VAULT_MOVED` and `error.proto`'s `VaultMoved`. [Shelf.freeze]
+     * has the note.
      */
     public suspend fun vaultMoved(vaultId: String, atIso: String, unacked: Long) {
         shelf.freeze(vaultId, atIso, unacked)
@@ -565,13 +724,14 @@ public class HomeSession private constructor(
         if (open != null) {
             changeReader = changes.start(open, scope)
         }
-        // THE SEAT LINE TRAVELS WITH THE BINDING, and this is now the only
-        // place it is published: it used to ride every pass's outcome, and
-        // there are no passes. What it says — is a vault open, is a write
-        // durable, what does the radio report — changes exactly when the
-        // foreground does.
+        // THE SEAT LINE TRAVELS WITH THE BINDING: what it says — is a vault
+        // open, is a write durable, what does the radio report — changes
+        // exactly when the foreground does. So does the backup line.
         publishSeat()
         publishLockup()
+        val front = shelf.foregroundHolding()?.vaultId
+        val reading = backupStatus.refreshForeground()
+        if (front != null) freezeIfMoved(front, reading, movedAtMs = null)
     }
 
     /**
@@ -735,14 +895,32 @@ public class HomeSession private constructor(
             // core's bounded, drop-nothing event queue, and a listener that
             // waited for a network there would stall it.
             session.changes.onCommit = { scope.launch { session.drain.afterCommit() } }
+            // THE RADIO MOVED: a link that came back, or Wi-Fi after cellular,
+            // is when withheld originals can go. Debounced on its own clock.
+            services.networkStatus.onChange { reading -> scope.launch { session.drain.onConnectivity(reading) } }
             session.serveSwitches()
             // THE ROSTER COLLECTOR BEFORE THE REBIND, so the roster the shelf
             // is already holding reaches Home rather than being the one value
             // that arrives only on the next change.
             session.serveRoster()
             session.serveStranded()
+            // HOME DRAWS THE BACKUP LINE FROM ITS OWN STATE (A11): every line
+            // the store draws becomes a `BackupLineChanged`.
+            scope.launch {
+                session.backupStatus.line.collect { line ->
+                    host.send(HomeEvent(backup_line = HomeEvent.BackupLineChanged(line = line)))
+                }
+            }
             session.rebind()
             host.send(HomeEvent(opened = HomeEvent.Opened()))
+            // THE ONE LAUNCH REGISTRATION, here and nowhere else in commonMain
+            // (`BackgroundSchedulingSpec`): both shells open a session at
+            // launch, and a background window the OS never registered is a
+            // backup that runs only while the app is open.
+            scope.launch {
+                session.registration.value = services.backgroundTasks.register()
+                session.drain.onSessionOpened()
+            }
             return session
         }
     }

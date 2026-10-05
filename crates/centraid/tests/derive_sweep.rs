@@ -53,10 +53,7 @@ fn core_with_bytes(
     store: &centraid_blobs::ByteStore,
 ) -> centraid_core::Handle {
     let handle = Core::open(CoreConfig::new(path)).expect("the gateway core opens");
-    handle.attach_bytes(centraid_blobs::ContentBytes::new(
-        store.clone(),
-        tokio::runtime::Handle::current(),
-    ));
+    handle.attach_bytes(centraid_blobs::ContentBytes::new(store.clone()));
     handle
 }
 
@@ -73,9 +70,7 @@ async fn a_gateway_start_derives_the_tiers_a_vault_is_missing() {
     let blobs_path = dir.path().join("vault.bytes");
 
     // ---- 1. A VAULT WITH ONE PHOTOGRAPH IN IT ----------------------------
-    let store = centraid_blobs::ByteStore::open(&blobs_path)
-        .await
-        .expect("the byte store opens");
+    let store = centraid_blobs::ByteStore::open(&blobs_path).expect("the byte store opens");
     let handle = core_with_bytes(&vault_path, &store);
     handle
         .with_vault(|vault| Ok(vault.found("Sweep", "Owner")?))

@@ -91,7 +91,7 @@ fn relative(path: &Path) -> String {
 /// A file lands here for one of two reasons and the reason is the entry:
 ///
 /// - it calls `content_digest` (or `centraid_media::format::content_hash_hex`,
-///   which IS `content_digest` — see `crates/vault/src/backup/store.rs`); or
+///   which IS `content_digest`); or
 /// - it carries a value it did not compute, out of a row or a verified handle,
 ///   and the entry says which.
 ///
@@ -110,15 +110,6 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
         "search/tests/door.rs",
         "a test fixture row; the value is a literal of the right shape and \
          nothing reads it as a digest",
-    ),
-    (
-        "vault/src/backup/drill.rs",
-        "the restore drill's own corpus: the ids come from `BlobStore::put`, \
-         which returns `backup::store::digest`",
-    ),
-    (
-        "vault/src/backup/restore.rs",
-        "writes a row the drill then samples; the value is the store's own id",
     ),
     (
         "vault/src/commands/core.rs",
@@ -143,9 +134,16 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
     ),
     (
         "vault/src/content.rs",
-        "`Vault::stage_bytes`, which writes the hash bao already verified the \
-         pulled bytes against — and this file DEFINES `content_digest`, so its \
-         one `blake3::hash` call is the door itself",
+        "`Vault::stage_bytes` and `Vault::stage_derivative`, which write the hash \
+         the content store computed as the bytes were written (#1080, the stage \
+         door) — and this file DEFINES `content_digest`, so its one \
+         `blake3::hash` call is the door itself",
+    ),
+    (
+        "vault/src/backup/files.rs",
+        "its own `#[cfg(test)]` fixture, and nothing else in the file writes a \
+         row: an original and its poster seeded with `content_digest` over the \
+         fixture's bytes, so the listing has a film and a picture to tell apart",
     ),
     (
         "vault/src/page.rs",
@@ -158,19 +156,6 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
          merits rather than silenced: the scan is right that this is a writer, \
          and a fixture literal is a declared source exactly as `search/tests/door.rs` \
          is (#1029 W3-0)",
-    ),
-    (
-        "vault/src/backup/base.rs",
-        "`content_digest` over the 4 MiB page range it just sealed — the \
-         plaintext hash IS the range-dedup key, which is why the index column \
-         exists (#1029 §2, §4). `object_name` beside it is the object's own \
-         name, which is `BlobStore::put`'s return and therefore \
-         `backup::store::digest`, the same function",
-    ),
-    (
-        "vault/tests/backup_crash_matrix.rs",
-        "`content_digest` over the row bytes the matrix writes — a fixture \
-         corpus, hashed through the one door so the scan is not lied to",
     ),
     (
         "vault/tests/collection_kind.rs",

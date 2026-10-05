@@ -18,26 +18,38 @@ import centraid.screen.v1.MediaPermission
 public interface PlatformServices {
     public val secureStore: SecureStore
     public val backgroundTasks: BackgroundTasks
-    // ONE W5 SEAM IS LEFT, AND THE OTHER LEFT WITH ITS DESTINATION
-    // (#1029 W18-3, the amendment of 2026-09-21, "Struck").
+    // THE OS MOVES BYTES WHILE THE APP IS SUSPENDED, ON iOS ONLY (#1080
+    // rulings 1, 2). That seam is `dev.centraid.shared.sync.BackgroundUploads`,
+    // installed by the iOS shell rather than built here, because its delegate
+    // is a Swift object; every other platform moves bytes in the pass itself.
     //
-    // `backgroundTransfers` stood here: a seam onto `NSURLSession`'s background
-    // session and a WorkManager upload worker, because the OS was the only
-    // thing that could move bytes to an HTTPS endpoint while the app was not
-    // running. There is no such endpoint any more — the gateway is the member's
-    // own laptop, reached over iroh by a client inside this process — so the
-    // seam had nowhere to carry bytes to. `dev.centraid.shared.sync.DrainPass`
-    // is what replaced it, and it is `commonMain` because the flow no longer
-    // needs anything a platform alone can do.
-    //
-    // `syncedSecrets` stays for the reason it was always here: the OS is the
-    // only thing that can synchronise a secret to a member's next phone.
+    // `syncedSecrets` is here because the OS is the only thing that can
+    // synchronise a secret to a member's next phone.
     public val syncedSecrets: SyncedSecrets
     public val networkStatus: NetworkStatus
+    public val powerAndLink: PowerAndLink
     public val mediaLibrary: MediaLibrary
     public val ocr: Ocr
     public val secureRandom: SecureRandom
     public val clock: DeviceClock
+}
+
+/**
+ * WHAT A PASS IS TOLD ABOUT THE LINK AND THE CHARGER (#1080, `DrainRequest`).
+ *
+ * Synchronous and cheap, because it is read at the start of every pass and
+ * must not hang one. **Null is "the platform would not say"**, and the pass
+ * reads it as the expensive answer — metered, not charging — because a guess
+ * wrong towards cheap spends a member's data plan and a guess wrong towards
+ * expensive delays a photograph (D-1025-S7-74). That mapping is
+ * `dev.centraid.shared.sync.PassConditions.input` and nowhere else.
+ */
+public interface PowerAndLink {
+    /** True on cellular, tethering or Low Data Mode; null when unknown. */
+    public fun metered(): Boolean?
+
+    /** True on external power; null when unknown. */
+    public fun charging(): Boolean?
 }
 
 /**
@@ -121,26 +133,41 @@ public interface SecureRandom {
 }
 
 /**
- * BGTaskScheduler on iOS, WorkManager on Android (v0's
- * `expo-background-task`, `docs/mobile-offline.md:208`).
+ * BGTaskScheduler on iOS, WorkManager on Android (#1080, the shells).
  *
- * **Registration is observable rather than assumed** (`:214`): [register]
- * returns what the platform said, and "Background App Refresh is off" is a
- * sentence a member reads rather than a silent absence of passes.
+ * **Registration is observable rather than assumed**: [register] returns what
+ * the platform said, and "Background App Refresh is off" is a sentence a
+ * member reads rather than a silent absence of passes. It is called ONCE per
+ * launch, by `HomeSession.open`, and `BackgroundSchedulingSpec` counts it.
+ *
+ * The other three are the shells' to call, and none of them suspends: they
+ * are reached from an app-delegate callback, a scene phase or a capture, none
+ * of which can await.
  */
 public interface BackgroundTasks {
     public suspend fun register(): Registration
 
-    // THE WINDOW, THE EXPIRY SIGNAL AND THE WAKE REASON LEFT WITH THE PASS
-    // (#1029 §1, §6). `window(WakeReason)` existed to bound one `seat.sync`
-    // call — its answer became the `SyncWindow` on the command, and
-    // `onPlatformExpiration`/`platformExpired` were the second trigger
-    // `SyncScheduler` honoured. There is no gateway, no pass and no scheduler,
-    // so all three named a shape of work this device no longer does.
-    //
-    // `register` stays: whether the OS will wake this app at all is a fact a
-    // member reads, and it is what W5's background transfers and W10's
-    // reminders will register against.
+    /**
+     * Ask for the next window again. iOS: at EVERY background entry and at the
+     * end of each pass, because a `BGTaskRequest` is one-shot and a request not
+     * resubmitted is the last one. Android: re-enqueues under the rule the
+     * member holds now, so a changed rule changes the constraints.
+     */
+    public fun resubmit()
+
+    /**
+     * Something new is worth a window soon: a capture, an import. Android
+     * enqueues an expedited one-off; iOS resubmits with no earliest date.
+     */
+    public fun nudge()
+
+    /**
+     * A long run the member asked for ("Back up now") or a backlog is
+     * starting ([start] true) or ended. Android runs it as a long-running job
+     * with a notification the app supplies; iOS keeps the screen awake while
+     * it runs. Idempotent both ways.
+     */
+    public fun backlog(start: Boolean)
 
     public data class Registration(
         public val registered: Boolean,
@@ -194,8 +221,10 @@ public interface NetworkStatus {
  * * **Exact SHA-256 is identity**; [Asset.perceptualHash] is a duplicates HINT
  *   that never auto-merges, which is why the two fields are named differently
  *   and why only one is called an id.
- * * **A Live Photo's HEIC and its paired MOV share one [Asset.captureGroupId]**,
- *   so a pair is one thing to a grid and two things to an uploader.
+ * * **A Live Photo is ONE [Asset] with two [Resource]s** (#1080, the walker):
+ *   the still and its paired movie are one place in the walk and two staged
+ *   files, committed as two rows sharing one [Asset.captureGroupId], so a pair
+ *   is one thing to a grid and two things to the core.
  * * **Android motion photos, RAW and burst members pass through as original
  *   bytes with NO inferred grouping** — so [Asset.captureGroupId] is null for
  *   them, and a platform that guessed would be inventing a relationship.
@@ -221,7 +250,17 @@ public interface MediaLibrary {
      */
     public suspend fun page(afterCursor: String?, limit: Int): Page
 
-    public data class Page(public val assets: List<Asset>, public val nextCursor: String?)
+    public data class Page(
+        public val assets: List<Asset>,
+        /** Where the next page starts; null only when this page is empty. */
+        public val nextCursor: String?,
+        /**
+         * NOTHING IS LEFT TO WALK (#1080). Its own field, because "the roll is
+         * walked" and "here is where to resume" are two facts: a cursor that
+         * went null at the end made every later pass re-walk the last page.
+         */
+        public val exhausted: Boolean = nextCursor == null,
+    )
 
     /**
      * OPEN ONE ORIGINAL'S BYTES, AS A STREAM (#1025 S6, D-1025-S7-71).
@@ -236,13 +275,54 @@ public interface MediaLibrary {
      * never does. [Original.read] has exactly `Staging`'s shape so the two
      * compose with no buffer between them.
      *
-     * Null when the platform will not produce the bytes — an asset only in
-     * iCloud with no network, one the member removed between the page and the
-     * read, or one outside a LIMITED selection. **Not an error**: a roll changes
-     * under an enumeration, and a shell that threw would end a backup pass over
-     * one photograph that moved.
+     * **No temporary copy** (#1080 ruling 6): the phone keeps no second copy
+     * of what the OS library already holds, so the bytes stream from the
+     * library straight into the stage door, which hashes and seals them as
+     * they pass. What it could not produce is an [Opened] answer, not a null.
      */
-    public suspend fun open(localId: String): Original?
+    public suspend fun open(ref: String, allowNetwork: Boolean = true): Opened
+
+    /**
+     * What [open] found (#1080, the walker).
+     *
+     * [ref] is a [Resource.ref]. [allowNetwork] says whether the platform may
+     * DOWNLOAD the bytes — an original that lives only in iCloud — and is the
+     * walker's to decide from the member's rule and the link: an original the
+     * phone does not hold is [InCloud] rather than fetched behind the rule.
+     */
+    public sealed interface Opened {
+        public class Ready(public val original: Original) : Opened
+
+        /** Only in iCloud, and this pass may not download it. It waits; it is never skipped. */
+        public data object InCloud : Opened
+
+        /**
+         * Removed between the page and the read, outside a LIMITED selection,
+         * or refused. **Not an error**: a roll changes under an enumeration,
+         * and a shell that threw would end a backup pass over one photograph
+         * that moved.
+         */
+        public data object Gone : Opened
+    }
+
+    /**
+     * A DERIVATIVE THE PLATFORM DECODED (#1080: the core stores derivatives
+     * the phone's own decoder rendered, because it cannot decode HEIC and
+     * keeps no copy of a library original to decode later).
+     *
+     * JPEG at quality 80, the long edge no longer than [Tier.longEdge], drawn
+     * from the CURRENT edit, upright, and with no metadata — a thumbnail
+     * travels first, over any link, and one carrying a home's coordinates is
+     * worse than none. Null when the platform cannot: the walker stages the
+     * original either way.
+     */
+    public suspend fun render(ref: String, tier: Tier): ByteArray? = null
+
+    /** The two derivatives `crates/media/src/renditions.rs` names, at its sizes. */
+    public enum class Tier(public val wire: String, public val longEdge: Int) {
+        THUMB("thumb", 360),
+        PREVIEW("preview", 2048),
+    }
 
     /**
      * One original, open. [close] is owed on every path, including a refusal
@@ -258,7 +338,11 @@ public interface MediaLibrary {
          */
         public val mediaType: String
 
-        /** The resource's own length, which may differ from [Asset.bytes]. */
+        /**
+         * The resource's own length, or 0 when the platform does not state
+         * one before the read — Photos never does. `StageBegin.byte_size`
+         * reads 0 as unknown (seam contract A8), so no copy is made to learn it.
+         */
         public val bytes: Long
 
         /** The next slice, at most [max] bytes. An EMPTY array means the end. */
@@ -300,19 +384,54 @@ public interface MediaLibrary {
         public val capturedAtIso: String,
         public val capturedUtcOffsetMinutes: Int,
         /**
-         * `photo` or `video` — `media.add_asset`'s own vocabulary (#1025 S6).
-         *
-         * Carried because the command takes it and the gateway's fallback is a
-         * guess off the media type. A Live Photo is TWO assets here, a `photo`
-         * and a `video` sharing one [captureGroupId], which is what the field
-         * below means.
+         * `photo` or `video` — `media.add_asset`'s own vocabulary (#1025 S6),
+         * for the asset's ORIGINAL. A Live Photo is a `photo` whose paired
+         * movie is its second [Resource], committed as a `video` row in the
+         * same [captureGroupId].
          */
         public val kind: Kind = Kind.PHOTO,
         /** A duplicates hint. Never auto-merges, never an identity. */
         public val perceptualHash: String? = null,
         /** A Live Photo pair. Null for motion photos, RAW and burst members. */
         public val captureGroupId: String? = null,
+        /**
+         * WHAT IS STAGED FOR IT, in order (#1080, the walker): the camera's
+         * original first, then a Live Photo's paired movie. Each [Resource.ref]
+         * is what [open] reads and what the core keeps as the item's
+         * `os_ref`, so it must find the same bytes again after a relaunch.
+         */
+        public val resources: List<Resource> = listOf(Resource(Resource.Role.ORIGINAL, localId)),
+        /**
+         * The cursor that resumes AFTER this asset: everything up to and
+         * including it has been offered. Null when the platform cannot resume
+         * mid-page; the page's own [Page.nextCursor] then covers it.
+         */
+        public val after: String? = null,
+        /**
+         * THE MEMBER EDITED IT (`PHAsset.hasAdjustments`; always false on
+         * Android). Its resources are the current rendition, which the next
+         * edit replaces, so the core never offers it for deletion
+         * (`StageBegin.os_edited`, seam contract A20).
+         */
+        public val edited: Boolean = false,
     )
+
+    /** One file of an [Asset]. */
+    public data class Resource(public val role: Role, public val ref: String) {
+        public enum class Role {
+            /**
+             * The asset's CURRENT RENDITION: the camera's bytes, or the edit's
+             * render once the member edited it (A20). Backing up the camera
+             * original and the edit's adjustment data beside it is an owner
+             * question; until then an edited asset is never deleted, so
+             * nothing is lost.
+             */
+            ORIGINAL,
+
+            /** A Live Photo's movie. */
+            PAIRED_VIDEO,
+        }
+    }
 
     /**
      * `media_asset.kind`'s two values a camera roll can produce.

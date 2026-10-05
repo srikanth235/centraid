@@ -536,10 +536,15 @@ fn the_rung_classifies_a_vault_written_before_it() {
     // the cross-app placements this rung ends. `locker_key` goes back to its
     // pre-rung-seven shape too, and `locker_item` and `locker_item_address`
     // get back the match-policy columns rung eight drops, and
-    // `notifications_notice` comes back for rung nine to drop, because the
-    // climb runs every rung above five.
+    // `notifications_notice` comes back for rung nine to drop, and rungs three
+    // and four's backup tables for rung ten to drop, because the climb runs
+    // every rung above five.
     {
         let raw = rusqlite::Connection::open(&path).expect("the file opens");
+        raw.execute_batch(centraid_vault::migrations::BACKUP_INDEX_SQL)
+            .expect("rung three's tables come back");
+        raw.execute_batch(centraid_vault::migrations::BLOB_CUSTODY_SQL)
+            .expect("rung four's tables come back");
         raw.execute_batch("PRAGMA foreign_keys = ON;")
             .expect("foreign keys");
         let rows = format!(

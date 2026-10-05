@@ -117,7 +117,13 @@ public class PhotosBridge {
             // photograph offered to two vaults is two uploads
             // (`docs/mobile-offline.md:175`).
             vaultId = { session.shelf.foregroundHolding()?.vaultId },
-        ).also { it.start() }
+            afterImport = { session.drain.afterImport() },
+        ).also {
+            it.start()
+            // AND THE SESSION'S PASSES WALK IT (R-1029-PH-4): opening the app
+            // and "Back up now" bring in what the member took while it was closed.
+            it.follow(session.drain)
+        }
         // AFTER the runner's start job: that job syncs permission before it
         // suspends on effects, so the first state this collect publishes past
         // the machine's seed already carries the OS grant (R-PHOTOS-1).

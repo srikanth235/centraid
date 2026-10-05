@@ -8,32 +8,32 @@
 //! # WHERE THE KEEP LIST LIVES, AND WHY IT IS NOT IN THE VAULT
 //!
 //! Beside the vault file, as `<stem>.keep-originals.json` — the same place
-//! `<stem>.bytes` is, and for the reason [`crate::phone::Laptop`] gives in more
-//! words: "keep this album's originals **on this phone**" is a fact about one
-//! device's disk. Written into the vault it would be sealed into a base,
-//! carried to the laptop and restored onto the next phone as a promise about a
-//! disk that phone never had. v0 kept it in the device store for the same
-//! reason (`KEEP_ORIGINALS_KEY`), and a vault row would also have cost a
+//! `<stem>.bytes` is, and for the reason [`crate::phone`] keeps the backup
+//! ledger there: "keep this album's originals **on this phone**" is a fact
+//! about one device's disk. Written into the vault it would be sealed into a
+//! snapshot, carried to a gateway and restored onto the next phone as a promise
+//! about a disk that phone never had. v0 kept it in the device store for the
+//! same reason (`KEEP_ORIGINALS_KEY`), and a vault row would also have cost a
 //! migration rung for a list of ids.
 //!
-//! It is NOT under the backup home: that directory is derived state a phone may
-//! lose and rebuild ("lose it and the phone re-pairs"), and a member's choice is
-//! not derived from anything. It is inside the vault directory the iOS shell's
+//! It is NOT the backup ledger's: the ledger is derived state a phone may lose
+//! and rebuild ("lose it and the phone re-pairs"), and a member's choice is not
+//! derived from anything. It is inside the vault directory the iOS shell's
 //! protection sweep walks, so the OS backup excludes it like every other path
-//! the vault owns (R-1029-8).
+//! the vault owns (R-1029-8). The `releasable` door reads it: an original in a
+//! kept album is never offered for deletion from the library (#1080, A19).
 //!
 //! # AN UNREADABLE LIST IS AN ERROR, NEVER AN EMPTY ONE
 //!
 //! The list exists to hold albums BACK from a release. Read as empty when it
 //! would not parse, it would hand every kept album to the first verb that frees
 //! space — the one reading of a corrupt file that destroys something. So a file
-//! that is there and will not parse refuses every ask, exactly as
-//! [`crate::phone::Laptop::read`] refuses to read a broken record as "not
-//! paired".
+//! that is there and will not parse refuses every ask, `releasable` among
+//! them.
 //!
 //! # A WRITE IS WHOLE OR IT DID NOT HAPPEN
 //!
-//! Temp file, `fsync`, rename — the rule `backup::store` states for a blob. A
+//! Temp file, `fsync`, rename — the rule the content store states for a blob. A
 //! crash mid-write leaves the old list, never a prefix of the new one, which
 //! would be the unreadable file above and every ask refused until someone
 //! deleted it.

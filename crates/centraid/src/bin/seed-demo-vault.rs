@@ -349,37 +349,12 @@ fn main() {
     // The bytes are the point of this seed: the first port sent titles with no
     // `data_uri` at all and Photos seeded zero on every run. A core with no
     // store refuses every photograph by name, so the store is opened here and
-    // put on the vault's byte door — the SAME store `centraid gateway` then
-    // serves a seat's `blob` streams from. There is no CAS to import any more,
-    // and no second directory for the two halves to disagree about.
-    //
-    // The runtime is leaked with the process: this binary seeds and exits, and
-    // shutting an iroh store down from a `Drop` that may run on one of its own
-    // threads is a deadlock for no gain.
-    let runtime = Box::leak(Box::new(
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("a runtime"),
-    ));
-    let store = runtime
-        .block_on(centraid_blobs::ByteStore::open(&bytes_dir))
-        .expect("the content store opens");
-    // A CLONE KEPT TO CLOSE IT WITH (#1025 S7).
-    //
-    // iroh-blobs flushes its index on shutdown, and this binary never shut the
-    // store down: it seeded, exited, and left `.data` files the store's own
-    // index did not know were whole. A gateway opened on that directory then
-    // RESET the `blob` stream for those blobs — and because the byte plane used
-    // to stop the window on the first refusal, **the whole plane stopped for
-    // ever and every photograph on the phone stayed a placeholder**. Nothing
-    // failed at seed time and nothing was red; it took driving the loop end to
-    // end to see it.
-    let to_close = store.clone();
-    handle.attach_bytes(centraid_blobs::ContentBytes::new(
-        store,
-        runtime.handle().clone(),
-    ));
+    // put on the vault's byte door — the one directory every read of this
+    // vault opens, and no second one for two halves to disagree about. A
+    // blob is a whole file the moment it is named, so the artifact this
+    // binary leaves needs nothing flushed when it exits.
+    let store = centraid_blobs::ByteStore::open(&bytes_dir).expect("the content store opens");
+    handle.attach_bytes(centraid_blobs::ContentBytes::new(store));
 
     // The calendar is discovered, never hard-coded — v0's agenda seed says so in
     // its own words. It exists because `Vault::found` mints a private
@@ -502,11 +477,6 @@ fn main() {
     handle
         .close_file()
         .expect("the vault file closes, so the artifact is the whole vault");
-    // THE STORE IS FLUSHED BEFORE THIS PROCESS GOES. See the clone above: the
-    // artifact this binary leaves is a store another process has to serve from,
-    // and an unflushed index is a fixture that lies.
-    runtime.block_on(to_close.close());
-
     println!("CENTRAID_VAULT={}", vault_path.display());
     println!("CENTRAID_VAULT_NAME={vault_name}");
     println!("CENTRAID_DEMO_WORDS={DEMO_WORDS}");
@@ -782,7 +752,7 @@ fn locker_items() -> Vec<(&'static str, Value)> {
 /// itself, against the item's id, exactly as the vault stores one. The value
 /// is a test string, not a key anybody signs with.
 fn seed_passkey(handle: &centraid_core::Handle) -> Result<(), String> {
-    let keys = centraid_core::phone::Keyring::derive(&demo_seed(), 0, None)
+    let keys = centraid_core::phone::Keyring::derive(&demo_seed(), 0)
         .map_err(|error| error.to_string())?;
     let key_id = handle
         .with_vault(|vault| {

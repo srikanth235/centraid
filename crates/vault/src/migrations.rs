@@ -126,6 +126,15 @@ pub const LOCKER_NO_MATCH_POLICY_SQL: &str =
 /// trigger, view or foreign key names the table.
 pub const NO_NOTICES_SQL: &str = include_str!("../../../contracts/migrations/009_no_notices.sql");
 
+/// Rung ten: the vault keeps no backup index (#1080).
+///
+/// Rungs three and four founded the old plane's index inside the vault — the
+/// range dedup index, the base's range list, a file key per blob and where its
+/// bytes sat. The plane that wrote them is deleted and its replacement names
+/// every part from the plaintext it carries and asks the gateway what it
+/// holds, so nothing reads them. Four `DROP`s, the child before its parent.
+pub const BACKUP_V2_SQL: &str = include_str!("../../../contracts/migrations/010_backup_v2.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -176,6 +185,11 @@ pub const LADDER: &[Migration] = &[
         version: 9,
         name: "no-notices",
         sql: NO_NOTICES_SQL,
+    },
+    Migration {
+        version: 10,
+        name: "backup-v2",
+        sql: BACKUP_V2_SQL,
     },
 ];
 

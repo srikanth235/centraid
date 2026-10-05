@@ -58,8 +58,9 @@ pub mod locker;
 /// THE ORIGINALS ON THIS PHONE, AND THE ALBUMS WHOSE ORIGINALS STAY (#1029,
 /// the photos port). See `originals.proto`.
 pub mod originals;
-/// THE PHONE'S TWO FLOWS (#1029 W15): drain, restore, and the pairing and
-/// backup status the shell draws beside them. See `phone.proto`.
+/// THE PHONE'S BACKUP PLANE (#1029 W15, #1080): the pass, pairing, restore,
+/// the status the shell draws, and the doors beside the pass. See
+/// `phone.proto`.
 pub mod phone;
 pub mod stage;
 

@@ -75,12 +75,12 @@ public data class CoreConfiguration(
      * THE VAULT'S SEED, AND IT CROSSES ONLY AT OPEN (`CONTRACT.md` §4b, #1029 W15).
      *
      * The 64-byte BIP-39 seed the member's 24 words derive, as **128 lowercase
-     * hex characters**, out of this device's Keychain or Keystore. Sealing a
-     * generation is built from it, so a core opened without it cannot back up.
+     * hex characters**, out of this device's Keychain or Keystore. The backup's
+     * keys derive from it (#1080), so a core opened without it cannot back up.
      *
      * **Absent is not an error.** Such a core reads and writes its vault
-     * perfectly well and refuses `Drain` with `ERROR_CODE_PEER_UNREACHABLE` and
-     * a sentence naming the seed — a state a shell draws as "unlock to back up",
+     * perfectly well and cannot back up (`crates/core/src/phone/mod.rs`) — a
+     * state a shell draws as "unlock to back up",
      * because a member who has not unlocked their phone has not lost anything.
      * **Present and malformed IS an error** (`BAD_ARGUMENT`), deliberately: a
      * shell that believed it had unlocked a core which cannot seal a byte would
@@ -92,39 +92,20 @@ public data class CoreConfiguration(
     public val vaultSeedHex: String? = null,
     /** The derivation index this vault was minted at. Ignored with no seed. */
     public val vaultIndex: Int = 0,
-    /**
-     * THIS DEVICE'S SECRET, WHICH IS NOT THE SEED AND DOES NOT TRAVEL WITH IT.
-     *
-     * 32 bytes as 64 lowercase hex characters, out of the ordinary secure
-     * store, which both platforms pin to this device. The seed above is
-     * SYNCHRONISED on purpose — it is the 24 words — and this one must not be:
-     * a device secret that reached a second phone would enrol both as the same
-     * device, which is exactly the distinction F1's `VAULT_MOVED` freeze is
-     * keyed on. `dev.centraid.shared.custody.VaultSecrets` is the one place the
-     * two are stored, with that rule on each accessor.
-     *
-     * **The CORE mints it**, at pair or at restore, certifies it under the
-     * vault's identity key and hands it back once on that flow's answer
-     * (`crates/core/src/phone/link.rs`); the shell stores it and passes it at
-     * every keyed open as `"device": {"secret": "<hex>"}`
-     * (`crates/core-ffi/src/marshal.rs`'s `device_secret`). **Absent is not an
-     * error**: a core opened without it seals and does not sign, so it drains
-     * nothing — every vault before its first pair (#1047 E1, R-1047-E4).
-     */
-    public val deviceSecretHex: String? = null,
 ) {
     /**
      * REDACTED: the generated `toString` of a data class prints every field,
-     * and two of these are the seed and the device secret (#1047 W2). A
-     * configuration that reached a log line or a crash report would carry
-     * every vault the member has.
+     * and one of these is the seed (#1047 W2). A configuration that reached a
+     * log line or a crash report would carry every vault the member has. There
+     * is no device secret to carry beside it: a gateway knows a phone by a
+     * bearer token in the core's backup ledger (#1080 A21), and the core
+     * ignores a `device` key.
      */
     override fun toString(): String =
         "CoreConfiguration(databasePath=$databasePath, create=$create, " +
             "expectedDigest=$expectedDigest, " +
             "vaultSeedHex=${if (vaultSeedHex == null) "absent" else "<redacted>"}, " +
-            "vaultIndex=$vaultIndex, " +
-            "deviceSecretHex=${if (deviceSecretHex == null) "absent" else "<redacted>"})"
+            "vaultIndex=$vaultIndex)"
 
     internal fun toJson(uiThreadName: String): String = buildString {
         append('{')
@@ -134,9 +115,6 @@ public data class CoreConfiguration(
         vaultSeedHex?.let {
             append(",\"vault\":{\"seed\":").append(quote(it))
                 .append(",\"index\":").append(vaultIndex).append('}')
-        }
-        deviceSecretHex?.let {
-            append(",\"device\":{\"secret\":").append(quote(it)).append('}')
         }
         append('}')
     }
@@ -389,6 +367,7 @@ public class CentraidCore private constructor(
                             detail = error.detail,
                             diagnosticId = error.diagnostic_id,
                             sentence = error.sentence.ifBlank { "Centraid refused that." },
+                            movedAtMs = error.moved?.moved_at_ms,
                         ),
                     )
                 } else {
@@ -442,6 +421,7 @@ public class CentraidCore private constructor(
             detail = error.detail,
             diagnosticId = error.diagnostic_id,
             sentence = error.sentence.ifBlank { "Centraid refused that." },
+            movedAtMs = error.moved?.moved_at_ms,
         )
     }
 

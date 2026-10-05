@@ -98,6 +98,18 @@ kotlin {
             // was: the link succeeded, the app built, the app ran, and nothing
             // called the core until this wave wired a read.
             linkerOpts("-force_load", "$slice/libcentraid_core_ffi.a")
+            // THE ARCHIVE IS AN INPUT OF THE LINK (#1080, the simulator restore).
+            // `-force_load` names it by path, so Gradle could not see it: a core
+            // rebuilt after the last Kotlin change left the link "up to date"
+            // and the XCFramework shipped the previous core, step 0 run or not
+            // (docs/traps/stale-core-slice.md). Declaring the file builds
+            // nothing — the slice is still cargo's, or `coreFfiLibDir`'s — it
+            // only makes a new archive a reason to link again.
+            linkTaskProvider.configure {
+                inputs.file("$slice/libcentraid_core_ffi.a")
+                    .withPropertyName("coreFfiArchive")
+                    .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.NONE)
+            }
             // THE FRAMEWORKS IROH NEEDS (#1020, D-1020-B7).
             //
             // The core gained an endpoint, and `netwatch` — iroh's interface

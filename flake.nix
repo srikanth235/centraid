@@ -16,14 +16,13 @@
 #     by the macOS runner and by `xcode-select`, and lane E confirms the version
 #     against the first real iOS build.
 #   * The gateway as a package. This is a `devShells` flake, NOT an installable
-#     derivation — the #504 packaging stub it replaces said the same and the
-#     reason is unchanged: a FOD/bun2nix build waits on the native-module pins
-#     (sharp / wasm-vips / node:sqlite / iroh) being packaging-stable, and
-#     `scripts/gateway-package/` plus `deploy/docker/gateway-v0.Dockerfile`
-#     remain the paths that do
-#     build and smoke the v0 gateway. The OS unit writer stays single-writer: a
-#     host service module must call `centraid-gateway service install` rather
-#     than invent a second unit path (docs/config-ownership.md).
+#     derivation — the #504 packaging stub it replaces said the same. The
+#     gateway is one Rust binary, `centraid-gateway` (#1080), and the paths
+#     that build and ship it are the release tarball and the container image
+#     from `deploy/gateway/Dockerfile`; a Nix package for it is nobody's
+#     request yet. The OS unit writer stays single-writer: a host service
+#     module must call `centraid-gateway install` rather than invent a second
+#     unit path (docs/config-ownership.md).
 #
 # THIS FILE HAS NOT BEEN EVALUATED. `nix` is not installed on the container wave
 # 1 was built on, so `nix flake check` has not run and the wave 1 receipt says

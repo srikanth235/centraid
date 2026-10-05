@@ -7,6 +7,7 @@ import centraid.screen.v1.PhotosGridState
 import dev.centraid.shared.platform.PlatformServices
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
+import dev.centraid.shared.sync.ShelfDrain
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -46,6 +47,12 @@ public class CameraRollRunner(
     private val scope: CoroutineScope,
     /** Which vault the roll is being offered to. See [CameraRoll.cursorKey]. */
     private val vaultId: () -> String?,
+    /**
+     * A pass imported something: `ShelfDrain.afterImport`. The import seals
+     * into the spool in the same stream when a destination is paired, so
+     * what was just staged moves now rather than at the next window.
+     */
+    private val afterImport: suspend () -> Unit = {},
 ) {
     private val passing = Mutex()
 
@@ -86,7 +93,11 @@ public class CameraRollRunner(
             // ordinary pass and never a second way to learn what is new: the
             // cursor is the durable answer, and a `PHChange` read here would be
             // a second opinion about it that a backgrounded app never gets.
-            scope.launch { once() }
+            // TO THE END, after a walk already going: a burst of a hundred
+            // photographs is more than one page, and a change that lands while
+            // the last page is read must not be dropped (#1080, the simulator
+            // edge cases).
+            scope.launch { walkToEnd() }
         }
         return scope.launch {
             syncPermission()
@@ -95,7 +106,7 @@ public class CameraRollRunner(
                     effect is ScreenEffect.RequestMediaPermission -> scope.launch { ask() }
                     effect is ScreenEffect.Backup &&
                         effect.action != ScreenEffect.Backup.Action.PAUSE ->
-                        scope.launch { once() }
+                        scope.launch { walkToEnd() }
                     // PAUSE STOPS THE NEXT PASS AND NEVER THE ONE RUNNING. A
                     // stage that is interrupted half way leaves the core a
                     // staging session nothing will ever end; the pass checks the
@@ -126,7 +137,7 @@ public class CameraRollRunner(
             // sit there is the failure.
             answer == MediaPermission.MEDIA_PERMISSION_LIMITED
         ) {
-            once()
+            walkToEnd()
         }
     }
 
@@ -141,14 +152,56 @@ public class CameraRollRunner(
      * cursor is what makes each one start where the last stopped, and
      * [MAX_PASSES] is the ceiling a cursor that failed to advance could never
      * run past. The automatic triggers — a grant, a library change, a
-     * `Backup` effect — stay one bounded pass each ([once]).
+     * `Backup` effect, and the session's passes ([follow]) — walk to the end
+     * too: only a background window needs a bounded page, and none walks.
      */
     public suspend fun pass() {
         val vault = vaultId() ?: return
         if (!passing.tryLock()) return
+        walk(vault)
+    }
+
+    /**
+     * THE WALK A PASS ASKS FOR: to the end of the roll, and AFTER a walk
+     * already going rather than instead of it. "Back up now" that returned
+     * while an earlier walk was still importing would run its asked pass
+     * without what that walk brings in.
+     */
+    public suspend fun walkToEnd() {
+        val vault = vaultId() ?: return
+        passing.lock()
+        walk(vault)
+    }
+
+    /**
+     * FOLLOW THE SESSION'S PASSES (#1080, the simulator edge cases;
+     * R-1029-PH-4): the app opening, the app becoming active and "Back up now"
+     * walk the roll first ([ShelfDrain.installWalk]), and the roll is walked
+     * once now — the app has just opened, and a roll the member filled while
+     * Centraid was closed is this walk's to bring in.
+     */
+    public fun follow(drain: ShelfDrain) {
+        drain.installWalk { walkToEnd() }
+        scope.launch { walkToEnd() }
+    }
+
+    /**
+     * Passes until the roll is walked, with every state they publish reaching
+     * the screen as a `BackupChanged` event. [passing] is held on entry and
+     * released here.
+     *
+     * The states are sent through [ScreenHost.send] rather than written onto
+     * the state directly, because the reducer is the only thing that may decide
+     * what a state becomes — a runner that assigned `backup` would be a second
+     * writer of a screen's state and would lose whatever the reducer did
+     * between two of its own frames.
+     */
+    private suspend fun walk(vault: String) {
+        var imported = 0
         try {
             repeat(MAX_PASSES) {
                 val report = roll.pass(vault) { state -> scope.launch { publish(state) } }
+                imported += report.queued - report.alreadyHeld
                 if (report.enumerated == 0 ||
                     report.state.phase != BackupState.Phase.PHASE_TRANSFERRING
                 ) {
@@ -157,26 +210,7 @@ public class CameraRollRunner(
             }
         } finally {
             passing.unlock()
-        }
-    }
-
-    /**
-     * One pass, if one is not already running, with every state it publishes
-     * reaching the screen as a `BackupChanged` event.
-     *
-     * The states are sent through [ScreenHost.send] rather than written onto
-     * the state directly, because the reducer is the only thing that may decide
-     * what a state becomes — a runner that assigned `backup` would be a second
-     * writer of a screen's state and would lose whatever the reducer did
-     * between two of its own frames.
-     */
-    private suspend fun once() {
-        val vault = vaultId() ?: return
-        if (!passing.tryLock()) return
-        try {
-            roll.pass(vault) { state -> scope.launch { publish(state) } }
-        } finally {
-            passing.unlock()
+            if (imported > 0) scope.launch { afterImport() }
         }
     }
 

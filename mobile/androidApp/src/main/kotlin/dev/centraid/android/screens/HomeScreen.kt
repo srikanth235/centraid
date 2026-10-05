@@ -123,6 +123,11 @@ public fun HomeScreen(
      */
     onShowWords: () -> Unit = {},
     onPairLaptop: () -> Unit = {},
+    /**
+     * Open the Backup screen (#1080): Home's backup line is its door.
+     * Defaulted for previews.
+     */
+    onOpenBackup: () -> Unit = {},
 ) {
     Column(
         Modifier
@@ -139,6 +144,11 @@ public fun HomeScreen(
             },
             onDownloadSettings = onDownloadSettings,
         )
+        // THE BACKUP LINE (#1080): where this vault's backup stands, in the
+        // machine's words, and the door to the Backup screen. It is the
+        // backup's and not the lockup's: the lockup says where the VAULT is,
+        // and the phone is the vault.
+        dev.centraid.android.screens.backup.BackupLineRow(state.backup_line, onOpenBackup)
         HomeTitleRow(onSettings = onMakeVault)
         StatusRibbon(state.data_?.status, onEvent)
         val failure = state.failure
@@ -297,8 +307,10 @@ private fun CustodyRow(label: String, tag: String, onPress: () -> Unit) {
  *
  * **It used to be a LOCAL removal** — the gateway kept the vault and kept this
  * device enrolled, so a forget cost a copy and a re-pair got it back. The phone
- * is the vault (#1029 §1). There is no copy anywhere else, so the dialog has to
- * say what it now does.
+ * is the vault (#1029 §1): forgetting removes the only live copy. What can
+ * survive it is the sealed backup on each gateway the vault was paired with
+ * (#1080), as far as a gateway acknowledged it, and only the vault's 24 words
+ * bring that back — so the dialog has to say what it now does.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable

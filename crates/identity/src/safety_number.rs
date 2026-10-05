@@ -1,7 +1,7 @@
 //! The digits two people read to each other (#1029 §5).
 //!
-//! A pair ticket that travels over a channel neither person controls — a
-//! message, an email — proves nothing on its own. Both sides derive a safety
+//! A key that travels over a channel neither person controls — a message, an
+//! email — proves nothing on its own. Both sides derive a safety
 //! number from the two identity keys and compare it out of band; the People app
 //! shows it. An attacker who substituted either key cannot make the two numbers
 //! agree without finding a BLAKE3 collision.
@@ -77,7 +77,25 @@ impl core::fmt::Display for SafetyNumber {
 
 /// The safety number for two identity keys, in either order.
 pub fn safety_number(one: &VerifyingKey, other: &VerifyingKey) -> SafetyNumber {
-    let (low, high) = if one.as_bytes() <= other.as_bytes() {
+    safety_number_of_bytes(one.as_bytes(), other.as_bytes())
+}
+
+/// THE NUMBER A PHONE AND ITS GATEWAY COMPARE AFTER PAIRING (#1080, the
+/// root's ruling A17).
+///
+/// Over two 32-byte strings exactly as each side holds them — the vault's
+/// identity key and the gateway certificate's pin, the BLAKE3 of its DER —
+/// with nothing decoded. A pin is a hash, not a curve point, and about half
+/// of all hashes do not decode as one, so a function that read both as keys
+/// would have no number for half of all gateways. The two are sorted by
+/// their bytes, so either side may name its own first, and the digits are
+/// made exactly as [`safety_number`] makes them: over two keys this IS that
+/// number. The phone's core (`phone::pair`) and the gateway's terminal
+/// (`report::safety_line`) both call this one function, so the two screens
+/// cannot disagree about how the digits are made — only about which bytes
+/// went in, which is the thing compared.
+pub fn safety_number_of_bytes(one: &[u8; 32], other: &[u8; 32]) -> SafetyNumber {
+    let (low, high) = if one <= other {
         (one, other)
     } else {
         (other, one)
@@ -86,8 +104,8 @@ pub fn safety_number(one: &VerifyingKey, other: &VerifyingKey) -> SafetyNumber {
     let mut hasher = blake3::Hasher::new();
     hasher.update(SAFETY_NUMBER_CONTEXT);
     hasher.update(&[0]);
-    hasher.update(low.as_bytes());
-    hasher.update(high.as_bytes());
+    hasher.update(low);
+    hasher.update(high);
 
     let groups = SAFETY_NUMBER_DIGITS / SAFETY_NUMBER_GROUP;
     let mut material = vec![0u8; groups * BYTES_PER_GROUP];
@@ -110,29 +128,6 @@ pub fn safety_number(one: &VerifyingKey, other: &VerifyingKey) -> SafetyNumber {
         }
     }
     SafetyNumber(digits)
-}
-
-/// THE NUMBER A PHONE AND ITS LAPTOP COMPARE AFTER PAIRING (W15-D5, #1047).
-///
-/// Over the vault's identity key and the laptop's iroh endpoint id, both as
-/// the 32 raw bytes each side holds: an `EndpointId` **is** an Ed25519 public
-/// key, so it is one of the two with no third value agreed in advance. The
-/// phone's core (`phone::pair`, `phone::restore`) and the laptop's
-/// `centraid-gateway` (once an admit has told it the vault's key) both call
-/// this one function, so the two screens cannot disagree about how the digits
-/// are made — only about which keys went in, which is the thing compared.
-///
-/// `None` when either is not an Ed25519 public key: a caller draws that as
-/// "no number", never as "it matched".
-pub fn pairing_safety_number(
-    vault_identity: &[u8],
-    laptop_endpoint: &[u8],
-) -> Option<SafetyNumber> {
-    let key = |raw: &[u8]| {
-        let raw: [u8; 32] = raw.try_into().ok()?;
-        VerifyingKey::from_bytes(&raw).ok()
-    };
-    Some(safety_number(&key(vault_identity)?, &key(laptop_endpoint)?))
 }
 
 #[cfg(test)]
@@ -199,20 +194,32 @@ mod tests {
         assert_eq!(parts.concat(), digits);
     }
 
+    /// **A17.** Any two 32-byte strings have a number — a pin that is no
+    /// curve point included — in either order, and over two keys it is the
+    /// keys' own safety number.
     #[test]
-    fn the_pairing_number_is_the_safety_number_over_the_raw_keys() {
+    fn any_two_byte_strings_have_a_number_and_two_keys_have_their_own() {
         let (vault, laptop) = keys();
         assert_eq!(
-            pairing_safety_number(vault.as_bytes(), laptop.as_bytes()),
-            Some(safety_number(&vault, &laptop))
+            safety_number_of_bytes(vault.as_bytes(), laptop.as_bytes()),
+            safety_number(&vault, &laptop)
         );
-        assert_eq!(
-            pairing_safety_number(laptop.as_bytes(), vault.as_bytes()),
-            pairing_safety_number(vault.as_bytes(), laptop.as_bytes()),
-            "either side may name its own key first"
+        let pin = (0_u8..=255)
+            .map(|first| {
+                let mut bytes = *blake3::hash(b"a gateway certificate").as_bytes();
+                bytes[0] = first;
+                bytes
+            })
+            .find(|bytes| VerifyingKey::from_bytes(bytes).is_err())
+            .expect("some 32 bytes are not a key");
+        let number = safety_number_of_bytes(vault.as_bytes(), &pin);
+        assert_eq!(number, safety_number_of_bytes(&pin, vault.as_bytes()));
+        assert_eq!(number.digits().len(), SAFETY_NUMBER_DIGITS);
+        assert_ne!(
+            number,
+            safety_number_of_bytes(laptop.as_bytes(), &pin),
+            "another vault, another number"
         );
-        assert_eq!(pairing_safety_number(&[0; 31], laptop.as_bytes()), None);
-        assert_eq!(pairing_safety_number(vault.as_bytes(), &[]), None);
     }
 
     #[test]

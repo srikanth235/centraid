@@ -38,7 +38,6 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod marshal;
-pub mod wal;
 
 use std::panic::AssertUnwindSafe;
 
@@ -75,12 +74,11 @@ pub const CENTRAID_TIMEOUT: i32 = -5;
 
 /// Open a core over a vault file.
 ///
-/// `config` is `len` bytes of UTF-8 JSON: `{"path": "...", "role":
-/// "gateway"|"seat-replicated"|"seat-thin", "create": bool?, "uiThreadName":
-/// "..."?, "expectedIdentity": "<digest>"?, "pairing": {…}?}`. JSON and not
-/// protobuf, because a
-/// configuration is read once at startup by a human-written call site and being
-/// able to log it verbatim is worth more than the encoding.
+/// `config` is `len` bytes of UTF-8 JSON: `{"path": "...", "create": bool?,
+/// "uiThreadName": "..."?, "expectedIdentity": "<digest>"?, "vault": {"seed":
+/// "<128 hex>", "index": n}?}`. JSON and not protobuf, because a configuration
+/// is read once at startup by a human-written call site and being able to log
+/// it verbatim — the seed aside — is worth more than the encoding.
 ///
 /// `expectedIdentity` is the artifact digest the SHELL's build recorded for the
 /// core it intends to load. A mismatch is refused here, before a handle exists
@@ -91,21 +89,10 @@ pub const CENTRAID_TIMEOUT: i32 = -5;
 /// already takes it, and the handshake's `Hello.identity` is what a shell
 /// compares after the fact.
 ///
-/// `pairing` is THE ENROLMENT RECORD THE SHELL KEPT FOR THIS VAULT (#1025
-/// S7-13): `{"secret": "<64 hex>"?, "gatewayAddress": "<64 hex>", "vaultId":
-/// "…", "vaultName": "…", "relayUrl": "…", "directAddrs": ["…"],
-/// "enrolledPublicKey": "<64 hex>"}`. One record and not three keys, because a
-/// key filed under one name and an address under another is a pair that can
-/// settle by halves — and did.
-///
-/// `secret` is this device's endpoint identity, 32 bytes as 64 lowercase hex,
-/// out of the shell's secure store. Absent means a fresh keypair per open,
-/// which is a seat its gateway has not enrolled; `enrolledPublicKey` is what
-/// catches that, and an open whose endpoint does not match it is refused with
-/// `ERROR_CODE_IDENTITY_MISMATCH` rather than dialled as a stranger.
-///
-/// `relayUrl` decides the relay mode: empty on a SETTLED record is a LAN-only
-/// deployment. There is no `relays` flag — see `CoreConfig::pairing`.
+/// `vault` is the seed the 24 words derive and this vault's index, out of the
+/// shell's secure store and borrowed for this call (`CONTRACT.md` §4b).
+/// `role`, `pairing` and `device` are ignored: there is one kind of core, and
+/// a gateway knows this phone by the token its pairing minted (#1080).
 ///
 /// On success writes an owned handle to `out` and returns [`CENTRAID_OK`]. The
 /// handle is released **only** by [`centraid_close`].
@@ -134,14 +121,6 @@ pub unsafe extern "C" fn centraid_open(
     let Some(bytes) = (unsafe { marshal::slice_of(config, len) }) else {
         return CENTRAID_BAD_ARGUMENT;
     };
-    // THE `-wal` SIDECAR PERSISTS, AND THE C CALL FOR IT LIVES IN THIS CRATE
-    // (#1029 W5, hand-off 5). Installed on the way in rather than at library
-    // load: there is no load hook in a `cdylib` a shell dlopens, and `open` is
-    // the one door every vault on this device comes through. Idempotent — the
-    // second call answers `false` and changes nothing. See
-    // `centraid_vault::wal_persistence` for what it adds over
-    // `SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE` and what W5 measured.
-    centraid_vault::wal_persistence::install(wal::persist);
     // The panic barrier is OUTSIDE every allocation this call makes, so a panic
     // in the middle leaks nothing the caller was told about: `out` is written
     // only on the success path.
@@ -153,15 +132,11 @@ pub unsafe extern "C" fn centraid_open(
         // copy from and no inbound endpoint on this device, so the open is the
         // open: the file, the migrations, the handle.
         //
-        // **THE BYTE STORE CAME BACK, AND THE CORE OWNS IT** (#1029 W6,
-        // hand-off 2). `SeatLink` also opened `<vault>.bytes` and handed it to
-        // `Handle::attach_bytes`, and when it went a core over this ABI held
-        // text and refused binary bytes by name. `ByteStore::open` is
-        // asynchronous and `ContentBytes` holds a runtime handle, so somebody
-        // has to own a runtime for the life of the core; on a phone there is no
-        // longer anybody else, so it is the core.
-        // `Handle::open_own_bytes` says why the runtime is multi-threaded and
-        // what the alternatives were.
+        // **THE CORE OWNS ITS BYTE STORE** (#1029 W6, hand-off 2; #1080).
+        // `<vault>.bytes` beside the file, a directory of files named by their
+        // hash, with the backup ledger beside the vault behind the same door —
+        // see `Handle::open_own_bytes`. On a phone there is nobody else to
+        // open it.
         //
         // **A STORE THAT WILL NOT OPEN IS NOT A FAILED OPEN.** The vault's rows
         // are readable and every text write still lands; what a shell gets is
@@ -441,18 +416,6 @@ fn code_for(error: &CoreError) -> i32 {
         CoreError::Poisoned { .. } => CENTRAID_PANICKED,
         CoreError::Decode(_) => CENTRAID_MALFORMED,
         CoreError::InvalidRequest { .. } => CENTRAID_BAD_ARGUMENT,
-        // THE CONFIGURATION NAMED AN IDENTITY THIS VAULT'S GATEWAY DOES NOT
-        // KNOW (#1025 S7-13), which is the one refusal `centraid_open` can
-        // produce that is neither a decode nor a stale core.
-        //
-        // `BAD_ARGUMENT` and not a seventh status code: the ABI has six, the
-        // xtask rule counts the symbols and `CONTRACT.md` governs the table, and
-        // a status code is deliberately NOT an error vocabulary — the reason
-        // lives in the response bytes' closed `ErrorCode`, which is
-        // `ERROR_CODE_IDENTITY_MISMATCH` wherever this surfaces through a
-        // `call`. What `open` gives a shell is a negative code and a log line
-        // naming both keys; what it must never give it is `OK` and no handle.
-        CoreError::IdentityMismatch { .. } => CENTRAID_BAD_ARGUMENT,
         // EVERYTHING ELSE IS A SUCCESSFUL CALL WITH A REFUSING ANSWER. The
         // reason is in the response bytes' closed `ErrorCode`, which is what a
         // shell branches on; collapsing them into status codes here would be a

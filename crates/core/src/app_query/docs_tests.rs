@@ -451,6 +451,7 @@ impl Scratch {
             frame(wire::stage_request::Kind::Begin(wire::StageBegin {
                 media_type: media_type.to_owned(),
                 byte_size: bytes.len() as u64,
+                ..wire::StageBegin::default()
             }))
         else {
             panic!("begin answers begun");
@@ -478,8 +479,7 @@ impl Scratch {
 #[test]
 fn a_staged_file_files_and_its_document_answers_the_held_path() {
     let scratch = Scratch::founded();
-    // The phone's own byte store, as the shell opens it; `Handle`'s `Drop`
-    // closes it (docs/traps/byte-store-lock.md).
+    // The phone's own byte store, as the shell opens it.
     scratch
         .handle
         .open_own_bytes(scratch.dir.join("vault.bytes"))

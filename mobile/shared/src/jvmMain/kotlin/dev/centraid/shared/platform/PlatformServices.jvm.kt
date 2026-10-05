@@ -1,6 +1,10 @@
 package dev.centraid.shared.platform
 
 import centraid.screen.v1.MediaPermission
+import dev.centraid.shared.sync.DeleteCapability
+import dev.centraid.shared.sync.DeleteOutcome
+import dev.centraid.shared.sync.LibraryDeleter
+import dev.centraid.shared.sync.ReleasableItem
 
 /**
  * The JVM's platform services: IN-MEMORY FAKES, and they say so
@@ -23,6 +27,7 @@ public class FakePlatformServices(
     override val backgroundTasks: FakeBackgroundTasks = FakeBackgroundTasks(),
     override val syncedSecrets: FakeSyncedSecrets = FakeSyncedSecrets(),
     override val networkStatus: FakeNetworkStatus = FakeNetworkStatus(),
+    override val powerAndLink: FakePowerAndLink = FakePowerAndLink(),
     override val mediaLibrary: FakeMediaLibrary = FakeMediaLibrary(),
     override val ocr: FakeOcr = FakeOcr(),
     // NOT A FAKE, and it is the one member here that must not be. A fake CSPRNG
@@ -63,13 +68,48 @@ public class FakeBackgroundTasks(
         sentence = "Centraid catches up in the background.",
     ),
 ) : BackgroundTasks {
+    /** How many times launch registered. `BackgroundSchedulingSpec` holds it at one per open. */
     public var registrations: Int = 0
         private set
+
+    public var resubmits: Int = 0
+        private set
+
+    public var nudges: Int = 0
+        private set
+
+    /** Every `backlog(start)` call, in order: a run is `[true, false]`. */
+    public val backlogs: MutableList<Boolean> = mutableListOf()
 
     override suspend fun register(): BackgroundTasks.Registration {
         registrations += 1
         return answer
     }
+
+    override fun resubmit() {
+        resubmits += 1
+    }
+
+    override fun nudge() {
+        nudges += 1
+    }
+
+    override fun backlog(start: Boolean) {
+        backlogs += start
+    }
+}
+
+/**
+ * A link and a charger a test sets. Null is the platform refusing to say,
+ * which the pass must read as the expensive answer.
+ */
+public class FakePowerAndLink(
+    public var metered: Boolean? = false,
+    public var charging: Boolean? = true,
+) : PowerAndLink {
+    override fun metered(): Boolean? = metered
+
+    override fun charging(): Boolean? = charging
 }
 
 /**
@@ -134,15 +174,14 @@ public class FakeMediaLibrary(
     public var grantOnRequest: MediaPermission = MediaPermission.MEDIA_PERMISSION_GRANTED,
     public var assets: List<MediaLibrary.Asset> = emptyList(),
     /**
-     * The bytes each `localId` answers with, for the staging half of a backup
-     * pass. An id with no entry answers null from [open] — which is the REAL
-     * case a pass must survive (an iCloud-only asset, one the member removed
-     * between the page and the read, one outside a LIMITED selection) and not
-     * an error.
+     * The bytes each resource ref answers with, for the staging half of a
+     * backup pass. A ref with no entry answers `Gone` from [open] — which is
+     * the REAL case a pass must survive (one the member removed between the
+     * page and the read, one outside a LIMITED selection) and not an error.
      */
     public var originals: Map<String, ByteArray> = emptyMap(),
 ) : MediaLibrary {
-    /** Every `localId` [open] was asked for, in order. */
+    /** Every ref [open] was asked for, in order. */
     public val opened: MutableList<String> = mutableListOf()
 
     /** Opens that were closed. A pass that leaks a resource fails this. */
@@ -160,26 +199,57 @@ public class FakeMediaLibrary(
         libraryListeners += listener
     }
 
-    override suspend fun open(localId: String): MediaLibrary.Original? {
-        opened += localId
-        val bytes = originals[localId] ?: return null
-        val asset = assets.firstOrNull { it.localId == localId }
-        return object : MediaLibrary.Original {
-            private var at = 0
-            override val mediaType: String =
-                if (asset?.kind == MediaLibrary.Kind.VIDEO) "video/quicktime" else "image/png"
-            override val bytes: Long = bytes.size.toLong()
+    /**
+     * Refs whose bytes live only in iCloud: [open] answers `InCloud` for them
+     * unless the walker allowed the download.
+     */
+    public var inCloud: Set<String> = emptySet()
 
-            override suspend fun read(max: Int): ByteArray {
-                if (at >= bytes.size) return ByteArray(0)
-                val end = minOf(at + max, bytes.size)
-                return bytes.copyOfRange(at, end).also { at = end }
-            }
+    /** What [render] answers; null, the default, is a platform with no decoder. */
+    public var renders: (ref: String, tier: MediaLibrary.Tier) -> ByteArray? = { _, _ -> null }
 
-            override suspend fun close() {
-                closed += 1
-            }
+    /** Every `(ref, allowNetwork)` [open] was asked for, in order. */
+    public val asked: MutableList<Pair<String, Boolean>> = mutableListOf()
+
+    /** Every `(ref, tier)` [render] was asked for, in order. */
+    public val rendered: MutableList<Pair<String, MediaLibrary.Tier>> = mutableListOf()
+
+    override suspend fun open(ref: String, allowNetwork: Boolean): MediaLibrary.Opened {
+        opened += ref
+        asked += ref to allowNetwork
+        if (ref in inCloud && !allowNetwork) return MediaLibrary.Opened.InCloud
+        val bytes = originals[ref] ?: return MediaLibrary.Opened.Gone
+        val video = assets.any { asset ->
+            asset.resources.any { it.ref == ref && it.role == MediaLibrary.Resource.Role.PAIRED_VIDEO } ||
+                (asset.localId == ref && asset.kind == MediaLibrary.Kind.VIDEO)
         }
+        return MediaLibrary.Opened.Ready(
+            object : MediaLibrary.Original {
+                private var at = 0
+                override val mediaType: String = if (video) "video/quicktime" else "image/png"
+
+                // PHOTOS STATES NO SIZE, and the fake says so the same way.
+                override val bytes: Long = if (statesSize) bytes.size.toLong() else 0L
+
+                override suspend fun read(max: Int): ByteArray {
+                    if (at >= bytes.size) return ByteArray(0)
+                    val end = minOf(at + max, bytes.size)
+                    return bytes.copyOfRange(at, end).also { at = end }
+                }
+
+                override suspend fun close() {
+                    closed += 1
+                }
+            },
+        )
+    }
+
+    /** Whether [open] states a length before the read, as Android does and Photos does not. */
+    public var statesSize: Boolean = true
+
+    override suspend fun render(ref: String, tier: MediaLibrary.Tier): ByteArray? {
+        rendered += ref to tier
+        return renders(ref, tier)
     }
 
     override suspend fun permission(): MediaPermission = grant
@@ -200,10 +270,34 @@ public class FakeMediaLibrary(
         val start = afterCursor?.let { cursor ->
             assets.indexOfFirst { it.localId == cursor } + 1
         } ?: 0
-        val window = assets.drop(start).take(limit)
-        return MediaLibrary.Page(window, window.lastOrNull()?.localId.takeIf {
-            start + window.size < assets.size
-        })
+        val window = assets.drop(start).take(limit).map { it.copy(after = it.localId) }
+        return MediaLibrary.Page(
+            assets = window,
+            nextCursor = window.lastOrNull()?.localId ?: afterCursor,
+            exhausted = start + window.size >= assets.size,
+        )
+    }
+}
+
+/**
+ * The shells' library deleter, as a spec drives it (#1080 A20): the system's
+ * confirmation always available, and an answer the spec chooses — by default
+ * every item it is handed went.
+ */
+public class FakeLibraryDeleter(
+    public var capability: DeleteCapability = DeleteCapability.SYSTEM_CONFIRMATION,
+    public var answer: (List<ReleasableItem>) -> DeleteOutcome = { items ->
+        DeleteOutcome(deleted = items.map { it.contentHash }, declined = false, error = null)
+    },
+) : LibraryDeleter {
+    /** Every list [delete] was handed, in order. */
+    public val handed: MutableList<List<ReleasableItem>> = mutableListOf()
+
+    override fun capability(): DeleteCapability = capability
+
+    override fun delete(items: List<ReleasableItem>, done: (DeleteOutcome) -> Unit) {
+        handed += items
+        done(answer(items))
     }
 }
 

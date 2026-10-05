@@ -377,7 +377,9 @@ const DRAWABLE_TYPE_COLUMN: &str = "drawable_type";
 /// arrow.
 pub const HELD_ORIGINAL_HASH_COLUMN: &str = "original_hash";
 
-/// WHETHER THE ORIGINAL ITSELF IS ON THIS DEVICE, 1 or 0.
+/// WHETHER THE ORIGINAL ITSELF IS ON THIS DEVICE, 1 or 0 — in the content
+/// store, or in the operating system's library the phone never copies from
+/// (#1080 ruling 6).
 ///
 /// The one fact that separates "held" from "thumbnail only", and it cannot be
 /// inferred from [`HELD_THUMBNAIL_COLUMN`]: the thumbnail column falls back to
@@ -780,10 +782,17 @@ impl Vault {
                 path.map_or(Value::Null, Value::Text),
             );
 
-            let held = original
-                .as_deref()
-                .and_then(|hash| blobs.and_then(|store| store.path_of(hash).ok().flatten()))
-                .is_some();
+            // ON THIS DEVICE, in the store or in the operating system's
+            // library (#1080 ruling 6): an original the library holds is held,
+            // though it has no path to hand a cell.
+            let held = original.as_deref().is_some_and(|hash| {
+                blobs.is_some_and(|store| {
+                    matches!(
+                        store.locate(hash),
+                        Ok(crate::bytes::Located::Store(_) | crate::bytes::Located::OsLibrary(_))
+                    )
+                })
+            });
             row.insert(
                 HELD_ORIGINAL_HELD_COLUMN.to_owned(),
                 Value::Integer(i64::from(held)),
@@ -871,7 +880,7 @@ fn cursor_text(row: &RowImage, column: &str) -> String {
 #[cfg(test)]
 mod keyset_tests {
     use super::*;
-    use crate::backup::store::BlobStore as _;
+    use crate::bytes::BlobStore as _;
 
     /// A THUMBNAIL READ REACHES THE BYTE STORE, AND THE STATEMENT PREPARES.
     ///
@@ -886,7 +895,7 @@ mod keyset_tests {
         let dir = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let store_dir = dir.join("blobs");
-        let store = crate::backup::store::FsBlobStore::open(&store_dir).expect("a blob store");
+        let store = crate::bytes::FsBlobStore::open(&store_dir).expect("a blob store");
         let bytes = b"not really a JPEG, and the store does not care";
         let hash = store.put(bytes).expect("the bytes are stored");
 
@@ -1014,7 +1023,7 @@ mod keyset_tests {
     fn no_path_for(media_type: &str, bytes: &[u8]) {
         let dir = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
-        let store = crate::backup::store::FsBlobStore::open(dir.join("blobs")).expect("a store");
+        let store = crate::bytes::FsBlobStore::open(dir.join("blobs")).expect("a store");
         let hash = store.put(bytes).expect("stored");
 
         let vault = Vault::create(dir.join("v.db")).expect("a vault");
@@ -1074,6 +1083,121 @@ mod keyset_tests {
         assert_eq!(
             answer.rows[0].get(HELD_ORIGINAL_HELD_COLUMN),
             Some(&Value::Integer(1))
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A DOOR THAT HOLDS ONLY LIBRARY ITEMS: every hash it was given is in the
+    /// operating system's library under an identifier, and none has a file.
+    struct LibraryOnly(std::collections::BTreeMap<String, String>);
+
+    impl crate::bytes::BlobStore for LibraryOnly {
+        fn put(&self, _: &[u8]) -> crate::bytes::Result<String> {
+            Err(crate::bytes::BlobError::InvalidId(
+                "a library takes nothing".to_owned(),
+            ))
+        }
+        fn get(&self, id: &str) -> crate::bytes::Result<Vec<u8>> {
+            Err(crate::bytes::BlobError::NotFound { id: id.to_owned() })
+        }
+        fn has(&self, _: &str) -> crate::bytes::Result<bool> {
+            Ok(false)
+        }
+        fn ids(&self) -> crate::bytes::Result<std::collections::BTreeSet<String>> {
+            Ok(std::collections::BTreeSet::new())
+        }
+        fn size(&self, id: &str) -> crate::bytes::Result<u64> {
+            Err(crate::bytes::BlobError::NotFound { id: id.to_owned() })
+        }
+        fn path_of(&self, _: &str) -> crate::bytes::Result<Option<std::path::PathBuf>> {
+            Ok(None)
+        }
+        fn locate(&self, id: &str) -> crate::bytes::Result<crate::bytes::Located> {
+            Ok(self
+                .0
+                .get(id)
+                .map_or(crate::bytes::Located::Nowhere, |os_ref| {
+                    crate::bytes::Located::OsLibrary(os_ref.clone())
+                }))
+        }
+    }
+
+    /// AN ORIGINAL THE LIBRARY HOLDS IS HELD, AND HAS NO PATH (#1080 ruling 6).
+    ///
+    /// The phone never copies a library item into its store, so its original
+    /// is on the device with no file to hand a cell: `original_held` is 1 and
+    /// the thumbnail column, which may fall back to the original, stays NULL.
+    /// An original the library does not hold either is not held at all.
+    #[test]
+    fn an_original_the_library_holds_is_held_and_has_no_path() {
+        let dir = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("the directory is made");
+        let in_library = crate::content::content_digest(b"a camera original");
+        let elsewhere = crate::content::content_digest(b"an original on another phone");
+
+        let vault = Vault::create(dir.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        vault
+            .apply_replica(|connection| {
+                for (content_id, hash, at) in [
+                    ("c1", &in_library, "2026-01-01T00:00:00.000Z"),
+                    ("c2", &elsewhere, "2026-01-02T00:00:00.000Z"),
+                ] {
+                    connection.execute(
+                        "INSERT INTO core_entity (entity_id, entity_type, created_at)
+                         VALUES (?1, 'core.content_item', ?2)",
+                        rusqlite::params![content_id, at],
+                    )?;
+                    connection.execute(
+                        "INSERT INTO core_content_item
+                           (content_id, content_uri, content_hash, byte_size, created_at)
+                         VALUES (?1, ?2, ?3, 17, ?4)",
+                        rusqlite::params![content_id, format!("blob:{hash}"), hash, at],
+                    )?;
+                }
+                Ok(())
+            })
+            .expect("the fixture rows land");
+
+        let vault = vault.with_blobs(Box::new(LibraryOnly(
+            [(in_library.clone(), "library-item-1".to_owned())]
+                .into_iter()
+                .collect(),
+        )));
+        let answer = vault
+            .keyset_page(&KeysetPage {
+                name: "content".to_owned(),
+                select: vec!["content_id".to_owned(), "created_at".to_owned()],
+                from: "core_content_item".to_owned(),
+                predicate: None,
+                binds: Vec::new(),
+                sort_column: "created_at".to_owned(),
+                pk_column: "content_id".to_owned(),
+                descending: false,
+                limit: 10,
+                after: None,
+                held_thumbnail: true,
+                note_body: false,
+                document_size: false,
+            })
+            .expect("it serves");
+        let held: Vec<(Option<&Value>, Option<&Value>)> = answer
+            .rows
+            .iter()
+            .map(|row| {
+                (
+                    row.get(HELD_THUMBNAIL_COLUMN),
+                    row.get(HELD_ORIGINAL_HELD_COLUMN),
+                )
+            })
+            .collect();
+        assert_eq!(
+            held,
+            vec![
+                (Some(&Value::Null), Some(&Value::Integer(1))),
+                (Some(&Value::Null), Some(&Value::Integer(0))),
+            ],
+            "the library's original is held with no path; the other is not held"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

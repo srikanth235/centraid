@@ -83,17 +83,21 @@ fn the_fixture_is_the_ladder_head_and_not_the_corpuss_description() {
     // THE POINT OF THE SPLIT. The two files are different fixtures answering
     // different questions, and this is what stops one being silently repointed
     // at the other: the ladder head carries every rung's objects, and the
-    // corpus, a v0 file, carries none of them.
+    // corpus, a v0 file, carries none of them — and what a later rung dropped
+    // is in neither.
     let fixture = std::fs::read_to_string(repo_root().join("contracts/schema/vault-ddl.sql"))
         .expect("the ladder-head fixture is committed");
     let corpus =
         std::fs::read_to_string(repo_root().join("contracts/golden/issue-1020/vault-ddl.sql"))
             .expect("the corpus's description is committed");
+    // Rung three and four's backup tables were the other two names here; rung
+    // ten drops them again (#1080), so the head carries rung six's and seven's
+    // guards instead.
     for object in [
         "core_entity_revision_no_self_parent",
         "core_link_no_revises_edge",
-        "backup_base_range",
-        "backup_blob_custody",
+        "core_collection_kind_is_immutable",
+        "locker_key_one_generation",
     ] {
         assert!(
             fixture.contains(object),
@@ -102,6 +106,12 @@ fn the_fixture_is_the_ladder_head_and_not_the_corpuss_description() {
         assert!(
             !corpus.contains(object),
             "`{object}` is in the corpus's description, which is a v0 file"
+        );
+    }
+    for dropped in ["backup_base_range", "backup_blob_custody"] {
+        assert!(
+            !fixture.contains(&format!("CREATE TABLE {dropped}")),
+            "`{dropped}` is founded by rung three or four and dropped by rung ten"
         );
     }
 }

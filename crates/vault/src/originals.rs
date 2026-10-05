@@ -9,19 +9,18 @@
 //! here. Neither can answer alone, and the SQL half stays in this crate because
 //! SQL is confined to it (`sql-confinement`).
 //!
-//! ## WHAT THIS DOES NOT COUNT, AND WHY THAT IS THE POINT
+//! ## WHAT THIS DOES NOT COUNT
 //!
 //! There is no `freeable` total here. v0 offered to delete a phone's originals
 //! only where a copy elsewhere was PROVED (`selectFreeUpCandidates`: a settled
-//! `casAck` and a verified hash), and the honest version of that number on this
-//! device is not zero — it is **not a number anybody can compute**: the drain
-//! uploads the vault's pages, never an original's bytes (`crates/core/src/phone/drain.rs`
-//! seals bases, segments and manifests; nothing outside the restore drill calls
-//! `backup::custody::admit`). A total over a predicate that no byte can satisfy
-//! would be a field that is always zero and reads as a finding. So the census
-//! reports what is true — what is here, and what is kept — and the proof that
-//! would make an original releasable is a missing plane, named in
-//! `docs/decisions.md` (R-1029-PH-1), not a zero.
+//! `casAck` and a verified hash), and the proof on this device is a gateway's
+//! acknowledgement of every part of an original, which the backup ledger
+//! records and the vault never sees (#1080 ruling 7). So the releasable
+//! originals are the phone core's answer over that ledger
+//! (`crates/core/src/phone`, the `releasable` door), and this module gives it
+//! the two facts only the rows hold: which originals sit in a kept album
+//! ([`kept_hashes`]), and which asset rows a set of bytes belongs to
+//! ([`assets_for_hashes`]).
 //!
 //! ## THE KEPT JOIN IS BY ALBUM MEMBERSHIP, AND ONLY A PHOTOGRAPH'S
 //!
@@ -125,4 +124,55 @@ pub fn census(vault: &Vault, kept_albums: &BTreeSet<String>) -> Result<Option<Or
         }
     }
     Ok(Some(census))
+}
+
+/// The content hashes of every live photograph in at least one of
+/// `kept_albums`: originals the member said to keep on this phone, which no
+/// verb may offer to delete from it.
+///
+/// # Errors
+/// [`crate::error::VaultError`] for anything SQLite refused.
+pub fn kept_hashes(vault: &Vault, kept_albums: &BTreeSet<String>) -> Result<BTreeSet<String>> {
+    if kept_albums.is_empty() {
+        return Ok(BTreeSet::new());
+    }
+    let kept_json = serde_json::to_string(&kept_albums.iter().collect::<Vec<_>>())
+        .unwrap_or_else(|_| "[]".to_owned());
+    vault.read(|connection| {
+        let mut statement = connection.prepare(
+            "SELECT DISTINCT c.content_hash
+               FROM media_asset a
+               JOIN core_content_item c ON c.content_id = a.content_id
+               JOIN core_collection_entry e
+                 ON e.target_type = 'media.asset' AND e.target_id = a.asset_id
+              WHERE a.deleted_at IS NULL
+                AND e.collection_id IN (SELECT value FROM json_each(?1))",
+        )?;
+        let rows = statement.query_map([kept_json], |row| row.get::<_, String>(0))?;
+        Ok(rows.collect::<rusqlite::Result<BTreeSet<_>>>()?)
+    })
+}
+
+/// The asset rows whose bytes are any of `hashes` (64 lowercase hex each),
+/// live or trashed: the ids a grid is keyed by, for the change event that
+/// tells it bytes arrived or left (`ChangeFeed::blobs_arrived`).
+///
+/// # Errors
+/// [`crate::error::VaultError`] for anything SQLite refused.
+pub fn assets_for_hashes(vault: &Vault, hashes: &[String]) -> Result<Vec<String>> {
+    if hashes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let hashes_json = serde_json::to_string(hashes).unwrap_or_else(|_| "[]".to_owned());
+    vault.read(|connection| {
+        let mut statement = connection.prepare(
+            "SELECT a.asset_id
+               FROM media_asset a
+               JOIN core_content_item c ON c.content_id = a.content_id
+              WHERE c.content_hash IN (SELECT value FROM json_each(?1))
+              ORDER BY a.asset_id",
+        )?;
+        let rows = statement.query_map([hashes_json], |row| row.get::<_, String>(0))?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    })
 }

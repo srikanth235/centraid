@@ -205,6 +205,12 @@ public object PhotoLightboxReads :
     override fun refused(failure: ReadFailure): PhotoLightboxEvent =
         PhotoLightboxEvent(refused = PhotoLightboxEvent.ReadRefused(failure = failure))
 
+    /** A tapped original's fetch, settled (#1080). */
+    override fun fetchSettled(assetId: String, fetched: Boolean, sentence: String): PhotoLightboxEvent =
+        PhotoLightboxEvent(
+            fetch_settled = PhotoLightboxEvent.FetchSettled(asset_id = assetId, fetched = fetched, sentence = sentence),
+        )
+
     private const val ASSET_ID: Int = 0
     private const val KIND: Int = 1
     private const val TITLE: Int = 2

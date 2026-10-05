@@ -63,12 +63,19 @@ public enum class PairRefusal {
 
     /** `UNAUTHORIZED`: the laptop answered and did not take the code (spent, or never minted). */
     NOT_TAKEN,
+
+    /**
+     * `VAULT_MOVED`: another phone holds this vault now, and pairing would have
+     * taken it over with this phone's older copy (#1080, the simulator edge
+     * cases). The way back is a restore from the words, never a pairing.
+     */
+    MOVED,
 }
 
 /**
  * W15's `Restore` request. It answers [RestoreResult.Restored], or
  * [RestoreResult.Refused] with WHICH refusal — never a bare null (#1047 R3),
- * for [PairDoor]'s reason: a generation this phone refused to lay down is not
+ * for [PairDoor]'s reason: a snapshot this phone refused to lay down is not
  * a laptop that did not answer, and "could not reach your laptop" sends a
  * member to wake a laptop that is awake.
  *
@@ -76,14 +83,19 @@ public enum class PairRefusal {
  * stores what the answer carries; see [Enrollment.restore].
  */
 public interface RestoreDoor {
-    public suspend fun restore(words: List<String>, endpoint: String?): RestoreResult
+    /**
+     * Restore from the 24 words, from the gateway the pairing [payload] names
+     * (`RestoreRequest.payload`, #1080 A1) — the text `centraid-gateway pair`
+     * prints, scanned or pasted. Null when the member gave none.
+     */
+    public suspend fun restore(words: List<String>, payload: String?): RestoreResult
 
     /**
      * The same restore from the 64-byte seed (128 hex) in place of the words
      * (`RestoreRequest.seed`, Q-1047-18): what a phone the synchronised
      * keychain handed the seed and no words restores with.
      */
-    public suspend fun restoreSeed(seedHex: String, endpoint: String?): RestoreResult
+    public suspend fun restoreSeed(seedHex: String, payload: String?): RestoreResult
 
     /**
      * ONLY THE VAULTS THAT STAYED, from the seed this phone stored
@@ -91,7 +103,7 @@ public interface RestoreDoor {
      * answer named in [RestoreAnswer.unclaimed], never an index the shell
      * chose. The core leaves every vault this phone holds as it is.
      */
-    public suspend fun restoreStayed(seedHex: String, endpoint: String?, indices: List<Int>): RestoreResult
+    public suspend fun restoreStayed(seedHex: String, payload: String?, indices: List<Int>): RestoreResult
 }
 
 /** What a restore came back as. */
@@ -113,75 +125,64 @@ public enum class RestoreRefusal {
     /** `PEER_UNREACHABLE`, no core, and everything unrecognised: the laptop did not answer. */
     UNREACHABLE,
 
-    /** `UNAUTHORIZED`: the laptop answered and would not grant this phone the vault's lease. */
+    /** `UNAUTHORIZED`: the gateway answered and would not take this phone's claim on the vault. */
     NOT_TAKEN,
 
     /**
-     * `INTERNAL`: what the laptop sent did not open, or failed `integrity_check`
-     * or the census. Nothing was laid down and the lease did not move, so the
-     * old phone still backs up (#1047 R3).
+     * `INTERNAL`: what the gateway sent did not open, or failed `integrity_check`
+     * or the census. Nothing was laid down and nothing was claimed — a restore
+     * claims only after the snapshot passed its checks (#1080) — so the old
+     * phone still backs up (#1047 R3).
      */
     DID_NOT_CHECK,
 }
 
 /**
- * What a `Pair` answered (`phone.proto`'s `PairResponse`).
+ * What a `Pair` answered (`phone.proto`'s `PairResponse`, #1080).
  *
- * **The safety number is the core's** (W15-D5): `centraid_identity::
- * pairing_safety_number` over the vault's identity key and the laptop's
- * endpoint key, the same function `centraid-gateway serve` prints its digits
- * with. This shell computes no number of its own — a second renderer would be
- * a second answer to "who did I pair with".
+ * **The safety number is the core's** (#1080 A7, A17):
+ * `centraid_identity::safety_number_of_bytes` over the vault's identity public
+ * key and the gateway certificate's BLAKE3 fingerprint — the digits the gateway prints
+ * when the pairing lands and beside it in `centraid-gateway pairings`. This
+ * shell computes no number of its own: a second renderer would be a second
+ * answer to "who did I pair with".
  */
 public data class PairAnswer(
-    /** The laptop's iroh `EndpointId`, hex — what this phone will dial. Never what a member compares. */
-    public val gatewayEndpoint: String,
     /** The 60 digits in 12 groups of 5 to compare; empty when the core could not compute one. */
     public val safetyNumber: String = "",
-    /**
-     * Whether the identity record reached the resolver.
-     *
-     * **False is not a failure of the pairing** (`phone.proto`): the phone is
-     * paired and can back up over the endpoint it just learned. What it costs
-     * is a restore from a device that never scanned this QR, so the member is
-     * told rather than reassured.
-     */
-    public val recordPublished: Boolean = true,
-    /** What the laptop calls itself, for the sentence. May be empty. */
-    public val laptopName: String = "",
+    /** What the gateway calls itself; may be empty. */
+    public val destinationLabel: String = "",
+    /** Where it was reached, `host:port`; may be empty. */
+    public val destinationAddress: String = "",
 )
 
 /**
- * What a `Restore` answered (`phone.proto`'s `RestoreResponse`).
- *
- * **It carries the device secret the restore minted**, which the core hands
- * over exactly once (`crates/core/src/phone/link.rs`), so its `toString` says
- * nothing of it.
+ * What a `Restore` answered (`phone.proto`'s `RestoreResponse`). Its
+ * `toString` carries counts only: a path or a safety number is not a log
+ * line's to keep.
  */
 public class RestoreAnswer(
     /** Every vault the laptop held for these words, laid down on this phone. */
     public val vaults: List<RestoredVaultAt>,
     /** How many derivation indices were tried past the last that answered. */
     public val gapScanned: Int = 0,
-    /** This phone's new device secret, 64 lowercase hex; the device store's. */
-    public val deviceSecretHex: String = "",
     /**
      * Every vault the restore checked and could not claim
      * (`RestoreResponse.unclaimed`, R-1047-R5): a claim failed after another
-     * landed, so this vault's file was removed and its lease is still the old
-     * phone's. Empty is the ordinary answer; [vaults] is never empty beside
+     * landed, so this vault's file was removed and its writer epoch is still
+     * the old phone's. Empty is the ordinary answer; [vaults] is never empty beside
      * it, because a restore where no claim landed is refused instead.
      */
     public val unclaimed: List<UnclaimedVaultAt> = emptyList(),
 ) {
     /**
-     * Rows the restored generations' censuses promised, summed — what makes
+     * Rows the restored snapshots' censuses promised, summed — what makes
      * "your vault is back" a claim rather than a hope (#1029 §2).
      */
     public val rows: Long get() = vaults.sumOf { it.rows }
 
     override fun toString(): String =
-        "RestoreAnswer(vaults=${vaults.size}, unclaimed=${unclaimed.size}, gapScanned=$gapScanned, <redacted>)"
+        "RestoreAnswer(vaults=${vaults.size}, unclaimed=${unclaimed.size}, gapScanned=$gapScanned)"
 }
 
 /**
@@ -221,8 +222,8 @@ public object CustodyCopy {
     public const val PAIR_TITLE: String = "Pair with your laptop"
 
     public const val PAIR_ASK: String =
-        "Run “centraid-gateway invite” on your laptop and scan the square it prints. " +
-            "You can paste the “pair” line underneath it instead."
+        "Run “centraid-gateway pair” on your laptop and scan the square it prints. " +
+            "You can paste the text underneath it instead."
 
     public const val PAIR_EMPTY: String = "Scan the square your laptop printed, or paste its text."
 
@@ -260,7 +261,7 @@ public object CustodyCopy {
         "Centraid could not check who answered, so it did not pair. Try again."
 
     /**
-     * **THE COMPARISON IS THE MEMBER'S** (#1029 §5).
+     * **THE COMPARISON IS THE MEMBER'S** (#1029 §5, #1080 A7).
      *
      * A safety number a member is shown but never asked to compare is
      * decoration. The sentence says what to do with it and what it means, and
@@ -268,19 +269,11 @@ public object CustodyCopy {
      * middle.
      */
     public fun pairedLine(answer: PairAnswer): String {
-        val who = answer.laptopName.ifBlank { "your laptop" }
-        val warning = if (answer.recordPublished) {
-            ""
-        } else {
-            // FALSE IS NOT A FAILURE OF THE PAIRING, and the sentence says what
-            // it actually costs rather than alarming a member about a backup
-            // that works.
-            " Centraid could not publish your address, so restoring on a new phone may need " +
-                "you to type it."
-        }
-        return "Paired with $who. Check every group of the number below matches the safety number " +
-            "“centraid-gateway serve” printed on $who. If it does not match, do not carry on — " +
-            "pair again on a network you trust.$warning"
+        val who = answer.destinationLabel.ifBlank { "your laptop" }
+        val where = if (answer.destinationAddress.isBlank()) "" else " at ${answer.destinationAddress}"
+        return "Paired with $who$where. Check every group of the number below matches the safety number " +
+            "centraid-gateway printed on $who. If it does not match, do not carry on — " +
+            "pair again on a network you trust."
     }
 
     /** Thousands separated, so a six-figure row count is readable at a glance. */

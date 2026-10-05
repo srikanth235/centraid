@@ -176,6 +176,12 @@ public object PhotosReads :
     override fun refused(failure: ReadFailure): PhotosGridEvent =
         PhotosGridEvent(refused = PhotosGridEvent.ReadRefused(failure = failure))
 
+    /** A tapped original's fetch, settled (#1080). */
+    override fun fetchSettled(assetId: String, fetched: Boolean, sentence: String): PhotosGridEvent =
+        PhotosGridEvent(
+            fetch_settled = PhotosGridEvent.FetchSettled(asset_id = assetId, fetched = fetched, sentence = sentence),
+        )
+
     override val appId: String = "photos"
 
     /**
@@ -337,8 +343,9 @@ public object PhotosReads :
     /**
      * WOULD AN ORDINARY WINDOW REFUSE TO ASK FOR THIS ORIGINAL?
      *
-     * The same table as `centraid_blobs::Budget::admits_original`, and it is
-     * here for ONE reason: a label. The core decides what crosses; this decides
+     * The rule the core's `phone::drain::Conditions` applies to a pass nobody
+     * asked for (`may_prepare` under MANUAL, `allows_cellular` on a metered
+     * link), and it is here for ONE reason: a label. The core decides what crosses; this decides
      * which sentence a cell shows, and a cell that cannot tell "waiting for a
      * window" from "your rule is holding this" shows the wrong one of two.
      *

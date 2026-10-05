@@ -1,32 +1,28 @@
-# `centraid-media` — the byte plane's formats
+# `centraid-media` — the backup's one format, and the arithmetic Photos reads
 
-Content-addressed sealed frames, the format-normative crypto every backup and snapshot artefact is built from, and the arithmetic Photos reads. No policy:
+No policy: `crates/vault` decides, this crate moves bytes.
 
 | Module | What it is |
 | --- | --- |
-| `cbsf` | **C**entraid **B**lob **S**ealed **F**rame v2: `MAGIC "CBSF"`, version `2`, a 37-byte header (4 magic + 1 version + 32-byte plaintext BLAKE3), sealed frames, a sealed big-endian directory, a 13-byte trailer. Store / zstd / raw-deflate frame bodies (`algorithm` bytes `0/1/2`). |
-| `format` | Canonical (ECMAScript-spelled) JSON, the BLAKE3 content hash and key derivation, AES-256-GCM `nonce ‖ ct ‖ tag`, the WAL segment seal and the `centraid-snapshot/2` manifest seal. |
+| `sealed` | **`centraid-sealed/2`** ([#1080](https://github.com/srikanth235/centraid/issues/1080)) — the one format every byte a gateway stores wears. A file is hashed and sealed in the same stream (`FileSealer`, `PartSealer`), and a file whose hash is already known can be sealed a window of parts per read (`WindowSealer`, R-1080-C39); each part ≤ 64 MiB carries a 30-byte clear header, is keyed from its own random salt under `K_backup`, framed in 4 MiB XChaCha20-Poly1305 chunks, and named `hex(keyed_hash(K_name, h ‖ u32be(i)))`, so the gateway holds ciphertext under names it cannot invert; `Assembler` and `open_whole` check a whole file against the `h` its names were computed from. |
+| `format` | The BLAKE3 content hash, the BLAKE3 KDF, and canonical (ECMAScript-spelled) JSON. |
 | `phash` | Hamming distance over hex digests. Unequal widths, non-hex characters and an empty digest are all **not comparable** — `None`, never `0`. |
 | `duplicates` | The near-duplicate projection the Photos `duplicates` query reads: union-find over phash Hamming ≤ 6, the group's **lowest `asset_id`** as its deterministic cluster id, compare-then-write. Order-independent, with a property test over 63 permutations. |
 | `models` | `models.lock.json`: the parser, and the one verify-then-fetch (`stat` size, then digest; temp file, digest, rename). A failure is **reported, never thrown**. Fetching is a trait; this crate opens no socket. |
-| `renditions` | The two derived renditions (thumbnail, preview) a gateway makes of an image. Pure: bytes in, bytes out. |
+| `renditions` | The JPEG derivatives (thumbnail, preview) the core draws when the shell staged none. Pure: bytes in, bytes out. |
 
-## Formats are normative
+## The format is normative
 
-`cbsf` and `format` are first-party MIT code (D-1020-R1), and every constant and every info/AAD string in them is a **format** decision. Editing one silently re-keys every vault that ever wrote a byte. The list, because it is short and load-bearing:
+Every context string, header field and framing rule in `sealed` is a **format** decision: editing one re-keys every backup a member holds. The contexts are `centraid backup v2 root`, `… name` and `… object`; the framing is canonical (every chunk but the last exactly 4 MiB, only an empty part ends in an empty chunk), so one payload has one sealed shape ([R-1080-B1–B3](../../docs/decisions.md#the-sealed-format-and-the-snapshot-plane-1080-wave-1-lane-b)). The formats before it — the v0 frame format and `centraid-object/1` — left with the planes that wrote them (#1080); no member holds an artefact in either.
 
-- CBSF frame AAD `blob:{sha}:v2:f{index}/{count}`, directory AAD `blobdir:{sha}:v2:n{count}`, and a **deterministic** nonce: the first 12 bytes of `keyed_blake3(key, "cbsf-nonce\0" ‖ aad ‖ "\0" ‖ keyed_blake3(key, plain))` (D-1025-S4-2).
-- Content addresses are BLAKE3 (D-1025-S4-1), and keys are derived with BLAKE3's `derive_key` mode (D-1025-S4-3).
-- Directory encoding: big-endian `u32 frame_size ‖ u64 total_size ‖ u32 count ‖ count × u32 sealed_len`. Every directory integer is big-endian.
-- Backup derivation contexts `centraid-backup:data:<vaultId>` and `centraid-backup:dedup:<vaultId>`; the WAL nonce context and AAD carry the **full** segment address, both offsets included, so a longer crash-retry re-nonces rather than reusing one.
-- `canonical_json` spells numbers the way `JSON.stringify` does (hence `ryu-js`), not the way `serde_json` spells integers. `1e21` is `1e+21` and `9007199254740993` is `9007199254740992`.
+`canonical_json` spells numbers the way `JSON.stringify` does (hence `ryu-js`), not the way `serde_json` spells integers: `1e21` is `1e+21` and `9007199254740993` is `9007199254740992`.
 
 ## The conformance boundary
 
-Two fixtures under `contracts/crypto/`, and each has the test that reads it beside it ([#1029](https://github.com/srikanth235/centraid/issues/1029) W13 — this paragraph named `contracts/golden/format-golden.json` and a `tests/golden.rs`, neither of which exists: the v0 cross-language fixture went with the TypeScript half of the product and nothing repointed the sentence):
+Two fixtures under `contracts/crypto/`, each with the test that reads it beside it:
 
-- `contracts/crypto/object-vectors.json`, read by [`tests/object_vectors.rs`](tests/object_vectors.rs) — `centraid-object/1`'s header fields, Padmé's buckets, the trained dictionary and its BLAKE3 id, each object kind's sealed length, a pack's item offsets, and how an oversized input splits. Half of it is **compared** and half is **opened**: sealing is deliberately not reproducible (random salt, random content key, random nonces), so the committed `sealedBase64` bytes are decrypted and checked against their plaintext rather than resealed.
-- `contracts/crypto/blake3-vectors.json`, read by [`tests/primitives.rs`](tests/primitives.rs) — every `keyed_hash` and `derive_key` site, as bytes.
+- `contracts/crypto/sealed-vectors.json`, read by [`tests/sealed_vectors.rs`](tests/sealed_vectors.rs) — `centraid-sealed/2`'s derived keys, names and committed sealed samples. Sealing is deliberately not reproducible (random salts, random nonces), so the samples are **opened** and checked against their plaintext rather than resealed.
+- `contracts/crypto/blake3-vectors.json`, read by [`tests/primitives.rs`](tests/primitives.rs) — the keyed hash and the KDF, as primitives.
 
 Both regenerate with `CENTRAID_UPDATE_FIXTURES=1`, and the comparison still runs afterwards, so the variable is a generator and never a way to go green.
 
@@ -45,4 +41,4 @@ Two things are deliberately absent:
 
 ## What is not here
 
-No consent, no journal, no replica, no handler, no policy — `crates/vault` decides, this crate moves bytes. Transport lives in `crates/net` and `crates/blobs`.
+No consent, no journal, no handler, no policy — `crates/vault` decides, this crate moves bytes. The content store is `crates/blobs`, and the network is the phone core's, through `crates/gateway`'s client.

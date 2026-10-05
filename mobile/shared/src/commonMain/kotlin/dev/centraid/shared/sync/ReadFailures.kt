@@ -78,14 +78,13 @@ internal fun fromCore(failure: CoreFailure): ReadFailure = when (failure) {
 }
 
 /**
- * THE VAULT MOVED, AS THE ONE PLACE THAT SAYS SO (#1029 F1, W5, hand-off 2).
+ * THE VAULT MOVED, AS THE ONE PLACE THAT SAYS SO (#1029 F1, #1080).
  *
- * `Shelf.freeze` has been the consumer since W2 and had no producer: nothing
- * could tell it a vault had moved, because there was no typed code to key on
- * and that lane declined to invent a number rather than mint a second
- * mechanism. `ERROR_CODE_VAULT_MOVED = 25` exists, and `lease.proto`'s
- * `VaultMoved` — `current_epoch`, `moved_at_ms` — rides on the refusal beside
- * it. **This is the mapping, and there is one.**
+ * A refusal carrying `ERROR_CODE_VAULT_MOVED = 25`, with `error.proto`'s
+ * `VaultMoved` — `current_epoch`, `moved_at_ms` — riding beside it, becomes
+ * the two terms `Shelf.freeze` takes. **This is the mapping, and there is
+ * one** for a refusal; [freezeFor] below is its twin for a pass and the
+ * ledger.
  *
  * It is HERE rather than inside the gateway client for the reason the two
  * functions above are here: a refusal becomes a member-facing fact in one
@@ -123,3 +122,19 @@ internal fun movedFrom(error: Error, unacked: Long): Moved? {
 
 /** What a `VAULT_MOVED` refusal says, in the two terms `Shelf.freeze` takes. */
 internal data class Moved(val atIso: String, val unacked: Long)
+
+/**
+ * THE SAME TWO TERMS FROM A PASS OR THE LEDGER (#1080): a pass that stopped
+ * `MOVED` at [movedAtMs], or a `backup_status` whose `frozen` the core
+ * remembered. Null when neither says the vault moved.
+ *
+ * The count is what is ONLY on this phone — the items no gateway acknowledged
+ * ([BackupReading.unconfirmed]) — and the date is the last acknowledgement on
+ * the GATEWAY's clock, so the line reads "N changes since the last backup";
+ * the move's own time stands in when nothing was ever acknowledged.
+ */
+internal fun freezeFor(reading: BackupReading?, movedAtMs: Long?): Moved? {
+    if (movedAtMs == null && reading?.frozen != true) return null
+    val sinceMs = reading?.lastAckMs ?: movedAtMs ?: 0L
+    return Moved(atIso = rfc3339FromEpochMillis(sinceMs), unacked = reading?.unconfirmed ?: 0L)
+}

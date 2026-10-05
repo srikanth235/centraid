@@ -1,43 +1,52 @@
 #if os(iOS)
 import BackgroundTasks
 import Foundation
+import UIKit
 
-/// THE HANDLERS `BGTaskScheduler` NEEDS, AND NOTHING ELSE (#1029 W18-1).
+/// THE TWO `BGTaskScheduler` WINDOWS, AND WHAT EACH ONE RUNS (#1029 W18-1;
+/// #1080, the shells).
 ///
-/// The scope amendment of 2026-09-21 ("Superseded — Background upload") is that
-/// the phone drains its spool over iroh **in the foreground and inside the
-/// `BGProcessingTask` window iOS grants**. There is no transfer while the app is
-/// suspended. That makes the two things in this file load-bearing rather than
-/// plumbing, and before it neither existed:
+/// Bytes move while the app is suspended through the background `URLSession`
+/// in `BackgroundUploads.swift` (#1080 ruling 2). These windows are the other
+/// half: the work that needs this process — taking a snapshot, hashing and
+/// sealing into the spool, settling what the OS reported, asking the core for
+/// the next `handoff` batch.
 ///
-/// 1. **Nothing registered a handler for either identifier.**
-///    `grep -rn 'forTaskWithIdentifier' mobile/iosApp/Sources` was empty, so
-///    `IosBackgroundTasks.register()` submitted two task requests that iOS had
-///    no launch handler for. A submit with no registered handler raises
-///    `NSInternalInconsistencyException`: the app does not fail the task, it
-///    **terminates**. Even a granted window had nothing to run.
-/// 2. **`dev.centraid.upload-pass` was not declared in `project.yml`**, which is
-///    the source `Resources/Info.plist` is generated from. Same exception, same
-///    termination, on the first submit of a generated build.
+/// | Identifier | Request | What it runs |
+/// |---|---|---|
+/// | `dev.centraid.upload-pass` | `BGProcessingTaskRequest`, network AND external power | the full pass: snapshot when due, prepare, settle, then hand the next batch to the OS |
+/// | `dev.centraid.sync-pass` | `BGAppRefreshTaskRequest`, seconds | a short pass whose deadline leaves it time to settle and hand off, not to prepare much |
 ///
-/// ## The three rules a handler here keeps
+/// **On power, now** (#1080). The processing window used to ask for a network
+/// and no charger, because the drain carried the bytes itself and a member who
+/// never charged overnight would never have been backed up. The bytes are the
+/// OS's to carry now, whenever the app is suspended; what is left for this
+/// window is hashing and sealing, which is the battery cost, and iOS grants a
+/// processing task on power far longer windows than one off it.
+///
+/// ## The rules a handler here keeps
 ///
 /// * **Register at launch, before any submit.** iOS requires every handler to be
-///   installed before `application(_:didFinishLaunchingWithOptions:)` returns;
-///   a registration made later is itself an exception. `CentraidApp.init()` is
-///   this app's launch, so [register] is called there and
-///   `IosBackgroundTasks.register()` — which submits — runs after it.
-/// * **`setTaskCompleted` on EVERY path, including expiration.** A task that
-///   ends without it is killed and its app is penalised in scheduling, which is
-///   a backup that gets rarer every time it fails.
-/// * **Re-submit on completion.** A `BGTaskRequest` is one-shot. A handler that
-///   does not schedule the next window runs exactly once in the life of an
-///   install, which reads to a member as "it worked the first day".
+///   installed before the app finishes launching; a registration made later is
+///   itself an exception. `CentraidApp.init()` calls [register].
+/// * **`setTaskCompleted` on EVERY path, including expiration, exactly once.**
+///   A task that ends without it is killed and its app is penalised in
+///   scheduling, which is a backup that gets rarer every time it fails.
+/// * **Resubmit at the start, at the end, and at every background entry.** A
+///   `BGTaskRequest` is one-shot: a handler that does not ask for the next
+///   window runs once in the life of an install, and one that asks only on
+///   success stops for good the first time a laptop is off. The scene phase
+///   calls [resubmitAll] on `.background` (#1080).
+/// * **A cold background launch opens the vaults first.** iOS may launch the
+///   app straight into a window with no scene; the handler touches
+///   `ShellModel.shared`, which opens the core, and waits up to
+///   [installWaitSeconds] for the shell to install [pass].
 ///
 /// Nothing here decides what a pass IS — [pass] is installed by the shell, for
 /// the same reason `SyncPass.install` exists on the Android half: the pass is
 /// `commonMain`'s and a copy spelled in a platform file is a second answer.
 enum BackgroundPasses {
+    typealias Pass = @MainActor (TimeInterval) async -> Bool
 
     /// The short window: iOS grants a `BGAppRefreshTask` seconds, not minutes.
     ///
@@ -47,8 +56,7 @@ enum BackgroundPasses {
     /// three files; `BackgroundIdentifierSpec` compares all three.
     static let refreshIdentifier = "dev.centraid.sync-pass"
 
-    /// The long one, for draining a generation. `BGProcessingTask` is what iOS
-    /// gives work that needs minutes.
+    /// The long one: minutes, on power, with a network.
     static let processingIdentifier = "dev.centraid.upload-pass"
 
     /// What a refresh window is told it has. iOS documents ~30 seconds and
@@ -61,18 +69,41 @@ enum BackgroundPasses {
     /// whichever arrives first, this or the expiration handler.
     static let processingBudgetSeconds: TimeInterval = 8 * 60
 
-    /// THE DRAIN PASS, INSTALLED BY THE SHELL.
+    /// How long a window waits for a cold launch to open the vaults and
+    /// install the pass before it completes honestly without one.
+    static let installWaitSeconds: TimeInterval = 20
+
+    /// Fifteen minutes, the same floor `IosBackgroundTasks.EARLIEST_SECONDS`
+    /// uses and the same one WorkManager enforces on the Android half.
+    static let earliestSeconds: TimeInterval = 15 * 60
+
+    /// THE PASS, INSTALLED BY THE SHELL once the session exists.
     ///
-    /// Takes the deadline this window has in seconds and answers whether the
-    /// spool was emptied. Nil before the shell has installed one — an app that
-    /// has not finished launching has nothing to drain — and a window that finds
-    /// it nil completes honestly rather than claiming a pass ran.
-    static var pass: ((TimeInterval) async -> Bool)?
+    /// Takes the deadline this window has in seconds and answers whether every
+    /// held vault's spool was emptied — which is what `setTaskCompleted`
+    /// takes. Nil before the shell has installed one.
+    @MainActor static var pass: Pass? {
+        didSet {
+            guard let pass else { return }
+            let waiting = waiters
+            waiters.removeAll()
+            waiting.values.forEach { $0.resume(returning: pass) }
+        }
+    }
+
+    @MainActor private static var waiters: [UUID: CheckedContinuation<Pass?, Never>] = [:]
 
     /// Install both handlers. **Called once, at launch, before any submit.**
     static func register() {
         register(identifier: refreshIdentifier, budget: refreshBudgetSeconds)
         register(identifier: processingIdentifier, budget: processingBudgetSeconds)
+    }
+
+    /// Ask for the next window of BOTH kinds. The scene phase calls this on
+    /// every `.background` (#1080), so leaving the app is what arms the night.
+    static func resubmitAll() {
+        resubmit(identifier: refreshIdentifier)
+        resubmit(identifier: processingIdentifier)
     }
 
     private static func register(identifier: String, budget: TimeInterval) {
@@ -82,28 +113,46 @@ enum BackgroundPasses {
     }
 
     private static func run(_ task: BGTask, identifier: String, budget: TimeInterval) {
-        // THE NEXT WINDOW IS ASKED FOR FIRST, not last. A pass that crashes or
-        // is expired mid-drain has still asked, so the failure costs one window
-        // rather than every window after it.
+        // THE NEXT WINDOW IS ASKED FOR FIRST as well as last. A pass that
+        // crashes or is expired mid-pass has still asked, so the failure costs
+        // one window rather than every window after it.
         resubmit(identifier: identifier)
-        guard let pass else {
-            // NOT A FAILURE. `success: true` here would be a claim that a drain
-            // happened; `false` is the honest answer and iOS reads it as work
-            // that did not finish, which is exactly what it was.
-            task.setTaskCompleted(success: false)
-            return
-        }
-        let work = Task {
+        let completion = TaskCompletion(task)
+        let work = Task { @MainActor in
+            // A COLD BACKGROUND LAUNCH HAS NO SESSION YET: opening it is
+            // `ShellModel`'s, and the pass is installed when it exists.
+            _ = ShellModel.shared
+            guard let pass = await installed(within: installWaitSeconds) else {
+                // NOT A FAILURE TO CLAIM AS SUCCESS. `false` is the honest
+                // answer: no pass ran in this window.
+                completion.finish(false)
+                return
+            }
             let drained = await pass(budget)
-            task.setTaskCompleted(success: drained)
+            resubmit(identifier: identifier)
+            completion.finish(drained)
         }
-        // EXPIRATION IS iOS TAKING THE WINDOW BACK. Cancelling the work is what
-        // stops the drain mid-object — the spool never loses a sealed object, so
-        // the next window resumes from where this one stopped — and
+        // EXPIRATION IS iOS TAKING THE WINDOW BACK. Cancelling stops the pass
+        // at its next part boundary — the spool never loses a sealed part, so
+        // the next window resumes where this one stopped — and
         // `setTaskCompleted` is owed on this path too.
         task.expirationHandler = {
             work.cancel()
-            task.setTaskCompleted(success: false)
+            completion.finish(false)
+        }
+    }
+
+    /// The installed pass, now or within [seconds], or nil.
+    @MainActor private static func installed(within seconds: TimeInterval) async -> Pass? {
+        if let pass { return pass }
+        let ticket = UUID()
+        return await withCheckedContinuation { continuation in
+            waiters[ticket] = continuation
+            DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+                MainActor.assumeIsolated {
+                    waiters.removeValue(forKey: ticket)?.resume(returning: nil)
+                }
+            }
         }
     }
 
@@ -117,10 +166,10 @@ enum BackgroundPasses {
         let request: BGTaskRequest
         if identifier == processingIdentifier {
             let processing = BGProcessingTaskRequest(identifier: identifier)
-            // A NETWORK, NOT A CHARGER. A member who never charges overnight is
-            // the member most likely to lose a phone.
             processing.requiresNetworkConnectivity = true
-            processing.requiresExternalPower = false
+            // ON POWER (#1080): see the header. The same answer
+            // `IosBackgroundTasks` submits at launch; the two must agree.
+            processing.requiresExternalPower = true
             request = processing
         } else {
             request = BGAppRefreshTaskRequest(identifier: identifier)
@@ -131,10 +180,26 @@ enum BackgroundPasses {
         // about it through `BackgroundTasks.Registration`.
         try? BGTaskScheduler.shared.submit(request)
     }
+}
 
-    /// Fifteen minutes, the same floor `IosBackgroundTasks.EARLIEST_SECONDS`
-    /// uses and the same one WorkManager enforces on the Android half.
-    private static let earliestSeconds: TimeInterval = 15 * 60
+/// `setTaskCompleted`, EXACTLY ONCE. The pass's answer and the expiration can
+/// both arrive, from two threads, and the second must be a no-op.
+private final class TaskCompletion: @unchecked Sendable {
+    private let task: BGTask
+    private let lock = NSLock()
+    private var done = false
+
+    init(_ task: BGTask) {
+        self.task = task
+    }
+
+    func finish(_ success: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !done else { return }
+        done = true
+        task.setTaskCompleted(success: success)
+    }
 }
 
 #endif

@@ -272,64 +272,64 @@
       <section class="dark" id="p2p">
         <div class="wrap">
           <p class="eyebrow r">§06 · peer-to-peer</p>
-          <h2 class="r" style="--d: 0.06s">Two phones behind NAT, <em>no middleman.</em></h2>
+          <h2 class="r" style="--d: 0.06s">Your phone, your machine, <em>no middleman.</em></h2>
           <p class="lede r" style="--d: 0.12s">
-            Your phone and your desktop almost certainly have no public address — both sit behind
-            NAT, a router quietly hiding them from the open internet. That single fact is why
-            personal software normally rents a cloud middleman just to let your own devices talk.
-            Centraid instead rides <b>iroh</b>, an open-source peer-to-peer library, over
-            <b>QUIC</b> — the modern transport that runs on UDP with TLS 1.3 built in and can carry
-            many independent streams on one connection, so a live SSE feed is just a stream that
-            stays open.
+            Your phone almost certainly has no public address, and neither does the laptop at home
+            — both sit behind a router that hides them from the open internet. That single fact is
+            why personal software normally rents a cloud middleman just to let your own devices
+            talk. Centraid's backup refuses the middleman instead: the phone, which holds the vault,
+            opens an ordinary <b>HTTPS</b> connection straight to a <b>gateway</b> it can reach — on
+            the home network, or at an address you gave it — and trusts it by a fingerprint you
+            scanned, not by an authority you have to believe.
           </p>
           <div class="grid cols-3" style="margin-top: 30px">
             <div class="card r" style="--d: 0.1s">
               <p class="c-no">the fast path</p>
-              <h3>Direct, punched</h3>
+              <h3>LAN first</h3>
               <p>
-                Both devices are behind NAT with no public IP, so iroh punches a direct hole
-                through it — traffic goes device to device, no server in the middle.
+                At home the phone finds the gateway on the local network — it advertises itself over
+                Bonjour — and uploads device to device at Wi-Fi speed, with nothing in between.
               </p>
             </div>
             <div class="card r" style="--d: 0.18s">
-              <p class="c-no">the fallback</p>
-              <h3>Relay fallback</h3>
+              <p class="c-no">away from home</p>
+              <h3>Any address you can dial</h3>
               <p>
-                When punching fails — symmetric NAT, strict firewalls — traffic relays through
-                iroh's public n0 network, still end-to-end encrypted. Centraid rents no relay fleet
-                of its own.
+                A gateway on a VPS, or a laptop on your own VPN, works from anywhere the phone can
+                reach it directly. Nothing punches through NATs and nothing relays: a gateway out of
+                reach is one the phone waits for.
               </p>
             </div>
             <div class="card r" style="--d: 0.26s">
               <p class="c-no">the identity</p>
-              <h3>Keys are addresses</h3>
+              <h3>The pin is the trust</h3>
               <p>
-                A device's network identity <em>is</em> its Ed25519 public key. The handshake
-                proves it — no account, no TLS certificate, no exposed port.
+                The gateway signs its own certificate. The phone compares the certificate's BLAKE3
+                hash with the <b>pin</b> in the pairing QR and trusts those exact bytes — no
+                account, no certificate authority, no domain name.
               </p>
             </div>
           </div>
           <div class="prose r" style="--d: 0.3s">
             <p>
-              Joining that network is a one-time pairing ticket, not a login: desktop shows a QR
-              code that burns on first use, or a headless gateway mints a pasteable ticket over SSH
-              that pins the gateway's key up front, closing the trust-on-first-use gap entirely.
-              From there, <b>enrollment is the whole access-control list</b> — one revocable row per
-              device key per vault, no roles, no permission matrix. Revocation bites mid-session,
-              re-checked on every stream, and an unenrolled key is refused at the transport layer
-              with a QUIC close code 401, before it ever reaches an application. The result is a
-              star, not a mesh: Centraid refuses the hardest problem in personal software —
-              multi-master sync — by never having it. One always-on gateway per person; every
-              device is just a client around it. A client need not be online to be useful, though:
-              each holds a consent-scoped offline <b>replica</b> — a private copy of just the slice
-              it's allowed to see — kept current by a one-way change log the gateway alone writes.
-              Offline edits queue as intents and settle on reconnect, so there is still exactly one
-              canonical writer and nothing to merge.
+              Joining is a one-time pairing, not a login: <code>centraid-gateway pair</code> prints
+              a QR code holding the gateway's addresses, its pin and a secret that admits one vault,
+              once, within a day. The phone scans it, refuses any certificate whose hash is not the
+              pin, and trades the secret for a <b>bearer token</b> for that one vault; you then
+              compare a 60-digit safety number on both screens. Why HTTPS rather than a peer-to-peer
+              transport? Because an iPhone keeps uploading for a suspended app only through the
+              system's background upload session, and that session speaks HTTPS. The gateway is a
+              <b>blind store</b>: everything on it was sealed on the phone under keys derived from
+              your 24 words, under names only your vault's key can compute, so a stolen gateway
+              yields ciphertext. And there is still exactly one writer. Each vault has a <b>writer
+              epoch</b> on every gateway; restoring onto a new phone claims the next one with a
+              signature only the vault's identity key can make, and the old phone is refused from
+              then on. The result is not a mesh and not sync: one phone writes, and the gateways
+              keep sealed copies of what it wrote.
             </p>
             <p class="aside">
               Go deeper: <a href="../devices/#iroh">Devices § connectivity</a> ·
-              <a href="../devices/#pairing">Devices § pairing</a> ·
-              <a href="https://www.iroh.computer/" target="_blank" rel="noopener">iroh.computer</a>
+              <a href="../devices/#pairing">Devices § pairing</a>
             </p>
           </div>
         </div>
