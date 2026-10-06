@@ -19,8 +19,8 @@ A report gives sessions, clean turns (turns not downstream of a session's first 
 | path | what |
 | --- | --- |
 | `authored/` | training-data sources: `worlds/` (households), `sessions/` (recipe-authored sessions with reference calls), `build.py` (replays each session through the runtime and writes training records, train == inference), `split.py` (train worlds / val worlds), `gate.py` (hygiene), `dist.py` (train, val, test one distribution?), `coverage.py` (shape), `trace.py` + `trace3_check.py` (the slot trace and its round trip), `BRIEF.md` (how to author), `evalkit/` (how the held-out A to D sessions were authored and checked) |
-| `eval/` | `sets/` (the frozen sets and `split.json`), `FROZEN.md`, `build_sets.py` (check, reference check, re-freeze), `sessions/` (provenance of the hand-written and e1 eval sessions), `worlds/` (A to D), `run.py` (single-session driver: `--model ref` verifies gold, `--model replay` re-sends a recorded run), `run_batched.py` (the batched greedy driver used on the GPU), `score.py`, `slices.py` (failed turns by class), `replay.py` (a recorded run through the current runtime, on CPU), `seed_worlds.py`, `lib.py`, `gold.py` |
-| `train/` | `fmt.py` (prompt and trace rendering), `train.py` (SFT; `--ema D` saves a weight EMA beside every mark as `ckpt-NNN-ema`), `soup.py` (uniform weight average of checkpoints), `decode.py` (constrained decoding), `hf_backend.py`, `batching.py`, `bundle.py` (stages a job: code, runtime binary, data, `job.json`), `kernel.py` (runs the job on the VM), `smoke.py` (CPU end to end), `vm/` (GCP Spot: `launch.sh`, `watch.sh`, `bundles.sh`, `score_ckpt.sh`, `README.md`) |
+| `eval/` | `sets/` (the frozen sets and `split.json`), `FROZEN.md`, `build_sets.py` (check, reference check, re-freeze), `rollout.py` (the rollout driver: screen and sample sets, RFT records and DPO pairs from scored runs; `test_rollout.py`), `sessions/` (provenance of the hand-written and e1 eval sessions), `worlds/` (A to D), `run.py` (single-session driver: `--model ref` verifies gold, `--model replay` re-sends a recorded run), `run_batched.py` (the batched greedy driver used on the GPU), `score.py`, `slices.py` (failed turns by class), `replay.py` (a recorded run through the current runtime, on CPU), `seed_worlds.py`, `lib.py`, `gold.py` |
+| `train/` | `fmt.py` (prompt and trace rendering), `train.py` (SFT; `--ema D` saves a weight EMA beside every mark as `ckpt-NNN-ema`; `--dpo PAIRS` runs DPO against the frozen initial model), `soup.py` (uniform weight average of checkpoints), `decode.py` (constrained decoding), `hf_backend.py`, `batching.py`, `bundle.py` (stages a job: code, runtime binary, data, `job.json`; `--continue-from gs://CKPT` is the continuation preset: init from it, 1 epoch, lr 4e-6, min-lr 0.05, warmup 0.02, ema 0.999), `kernel.py` (runs the job on the VM), `smoke.py` (CPU end to end), `vm/` (GCP Spot: `launch.sh`, `watch.sh`, `bundles.sh`, `score_ckpt.sh`, `README.md`) |
 | `data/` | the built artefacts of the current version: `train.jsonl.gz`, `train-val.jsonl.gz`, `README.md` (counts, hashes, the build command) |
 | `render.py` | the renderer shared by the runtime export and the trainer |
 
@@ -33,5 +33,25 @@ The runtime is the Rust crate `crates/nativetools`; `NATIVETOOLS` names the bina
 3. `train/vm/bundles.sh` once per runtime build; `train/vm/score_ckpt.sh gs://.../out/ckpt-100 --sets trainfit,val` (ckpt-100 is the default mark; `train/vm/score_ckpt.sh gs://.../out --mark best` scores the mark with the lowest val decision loss, which the trainer names in `out/best.json`).
 4. Diagnose on val: `eval/slices.py`, `eval/replay.py` for runtime changes (no model needed).
 5. Test at a milestone only.
+
+## Rollouts: the model's own sessions as training data
+
+`eval/rollout.py` is the CPU side of rejection-sampling fine-tuning and DPO: the GPU runs are `score_ckpt.sh` runs, so a set file is all they need. The set files are `eval/sets/roll-screen.jsonl` and `roll-sample.jsonl` (not frozen sets: `build_sets.py check` and `FROZEN.md` do not read them). The sets are gold of the build's `--gold-from-ref` output (only the sessions that verified); the worlds they were built on (the collision worlds, `build.py --worlds-dir`) go into the scoring bundle through `BUNDLE_WORLDS`, and the sample bundle runs with `NATIVE_SAMPLE=1` through `BUNDLE_EVAL_ENV`. `export` replays each kept rollout through the runtime that scored it, so run it with that binary. The method (what a pair is, what a record keeps) is in the module docstring.
+
+```
+# 1. screen set: every session once, greedy (B = the build outputs, W = their worlds dir, NT = the runtime binary the bundle ships)
+python3 eval/rollout.py sets --built $B/built $B/built-k1 --tokens
+BUNDLE_NATIVETOOLS=$NT BUNDLE_WORLDS=$W train/vm/bundles.sh --sets roll-screen
+# 2. score the screen set (the owner launches; --new-vm leaves no metadata to remove from the training VM); fetch score/<NAME>/roll-screen/{run.jsonl,report.json}
+JOB=<job> BUCKET=<bucket> train/vm/score_ckpt.sh $CKPT --name roll-screen --sets roll-screen --bundles-prefix bundles-roll --new-vm
+# 3. sample set: k copies (ids <id>-s<k>) of every failed session and a seeded 0.3 of the passing ones
+python3 eval/rollout.py sets --sample --screen-report screen/report.json [-k 6] [--frac 0.3] [--seed 1044]
+BUNDLE_NATIVETOOLS=$NT BUNDLE_WORLDS=$W BUNDLE_EVAL_ENV='{"NATIVE_SAMPLE": "1"}' train/vm/bundles.sh --sets roll-sample
+# 4. score the sample set (same checkpoint, a new --name; temperature 0.6, top-p 0.95)
+JOB=<job> BUCKET=<bucket> train/vm/score_ckpt.sh $CKPT --name roll-sample --sets roll-sample --bundles-prefix bundles-roll --new-vm
+# 5. export: rft.jsonl.gz (up to -m 2 passing rollouts per session), dpo.jsonl.gz (up to -p 2 pairs), summary.json
+NATIVETOOLS=$NT python3 eval/rollout.py export --screen-run screen/run.jsonl --screen-report screen/report.json \
+    --sample-run sample/run.jsonl --sample-report sample/report.json --worlds $W --out OUT [-m 2] [-p 2]
+```
 
 Decisions: `docs/decisions.md`, the #1044 section. Evidence: `receipts/issue-1044-*.md`. Where the work stands and what comes next: `HANDOFF.md`.

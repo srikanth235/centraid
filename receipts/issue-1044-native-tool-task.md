@@ -210,3 +210,21 @@ Val (655 sessions, 2,055 turns), greedy, the runtime named per row. Paired compa
 - **nt13** (resolve more, guess nothing: B1, B2, R1 to R6; `tests/phase9_nt13.rs`, 823 crate tests): val gold refreezes byte-identical; six train sets verify identically on nt12 and nt13; replay gains S2 +3, S1 +2, i2a +2 sessions, with no session lost by nt13 (every turn that flipped down is a replay artefact: renumbered rows downstream of a newly found row, or a recorded repeat after a now-successful call).
 - **Trainer.** `train.py --ema D` keeps an fp32 weight EMA, evaluated on val and saved beside every mark as `ckpt-NNN-ema`; the training is bit-identical with or without it, and a resume carries the shadow (`train/test_ema.py`). `train/soup.py` is the uniform weight average that built S1 to S3 (`train/test_soup.py`).
 - Open: the four owner rulings, a live score of S2 on nt13, rollouts and a rejection-sampled run, test at a milestone: `experiments/toolchat/native/HANDOFF.md`.
+
+## Evidence: phase 0 of the next iteration, runtime nt14 and nt15, val v7.4 (2026-10-06)
+
+CPU only; no model was trained or scored live. Replays rescore S2's recorded nt12 run (`eval/replay.py`) under a new runtime and gold.
+
+| step | S2 sessions (655) | note |
+| --- | --- | --- |
+| recorded run, v7.3 gold | 537 | the nt12 live score |
+| recorded run rescored on the N7 refreeze | 541 | `decline-any-reason` widens 124 turns |
+| replay on nt14 + N7 | 547 | 11 up, 3 down; the 3 down were an N1 over-reach (ranges and open windows), fixed in nt15 as N1b |
+| replay on nt15 + v7.4 | 542 | 14 turns gained for real (T03-121, T03-131, T03-012, C-E010, test-B-060, test-D-010 among them); all 11 sessions down are renumbering artefacts: the new vault lines shift `#n` handles the recorded model wrote |
+
+- **Hard-core audit** of the 63 sessions every model fails (2 readers): model-hard 44, runtime 12, conventions 5, gold 2. Safety finding T03-121: a rejected "2fa" reveal ended with the password revealed in every model; fixed by N4 and R1s.
+- **nt14** (ruling 1, N1 to N6, N9; `tests/phase9_nt14.rs`) and **nt15** (R1 to R5, N1b and three follow-ups found by the replay: kind words in R4, R1s only for a field the user named, the R1a hint's scope; `tests/phase9_nt15.rs`): 889 crate tests. Gold of nine train worlds is byte-identical nt13 to nt15 except the reveal error text of two recorded author steps. nt15 changes the system prompt's `act` line (`body+`) and 93 of 5,523 train vault lines, which a replay cannot price: the live score of S2 on nt15 is the open measurement.
+- **val v7.4** (sha256 `5d3d9035…`, nt15 sha256 `03a3d3a2…`): 128 turns in 108 sessions gain an accept, none removed (`decline-any-reason` 124, `superlative` 2, `after-series-ask` 1, `group-or-value` 1), UNEXPLAINED 0. G2 audit: of B-E093, D-E127, D-E128, T12-085, T12-092, T23-108 only D-E127 needed the rule; no val turn needed rewording. C1 to C6 contradict no val gold. Rulings: D-1044-16.
+- **Data for the rejection-sampled run**: 2,514 fresh sessions (train worlds, rewordings new to training) and 355 skill sessions for the seven model-hard skills (S1 referent 53, S2 units and windows 53, S3 read vs write 54, S4 no invention 47, S5 decline after a miss 53, S6 vocabulary 50, S7 look then pick 45), all verified on nt15; the screen set `eval/sets/roll-screen.jsonl` holds the 2,869.
+- **Tooling**: `eval/rollout.py` (screen and sample sets, RFT records and DPO pairs; 33 tests), `train.py --dpo` with a precomputed reference (21 tests) and `bundle.py --continue-from` (1 epoch, lr 4e-6, EMA 0.999), retry on a runtime signal (`NATIVE_RETRY`), opt-in fast kernels and bf16 scoring.
+- Open: the live S2 score on nt15, then screen, sample, RFT and DPO, each on the owner's go: `experiments/toolchat/native/HANDOFF.md`.
