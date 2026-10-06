@@ -677,7 +677,8 @@ fn a_read_with_a_selector_beyond_the_name_keeps_its_rows() {
     let world = seeded();
     let mut session = world.session();
     session.user("is the cabin due the friday after next");
-    // a name that resolves, narrowed to nothing by when, is already the answer (D-E048)
+    // a name that resolves, narrowed to nothing by when, is the answer of the name alone with the
+    // day the row is on (nt14 N1; D-E048's empty answer is what `--no-normalize` still says)
     let when = json!({"unit": "week", "rel": 2, "weekday": 5});
     let answered = call(
         &mut session,
@@ -685,8 +686,12 @@ fn a_read_with_a_selector_beyond_the_name_keeps_its_rows() {
         json!({"kind": "task", "name": "cabin", "when": when}),
     );
     assert_eq!(
-        answered["effect"]["answer"]["rows"],
-        json!([]),
+        ids(&answered["effect"]["answer"]["rows"]),
+        vec![world.id("cabin")],
+        "{answered}"
+    );
+    assert!(
+        text(&answered).contains("note: none Fri 2026-10-09; Book the cabin is on Fri 2026-10-02"),
         "{answered}"
     );
     assert!(answered["effect"].get("composed").is_none(), "{answered}");
@@ -1190,11 +1195,35 @@ fn a_find_with_rows_a_name_that_resolves_or_a_valid_empty_is_not_a_miss() {
         "{hit}"
     );
     assert!(hit["effect"].get("compose").is_none(), "{hit}");
-    // a name that reaches a row, narrowed to nothing by a date, is the empty answer of §8.5
+    // a name that reaches a row, narrowed to nothing by a date, is the name's own row with the
+    // day it is on (nt14 N1), not a miss; under `--no-normalize` the empty answer of §8.5
     session.user("is the cabin due the friday after next");
     let when = json!({"unit": "week", "rel": 2, "weekday": 5});
-    let empty = call(
+    let found = call(
         &mut session,
+        "find",
+        json!({"kind": "task", "name": "cabin", "when": when}),
+    );
+    assert_eq!(
+        found["effect"]["rows"].as_array().map(Vec::len),
+        Some(1),
+        "{found}"
+    );
+    assert!(found["effect"].get("compose").is_none(), "{found}");
+    assert!(
+        text(&found).contains("note: none Fri 2026-10-09"),
+        "{found}"
+    );
+    let mut replayed = world.session_with(
+        common::TODAY,
+        centraid_nativetools::Flags {
+            normalize: false,
+            ..centraid_nativetools::Flags::default()
+        },
+    );
+    replayed.user("is the cabin due the friday after next");
+    let empty = call(
+        &mut replayed,
         "find",
         json!({"kind": "task", "name": "cabin", "when": when}),
     );
@@ -2731,7 +2760,9 @@ fn a_partial_fit_of_its_own_kind_does_not_shadow_the_exact_name_of_another() {
     let reply = call(&mut session, "act", move_oil_change("oil change"));
     assert_eq!(diff_rows(&reply)[0]["id"], world.id("oil"), "{reply}");
     assert_eq!(family(&reply), fix("unmatched_write", "apply_other_kind"));
-    // a verb the event does not take has no other kind to go to: the ask names the partial fit
+    // a verb the event does not take has no other kind to go to, and `Buy oil filter` holds one of
+    // the two words of the name: no candidate for a write (nt15 R4: more than half the words), so
+    // the turn ends in the decline
     let mut session = world.session();
     session.user("tick off oil change");
     let ask = call(
@@ -2739,22 +2770,22 @@ fn a_partial_fit_of_its_own_kind_does_not_shadow_the_exact_name_of_another() {
         "act",
         json!({"verb": "complete", "kind": "task", "name": "oil change"}),
     );
-    assert_eq!(tool_of(&ask), "ask", "{ask}");
-    assert_eq!(options(&ask), vec![world.id("filter")], "{ask}");
+    assert_eq!(tool_of(&ask), "decline", "{ask}");
+    assert_eq!(family(&ask), fix("unmatched_write", "decline:not_found"));
     assert!(diff_rows(&ask).is_empty(), "{ask}");
 }
 
 #[test]
-fn a_candidate_that_fits_one_word_of_two_is_asked_about_not_applied() {
-    // "Ray Smith" reaches "Ray Ochoa" by one word of two: a guess for the ask, not a spelling of the
-    // name (R3 applies "Ray Ochoo", whose every word is spelled)
+fn a_candidate_that_fits_one_word_of_two_is_not_one_for_a_write() {
+    // "Ray Smith" reaches "Ray Ochoa" by one word of two: no candidate for a write (nt15 R4: more
+    // than half of the name's words; it was the ask `Did you mean Ray Ochoa?`), and not a spelling
+    // of the name either (R3 applies "Ray Ochoo", whose every word is spelled)
     let world = seeded();
     let mut session = world.session();
     session.user("star ray smith");
     let reply = call(&mut session, "act", STAR("Ray Smith"));
-    assert_eq!(tool_of(&reply), "ask", "{reply}");
-    assert_eq!(options(&reply), vec![world.id("ray")], "{reply}");
-    assert_eq!(family(&reply), fix("unmatched_write", "ask_nearest"));
+    assert_eq!(tool_of(&reply), "decline", "{reply}");
+    assert_eq!(family(&reply), fix("unmatched_write", "decline:not_found"));
     assert!(reply["effect"].get("near_spelling").is_none(), "{reply}");
     assert!(diff_rows(&reply).is_empty(), "{reply}");
 }

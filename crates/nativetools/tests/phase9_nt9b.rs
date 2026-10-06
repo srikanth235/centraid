@@ -904,7 +904,8 @@ fn a_link_the_kinds_lack_names_the_parameter_that_fits() {
 fn a_secret_the_item_lacks_names_the_one_it_holds() {
     let world = seeded();
     let mut session = world.session();
-    session.user("what is the cvv of the home wifi");
+    // (nt15 R1s: the call for the one secret it holds is sent only when the message names it)
+    session.user("what is the cvv or the password of the home wifi");
     let wifi = common::find_in_turn(&mut session, "locker item", "Home wifi");
     let reply = call(
         &mut session,

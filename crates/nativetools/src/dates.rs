@@ -232,6 +232,49 @@ impl Resolved {
         }
     }
 
+    /// The first day of a closed range, for a write that takes one day (nt14 N5: a task due "in
+    /// October" is due on the 1st). `None` for a day, an instant (`point` has those) and an
+    /// open-ended range.
+    #[must_use]
+    pub fn first_day(self) -> Option<Stamp> {
+        if self.is_open() || self.point().is_some() {
+            return None;
+        }
+        let (from, _) = self.ends();
+        Some(Stamp {
+            date: from.date(),
+            time: None,
+        })
+    }
+
+    /// The part of the day around an instant (nt14 N9): morning 05:00 to 11:59, afternoon 12:00
+    /// to 16:59, evening 17:00 to 23:59, as its name and the span. `None` for any other
+    /// expression and for the small hours.
+    #[must_use]
+    pub fn part_of_day(self) -> Option<(&'static str, Self)> {
+        let Self::At(at) = self else {
+            return None;
+        };
+        let (name, from, to) = match at.hour() {
+            5..=11 => ("morning", 5, 11),
+            12..=16 => ("afternoon", 12, 16),
+            17..=23 => ("evening", 17, 23),
+            _ => return None,
+        };
+        let edge = |hour: i8, minute: i8| {
+            Time::new(hour, minute, 0, 0)
+                .ok()
+                .map(|time| at.date().to_datetime(time))
+        };
+        Some((
+            name,
+            Self::Between {
+                from: edge(from, 0)?,
+                to: edge(to, 59)?,
+            },
+        ))
+    }
+
     /// The first and last point, for a span a write takes (event start/end).
     #[must_use]
     pub fn ends(self) -> (DateTime, DateTime) {

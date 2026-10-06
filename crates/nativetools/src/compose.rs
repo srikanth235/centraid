@@ -233,6 +233,9 @@ impl Session {
             .within
             .and_then(|handle| self.results.get(handle.checked_sub(1)?))
             .map(|result| result.keys.iter().cloned().collect());
+        // a write needs more than half the name's content words in a row (nt15 R4; reads keep
+        // half), so a row that shares one of two is no candidate; off with `--no-normalize`
+        let majority = self.flags.normalize;
         let in_part = |kinds: &[Kind]| {
             keep(search::name_in_part(
                 self,
@@ -240,6 +243,7 @@ impl Session {
                 kinds,
                 scope.as_ref(),
                 trashed,
+                majority,
             ))
         };
         let own = in_part(&selector.kinds);
@@ -370,7 +374,7 @@ impl Session {
                 return (keys, !reached.is_typo());
             }
             let part: Vec<Key> =
-                search::name_in_part(self, name, kinds, scope.as_ref(), selector.trashed)
+                search::name_in_part(self, name, kinds, scope.as_ref(), selector.trashed, false)
                     .into_iter()
                     .filter(|key| keep(key))
                     .collect();

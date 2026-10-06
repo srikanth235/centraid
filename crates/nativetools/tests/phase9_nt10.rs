@@ -30,7 +30,8 @@ fn a_resend_after_an_error_with_a_fix_quotes_the_fix_and_the_turn_stays_open() {
     // stays an error that ends in the call to send
     let world = seeded();
     let mut session = world.session();
-    session.user("show the cvv of the home wifi");
+    // (nt15 R1s: the one secret the item holds is offered to send only when the message names it)
+    session.user("show the password or the cvv of the home wifi");
     let wifi = common::find_in_turn(&mut session, "locker_item", "home wifi");
     let bad = json!({"verb": "reveal", "rows": [wifi], "args": "field: cvv"});
     let first = call(&mut session, "act", bad.clone());
@@ -187,11 +188,23 @@ fn a_when_the_message_never_said_is_named() {
     let world = seeded();
     let mut session = world.session();
     session.user("what about the cabin task");
-    let miss = call(
-        &mut session,
-        "find",
-        json!({"kind": "task", "name": "cabin", "when": {"unit": "day", "rel": 1}}),
+    let call_with = json!({"kind": "task", "name": "cabin", "when": {"unit": "day", "rel": 1}});
+    // the name and the day fit no row, the name fits one: the name's row and its day (nt14 N1)
+    let widened = call(&mut session, "find", call_with.clone());
+    assert!(
+        text(&widened).contains("note: none Mon 2026-09-28; Book the cabin is on Fri 2026-10-02"),
+        "{widened}"
     );
+    // a session that does not normalise has the hint of the `when` that hid the row
+    let mut replay = world.session_with(
+        common::TODAY,
+        centraid_nativetools::Flags {
+            normalize: false,
+            ..centraid_nativetools::Flags::default()
+        },
+    );
+    replay.user("what about the cabin task");
+    let miss = call(&mut replay, "find", call_with);
     assert!(hint_of(&miss).contains("without when"), "{miss}");
     assert!(hint_of(&miss).contains("task \"Book the cabin\""), "{miss}");
 }
@@ -643,9 +656,11 @@ fn a_field_the_kind_names_otherwise_runs_as_that_field() {
 
 #[test]
 fn a_secret_the_item_lacks_ends_in_the_whole_reveal_call() {
+    // the call to send is the one for the secret the person's words name (nt15 R1s): a message
+    // that names only the cvv gets no call for the password
     let world = seeded();
     let mut session = world.session();
-    session.user("what is the cvv of the home wifi");
+    session.user("what is the cvv or the password of the home wifi");
     let wifi = common::find_in_turn(&mut session, "locker item", "Home wifi");
     let reply = call(
         &mut session,

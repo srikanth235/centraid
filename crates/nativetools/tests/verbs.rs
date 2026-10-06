@@ -319,7 +319,12 @@ fn reschedule_reads_the_row_anchor_and_keeps_the_time() {
         "act",
         json!({"verb": "reschedule", "rows": cabin, "args": {"to": {"unit": "week", "rel": 1}}}),
     );
-    assert!(range.contains("is a range"), "{range}");
+    // a task due on a closed range is due on its first day, with a note (nt14 N5)
+    assert!(
+        range.contains("note: read 2026-09-28..2026-10-04 as its first day, Mon 2026-09-28"),
+        "{range}"
+    );
+    session.user("");
     let bad = text(
         &mut session,
         "act",
@@ -568,6 +573,9 @@ fn cancel_log_settle_debt_settle_up_and_reveal() {
         nothing.contains("has no cvv. It holds: password."),
         "{nothing}"
     );
+    // the password is a new turn's request (nt15 R1s: after a refusal for the cvv, another secret
+    // of the item is not revealed in the same turn)
+    session.user("and the wifi password then");
     let revealed = call(
         &mut session,
         "act",

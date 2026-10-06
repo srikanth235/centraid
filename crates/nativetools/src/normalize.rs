@@ -37,10 +37,21 @@
 //!     `status = canceled`, a currency name or a near code) is the one value it means, in a
 //!     `where` and in an `edit` or `create` arg (`whr::resolve_where`, `resolve_arg`).
 //! 11. (nt13 R5) A compute's `group` written as a condition (`starred = yes`) groups by its field.
+//! 12. (nt14 N4) A `reveal`'s `field` written as another name for a secret (`2fa`, `cvc`,
+//!     `card no`, `pw`) is the field the item keeps (`REVEAL_SYNONYMS`, a closed table; `pin`
+//!     and every other word stay the error), with `note: read field 2fa as code`.
+//! 13. (nt15 R1a) A condition on `note count` of a task or an event (`note count = 0`, `> 0`) is the
+//!     condition on its `description` that says the same (`description is empty`, `is set`):
+//!     their notes are their description (`whr::notes_as_description`).
+//! 14. (nt15 R1b) `within: #43, #44` names rows, not a result: it is `rows: #43, #44` when every
+//!     `#n` is a row and nothing else selects (`Session::within_rows`).
+//! 16. (nt15 R2b) `notes+:` of a task is `description+:` (the append form, `act::appended`).
+//! 15. (nt15 R1c) A `linked_to` that names rows of several kinds keeps the ones the kind is linked
+//!     to when at least one is (`Session::keep_valid_links`).
 //! 7. A `when` written leniently (`9pm`, `"rel": "1"`, a weekday or a month as a word) is the
 //!    grammar's own form, with a note (`dates::lenient`).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
@@ -360,6 +371,170 @@ impl Session {
         object.insert("where".to_owned(), json!(fixed));
     }
 
+    /// RULE 13 (nt15 R1a): `note count = 0` on a task or an event is `description is empty`
+    /// (`> 0` is `description is set`), with a note: their notes are their description.
+    fn note_count_description(object: &mut Map<String, Value>, out: &mut Normalized) {
+        let Some(kind) = arg_str(object, "kind").and_then(|kind| Kind::parse(kind.trim())) else {
+            return;
+        };
+        let Some(text) = arg_str(object, "where").filter(|text| !text.trim().is_empty()) else {
+            return;
+        };
+        let mut changed = false;
+        let parts: Vec<String> = whr::split_and(&text)
+            .into_iter()
+            .map(|part| match whr::notes_as_description(kind, &part) {
+                Some((clause, state)) => {
+                    out.notes.push(format!(
+                        "note: read {} as {clause} ({} notes are its description)",
+                        part.trim(),
+                        if kind == Kind::Task { "a task's" } else { "an event's" }
+                    ));
+                    out.entries.push(
+                        json!({"rule": "note_count_description", "clause": part.trim(), "state": state}),
+                    );
+                    changed = true;
+                    clause
+                }
+                None => part,
+            })
+            .collect();
+        if changed {
+            object.insert("where".to_owned(), json!(parts.join(" and ")));
+        }
+    }
+
+    /// RULE 16 (nt15 R2b): the append form written with another word for the text (`notes+:` of a
+    /// task, `text+:` of a note) is the field's own, `description+:` or `body+:`, with a note
+    /// (`whr::resolve_field`, the one resolver of a field's other names).
+    fn append_alias(&self, object: &mut Map<String, Value>, out: &mut Normalized) {
+        let kind = arg_str(object, "kind")
+            .and_then(|kind| Kind::parse(kind.trim()))
+            .or_else(|| {
+                let rows = self.resolve_rows(object.get("rows")?).ok()?;
+                rows.first().map(|key| key.0)
+            });
+        let (Some(kind), Ok(mut lines)) = (kind, ArgLines::read(object.get("args"))) else {
+            return;
+        };
+        let mut changed = false;
+        for key in lines.keys() {
+            let Some(word) = key.strip_suffix('+').map(str::trim) else {
+                continue;
+            };
+            let Some(field) = whr::resolve_field(kind, word)
+                .filter(|field| matches!(*field, "body" | "description") && *field != word)
+            else {
+                continue;
+            };
+            let meant = format!("{field}+");
+            if lines.has(&meant) {
+                continue;
+            }
+            lines.rename(&key, &meant);
+            out.notes.push(format!("note: read {key} as {meant}"));
+            out.entries
+                .push(json!({"rule": "append_field_read", "from": key, "to": meant}));
+            changed = true;
+        }
+        if changed {
+            object.insert("args".to_owned(), lines.into_value());
+        }
+    }
+
+    /// RULE 14 (nt15 R1b): `within: #43, #44` is a list of rows, not a result: `rows: #43, #44`,
+    /// with a note, when every `#n` is a row of the vault and nothing else selects (a `where`, a
+    /// `name`, ... beside it stays the error that names the repair). Not for a `find`, which has
+    /// no `rows`: its error says `answer rows: #43, #44`.
+    fn within_rows(&self, tool: &str, object: &mut Map<String, Value>, out: &mut Normalized) {
+        // `find` has no `rows`: its reply names `answer`, which takes them
+        let Some(within) = arg_str(object, "within").filter(|_| tool != "find") else {
+            return;
+        };
+        let parts = crate::session::handle_list(&Value::String(within));
+        if parts.is_empty()
+            || !parts.iter().all(|part| crate::session::is_row_handle(part))
+            || parts.iter().any(|part| self.resolve_row(part).is_err())
+            || object.get("rows").is_some_and(|rows| !rows.is_null())
+            || selector_params(object) != ["within"]
+        {
+            return;
+        }
+        let rows = parts.join(", ");
+        object.remove("within");
+        object.insert("rows".to_owned(), json!(rows));
+        out.notes.push(format!(
+            "note: within takes a result (@n); used rows: {rows}"
+        ));
+        out.entries
+            .push(json!({"rule": "within_as_rows", "rows": rows}));
+    }
+
+    /// RULE 15 (nt15 R1c): a `linked_to` that names rows of several kinds keeps the rows the
+    /// kind of the call is linked to, when at least one is, with a note that names the rest. With
+    /// none, or all of them valid, it is left for the reply that names which are which.
+    fn keep_valid_links(&self, object: &mut Map<String, Value>, out: &mut Normalized) {
+        let Some(value) = object.get("linked_to").filter(|value| !value.is_null()) else {
+            return;
+        };
+        let kinds = match arg_str(object, "kind") {
+            Some(text) => self.parse_kinds(&text, false).ok(),
+            None => arg_str(object, "within")
+                .and_then(|handle| self.resolve_result(&handle).ok())
+                .map(|handle| self.results[handle - 1].kinds.clone()),
+        };
+        let (Some(kinds), Ok(keys)) = (kinds, self.resolve_rows(value)) else {
+            return;
+        };
+        if kinds.is_empty() || keys.len() < 2 {
+            return;
+        }
+        let links = |key: &crate::world::Key| {
+            kinds
+                .iter()
+                .all(|kind| kind.spec().link_to(key.0).is_some())
+        };
+        let (valid, invalid): (Vec<_>, Vec<_>) = keys.iter().partition(|key| links(key));
+        if valid.is_empty() || invalid.is_empty() {
+            return;
+        }
+        let said = |keys: &[&crate::world::Key]| -> Vec<String> {
+            keys.iter()
+                .map(|key| match self.numbers.get(*key) {
+                    Some(number) => format!("#{number} {}", key.0.name()),
+                    None => key.0.name().to_owned(),
+                })
+                .collect()
+        };
+        let handles: Vec<String> = valid
+            .iter()
+            .filter_map(|key| self.numbers.get(*key).map(|number| format!("#{number}")))
+            .collect();
+        if handles.len() != valid.len() {
+            return;
+        }
+        let kind_words: Vec<&str> = kinds.iter().map(|kind| kind.plural()).collect();
+        out.notes.push(format!(
+            "note: used linked_to {}; ignored {} ({} link to {})",
+            handles.join(", "),
+            said(&invalid).join(", "),
+            kind_words.join(" or "),
+            kinds
+                .iter()
+                .flat_map(|kind| kind.spec().links.iter().map(|link| link.kind.name()))
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+        out.entries.push(json!({
+            "rule": "linked_to_valid",
+            "kept": handles,
+            "ignored": said(&invalid),
+        }));
+        object.insert("linked_to".to_owned(), json!(handles.join(", ")));
+    }
+
     /// RULE 10 (nt13 R1): an enumerated value, a currency name or a near currency code in a
     /// `where`, or in the args of an `edit` or a `create`, is the one value it means, with a note
     /// (`whr::resolve_where`, `resolve_arg`). Several values or none: left for the refusal that
@@ -410,6 +585,31 @@ impl Session {
         if changed {
             object.insert("args".to_owned(), lines.into_value());
         }
+    }
+
+    /// RULE 12 (nt14 N4): a `reveal` whose `field` is a synonym of a secret's name asks for that
+    /// secret (`meta::reveal_synonym`).
+    fn reveal_synonym(object: &mut Map<String, Value>, out: &mut Normalized) {
+        if !arg_str(object, "verb").is_some_and(|verb| verb.eq_ignore_ascii_case("reveal")) {
+            return;
+        }
+        let Ok(mut lines) = ArgLines::read(object.get("args")) else {
+            return;
+        };
+        let Some(written) = lines.get("field").map(|value| text_of(&value)) else {
+            return;
+        };
+        let Some(field) = meta::reveal_synonym(&written) else {
+            return;
+        };
+        let shown = unquoted(&written);
+        out.entries
+            .push(json!({"rule": "reveal_field_read", "from": shown, "to": field}));
+        out.notes
+            .push(format!("note: read field {shown} as {field}"));
+        lines.remove("field");
+        lines.set("field", field.to_owned());
+        object.insert("args".to_owned(), lines.into_value());
     }
 
     /// RULE 11 (nt13 R5): a `group` of a computation written as a condition (`starred = yes`,
@@ -493,13 +693,22 @@ impl Session {
         let mut object = object.clone();
         Self::lenient_when(&mut object, &mut out);
         Self::lenient_where(&mut object, &mut out);
+        Self::note_count_description(&mut object, &mut out);
+        self.within_rows(tool, &mut object, &mut out);
+        self.keep_valid_links(&mut object, &mut out);
         self.resolve_values(tool, &mut object, &mut out);
         if matches!(tool, "compute" | "answer") {
             Self::group_condition(&mut object, &mut out);
         }
         let verb = arg_str(&object, "verb").unwrap_or_default().to_lowercase();
+        if tool == "act" {
+            Self::reveal_synonym(&mut object, &mut out);
+        }
         if tool == "act" && matches!(verb.as_str(), "create" | "edit") {
             Self::convert_units(&mut object, &mut out);
+        }
+        if tool == "act" && verb == "edit" {
+            self.append_alias(&mut object, &mut out);
         }
         if tool == "act" && verb == "create" {
             self.normalize_create(&mut object, &mut out);

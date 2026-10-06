@@ -428,18 +428,78 @@ pub fn resolve_with<T: Clone, S: AsRef<str>>(
     out
 }
 
-/// The rows of `pool` a name resolves to: each answers to its name and a person's nickname.
+/// The rows of `pool` a name resolves to: each answers to its name and a person's nickname; a
+/// kinship word nothing else reaches is read through a person's role and nickname (`kin_reading`).
 #[must_use]
 pub(crate) fn resolve_rows<'a>(
     query: &str,
     rows: impl IntoIterator<Item = &'a Row>,
     light: bool,
 ) -> Resolution<Key> {
-    let candidates: Vec<(Key, Vec<&str>)> = rows
-        .into_iter()
-        .map(|row| (row.key(), aliases(row)))
+    let rows: Vec<&Row> = rows.into_iter().collect();
+    let candidates: Vec<(Key, Vec<&str>)> =
+        rows.iter().map(|row| (row.key(), aliases(row))).collect();
+    let found = resolve_with(query, &candidates, light);
+    if light && found.tier.is_none() {
+        return kin_reading(query, &rows).unwrap_or(found);
+    }
+    found
+}
+
+/// The kinship words that mean one another (nt14 N6), a closed table, folded (accents and case
+/// gone: `papá` is `papa`). The grandparents are two classes, not one, and `son`, `daughter`,
+/// `brother`, `sister`, `wife`, `husband` and `partner` are their own.
+const KIN: &[&[&str]] = &[
+    &["papa", "pa", "dad", "daddy", "father"],
+    &["mama", "ma", "mom", "mum", "mommy", "mother"],
+    &["amma", "ammi"],
+    &["abuela", "grandma", "granny", "nana", "grandmother"],
+    &["abuelo", "grandpa", "grandfather"],
+    &["son"],
+    &["daughter"],
+    &["brother"],
+    &["sister"],
+    &["wife"],
+    &["husband"],
+    &["partner"],
+];
+
+/// A KINSHIP WORD READ THROUGH A PERSON'S ROLE AND NICKNAME (nt14 N6; off with `--no-normalize`):
+/// `dad` or `papá` is the one person whose role or nickname, as a whole, is a word of the same
+/// class (`Father`, `Papa`; `Mother-in-law` is not `mother`). It is a tier-4 read, so it is said
+/// (`matched "Ravi Menon" for "papá"`) and a write acts on it as on any tier-4 row. Several
+/// people, or none: `None`, the path a name that reached nothing takes. `nana` is kin only while
+/// no one in the pool is called `nana`.
+fn kin_reading(query: &str, rows: &[&Row]) -> Option<Resolution<Key>> {
+    let said = folded_words(query, true).join(" ");
+    let class = KIN.iter().find(|class| class.contains(&said.as_str()))?;
+    let named_nana = rows.iter().any(|row| {
+        aliases(row)
+            .iter()
+            .any(|name| folded_words(name, true).iter().any(|word| word == "nana"))
+    });
+    let people: Vec<&&Row> = rows
+        .iter()
+        .filter(|row| row.kind == crate::meta::Kind::Person)
+        .filter(|row| {
+            ["role", "nickname"].iter().any(|field| {
+                let Some(crate::world::Val::Text(text)) = row.field(field) else {
+                    return false;
+                };
+                let have = folded_words(text, true).join(" ");
+                class.contains(&have.as_str()) && !(named_nana && have == "nana")
+            })
+        })
         .collect();
-    resolve_with(query, &candidates, light)
+    let [only] = people.as_slice() else {
+        return None;
+    };
+    Some(Resolution {
+        tier: Some(Tier::Typo),
+        matches: vec![only.key()],
+        reached_all: vec![only.key()],
+        named: vec![only.name.clone()],
+    })
 }
 
 impl Session {

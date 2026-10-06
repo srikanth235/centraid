@@ -203,6 +203,8 @@ pub fn balance(
         }
         Kind::Group => {
             let group = one_of(session, keys, Kind::Group, "")?;
+            let net = centraid_apps_tally::balance::group_net(&data, &group.1);
+            let me_row = session.world.row(&session.world.me_key()).is_some();
             let person = match linked.iter().filter(|key| key.0 == Kind::Person).count() {
                 1 => linked
                     .iter()
@@ -212,9 +214,19 @@ pub fn balance(
                 // no person named: a group's balance is the person's own, unless the message is
                 // about someone else (a name, a pronoun for them, a person in focus): the model
                 // left that person out and the error says to add them
-                0 if session.world.row(&session.world.me_key()).is_some()
-                    && !session.names_someone_else() =>
+                0 if me_row && !session.names_someone_else() => {
+                    your_balance_note(session);
+                    session.world.me_key()
+                }
+                // nt14 (owner ruling 2026-10-06): the message names no one and says no pronoun
+                // for them, so a person only in focus does not make it theirs; the user's own
+                // balance, when the user is in the group. Off under `--no-normalize`.
+                0 if me_row
+                    && session.flags.normalize
+                    && !session.names_a_person_or_pronoun()
+                    && net.contains_key(&session.world.me_key().1) =>
                 {
+                    your_balance_note(session);
                     session.world.me_key()
                 }
                 _ => {
@@ -224,7 +236,6 @@ pub fn balance(
                     );
                 }
             };
-            let net = centraid_apps_tally::balance::group_net(&data, &group.1);
             let value = net.get(&person.1).copied().unwrap_or(0);
             let currency = session
                 .world
@@ -246,10 +257,103 @@ pub fn balance(
                        "person": person.1, "values": machine_values(&bucket)}),
             ))
         }
-        other => Err(format!(
-            "error: balance is defined for person and for group (with linked_to a person), not for {}.",
-            other.plural()
-        )),
+        // nt14 N2 and N3 (`--no-normalize` keeps the error): a debt's open amount, and a row linked
+        // to exactly one group (a group's rows hold the user's money there) is the user's balance
+        // in that group
+        other if session.flags.normalize && other == Kind::Debt => debt_balance(session, keys),
+        other => match group_of_row(session, other, keys) {
+            Some((row, group)) => {
+                let me = session.world.me_key();
+                let held = centraid_apps_tally::balance::group_net(&data, &group.1);
+                if !held.contains_key(&me.1) {
+                    return Err(not_defined(other));
+                }
+                let (r, g) = (session.number(&row), session.number(&group));
+                let said = format!(
+                    "note: {} is in {}; used your balance there",
+                    render::named(&session.world, r, &row),
+                    render::named(&session.world, g, &group)
+                );
+                let result = balance(session, Kind::Group, &[group], &[me])?;
+                session.pending_notes.push(said);
+                Ok(result)
+            }
+            None => Err(not_defined(other)),
+        },
+    }
+}
+
+fn not_defined(kind: Kind) -> String {
+    format!(
+        "error: balance is defined for person and for group (with linked_to a person), not for {}.",
+        kind.plural()
+    )
+}
+
+/// nt14 N2: the open amount of one debt (what is still owed on it: zero once it is settled) in
+/// its own currency, the direction in the words that say it.
+fn debt_balance(session: &mut Session, keys: &[Key]) -> Result<((String, String), Value), String> {
+    let debt = one_of(session, keys, Kind::Debt, "")?;
+    let Some(row) = session.world.row(&debt).cloned() else {
+        return Err(not_defined(Kind::Debt));
+    };
+    let (minor, currency) = match row.field("amount") {
+        Some(Val::Money(minor, currency)) => (*minor, currency.clone()),
+        _ => (0, session.world.currency.clone()),
+    };
+    let open = row.field("status") == Some(&Val::Enum("open"));
+    let mut bucket: Bucket = BTreeMap::new();
+    bucket.insert(Some(currency), if open { minor } else { 0 });
+    let who = if row.field("direction") == Some(&Val::Enum("owes_me")) {
+        "they owe you"
+    } else {
+        "you owe them"
+    };
+    let n = session.number(&debt);
+    let what = format!(
+        "open amount of {}; {}",
+        render::named(&session.world, n, &debt),
+        if open { who } else { "settled" }
+    );
+    Ok((
+        (text_values(&bucket), what),
+        json!({"op": "balance", "of": {"kind": "debt", "id": debt.1},
+               "values": machine_values(&bucket)}),
+    ))
+}
+
+/// nt14 N3: the one row selected and the one live group it is linked to, when there is exactly
+/// one of each; `None` for none or several of either (the error it was).
+fn group_of_row(session: &Session, kind: Kind, keys: &[Key]) -> Option<(Key, Key)> {
+    if !session.flags.normalize {
+        return None;
+    }
+    let [row] = keys else {
+        return None;
+    };
+    if row.0 != kind {
+        return None;
+    }
+    let groups: Vec<Key> = session
+        .world
+        .neighbours(row)
+        .remove(&Kind::Group)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|group| session.world.row(group).is_some_and(|g| !g.trashed))
+        .collect();
+    match groups.as_slice() {
+        [group] => Some((row.clone(), group.clone())),
+        _ => None,
+    }
+}
+
+/// The default's own line: the balance is the user's because no person was named (nt14).
+fn your_balance_note(session: &mut Session) {
+    if session.flags.normalize {
+        session
+            .pending_notes
+            .push("note: your balance (no person named)".to_owned());
     }
 }
 

@@ -805,17 +805,22 @@ pub(crate) fn container_hit(session: &Session, message: &str) -> Option<Key> {
         .find(|key| key.0 == kind)
 }
 
+/// Whether the message says a pronoun for someone else (`with him`, `her balance`).
+pub(crate) fn says_a_pronoun_for_them(message: &str) -> bool {
+    const PRONOUNS: &[&str] = &[
+        "him", "her", "he", "she", "them", "they", "his", "hers", "their", "theirs",
+    ];
+    words_of(message)
+        .iter()
+        .any(|(folded, _)| PRONOUNS.contains(&folded.as_str()))
+}
+
 /// Whether the message or the conversation is about someone other than the
 /// person: a pronoun for them (`with him`, `her balance with me`), or a person
 /// in the focus sets, the options of the last ask or what was created.
 pub(crate) fn other_person_in_play(session: &Session, message: &str) -> bool {
-    const PRONOUNS: &[&str] = &[
-        "him", "her", "he", "she", "them", "they", "his", "hers", "their", "theirs",
-    ];
     let me = session.world.me_key();
-    let said = words_of(message)
-        .iter()
-        .any(|(folded, _)| PRONOUNS.contains(&folded.as_str()));
+    let said = says_a_pronoun_for_them(message);
     let numbered = |numbers: &[usize]| {
         numbers
             .iter()

@@ -477,7 +477,7 @@
       }
     ]
   },
-  "act.reveal_takes_field_x": {
+  "act.reveal_takes_field_one_of_this": {
     "tool": "act",
     "argument": "args",
     "calls": [
@@ -486,7 +486,78 @@
         "args": {
           "verb": "reveal",
           "kind": "locker item",
-          "name": "Home wifi"
+          "name": "Home wifi",
+          "args": "field: pin"
+        }
+      }
+    ]
+  },
+  "act.first_was_asked_for_first_and": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "user": "what is the cvv of the home wifi",
+        "tool": "act",
+        "args": {
+          "verb": "reveal",
+          "kind": "locker item",
+          "name": "Home wifi",
+          "args": "field: cvv"
+        }
+      },
+      {
+        "tool": "act",
+        "args": {
+          "verb": "reveal",
+          "kind": "locker item",
+          "name": "Home wifi",
+          "args": "field: password"
+        }
+      }
+    ]
+  },
+  "act.only_a_body_or_a_description": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "task",
+          "name": "Pay rent",
+          "args": "effort+: 5"
+        }
+      }
+    ]
+  },
+  "act.base_and_base_in_one_edit": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "note",
+          "name": "Dal",
+          "args": "body: lentils\nbody+: oat milk"
+        }
+      }
+    ]
+  },
+  "act.base_needs_the_text_to_add": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "note",
+          "name": "Dal",
+          "args": "body+: "
         }
       }
     ]
@@ -544,17 +615,7 @@
   "act.a_task_is_due_at_one": {
     "tool": "act",
     "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "reschedule",
-          "kind": "task",
-          "name": "Pay rent",
-          "args": "to: {\"unit\":\"week\",\"rel\":1}"
-        }
-      }
-    ]
+    "why_none": "normalised away before the call runs: a task due on a closed range (a month, a week) is due on its first day and the reply notes it (act.rs, first_day_of; nt14 N5); only a session that does not normalise says this"
   },
   "act.an_event_moves_to_one_day": {
     "tool": "act",

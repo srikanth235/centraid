@@ -151,7 +151,7 @@ fn tools_with(full: bool) -> Vec<Value> {
     act.insert("rows".into(), rows.clone());
     act.insert(
         "args".into(),
-        json!({"type": "string", "description": "field: value lines, dates as date expressions (create: name and fields, kind as the kind param · reschedule, add_to: to · remove_from: from · log: kind · settle_up: group · reveal: field)"}),
+        json!({"type": "string", "description": "field: value lines, dates as date expressions (create: name and fields, kind as the kind param · edit: field: value, or body+: / description+: text to add · reschedule, add_to: to · remove_from: from · log: kind · settle_up: group · reveal: field)"}),
     );
     act.insert(
         "more".into(),
@@ -312,7 +312,7 @@ const SIGNATURES: [(&str, &[&str], &str); 8] = [
     (
         "act",
         &["verb", "rows|selector", "args", "more"],
-        "change the vault; ends the turn unless more",
+        "change the vault; ends the turn unless more; edit body+: or description+: adds text",
     ),
     (
         "answer",

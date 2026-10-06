@@ -807,7 +807,7 @@ pub static VERBS: &[VerbSpec] = &[
     VerbSpec {
         verb: Verb::Edit,
         name: "edit",
-        args: "field: value lines (name, or any editable field)",
+        args: "field: value lines (name, or any editable field; body+: or description+: adds text)",
         done: "edited",
         commands: &[
             (Kind::Person, "people.edit_person"),
@@ -1069,6 +1069,99 @@ pub const REVEAL_FIELDS: &[(&str, &str)] = &[
     ("cvv", "cvv"),
     ("content", "content"),
 ];
+
+/// Other names for the secrets a locker item keeps (nt14 N4), a closed table: the word as folded
+/// (lowercase, hyphen and underscore a space) and the field of `REVEAL_FIELDS` it asks for.
+/// `pin` and every word not here stay the error that names the fields.
+const REVEAL_SYNONYMS: &[(&str, &str)] = &[
+    ("2fa", "code"),
+    ("otp", "code"),
+    ("totp", "code"),
+    ("authenticator", "code"),
+    ("auth code", "code"),
+    ("cvc", "cvv"),
+    ("cvv2", "cvv"),
+    ("security code", "cvv"),
+    ("card", "card_number"),
+    ("card no", "card_number"),
+    ("card num", "card_number"),
+    ("pass", "password"),
+    ("pw", "password"),
+];
+
+/// Whether a word is a kind of the vault or another word for one (`debt`, `IOU`, `doc`, `pic`,
+/// `login`, `contact`, `bill`): a noun that says what a row is, not a word of its name. A closed
+/// table over `Kind::parse` (nt15 R4: it is no content word of a name).
+#[must_use]
+pub fn kind_word(word: &str) -> bool {
+    const OTHER: &[&str] = &[
+        "iou",
+        "ious",
+        "bill",
+        "bills",
+        "doc",
+        "docs",
+        "pic",
+        "pics",
+        "picture",
+        "pictures",
+        "image",
+        "images",
+        "contact",
+        "contacts",
+        "persons",
+        "login",
+        "logins",
+        "memo",
+        "memos",
+        "todo",
+        "todos",
+        "appointment",
+        "appointments",
+        "item",
+        "items",
+        "group",
+        "groups",
+    ];
+    let folded = word.trim().to_lowercase();
+    Kind::parse(&folded).is_some() || OTHER.contains(&folded.as_str())
+}
+
+/// Every way a person names the secret `field` of `REVEAL_FIELDS` (nt15 R1s): its own name (with
+/// a space for an underscore, `card number`), the synonyms of `REVEAL_SYNONYMS` and, for the
+/// sealed content of a note item, `notes`. A word of the message that is one of these asks for it.
+#[must_use]
+pub fn reveal_names(field: &str) -> Vec<String> {
+    let mut names = vec![field.replace('_', " ")];
+    names.extend(
+        REVEAL_SYNONYMS
+            .iter()
+            .filter(|(_, meant)| *meant == field)
+            .map(|(name, _)| (*name).to_owned()),
+    );
+    if field == "content" {
+        names.push("notes".to_owned());
+    }
+    names
+}
+
+/// The field of `REVEAL_FIELDS` a word asks for by another name (nt14 N4).
+#[must_use]
+pub fn reveal_synonym(word: &str) -> Option<&'static str> {
+    let folded: Vec<String> = word
+        .trim()
+        .trim_matches('"')
+        .to_lowercase()
+        .split(|c: char| c.is_whitespace() || c == '-' || c == '_' || c == '.')
+        .filter(|part| !part.is_empty())
+        .map(str::to_owned)
+        .collect();
+    let folded = folded.join(" ");
+    REVEAL_SYNONYMS
+        .iter()
+        .find(|(name, _)| *name == folded)
+        .map(|(_, field)| *field)
+}
 
 /// Task priority as the vault reads it (RFC 5545): 1 is the highest, 9 the
 /// lowest, 0 unset.

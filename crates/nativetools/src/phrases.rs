@@ -1043,7 +1043,7 @@ const AFTER_HOUR: [&str; 30] = [
 /// What may follow a day of the month that could also be a position ("the
 /// second one", "the third meeting" are picks; "the fifth altogether", "on the
 /// third at 6" are dates): a word that is not a noun it counts.
-const AFTER_DAY: [&str; 47] = [
+const AFTER_DAY: [&str; 59] = [
     "at",
     "and",
     "to",
@@ -1091,7 +1091,54 @@ const AFTER_DAY: [&str; 47] = [
     "with",
     "up",
     "off",
+    "works",
+    "work",
+    "free",
+    "good",
+    "fine",
+    "ok",
+    "okay",
+    "again",
+    "available",
+    "busy",
+    "would",
+    "will",
 ];
+
+/// A small day number after one of these is a date even when a word follows that is no listed
+/// continuation (`remind me on the 2nd about rent`, `by the 3rd for lunch`; nt15 R3a): it is only
+/// a position (`on the second one`) when the next word is a noun it counts.
+const DAY_LEAD: [&str; 10] = [
+    "on", "by", "before", "until", "till", "due", "for", "from", "since", "around",
+];
+/// The nouns a small ordinal counts (`the 3rd meeting`, `the second one`): after a `DAY_LEAD` word
+/// they still make it a position, and so does any kind of the vault.
+const COUNTED: [&str; 18] = [
+    "one",
+    "ones",
+    "thing",
+    "things",
+    "item",
+    "items",
+    "row",
+    "rows",
+    "result",
+    "results",
+    "option",
+    "options",
+    "meeting",
+    "meetings",
+    "appointment",
+    "appointments",
+    "visit",
+    "class",
+];
+
+/// What may follow a day of the month that could also be a position, when the word before it
+/// says a date (nt15 R3a): not a noun the ordinal counts.
+fn counted_noun(word: &str) -> bool {
+    COUNTED.contains(&word) || crate::meta::Kind::parse(word).is_some()
+}
 
 fn qualifier(word: &str) -> Option<i64> {
     match word {
@@ -2431,7 +2478,91 @@ impl<'a> Reader<'a> {
     }
 
     fn date_phrase(&self, i: usize) -> Option<(usize, String)> {
-        self.month_day(i).or_else(|| self.ordinal_day(i))
+        self.shared_month(i)
+            .or_else(|| self.month_day(i))
+            .or_else(|| self.ordinal_day(i))
+    }
+
+    /// The text between tokens `a` and `b`.
+    fn gap(&self, a: usize, b: usize) -> &str {
+        self.message
+            .get(self.toks[a].end..self.toks[b].start)
+            .unwrap_or("")
+    }
+
+    /// TWO DAYS THAT SHARE ONE MONTH NAME (nt15 R3b): "the 21st and 22nd of august" is one span
+    /// from 08-21 to 08-22, in each reading the month has (the past one, then the upcoming one),
+    /// not "the 21st" of this month and "the 22nd of august" beside it. Two consecutive days
+    /// joined by "and", or two days joined by "to", "till", "until", "through" or a hyphen, are
+    /// the span; two days that are not (the 5th and the 20th of august: the days between are not
+    /// meant) or joined by "or" are two days, the first read in the month the second names. The
+    /// phrase ends at the month (and its year, when one is said).
+    fn shared_month(&self, i: usize) -> Option<(usize, String)> {
+        let start = if self.is(i, "the") && self.run(i, i + 1) {
+            i + 1
+        } else {
+            i
+        };
+        let (first, used) = self.day_at(start)?;
+        let first_end = start + used - 1;
+        let join = start + used;
+        // "and", "or" or a comma join; "to", "till", "until", "through" or a hyphen make a span
+        let (word, mut next) = if self.toks.get(join).is_some_and(|tok| {
+            matches!(tok.text.as_str(), "and" | "or") || SPAN_JOINS.contains(&tok.text.as_str())
+        }) {
+            (self.text(join).to_owned(), join + 1)
+        } else if self.toks.get(join).is_some()
+            && self.gap(join - 1, join).contains('-')
+            && !self.gap(join - 1, join).contains(char::is_whitespace)
+        {
+            ("-".to_owned(), join)
+        } else if self.toks.get(join).is_some() && self.gap(join - 1, join).trim() == "," {
+            ("and".to_owned(), join)
+        } else {
+            return None;
+        };
+        if self.is(next, "the") {
+            next += 1;
+        }
+        let (second, used) = self.day_at(next)?;
+        let mut at = next + used;
+        if self.is(at, "of") && self.run(at - 1, at) {
+            at += 1;
+        }
+        let month = self.month_at(at)?;
+        let after = self.text(at + 1);
+        if month == 5 && self.run(at, at + 1) && !self.after_day_ok(after) {
+            return None;
+        }
+        // a day that is a bare small number is a day only beside an ordinal ("5 and 6 may")
+        let span = match word.as_str() {
+            "and" => second == first + 1,
+            "or" => false,
+            _ => second > first,
+        };
+        let year = self
+            .year_at(at + 1)
+            .filter(|_| self.run(at, at + 1))
+            .map(|year| (year, 1));
+        let consumed = |through: usize| through + 1 - i;
+        if !span {
+            // the first day in the month the second names; the second is read on its own
+            let (past, upcoming) = self.month_day_dates(month, first)?;
+            return Some((consumed(first_end), pair(past, upcoming)));
+        }
+        let last = at + year.map_or(0, |(_, tokens)| tokens);
+        let build = |year: i16| -> Option<Resolved> {
+            let from = Date::new(year, month, first).ok()?;
+            let to = Date::new(year, month, second).ok()?;
+            self.eval(&span_expr(day_expr(from), day_expr(to)))
+        };
+        if let Some((year, _)) = year {
+            return Some((consumed(last), build(year)?.plain()));
+        }
+        let (past, upcoming) = self.month_day_dates(month, first)?;
+        let past = build(first_day(past).year())?;
+        let upcoming = build(first_day(upcoming).year())?;
+        Some((consumed(last), pair(past, upcoming)))
     }
 
     /// Whether a word may follow a date without being a noun it counts.
@@ -2513,7 +2644,10 @@ impl<'a> Reader<'a> {
         }
         if day <= 12 {
             let named = the || numeric_ordinal(self.text(start)).is_some();
-            if !(named && (!adjacent || self.after_day_ok(next))) {
+            // a date word before it ("on the 2nd about rent") makes it a date unless a noun it
+            // counts follows
+            let led = DAY_LEAD.contains(&self.before(i)) && !counted_noun(next);
+            if !(named && (!adjacent || self.after_day_ok(next) || led)) {
                 return None;
             }
         }
@@ -2770,7 +2904,10 @@ impl<'a> Reader<'a> {
             _ => (0, ""),
         };
         if skip > 0 {
-            let spec = self.spec_at(i + skip, trigger == "at")?;
+            // a number word is an hour after "at", and, in a message that sets or moves something,
+            // after "to" ("move it to one": 13:00 or 01:00, nt15 R3e)
+            let words = trigger == "at" || (trigger == "to" && self.write);
+            let spec = self.spec_at(i + skip, words)?;
             if !self.run(i, i + skip) {
                 return None;
             }

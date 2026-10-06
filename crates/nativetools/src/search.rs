@@ -565,6 +565,10 @@ const ARTICLES: &[&str] = &["the", "a", "an"];
 /// meant while another fits all. Best first, as `search` lists them. For a lookup of trashed rows
 /// (`trashed_only`) the tiers are those of the trashed rows alone. It is a guess for an ask or
 /// an answer of near rows, never a row a write goes to.
+///
+/// For a WRITE (`majority`, nt15 R4) a row must hold MORE than half of the name's content words
+/// (articles and kind nouns aside): `renew passport` is not `Renew car insurance`, which shares one of its two,
+/// so the act on it is never asked about (at least 2 of a 2-word name, 2 of 3, 3 of 4).
 #[must_use]
 pub(crate) fn name_in_part(
     session: &Session,
@@ -572,11 +576,33 @@ pub(crate) fn name_in_part(
     kinds: &[Kind],
     within: Option<&BTreeSet<Key>>,
     trashed_only: bool,
+    majority: bool,
 ) -> Vec<Key> {
+    // (a kind noun, `debt` or `IOU`, is no word of a name either: `settle the ticket IOU` has
+    // one content word)
+    let content: Vec<Spoken> = spoken_tokens(text)
+        .into_iter()
+        .filter(|token| !token.is_article())
+        .filter(|token| !token.single().is_some_and(crate::meta::kind_word))
+        .collect();
     let hits: Vec<(Key, u32)> = ranked_with(session, text, kinds, false, false)
         .into_iter()
         .filter(|(key, _)| within.is_none_or(|scope| scope.contains(key)))
         .filter(|(key, _)| !trashed_only || session.world.row(key).is_some_and(|row| row.trashed))
+        .filter(|(key, _)| {
+            !majority
+                || session.world.row(key).is_some_and(|row| {
+                    let name = row_words(row);
+                    let said = content
+                        .iter()
+                        .filter(|token| {
+                            let (_, hit, size) = best_reading(token, &name, false);
+                            size > 0 && hit == size
+                        })
+                        .count();
+                    said * 2 > content.len()
+                })
+        })
         .collect();
     let best = hits.first().map_or(0, |(_, score)| *score);
     hits.into_iter()
@@ -957,6 +983,13 @@ struct Hit {
     /// Those hits scored (3 a word, 2 a prefix).
     score: u32,
     container: bool,
+    /// The message tokens (indexes into the tokens) that hit as a word or a word's start.
+    reached: Vec<usize>,
+    /// Those of them that are a whole word of a name (a start of one is the others).
+    whole: Vec<usize>,
+    /// The tokens that reach the row only as a NEAR SPELLING (one edit from a name word, or a
+    /// joined name, `weijie` for `Wei Jie`): a lower tier, nt15 R3c, e.
+    near: Vec<usize>,
 }
 
 /// Whether the message says a word of the name (or nickname) of a live person other than the
@@ -988,6 +1021,105 @@ pub(crate) fn persons_named(session: &Session, message: &str) -> Vec<Key> {
         })
         .map(Row::key)
         .collect()
+}
+
+/// Words of five letters or more that name nothing on their own (`after`, `every`, a month, a
+/// weekday, a unit of time: the `dates:` line reads those): they never make a row worth a slot of
+/// its own in the vault line (`preground`, nt15 R3d).
+const FUNCTION_WORDS: &[&str] = &[
+    "after",
+    "again",
+    "before",
+    "being",
+    "below",
+    "above",
+    "around",
+    "between",
+    "through",
+    "during",
+    "every",
+    "first",
+    "going",
+    "other",
+    "since",
+    "still",
+    "under",
+    "until",
+    "while",
+    "would",
+    "should",
+    "could",
+    "really",
+    "anything",
+    "something",
+    "everything",
+    "another",
+    "minutes",
+    "hours",
+    "days",
+    "weeks",
+    "months",
+    "years",
+    "weekend",
+    "january",
+    "february",
+    "march",
+    "april",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+];
+
+/// Whether a message word can be read as a near spelling at all (nt15 R3c): six letters or more
+/// (a shorter word is one edit from too many words: `right` and `night`), only letters, and no
+/// kind of the vault (`logins`, `photos`, `documents` name a category, not a row).
+fn near_candidate(token: &str) -> bool {
+    token.chars().count() >= 6
+        && token.chars().all(char::is_alphabetic)
+        && Kind::parse(token).is_none()
+}
+
+/// Whether a message word reaches a row only as a NEAR SPELLING (nt15 R3c, R3e): one edit
+/// (`crate::resolve::one_edit`) from a word of the row's names with the same first letter (a slip
+/// is rarely the first letter: `brazil` for `Brasil`, not `right` for `night`), and not the plain
+/// plural or singular of it (`logins` for `login` is a category, not a slip); or the one word the
+/// words of a name make when said joined, or one edit from it (`weijie` for `Wei Jie`).
+fn near_spelling(token: &str, names: &[&str], spelled: &[String]) -> bool {
+    let first = token.chars().next();
+    let plural = |word: &str| {
+        [token, word].iter().any(|long| {
+            ["s", "es"].iter().any(|ending| {
+                let short = if *long == token { word } else { token };
+                *long == format!("{short}{ending}")
+            })
+        })
+    };
+    if spelled.iter().any(|word| {
+        word.chars().next() == first && !plural(word) && crate::resolve::one_edit(token, word)
+    }) {
+        return true;
+    }
+    names.iter().any(|name| {
+        let words = spoken_words(name);
+        (0..words.len()).any(|from| {
+            (from + 1..words.len()).any(|to| {
+                let joined = words[from..=to].concat();
+                joined == token
+                    || (joined.chars().next() == first && crate::resolve::one_edit(token, &joined))
+            })
+        })
+    })
 }
 
 /// The pre-grounding block for one user message, or `None` when no token
@@ -1029,7 +1161,9 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
         let spelled: Vec<String> = names.iter().flat_map(|name| spellings_of(name)).collect();
         let mut hits = 0;
         let mut score = 0;
-        for token in &tokens {
+        let mut reached: Vec<usize> = Vec::new();
+        let mut whole: Vec<usize> = Vec::new();
+        for (at, token) in tokens.iter().enumerate() {
             let best = spelled
                 .iter()
                 .map(|word| word_score(token, word))
@@ -1039,6 +1173,10 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
             if best >= 2 {
                 hits += 1;
                 score += best;
+                reached.push(at);
+                if best == 3 {
+                    whole.push(at);
+                }
             }
         }
         // A NAME THE MESSAGE SAYS IN FULL: every word of it, spelled with its joiners or
@@ -1065,6 +1203,9 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
             hits,
             score,
             container: row.kind.spec().container,
+            reached,
+            whole,
+            near: Vec::new(),
         });
     }
     // WHAT THE MESSAGE POINTS AT WITHOUT NAMING IT: the container of the focus
@@ -1086,7 +1227,48 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
                     && usize::try_from(hit.score).is_ok_and(|score| score >= 3 * hit.hits)))
     });
     let closing = crate::block::me_hit(session, message, other, group_named);
+    let reach: Vec<usize> = (0..tokens.len())
+        .map(|at| found.iter().filter(|hit| hit.reached.contains(&at)).count())
+        .collect();
     found.retain(|hit| !leading.contains(&hit.key) && closing.as_ref() != Some(&hit.key));
+    // NEAR SPELLINGS (nt15 R3c, R3e): a word of the message that no row reaches by a word or its
+    // start may reach a row by one edit (`brazil` for `Brasil`) or as the joined words of a name
+    // (`weijie` for `Wei Jie`): the row joins the line at a lower tier (it follows every row a
+    // word reaches, and fills a slot only a word nothing else reaches asks for, or one left over)
+    let unreached: Vec<usize> = (0..tokens.len())
+        .filter(|at| reach[*at] == 0 && near_candidate(tokens[*at]))
+        .collect();
+    if !unreached.is_empty() {
+        for row in session.world.rows.values() {
+            if row.trashed || leading.contains(&row.key()) || closing.as_ref() == Some(&row.key()) {
+                continue;
+            }
+            let names: Vec<&str> = aliases(row);
+            let spelled: Vec<String> = names.iter().flat_map(|name| spellings_of(name)).collect();
+            let near: Vec<usize> = unreached
+                .iter()
+                .copied()
+                .filter(|at| near_spelling(tokens[*at], &names, &spelled))
+                .collect();
+            if near.is_empty() {
+                continue;
+            }
+            match found.iter_mut().find(|hit| hit.key == row.key()) {
+                Some(hit) => hit.near = near,
+                None => found.push(Hit {
+                    key: row.key(),
+                    exact: false,
+                    span: 0,
+                    hits: 0,
+                    score: 0,
+                    container: row.kind.spec().container,
+                    reached: Vec::new(),
+                    whole: Vec::new(),
+                    near,
+                }),
+            }
+        }
+    }
     if found.is_empty() && leading.is_empty() && closing.is_none() {
         return None;
     }
@@ -1105,8 +1287,10 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
             .map(|row| row.name.to_lowercase())
     };
     found.sort_by(|a, b| {
-        b.exact
-            .cmp(&a.exact)
+        // a row reached only as a near spelling comes after every row reached by a word or its start
+        (a.hits == 0 && !a.exact)
+            .cmp(&(b.hits == 0 && !b.exact))
+            .then_with(|| b.exact.cmp(&a.exact))
             .then_with(|| b.span.cmp(&a.span))
             .then_with(|| b.hits.cmp(&a.hits))
             .then_with(|| b.score.cmp(&a.score))
@@ -1115,9 +1299,8 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
             .then_with(|| lower(a).cmp(&lower(b)))
             .then_with(|| a.key.1.cmp(&b.key.1))
     });
-    // DIVERSITY: no kind past half the slots while another kind has a hit. A
-    // row over its kind's share waits; it fills a slot only when no other
-    // kind's hit is left to.
+    // DIVERSITY: no kind past half the slots while another kind has a hit. A row over its kind's
+    // share waits; it fills a slot only when no other kind's hit is left to.
     let room = PREGROUND_CAP.saturating_sub(leading.len() + usize::from(closing.is_some()));
     let share = PREGROUND_CAP / 2;
     let mut per_kind: BTreeMap<Kind, usize> = BTreeMap::new();
@@ -1140,6 +1323,68 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
             break;
         }
         chosen.push(index);
+    }
+    // EVERY CONTENT WORD KEEPS A SLOT (nt15 R3d): a word of the message that reaches a row worth a
+    // slot and has none among the rows chosen (eight exact hits on `work` filled the line, and
+    // `reno`, a prefix of the list `Kitchen renovation`, reaches only that list) is served before
+    // the cap closes: the word that reaches the fewest rows first, with the best row it reaches
+    // (a container whose name starts with the word before any other hit), in the place of the
+    // lowest-ranked row no other word depends on. A row is worth a slot when it is a container
+    // whose name starts with a word of four letters or more, or has the word, of five letters or
+    // more, whole in its name (`FUNCTION_WORDS` aside): the short or common word that only
+    // brushes a name (`take` for `Takeaway`, `now` for `Nowy Sacz`, `after`) keeps no slot, and a
+    // line that already holds a row for every word is as it was. A near spelling (R3c) has no slot
+    // of its own: it takes one that is left over. A kind of the vault (`documents`, `notes`) names
+    // a category and asks for no row.
+    let wanted: Vec<usize> = (0..tokens.len())
+        .filter(|at| Kind::parse(tokens[*at]).is_none())
+        .collect();
+    let covers = |index: usize, at: usize| found[index].reached.contains(&at);
+    let worth = |index: usize, at: usize| {
+        let hit = &found[index];
+        let length = tokens[at].chars().count();
+        hit.reached.contains(&at)
+            && ((hit.container && length >= 4)
+                || (hit.whole.contains(&at)
+                    && length >= 5
+                    && !FUNCTION_WORDS.contains(&tokens[at])))
+    };
+    let reaching = |at: usize| found.iter().filter(|hit| hit.reached.contains(&at)).count();
+    let mut order = wanted.clone();
+    order.sort_by_key(|at| (reaching(*at), *at));
+    for at in order {
+        if room == 0 || chosen.iter().any(|index| covers(*index, at)) {
+            continue;
+        }
+        let candidates: Vec<usize> = (0..found.len()).filter(|index| worth(*index, at)).collect();
+        let pick = candidates
+            .iter()
+            .find(|index| found[**index].container)
+            .or_else(|| candidates.first())
+            .copied();
+        let Some(pick) = pick else {
+            continue;
+        };
+        if chosen.len() >= room {
+            let alone = |victim: usize, other: &[usize]| {
+                wanted.iter().any(|token| {
+                    covers(victim, *token) && !other.iter().any(|index| covers(*index, *token))
+                })
+            };
+            let victim = chosen
+                .iter()
+                .copied()
+                .filter(|victim| {
+                    let rest: Vec<usize> = chosen.iter().copied().filter(|i| i != victim).collect();
+                    !alone(*victim, &rest)
+                })
+                .max();
+            let Some(victim) = victim else {
+                continue;
+            };
+            chosen.retain(|index| *index != victim);
+        }
+        chosen.push(pick);
     }
     chosen.sort_unstable();
     let mut parts = Vec::new();

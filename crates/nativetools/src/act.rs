@@ -185,7 +185,7 @@ fn split_semis(line: &str) -> Vec<String> {
             !key.is_empty()
                 && key
                     .chars()
-                    .all(|c| c.is_ascii_alphabetic() || c == '_' || c == ' ')
+                    .all(|c| c.is_ascii_alphabetic() || c == '_' || c == ' ' || c == '+')
                 && key.split_whitespace().count() <= 2
         })
     };
@@ -1477,7 +1477,21 @@ impl Session {
                 }
                 return Err(refusal);
             }
-            let plan = match self.plan(verb, &row, args) {
+            // A SECRET THE PERSON DID NOT ASK FOR (nt15 R1s): after a reveal of this item was
+            // refused for a field, no other field of it is revealed in the turn unless the
+            // person's words name it
+            if verb == Verb::Reveal
+                && let Some(guarded) = self.reveal_guard(&row, args)
+            {
+                return guarded;
+            }
+            let planned = self.plan(verb, &row, args);
+            if verb == Verb::Reveal
+                && let Err(refusal) = &planned
+            {
+                self.note_reveal_refusal(&row, args, refusal);
+            }
+            let plan = match planned {
                 // A ROW FOR A CONTAINER OF ANOTHER KIND (a person into an event): nothing can
                 // lift it. The sentence is the runtime's own, `plan_membership`'s.
                 Err(refusal)
@@ -1768,6 +1782,10 @@ impl Session {
                     } else {
                         format!("no longer in {name}")
                     });
+                }
+                // a restore shows the text of the row it brings back (nt15 R2a)
+                if verb == Verb::Restore {
+                    parts.extend(render::text_facts(new));
                 }
                 let mut line = format!("{}: {}", verb.spec().done, render::short(n, new));
                 if parts.is_empty() {
@@ -2354,13 +2372,140 @@ impl Session {
             .collect()
     }
 
+    /// Whether the person's message names the secret `field` (`password`, `code`, `notes`): by
+    /// its own name or one of the other names the runtime reads for it (`meta::reveal_names`).
+    pub(crate) fn message_names_secret(&self, field: &str) -> bool {
+        let field = if field == "notes" { "content" } else { field };
+        let said = format!(" {} ", crate::search::fold_words(&self.message).join(" "));
+        meta::reveal_names(field).iter().any(|name| {
+            let folded = crate::search::fold_words(name).join(" ");
+            said.contains(&format!(" {folded} ")) || said.contains(&format!(" {folded}s "))
+        })
+    }
+
+    /// A reveal refused for a field the item lacks or the runtime does not know is remembered
+    /// for the turn (`reveal_guard`).
+    fn note_reveal_refusal(&mut self, row: &Row, args: &Map<String, Value>, refusal: &str) {
+        let field_refusal = refusal.starts_with("error: reveal takes field: one of")
+            || (refusal.contains(" has no ") && refusal.contains(" It holds: "));
+        let asked = args
+            .get("field")
+            .map(text_of)
+            .unwrap_or_default()
+            .trim()
+            .trim_matches('"')
+            .to_lowercase();
+        if field_refusal && !asked.is_empty() {
+            self.reveal_refused.push((self.turn, row.key(), asked));
+        }
+    }
+
+    /// THE SMALLEST RULE THAT MAKES "ASKED FOR X, REVEALED Y" IMPOSSIBLE (nt15 R1s): once a
+    /// reveal of an item was refused in this turn for a field it does not keep (or the runtime
+    /// does not know: `2fa` on a login with no code, `pin`) and the person's message asked for
+    /// that field (`asked_by_message`), a reveal of a DIFFERENT secret of that item is not made
+    /// unless the message names it, by its own name or one the runtime reads for it
+    /// (`message_names_secret`). A field the message never named was the model's guess, and the
+    /// repair to what the item holds goes through. The turn ends in an ask that lists what the
+    /// item holds (`Which one do you want: password or code?`), or, with `--no-compose`, in an
+    /// error that names the field asked for first. A reveal the message names, and a repeat of
+    /// the field refused, are as they were.
+    fn reveal_guard(
+        &mut self,
+        row: &Row,
+        args: &Map<String, Value>,
+    ) -> Option<Result<Outcome, String>> {
+        let asked = args
+            .get("field")
+            .map(text_of)?
+            .trim()
+            .trim_matches('"')
+            .to_lowercase();
+        let is_note = row.field("type") == Some(&Val::Enum("note"));
+        let lookup = if asked == "notes" && is_note {
+            "content"
+        } else {
+            asked.as_str()
+        };
+        // only a secret the item really keeps can be the one revealed instead
+        let (_, column) = meta::REVEAL_FIELDS
+            .iter()
+            .find(|(name, _)| *name == lookup)?;
+        row.extra.get(*column)?;
+        let key = row.key();
+        let first = self
+            .reveal_refused
+            .iter()
+            .find(|(turn, at, said)| *turn == self.turn && *at == key && *said != asked)?
+            .2
+            .clone();
+        if self.message_names_secret(&asked) || !self.asked_by_message(&first) {
+            return None;
+        }
+        let name = self.named(&key);
+        let held = Self::held_secrets(row);
+        if !self.flags.compose {
+            return Some(Err(format!(
+                "error: {first} was asked for first, and {name} does not keep it; {asked} is another secret, so it is not revealed. {name} holds: {}.",
+                held.join(", ")
+            )));
+        }
+        let question = match held.as_slice() {
+            [only] => format!("Do you want the {only}?"),
+            _ => format!("Which one do you want: {}?", held.join(" or ")),
+        };
+        let lead =
+            format!("not revealed: {first} was asked for first, and {name} does not keep it");
+        let mut outcome = self.ends_in_ask(
+            Some(lead),
+            &question,
+            std::slice::from_ref(&key),
+            "the runtime ended the turn: another secret than the one asked for is not revealed",
+        );
+        outcome.effect.insert(
+            "reveal_guard".to_owned(),
+            json!({"asked": first, "not_revealed": asked}),
+        );
+        Some(Ok(crate::compose::marked(
+            outcome,
+            "reveal_other_field",
+            "ask_fields",
+        )))
+    }
+
+    /// The secrets a locker item holds, by the field names `reveal` takes (`content` is also
+    /// read as `notes` on a note item).
+    fn held_secrets(row: &Row) -> Vec<&'static str> {
+        meta::REVEAL_FIELDS
+            .iter()
+            .filter(|(_, column)| row.extra.contains_key(column))
+            .map(|(name, _)| *name)
+            .collect()
+    }
+
+    /// Whether the person's message asks for `field` as a secret: it names it by its own name or
+    /// a synonym (`message_names_secret`), or says the word the call used (`pin`). A field the
+    /// message does not name was the model's guess, and a repair of it is no secret the person
+    /// ruled out (`reveal_guard`).
+    fn asked_by_message(&self, field: &str) -> bool {
+        let field = field.trim().trim_matches('"').to_lowercase();
+        let said = format!(" {} ", crate::search::fold_words(&self.message).join(" "));
+        let own = crate::search::fold_words(&field).join(" ");
+        let meant = meta::REVEAL_FIELDS
+            .iter()
+            .find(|(name, _)| *name == field)
+            .map(|(name, _)| *name)
+            .or_else(|| meta::reveal_synonym(&field));
+        said.contains(&format!(" {own} "))
+            || meant.is_some_and(|meant| self.message_names_secret(meant))
+    }
+
     fn plan_reveal(&mut self, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
         for key in args.keys() {
             if key != "field" {
                 return Err(format!("error: reveal takes field: …, not \"{key}\"."));
             }
         }
-        let names: Vec<&str> = meta::REVEAL_FIELDS.iter().map(|(name, _)| *name).collect();
         let field = args
             .get("field")
             .map(text_of)
@@ -2373,19 +2518,31 @@ impl Session {
         } else {
             field.as_str()
         };
-        let column = meta::REVEAL_FIELDS
+        let Some(column) = meta::REVEAL_FIELDS
             .iter()
             .find(|(name, _)| *name == lookup)
             .map(|(_, column)| *column)
-            .ok_or_else(|| format!("error: reveal takes field: {}.", names.join(" · ")))?;
+        else {
+            // nt15 R1d: the fields THIS ROW holds, not a generic list
+            let held = Self::held_secrets(row);
+            let item = match row.field("type") {
+                Some(Val::Enum(kind)) => (*kind).replace('_', " "),
+                _ => "item".to_owned(),
+            };
+            let shown = field.trim().trim_matches('"');
+            return Err(format!(
+                "error: reveal takes field: one of this {item}'s secrets, not \"{shown}\". this {item} {}.",
+                if held.is_empty() {
+                    "holds no secrets".to_owned()
+                } else {
+                    format!("holds: {}", held.join(", "))
+                }
+            ));
+        };
         let key = row.key();
         let Some(sealed) = row.extra.get(column).cloned() else {
             let name = self.named(&key);
-            let has: Vec<&str> = meta::REVEAL_FIELDS
-                .iter()
-                .filter(|(_, column)| row.extra.contains_key(column))
-                .map(|(name, _)| *name)
-                .collect();
+            let has = Self::held_secrets(row);
             return Err(format!(
                 "error: {name} has no {field}. It holds: {}.{}",
                 if has.is_empty() {
@@ -2393,8 +2550,12 @@ impl Session {
                 } else {
                     has.join(", ")
                 },
+                // the one it holds is offered to send only when the person's words name it: a
+                // secret they did not ask for is never the suggestion (nt15 R1s)
                 match has.as_slice() {
-                    [only] => format!(" Send reveal field: {only}."),
+                    [only] if self.message_names_secret(only) || !self.asked_by_message(&field) => {
+                        format!(" Send reveal field: {only}.")
+                    }
                     _ => String::new(),
                 }
             ));
@@ -2462,12 +2623,22 @@ impl Session {
         let said = (!said.is_empty()).then(|| said.join("\n"));
         match row.kind {
             Kind::Task => {
-                let point = resolved.point().ok_or_else(|| {
-                    format!(
-                        "error: a task is due at one day or instant; {} is a range.",
-                        resolved.echo()
-                    )
-                })?;
+                let (point, started) = match resolved.point() {
+                    Some(point) => (point, None),
+                    None => self
+                        .first_day_of(resolved)
+                        .map(|(point, note)| (point, Some(note)))
+                        .ok_or_else(|| {
+                            format!(
+                                "error: a task is due at one day or instant; {} is a range.",
+                                resolved.echo()
+                            )
+                        })?,
+                };
+                let said = match (said, started) {
+                    (Some(said), Some(note)) => Some(format!("{said}\n{note}")),
+                    (said, note) => said.or(note),
+                };
                 let point = keep_time(point, row.date);
                 if row.date == Some(point) {
                     return Ok(Plan::Already(format!("is already due {}", point.show())));
@@ -2596,6 +2767,66 @@ impl Session {
         (dates::Resolved::At(at), notes)
     }
 
+    /// nt14 N5: a task's due date given as a closed range (a month, a week) is the range's first
+    /// day, with `note: read 2026-10-01..2026-10-31 as its first day, Thu 2026-10-01`. Off under
+    /// `--no-normalize`; events and every other kind keep the refusal of a range.
+    fn first_day_of(&self, resolved: dates::Resolved) -> Option<(dates::Stamp, String)> {
+        if !self.flags.normalize {
+            return None;
+        }
+        let day = resolved.first_day()?;
+        let note = format!(
+            "note: read {} as its first day, {}",
+            resolved.echo(),
+            day.show()
+        );
+        Some((day, note))
+    }
+
+    /// `body+: text` and `description+: text` of an `edit`: the field's new value is the text it
+    /// has with `text` added at the end (`appended`), so an add never overwrites text the model
+    /// did not see. Any other field takes no `+`.
+    fn append_args(row: &Row, args: &Map<String, Value>) -> Result<Map<String, Value>, String> {
+        if !args.keys().any(|key| key.ends_with('+')) {
+            return Ok(args.clone());
+        }
+        let kind = row.kind;
+        let mut out = Map::new();
+        for (key, value) in args {
+            let Some(base) = key.strip_suffix('+').map(str::trim) else {
+                out.insert(key.clone(), value.clone());
+                continue;
+            };
+            let holds_text = matches!(base, "body" | "description")
+                && kind
+                    .spec()
+                    .field(base)
+                    .is_some_and(|field| field.edit.is_some());
+            if !holds_text {
+                return Err(format!(
+                    "error: only a body or a description takes +: (text added to the end); {} editable fields: {}.",
+                    kind.name(),
+                    editable(kind)
+                ));
+            }
+            if args.contains_key(base) {
+                return Err(format!(
+                    "error: {base} and {base}+ in one edit; {base}+: adds, {base}: replaces."
+                ));
+            }
+            let added = text_of(value);
+            if added.trim().is_empty() {
+                return Err(format!("error: {base}+ needs the text to add."));
+            }
+            let have = match row.field(base) {
+                Some(Val::Text(text)) => text.as_str(),
+                _ => "",
+            };
+            out.insert(base.to_owned(), json!(appended(have, &added)));
+        }
+        Ok(out)
+    }
+
     fn plan_edit(&mut self, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
         let kind = row.kind;
         let spec = kind.spec();
@@ -2606,6 +2837,9 @@ impl Session {
                 editable(kind)
             ));
         }
+        // THE APPEND FORM (nt15 R2b): `body+: oat milk` adds to the text the row has
+        let appended = Self::append_args(row, args)?;
+        let args = &appended;
         let id_key = id_param(kind);
         // command → (input, inverse input)
         let mut forward: BTreeMap<&'static str, Map<String, Value>> = BTreeMap::new();
@@ -3053,12 +3287,19 @@ impl Session {
             Kind::Task => {
                 let mut input = json!({"task_id": mint(), "title": name});
                 if let Some(resolved) = date {
-                    let point = resolved.point().ok_or_else(|| {
-                        format!(
-                            "error: a task is due at one day or instant; {} is a range.",
-                            resolved.echo()
-                        )
-                    })?;
+                    let point = match resolved.point() {
+                        Some(point) => point,
+                        None => {
+                            let (point, note) = self.first_day_of(resolved).ok_or_else(|| {
+                                format!(
+                                    "error: a task is due at one day or instant; {} is a range.",
+                                    resolved.echo()
+                                )
+                            })?;
+                            self.pending_notes.push(note);
+                            point
+                        }
+                    };
                     input["due_at"] = json!(point.vault());
                 }
                 if let Some(effort) = number("effort")? {
@@ -3795,6 +4036,42 @@ fn rename(kind: Kind) -> (&'static str, &'static str) {
         Kind::List => ("schedule.save_project", "name"),
         Kind::Debt => ("", ""),
     }
+}
+
+/// `have` with `added` at its end, joined as `have` is written (nt15 R2b): a body of lines gets
+/// a new line (with the bullet its lines carry, `- `, `* ` or `• `); a body that ends a sentence
+/// gets a space; one with `; ` and no `, ` keeps `; `; any other (a list, a phrase) gets `, `. A
+/// text that is empty is just the new text.
+#[must_use]
+pub fn appended(have: &str, added: &str) -> String {
+    let added = added.trim();
+    let have = have.trim_end().trim_end_matches([',', ';']).trim_end();
+    if have.is_empty() {
+        return added.to_owned();
+    }
+    if have.contains('\n') {
+        let lines: Vec<&str> = have
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .collect();
+        let bullet = ["- ", "* ", "• "].into_iter().find(|bullet| {
+            lines
+                .iter()
+                .all(|line| line.trim_start().starts_with(bullet))
+        });
+        return match bullet {
+            Some(bullet) if !added.starts_with(bullet) => format!("{have}\n{bullet}{added}"),
+            _ => format!("{have}\n{added}"),
+        };
+    }
+    let separator = if have.ends_with(['.', '!', '?']) {
+        " "
+    } else if have.contains("; ") && !have.contains(", ") {
+        "; "
+    } else {
+        ", "
+    };
+    format!("{have}{separator}{added}")
 }
 
 fn editable(kind: Kind) -> String {

@@ -433,7 +433,8 @@ fn nt12_r1_a_secret_the_item_lacks_is_still_an_error_with_the_call() {
     // a reveal is egress: the runtime does not run the fix for the model
     let world = seeded();
     let mut session = world.session();
-    session.user("show the cvv of the home wifi");
+    // (nt15 R1s: the call for the one secret it holds is sent only when the message names it)
+    session.user("show the cvv or the password of the home wifi");
     let handle = find_in_turn(&mut session, "locker_item", "home wifi");
     let reply = call(
         &mut session,

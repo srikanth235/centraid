@@ -564,7 +564,8 @@ fn issue_22_only_a_name_that_reaches_nothing_or_a_missing_link_is_a_dead_end() {
     );
     assert_eq!(unlinked["ends_turn"], true, "{unlinked}");
     assert_eq!(unlinked["effect"]["answer"]["rows"], json!([]));
-    // A name that resolves, narrowed to nothing by when, is an answer.
+    // A name that resolves, narrowed to nothing by when, is the answer of the name alone with the
+    // day the row is on (nt14 N1: "is the cabin due the friday after next?").
     session.user("is the cabin due the friday after next?");
     let when = json!({"unit": "week", "rel": 2, "weekday": 5});
     let found = call(
@@ -573,9 +574,10 @@ fn issue_22_only_a_name_that_reaches_nothing_or_a_missing_link_is_a_dead_end() {
         json!({"kind": "task", "name": "cabin", "when": when}),
     );
     assert!(
-        found["text"].as_str().unwrap().starts_with(
-            "0 tasks called \"cabin\" match (when: Fri 2026-10-09)\nrows you can still use: "
-        ),
+        found["text"]
+            .as_str()
+            .unwrap()
+            .contains("note: none Fri 2026-10-09; Book the cabin is on Fri 2026-10-02 09:00"),
         "{found}"
     );
     assert!(found["effect"]["recovery"].is_null(), "{found}");
@@ -586,7 +588,13 @@ fn issue_22_only_a_name_that_reaches_nothing_or_a_missing_link_is_a_dead_end() {
         json!({"kind": "task", "name": "cabin", "when": when}),
     );
     assert_eq!(answered["ends_turn"], true, "{answered}");
-    assert_eq!(answered["effect"]["answer"]["rows"], json!([]));
+    assert!(
+        answered["text"]
+            .as_str()
+            .unwrap()
+            .contains("note: none Fri 2026-10-09"),
+        "{answered}"
+    );
     // A name with only trashed rows is still a dead end, with or without
     // other conditions.
     session.user("");

@@ -83,6 +83,7 @@ impl Session {
         &self,
         tokens: &[String],
         kinds: &[Kind],
+        trashed: bool,
     ) -> Option<(Vec<String>, String)> {
         let cue = cue(tokens)?;
         let mut named_focus = None;
@@ -107,7 +108,7 @@ impl Session {
                     .collect();
             }
         }
-        numbers.extend(self.put_in_play(kinds));
+        numbers.extend(self.put_in_play(kinds, trashed));
         for number in numbers {
             let handle = format!("#{number}");
             if !covered.contains(&number) && !handles.contains(&handle) {
@@ -123,8 +124,10 @@ impl Session {
 
     /// The `#n` of the rows of `kinds` the previous turn put in play besides its result: the
     /// options of the ask that ended it, the rows its write created or changed, and the rows the
-    /// message or the message before it names by a whole name of their own.
-    fn put_in_play(&self, kinds: &[Kind]) -> Vec<usize> {
+    /// message or the message before it names by a whole name of their own. The rows a message
+    /// names are live ones, or, for a read of the trash (`trashed`), trashed ones (nt15 R5: a
+    /// trashed row named earlier is left out of "who else is in the trash").
+    fn put_in_play(&self, kinds: &[Kind], trashed: bool) -> Vec<usize> {
         let of_kind = |number: usize| {
             self.by_number
                 .get(number.wrapping_sub(1))
@@ -156,7 +159,7 @@ impl Session {
                 .into_iter()
                 .collect();
         for row in self.world.rows.values() {
-            if row.trashed || !kinds.contains(&row.kind) {
+            if row.trashed != trashed || !kinds.contains(&row.kind) {
                 continue;
             }
             let named = crate::search::aliases(row).into_iter().any(|alias| {
@@ -174,7 +177,7 @@ impl Session {
             let twins = self
                 .world
                 .of_kind(row.kind)
-                .filter(|other| !other.trashed && other.name == row.name)
+                .filter(|other| other.trashed == trashed && other.name == row.name)
                 .count();
             if twins == 1
                 && let Some(number) = self.numbers.get(&row.key())

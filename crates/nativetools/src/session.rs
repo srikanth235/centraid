@@ -426,6 +426,10 @@ pub struct Session {
     /// the turn it was offered in and the row. A reschedule of that row in the turn after is the
     /// person's yes (`Session::plan_anew`, nt13 R6).
     pub(crate) plan_offer: Option<(usize, Key)>,
+    /// `(turn, item, field as asked)` of every reveal this session refused for a field the item
+    /// does not keep or the runtime does not know: a later reveal of ANOTHER secret of that item
+    /// in the same turn is not made silently (`Session::reveal_guard`, nt15 R1s).
+    pub(crate) reveal_refused: Vec<(usize, Key, String)>,
 }
 
 impl Selector {
@@ -526,6 +530,12 @@ pub(crate) fn handle_list(value: &Value) -> Vec<String> {
     }
 }
 
+/// `#12`: a row handle.
+pub(crate) fn is_row_handle(part: &str) -> bool {
+    part.strip_prefix('#')
+        .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
+}
+
 pub(crate) fn tool_params(tool: &str) -> Vec<&'static str> {
     let mut out: Vec<&'static str> = match tool {
         "search" => vec!["text", "kind"],
@@ -614,6 +624,7 @@ impl Session {
             compiled: None,
             pending_bulk: None,
             plan_offer: None,
+            reveal_refused: Vec::new(),
         };
         if flags.directory {
             session.number_directory();
@@ -706,7 +717,16 @@ impl Session {
             .trim()
             .strip_prefix('@')
             .and_then(|n| n.parse().ok())
-            .ok_or_else(|| format!("error: \"{handle}\" is not a result; results are @n."))?;
+            .ok_or_else(|| {
+                // nt15 R1b: a list of rows (`#43, #44`) is `rows`, not a result
+                let rows = handle_list(&Value::String(handle.to_owned()));
+                let repair = if !rows.is_empty() && rows.iter().all(|part| is_row_handle(part)) {
+                    format!(" These are rows: use rows: {}.", rows.join(", "))
+                } else {
+                    String::new()
+                };
+                format!("error: \"{handle}\" is not a result; results are @n.{repair}")
+            })?;
         if number == 0 || number > self.results.len() {
             return Err(format!(
                 "error: @{number} was never issued; issued results: {}.",
@@ -810,7 +830,7 @@ impl Session {
         Ok(Some(keys))
     }
 
-    fn parse_kinds(&self, text: &str, any: bool) -> Result<Vec<Kind>, String> {
+    pub(crate) fn parse_kinds(&self, text: &str, any: bool) -> Result<Vec<Kind>, String> {
         let mut kinds = Vec::new();
         for part in text
             .split(',')
@@ -1036,7 +1056,108 @@ impl Session {
             *selector = widened;
             keys = found;
         }
+        if keys.is_empty()
+            && let Some((widened, found, note)) = self.part_of_day_reading(selector)
+        {
+            self.pending_notes.push(note);
+            *selector = widened;
+            keys = found;
+        }
         keys
+    }
+
+    /// AN EXACT TIME ON ROWS DATED BY A RECORD'S TIMESTAMP, READ AS THE PART OF THE DAY AROUND IT
+    /// (nt14 N9; a read that reached nothing, off with `--no-normalize`): `19:00` on notes is the
+    /// evening, 17:00 to 23:59 (morning 05:00 to 11:59, afternoon 12:00 to 16:59), since a person
+    /// says "last night" and the model writes the hour. Rows with a time of their own (events,
+    /// tasks) are exact, and the small hours are no part of the day here. The widened selector,
+    /// the rows it reaches (not empty) and `note: read 19:00 as the evening`.
+    fn part_of_day_reading(&self, selector: &Selector) -> Option<(Selector, Vec<Key>, String)> {
+        if !self.flags.normalize
+            || selector
+                .kinds
+                .iter()
+                .any(|kind| matches!(kind, Kind::Event | Kind::Task))
+        {
+            return None;
+        }
+        let when = selector.when?;
+        let Resolved::At(at) = when else {
+            return None;
+        };
+        let (part, span) = when.part_of_day()?;
+        let widened = Selector {
+            when: Some(span),
+            ..selector.clone()
+        };
+        let rows = self.select(&widened);
+        let note = format!(
+            "note: read {} as the {part}",
+            crate::dates::clock(at.time())
+        );
+        (!rows.is_empty()).then_some((widened, rows, note))
+    }
+
+    /// A NAME AND A DAY THAT FIT NO ROW, WHILE THE NAME FITS ROWS OF THE KIND (nt14 N1: "is the
+    /// dentist still on the 6th?"): the answer is the rows the name reaches, with the day they
+    /// are on, `note: none Tue 2026-10-06; Dentist is on Fri 2026-10-02`. `find` and `answer`
+    /// only (a count of what is on a day is its own question); never without a name; off with
+    /// `--no-normalize`. Narrowed (N1b, nt15) to a `when` of ONE day (a range or an open window
+    /// that reaches nothing stays empty) and to the rows dated today or later (an undated row
+    /// stays; a past row is never offered).
+    pub(crate) fn name_without_when(
+        &mut self,
+        selector: &mut Selector,
+        keys: Vec<Key>,
+    ) -> Vec<Key> {
+        if !keys.is_empty() || !self.flags.normalize {
+            return keys;
+        }
+        let (Some(when), Some(_)) = (selector.when, selector.name.as_ref()) else {
+            return keys;
+        };
+        // N1b: ONE DAY only ("still on the 6th?"). A range ("any vet visits next week") and an
+        // open window ("the next swim lesson") that reach no row are an empty read, never the
+        // rows of the name from some other week
+        let (from, to) = when.ends();
+        if when.is_open() || from.date() != to.date() {
+            return keys;
+        }
+        let widened = Selector {
+            when: None,
+            ..selector.clone()
+        };
+        // ... and the rows ahead only: a row dated today or later (an undated row may stay),
+        // never one that is past
+        let today = self.today();
+        let rows: Vec<Key> = self
+            .select(&widened)
+            .into_iter()
+            .filter(|key| {
+                self.world
+                    .row(key)
+                    .is_some_and(|row| row.date.is_none_or(|date| date.date >= today))
+            })
+            .collect();
+        if rows.is_empty() {
+            return keys;
+        }
+        let mut on: Vec<String> = rows
+            .iter()
+            .filter_map(|key| self.world.row(key))
+            .take(ROW_CAP)
+            .map(|row| match row.date {
+                Some(date) => format!("{} is on {}", row.name, date.show()),
+                None => format!("{} has no date", row.name),
+            })
+            .collect();
+        if rows.len() > ROW_CAP {
+            on.push(format!("and {} more", rows.len() - ROW_CAP));
+        }
+        self.pending_notes
+            .push(format!("note: none {}; {}", when.echo(), on.join(", ")));
+        *selector = widened;
+        rows
     }
 
     /// A TEXT LITERAL THAT REACHED NO ROW, READ BY THE RESOLVER'S TIERS (nt13 R2): `F = "lit"` or
@@ -1276,6 +1397,57 @@ impl Session {
         }
     }
 
+    /// WHICH ROWS OF A `linked_to` ARE LINKS FOR THE KIND (nt15 R1c), when the call names several:
+    /// ` #31 person is a valid link for photos; #26 photo and #33 event are not.` A sentence with
+    /// a leading space, or nothing for a call that names one row.
+    fn link_verdict(&mut self, selector: &Selector, kind: Kind) -> String {
+        if selector.linked_to.len() < 2 {
+            return String::new();
+        }
+        let (mut valid, mut invalid): (Vec<String>, Vec<String>) = (Vec::new(), Vec::new());
+        for key in selector.linked_to.clone() {
+            let said = format!("#{} {}", self.number(&key), key.0.name());
+            if kind.spec().link_to(key.0).is_some() {
+                valid.push(said);
+            } else {
+                invalid.push(said);
+            }
+        }
+        let list = |items: &[String]| match items {
+            [only] => only.clone(),
+            [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+            [] => String::new(),
+        };
+        let are = |items: &[String]| if items.len() == 1 { "is" } else { "are" };
+        if valid.is_empty() {
+            let (a, noun) = if invalid.len() == 1 {
+                ("a ", "link")
+            } else {
+                ("", "links")
+            };
+            format!(
+                " {} {} not {a}valid {noun} for {}.",
+                list(&invalid),
+                are(&invalid),
+                kind.plural()
+            )
+        } else {
+            let (a, noun) = if valid.len() == 1 {
+                ("a ", "link")
+            } else {
+                ("", "links")
+            };
+            format!(
+                " {} {} {a}valid {noun} for {}; {} {} not.",
+                list(&valid),
+                are(&valid),
+                kind.plural(),
+                list(&invalid),
+                are(&invalid)
+            )
+        }
+    }
+
     /// A link the metadata does not have: the dead-end observation with the
     /// rows whose name mentions the target (SPEC §5 "No link").
     pub(crate) fn no_link(&mut self, selector: &Selector) -> Option<Outcome> {
@@ -1306,13 +1478,20 @@ impl Session {
                     .map(Row::key)
                     .take(ROW_CAP)
                     .collect();
-                let fix = self
-                    .link_call(*kind, selector)
-                    .unwrap_or_else(|| whr::link_fix(*kind, target.0));
+                // (a task's notes are its description only for the generic reading: a call that
+                // names a note row has no use of the sentence, nt15 R1a)
+                let fix = self.link_call(*kind, selector).unwrap_or_else(|| {
+                    if matches!(*kind, Kind::Task | Kind::Event) && target.0 == Kind::Note {
+                        String::new()
+                    } else {
+                        whr::link_fix(*kind, target.0)
+                    }
+                });
                 let mut text = format!(
-                    "{} are not linked to {}.{fix}",
+                    "{} are not linked to {}.{fix}{}",
                     kind.plural(),
                     target.0.plural(),
+                    self.link_verdict(selector, *kind),
                 );
                 let mut lines = Vec::new();
                 let capital = capitalise(kind.plural());
@@ -2056,6 +2235,13 @@ impl Session {
             .collect()
     }
 
+    /// Whether the message names a person other than the user or says a pronoun for them
+    /// (a person only in focus does not count: nt14).
+    pub(crate) fn names_a_person_or_pronoun(&self) -> bool {
+        crate::search::message_names_a_person(self, &self.message)
+            || crate::block::says_a_pronoun_for_them(&self.message)
+    }
+
     /// Whether the turn is about a person other than the user: the message says one's name, or
     /// a pronoun for them, or one is in focus (`block::other_person_in_play`).
     pub(crate) fn names_someone_else(&self) -> bool {
@@ -2374,12 +2560,16 @@ impl Session {
     }
 
     fn find(&mut self, args: &Map<String, Value>) -> Result<Outcome, String> {
-        let selector = self.selector(args)?;
+        // (nt15 R1b: a find has no `rows`; the repair its error names is `answer`'s)
+        let selector = self
+            .selector(args)
+            .map_err(|error| error.replace(" use rows: ", " find takes no rows; answer rows: "))?;
         if let Some(outcome) = self.no_link(&selector) {
             return Ok(outcome);
         }
         let mut selector = selector;
         let keys = self.select_read(&mut selector);
+        let keys = self.name_without_when(&mut selector, keys);
         let mut outcome = Outcome::text("");
         // A FIND IS A LOOKUP (SPEC §4.8): a name that reaches nothing is a miss the turn goes
         // on from, never an answer; `answer` is where the near spellings become the answer.
@@ -2673,6 +2863,7 @@ impl Session {
             }
             let mut selector = selector;
             let keys = self.select_read(&mut selector);
+            let keys = self.name_without_when(&mut selector, keys);
             if keys.is_empty() {
                 // A DEAD END (SPEC §8.5; `dead_end`) is a recovery and the
                 // turn goes on. Any other empty result is the answer

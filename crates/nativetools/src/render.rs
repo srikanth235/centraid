@@ -15,6 +15,41 @@ pub fn when(stamp: Stamp, today: Date) -> String {
     }
 }
 
+/// The longest note body, task description or event description a row line shows WHOLE
+/// (nt15 R2a); a longer text is cut as every other text field is (`CUT`).
+pub const WHOLE: usize = 200;
+/// Where any other text, and a body or description past `WHOLE`, is cut.
+const CUT: usize = 60;
+
+/// One text field as a fact: `body "…"`. The free text of a row (a note's body, a task's or an
+/// event's description) is shown whole when it is `WHOLE` characters or fewer, so an edit of it
+/// is made over text the model has seen; any other text, and a longer one, is cut at `CUT`.
+fn text_fact(name: &str, text: &str) -> String {
+    let free = matches!(name, "body" | "description");
+    let total = text.chars().count();
+    if free && total <= WHOLE {
+        return format!("{name} \"{text}\"");
+    }
+    let short: String = text.chars().take(CUT).collect();
+    let ellipsis = if total > CUT { "…" } else { "" };
+    format!("{name} \"{short}{ellipsis}\"")
+}
+
+/// The body or description of a row as facts, for a reply that must show it (a `restore`).
+#[must_use]
+pub fn text_facts(row: &Row) -> Vec<String> {
+    row.kind
+        .spec()
+        .fields
+        .iter()
+        .filter(|field| matches!(field.name, "body" | "description"))
+        .filter_map(|field| match row.field(field.name) {
+            Some(Val::Text(text)) => Some(text_fact(field.name, text)),
+            _ => None,
+        })
+        .collect()
+}
+
 /// The facts of a row after its name: date, then fields in card order.
 #[must_use]
 pub fn facts(row: &Row, today: Date) -> Vec<String> {
@@ -30,11 +65,7 @@ pub fn facts(row: &Row, today: Date) -> Vec<String> {
         match (field.ty, value) {
             (FieldType::Bool, Val::Bool(true)) => out.push(field.name.to_owned()),
             (FieldType::Bool, _) => {}
-            (FieldType::Text, Val::Text(text)) => {
-                let short: String = text.chars().take(60).collect();
-                let ellipsis = if text.chars().count() > 60 { "…" } else { "" };
-                out.push(format!("{} \"{short}{ellipsis}\"", field.name));
-            }
+            (FieldType::Text, Val::Text(text)) => out.push(text_fact(field.name, text)),
             _ => out.push(format!("{} {}", field.name, value.show(Some(field)))),
         }
     }

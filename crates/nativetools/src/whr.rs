@@ -235,8 +235,43 @@ pub fn link_fix(kind: Kind, target: Kind) -> String {
         (Kind::Person, Kind::Album) | (Kind::Album, Kind::Person) => {
             " The photos of a person or an album: find kind photo, linked_to that row.".to_owned()
         }
+        // nt15 R1a: a task's or an event's notes are its description, not rows
+        (Kind::Task | Kind::Event, Kind::Note) => format!(
+            " {} notes are its description: where description is empty (or is set, or contains \"…\").",
+            if kind == Kind::Task { "A task's" } else { "An event's" }
+        ),
+        (Kind::Note, Kind::Task | Kind::Event) => format!(
+            " {} notes are its description, not linked rows: where description is set (or contains \"…\") on the {}.",
+            if target == Kind::Task { "A task's" } else { "An event's" },
+            target.name()
+        ),
         _ => String::new(),
     }
+}
+
+/// A condition on how many NOTES a task or an event is linked to (`note count = 0`), as the
+/// `description` condition that says the same (nt15 R1a: their notes are their description):
+/// `(clause, "empty" or "set")`. Only the counts that mean one or the other, `= 0`, `<= 0`, `< 1`
+/// (empty) and `> 0`, `>= 1`, `!= 0` (set); any other count has no such reading.
+#[must_use]
+pub(crate) fn notes_as_description(kind: Kind, part: &str) -> Option<(String, &'static str)> {
+    if !matches!(kind, Kind::Task | Kind::Event) {
+        return None;
+    }
+    let lower = part.trim().to_lowercase();
+    let (word, rest) = lower.split_once(" count ")?;
+    if !matches!(word.trim(), "note" | "notes") {
+        return None;
+    }
+    let (op, value) = split_op(rest)?;
+    let count = value.trim().parse::<i64>().ok()?;
+    let empty = match (op, count) {
+        (Op::Eq | Op::Le, 0) | (Op::Lt, 1) => true,
+        (Op::Ne | Op::Gt, 0) | (Op::Ge, 1) => false,
+        _ => return None,
+    };
+    let state = if empty { "empty" } else { "set" };
+    Some((format!("description is {state}"), state))
 }
 
 /// The fields a kind has, as the error lists them.

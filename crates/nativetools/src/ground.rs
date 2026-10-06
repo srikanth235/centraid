@@ -2032,10 +2032,11 @@ impl Session {
         let Ok(selector) = self.selector(out) else {
             return;
         };
-        if selector.trashed {
-            return;
-        }
-        let Some((handles, note)) = self.exclusion(&tokens(&self.message), &selector.kinds) else {
+        // a read of the trash ("who else is in the trash") leaves out what was put in play the
+        // same way, and the rows it names are trashed ones (nt15 R5)
+        let Some((handles, note)) =
+            self.exclusion(&tokens(&self.message), &selector.kinds, selector.trashed)
+        else {
             return;
         };
         out.insert("exclude".to_owned(), json!(handles));
