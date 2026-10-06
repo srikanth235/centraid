@@ -142,8 +142,8 @@ The slot order is `trace.SLOT_ORDER4`: the row decision (`pick`, `rows`, `row`) 
 
 | Metric | v3.1 | v4 |
 | --- | --- | --- |
-| Compiled call equal to the v3.1 think's, Python | | 611 / 641 steps (30 lookups not said) |
-| Same, the runtime's `compile` op (stated = the record's call, call = the v3.1 call) | | 549 / 549 compared steps (repair steps excepted) |
+| Compiled call equal to the v3.1 think's, Python |  | 611 / 641 steps (30 lookups not said) |
+| Same, the runtime's `compile` op (stated = the record's call, call = the v3.1 call) |  | 549 / 549 compared steps (repair steps excepted) |
 | Slot lines per turn | 6.38 | 4.92 (-23%) |
 | Think tokens per turn (Qwen) | 51.24 | 35.76 (-30.2%) |
 | Think decision tokens per turn | 29.94 | 19.04 (-36.4%) |
@@ -151,4 +151,3 @@ The slot order is `trace.SLOT_ORDER4`: the row decision (`pick`, `rows`, `row`) 
 | Call decision tokens per turn | 13.57 | 13.57 |
 | Trained tokens per turn | 121.34 | 105.85 (-12.8%) |
 | Think accepted by the grammar of its version, whole world (670 steps) | 669 (the refer rule demanded on 356) | 638 (the other 32: 31 lookups, which stay v3.1, and 1 the v3.1 grammar refuses too) |
-

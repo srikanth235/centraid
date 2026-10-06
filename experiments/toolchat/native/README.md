@@ -1,8 +1,6 @@
 # The native tool task
 
-Issue [#1044](https://github.com/srikanth235/centraid/issues/1044). One model, Qwen3.5-0.8B, fine-tuned to drive the
-vault through eight tools (`SPEC.md`) with the slot trace (`CONTRACT_V3.md`), scored on held-out households. The target
-is 85% session pass on test; a session passes when every turn's effect matches its gold.
+Issue [#1044](https://github.com/srikanth235/centraid/issues/1044). One model, Qwen3.5-0.8B, fine-tuned to drive the vault through eight tools (`SPEC.md`) with the slot trace (`CONTRACT_V3.md`), scored on held-out households. The target is 85% session pass on test; a session passes when every turn's effect matches its gold.
 
 ## The three numbers
 
@@ -14,8 +12,7 @@ Every checkpoint is scored by one script on three frozen sets (`eval/FROZEN.md`)
 | val | 655, seven held-out worlds | the number every fix is derived on |
 | test | 656, the other half of the same pool | scored only at milestones |
 
-A report gives sessions, clean turns (turns not downstream of a session's first failure: the steering metric) and all
-turns. Scoring is greedy; there is no voting.
+A report gives sessions, clean turns (turns not downstream of a session's first failure: the steering metric) and all turns. Scoring is greedy; there is no voting.
 
 ## Layout
 

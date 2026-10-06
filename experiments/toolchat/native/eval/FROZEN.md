@@ -22,11 +22,11 @@ One session per line: `id`, `set`, `world`, `today`, `me`, `tags`, `turns` (each
 
 val and test are the two halves of one pool of 1,311 sessions on the same seven worlds. A to D are in `worlds/`. T03, T12 and T23 are the val worlds of `authored/split.json`, held out of training whole. `sets/split.json` records the split (seed 0, stratified by world and min(turns, 5)) and the origin of every session:
 
-| origin | sources | pool | val | test |
-| --- | --- | --- | --- | --- |
-| `val-v3.1` | the authored sessions of T03, T12 and T23 | 391 | 195 | 196 |
-| `test-v3.1` | the hand-written sessions of A to D | 450 | 224 | 226 |
-| `e1` | recipe-authored sessions on A to D | 470 | 236 | 234 |
+| origin      | sources                                   | pool | val | test |
+| ----------- | ----------------------------------------- | ---- | --- | ---- |
+| `val-v3.1`  | the authored sessions of T03, T12 and T23 | 391  | 195 | 196  |
+| `test-v3.1` | the hand-written sessions of A to D       | 450  | 224 | 226  |
+| `e1`        | recipe-authored sessions on A to D        | 470  | 236 | 234  |
 
 The sources are in `sessions/` (`sessions/README.md`). They are provenance only: the sets carry the gold corrections of v3 and v3.1 and the regenerated gold of v5 and v6, which the sources do not.
 
@@ -47,9 +47,9 @@ e0685c65c7ce377e1559488760e6ed55a9e3f7b445c2a3daee7be62ba13d5d0d  sets/split.jso
 
 A gold item is verified by running its reference calls through the runtime and scoring the run (`run.py --model ref`, then `score.py`). `python3 build_sets.py ref` does this for val, then test, and exits 1 unless both reach 100% of sessions and turns.
 
-| set | sessions | turns |
-| --- | --- | --- |
-| val | 655 / 655 | 2,055 / 2,055 |
+| set  | sessions  | turns         |
+| ---- | --------- | ------------- |
+| val  | 655 / 655 | 2,055 / 2,055 |
 | test | 656 / 656 | 2,075 / 2,075 |
 
 Version 6 was checked against the stage-2 runtime (`nativetools`, sha256 `1b3af4607607...`) on 2026-10-02: the refreeze output before it was copied, and the files in `sets/` after, both score 100% on val and test. The val of version 7 was checked against the phase-7 runtime (sha256 `83f2affa7e65...`) on 2026-10-03: 655 / 655 sessions and 2,055 / 2,055 turns; test was not rerun on it.
@@ -60,13 +60,13 @@ The first scored sets were the 450 hand-written sessions of worlds A to D (test)
 
 v5 regenerated the gold with the stage-1 runtime (#1044: matching, status, the write path, the session loop). `build_sets.py refreeze` replaced the gold of every turn whose reference run fails it, or passes it but a convention says the gold is a superseded reading, by one accept derived from the run (D-1044-7 to D-1044-10 and the cap of 12 rows). Every change was explained by a convention; a change none explained would have kept the old gold. 13 gold repairs edited the reference calls and the gold of 13 val turns first: ten from the diagnosis of the v3 run, and three the owner ruled on (T23-046 and test-D-097 accept either reading, T12-129 adds the row answer beside the decline). Sessions, turns and the split are v4's. Turns changed, by convention:
 
-| convention | val | test |
-| --- | --- | --- |
-| ask-options | 10 | 6 |
-| bulk-cap | 0 | 1 |
-| refusal | 10 | 7 |
-| repair | 13 | 0 |
-| status | 16 | 3 |
+| convention  | val | test |
+| ----------- | --- | ---- |
+| ask-options | 10  | 6    |
+| bulk-cap    | 0   | 1    |
+| refusal     | 10  | 7    |
+| repair      | 13  | 0    |
+| status      | 16  | 3    |
 
 The session and turn of every changed turn (ids only):
 
@@ -84,9 +84,9 @@ v6 regenerated the gold with the stage-2 runtime (#1044: container readouts, sta
 trainfit was drawn anew (seed 0, 12 per train world) from the train rebuild of the same version: the rebuild adds collision rows to the train worlds (`authored/gen/collide.py`) and a session whose gold change no convention explains is dropped, 176 of 3,869 (4.5%, 98 of them a listing or count that now includes a collision row, 34 a write the runtime answers with a name question), and 17 of the 300 sessions of v5's sample were among them, so `--keep-ids` refused. The train data is `data/train.jsonl.gz` (3,693 sessions); `data/README.md` records its build. Turns changed, by convention:
 
 | convention | val | test |
-| --- | --- | --- |
-| container | 6 | 3 |
-| next | 2 | 0 |
+| ---------- | --- | ---- |
+| container  | 6   | 3    |
+| next       | 2   | 0    |
 
 The session and turn of every changed turn (ids only):
 

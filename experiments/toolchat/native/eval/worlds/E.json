@@ -1,3062 +1,2696 @@
 {
- "me": "Ji-an Yoo",
- "today": "2027-04-09T21:20",
- "epoch": "2026-01-12T09:00",
- "seed": "E",
- "currency": "KRW",
- "people": [
-  {
-   "key": "eomma",
-   "name": "Mi-kyung Kwon",
-   "role": "mum",
-   "nickname": "Eomma",
-   "starred": true,
-   "cadence": 3,
-   "last_contacted": "2027-04-08T20:40",
-   "last_contacted_kind": "call",
-   "met": "Daegu"
-  },
-  {
-   "key": "appa",
-   "name": "Dong-hyun Yoo",
-   "role": "dad",
-   "nickname": "Appa",
-   "starred": true,
-   "cadence": 7,
-   "last_contacted": "2027-04-04T19:10",
-   "met": "Daegu"
-  },
-  {
-   "key": "halmoni",
-   "name": "Sun-ja Choi",
-   "role": "grandmother",
-   "nickname": "Halmoni",
-   "cadence": 14,
-   "last_contacted": "2027-03-28T18:00",
-   "met": "Daegu"
-  },
-  {
-   "key": "jun_seo",
-   "name": "Jun-seo Yoo",
-   "role": "younger brother",
-   "cadence": 10,
-   "last_contacted": "2027-04-05T23:10",
-   "last_contacted_kind": "message",
-   "met": "Busan"
-  },
-  {
-   "key": "imo",
-   "name": "Eun-kyung Kwon",
-   "role": "aunt",
-   "nickname": "Imo",
-   "met": "Daegu"
-  },
-  {
-   "key": "ha_eun",
-   "name": "Ha-eun Song",
-   "role": "flatmate",
-   "starred": true,
-   "cadence": 1,
-   "last_contacted": "2027-04-09T08:05",
-   "last_contacted_kind": "visit"
-  },
-  {
-   "key": "min_seo",
-   "name": "Min-seo Cho",
-   "role": "flatmate",
-   "nickname": "Minnie",
-   "cadence": 1,
-   "last_contacted": "2027-04-08T22:30",
-   "last_contacted_kind": "visit"
-  },
-  {
-   "key": "landlady",
-   "name": "Soon-ok Ahn",
-   "role": "landlady",
-   "nickname": "Ajumma",
-   "met": "Bongcheon-dong"
-  },
-  {
-   "key": "vet",
-   "name": "Tae-woo Lim",
-   "role": "vet",
-   "nickname": "Dr Lim",
-   "met": "Bongcheon-dong"
-  },
-  {
-   "key": "advisor",
-   "name": "Sung-ho Bae",
-   "role": "PhD advisor",
-   "nickname": "Prof Bae",
-   "starred": true,
-   "cadence": 14,
-   "last_contacted": "2027-03-31T15:30",
-   "met": "Stats Lab"
-  },
-  {
-   "key": "jin_sunbae",
-   "name": "Jin-woo Seo",
-   "role": "senior labmate",
-   "nickname": "Jin Sunbae",
-   "cadence": 7,
-   "last_contacted": "2027-04-09T18:40",
-   "last_contacted_kind": "coffee",
-   "met": "Stats Lab"
-  },
-  {
-   "key": "minjun_k",
-   "name": "Min-jun Kim",
-   "role": "labmate",
-   "cadence": 14,
-   "last_contacted": "2027-04-06T12:30",
-   "last_contacted_kind": "message",
-   "met": "Stats Lab"
-  },
-  {
-   "key": "su_bin",
-   "name": "Su-bin Ryu",
-   "role": "labmate",
-   "met": "Stats Lab"
-  },
-  {
-   "key": "dept_office",
-   "name": "Eun-hee Hwang",
-   "role": "department office",
-   "met": "Stats Department"
-  },
-  {
-   "key": "maestro",
-   "name": "Chang-hoon Oh",
-   "role": "conductor",
-   "nickname": "Maestro Oh",
-   "starred": true,
-   "met": "Hangang Orchestra"
-  },
-  {
-   "key": "concertmaster",
-   "name": "Seul-gi Hong",
-   "role": "concertmaster",
-   "met": "Hangang Orchestra"
-  },
-  {
-   "key": "minjun_p",
-   "name": "Min-jun Park",
-   "role": "cello stand partner",
-   "cadence": 14,
-   "last_contacted": "2027-04-03T17:30",
-   "last_contacted_kind": "coffee",
-   "met": "Hangang Orchestra"
-  },
-  {
-   "key": "treasurer",
-   "name": "Bo-ra Jeon",
-   "role": "orchestra treasurer",
-   "met": "Hangang Orchestra"
-  },
-  {
-   "key": "librarian",
-   "name": "Dae-sung Yang",
-   "role": "orchestra librarian",
-   "met": "Hangang Orchestra"
-  },
-  {
-   "key": "jihye_y",
-   "name": "Ji-hye Yoon",
-   "role": "second violin",
-   "met": "Hangang Orchestra"
-  },
-  {
-   "key": "yunho",
-   "name": "Yun-ho Seo",
-   "role": "student, 11th grade calculus",
-   "cadence": 7,
-   "last_contacted": "2027-04-06T21:05",
-   "last_contacted_kind": "visit",
-   "met": "tutoring"
-  },
-  {
-   "key": "mrs_jang",
-   "name": "Kyung-ae Jang",
-   "role": "Yun-ho's mother",
-   "met": "tutoring",
-   "last_contacted": "2027-04-01T10:00",
-   "last_contacted_kind": "message"
-  },
-  {
-   "key": "harin",
-   "name": "Ha-rin Kang",
-   "role": "student, 9th grade (twin)",
-   "met": "tutoring"
-  },
-  {
-   "key": "harim",
-   "name": "Ha-rim Kang",
-   "role": "student, 9th grade (twin)",
-   "met": "tutoring"
-  },
-  {
-   "key": "mr_kang",
-   "name": "Tae-sik Kang",
-   "role": "the twins' father",
-   "met": "tutoring"
-  },
-  {
-   "key": "doyun",
-   "name": "Do-yun Moon",
-   "role": "student, 8th grade online",
-   "met": "tutoring"
-  },
-  {
-   "key": "seungwoo",
-   "name": "Seung-woo Baek",
-   "role": "student, SAT maths",
-   "met": "tutoring"
-  },
-  {
-   "key": "mina",
-   "name": "Mi-na Jeon",
-   "role": "best friend",
-   "nickname": "Mina",
-   "starred": true,
-   "cadence": 7,
-   "last_contacted": "2027-04-07T22:15",
-   "last_contacted_kind": "message",
-   "met": "university"
-  },
-  {
-   "key": "hoseok",
-   "name": "Ho-seok Jang",
-   "role": "friend",
-   "met": "university",
-   "cadence": 30,
-   "last_contacted": "2027-03-14T19:00"
-  },
-  {
-   "key": "jihye_yun",
-   "name": "Jihye Yun",
-   "role": "high-school friend",
-   "met": "Daegu",
-   "cadence": 45,
-   "last_contacted": "2027-02-27T21:00",
-   "last_contacted_kind": "message"
-  },
-  {
-   "key": "dentist",
-   "name": "Kyung-soo Park",
-   "role": "dentist",
-   "nickname": "Dr Park"
-  },
-  {
-   "key": "hairdresser",
-   "name": "Soo-jin Lee",
-   "role": "hairdresser"
-  },
-  {
-   "key": "old_student",
-   "name": "Joon-young Oh",
-   "role": "former student",
-   "met": "tutoring",
-   "trashed": "2027-03-30T11:00"
-  },
-  {
-   "key": "old_flatmate",
-   "name": "Hye-won Baek",
-   "role": "old flatmate",
-   "met": "Sillim",
-   "trashed": "2026-12-14T10:00"
-  }
- ],
- "groups": [
-  {
-   "key": "flat_bills",
-   "name": "Bongcheon Flat Bills",
-   "currency": "KRW",
-   "members": [
-    "ha_eun",
-    "min_seo"
-   ],
-   "created": "2026-01-12T10:00"
-  },
-  {
-   "key": "orch_kitty",
-   "name": "Hangang Orchestra Kitty",
-   "currency": "KRW",
-   "members": [
-    "treasurer",
-    "maestro",
-    "concertmaster",
-    "minjun_p",
-    "librarian",
-    "jihye_y"
-   ],
-   "created": "2026-02-07T15:00"
-  },
-  {
-   "key": "kyoto",
-   "name": "Kyoto Trip 2026",
-   "currency": "JPY",
-   "members": [
-    "mina",
-    "hoseok"
-   ],
-   "created": "2026-02-20T21:00"
-  },
-  {
-   "key": "lab_fund",
-   "name": "Stats Lab Dinner Fund",
-   "currency": "KRW",
-   "members": [
-    "jin_sunbae",
-    "minjun_k",
-    "su_bin"
-   ],
-   "created": "2026-03-04T18:00"
-  },
-  {
-   "key": "daegu_fund",
-   "name": "Daegu Family Fund",
-   "currency": "KRW",
-   "members": [
-    "jun_seo",
-    "imo"
-   ],
-   "created": "2026-09-20T20:00"
-  },
-  {
-   "key": "jeju",
-   "name": "Jeju Weekend 2027",
-   "currency": "KRW",
-   "members": [
-    "mina",
-    "hoseok",
-    "ha_eun"
-   ],
-   "created": "2027-03-22T22:00"
-  }
- ],
- "expenses": [
-  {
-   "group": "flat_bills",
-   "name": "Wifi March",
-   "amount": 33000,
-   "paid_by": "ha_eun",
-   "split": [
-    "me",
-    "ha_eun",
-    "min_seo"
-   ],
-   "date": "2027-03-05"
-  },
-  {
-   "group": "flat_bills",
-   "name": "Gas bill March",
-   "amount": 41000,
-   "paid_by": "me",
-   "split": [
-    "me",
-    "ha_eun",
-    "min_seo"
-   ],
-   "date": "2027-03-20"
-  },
-  {
-   "group": "flat_bills",
-   "name": "Electricity March",
-   "amount": 58000,
-   "paid_by": "min_seo",
-   "split": [
-    "me",
-    "ha_eun",
-    "min_seo"
-   ],
-   "date": "2027-03-22"
-  },
-  {
-   "group": "flat_bills",
-   "name": "Detergent and toilet paper",
-   "amount": 24800,
-   "paid_by": "ha_eun",
-   "split": [
-    "me",
-    "ha_eun",
-    "min_seo"
-   ],
-   "date": "2027-04-01"
-  },
-  {
-   "group": "orch_kitty",
-   "name": "Rehearsal room rent March",
-   "amount": 240000,
-   "paid_by": "treasurer",
-   "split": [
-    "me",
-    "treasurer",
-    "concertmaster",
-    "minjun_p",
-    "librarian",
-    "jihye_y"
-   ],
-   "date": "2027-03-02"
-  },
-  {
-   "group": "orch_kitty",
-   "name": "Sheet music copies",
-   "amount": 38000,
-   "paid_by": "librarian",
-   "split": [
-    "me",
-    "librarian",
-    "minjun_p",
-    "jihye_y"
-   ],
-   "date": "2027-03-13"
-  },
-  {
-   "group": "orch_kitty",
-   "name": "Concert hall deposit",
-   "amount": 600000,
-   "paid_by": "treasurer",
-   "split": [
-    "me",
-    "treasurer",
-    "maestro",
-    "concertmaster",
-    "minjun_p",
-    "librarian",
-    "jihye_y"
-   ],
-   "date": "2027-03-26"
-  },
-  {
-   "group": "orch_kitty",
-   "name": "Chicken and beer after rehearsal",
-   "amount": 96000,
-   "paid_by": "me",
-   "split": [
-    "me",
-    "concertmaster",
-    "minjun_p",
-    "librarian",
-    "jihye_y",
-    "treasurer"
-   ],
-   "date": "2027-04-03"
-  },
-  {
-   "group": "kyoto",
-   "name": "Ryokan in Gion, two nights",
-   "amount": 54000,
-   "paid_by": "mina",
-   "split": [
-    "me",
-    "mina",
-    "hoseok"
-   ],
-   "date": "2026-03-28"
-  },
-  {
-   "group": "kyoto",
-   "name": "Haruka express tickets",
-   "amount": 8400,
-   "paid_by": "hoseok",
-   "split": [
-    "me",
-    "mina",
-    "hoseok"
-   ],
-   "date": "2026-03-27"
-  },
-  {
-   "group": "kyoto",
-   "name": "Kaiseki dinner",
-   "amount": 24000,
-   "paid_by": "me",
-   "split": [
-    "me",
-    "mina",
-    "hoseok"
-   ],
-   "date": "2026-03-29"
-  },
-  {
-   "group": "kyoto",
-   "name": "Nishiki market snacks",
-   "amount": 6300,
-   "paid_by": "me",
-   "split": [
-    "me",
-    "mina"
-   ],
-   "date": "2026-03-29"
-  },
-  {
-   "group": "lab_fund",
-   "name": "Lab dinner at the samgyeopsal place",
-   "amount": 148000,
-   "paid_by": "jin_sunbae",
-   "split": [
-    "me",
-    "jin_sunbae",
-    "minjun_k",
-    "su_bin"
-   ],
-   "date": "2027-03-19"
-  },
-  {
-   "group": "lab_fund",
-   "name": "Coffee beans for the lab",
-   "amount": 32000,
-   "paid_by": "me",
-   "split": [
-    "me",
-    "jin_sunbae",
-    "minjun_k",
-    "su_bin"
-   ],
-   "date": "2027-03-29"
-  },
-  {
-   "group": "lab_fund",
-   "name": "Prof Bae's birthday cake",
-   "amount": 45000,
-   "paid_by": "su_bin",
-   "split": [
-    "me",
-    "jin_sunbae",
-    "minjun_k",
-    "su_bin"
-   ],
-   "date": "2027-04-02"
-  },
-  {
-   "group": "daegu_fund",
-   "name": "Halmoni's hospital copay",
-   "amount": 60000,
-   "paid_by": "imo",
-   "split": [
-    "me",
-    "jun_seo",
-    "imo"
-   ],
-   "date": "2027-03-08"
-  },
-  {
-   "group": "daegu_fund",
-   "name": "Chuseok gift set",
-   "amount": 90000,
-   "paid_by": "me",
-   "split": [
-    "me",
-    "jun_seo"
-   ],
-   "date": "2026-09-18"
-  }
- ],
- "lists": [
-  {
-   "key": "thesis",
-   "name": "PhD thesis",
-   "area": "research"
-  },
-  {
-   "key": "tutoring",
-   "name": "Tutoring",
-   "area": "work"
-  },
-  {
-   "key": "flat_l",
-   "name": "Flat and Bori",
-   "area": "home"
-  },
-  {
-   "key": "orch_l",
-   "name": "Orchestra",
-   "area": "music"
-  },
-  {
-   "key": "family",
-   "name": "Daegu and family",
-   "area": "family"
-  },
-  {
-   "key": "errands",
-   "name": "Errands",
-   "area": "home"
-  }
- ],
- "events": [
-  {
-   "key": "rehearse_0313",
-   "name": "Orchestra rehearsal",
-   "start": "2027-03-13T14:00",
-   "end": "2027-03-13T17:00",
-   "created": "2027-03-10T12:00",
-   "attendees": [
-    "maestro",
-    "minjun_p"
-   ],
-   "description": "Hangang community hall, room B"
-  },
-  {
-   "key": "rehearse_0320",
-   "name": "Orchestra rehearsal",
-   "start": "2027-03-20T14:00",
-   "end": "2027-03-20T17:00",
-   "created": "2027-03-17T12:00",
-   "attendees": [
-    "maestro",
-    "minjun_p"
-   ],
-   "description": "Hangang community hall, room B",
-   "cancelled": true
-  },
-  {
-   "key": "rehearse_0327",
-   "name": "Orchestra rehearsal",
-   "start": "2027-03-27T14:00",
-   "end": "2027-03-27T17:00",
-   "created": "2027-03-24T12:00",
-   "attendees": [
-    "maestro",
-    "minjun_p"
-   ],
-   "description": "Hangang community hall, room B"
-  },
-  {
-   "key": "rehearse_0403",
-   "name": "Orchestra rehearsal",
-   "start": "2027-04-03T14:00",
-   "end": "2027-04-03T17:00",
-   "created": "2027-03-31T12:00",
-   "attendees": [
-    "maestro",
-    "minjun_p"
-   ],
-   "description": "Hangang community hall, room B"
-  },
-  {
-   "key": "rehearse_0410",
-   "name": "Orchestra rehearsal",
-   "start": "2027-04-10T14:00",
-   "end": "2027-04-10T17:00",
-   "created": "2027-04-07T12:00",
-   "attendees": [
-    "maestro",
-    "minjun_p"
-   ],
-   "description": "Hangang community hall, room B"
-  },
-  {
-   "key": "rehearse_0417",
-   "name": "Orchestra rehearsal",
-   "start": "2027-04-17T14:00",
-   "end": "2027-04-17T17:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "maestro",
-    "minjun_p"
-   ],
-   "description": "Hangang community hall, room B"
-  },
-  {
-   "key": "rehearse_0501",
-   "name": "Orchestra rehearsal",
-   "start": "2027-05-01T14:00",
-   "end": "2027-05-01T17:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "maestro",
-    "minjun_p"
-   ],
-   "description": "Hangang community hall, room B"
-  },
-  {
-   "key": "rehearse_0508",
-   "name": "Orchestra rehearsal",
-   "start": "2027-05-08T14:00",
-   "end": "2027-05-08T17:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "maestro",
-    "minjun_p"
-   ],
-   "description": "Hangang community hall, room B"
-  },
-  {
-   "key": "rehearse_0515",
-   "name": "Orchestra rehearsal",
-   "start": "2027-05-15T14:00",
-   "end": "2027-05-15T17:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "maestro",
-    "minjun_p"
-   ],
-   "description": "Hangang community hall, room B"
-  },
-  {
-   "key": "labmtg_0329",
-   "name": "Lab meeting",
-   "start": "2027-03-29T10:00",
-   "end": "2027-03-29T11:30",
-   "created": "2027-03-26T08:00",
-   "attendees": [
-    "advisor",
-    "jin_sunbae",
-    "minjun_k",
-    "su_bin"
-   ]
-  },
-  {
-   "key": "labmtg_0405",
-   "name": "Lab meeting",
-   "start": "2027-04-05T10:00",
-   "end": "2027-04-05T11:30",
-   "created": "2027-04-02T08:00",
-   "attendees": [
-    "advisor",
-    "jin_sunbae",
-    "minjun_k",
-    "su_bin"
-   ]
-  },
-  {
-   "key": "labmtg_0412",
-   "name": "Lab meeting",
-   "start": "2027-04-12T10:00",
-   "end": "2027-04-12T11:30",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "advisor",
-    "jin_sunbae",
-    "minjun_k",
-    "su_bin"
-   ]
-  },
-  {
-   "key": "labmtg_0419",
-   "name": "Lab meeting",
-   "start": "2027-04-19T10:00",
-   "end": "2027-04-19T11:30",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "advisor",
-    "jin_sunbae",
-    "minjun_k",
-    "su_bin"
-   ]
-  },
-  {
-   "key": "labmtg_0426",
-   "name": "Lab meeting",
-   "start": "2027-04-26T10:00",
-   "end": "2027-04-26T11:30",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "advisor",
-    "jin_sunbae",
-    "minjun_k",
-    "su_bin"
-   ]
-  },
-  {
-   "key": "yunho_0330",
-   "name": "Tutoring - Yun-ho",
-   "start": "2027-03-30T19:00",
-   "end": "2027-03-30T21:00",
-   "created": "2027-03-27T17:00",
-   "attendees": [
-    "yunho"
-   ]
-  },
-  {
-   "key": "yunho_0406",
-   "name": "Tutoring - Yun-ho",
-   "start": "2027-04-06T19:00",
-   "end": "2027-04-06T21:00",
-   "created": "2027-04-03T17:00",
-   "attendees": [
-    "yunho"
-   ],
-   "cancelled": true
-  },
-  {
-   "key": "yunho_0413",
-   "name": "Tutoring - Yun-ho",
-   "start": "2027-04-13T19:00",
-   "end": "2027-04-13T21:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "yunho"
-   ]
-  },
-  {
-   "key": "yunho_0420",
-   "name": "Tutoring - Yun-ho",
-   "start": "2027-04-20T19:00",
-   "end": "2027-04-20T21:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "yunho"
-   ]
-  },
-  {
-   "key": "yunho_0427",
-   "name": "Tutoring - Yun-ho",
-   "start": "2027-04-27T19:00",
-   "end": "2027-04-27T21:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "yunho"
-   ]
-  },
-  {
-   "key": "harin_0408",
-   "name": "Tutoring - Ha-rin",
-   "start": "2027-04-08T18:00",
-   "end": "2027-04-08T19:30",
-   "created": "2027-04-05T16:00",
-   "attendees": [
-    "harin"
-   ]
-  },
-  {
-   "key": "harin_0422",
-   "name": "Tutoring - Ha-rin",
-   "start": "2027-04-22T18:00",
-   "end": "2027-04-22T19:30",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "harin"
-   ]
-  },
-  {
-   "key": "harin_0506",
-   "name": "Tutoring - Ha-rin",
-   "start": "2027-05-06T18:00",
-   "end": "2027-05-06T19:30",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "harin"
-   ]
-  },
-  {
-   "key": "harim_0408",
-   "name": "Tutoring - Ha-rim",
-   "start": "2027-04-08T19:30",
-   "end": "2027-04-08T21:00",
-   "created": "2027-04-05T17:30",
-   "attendees": [
-    "harim"
-   ]
-  },
-  {
-   "key": "harim_0422",
-   "name": "Tutoring - Ha-rim",
-   "start": "2027-04-22T19:30",
-   "end": "2027-04-22T21:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "harim"
-   ]
-  },
-  {
-   "key": "harim_0506",
-   "name": "Tutoring - Ha-rim",
-   "start": "2027-05-06T19:30",
-   "end": "2027-05-06T21:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "harim"
-   ]
-  },
-  {
-   "key": "doyun_0402",
-   "name": "Tutoring - Do-yun (online)",
-   "start": "2027-04-02T17:00",
-   "end": "2027-04-02T18:00",
-   "created": "2027-03-30T15:00",
-   "attendees": [
-    "doyun"
-   ]
-  },
-  {
-   "key": "doyun_0409",
-   "name": "Tutoring - Do-yun (online)",
-   "start": "2027-04-09T17:00",
-   "end": "2027-04-09T18:00",
-   "created": "2027-04-06T15:00",
-   "attendees": [
-    "doyun"
-   ]
-  },
-  {
-   "key": "doyun_0416",
-   "name": "Tutoring - Do-yun (online)",
-   "start": "2027-04-16T17:00",
-   "end": "2027-04-16T18:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "doyun"
-   ]
-  },
-  {
-   "key": "doyun_0423",
-   "name": "Tutoring - Do-yun (online)",
-   "start": "2027-04-23T17:00",
-   "end": "2027-04-23T18:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "doyun"
-   ]
-  },
-  {
-   "key": "callhome_0328",
-   "name": "Call Eomma",
-   "start": "2027-03-28T20:00",
-   "end": "2027-03-28T20:30",
-   "created": "2027-03-25T18:00",
-   "attendees": [
-    "eomma"
-   ]
-  },
-  {
-   "key": "callhome_0404",
-   "name": "Call Eomma",
-   "start": "2027-04-04T20:00",
-   "end": "2027-04-04T20:30",
-   "created": "2027-04-01T18:00",
-   "attendees": [
-    "eomma"
-   ]
-  },
-  {
-   "key": "callhome_0411",
-   "name": "Call Eomma",
-   "start": "2027-04-11T20:00",
-   "end": "2027-04-11T20:30",
-   "created": "2027-04-08T18:00",
-   "attendees": [
-    "eomma"
-   ]
-  },
-  {
-   "key": "callhome_0418",
-   "name": "Call Eomma",
-   "start": "2027-04-18T20:00",
-   "end": "2027-04-18T20:30",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "eomma"
-   ]
-  },
-  {
-   "key": "callhome_0502",
-   "name": "Call Eomma",
-   "start": "2027-05-02T20:00",
-   "end": "2027-05-02T20:30",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "eomma"
-   ]
-  },
-  {
-   "key": "seungwoo_0314",
-   "name": "Tutoring - Seung-woo",
-   "start": "2027-03-14T15:00",
-   "end": "2027-03-14T17:00",
-   "created": "2027-03-11T13:00",
-   "attendees": [
-    "seungwoo"
-   ]
-  },
-  {
-   "key": "seungwoo_0328",
-   "name": "Tutoring - Seung-woo",
-   "start": "2027-03-28T15:00",
-   "end": "2027-03-28T17:00",
-   "created": "2027-03-25T13:00",
-   "attendees": [
-    "seungwoo"
-   ]
-  },
-  {
-   "key": "seungwoo_0411",
-   "name": "Tutoring - Seung-woo",
-   "start": "2027-04-11T15:00",
-   "end": "2027-04-11T17:00",
-   "created": "2027-04-08T13:00",
-   "attendees": [
-    "seungwoo"
-   ]
-  },
-  {
-   "key": "sectional_0324",
-   "name": "Orchestra sectional - cellos",
-   "start": "2027-03-24T19:30",
-   "end": "2027-03-24T21:00",
-   "created": "2027-03-21T17:30",
-   "attendees": [
-    "minjun_p"
-   ]
-  },
-  {
-   "key": "sectional_0407",
-   "name": "Orchestra sectional - cellos",
-   "start": "2027-04-07T19:30",
-   "end": "2027-04-07T21:00",
-   "created": "2027-04-04T17:30",
-   "attendees": [
-    "minjun_p"
-   ]
-  },
-  {
-   "key": "sectional_0428",
-   "name": "Orchestra sectional - cellos",
-   "start": "2027-04-28T19:30",
-   "end": "2027-04-28T21:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "minjun_p"
-   ]
-  },
-  {
-   "key": "advisor_mar",
-   "name": "Advisor meeting",
-   "start": "2027-03-03T14:00",
-   "end": "2027-03-03T15:00",
-   "created": "2027-02-28T12:00",
-   "attendees": [
-    "advisor"
-   ]
-  },
-  {
-   "key": "advisor_mar31",
-   "name": "Advisor meeting",
-   "start": "2027-03-31T14:00",
-   "end": "2027-03-31T15:00",
-   "created": "2027-03-28T12:00",
-   "attendees": [
-    "advisor"
-   ],
-   "cancelled": true,
-   "description": "Prof Bae is at a conference in Jeju"
-  },
-  {
-   "key": "advisor_apr",
-   "name": "Advisor meeting",
-   "start": "2027-04-14T14:00",
-   "end": "2027-04-14T15:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "advisor"
-   ]
-  },
-  {
-   "key": "proposal",
-   "name": "Thesis proposal defense",
-   "start": "2027-04-30T10:00",
-   "end": "2027-04-30T12:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "advisor",
-    "jin_sunbae"
-   ],
-   "description": "seminar room 302, committee of four"
-  },
-  {
-   "key": "dentist_apr",
-   "name": "Dentist - Dr Park",
-   "start": "2027-04-15T15:30",
-   "end": "2027-04-15T16:15",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "dentist"
-   ]
-  },
-  {
-   "key": "dentist_feb",
-   "name": "Dentist - Dr Park",
-   "start": "2027-02-26T16:00",
-   "end": "2027-02-26T16:45",
-   "created": "2027-02-23T14:00",
-   "attendees": [
-    "dentist"
-   ]
-  },
-  {
-   "key": "vet_check",
-   "name": "Vet - Bori check-up",
-   "start": "2027-03-13T11:00",
-   "end": "2027-03-13T11:30",
-   "created": "2027-03-10T09:00",
-   "attendees": [
-    "vet"
-   ]
-  },
-  {
-   "key": "vet_vacc",
-   "name": "Vet - Bori vaccination",
-   "start": "2027-04-17T11:00",
-   "end": "2027-04-17T11:30",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "vet"
-   ]
-  },
-  {
-   "key": "dinner_mina_mar",
-   "name": "Dinner with Mi-na",
-   "start": "2027-03-19T19:00",
-   "end": "2027-03-19T21:00",
-   "created": "2027-03-16T17:00",
-   "attendees": [
-    "mina"
-   ]
-  },
-  {
-   "key": "dinner_mina_apr",
-   "name": "Dinner with Mi-na",
-   "start": "2027-04-16T19:00",
-   "end": "2027-04-16T21:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "mina"
-   ]
-  },
-  {
-   "key": "coffee_mina",
-   "name": "Coffee with Mi-na",
-   "start": "2027-04-03T10:00",
-   "end": "2027-04-03T11:00",
-   "created": "2027-03-31T08:00",
-   "attendees": [
-    "mina"
-   ]
-  },
-  {
-   "key": "hair",
-   "name": "Hair appointment",
-   "start": "2027-04-11T11:00",
-   "end": "2027-04-11T12:30",
-   "created": "2027-04-08T09:00",
-   "attendees": [
-    "hairdresser"
-   ]
-  },
-  {
-   "key": "brunch_junseo",
-   "name": "Brunch with Jun-seo",
-   "start": "2027-04-18T11:00",
-   "end": "2027-04-18T13:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "jun_seo"
-   ],
-   "description": "he is in Seoul for a job fair"
-  },
-  {
-   "key": "committee",
-   "name": "Orchestra committee meeting",
-   "start": "2027-04-18T18:30",
-   "end": "2027-04-18T19:30",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "treasurer",
-    "maestro",
-    "librarian"
-   ],
-   "description": "agree the concert programme order"
-  },
-  {
-   "key": "lease_talk",
-   "name": "Lease renewal talk with Ajumma",
-   "start": "2027-04-20T18:00",
-   "end": "2027-04-20T18:40",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "landlady"
-   ]
-  },
-  {
-   "key": "flat_dinner",
-   "name": "Flat dinner - Ha-eun's birthday",
-   "start": "2027-03-27T19:00",
-   "end": "2027-03-27T22:00",
-   "created": "2027-03-24T17:00",
-   "attendees": [
-    "ha_eun",
-    "min_seo"
-   ]
-  },
-  {
-   "key": "ktx_down",
-   "name": "KTX to Daegu",
-   "start": "2027-04-23T18:30",
-   "end": "2027-04-23T20:40",
-   "created": "2027-04-08T21:20",
-   "description": "car 5, seat 11A"
-  },
-  {
-   "key": "halmoni80",
-   "name": "Halmoni's 80th birthday lunch",
-   "start": "2027-04-24T12:00",
-   "end": "2027-04-24T14:30",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "halmoni",
-    "eomma",
-    "appa",
-    "imo",
-    "jun_seo"
-   ],
-   "description": "at the restaurant near Dongseongno"
-  },
-  {
-   "key": "ktx_up",
-   "name": "KTX back to Seoul",
-   "start": "2027-04-25T17:00",
-   "end": "2027-04-25T19:10",
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "dress",
-   "name": "Dress rehearsal",
-   "start": "2027-05-21T19:00",
-   "end": "2027-05-21T21:30",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "maestro"
-   ]
-  },
-  {
-   "key": "concert",
-   "name": "Spring concert - Hangang Orchestra",
-   "start": "2027-05-22T15:00",
-   "end": "2027-05-22T17:30",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "maestro",
-    "concertmaster",
-    "minjun_p",
-    "eomma",
-    "appa"
-   ],
-   "description": "black dress, arrive at 13:00"
-  },
-  {
-   "key": "kss",
-   "name": "KSS spring conference",
-   "start": "2027-05-27T09:00",
-   "end": "2027-05-28T17:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "advisor"
-   ],
-   "description": "poster session on the Friday"
-  },
-  {
-   "key": "ice_cream",
-   "name": "Hangang picnic with Mi-na",
-   "start": "2027-05-02T13:00",
-   "end": "2027-05-02T16:00",
-   "created": "2027-04-08T21:20",
-   "attendees": [
-    "mina",
-    "hoseok"
-   ],
-   "cancelled": true,
-   "description": "rain forecast, moved to a cafe"
-  },
-  {
-   "key": "kyoto_trip",
-   "name": "Kyoto trip",
-   "start": "2026-03-27T07:30",
-   "end": "2026-03-30T22:00",
-   "created": "2026-03-24T05:30",
-   "attendees": [
-    "mina",
-    "hoseok"
-   ],
-   "description": "Gimpo to Kansai, ryokan in Gion"
-  },
-  {
-   "key": "chuseok",
-   "name": "Chuseok in Daegu",
-   "start": "2026-09-24T09:00",
-   "end": "2026-09-27T18:00",
-   "created": "2026-09-21T07:00",
-   "attendees": [
-    "eomma",
-    "appa",
-    "halmoni",
-    "jun_seo"
-   ]
-  },
-  {
-   "key": "autumn_concert",
-   "name": "Autumn concert - Hangang Orchestra",
-   "start": "2026-11-14T15:00",
-   "end": "2026-11-14T17:30",
-   "created": "2026-11-11T13:00",
-   "attendees": [
-    "maestro",
-    "concertmaster",
-    "minjun_p"
-   ],
-   "description": "Hangang community hall"
-  },
-  {
-   "key": "seollal",
-   "name": "Seollal in Daegu",
-   "start": "2027-02-05T10:00",
-   "end": "2027-02-07T17:00",
-   "created": "2027-02-02T08:00",
-   "attendees": [
-    "eomma",
-    "appa",
-    "halmoni",
-    "imo"
-   ]
-  },
-  {
-   "key": "old_dinner",
-   "name": "Dinner with Mi-na",
-   "start": "2027-03-26T19:00",
-   "end": "2027-03-26T21:00",
-   "created": "2027-03-23T17:00",
-   "attendees": [
-    "mina"
-   ],
-   "trashed": "2027-03-30T09:00"
-  },
-  {
-   "key": "old_rehearse",
-   "name": "Orchestra rehearsal",
-   "start": "2027-02-20T14:00",
-   "end": "2027-02-20T17:00",
-   "created": "2027-02-17T12:00",
-   "attendees": [
-    "maestro"
-   ],
-   "trashed": "2027-02-25T10:00"
-  }
- ],
- "tasks": [
-  {
-   "key": "ch3",
-   "name": "Thesis chapter 3",
-   "due": "2027-05-31",
-   "list": "thesis",
-   "priority": 2,
-   "status": "in_progress",
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "ch3_var",
-   "name": "Derive the variance estimator",
-   "due": "2027-02-26",
-   "list": "thesis",
-   "parent": "ch3",
-   "completed": "2027-02-25T22:10",
-   "created": "2027-02-20T11:00"
-  },
-  {
-   "key": "ch3_code",
-   "name": "Code the bootstrap in R",
-   "due": "2027-03-12",
-   "list": "thesis",
-   "parent": "ch3",
-   "effort": 180,
-   "completed": "2027-03-11T23:30",
-   "created": "2027-03-06T12:00"
-  },
-  {
-   "key": "ch3_sim",
-   "name": "Rerun the simulations with 2000 replicates",
-   "due": "2027-04-16",
-   "list": "thesis",
-   "parent": "ch3",
-   "effort": 120,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "ch3_plot",
-   "name": "Fix the coverage plot",
-   "due": "2027-04-12",
-   "list": "thesis",
-   "parent": "ch3",
-   "effort": 45,
-   "created": "2027-04-06T12:00"
-  },
-  {
-   "key": "ch3_disc",
-   "name": "Write the discussion section",
-   "due": "2027-04-23",
-   "list": "thesis",
-   "parent": "ch3",
-   "effort": 240,
-   "priority": 2,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "ch3_send",
-   "name": "Send the draft to Prof Bae",
-   "due": "2027-04-26",
-   "list": "thesis",
-   "parent": "ch3",
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "ch3_rev",
-   "name": "Revise after the comments",
-   "due": "2027-05-14",
-   "list": "thesis",
-   "parent": "ch3",
-   "effort": 180,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "ch3_refs",
-   "name": "Proofread the references",
-   "due": "2027-05-28",
-   "list": "thesis",
-   "parent": "ch3",
-   "effort": 60,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "prop",
-   "name": "Thesis proposal defense",
-   "due": "2027-04-30",
-   "list": "thesis",
-   "priority": 1,
-   "status": "in_progress",
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "prop_room",
-   "name": "Book the seminar room",
-   "due": "2027-03-26",
-   "list": "thesis",
-   "parent": "prop",
-   "completed": "2027-03-25T16:00",
-   "created": "2027-03-20T13:00"
-  },
-  {
-   "key": "prop_mail",
-   "name": "Email the committee the final draft",
-   "due": "2027-04-16",
-   "list": "thesis",
-   "parent": "prop",
-   "priority": 1,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "prop_print",
-   "name": "Print the proposal for the committee",
-   "due": "2027-04-26",
-   "list": "thesis",
-   "parent": "prop",
-   "effort": 20,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "prop_slides",
-   "name": "Make the slides",
-   "due": "2027-04-23",
-   "list": "thesis",
-   "parent": "prop",
-   "effort": 240,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "prop_rehearse",
-   "name": "Rehearse the talk with Jin Sunbae",
-   "due": "2027-04-27",
-   "list": "thesis",
-   "parent": "prop",
-   "effort": 90,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "concert_t",
-   "name": "Spring concert prep",
-   "due": "2027-05-22",
-   "list": "orch_l",
-   "status": "in_progress",
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "concert_parts",
-   "name": "Print the cello parts",
-   "due": "2027-03-10",
-   "list": "orch_l",
-   "parent": "concert_t",
-   "completed": "2027-03-09T21:00",
-   "created": "2027-03-04T12:00"
-  },
-  {
-   "key": "concert_learn",
-   "name": "Learn the Dvorak slow movement",
-   "due": "2027-04-30",
-   "list": "orch_l",
-   "parent": "concert_t",
-   "effort": 600,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "concert_fee",
-   "name": "Pay the concert fee",
-   "due": "2027-04-20",
-   "list": "orch_l",
-   "parent": "concert_t",
-   "priority": 1,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "concert_shoes",
-   "name": "Buy black concert shoes",
-   "due": "2027-05-10",
-   "list": "orch_l",
-   "parent": "concert_t",
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "concert_invite",
-   "name": "Invite Eomma and Appa to the concert",
-   "due": "2027-05-01",
-   "list": "orch_l",
-   "parent": "concert_t",
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "halmoni_t",
-   "name": "Halmoni's 80th birthday",
-   "due": "2027-04-24",
-   "list": "family",
-   "priority": 2,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "halmoni_ktx",
-   "name": "Book the KTX to Daegu",
-   "due": "2027-04-12",
-   "list": "family",
-   "parent": "halmoni_t",
-   "priority": 1,
-   "created": "2027-04-06T10:00"
-  },
-  {
-   "key": "halmoni_gift",
-   "name": "Buy a present for Halmoni",
-   "due": "2027-04-20",
-   "list": "family",
-   "parent": "halmoni_t",
-   "effort": 60,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "halmoni_cake",
-   "name": "Order the birthday cake with Imo",
-   "due": "2027-04-19",
-   "list": "family",
-   "parent": "halmoni_t",
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "rent_jan",
-   "name": "Pay rent",
-   "due": "2027-01-05",
-   "list": "flat_l",
-   "completed": "2027-01-04T21:00",
-   "created": "2026-12-30T12:00"
-  },
-  {
-   "key": "rent_feb",
-   "name": "Pay rent",
-   "due": "2027-02-05",
-   "list": "flat_l",
-   "completed": "2027-02-05T09:30",
-   "created": "2027-01-30T12:00"
-  },
-  {
-   "key": "rent_mar",
-   "name": "Pay rent",
-   "due": "2027-03-05",
-   "list": "flat_l",
-   "completed": "2027-03-04T22:15",
-   "created": "2027-02-27T12:00"
-  },
-  {
-   "key": "rent_apr",
-   "name": "Pay rent",
-   "due": "2027-04-05",
-   "list": "flat_l",
-   "completed": "2027-04-05T08:50",
-   "created": "2027-03-30T12:00"
-  },
-  {
-   "key": "rent_may",
-   "name": "Pay rent",
-   "due": "2027-05-05",
-   "list": "flat_l",
-   "priority": 1,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "fee_yun_jan",
-   "name": "Collect tutoring fee - Mrs Jang",
-   "due": "2027-01-25",
-   "list": "tutoring",
-   "completed": "2027-01-26T20:00",
-   "created": "2027-01-19T10:00"
-  },
-  {
-   "key": "fee_yun_feb",
-   "name": "Collect tutoring fee - Mrs Jang",
-   "due": "2027-02-25",
-   "list": "tutoring",
-   "completed": "2027-02-25T21:10",
-   "created": "2027-02-19T10:00"
-  },
-  {
-   "key": "fee_yun_mar",
-   "name": "Collect tutoring fee - Mrs Jang",
-   "due": "2027-03-25",
-   "list": "tutoring",
-   "completed": "2027-03-30T20:30",
-   "created": "2027-03-19T10:00"
-  },
-  {
-   "key": "fee_yun_apr",
-   "name": "Collect tutoring fee - Mrs Jang",
-   "due": "2027-04-25",
-   "list": "tutoring",
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "fee_kang_mar",
-   "name": "Collect tutoring fee - Mr Kang",
-   "due": "2027-03-25",
-   "list": "tutoring",
-   "completed": "2027-03-26T20:00",
-   "created": "2027-03-19T11:00"
-  },
-  {
-   "key": "fee_kang_apr",
-   "name": "Collect tutoring fee - Mr Kang",
-   "due": "2027-04-25",
-   "list": "tutoring",
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "litter_jan",
-   "name": "Buy cat litter",
-   "due": "2027-01-18",
-   "list": "flat_l",
-   "completed": "2027-01-18T19:00",
-   "created": "2027-01-12T09:00"
-  },
-  {
-   "key": "litter_feb",
-   "name": "Buy cat litter",
-   "due": "2027-02-20",
-   "list": "flat_l",
-   "completed": "2027-02-21T11:00",
-   "created": "2027-02-14T09:00"
-  },
-  {
-   "key": "litter_mar",
-   "name": "Buy cat litter",
-   "due": "2027-03-22",
-   "list": "flat_l",
-   "completed": "2027-03-22T18:30",
-   "created": "2027-03-16T09:00"
-  },
-  {
-   "key": "litter_apr",
-   "name": "Buy cat litter",
-   "due": "2027-04-12",
-   "list": "flat_l",
-   "effort": 15,
-   "created": "2027-04-06T09:00"
-  },
-  {
-   "key": "food_mar",
-   "name": "Order Bori's food",
-   "due": "2027-03-15",
-   "list": "flat_l",
-   "completed": "2027-03-14T23:00",
-   "created": "2027-03-09T12:00"
-  },
-  {
-   "key": "food_apr",
-   "name": "Order Bori's food",
-   "due": "2027-04-14",
-   "list": "flat_l",
-   "created": "2027-04-08T12:00"
-  },
-  {
-   "key": "dues_jan",
-   "name": "Pay orchestra dues",
-   "due": "2027-01-15",
-   "list": "orch_l",
-   "completed": "2027-01-15T12:00",
-   "created": "2027-01-09T12:00"
-  },
-  {
-   "key": "dues_apr",
-   "name": "Pay orchestra dues",
-   "due": "2027-04-05",
-   "list": "orch_l",
-   "priority": 1,
-   "created": "2027-03-30T12:00"
-  },
-  {
-   "key": "mail_bae_jan",
-   "name": "Email Prof Bae",
-   "due": "2027-02-02",
-   "list": "thesis",
-   "completed": "2027-02-02T11:00",
-   "created": "2027-01-27T11:00"
-  },
-  {
-   "key": "mail_bae_mar",
-   "name": "Email Prof Bae",
-   "due": "2027-03-28",
-   "list": "thesis",
-   "completed": "2027-03-28T10:15",
-   "created": "2027-03-22T11:00"
-  },
-  {
-   "key": "mail_bae_apr",
-   "name": "Email Prof Bae",
-   "due": "2027-04-12",
-   "list": "thesis",
-   "effort": 15,
-   "created": "2027-04-06T11:00"
-  },
-  {
-   "key": "prep_yun_a",
-   "name": "Prepare lesson - Yun-ho",
-   "due": "2027-03-22",
-   "list": "tutoring",
-   "completed": "2027-03-22T15:00",
-   "created": "2027-03-16T09:00"
-  },
-  {
-   "key": "prep_yun_b",
-   "name": "Prepare lesson - Yun-ho",
-   "due": "2027-04-05",
-   "list": "tutoring",
-   "completed": "2027-04-05T16:20",
-   "created": "2027-03-30T09:00"
-  },
-  {
-   "key": "prep_yun_c",
-   "name": "Prepare lesson - Yun-ho",
-   "due": "2027-04-12",
-   "list": "tutoring",
-   "effort": 60,
-   "created": "2027-04-06T09:00"
-  },
-  {
-   "key": "grade_harin",
-   "name": "Grade Ha-rin's quiz",
-   "due": "2027-04-08",
-   "list": "tutoring",
-   "effort": 20,
-   "completed": "2027-04-08T17:30",
-   "created": "2027-04-02T10:00"
-  },
-  {
-   "key": "grade_harim",
-   "name": "Grade Ha-rim's quiz",
-   "due": "2027-04-08",
-   "list": "tutoring",
-   "effort": 20,
-   "created": "2027-04-02T10:00"
-  },
-  {
-   "key": "sat_sheet",
-   "name": "Make Seung-woo a SAT practice sheet",
-   "due": "2027-04-10",
-   "list": "tutoring",
-   "effort": 45,
-   "created": "2027-04-04T13:00"
-  },
-  {
-   "key": "libbooks",
-   "name": "Return library books",
-   "due": "2027-04-02",
-   "list": "errands",
-   "effort": 20,
-   "created": "2027-03-27T12:00"
-  },
-  {
-   "key": "kss_abs",
-   "name": "Submit the KSS abstract",
-   "due": "2027-02-15",
-   "list": "thesis",
-   "completed": "2027-02-14T23:40",
-   "created": "2027-02-09T11:00"
-  },
-  {
-   "key": "kss_reg",
-   "name": "Register for the KSS conference",
-   "due": "2027-04-20",
-   "list": "thesis",
-   "effort": 15,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "travel_grant",
-   "name": "Apply for the conference travel grant",
-   "due": "2027-04-28",
-   "list": "thesis",
-   "effort": 60,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "japanese",
-   "name": "Sign up for Japanese class",
-   "due": "2027-03-10",
-   "list": "errands",
-   "status": "cancelled",
-   "created": "2027-03-04T12:00"
-  },
-  {
-   "key": "vet_book",
-   "name": "Book Bori's vaccination",
-   "due": "2027-03-30",
-   "list": "flat_l",
-   "completed": "2027-03-30T12:00",
-   "created": "2027-03-24T12:00"
-  },
-  {
-   "key": "lease_copy",
-   "name": "Ask Ajumma for a copy of the lease",
-   "due": "2027-04-16",
-   "list": "flat_l",
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "junseo_refund",
-   "name": "Send Jun-seo the KTX refund form",
-   "due": "2027-04-07",
-   "list": "family",
-   "created": "2027-04-01T12:00"
-  },
-  {
-   "key": "appa_gift",
-   "name": "Buy a birthday present for Appa",
-   "due": "2027-06-05",
-   "list": "family",
-   "effort": 60,
-   "created": "2027-04-08T21:20"
-  },
-  {
-   "key": "bowing",
-   "name": "Ask Min-jun about the bowing marks",
-   "due": "2027-04-10",
-   "list": "orch_l",
-   "effort": 10,
-   "created": "2027-04-04T10:00"
-  },
-  {
-   "key": "book_minjun",
-   "name": "Return Min-jun's stats book",
-   "due": "2027-04-13",
-   "list": "thesis",
-   "effort": 5,
-   "created": "2027-04-07T10:00"
-  },
-  {
-   "key": "gym_locker",
-   "name": "Renew the old gym locker",
-   "due": "2027-02-01",
-   "list": "errands",
-   "trashed": "2027-03-31T10:00",
-   "created": "2027-01-26T09:00"
-  },
-  {
-   "key": "scratch_task",
-   "name": "Buy a desk lamp",
-   "due": "2027-01-20",
-   "list": "errands",
-   "trashed": "2027-02-18T10:00",
-   "created": "2027-01-14T11:00"
-  }
- ],
- "notebooks": [
-  {
-   "key": "thesis_nb",
-   "name": "Thesis Notes"
-  },
-  {
-   "key": "tutor_nb",
-   "name": "Tutoring Notes"
-  },
-  {
-   "key": "orch_nb",
-   "name": "Orchestra Notes"
-  },
-  {
-   "key": "bori_nb",
-   "name": "Bori Care"
-  },
-  {
-   "key": "recipes_nb",
-   "name": "Recipes"
-  },
-  {
-   "key": "reading_nb",
-   "name": "Reading List"
-  }
- ],
- "notes": [
-  {
-   "key": "ch3_outline",
-   "name": "Chapter 3 outline",
-   "created": "2027-03-02T20:00",
-   "body": "motivation, the bootstrap estimator, coverage simulations, a real data example on air quality",
-   "notebook": "thesis_nb"
-  },
-  {
-   "key": "bae_mar3",
-   "name": "Advisor feedback 3 Mar",
-   "created": "2027-03-03T15:20",
-   "body": "tighten the assumptions, show coverage for small n, drop the second example, start the proposal slides early",
-   "notebook": "thesis_nb"
-  },
-  {
-   "key": "sim_settings",
-   "name": "Simulation settings",
-   "created": "2027-03-09T23:10",
-   "body": "n 200 and 1000, rho 0.3 and 0.7, 2000 replicates, seed 20270301, cluster node 3",
-   "notebook": "thesis_nb"
-  },
-  {
-   "key": "prop_checklist",
-   "name": "Proposal defence checklist",
-   "created": "2027-03-26T17:00",
-   "body": "room booked, slides to Prof Bae a week before, print four copies, water for the committee, backup laptop",
-   "notebook": "thesis_nb",
-   "pinned": true
-  },
-  {
-   "key": "boot_reading",
-   "name": "Bootstrap papers to read",
-   "created": "2027-02-18T11:30",
-   "body": "Efron 1979, the block bootstrap review, two recent preprints on coverage",
-   "notebook": "thesis_nb"
-  },
-  {
-   "key": "yunho_prog",
-   "name": "Yun-ho progress",
-   "created": "2027-04-06T21:20",
-   "body": "limits are fine, still slips on the chain rule, midterm on the 22nd, needs timed practice",
-   "notebook": "tutor_nb"
-  },
-  {
-   "key": "twins_weak",
-   "name": "Ha-rin and Ha-rim weak spots",
-   "created": "2027-03-25T21:15",
-   "body": "Ha-rin rushes algebra, Ha-rim skips the working, both fine on geometry, quiz every second week",
-   "notebook": "tutor_nb"
-  },
-  {
-   "key": "doyun_setup",
-   "name": "Do-yun online setup",
-   "created": "2027-03-18T14:20",
-   "body": "shared whiteboard link, he joins from his phone, mum sits in the first ten minutes",
-   "notebook": "tutor_nb"
-  },
-  {
-   "key": "seungwoo_plan",
-   "name": "Seung-woo SAT plan",
-   "created": "2027-03-14T17:10",
-   "body": "two practice sections a week, review wrong answers on Sunday, test date in June",
-   "notebook": "tutor_nb"
-  },
-  {
-   "key": "fees",
-   "name": "Tutoring fees and schedule",
-   "created": "2027-01-04T10:00",
-   "body": "Yun-ho 400000 a month, the twins 600000, Do-yun 200000, Seung-woo 150000 a lesson",
-   "notebook": "tutor_nb",
-   "pinned": true
-  },
-  {
-   "key": "dvorak",
-   "name": "Dvorak slow movement fingerings",
-   "created": "2027-03-10T22:00",
-   "body": "shift early in bar 12, open string at the entry, ask Maestro Oh about the ritardando",
-   "notebook": "orch_nb"
-  },
-  {
-   "key": "programme",
-   "name": "Spring concert programme",
-   "created": "2027-03-27T21:00",
-   "body": "overture first, the Dvorak symphony after the break, encore to be decided, call time 13:00",
-   "notebook": "orch_nb",
-   "pinned": true
-  },
-  {
-   "key": "brahms_bow",
-   "name": "Bowing marks for the Brahms",
-   "created": "2027-02-27T21:30",
-   "body": "up bow at the pickup, long bows in the theme, copy Min-jun's marks for the second page",
-   "notebook": "orch_nb"
-  },
-  {
-   "key": "room_rules",
-   "name": "Rehearsal room rules",
-   "created": "2026-02-14T16:00",
-   "body": "no food in the room, chairs back at five to five, the key goes back to the office",
-   "notebook": "orch_nb"
-  },
-  {
-   "key": "bori_food",
-   "name": "Bori food and allergies",
-   "created": "2026-01-20T22:00",
-   "body": "salmon kibble only, no chicken treats, wet food on Sundays, water fountain needs a new filter monthly",
-   "notebook": "bori_nb",
-   "pinned": true
-  },
-  {
-   "key": "bori_vacc",
-   "name": "Bori vaccination schedule",
-   "created": "2026-04-10T10:00",
-   "body": "boosters every year in April, rabies every three years, flea drops monthly",
-   "notebook": "bori_nb"
-  },
-  {
-   "key": "bori_vet",
-   "name": "Vet visit 13 Mar",
-   "created": "2027-03-13T12:00",
-   "body": "weight 4.1 kilos, teeth fine, Dr Lim says book the booster for April",
-   "notebook": "bori_nb"
-  },
-  {
-   "key": "jjigae",
-   "name": "Kimchi jjigae",
-   "created": "2026-02-02T19:30",
-   "body": "old kimchi, pork belly, onion, a spoon of gochugaru, simmer thirty minutes, tofu last",
-   "notebook": "recipes_nb"
-  },
-  {
-   "key": "doenjang",
-   "name": "Doenjang jjigae",
-   "created": "2026-03-15T19:00",
-   "body": "anchovy stock, zucchini, potato, tofu, a green chilli, doenjang and a little gochujang",
-   "notebook": "recipes_nb"
-  },
-  {
-   "key": "japchae",
-   "name": "Eomma's japchae",
-   "created": "2026-09-27T14:00",
-   "body": "sweet potato noodles, spinach, carrot, mushrooms, soy and sugar, sesame oil last",
-   "notebook": "recipes_nb"
-  },
-  {
-   "key": "tteok",
-   "name": "Tteokbokki for the flat",
-   "created": "2026-11-20T20:30",
-   "body": "rice cakes soaked in warm water, fish cakes, gochujang sauce, boiled eggs, scallions",
-   "notebook": "recipes_nb"
-  },
-  {
-   "key": "diary_bad",
-   "name": "Diary entry - bad week",
-   "created": "2027-03-12T23:30",
-   "body": "simulations crashed twice, Prof Bae unhappy with the plot, skipped the gym, Bori slept on my keyboard"
-  },
-  {
-   "key": "diary_good",
-   "name": "Diary entry - good rehearsal",
-   "created": "2027-03-27T22:30",
-   "body": "the slow movement finally clicked, Maestro Oh smiled, chicken with the cellos"
-  },
-  {
-   "key": "kyoto_pack",
-   "name": "Kyoto packing list",
-   "created": "2026-03-20T22:00",
-   "body": "passport, yen from the airport, rain jacket, a small umbrella, comfortable shoes, the camera"
-  },
-  {
-   "key": "halmoni_ideas",
-   "name": "Gift ideas for Halmoni",
-   "created": "2027-04-02T21:40",
-   "body": "a warm cardigan, a photo book of Bori, ginseng candies, a new radio"
-  },
-  {
-   "key": "lease_notes",
-   "name": "Lease notes from Ajumma",
-   "created": "2027-02-14T18:30",
-   "body": "deposit stays as is, rent up 20000 from June, no more cats allowed, boiler checked in October"
-  },
-  {
-   "key": "old_scratch",
-   "name": "Scratch note",
-   "created": "2027-03-20T10:00",
-   "body": "call the dentist, buy tape",
-   "trashed": "2027-04-01T09:00"
-  },
-  {
-   "key": "old_shopping",
-   "name": "Old shopping list",
-   "created": "2026-11-01T10:00",
-   "body": "eggs, tofu, kimchi",
-   "trashed": "2026-12-15T10:00"
-  }
- ],
- "folders": [
-  {
-   "key": "thesis_f",
-   "name": "Thesis"
-  },
-  {
-   "key": "housing_f",
-   "name": "Housing"
-  },
-  {
-   "key": "tutoring_f",
-   "name": "Tutoring"
-  },
-  {
-   "key": "orch_f",
-   "name": "Orchestra"
-  },
-  {
-   "key": "medical_f",
-   "name": "Medical and Bori"
-  },
-  {
-   "key": "papers_f",
-   "name": "Papers"
-  },
-  {
-   "key": "sort_f",
-   "name": "To Sort"
-  }
- ],
- "documents": [
-  {
-   "key": "proposal_v3",
-   "name": "Thesis proposal draft v3",
-   "folder": "thesis_f",
-   "created": "2027-03-30T23:00"
-  },
-  {
-   "key": "kss_abstract",
-   "name": "KSS 2027 abstract",
-   "folder": "thesis_f",
-   "created": "2027-02-14T23:30"
-  },
-  {
-   "key": "ch3_results",
-   "name": "Chapter 3 simulation results 2027-03",
-   "folder": "thesis_f",
-   "created": "2027-03-28T21:00"
-  },
-  {
-   "key": "scholarship",
-   "name": "Scholarship letter 2026",
-   "folder": "thesis_f",
-   "created": "2026-03-04T10:00",
-   "starred": true
-  },
-  {
-   "key": "lease_2026",
-   "name": "Lease contract 2026",
-   "folder": "housing_f",
-   "created": "2026-06-12T11:00",
-   "starred": true
-  },
-  {
-   "key": "cat_addendum",
-   "name": "Lease addendum for the cat 2026",
-   "folder": "housing_f",
-   "created": "2026-09-02T10:00"
-  },
-  {
-   "key": "contract_yun",
-   "name": "Tutoring contract - Yun-ho 2027",
-   "folder": "tutoring_f",
-   "created": "2027-01-04T10:30"
-  },
-  {
-   "key": "contract_kang",
-   "name": "Tutoring contract - Kang twins 2027",
-   "folder": "tutoring_f",
-   "created": "2027-01-11T10:30"
-  },
-  {
-   "key": "receipts_q1",
-   "name": "Tutoring fee receipts 2027 Q1",
-   "folder": "tutoring_f",
-   "created": "2027-03-31T20:00"
-  },
-  {
-   "key": "orch_form",
-   "name": "Orchestra membership form 2027",
-   "folder": "orch_f",
-   "created": "2027-01-09T15:00"
-  },
-  {
-   "key": "programme_draft",
-   "name": "Spring concert programme draft 2027",
-   "folder": "orch_f",
-   "created": "2027-03-29T20:00"
-  },
-  {
-   "key": "bylaws",
-   "name": "Hangang Orchestra bylaws 2025",
-   "folder": "orch_f",
-   "created": "2025-09-06T15:00"
-  },
-  {
-   "key": "bori_vacc_doc",
-   "name": "Bori vaccination record 2026",
-   "folder": "medical_f",
-   "created": "2026-04-10T11:00"
-  },
-  {
-   "key": "bori_adopt",
-   "name": "Bori adoption papers 2025",
-   "folder": "medical_f",
-   "created": "2025-11-02T14:00",
-   "starred": true
-  },
-  {
-   "key": "tax_2026",
-   "name": "Year-end tax settlement 2026",
-   "folder": "papers_f",
-   "created": "2027-02-10T21:00"
-  },
-  {
-   "key": "passport_scan",
-   "name": "Passport scan",
-   "folder": "papers_f",
-   "created": "2026-01-13T10:00"
-  },
-  {
-   "key": "licence_scan",
-   "name": "Driver's licence scan",
-   "folder": "papers_f",
-   "created": "2026-01-13T10:05"
-  },
-  {
-   "key": "tuition_spring",
-   "name": "Tuition receipt Spring 2027",
-   "created": "2027-03-05T14:00"
-  },
-  {
-   "key": "old_lease_draft",
-   "name": "Old lease draft 2025",
-   "folder": "housing_f",
-   "created": "2025-12-20T10:00",
-   "trashed": "2026-12-14T10:30"
-  },
-  {
-   "key": "dup_scan",
-   "name": "Duplicate scan",
-   "folder": "papers_f",
-   "created": "2027-03-10T10:00",
-   "trashed": "2027-04-02T10:00"
-  }
- ],
- "albums": [
-  {
-   "key": "bori_al",
-   "name": "Bori"
-  },
-  {
-   "key": "kyoto_al",
-   "name": "Kyoto 2026"
-  },
-  {
-   "key": "orch_al",
-   "name": "Hangang Orchestra"
-  },
-  {
-   "key": "daegu_al",
-   "name": "Daegu"
-  },
-  {
-   "key": "lab_al",
-   "name": "Lab Outings"
-  },
-  {
-   "key": "sort_al",
-   "name": "Unsorted Scans"
-  }
- ],
- "photos": [
-  {
-   "key": "p_bori_adopt",
-   "name": "Bori on adoption day",
-   "taken": "2025-11-02T15:30",
-   "albums": [
-    "bori_al"
-   ],
-   "starred": true
-  },
-  {
-   "key": "p_bori_box",
-   "name": "Bori in a cardboard box",
-   "taken": "2025-11-09T20:10",
-   "albums": [
-    "bori_al"
-   ]
-  },
-  {
-   "key": "p_bori_desk",
-   "name": "Bori on my desk",
-   "taken": "2026-01-20T22:40",
-   "albums": [
-    "bori_al"
-   ]
-  },
-  {
-   "key": "p_bori_laptop",
-   "name": "Bori and the laptop",
-   "taken": "2026-03-03T01:15",
-   "albums": [
-    "bori_al"
-   ]
-  },
-  {
-   "key": "p_bori_window",
-   "name": "Bori in the window",
-   "taken": "2027-02-28T16:20",
-   "albums": [
-    "bori_al"
-   ],
-   "starred": true
-  },
-  {
-   "key": "p_bori_cello",
-   "name": "Bori with the cello case",
-   "taken": "2027-03-06T12:45",
-   "albums": [
-    "bori_al"
-   ],
-   "people": [
-    "ha_eun"
-   ]
-  },
-  {
-   "key": "p_bori_vet",
-   "name": "Bori at the vet",
-   "taken": "2027-03-13T11:10",
-   "albums": [
-    "bori_al"
-   ],
-   "people": [
-    "vet"
-   ]
-  },
-  {
-   "key": "p_bori_sofa",
-   "name": "Bori asleep on the sofa",
-   "taken": "2027-04-04T14:00",
-   "albums": [
-    "bori_al"
-   ],
-   "people": [
-    "min_seo"
-   ]
-  },
-  {
-   "key": "p_ky_gates",
-   "name": "Fushimi Inari gates",
-   "taken": "2026-03-27T10:30",
-   "albums": [
-    "kyoto_al"
-   ],
-   "people": [
-    "mina"
-   ],
-   "starred": true
-  },
-  {
-   "key": "p_ky_gion",
-   "name": "Gion at dusk",
-   "taken": "2026-03-28T18:40",
-   "albums": [
-    "kyoto_al"
-   ]
-  },
-  {
-   "key": "p_ky_breakfast",
-   "name": "Ryokan breakfast",
-   "taken": "2026-03-29T08:20",
-   "albums": [
-    "kyoto_al"
-   ],
-   "people": [
-    "hoseok"
-   ]
-  },
-  {
-   "key": "p_ky_bamboo",
-   "name": "Arashiyama bamboo grove",
-   "taken": "2026-03-29T11:15",
-   "albums": [
-    "kyoto_al"
-   ]
-  },
-  {
-   "key": "p_ky_kaiseki",
-   "name": "Kaiseki dinner",
-   "taken": "2026-03-29T19:30",
-   "albums": [
-    "kyoto_al"
-   ],
-   "people": [
-    "mina",
-    "hoseok"
-   ]
-  },
-  {
-   "key": "p_ky_kiyomizu",
-   "name": "Mi-na at Kiyomizu",
-   "taken": "2026-03-30T09:50",
-   "albums": [
-    "kyoto_al"
-   ],
-   "people": [
-    "mina"
-   ]
-  },
-  {
-   "key": "p_ky_deer",
-   "name": "Ho-seok and the deer in Nara",
-   "taken": "2026-03-30T14:05",
-   "albums": [
-    "kyoto_al"
-   ],
-   "people": [
-    "hoseok"
-   ]
-  },
-  {
-   "key": "p_or_stage",
-   "name": "Autumn concert stage",
-   "taken": "2026-11-14T16:30",
-   "albums": [
-    "orch_al"
-   ],
-   "people": [
-    "maestro"
-   ],
-   "starred": true
-  },
-  {
-   "key": "p_or_cellos",
-   "name": "The cello section",
-   "taken": "2026-11-14T14:45",
-   "albums": [
-    "orch_al"
-   ],
-   "people": [
-    "minjun_p"
-   ]
-  },
-  {
-   "key": "p_or_maestro",
-   "name": "Maestro Oh rehearsing",
-   "taken": "2027-03-13T15:20",
-   "albums": [
-    "orch_al"
-   ],
-   "people": [
-    "maestro"
-   ]
-  },
-  {
-   "key": "p_or_cover",
-   "name": "Concert programme cover",
-   "taken": "2027-03-29T20:30",
-   "albums": [
-    "orch_al"
-   ]
-  },
-  {
-   "key": "p_or_chicken",
-   "name": "Chicken after rehearsal",
-   "taken": "2027-04-03T18:10",
-   "albums": [
-    "orch_al"
-   ],
-   "people": [
-    "concertmaster",
-    "minjun_p",
-    "librarian",
-    "jihye_y"
-   ]
-  },
-  {
-   "key": "p_or_partner",
-   "name": "Stand partner Min-jun",
-   "taken": "2027-03-27T16:10",
-   "albums": [
-    "orch_al"
-   ],
-   "people": [
-    "minjun_p"
-   ]
-  },
-  {
-   "key": "p_dg_table",
-   "name": "Chuseok table 2026",
-   "taken": "2026-09-25T12:30",
-   "albums": [
-    "daegu_al"
-   ],
-   "people": [
-    "eomma",
-    "appa",
-    "halmoni"
-   ],
-   "starred": true
-  },
-  {
-   "key": "p_dg_halmoni",
-   "name": "Halmoni and Eomma in the kitchen",
-   "taken": "2026-09-24T17:00",
-   "albums": [
-    "daegu_al"
-   ],
-   "people": [
-    "halmoni",
-    "eomma"
-   ]
-  },
-  {
-   "key": "p_dg_garden",
-   "name": "Appa's tomato garden",
-   "taken": "2026-09-26T09:10",
-   "albums": [
-    "daegu_al"
-   ],
-   "people": [
-    "appa"
-   ]
-  },
-  {
-   "key": "p_dg_street",
-   "name": "Dongseongno street at night",
-   "taken": "2026-09-26T20:20",
-   "albums": [
-    "daegu_al"
-   ]
-  },
-  {
-   "key": "p_dg_apsan",
-   "name": "Jun-seo and me on Apsan",
-   "taken": "2026-09-27T11:00",
-   "albums": [
-    "daegu_al"
-   ],
-   "people": [
-    "jun_seo"
-   ]
-  },
-  {
-   "key": "p_lab_dinner",
-   "name": "Lab dinner at the samgyeopsal place",
-   "taken": "2027-03-19T20:15",
-   "albums": [
-    "lab_al"
-   ],
-   "people": [
-    "jin_sunbae",
-    "minjun_k",
-    "su_bin"
-   ]
-  },
-  {
-   "key": "p_lab_cake",
-   "name": "Prof Bae's birthday cake",
-   "taken": "2027-04-02T16:00",
-   "albums": [
-    "lab_al"
-   ],
-   "people": [
-    "advisor",
-    "su_bin"
-   ]
-  },
-  {
-   "key": "p_lab_poster",
-   "name": "Poster test print",
-   "taken": "2027-03-04T11:30",
-   "albums": [
-    "lab_al"
-   ]
-  },
-  {
-   "key": "p_blossoms",
-   "name": "Cherry blossoms at Yeouido",
-   "taken": "2027-04-03T12:10",
-   "people": [
-    "mina",
-    "hoseok"
-   ]
-  },
-  {
-   "key": "p_hangang",
-   "name": "The Han River at night",
-   "taken": "2027-03-21T22:05"
-  },
-  {
-   "key": "p_board",
-   "name": "Whiteboard derivation",
-   "taken": "2027-02-25T21:30"
-  },
-  {
-   "key": "p_worksheet",
-   "name": "Tutoring worksheet scan",
-   "taken": "2027-04-06T20:50",
-   "people": [
-    "yunho"
-   ]
-  },
-  {
-   "key": "p_balcony",
-   "name": "View from the flat balcony",
-   "taken": "2026-07-03T06:40"
-  },
-  {
-   "key": "p_desk",
-   "name": "My thesis desk",
-   "taken": "2027-01-15T23:00",
-   "starred": true
-  },
-  {
-   "key": "p_textbook",
-   "name": "Receipt for the textbook",
-   "taken": "2027-03-31T13:00"
-  },
-  {
-   "key": "p_blurry",
-   "name": "Blurry cat photo",
-   "taken": "2027-03-29T07:30",
-   "trashed": "2027-04-03T09:00"
-  },
-  {
-   "key": "p_chat",
-   "name": "Screenshot of the chat",
-   "taken": "2026-11-02T12:00",
-   "trashed": "2026-12-02T09:00"
-  }
- ],
- "debts": [
-  {
-   "key": "d_haeun_groceries",
-   "person": "ha_eun",
-   "direction": "owes_me",
-   "amount": 18500,
-   "name": "groceries I paid for",
-   "date": "2027-04-02"
-  },
-  {
-   "key": "d_minseo_cleaner",
-   "person": "min_seo",
-   "direction": "i_owe",
-   "amount": 15000,
-   "name": "bathroom cleaner and mop",
-   "date": "2027-03-27"
-  },
-  {
-   "key": "d_mina_kyoto",
-   "person": "mina",
-   "direction": "i_owe",
-   "amount": 62000,
-   "name": "Kyoto ryokan share in won (about 6850 yen)",
-   "date": "2026-03-30"
-  },
-  {
-   "key": "d_junseo_case",
-   "person": "jun_seo",
-   "direction": "owes_me",
-   "amount": 40000,
-   "name": "phone case I bought him",
-   "date": "2027-03-08"
-  },
-  {
-   "key": "d_minjun_k_lunch",
-   "person": "minjun_k",
-   "direction": "owes_me",
-   "amount": 9500,
-   "name": "cafeteria lunch",
-   "date": "2027-04-06"
-  },
-  {
-   "key": "d_jin_coffee",
-   "person": "jin_sunbae",
-   "direction": "i_owe",
-   "amount": 5000,
-   "name": "coffee after the seminar",
-   "date": "2027-04-09"
-  },
-  {
-   "key": "d_bora_chicken",
-   "person": "treasurer",
-   "direction": "i_owe",
-   "amount": 12000,
-   "name": "chicken night share",
-   "date": "2027-03-13",
-   "settled": "2027-03-20T17:30"
-  },
-  {
-   "key": "d_mrsjang_book",
-   "person": "mrs_jang",
-   "direction": "owes_me",
-   "amount": 28000,
-   "name": "workbook I ordered for Yun-ho",
-   "date": "2027-03-10"
-  },
-  {
-   "key": "d_mina_cinema",
-   "person": "mina",
-   "direction": "owes_me",
-   "amount": 14000,
-   "name": "cinema tickets",
-   "date": "2027-03-19",
-   "settled": "2027-04-01T21:00"
-  },
-  {
-   "key": "d_hoseok_ramen",
-   "person": "hoseok",
-   "direction": "owes_me",
-   "amount": 11000,
-   "name": "ramen after the blossoms",
-   "date": "2027-04-03"
-  },
-  {
-   "key": "d_minjun_p_score",
-   "person": "minjun_p",
-   "direction": "i_owe",
-   "amount": 22000,
-   "name": "Dvorak score he lent the money for",
-   "date": "2027-02-27",
-   "settled": "2027-03-06T16:45"
-  },
-  {
-   "key": "d_imo_cake",
-   "person": "imo",
-   "direction": "owes_me",
-   "amount": 35000,
-   "name": "half of Halmoni's cake",
-   "date": "2027-04-05"
-  },
-  {
-   "key": "d_landlady_repair",
-   "person": "landlady",
-   "direction": "owes_me",
-   "amount": 80000,
-   "name": "boiler repair she will refund",
-   "date": "2027-01-22"
-  }
- ],
- "locker": [
-  {
-   "key": "naver",
-   "name": "Naver account",
-   "type": "login",
-   "username": "jian.yoo",
-   "url": "https://naver.com",
-   "password": "Bori&Cello2026",
-   "code": "JBSWY3DPEHPK3PXP",
-   "starred": true
-  },
-  {
-   "key": "mysnu",
-   "name": "mySNU portal",
-   "type": "login",
-   "username": "jianyoo",
-   "url": "https://my.snu.ac.kr",
-   "password": "Stats#Phd4th"
-  },
-  {
-   "key": "kakaobank",
-   "name": "KakaoBank",
-   "type": "login",
-   "username": "jian.yoo@kakao.com",
-   "url": "https://kakaobank.com",
-   "password": "Hangang-Seoul27"
-  },
-  {
-   "key": "kb_card",
-   "name": "KB Kookmin debit card",
-   "type": "card",
-   "card_number": "9430123498765432",
-   "cvv": "482"
-  },
-  {
-   "key": "door_code",
-   "name": "Flat door code",
-   "type": "note",
-   "notes": "2580 then the bell",
-   "starred": true
-  },
-  {
-   "key": "resident_card",
-   "name": "Resident registration card",
-   "type": "identity"
-  },
-  {
-   "key": "flat_wifi",
-   "name": "Flat wifi",
-   "type": "wifi",
-   "password": "BoriMeow302",
-   "starred": true
-  },
-  {
-   "key": "lab_wifi",
-   "name": "Lab wifi",
-   "type": "wifi",
-   "password": "StatsLab-Guest27"
-  },
-  {
-   "key": "gov24",
-   "name": "Government24 portal",
-   "type": "password",
-   "password": "Seoul!Gov2027"
-  },
-  {
-   "key": "cluster_ssh",
-   "name": "Lab cluster SSH key",
-   "type": "ssh_key",
-   "notes": "ed25519, gpu node 3, renew in June"
-  },
-  {
-   "key": "kakao_api",
-   "name": "Kakao Maps API key",
-   "type": "api_credential",
-   "notes": "for the tutoring scheduler script"
-  },
-  {
-   "key": "passport",
-   "name": "Passport",
-   "type": "passport",
-   "notes": "M12345678, expires 2031-08-14"
-  },
-  {
-   "key": "kb_acct",
-   "name": "KB Kookmin account",
-   "type": "bank_account",
-   "notes": "Sillim branch, account 123401-04-567890",
-   "starred": true
-  },
-  {
-   "key": "licence",
-   "name": "Driver's licence",
-   "type": "driving_licence",
-   "notes": "class 2 regular, renew in 2030"
-  },
-  {
-   "key": "matlab",
-   "name": "MATLAB campus licence",
-   "type": "software_licence",
-   "notes": "SNU campus licence, renews every March",
-   "starred": true
-  },
-  {
-   "key": "wallet",
-   "name": "Crypto wallet",
-   "type": "crypto_wallet",
-   "notes": "a little Ethereum from a hackathon, about 90000 won"
-  },
-  {
-   "key": "orch_member",
-   "name": "Hangang Orchestra membership",
-   "type": "membership",
-   "notes": "member no. 27, dues paid to June"
-  },
-  {
-   "key": "lease_orig",
-   "name": "Lease contract original",
-   "type": "document",
-   "notes": "original with Ajumma, scan in the Housing folder"
-  },
-  {
-   "key": "old_wifi",
-   "name": "Old Sillim flat wifi",
-   "type": "wifi",
-   "password": "Sillim2025!",
-   "trashed": "2027-04-01T10:00"
-  },
-  {
-   "key": "old_daum",
-   "name": "Old Daum login",
-   "type": "login",
-   "username": "jian_yoo",
-   "password": "OldDaum77",
-   "trashed": "2026-12-20T10:00"
-  }
- ],
- "links": [
-  {
-   "from": "fee_yun_jan",
-   "to": "mrs_jang"
-  },
-  {
-   "from": "fee_yun_feb",
-   "to": "mrs_jang"
-  },
-  {
-   "from": "fee_yun_mar",
-   "to": "mrs_jang"
-  },
-  {
-   "from": "fee_yun_apr",
-   "to": "mrs_jang"
-  },
-  {
-   "from": "fee_kang_mar",
-   "to": "mr_kang"
-  },
-  {
-   "from": "fee_kang_apr",
-   "to": "mr_kang"
-  },
-  {
-   "from": "prep_yun_a",
-   "to": "yunho"
-  },
-  {
-   "from": "prep_yun_b",
-   "to": "yunho"
-  },
-  {
-   "from": "prep_yun_c",
-   "to": "yunho"
-  },
-  {
-   "from": "grade_harin",
-   "to": "harin"
-  },
-  {
-   "from": "grade_harim",
-   "to": "harim"
-  },
-  {
-   "from": "sat_sheet",
-   "to": "seungwoo"
-  },
-  {
-   "from": "mail_bae_jan",
-   "to": "advisor"
-  },
-  {
-   "from": "mail_bae_mar",
-   "to": "advisor"
-  },
-  {
-   "from": "mail_bae_apr",
-   "to": "advisor"
-  },
-  {
-   "from": "ch3_send",
-   "to": "advisor"
-  },
-  {
-   "from": "prop_rehearse",
-   "to": "jin_sunbae"
-  },
-  {
-   "from": "vet_book",
-   "to": "vet"
-  },
-  {
-   "from": "halmoni_gift",
-   "to": "halmoni"
-  },
-  {
-   "from": "halmoni_cake",
-   "to": "imo"
-  },
-  {
-   "from": "junseo_refund",
-   "to": "jun_seo"
-  },
-  {
-   "from": "lease_copy",
-   "to": "landlady"
-  },
-  {
-   "from": "appa_gift",
-   "to": "appa"
-  },
-  {
-   "from": "bowing",
-   "to": "minjun_p"
-  },
-  {
-   "from": "book_minjun",
-   "to": "minjun_k"
-  },
-  {
-   "from": "dues_apr",
-   "to": "treasurer"
-  },
-  {
-   "from": "dues_jan",
-   "to": "treasurer"
-  },
-  {
-   "from": "yunho_prog",
-   "to": "yunho"
-  },
-  {
-   "from": "twins_weak",
-   "to": "harin"
-  },
-  {
-   "from": "twins_weak",
-   "to": "harim"
-  },
-  {
-   "from": "doyun_setup",
-   "to": "doyun"
-  },
-  {
-   "from": "seungwoo_plan",
-   "to": "seungwoo"
-  },
-  {
-   "from": "bae_mar3",
-   "to": "advisor"
-  },
-  {
-   "from": "bori_vet",
-   "to": "vet"
-  },
-  {
-   "from": "japchae",
-   "to": "eomma"
-  },
-  {
-   "from": "halmoni_ideas",
-   "to": "halmoni"
-  },
-  {
-   "from": "lease_notes",
-   "to": "landlady"
-  },
-  {
-   "from": "dvorak",
-   "to": "maestro"
-  },
-  {
-   "from": "brahms_bow",
-   "to": "minjun_p"
-  }
- ]
+  "me": "Ji-an Yoo",
+  "today": "2027-04-09T21:20",
+  "epoch": "2026-01-12T09:00",
+  "seed": "E",
+  "currency": "KRW",
+  "people": [
+    {
+      "key": "eomma",
+      "name": "Mi-kyung Kwon",
+      "role": "mum",
+      "nickname": "Eomma",
+      "starred": true,
+      "cadence": 3,
+      "last_contacted": "2027-04-08T20:40",
+      "last_contacted_kind": "call",
+      "met": "Daegu"
+    },
+    {
+      "key": "appa",
+      "name": "Dong-hyun Yoo",
+      "role": "dad",
+      "nickname": "Appa",
+      "starred": true,
+      "cadence": 7,
+      "last_contacted": "2027-04-04T19:10",
+      "met": "Daegu"
+    },
+    {
+      "key": "halmoni",
+      "name": "Sun-ja Choi",
+      "role": "grandmother",
+      "nickname": "Halmoni",
+      "cadence": 14,
+      "last_contacted": "2027-03-28T18:00",
+      "met": "Daegu"
+    },
+    {
+      "key": "jun_seo",
+      "name": "Jun-seo Yoo",
+      "role": "younger brother",
+      "cadence": 10,
+      "last_contacted": "2027-04-05T23:10",
+      "last_contacted_kind": "message",
+      "met": "Busan"
+    },
+    {
+      "key": "imo",
+      "name": "Eun-kyung Kwon",
+      "role": "aunt",
+      "nickname": "Imo",
+      "met": "Daegu"
+    },
+    {
+      "key": "ha_eun",
+      "name": "Ha-eun Song",
+      "role": "flatmate",
+      "starred": true,
+      "cadence": 1,
+      "last_contacted": "2027-04-09T08:05",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "min_seo",
+      "name": "Min-seo Cho",
+      "role": "flatmate",
+      "nickname": "Minnie",
+      "cadence": 1,
+      "last_contacted": "2027-04-08T22:30",
+      "last_contacted_kind": "visit"
+    },
+    {
+      "key": "landlady",
+      "name": "Soon-ok Ahn",
+      "role": "landlady",
+      "nickname": "Ajumma",
+      "met": "Bongcheon-dong"
+    },
+    {
+      "key": "vet",
+      "name": "Tae-woo Lim",
+      "role": "vet",
+      "nickname": "Dr Lim",
+      "met": "Bongcheon-dong"
+    },
+    {
+      "key": "advisor",
+      "name": "Sung-ho Bae",
+      "role": "PhD advisor",
+      "nickname": "Prof Bae",
+      "starred": true,
+      "cadence": 14,
+      "last_contacted": "2027-03-31T15:30",
+      "met": "Stats Lab"
+    },
+    {
+      "key": "jin_sunbae",
+      "name": "Jin-woo Seo",
+      "role": "senior labmate",
+      "nickname": "Jin Sunbae",
+      "cadence": 7,
+      "last_contacted": "2027-04-09T18:40",
+      "last_contacted_kind": "coffee",
+      "met": "Stats Lab"
+    },
+    {
+      "key": "minjun_k",
+      "name": "Min-jun Kim",
+      "role": "labmate",
+      "cadence": 14,
+      "last_contacted": "2027-04-06T12:30",
+      "last_contacted_kind": "message",
+      "met": "Stats Lab"
+    },
+    {
+      "key": "su_bin",
+      "name": "Su-bin Ryu",
+      "role": "labmate",
+      "met": "Stats Lab"
+    },
+    {
+      "key": "dept_office",
+      "name": "Eun-hee Hwang",
+      "role": "department office",
+      "met": "Stats Department"
+    },
+    {
+      "key": "maestro",
+      "name": "Chang-hoon Oh",
+      "role": "conductor",
+      "nickname": "Maestro Oh",
+      "starred": true,
+      "met": "Hangang Orchestra"
+    },
+    {
+      "key": "concertmaster",
+      "name": "Seul-gi Hong",
+      "role": "concertmaster",
+      "met": "Hangang Orchestra"
+    },
+    {
+      "key": "minjun_p",
+      "name": "Min-jun Park",
+      "role": "cello stand partner",
+      "cadence": 14,
+      "last_contacted": "2027-04-03T17:30",
+      "last_contacted_kind": "coffee",
+      "met": "Hangang Orchestra"
+    },
+    {
+      "key": "treasurer",
+      "name": "Bo-ra Jeon",
+      "role": "orchestra treasurer",
+      "met": "Hangang Orchestra"
+    },
+    {
+      "key": "librarian",
+      "name": "Dae-sung Yang",
+      "role": "orchestra librarian",
+      "met": "Hangang Orchestra"
+    },
+    {
+      "key": "jihye_y",
+      "name": "Ji-hye Yoon",
+      "role": "second violin",
+      "met": "Hangang Orchestra"
+    },
+    {
+      "key": "yunho",
+      "name": "Yun-ho Seo",
+      "role": "student, 11th grade calculus",
+      "cadence": 7,
+      "last_contacted": "2027-04-06T21:05",
+      "last_contacted_kind": "visit",
+      "met": "tutoring"
+    },
+    {
+      "key": "mrs_jang",
+      "name": "Kyung-ae Jang",
+      "role": "Yun-ho's mother",
+      "met": "tutoring",
+      "last_contacted": "2027-04-01T10:00",
+      "last_contacted_kind": "message"
+    },
+    {
+      "key": "harin",
+      "name": "Ha-rin Kang",
+      "role": "student, 9th grade (twin)",
+      "met": "tutoring"
+    },
+    {
+      "key": "harim",
+      "name": "Ha-rim Kang",
+      "role": "student, 9th grade (twin)",
+      "met": "tutoring"
+    },
+    {
+      "key": "mr_kang",
+      "name": "Tae-sik Kang",
+      "role": "the twins' father",
+      "met": "tutoring"
+    },
+    {
+      "key": "doyun",
+      "name": "Do-yun Moon",
+      "role": "student, 8th grade online",
+      "met": "tutoring"
+    },
+    {
+      "key": "seungwoo",
+      "name": "Seung-woo Baek",
+      "role": "student, SAT maths",
+      "met": "tutoring"
+    },
+    {
+      "key": "mina",
+      "name": "Mi-na Jeon",
+      "role": "best friend",
+      "nickname": "Mina",
+      "starred": true,
+      "cadence": 7,
+      "last_contacted": "2027-04-07T22:15",
+      "last_contacted_kind": "message",
+      "met": "university"
+    },
+    {
+      "key": "hoseok",
+      "name": "Ho-seok Jang",
+      "role": "friend",
+      "met": "university",
+      "cadence": 30,
+      "last_contacted": "2027-03-14T19:00"
+    },
+    {
+      "key": "jihye_yun",
+      "name": "Jihye Yun",
+      "role": "high-school friend",
+      "met": "Daegu",
+      "cadence": 45,
+      "last_contacted": "2027-02-27T21:00",
+      "last_contacted_kind": "message"
+    },
+    {
+      "key": "dentist",
+      "name": "Kyung-soo Park",
+      "role": "dentist",
+      "nickname": "Dr Park"
+    },
+    {
+      "key": "hairdresser",
+      "name": "Soo-jin Lee",
+      "role": "hairdresser"
+    },
+    {
+      "key": "old_student",
+      "name": "Joon-young Oh",
+      "role": "former student",
+      "met": "tutoring",
+      "trashed": "2027-03-30T11:00"
+    },
+    {
+      "key": "old_flatmate",
+      "name": "Hye-won Baek",
+      "role": "old flatmate",
+      "met": "Sillim",
+      "trashed": "2026-12-14T10:00"
+    }
+  ],
+  "groups": [
+    {
+      "key": "flat_bills",
+      "name": "Bongcheon Flat Bills",
+      "currency": "KRW",
+      "members": ["ha_eun", "min_seo"],
+      "created": "2026-01-12T10:00"
+    },
+    {
+      "key": "orch_kitty",
+      "name": "Hangang Orchestra Kitty",
+      "currency": "KRW",
+      "members": [
+        "treasurer",
+        "maestro",
+        "concertmaster",
+        "minjun_p",
+        "librarian",
+        "jihye_y"
+      ],
+      "created": "2026-02-07T15:00"
+    },
+    {
+      "key": "kyoto",
+      "name": "Kyoto Trip 2026",
+      "currency": "JPY",
+      "members": ["mina", "hoseok"],
+      "created": "2026-02-20T21:00"
+    },
+    {
+      "key": "lab_fund",
+      "name": "Stats Lab Dinner Fund",
+      "currency": "KRW",
+      "members": ["jin_sunbae", "minjun_k", "su_bin"],
+      "created": "2026-03-04T18:00"
+    },
+    {
+      "key": "daegu_fund",
+      "name": "Daegu Family Fund",
+      "currency": "KRW",
+      "members": ["jun_seo", "imo"],
+      "created": "2026-09-20T20:00"
+    },
+    {
+      "key": "jeju",
+      "name": "Jeju Weekend 2027",
+      "currency": "KRW",
+      "members": ["mina", "hoseok", "ha_eun"],
+      "created": "2027-03-22T22:00"
+    }
+  ],
+  "expenses": [
+    {
+      "group": "flat_bills",
+      "name": "Wifi March",
+      "amount": 33000,
+      "paid_by": "ha_eun",
+      "split": ["me", "ha_eun", "min_seo"],
+      "date": "2027-03-05"
+    },
+    {
+      "group": "flat_bills",
+      "name": "Gas bill March",
+      "amount": 41000,
+      "paid_by": "me",
+      "split": ["me", "ha_eun", "min_seo"],
+      "date": "2027-03-20"
+    },
+    {
+      "group": "flat_bills",
+      "name": "Electricity March",
+      "amount": 58000,
+      "paid_by": "min_seo",
+      "split": ["me", "ha_eun", "min_seo"],
+      "date": "2027-03-22"
+    },
+    {
+      "group": "flat_bills",
+      "name": "Detergent and toilet paper",
+      "amount": 24800,
+      "paid_by": "ha_eun",
+      "split": ["me", "ha_eun", "min_seo"],
+      "date": "2027-04-01"
+    },
+    {
+      "group": "orch_kitty",
+      "name": "Rehearsal room rent March",
+      "amount": 240000,
+      "paid_by": "treasurer",
+      "split": [
+        "me",
+        "treasurer",
+        "concertmaster",
+        "minjun_p",
+        "librarian",
+        "jihye_y"
+      ],
+      "date": "2027-03-02"
+    },
+    {
+      "group": "orch_kitty",
+      "name": "Sheet music copies",
+      "amount": 38000,
+      "paid_by": "librarian",
+      "split": ["me", "librarian", "minjun_p", "jihye_y"],
+      "date": "2027-03-13"
+    },
+    {
+      "group": "orch_kitty",
+      "name": "Concert hall deposit",
+      "amount": 600000,
+      "paid_by": "treasurer",
+      "split": [
+        "me",
+        "treasurer",
+        "maestro",
+        "concertmaster",
+        "minjun_p",
+        "librarian",
+        "jihye_y"
+      ],
+      "date": "2027-03-26"
+    },
+    {
+      "group": "orch_kitty",
+      "name": "Chicken and beer after rehearsal",
+      "amount": 96000,
+      "paid_by": "me",
+      "split": [
+        "me",
+        "concertmaster",
+        "minjun_p",
+        "librarian",
+        "jihye_y",
+        "treasurer"
+      ],
+      "date": "2027-04-03"
+    },
+    {
+      "group": "kyoto",
+      "name": "Ryokan in Gion, two nights",
+      "amount": 54000,
+      "paid_by": "mina",
+      "split": ["me", "mina", "hoseok"],
+      "date": "2026-03-28"
+    },
+    {
+      "group": "kyoto",
+      "name": "Haruka express tickets",
+      "amount": 8400,
+      "paid_by": "hoseok",
+      "split": ["me", "mina", "hoseok"],
+      "date": "2026-03-27"
+    },
+    {
+      "group": "kyoto",
+      "name": "Kaiseki dinner",
+      "amount": 24000,
+      "paid_by": "me",
+      "split": ["me", "mina", "hoseok"],
+      "date": "2026-03-29"
+    },
+    {
+      "group": "kyoto",
+      "name": "Nishiki market snacks",
+      "amount": 6300,
+      "paid_by": "me",
+      "split": ["me", "mina"],
+      "date": "2026-03-29"
+    },
+    {
+      "group": "lab_fund",
+      "name": "Lab dinner at the samgyeopsal place",
+      "amount": 148000,
+      "paid_by": "jin_sunbae",
+      "split": ["me", "jin_sunbae", "minjun_k", "su_bin"],
+      "date": "2027-03-19"
+    },
+    {
+      "group": "lab_fund",
+      "name": "Coffee beans for the lab",
+      "amount": 32000,
+      "paid_by": "me",
+      "split": ["me", "jin_sunbae", "minjun_k", "su_bin"],
+      "date": "2027-03-29"
+    },
+    {
+      "group": "lab_fund",
+      "name": "Prof Bae's birthday cake",
+      "amount": 45000,
+      "paid_by": "su_bin",
+      "split": ["me", "jin_sunbae", "minjun_k", "su_bin"],
+      "date": "2027-04-02"
+    },
+    {
+      "group": "daegu_fund",
+      "name": "Halmoni's hospital copay",
+      "amount": 60000,
+      "paid_by": "imo",
+      "split": ["me", "jun_seo", "imo"],
+      "date": "2027-03-08"
+    },
+    {
+      "group": "daegu_fund",
+      "name": "Chuseok gift set",
+      "amount": 90000,
+      "paid_by": "me",
+      "split": ["me", "jun_seo"],
+      "date": "2026-09-18"
+    }
+  ],
+  "lists": [
+    {
+      "key": "thesis",
+      "name": "PhD thesis",
+      "area": "research"
+    },
+    {
+      "key": "tutoring",
+      "name": "Tutoring",
+      "area": "work"
+    },
+    {
+      "key": "flat_l",
+      "name": "Flat and Bori",
+      "area": "home"
+    },
+    {
+      "key": "orch_l",
+      "name": "Orchestra",
+      "area": "music"
+    },
+    {
+      "key": "family",
+      "name": "Daegu and family",
+      "area": "family"
+    },
+    {
+      "key": "errands",
+      "name": "Errands",
+      "area": "home"
+    }
+  ],
+  "events": [
+    {
+      "key": "rehearse_0313",
+      "name": "Orchestra rehearsal",
+      "start": "2027-03-13T14:00",
+      "end": "2027-03-13T17:00",
+      "created": "2027-03-10T12:00",
+      "attendees": ["maestro", "minjun_p"],
+      "description": "Hangang community hall, room B"
+    },
+    {
+      "key": "rehearse_0320",
+      "name": "Orchestra rehearsal",
+      "start": "2027-03-20T14:00",
+      "end": "2027-03-20T17:00",
+      "created": "2027-03-17T12:00",
+      "attendees": ["maestro", "minjun_p"],
+      "description": "Hangang community hall, room B",
+      "cancelled": true
+    },
+    {
+      "key": "rehearse_0327",
+      "name": "Orchestra rehearsal",
+      "start": "2027-03-27T14:00",
+      "end": "2027-03-27T17:00",
+      "created": "2027-03-24T12:00",
+      "attendees": ["maestro", "minjun_p"],
+      "description": "Hangang community hall, room B"
+    },
+    {
+      "key": "rehearse_0403",
+      "name": "Orchestra rehearsal",
+      "start": "2027-04-03T14:00",
+      "end": "2027-04-03T17:00",
+      "created": "2027-03-31T12:00",
+      "attendees": ["maestro", "minjun_p"],
+      "description": "Hangang community hall, room B"
+    },
+    {
+      "key": "rehearse_0410",
+      "name": "Orchestra rehearsal",
+      "start": "2027-04-10T14:00",
+      "end": "2027-04-10T17:00",
+      "created": "2027-04-07T12:00",
+      "attendees": ["maestro", "minjun_p"],
+      "description": "Hangang community hall, room B"
+    },
+    {
+      "key": "rehearse_0417",
+      "name": "Orchestra rehearsal",
+      "start": "2027-04-17T14:00",
+      "end": "2027-04-17T17:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["maestro", "minjun_p"],
+      "description": "Hangang community hall, room B"
+    },
+    {
+      "key": "rehearse_0501",
+      "name": "Orchestra rehearsal",
+      "start": "2027-05-01T14:00",
+      "end": "2027-05-01T17:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["maestro", "minjun_p"],
+      "description": "Hangang community hall, room B"
+    },
+    {
+      "key": "rehearse_0508",
+      "name": "Orchestra rehearsal",
+      "start": "2027-05-08T14:00",
+      "end": "2027-05-08T17:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["maestro", "minjun_p"],
+      "description": "Hangang community hall, room B"
+    },
+    {
+      "key": "rehearse_0515",
+      "name": "Orchestra rehearsal",
+      "start": "2027-05-15T14:00",
+      "end": "2027-05-15T17:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["maestro", "minjun_p"],
+      "description": "Hangang community hall, room B"
+    },
+    {
+      "key": "labmtg_0329",
+      "name": "Lab meeting",
+      "start": "2027-03-29T10:00",
+      "end": "2027-03-29T11:30",
+      "created": "2027-03-26T08:00",
+      "attendees": ["advisor", "jin_sunbae", "minjun_k", "su_bin"]
+    },
+    {
+      "key": "labmtg_0405",
+      "name": "Lab meeting",
+      "start": "2027-04-05T10:00",
+      "end": "2027-04-05T11:30",
+      "created": "2027-04-02T08:00",
+      "attendees": ["advisor", "jin_sunbae", "minjun_k", "su_bin"]
+    },
+    {
+      "key": "labmtg_0412",
+      "name": "Lab meeting",
+      "start": "2027-04-12T10:00",
+      "end": "2027-04-12T11:30",
+      "created": "2027-04-08T21:20",
+      "attendees": ["advisor", "jin_sunbae", "minjun_k", "su_bin"]
+    },
+    {
+      "key": "labmtg_0419",
+      "name": "Lab meeting",
+      "start": "2027-04-19T10:00",
+      "end": "2027-04-19T11:30",
+      "created": "2027-04-08T21:20",
+      "attendees": ["advisor", "jin_sunbae", "minjun_k", "su_bin"]
+    },
+    {
+      "key": "labmtg_0426",
+      "name": "Lab meeting",
+      "start": "2027-04-26T10:00",
+      "end": "2027-04-26T11:30",
+      "created": "2027-04-08T21:20",
+      "attendees": ["advisor", "jin_sunbae", "minjun_k", "su_bin"]
+    },
+    {
+      "key": "yunho_0330",
+      "name": "Tutoring - Yun-ho",
+      "start": "2027-03-30T19:00",
+      "end": "2027-03-30T21:00",
+      "created": "2027-03-27T17:00",
+      "attendees": ["yunho"]
+    },
+    {
+      "key": "yunho_0406",
+      "name": "Tutoring - Yun-ho",
+      "start": "2027-04-06T19:00",
+      "end": "2027-04-06T21:00",
+      "created": "2027-04-03T17:00",
+      "attendees": ["yunho"],
+      "cancelled": true
+    },
+    {
+      "key": "yunho_0413",
+      "name": "Tutoring - Yun-ho",
+      "start": "2027-04-13T19:00",
+      "end": "2027-04-13T21:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["yunho"]
+    },
+    {
+      "key": "yunho_0420",
+      "name": "Tutoring - Yun-ho",
+      "start": "2027-04-20T19:00",
+      "end": "2027-04-20T21:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["yunho"]
+    },
+    {
+      "key": "yunho_0427",
+      "name": "Tutoring - Yun-ho",
+      "start": "2027-04-27T19:00",
+      "end": "2027-04-27T21:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["yunho"]
+    },
+    {
+      "key": "harin_0408",
+      "name": "Tutoring - Ha-rin",
+      "start": "2027-04-08T18:00",
+      "end": "2027-04-08T19:30",
+      "created": "2027-04-05T16:00",
+      "attendees": ["harin"]
+    },
+    {
+      "key": "harin_0422",
+      "name": "Tutoring - Ha-rin",
+      "start": "2027-04-22T18:00",
+      "end": "2027-04-22T19:30",
+      "created": "2027-04-08T21:20",
+      "attendees": ["harin"]
+    },
+    {
+      "key": "harin_0506",
+      "name": "Tutoring - Ha-rin",
+      "start": "2027-05-06T18:00",
+      "end": "2027-05-06T19:30",
+      "created": "2027-04-08T21:20",
+      "attendees": ["harin"]
+    },
+    {
+      "key": "harim_0408",
+      "name": "Tutoring - Ha-rim",
+      "start": "2027-04-08T19:30",
+      "end": "2027-04-08T21:00",
+      "created": "2027-04-05T17:30",
+      "attendees": ["harim"]
+    },
+    {
+      "key": "harim_0422",
+      "name": "Tutoring - Ha-rim",
+      "start": "2027-04-22T19:30",
+      "end": "2027-04-22T21:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["harim"]
+    },
+    {
+      "key": "harim_0506",
+      "name": "Tutoring - Ha-rim",
+      "start": "2027-05-06T19:30",
+      "end": "2027-05-06T21:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["harim"]
+    },
+    {
+      "key": "doyun_0402",
+      "name": "Tutoring - Do-yun (online)",
+      "start": "2027-04-02T17:00",
+      "end": "2027-04-02T18:00",
+      "created": "2027-03-30T15:00",
+      "attendees": ["doyun"]
+    },
+    {
+      "key": "doyun_0409",
+      "name": "Tutoring - Do-yun (online)",
+      "start": "2027-04-09T17:00",
+      "end": "2027-04-09T18:00",
+      "created": "2027-04-06T15:00",
+      "attendees": ["doyun"]
+    },
+    {
+      "key": "doyun_0416",
+      "name": "Tutoring - Do-yun (online)",
+      "start": "2027-04-16T17:00",
+      "end": "2027-04-16T18:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["doyun"]
+    },
+    {
+      "key": "doyun_0423",
+      "name": "Tutoring - Do-yun (online)",
+      "start": "2027-04-23T17:00",
+      "end": "2027-04-23T18:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["doyun"]
+    },
+    {
+      "key": "callhome_0328",
+      "name": "Call Eomma",
+      "start": "2027-03-28T20:00",
+      "end": "2027-03-28T20:30",
+      "created": "2027-03-25T18:00",
+      "attendees": ["eomma"]
+    },
+    {
+      "key": "callhome_0404",
+      "name": "Call Eomma",
+      "start": "2027-04-04T20:00",
+      "end": "2027-04-04T20:30",
+      "created": "2027-04-01T18:00",
+      "attendees": ["eomma"]
+    },
+    {
+      "key": "callhome_0411",
+      "name": "Call Eomma",
+      "start": "2027-04-11T20:00",
+      "end": "2027-04-11T20:30",
+      "created": "2027-04-08T18:00",
+      "attendees": ["eomma"]
+    },
+    {
+      "key": "callhome_0418",
+      "name": "Call Eomma",
+      "start": "2027-04-18T20:00",
+      "end": "2027-04-18T20:30",
+      "created": "2027-04-08T21:20",
+      "attendees": ["eomma"]
+    },
+    {
+      "key": "callhome_0502",
+      "name": "Call Eomma",
+      "start": "2027-05-02T20:00",
+      "end": "2027-05-02T20:30",
+      "created": "2027-04-08T21:20",
+      "attendees": ["eomma"]
+    },
+    {
+      "key": "seungwoo_0314",
+      "name": "Tutoring - Seung-woo",
+      "start": "2027-03-14T15:00",
+      "end": "2027-03-14T17:00",
+      "created": "2027-03-11T13:00",
+      "attendees": ["seungwoo"]
+    },
+    {
+      "key": "seungwoo_0328",
+      "name": "Tutoring - Seung-woo",
+      "start": "2027-03-28T15:00",
+      "end": "2027-03-28T17:00",
+      "created": "2027-03-25T13:00",
+      "attendees": ["seungwoo"]
+    },
+    {
+      "key": "seungwoo_0411",
+      "name": "Tutoring - Seung-woo",
+      "start": "2027-04-11T15:00",
+      "end": "2027-04-11T17:00",
+      "created": "2027-04-08T13:00",
+      "attendees": ["seungwoo"]
+    },
+    {
+      "key": "sectional_0324",
+      "name": "Orchestra sectional - cellos",
+      "start": "2027-03-24T19:30",
+      "end": "2027-03-24T21:00",
+      "created": "2027-03-21T17:30",
+      "attendees": ["minjun_p"]
+    },
+    {
+      "key": "sectional_0407",
+      "name": "Orchestra sectional - cellos",
+      "start": "2027-04-07T19:30",
+      "end": "2027-04-07T21:00",
+      "created": "2027-04-04T17:30",
+      "attendees": ["minjun_p"]
+    },
+    {
+      "key": "sectional_0428",
+      "name": "Orchestra sectional - cellos",
+      "start": "2027-04-28T19:30",
+      "end": "2027-04-28T21:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["minjun_p"]
+    },
+    {
+      "key": "advisor_mar",
+      "name": "Advisor meeting",
+      "start": "2027-03-03T14:00",
+      "end": "2027-03-03T15:00",
+      "created": "2027-02-28T12:00",
+      "attendees": ["advisor"]
+    },
+    {
+      "key": "advisor_mar31",
+      "name": "Advisor meeting",
+      "start": "2027-03-31T14:00",
+      "end": "2027-03-31T15:00",
+      "created": "2027-03-28T12:00",
+      "attendees": ["advisor"],
+      "cancelled": true,
+      "description": "Prof Bae is at a conference in Jeju"
+    },
+    {
+      "key": "advisor_apr",
+      "name": "Advisor meeting",
+      "start": "2027-04-14T14:00",
+      "end": "2027-04-14T15:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["advisor"]
+    },
+    {
+      "key": "proposal",
+      "name": "Thesis proposal defense",
+      "start": "2027-04-30T10:00",
+      "end": "2027-04-30T12:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["advisor", "jin_sunbae"],
+      "description": "seminar room 302, committee of four"
+    },
+    {
+      "key": "dentist_apr",
+      "name": "Dentist - Dr Park",
+      "start": "2027-04-15T15:30",
+      "end": "2027-04-15T16:15",
+      "created": "2027-04-08T21:20",
+      "attendees": ["dentist"]
+    },
+    {
+      "key": "dentist_feb",
+      "name": "Dentist - Dr Park",
+      "start": "2027-02-26T16:00",
+      "end": "2027-02-26T16:45",
+      "created": "2027-02-23T14:00",
+      "attendees": ["dentist"]
+    },
+    {
+      "key": "vet_check",
+      "name": "Vet - Bori check-up",
+      "start": "2027-03-13T11:00",
+      "end": "2027-03-13T11:30",
+      "created": "2027-03-10T09:00",
+      "attendees": ["vet"]
+    },
+    {
+      "key": "vet_vacc",
+      "name": "Vet - Bori vaccination",
+      "start": "2027-04-17T11:00",
+      "end": "2027-04-17T11:30",
+      "created": "2027-04-08T21:20",
+      "attendees": ["vet"]
+    },
+    {
+      "key": "dinner_mina_mar",
+      "name": "Dinner with Mi-na",
+      "start": "2027-03-19T19:00",
+      "end": "2027-03-19T21:00",
+      "created": "2027-03-16T17:00",
+      "attendees": ["mina"]
+    },
+    {
+      "key": "dinner_mina_apr",
+      "name": "Dinner with Mi-na",
+      "start": "2027-04-16T19:00",
+      "end": "2027-04-16T21:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["mina"]
+    },
+    {
+      "key": "coffee_mina",
+      "name": "Coffee with Mi-na",
+      "start": "2027-04-03T10:00",
+      "end": "2027-04-03T11:00",
+      "created": "2027-03-31T08:00",
+      "attendees": ["mina"]
+    },
+    {
+      "key": "hair",
+      "name": "Hair appointment",
+      "start": "2027-04-11T11:00",
+      "end": "2027-04-11T12:30",
+      "created": "2027-04-08T09:00",
+      "attendees": ["hairdresser"]
+    },
+    {
+      "key": "brunch_junseo",
+      "name": "Brunch with Jun-seo",
+      "start": "2027-04-18T11:00",
+      "end": "2027-04-18T13:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["jun_seo"],
+      "description": "he is in Seoul for a job fair"
+    },
+    {
+      "key": "committee",
+      "name": "Orchestra committee meeting",
+      "start": "2027-04-18T18:30",
+      "end": "2027-04-18T19:30",
+      "created": "2027-04-08T21:20",
+      "attendees": ["treasurer", "maestro", "librarian"],
+      "description": "agree the concert programme order"
+    },
+    {
+      "key": "lease_talk",
+      "name": "Lease renewal talk with Ajumma",
+      "start": "2027-04-20T18:00",
+      "end": "2027-04-20T18:40",
+      "created": "2027-04-08T21:20",
+      "attendees": ["landlady"]
+    },
+    {
+      "key": "flat_dinner",
+      "name": "Flat dinner - Ha-eun's birthday",
+      "start": "2027-03-27T19:00",
+      "end": "2027-03-27T22:00",
+      "created": "2027-03-24T17:00",
+      "attendees": ["ha_eun", "min_seo"]
+    },
+    {
+      "key": "ktx_down",
+      "name": "KTX to Daegu",
+      "start": "2027-04-23T18:30",
+      "end": "2027-04-23T20:40",
+      "created": "2027-04-08T21:20",
+      "description": "car 5, seat 11A"
+    },
+    {
+      "key": "halmoni80",
+      "name": "Halmoni's 80th birthday lunch",
+      "start": "2027-04-24T12:00",
+      "end": "2027-04-24T14:30",
+      "created": "2027-04-08T21:20",
+      "attendees": ["halmoni", "eomma", "appa", "imo", "jun_seo"],
+      "description": "at the restaurant near Dongseongno"
+    },
+    {
+      "key": "ktx_up",
+      "name": "KTX back to Seoul",
+      "start": "2027-04-25T17:00",
+      "end": "2027-04-25T19:10",
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "dress",
+      "name": "Dress rehearsal",
+      "start": "2027-05-21T19:00",
+      "end": "2027-05-21T21:30",
+      "created": "2027-04-08T21:20",
+      "attendees": ["maestro"]
+    },
+    {
+      "key": "concert",
+      "name": "Spring concert - Hangang Orchestra",
+      "start": "2027-05-22T15:00",
+      "end": "2027-05-22T17:30",
+      "created": "2027-04-08T21:20",
+      "attendees": ["maestro", "concertmaster", "minjun_p", "eomma", "appa"],
+      "description": "black dress, arrive at 13:00"
+    },
+    {
+      "key": "kss",
+      "name": "KSS spring conference",
+      "start": "2027-05-27T09:00",
+      "end": "2027-05-28T17:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["advisor"],
+      "description": "poster session on the Friday"
+    },
+    {
+      "key": "ice_cream",
+      "name": "Hangang picnic with Mi-na",
+      "start": "2027-05-02T13:00",
+      "end": "2027-05-02T16:00",
+      "created": "2027-04-08T21:20",
+      "attendees": ["mina", "hoseok"],
+      "cancelled": true,
+      "description": "rain forecast, moved to a cafe"
+    },
+    {
+      "key": "kyoto_trip",
+      "name": "Kyoto trip",
+      "start": "2026-03-27T07:30",
+      "end": "2026-03-30T22:00",
+      "created": "2026-03-24T05:30",
+      "attendees": ["mina", "hoseok"],
+      "description": "Gimpo to Kansai, ryokan in Gion"
+    },
+    {
+      "key": "chuseok",
+      "name": "Chuseok in Daegu",
+      "start": "2026-09-24T09:00",
+      "end": "2026-09-27T18:00",
+      "created": "2026-09-21T07:00",
+      "attendees": ["eomma", "appa", "halmoni", "jun_seo"]
+    },
+    {
+      "key": "autumn_concert",
+      "name": "Autumn concert - Hangang Orchestra",
+      "start": "2026-11-14T15:00",
+      "end": "2026-11-14T17:30",
+      "created": "2026-11-11T13:00",
+      "attendees": ["maestro", "concertmaster", "minjun_p"],
+      "description": "Hangang community hall"
+    },
+    {
+      "key": "seollal",
+      "name": "Seollal in Daegu",
+      "start": "2027-02-05T10:00",
+      "end": "2027-02-07T17:00",
+      "created": "2027-02-02T08:00",
+      "attendees": ["eomma", "appa", "halmoni", "imo"]
+    },
+    {
+      "key": "old_dinner",
+      "name": "Dinner with Mi-na",
+      "start": "2027-03-26T19:00",
+      "end": "2027-03-26T21:00",
+      "created": "2027-03-23T17:00",
+      "attendees": ["mina"],
+      "trashed": "2027-03-30T09:00"
+    },
+    {
+      "key": "old_rehearse",
+      "name": "Orchestra rehearsal",
+      "start": "2027-02-20T14:00",
+      "end": "2027-02-20T17:00",
+      "created": "2027-02-17T12:00",
+      "attendees": ["maestro"],
+      "trashed": "2027-02-25T10:00"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "ch3",
+      "name": "Thesis chapter 3",
+      "due": "2027-05-31",
+      "list": "thesis",
+      "priority": 2,
+      "status": "in_progress",
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "ch3_var",
+      "name": "Derive the variance estimator",
+      "due": "2027-02-26",
+      "list": "thesis",
+      "parent": "ch3",
+      "completed": "2027-02-25T22:10",
+      "created": "2027-02-20T11:00"
+    },
+    {
+      "key": "ch3_code",
+      "name": "Code the bootstrap in R",
+      "due": "2027-03-12",
+      "list": "thesis",
+      "parent": "ch3",
+      "effort": 180,
+      "completed": "2027-03-11T23:30",
+      "created": "2027-03-06T12:00"
+    },
+    {
+      "key": "ch3_sim",
+      "name": "Rerun the simulations with 2000 replicates",
+      "due": "2027-04-16",
+      "list": "thesis",
+      "parent": "ch3",
+      "effort": 120,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "ch3_plot",
+      "name": "Fix the coverage plot",
+      "due": "2027-04-12",
+      "list": "thesis",
+      "parent": "ch3",
+      "effort": 45,
+      "created": "2027-04-06T12:00"
+    },
+    {
+      "key": "ch3_disc",
+      "name": "Write the discussion section",
+      "due": "2027-04-23",
+      "list": "thesis",
+      "parent": "ch3",
+      "effort": 240,
+      "priority": 2,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "ch3_send",
+      "name": "Send the draft to Prof Bae",
+      "due": "2027-04-26",
+      "list": "thesis",
+      "parent": "ch3",
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "ch3_rev",
+      "name": "Revise after the comments",
+      "due": "2027-05-14",
+      "list": "thesis",
+      "parent": "ch3",
+      "effort": 180,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "ch3_refs",
+      "name": "Proofread the references",
+      "due": "2027-05-28",
+      "list": "thesis",
+      "parent": "ch3",
+      "effort": 60,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "prop",
+      "name": "Thesis proposal defense",
+      "due": "2027-04-30",
+      "list": "thesis",
+      "priority": 1,
+      "status": "in_progress",
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "prop_room",
+      "name": "Book the seminar room",
+      "due": "2027-03-26",
+      "list": "thesis",
+      "parent": "prop",
+      "completed": "2027-03-25T16:00",
+      "created": "2027-03-20T13:00"
+    },
+    {
+      "key": "prop_mail",
+      "name": "Email the committee the final draft",
+      "due": "2027-04-16",
+      "list": "thesis",
+      "parent": "prop",
+      "priority": 1,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "prop_print",
+      "name": "Print the proposal for the committee",
+      "due": "2027-04-26",
+      "list": "thesis",
+      "parent": "prop",
+      "effort": 20,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "prop_slides",
+      "name": "Make the slides",
+      "due": "2027-04-23",
+      "list": "thesis",
+      "parent": "prop",
+      "effort": 240,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "prop_rehearse",
+      "name": "Rehearse the talk with Jin Sunbae",
+      "due": "2027-04-27",
+      "list": "thesis",
+      "parent": "prop",
+      "effort": 90,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "concert_t",
+      "name": "Spring concert prep",
+      "due": "2027-05-22",
+      "list": "orch_l",
+      "status": "in_progress",
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "concert_parts",
+      "name": "Print the cello parts",
+      "due": "2027-03-10",
+      "list": "orch_l",
+      "parent": "concert_t",
+      "completed": "2027-03-09T21:00",
+      "created": "2027-03-04T12:00"
+    },
+    {
+      "key": "concert_learn",
+      "name": "Learn the Dvorak slow movement",
+      "due": "2027-04-30",
+      "list": "orch_l",
+      "parent": "concert_t",
+      "effort": 600,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "concert_fee",
+      "name": "Pay the concert fee",
+      "due": "2027-04-20",
+      "list": "orch_l",
+      "parent": "concert_t",
+      "priority": 1,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "concert_shoes",
+      "name": "Buy black concert shoes",
+      "due": "2027-05-10",
+      "list": "orch_l",
+      "parent": "concert_t",
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "concert_invite",
+      "name": "Invite Eomma and Appa to the concert",
+      "due": "2027-05-01",
+      "list": "orch_l",
+      "parent": "concert_t",
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "halmoni_t",
+      "name": "Halmoni's 80th birthday",
+      "due": "2027-04-24",
+      "list": "family",
+      "priority": 2,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "halmoni_ktx",
+      "name": "Book the KTX to Daegu",
+      "due": "2027-04-12",
+      "list": "family",
+      "parent": "halmoni_t",
+      "priority": 1,
+      "created": "2027-04-06T10:00"
+    },
+    {
+      "key": "halmoni_gift",
+      "name": "Buy a present for Halmoni",
+      "due": "2027-04-20",
+      "list": "family",
+      "parent": "halmoni_t",
+      "effort": 60,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "halmoni_cake",
+      "name": "Order the birthday cake with Imo",
+      "due": "2027-04-19",
+      "list": "family",
+      "parent": "halmoni_t",
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "rent_jan",
+      "name": "Pay rent",
+      "due": "2027-01-05",
+      "list": "flat_l",
+      "completed": "2027-01-04T21:00",
+      "created": "2026-12-30T12:00"
+    },
+    {
+      "key": "rent_feb",
+      "name": "Pay rent",
+      "due": "2027-02-05",
+      "list": "flat_l",
+      "completed": "2027-02-05T09:30",
+      "created": "2027-01-30T12:00"
+    },
+    {
+      "key": "rent_mar",
+      "name": "Pay rent",
+      "due": "2027-03-05",
+      "list": "flat_l",
+      "completed": "2027-03-04T22:15",
+      "created": "2027-02-27T12:00"
+    },
+    {
+      "key": "rent_apr",
+      "name": "Pay rent",
+      "due": "2027-04-05",
+      "list": "flat_l",
+      "completed": "2027-04-05T08:50",
+      "created": "2027-03-30T12:00"
+    },
+    {
+      "key": "rent_may",
+      "name": "Pay rent",
+      "due": "2027-05-05",
+      "list": "flat_l",
+      "priority": 1,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "fee_yun_jan",
+      "name": "Collect tutoring fee - Mrs Jang",
+      "due": "2027-01-25",
+      "list": "tutoring",
+      "completed": "2027-01-26T20:00",
+      "created": "2027-01-19T10:00"
+    },
+    {
+      "key": "fee_yun_feb",
+      "name": "Collect tutoring fee - Mrs Jang",
+      "due": "2027-02-25",
+      "list": "tutoring",
+      "completed": "2027-02-25T21:10",
+      "created": "2027-02-19T10:00"
+    },
+    {
+      "key": "fee_yun_mar",
+      "name": "Collect tutoring fee - Mrs Jang",
+      "due": "2027-03-25",
+      "list": "tutoring",
+      "completed": "2027-03-30T20:30",
+      "created": "2027-03-19T10:00"
+    },
+    {
+      "key": "fee_yun_apr",
+      "name": "Collect tutoring fee - Mrs Jang",
+      "due": "2027-04-25",
+      "list": "tutoring",
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "fee_kang_mar",
+      "name": "Collect tutoring fee - Mr Kang",
+      "due": "2027-03-25",
+      "list": "tutoring",
+      "completed": "2027-03-26T20:00",
+      "created": "2027-03-19T11:00"
+    },
+    {
+      "key": "fee_kang_apr",
+      "name": "Collect tutoring fee - Mr Kang",
+      "due": "2027-04-25",
+      "list": "tutoring",
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "litter_jan",
+      "name": "Buy cat litter",
+      "due": "2027-01-18",
+      "list": "flat_l",
+      "completed": "2027-01-18T19:00",
+      "created": "2027-01-12T09:00"
+    },
+    {
+      "key": "litter_feb",
+      "name": "Buy cat litter",
+      "due": "2027-02-20",
+      "list": "flat_l",
+      "completed": "2027-02-21T11:00",
+      "created": "2027-02-14T09:00"
+    },
+    {
+      "key": "litter_mar",
+      "name": "Buy cat litter",
+      "due": "2027-03-22",
+      "list": "flat_l",
+      "completed": "2027-03-22T18:30",
+      "created": "2027-03-16T09:00"
+    },
+    {
+      "key": "litter_apr",
+      "name": "Buy cat litter",
+      "due": "2027-04-12",
+      "list": "flat_l",
+      "effort": 15,
+      "created": "2027-04-06T09:00"
+    },
+    {
+      "key": "food_mar",
+      "name": "Order Bori's food",
+      "due": "2027-03-15",
+      "list": "flat_l",
+      "completed": "2027-03-14T23:00",
+      "created": "2027-03-09T12:00"
+    },
+    {
+      "key": "food_apr",
+      "name": "Order Bori's food",
+      "due": "2027-04-14",
+      "list": "flat_l",
+      "created": "2027-04-08T12:00"
+    },
+    {
+      "key": "dues_jan",
+      "name": "Pay orchestra dues",
+      "due": "2027-01-15",
+      "list": "orch_l",
+      "completed": "2027-01-15T12:00",
+      "created": "2027-01-09T12:00"
+    },
+    {
+      "key": "dues_apr",
+      "name": "Pay orchestra dues",
+      "due": "2027-04-05",
+      "list": "orch_l",
+      "priority": 1,
+      "created": "2027-03-30T12:00"
+    },
+    {
+      "key": "mail_bae_jan",
+      "name": "Email Prof Bae",
+      "due": "2027-02-02",
+      "list": "thesis",
+      "completed": "2027-02-02T11:00",
+      "created": "2027-01-27T11:00"
+    },
+    {
+      "key": "mail_bae_mar",
+      "name": "Email Prof Bae",
+      "due": "2027-03-28",
+      "list": "thesis",
+      "completed": "2027-03-28T10:15",
+      "created": "2027-03-22T11:00"
+    },
+    {
+      "key": "mail_bae_apr",
+      "name": "Email Prof Bae",
+      "due": "2027-04-12",
+      "list": "thesis",
+      "effort": 15,
+      "created": "2027-04-06T11:00"
+    },
+    {
+      "key": "prep_yun_a",
+      "name": "Prepare lesson - Yun-ho",
+      "due": "2027-03-22",
+      "list": "tutoring",
+      "completed": "2027-03-22T15:00",
+      "created": "2027-03-16T09:00"
+    },
+    {
+      "key": "prep_yun_b",
+      "name": "Prepare lesson - Yun-ho",
+      "due": "2027-04-05",
+      "list": "tutoring",
+      "completed": "2027-04-05T16:20",
+      "created": "2027-03-30T09:00"
+    },
+    {
+      "key": "prep_yun_c",
+      "name": "Prepare lesson - Yun-ho",
+      "due": "2027-04-12",
+      "list": "tutoring",
+      "effort": 60,
+      "created": "2027-04-06T09:00"
+    },
+    {
+      "key": "grade_harin",
+      "name": "Grade Ha-rin's quiz",
+      "due": "2027-04-08",
+      "list": "tutoring",
+      "effort": 20,
+      "completed": "2027-04-08T17:30",
+      "created": "2027-04-02T10:00"
+    },
+    {
+      "key": "grade_harim",
+      "name": "Grade Ha-rim's quiz",
+      "due": "2027-04-08",
+      "list": "tutoring",
+      "effort": 20,
+      "created": "2027-04-02T10:00"
+    },
+    {
+      "key": "sat_sheet",
+      "name": "Make Seung-woo a SAT practice sheet",
+      "due": "2027-04-10",
+      "list": "tutoring",
+      "effort": 45,
+      "created": "2027-04-04T13:00"
+    },
+    {
+      "key": "libbooks",
+      "name": "Return library books",
+      "due": "2027-04-02",
+      "list": "errands",
+      "effort": 20,
+      "created": "2027-03-27T12:00"
+    },
+    {
+      "key": "kss_abs",
+      "name": "Submit the KSS abstract",
+      "due": "2027-02-15",
+      "list": "thesis",
+      "completed": "2027-02-14T23:40",
+      "created": "2027-02-09T11:00"
+    },
+    {
+      "key": "kss_reg",
+      "name": "Register for the KSS conference",
+      "due": "2027-04-20",
+      "list": "thesis",
+      "effort": 15,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "travel_grant",
+      "name": "Apply for the conference travel grant",
+      "due": "2027-04-28",
+      "list": "thesis",
+      "effort": 60,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "japanese",
+      "name": "Sign up for Japanese class",
+      "due": "2027-03-10",
+      "list": "errands",
+      "status": "cancelled",
+      "created": "2027-03-04T12:00"
+    },
+    {
+      "key": "vet_book",
+      "name": "Book Bori's vaccination",
+      "due": "2027-03-30",
+      "list": "flat_l",
+      "completed": "2027-03-30T12:00",
+      "created": "2027-03-24T12:00"
+    },
+    {
+      "key": "lease_copy",
+      "name": "Ask Ajumma for a copy of the lease",
+      "due": "2027-04-16",
+      "list": "flat_l",
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "junseo_refund",
+      "name": "Send Jun-seo the KTX refund form",
+      "due": "2027-04-07",
+      "list": "family",
+      "created": "2027-04-01T12:00"
+    },
+    {
+      "key": "appa_gift",
+      "name": "Buy a birthday present for Appa",
+      "due": "2027-06-05",
+      "list": "family",
+      "effort": 60,
+      "created": "2027-04-08T21:20"
+    },
+    {
+      "key": "bowing",
+      "name": "Ask Min-jun about the bowing marks",
+      "due": "2027-04-10",
+      "list": "orch_l",
+      "effort": 10,
+      "created": "2027-04-04T10:00"
+    },
+    {
+      "key": "book_minjun",
+      "name": "Return Min-jun's stats book",
+      "due": "2027-04-13",
+      "list": "thesis",
+      "effort": 5,
+      "created": "2027-04-07T10:00"
+    },
+    {
+      "key": "gym_locker",
+      "name": "Renew the old gym locker",
+      "due": "2027-02-01",
+      "list": "errands",
+      "trashed": "2027-03-31T10:00",
+      "created": "2027-01-26T09:00"
+    },
+    {
+      "key": "scratch_task",
+      "name": "Buy a desk lamp",
+      "due": "2027-01-20",
+      "list": "errands",
+      "trashed": "2027-02-18T10:00",
+      "created": "2027-01-14T11:00"
+    }
+  ],
+  "notebooks": [
+    {
+      "key": "thesis_nb",
+      "name": "Thesis Notes"
+    },
+    {
+      "key": "tutor_nb",
+      "name": "Tutoring Notes"
+    },
+    {
+      "key": "orch_nb",
+      "name": "Orchestra Notes"
+    },
+    {
+      "key": "bori_nb",
+      "name": "Bori Care"
+    },
+    {
+      "key": "recipes_nb",
+      "name": "Recipes"
+    },
+    {
+      "key": "reading_nb",
+      "name": "Reading List"
+    }
+  ],
+  "notes": [
+    {
+      "key": "ch3_outline",
+      "name": "Chapter 3 outline",
+      "created": "2027-03-02T20:00",
+      "body": "motivation, the bootstrap estimator, coverage simulations, a real data example on air quality",
+      "notebook": "thesis_nb"
+    },
+    {
+      "key": "bae_mar3",
+      "name": "Advisor feedback 3 Mar",
+      "created": "2027-03-03T15:20",
+      "body": "tighten the assumptions, show coverage for small n, drop the second example, start the proposal slides early",
+      "notebook": "thesis_nb"
+    },
+    {
+      "key": "sim_settings",
+      "name": "Simulation settings",
+      "created": "2027-03-09T23:10",
+      "body": "n 200 and 1000, rho 0.3 and 0.7, 2000 replicates, seed 20270301, cluster node 3",
+      "notebook": "thesis_nb"
+    },
+    {
+      "key": "prop_checklist",
+      "name": "Proposal defence checklist",
+      "created": "2027-03-26T17:00",
+      "body": "room booked, slides to Prof Bae a week before, print four copies, water for the committee, backup laptop",
+      "notebook": "thesis_nb",
+      "pinned": true
+    },
+    {
+      "key": "boot_reading",
+      "name": "Bootstrap papers to read",
+      "created": "2027-02-18T11:30",
+      "body": "Efron 1979, the block bootstrap review, two recent preprints on coverage",
+      "notebook": "thesis_nb"
+    },
+    {
+      "key": "yunho_prog",
+      "name": "Yun-ho progress",
+      "created": "2027-04-06T21:20",
+      "body": "limits are fine, still slips on the chain rule, midterm on the 22nd, needs timed practice",
+      "notebook": "tutor_nb"
+    },
+    {
+      "key": "twins_weak",
+      "name": "Ha-rin and Ha-rim weak spots",
+      "created": "2027-03-25T21:15",
+      "body": "Ha-rin rushes algebra, Ha-rim skips the working, both fine on geometry, quiz every second week",
+      "notebook": "tutor_nb"
+    },
+    {
+      "key": "doyun_setup",
+      "name": "Do-yun online setup",
+      "created": "2027-03-18T14:20",
+      "body": "shared whiteboard link, he joins from his phone, mum sits in the first ten minutes",
+      "notebook": "tutor_nb"
+    },
+    {
+      "key": "seungwoo_plan",
+      "name": "Seung-woo SAT plan",
+      "created": "2027-03-14T17:10",
+      "body": "two practice sections a week, review wrong answers on Sunday, test date in June",
+      "notebook": "tutor_nb"
+    },
+    {
+      "key": "fees",
+      "name": "Tutoring fees and schedule",
+      "created": "2027-01-04T10:00",
+      "body": "Yun-ho 400000 a month, the twins 600000, Do-yun 200000, Seung-woo 150000 a lesson",
+      "notebook": "tutor_nb",
+      "pinned": true
+    },
+    {
+      "key": "dvorak",
+      "name": "Dvorak slow movement fingerings",
+      "created": "2027-03-10T22:00",
+      "body": "shift early in bar 12, open string at the entry, ask Maestro Oh about the ritardando",
+      "notebook": "orch_nb"
+    },
+    {
+      "key": "programme",
+      "name": "Spring concert programme",
+      "created": "2027-03-27T21:00",
+      "body": "overture first, the Dvorak symphony after the break, encore to be decided, call time 13:00",
+      "notebook": "orch_nb",
+      "pinned": true
+    },
+    {
+      "key": "brahms_bow",
+      "name": "Bowing marks for the Brahms",
+      "created": "2027-02-27T21:30",
+      "body": "up bow at the pickup, long bows in the theme, copy Min-jun's marks for the second page",
+      "notebook": "orch_nb"
+    },
+    {
+      "key": "room_rules",
+      "name": "Rehearsal room rules",
+      "created": "2026-02-14T16:00",
+      "body": "no food in the room, chairs back at five to five, the key goes back to the office",
+      "notebook": "orch_nb"
+    },
+    {
+      "key": "bori_food",
+      "name": "Bori food and allergies",
+      "created": "2026-01-20T22:00",
+      "body": "salmon kibble only, no chicken treats, wet food on Sundays, water fountain needs a new filter monthly",
+      "notebook": "bori_nb",
+      "pinned": true
+    },
+    {
+      "key": "bori_vacc",
+      "name": "Bori vaccination schedule",
+      "created": "2026-04-10T10:00",
+      "body": "boosters every year in April, rabies every three years, flea drops monthly",
+      "notebook": "bori_nb"
+    },
+    {
+      "key": "bori_vet",
+      "name": "Vet visit 13 Mar",
+      "created": "2027-03-13T12:00",
+      "body": "weight 4.1 kilos, teeth fine, Dr Lim says book the booster for April",
+      "notebook": "bori_nb"
+    },
+    {
+      "key": "jjigae",
+      "name": "Kimchi jjigae",
+      "created": "2026-02-02T19:30",
+      "body": "old kimchi, pork belly, onion, a spoon of gochugaru, simmer thirty minutes, tofu last",
+      "notebook": "recipes_nb"
+    },
+    {
+      "key": "doenjang",
+      "name": "Doenjang jjigae",
+      "created": "2026-03-15T19:00",
+      "body": "anchovy stock, zucchini, potato, tofu, a green chilli, doenjang and a little gochujang",
+      "notebook": "recipes_nb"
+    },
+    {
+      "key": "japchae",
+      "name": "Eomma's japchae",
+      "created": "2026-09-27T14:00",
+      "body": "sweet potato noodles, spinach, carrot, mushrooms, soy and sugar, sesame oil last",
+      "notebook": "recipes_nb"
+    },
+    {
+      "key": "tteok",
+      "name": "Tteokbokki for the flat",
+      "created": "2026-11-20T20:30",
+      "body": "rice cakes soaked in warm water, fish cakes, gochujang sauce, boiled eggs, scallions",
+      "notebook": "recipes_nb"
+    },
+    {
+      "key": "diary_bad",
+      "name": "Diary entry - bad week",
+      "created": "2027-03-12T23:30",
+      "body": "simulations crashed twice, Prof Bae unhappy with the plot, skipped the gym, Bori slept on my keyboard"
+    },
+    {
+      "key": "diary_good",
+      "name": "Diary entry - good rehearsal",
+      "created": "2027-03-27T22:30",
+      "body": "the slow movement finally clicked, Maestro Oh smiled, chicken with the cellos"
+    },
+    {
+      "key": "kyoto_pack",
+      "name": "Kyoto packing list",
+      "created": "2026-03-20T22:00",
+      "body": "passport, yen from the airport, rain jacket, a small umbrella, comfortable shoes, the camera"
+    },
+    {
+      "key": "halmoni_ideas",
+      "name": "Gift ideas for Halmoni",
+      "created": "2027-04-02T21:40",
+      "body": "a warm cardigan, a photo book of Bori, ginseng candies, a new radio"
+    },
+    {
+      "key": "lease_notes",
+      "name": "Lease notes from Ajumma",
+      "created": "2027-02-14T18:30",
+      "body": "deposit stays as is, rent up 20000 from June, no more cats allowed, boiler checked in October"
+    },
+    {
+      "key": "old_scratch",
+      "name": "Scratch note",
+      "created": "2027-03-20T10:00",
+      "body": "call the dentist, buy tape",
+      "trashed": "2027-04-01T09:00"
+    },
+    {
+      "key": "old_shopping",
+      "name": "Old shopping list",
+      "created": "2026-11-01T10:00",
+      "body": "eggs, tofu, kimchi",
+      "trashed": "2026-12-15T10:00"
+    }
+  ],
+  "folders": [
+    {
+      "key": "thesis_f",
+      "name": "Thesis"
+    },
+    {
+      "key": "housing_f",
+      "name": "Housing"
+    },
+    {
+      "key": "tutoring_f",
+      "name": "Tutoring"
+    },
+    {
+      "key": "orch_f",
+      "name": "Orchestra"
+    },
+    {
+      "key": "medical_f",
+      "name": "Medical and Bori"
+    },
+    {
+      "key": "papers_f",
+      "name": "Papers"
+    },
+    {
+      "key": "sort_f",
+      "name": "To Sort"
+    }
+  ],
+  "documents": [
+    {
+      "key": "proposal_v3",
+      "name": "Thesis proposal draft v3",
+      "folder": "thesis_f",
+      "created": "2027-03-30T23:00"
+    },
+    {
+      "key": "kss_abstract",
+      "name": "KSS 2027 abstract",
+      "folder": "thesis_f",
+      "created": "2027-02-14T23:30"
+    },
+    {
+      "key": "ch3_results",
+      "name": "Chapter 3 simulation results 2027-03",
+      "folder": "thesis_f",
+      "created": "2027-03-28T21:00"
+    },
+    {
+      "key": "scholarship",
+      "name": "Scholarship letter 2026",
+      "folder": "thesis_f",
+      "created": "2026-03-04T10:00",
+      "starred": true
+    },
+    {
+      "key": "lease_2026",
+      "name": "Lease contract 2026",
+      "folder": "housing_f",
+      "created": "2026-06-12T11:00",
+      "starred": true
+    },
+    {
+      "key": "cat_addendum",
+      "name": "Lease addendum for the cat 2026",
+      "folder": "housing_f",
+      "created": "2026-09-02T10:00"
+    },
+    {
+      "key": "contract_yun",
+      "name": "Tutoring contract - Yun-ho 2027",
+      "folder": "tutoring_f",
+      "created": "2027-01-04T10:30"
+    },
+    {
+      "key": "contract_kang",
+      "name": "Tutoring contract - Kang twins 2027",
+      "folder": "tutoring_f",
+      "created": "2027-01-11T10:30"
+    },
+    {
+      "key": "receipts_q1",
+      "name": "Tutoring fee receipts 2027 Q1",
+      "folder": "tutoring_f",
+      "created": "2027-03-31T20:00"
+    },
+    {
+      "key": "orch_form",
+      "name": "Orchestra membership form 2027",
+      "folder": "orch_f",
+      "created": "2027-01-09T15:00"
+    },
+    {
+      "key": "programme_draft",
+      "name": "Spring concert programme draft 2027",
+      "folder": "orch_f",
+      "created": "2027-03-29T20:00"
+    },
+    {
+      "key": "bylaws",
+      "name": "Hangang Orchestra bylaws 2025",
+      "folder": "orch_f",
+      "created": "2025-09-06T15:00"
+    },
+    {
+      "key": "bori_vacc_doc",
+      "name": "Bori vaccination record 2026",
+      "folder": "medical_f",
+      "created": "2026-04-10T11:00"
+    },
+    {
+      "key": "bori_adopt",
+      "name": "Bori adoption papers 2025",
+      "folder": "medical_f",
+      "created": "2025-11-02T14:00",
+      "starred": true
+    },
+    {
+      "key": "tax_2026",
+      "name": "Year-end tax settlement 2026",
+      "folder": "papers_f",
+      "created": "2027-02-10T21:00"
+    },
+    {
+      "key": "passport_scan",
+      "name": "Passport scan",
+      "folder": "papers_f",
+      "created": "2026-01-13T10:00"
+    },
+    {
+      "key": "licence_scan",
+      "name": "Driver's licence scan",
+      "folder": "papers_f",
+      "created": "2026-01-13T10:05"
+    },
+    {
+      "key": "tuition_spring",
+      "name": "Tuition receipt Spring 2027",
+      "created": "2027-03-05T14:00"
+    },
+    {
+      "key": "old_lease_draft",
+      "name": "Old lease draft 2025",
+      "folder": "housing_f",
+      "created": "2025-12-20T10:00",
+      "trashed": "2026-12-14T10:30"
+    },
+    {
+      "key": "dup_scan",
+      "name": "Duplicate scan",
+      "folder": "papers_f",
+      "created": "2027-03-10T10:00",
+      "trashed": "2027-04-02T10:00"
+    }
+  ],
+  "albums": [
+    {
+      "key": "bori_al",
+      "name": "Bori"
+    },
+    {
+      "key": "kyoto_al",
+      "name": "Kyoto 2026"
+    },
+    {
+      "key": "orch_al",
+      "name": "Hangang Orchestra"
+    },
+    {
+      "key": "daegu_al",
+      "name": "Daegu"
+    },
+    {
+      "key": "lab_al",
+      "name": "Lab Outings"
+    },
+    {
+      "key": "sort_al",
+      "name": "Unsorted Scans"
+    }
+  ],
+  "photos": [
+    {
+      "key": "p_bori_adopt",
+      "name": "Bori on adoption day",
+      "taken": "2025-11-02T15:30",
+      "albums": ["bori_al"],
+      "starred": true
+    },
+    {
+      "key": "p_bori_box",
+      "name": "Bori in a cardboard box",
+      "taken": "2025-11-09T20:10",
+      "albums": ["bori_al"]
+    },
+    {
+      "key": "p_bori_desk",
+      "name": "Bori on my desk",
+      "taken": "2026-01-20T22:40",
+      "albums": ["bori_al"]
+    },
+    {
+      "key": "p_bori_laptop",
+      "name": "Bori and the laptop",
+      "taken": "2026-03-03T01:15",
+      "albums": ["bori_al"]
+    },
+    {
+      "key": "p_bori_window",
+      "name": "Bori in the window",
+      "taken": "2027-02-28T16:20",
+      "albums": ["bori_al"],
+      "starred": true
+    },
+    {
+      "key": "p_bori_cello",
+      "name": "Bori with the cello case",
+      "taken": "2027-03-06T12:45",
+      "albums": ["bori_al"],
+      "people": ["ha_eun"]
+    },
+    {
+      "key": "p_bori_vet",
+      "name": "Bori at the vet",
+      "taken": "2027-03-13T11:10",
+      "albums": ["bori_al"],
+      "people": ["vet"]
+    },
+    {
+      "key": "p_bori_sofa",
+      "name": "Bori asleep on the sofa",
+      "taken": "2027-04-04T14:00",
+      "albums": ["bori_al"],
+      "people": ["min_seo"]
+    },
+    {
+      "key": "p_ky_gates",
+      "name": "Fushimi Inari gates",
+      "taken": "2026-03-27T10:30",
+      "albums": ["kyoto_al"],
+      "people": ["mina"],
+      "starred": true
+    },
+    {
+      "key": "p_ky_gion",
+      "name": "Gion at dusk",
+      "taken": "2026-03-28T18:40",
+      "albums": ["kyoto_al"]
+    },
+    {
+      "key": "p_ky_breakfast",
+      "name": "Ryokan breakfast",
+      "taken": "2026-03-29T08:20",
+      "albums": ["kyoto_al"],
+      "people": ["hoseok"]
+    },
+    {
+      "key": "p_ky_bamboo",
+      "name": "Arashiyama bamboo grove",
+      "taken": "2026-03-29T11:15",
+      "albums": ["kyoto_al"]
+    },
+    {
+      "key": "p_ky_kaiseki",
+      "name": "Kaiseki dinner",
+      "taken": "2026-03-29T19:30",
+      "albums": ["kyoto_al"],
+      "people": ["mina", "hoseok"]
+    },
+    {
+      "key": "p_ky_kiyomizu",
+      "name": "Mi-na at Kiyomizu",
+      "taken": "2026-03-30T09:50",
+      "albums": ["kyoto_al"],
+      "people": ["mina"]
+    },
+    {
+      "key": "p_ky_deer",
+      "name": "Ho-seok and the deer in Nara",
+      "taken": "2026-03-30T14:05",
+      "albums": ["kyoto_al"],
+      "people": ["hoseok"]
+    },
+    {
+      "key": "p_or_stage",
+      "name": "Autumn concert stage",
+      "taken": "2026-11-14T16:30",
+      "albums": ["orch_al"],
+      "people": ["maestro"],
+      "starred": true
+    },
+    {
+      "key": "p_or_cellos",
+      "name": "The cello section",
+      "taken": "2026-11-14T14:45",
+      "albums": ["orch_al"],
+      "people": ["minjun_p"]
+    },
+    {
+      "key": "p_or_maestro",
+      "name": "Maestro Oh rehearsing",
+      "taken": "2027-03-13T15:20",
+      "albums": ["orch_al"],
+      "people": ["maestro"]
+    },
+    {
+      "key": "p_or_cover",
+      "name": "Concert programme cover",
+      "taken": "2027-03-29T20:30",
+      "albums": ["orch_al"]
+    },
+    {
+      "key": "p_or_chicken",
+      "name": "Chicken after rehearsal",
+      "taken": "2027-04-03T18:10",
+      "albums": ["orch_al"],
+      "people": ["concertmaster", "minjun_p", "librarian", "jihye_y"]
+    },
+    {
+      "key": "p_or_partner",
+      "name": "Stand partner Min-jun",
+      "taken": "2027-03-27T16:10",
+      "albums": ["orch_al"],
+      "people": ["minjun_p"]
+    },
+    {
+      "key": "p_dg_table",
+      "name": "Chuseok table 2026",
+      "taken": "2026-09-25T12:30",
+      "albums": ["daegu_al"],
+      "people": ["eomma", "appa", "halmoni"],
+      "starred": true
+    },
+    {
+      "key": "p_dg_halmoni",
+      "name": "Halmoni and Eomma in the kitchen",
+      "taken": "2026-09-24T17:00",
+      "albums": ["daegu_al"],
+      "people": ["halmoni", "eomma"]
+    },
+    {
+      "key": "p_dg_garden",
+      "name": "Appa's tomato garden",
+      "taken": "2026-09-26T09:10",
+      "albums": ["daegu_al"],
+      "people": ["appa"]
+    },
+    {
+      "key": "p_dg_street",
+      "name": "Dongseongno street at night",
+      "taken": "2026-09-26T20:20",
+      "albums": ["daegu_al"]
+    },
+    {
+      "key": "p_dg_apsan",
+      "name": "Jun-seo and me on Apsan",
+      "taken": "2026-09-27T11:00",
+      "albums": ["daegu_al"],
+      "people": ["jun_seo"]
+    },
+    {
+      "key": "p_lab_dinner",
+      "name": "Lab dinner at the samgyeopsal place",
+      "taken": "2027-03-19T20:15",
+      "albums": ["lab_al"],
+      "people": ["jin_sunbae", "minjun_k", "su_bin"]
+    },
+    {
+      "key": "p_lab_cake",
+      "name": "Prof Bae's birthday cake",
+      "taken": "2027-04-02T16:00",
+      "albums": ["lab_al"],
+      "people": ["advisor", "su_bin"]
+    },
+    {
+      "key": "p_lab_poster",
+      "name": "Poster test print",
+      "taken": "2027-03-04T11:30",
+      "albums": ["lab_al"]
+    },
+    {
+      "key": "p_blossoms",
+      "name": "Cherry blossoms at Yeouido",
+      "taken": "2027-04-03T12:10",
+      "people": ["mina", "hoseok"]
+    },
+    {
+      "key": "p_hangang",
+      "name": "The Han River at night",
+      "taken": "2027-03-21T22:05"
+    },
+    {
+      "key": "p_board",
+      "name": "Whiteboard derivation",
+      "taken": "2027-02-25T21:30"
+    },
+    {
+      "key": "p_worksheet",
+      "name": "Tutoring worksheet scan",
+      "taken": "2027-04-06T20:50",
+      "people": ["yunho"]
+    },
+    {
+      "key": "p_balcony",
+      "name": "View from the flat balcony",
+      "taken": "2026-07-03T06:40"
+    },
+    {
+      "key": "p_desk",
+      "name": "My thesis desk",
+      "taken": "2027-01-15T23:00",
+      "starred": true
+    },
+    {
+      "key": "p_textbook",
+      "name": "Receipt for the textbook",
+      "taken": "2027-03-31T13:00"
+    },
+    {
+      "key": "p_blurry",
+      "name": "Blurry cat photo",
+      "taken": "2027-03-29T07:30",
+      "trashed": "2027-04-03T09:00"
+    },
+    {
+      "key": "p_chat",
+      "name": "Screenshot of the chat",
+      "taken": "2026-11-02T12:00",
+      "trashed": "2026-12-02T09:00"
+    }
+  ],
+  "debts": [
+    {
+      "key": "d_haeun_groceries",
+      "person": "ha_eun",
+      "direction": "owes_me",
+      "amount": 18500,
+      "name": "groceries I paid for",
+      "date": "2027-04-02"
+    },
+    {
+      "key": "d_minseo_cleaner",
+      "person": "min_seo",
+      "direction": "i_owe",
+      "amount": 15000,
+      "name": "bathroom cleaner and mop",
+      "date": "2027-03-27"
+    },
+    {
+      "key": "d_mina_kyoto",
+      "person": "mina",
+      "direction": "i_owe",
+      "amount": 62000,
+      "name": "Kyoto ryokan share in won (about 6850 yen)",
+      "date": "2026-03-30"
+    },
+    {
+      "key": "d_junseo_case",
+      "person": "jun_seo",
+      "direction": "owes_me",
+      "amount": 40000,
+      "name": "phone case I bought him",
+      "date": "2027-03-08"
+    },
+    {
+      "key": "d_minjun_k_lunch",
+      "person": "minjun_k",
+      "direction": "owes_me",
+      "amount": 9500,
+      "name": "cafeteria lunch",
+      "date": "2027-04-06"
+    },
+    {
+      "key": "d_jin_coffee",
+      "person": "jin_sunbae",
+      "direction": "i_owe",
+      "amount": 5000,
+      "name": "coffee after the seminar",
+      "date": "2027-04-09"
+    },
+    {
+      "key": "d_bora_chicken",
+      "person": "treasurer",
+      "direction": "i_owe",
+      "amount": 12000,
+      "name": "chicken night share",
+      "date": "2027-03-13",
+      "settled": "2027-03-20T17:30"
+    },
+    {
+      "key": "d_mrsjang_book",
+      "person": "mrs_jang",
+      "direction": "owes_me",
+      "amount": 28000,
+      "name": "workbook I ordered for Yun-ho",
+      "date": "2027-03-10"
+    },
+    {
+      "key": "d_mina_cinema",
+      "person": "mina",
+      "direction": "owes_me",
+      "amount": 14000,
+      "name": "cinema tickets",
+      "date": "2027-03-19",
+      "settled": "2027-04-01T21:00"
+    },
+    {
+      "key": "d_hoseok_ramen",
+      "person": "hoseok",
+      "direction": "owes_me",
+      "amount": 11000,
+      "name": "ramen after the blossoms",
+      "date": "2027-04-03"
+    },
+    {
+      "key": "d_minjun_p_score",
+      "person": "minjun_p",
+      "direction": "i_owe",
+      "amount": 22000,
+      "name": "Dvorak score he lent the money for",
+      "date": "2027-02-27",
+      "settled": "2027-03-06T16:45"
+    },
+    {
+      "key": "d_imo_cake",
+      "person": "imo",
+      "direction": "owes_me",
+      "amount": 35000,
+      "name": "half of Halmoni's cake",
+      "date": "2027-04-05"
+    },
+    {
+      "key": "d_landlady_repair",
+      "person": "landlady",
+      "direction": "owes_me",
+      "amount": 80000,
+      "name": "boiler repair she will refund",
+      "date": "2027-01-22"
+    }
+  ],
+  "locker": [
+    {
+      "key": "naver",
+      "name": "Naver account",
+      "type": "login",
+      "username": "jian.yoo",
+      "url": "https://naver.com",
+      "password": "Bori&Cello2026",
+      "code": "JBSWY3DPEHPK3PXP",
+      "starred": true
+    },
+    {
+      "key": "mysnu",
+      "name": "mySNU portal",
+      "type": "login",
+      "username": "jianyoo",
+      "url": "https://my.snu.ac.kr",
+      "password": "Stats#Phd4th"
+    },
+    {
+      "key": "kakaobank",
+      "name": "KakaoBank",
+      "type": "login",
+      "username": "jian.yoo@kakao.com",
+      "url": "https://kakaobank.com",
+      "password": "Hangang-Seoul27"
+    },
+    {
+      "key": "kb_card",
+      "name": "KB Kookmin debit card",
+      "type": "card",
+      "card_number": "9430123498765432",
+      "cvv": "482"
+    },
+    {
+      "key": "door_code",
+      "name": "Flat door code",
+      "type": "note",
+      "notes": "2580 then the bell",
+      "starred": true
+    },
+    {
+      "key": "resident_card",
+      "name": "Resident registration card",
+      "type": "identity"
+    },
+    {
+      "key": "flat_wifi",
+      "name": "Flat wifi",
+      "type": "wifi",
+      "password": "BoriMeow302",
+      "starred": true
+    },
+    {
+      "key": "lab_wifi",
+      "name": "Lab wifi",
+      "type": "wifi",
+      "password": "StatsLab-Guest27"
+    },
+    {
+      "key": "gov24",
+      "name": "Government24 portal",
+      "type": "password",
+      "password": "Seoul!Gov2027"
+    },
+    {
+      "key": "cluster_ssh",
+      "name": "Lab cluster SSH key",
+      "type": "ssh_key",
+      "notes": "ed25519, gpu node 3, renew in June"
+    },
+    {
+      "key": "kakao_api",
+      "name": "Kakao Maps API key",
+      "type": "api_credential",
+      "notes": "for the tutoring scheduler script"
+    },
+    {
+      "key": "passport",
+      "name": "Passport",
+      "type": "passport",
+      "notes": "M12345678, expires 2031-08-14"
+    },
+    {
+      "key": "kb_acct",
+      "name": "KB Kookmin account",
+      "type": "bank_account",
+      "notes": "Sillim branch, account 123401-04-567890",
+      "starred": true
+    },
+    {
+      "key": "licence",
+      "name": "Driver's licence",
+      "type": "driving_licence",
+      "notes": "class 2 regular, renew in 2030"
+    },
+    {
+      "key": "matlab",
+      "name": "MATLAB campus licence",
+      "type": "software_licence",
+      "notes": "SNU campus licence, renews every March",
+      "starred": true
+    },
+    {
+      "key": "wallet",
+      "name": "Crypto wallet",
+      "type": "crypto_wallet",
+      "notes": "a little Ethereum from a hackathon, about 90000 won"
+    },
+    {
+      "key": "orch_member",
+      "name": "Hangang Orchestra membership",
+      "type": "membership",
+      "notes": "member no. 27, dues paid to June"
+    },
+    {
+      "key": "lease_orig",
+      "name": "Lease contract original",
+      "type": "document",
+      "notes": "original with Ajumma, scan in the Housing folder"
+    },
+    {
+      "key": "old_wifi",
+      "name": "Old Sillim flat wifi",
+      "type": "wifi",
+      "password": "Sillim2025!",
+      "trashed": "2027-04-01T10:00"
+    },
+    {
+      "key": "old_daum",
+      "name": "Old Daum login",
+      "type": "login",
+      "username": "jian_yoo",
+      "password": "OldDaum77",
+      "trashed": "2026-12-20T10:00"
+    }
+  ],
+  "links": [
+    {
+      "from": "fee_yun_jan",
+      "to": "mrs_jang"
+    },
+    {
+      "from": "fee_yun_feb",
+      "to": "mrs_jang"
+    },
+    {
+      "from": "fee_yun_mar",
+      "to": "mrs_jang"
+    },
+    {
+      "from": "fee_yun_apr",
+      "to": "mrs_jang"
+    },
+    {
+      "from": "fee_kang_mar",
+      "to": "mr_kang"
+    },
+    {
+      "from": "fee_kang_apr",
+      "to": "mr_kang"
+    },
+    {
+      "from": "prep_yun_a",
+      "to": "yunho"
+    },
+    {
+      "from": "prep_yun_b",
+      "to": "yunho"
+    },
+    {
+      "from": "prep_yun_c",
+      "to": "yunho"
+    },
+    {
+      "from": "grade_harin",
+      "to": "harin"
+    },
+    {
+      "from": "grade_harim",
+      "to": "harim"
+    },
+    {
+      "from": "sat_sheet",
+      "to": "seungwoo"
+    },
+    {
+      "from": "mail_bae_jan",
+      "to": "advisor"
+    },
+    {
+      "from": "mail_bae_mar",
+      "to": "advisor"
+    },
+    {
+      "from": "mail_bae_apr",
+      "to": "advisor"
+    },
+    {
+      "from": "ch3_send",
+      "to": "advisor"
+    },
+    {
+      "from": "prop_rehearse",
+      "to": "jin_sunbae"
+    },
+    {
+      "from": "vet_book",
+      "to": "vet"
+    },
+    {
+      "from": "halmoni_gift",
+      "to": "halmoni"
+    },
+    {
+      "from": "halmoni_cake",
+      "to": "imo"
+    },
+    {
+      "from": "junseo_refund",
+      "to": "jun_seo"
+    },
+    {
+      "from": "lease_copy",
+      "to": "landlady"
+    },
+    {
+      "from": "appa_gift",
+      "to": "appa"
+    },
+    {
+      "from": "bowing",
+      "to": "minjun_p"
+    },
+    {
+      "from": "book_minjun",
+      "to": "minjun_k"
+    },
+    {
+      "from": "dues_apr",
+      "to": "treasurer"
+    },
+    {
+      "from": "dues_jan",
+      "to": "treasurer"
+    },
+    {
+      "from": "yunho_prog",
+      "to": "yunho"
+    },
+    {
+      "from": "twins_weak",
+      "to": "harin"
+    },
+    {
+      "from": "twins_weak",
+      "to": "harim"
+    },
+    {
+      "from": "doyun_setup",
+      "to": "doyun"
+    },
+    {
+      "from": "seungwoo_plan",
+      "to": "seungwoo"
+    },
+    {
+      "from": "bae_mar3",
+      "to": "advisor"
+    },
+    {
+      "from": "bori_vet",
+      "to": "vet"
+    },
+    {
+      "from": "japchae",
+      "to": "eomma"
+    },
+    {
+      "from": "halmoni_ideas",
+      "to": "halmoni"
+    },
+    {
+      "from": "lease_notes",
+      "to": "landlady"
+    },
+    {
+      "from": "dvorak",
+      "to": "maestro"
+    },
+    {
+      "from": "brahms_bow",
+      "to": "minjun_p"
+    }
+  ]
 }

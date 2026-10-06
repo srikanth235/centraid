@@ -21,7 +21,7 @@ Session header (`today` and `me` are the world's own, in `<W>.json`):
 Environment of `check.sh`:
 
 | variable | meaning |
-|---|---|
+| --- | --- |
 | `EVALKIT_ROOT` | the full `experiments/toolchat/native` tree, which holds the held-out sets (default: the tree that holds `check.sh`) |
 | `P` | the author's private copy (default: `EVALKIT_ROOT`) |
 | `PY` | a Python with torch (CPU), transformers and numpy (default `python3`) |
@@ -31,6 +31,7 @@ Environment of `check.sh`:
 | `EVAL_VAULTS` | where the world is seeded (default `$OUT/vaults`) |
 
 ## Read (nothing else)
+
 1. This file.
 2. `$P/authored/BRIEF.md`: sections "Why this exists", "Hard rules" and "The sessions" (skip "The world": your world exists; skip "Verify": use `check.sh` below). Where BRIEF and this kit differ, this kit wins.
 3. `$P/eval/gold.py` (the helpers), and the first ~80 lines of `$P/authored/sessions/T01.py` as a format example (a train world: do not copy its messages).
@@ -38,15 +39,17 @@ Environment of `check.sh`:
 5. As needed: `$P/SPEC.md` §8 (policy) and §14.1 (rulings), and a runtime export `$NATIVETOOLS export <dir>` (prompt.sig.txt, kind_card.txt, the grammars).
 
 ## Never open
+
 The full repo (its `eval/sets`, `eval/sessions`, `eval/worlds`, `data`, `runs`; you run its `authored/evalkit/check.sh`, you do not open its files), any other author's copy, or anything else outside `P` and your own `OUT`. They hold the held-out sessions you must stay blind to. Do not run `pkill`/`kill`. Write only `$P/authored/sessions/<W>*.py` and scratch files under `OUT`.
 
 ## What to write
+
 - **N sessions** (N is in your task), ids `<W>-E001` upward, in `$P/authored/sessions/<W>.py` (the header above) and, if you like, `<W>_02.py`, `<W>_03.py`... (each a copy of the header, then `S(...)` calls). Write each session by hand. Never generate or edit sessions with a script across files.
 - Everything in BRIEF "The sessions" applies: real terse phone typing, leaning on earlier turns, loose names, repairs with `bad(...)`, asks, declines, never-minds, undo, trashed rows, empty results and their recovery. Use every kind the world has (people, groups, expenses, debts, lists, events, tasks, links, notebooks, notes, folders, documents, albums, photos, locker) and every verb, roughly in the proportions a real household would.
 - Shape targets: the training corpus's own figures. Land within the tolerance:
 
 | figure | train | tolerance |
-|---|---|---|
+| --- | --- | --- |
 | session length 1 / 2 / 3 / 4 / 5 / 6 / 7+ | 9 / 21 / 32 / 25 / 7 / 3 / 2 % | ±4 each |
 | outcomes rows / value / write / write+read / ask / decline / find-only | 33 / 12 / 39 / 1 / 8 / 6 / 2 % | ±4 each |
 | runtime said ambiguous (turns) | 5.3% | 3–7 |
@@ -59,6 +62,7 @@ The full repo (its `eval/sets`, `eval/sessions`, `eval/worlds`, `data`, `runs`; 
 | multi-call turns | 19% | 15–23 |
 
 ## Check (the only gate)
+
 Run it from the full repo, with `P`, `NATIVETOOLS` and `TRAIN_GOLD` set:
 
     authored/evalkit/check.sh <W> --only <W>-E001,<W>-E002     # fast: replay just these
@@ -69,4 +73,5 @@ A session that does not verify: read its FAIL line, inspect it with `cd $P && NA
 To re-run the checks on the shipped sources, copy `eval/sessions/e1/<W>*.py` to `$P/authored/sessions/` and `eval/worlds/<W>.json` with `<W>.keys.json` to `$P/authored/worlds/`; every message of six words or more then reports HELD-DUP, because those sessions are in `eval/sets`. `hyg.py` and `mix.py` also run alone (see their docstrings).
 
 ## Report (at most 12 lines)
+
 Sessions verified; the shape lines; sessions deleted and why; any runtime behaviour you believe is wrong (session id + message); anything in this kit that got in your way.

@@ -1,2735 +1,2389 @@
 {
- "me": "Rosa Delgado-Ortiz",
- "today": "2026-10-28T16:10",
- "epoch": "2024-03-01T09:00",
- "seed": "T32",
- "currency": "MXN",
- "people": [
-  {
-   "key": "emi",
-   "name": "Emiliano Delgado Ortiz",
-   "role": "son",
-   "nickname": "Emi",
-   "starred": true,
-   "cadence": 1,
-   "last_contacted": "2026-10-28T14:30",
-   "created": "2024-03-01T09:00"
-  },
-  {
-   "key": "dani",
-   "name": "Daniela Delgado Ortiz",
-   "role": "daughter",
-   "nickname": "Dani",
-   "starred": true,
-   "cadence": 3,
-   "last_contacted": "2026-10-26T20:10",
-   "last_contacted_kind": "call",
-   "met": "Mexico City"
-  },
-  {
-   "key": "rodrigo",
-   "name": "Rodrigo Salinas",
-   "role": "Dani's fiance",
-   "met": "Mexico City",
-   "cadence": 30,
-   "last_contacted": "2026-10-04T20:20",
-   "last_contacted_kind": "call"
-  },
-  {
-   "key": "carmen",
-   "name": "Carmen Ortiz",
-   "role": "mum",
-   "nickname": "Mama Carmen",
-   "starred": true,
-   "cadence": 2,
-   "last_contacted": "2026-10-27T18:00",
-   "last_contacted_kind": "visit",
-   "met": "Colonia Reforma"
-  },
-  {
-   "key": "maria_o",
-   "name": "Maria Ortiz",
-   "role": "sister",
-   "cadence": 7,
-   "last_contacted": "2026-10-24T19:00",
-   "last_contacted_kind": "call",
-   "met": "Colonia Reforma"
-  },
-  {
-   "key": "pepe",
-   "name": "Jose Ortiz",
-   "role": "brother",
-   "nickname": "Pepe",
-   "cadence": 21,
-   "last_contacted": "2026-10-04T12:00",
-   "last_contacted_kind": "call",
-   "met": "Chicago"
-  },
-  {
-   "key": "gaby",
-   "name": "Gabriela Ortiz",
-   "role": "niece",
-   "met": "Chicago",
-   "cadence": 30,
-   "last_contacted": "2026-09-27T15:00",
-   "last_contacted_kind": "message"
-  },
-  {
-   "key": "beto",
-   "name": "Alberto Cruz",
-   "role": "baker",
-   "nickname": "Beto",
-   "starred": true,
-   "cadence": 1,
-   "last_contacted": "2026-10-28T05:00",
-   "met": "La Espiga"
-  },
-  {
-   "key": "yesenia",
-   "name": "Yesenia Santiago",
-   "role": "counter",
-   "met": "La Espiga",
-   "cadence": 1,
-   "last_contacted": "2026-10-28T13:00"
-  },
-  {
-   "key": "teodoro",
-   "name": "Teodoro Ramirez",
-   "role": "flour supplier",
-   "nickname": "Don Teodoro",
-   "met": "Harinera del Valle",
-   "cadence": 7,
-   "last_contacted": "2026-10-27T06:00"
-  },
-  {
-   "key": "reyna",
-   "name": "Reyna Matias",
-   "role": "egg supplier",
-   "nickname": "Dona Reyna",
-   "met": "Etla"
-  },
-  {
-   "key": "memo",
-   "name": "Guillermo Aquino",
-   "role": "baker friend",
-   "nickname": "Don Memo",
-   "met": "Mercado Sanchez Pascuas"
-  },
-  {
-   "key": "flor",
-   "name": "Flor Aragon",
-   "role": "client",
-   "starred": true,
-   "met": "Oaxaca",
-   "cadence": 14,
-   "last_contacted": "2026-10-22T11:00",
-   "last_contacted_kind": "message"
-  },
-  {
-   "key": "sofia",
-   "name": "Sofia Martinez",
-   "role": "accountant",
-   "nickname": "Contadora",
-   "cadence": 30,
-   "last_contacted": "2026-09-30T12:00"
-  },
-  {
-   "key": "chuy",
-   "name": "Jesus Hernandez",
-   "role": "mechanic",
-   "nickname": "Don Chuy",
-   "met": "Taller Hernandez"
-  },
-  {
-   "key": "ignacio",
-   "name": "Ignacio Torres",
-   "role": "parish priest",
-   "nickname": "Padre Ignacio",
-   "met": "Santo Domingo"
-  },
-  {
-   "key": "aurelio",
-   "name": "Aurelio Vasquez",
-   "role": "choir director",
-   "nickname": "Maestro Aurelio",
-   "starred": true,
-   "met": "Coro de Santo Domingo",
-   "cadence": 7,
-   "last_contacted": "2026-10-22T20:40"
-  },
-  {
-   "key": "marilu",
-   "name": "Maria Luisa Perez",
-   "role": "choir, soprano",
-   "nickname": "Marilu",
-   "met": "Coro de Santo Domingo"
-  },
-  {
-   "key": "marichuy",
-   "name": "Maria de Jesus Cruz",
-   "role": "choir, alto",
-   "nickname": "Marichuy",
-   "met": "Coro de Santo Domingo"
-  },
-  {
-   "key": "lupita",
-   "name": "Guadalupe Hernandez",
-   "role": "choir, soprano",
-   "nickname": "Lupita",
-   "met": "Coro de Santo Domingo"
-  },
-  {
-   "key": "lupe_r",
-   "name": "Lupe Hernandez Ruiz",
-   "role": "neighbour",
-   "met": "Colonia Reforma"
-  },
-  {
-   "key": "xochitl",
-   "name": "Xochitl Villalobos",
-   "role": "choir, soprano",
-   "met": "Coro de Santo Domingo"
-  },
-  {
-   "key": "cuauh",
-   "name": "Cuauhtemoc Bautista",
-   "role": "choir, bass",
-   "met": "Coro de Santo Domingo",
-   "cadence": 30,
-   "last_contacted": "2026-10-01T21:00"
-  },
-  {
-   "key": "ramiro",
-   "name": "Ramiro Luna",
-   "role": "choir, tenor",
-   "met": "Coro de Santo Domingo"
-  },
-  {
-   "key": "chela",
-   "name": "Consuelo Gomez",
-   "role": "neighbour",
-   "nickname": "Dona Chela",
-   "met": "Colonia Reforma"
-  },
-  {
-   "key": "pablo",
-   "name": "Pablo Cervantes",
-   "role": "doctor",
-   "nickname": "Dr Cervantes"
-  },
-  {
-   "key": "omar",
-   "name": "Omar Jimenez",
-   "role": "market administrator",
-   "met": "Mercado Sanchez Pascuas"
-  },
-  {
-   "key": "veronica",
-   "name": "Veronica Castillo",
-   "role": "school director",
-   "met": "Primaria Benito Juarez"
-  },
-  {
-   "key": "old_sup",
-   "name": "Hilario Mendoza",
-   "role": "old supplier",
-   "met": "Abastos",
-   "trashed": "2026-07-18T10:00"
-  },
-  {
-   "key": "old_emp",
-   "name": "Karla Pineda",
-   "role": "old employee",
-   "met": "La Espiga",
-   "trashed": "2026-10-14T10:00"
-  }
- ],
- "groups": [
-  {
-   "key": "coro",
-   "name": "Coro Santo Domingo",
-   "currency": "MXN",
-   "members": [
-    "aurelio",
-    "marilu",
-    "marichuy",
-    "lupita",
-    "xochitl",
-    "cuauh",
-    "ramiro"
-   ],
-   "created": "2024-09-05T20:00"
-  },
-  {
-   "key": "familia",
-   "name": "Familia Delgado Ortiz",
-   "currency": "MXN",
-   "members": [
-    "emi",
-    "dani",
-    "carmen",
-    "maria_o"
-   ],
-   "created": "2024-03-01T10:00"
-  },
-  {
-   "key": "boda",
-   "name": "Boda de Dani",
-   "currency": "MXN",
-   "members": [
-    "dani",
-    "emi",
-    "rodrigo"
-   ],
-   "created": "2026-08-15T20:00"
-  },
-  {
-   "key": "panaderos",
-   "name": "Panaderos de Sanchez Pascuas",
-   "currency": "MXN",
-   "members": [
-    "memo",
-    "teodoro",
-    "omar"
-   ],
-   "created": "2025-02-10T08:00"
-  },
-  {
-   "key": "chicago",
-   "name": "Chicago Cousins",
-   "currency": "USD",
-   "members": [
-    "pepe",
-    "gaby"
-   ],
-   "created": "2025-12-01T20:00"
-  },
-  {
-   "key": "posada",
-   "name": "Posada Vecinal 2026",
-   "currency": "MXN",
-   "members": [
-    "chela",
-    "lupe_r"
-   ],
-   "created": "2026-10-20T19:00"
-  }
- ],
- "expenses": [
-  {
-   "group": "coro",
-   "name": "Sheet music copies",
-   "amount": 840,
-   "paid_by": "aurelio",
-   "split": [
-    "me",
-    "aurelio",
-    "marilu",
-    "marichuy",
-    "lupita",
-    "xochitl",
-    "cuauh",
-    "ramiro"
-   ],
-   "date": "2026-09-10"
-  },
-  {
-   "group": "coro",
-   "name": "Candles for the Mass",
-   "amount": 360,
-   "paid_by": "me",
-   "split": [
-    "me",
-    "marilu",
-    "marichuy",
-    "lupita"
-   ],
-   "date": "2026-10-02"
-  },
-  {
-   "group": "coro",
-   "name": "Concert posters",
-   "amount": 520,
-   "paid_by": "xochitl",
-   "split": [
-    "me",
-    "xochitl",
-    "cuauh",
-    "ramiro",
-    "marilu"
-   ],
-   "date": "2026-10-20"
-  },
-  {
-   "group": "familia",
-   "name": "Mama Carmen's medicine",
-   "amount": 1450,
-   "paid_by": "me",
-   "split": [
-    "me",
-    "maria_o",
-    "emi",
-    "dani"
-   ],
-   "date": "2026-10-05"
-  },
-  {
-   "group": "familia",
-   "name": "Roof leak repair",
-   "amount": 3200,
-   "paid_by": "maria_o",
-   "split": [
-    "me",
-    "maria_o"
-   ],
-   "date": "2026-09-02"
-  },
-  {
-   "group": "familia",
-   "name": "Birthday cake supplies",
-   "amount": 480,
-   "paid_by": "emi",
-   "split": [
-    "me",
-    "emi",
-    "dani"
-   ],
-   "date": "2026-08-22"
-  },
-  {
-   "group": "boda",
-   "name": "Venue deposit",
-   "amount": 30000,
-   "paid_by": "me",
-   "split": [
-    "me",
-    "dani",
-    "rodrigo"
-   ],
-   "date": "2026-09-05"
-  },
-  {
-   "group": "boda",
-   "name": "Wedding invitations",
-   "amount": 4800,
-   "paid_by": "dani",
-   "split": [
-    "me",
-    "dani",
-    "rodrigo"
-   ],
-   "date": "2026-10-08"
-  },
-  {
-   "group": "boda",
-   "name": "Cake tasting",
-   "amount": 900,
-   "paid_by": "rodrigo",
-   "split": [
-    "me",
-    "dani",
-    "rodrigo",
-    "emi"
-   ],
-   "date": "2026-10-17"
-  },
-  {
-   "group": "panaderos",
-   "name": "Shared flour order",
-   "amount": 14400,
-   "paid_by": "teodoro",
-   "split": [
-    "me",
-    "memo",
-    "teodoro"
-   ],
-   "date": "2026-10-13"
-  },
-  {
-   "group": "panaderos",
-   "name": "Market stall fee",
-   "amount": 1800,
-   "paid_by": "me",
-   "split": [
-    "me",
-    "memo",
-    "omar"
-   ],
-   "date": "2026-10-26"
-  },
-  {
-   "group": "chicago",
-   "name": "Mama Carmen's hospital top-up",
-   "amount": 300,
-   "paid_by": "pepe",
-   "split": [
-    "me",
-    "pepe",
-    "gaby"
-   ],
-   "date": "2026-07-15"
-  },
-  {
-   "group": "chicago",
-   "name": "Gift for Mama Carmen",
-   "amount": 90,
-   "paid_by": "gaby",
-   "split": [
-    "me",
-    "pepe",
-    "gaby"
-   ],
-   "date": "2026-09-12"
-  }
- ],
- "lists": [
-  {
-   "key": "bakery_l",
-   "name": "Bakery",
-   "area": "work"
-  },
-  {
-   "key": "van_l",
-   "name": "Van",
-   "area": "work"
-  },
-  {
-   "key": "choir_l",
-   "name": "Choir",
-   "area": "social"
-  },
-  {
-   "key": "family_l",
-   "name": "Family",
-   "area": "family"
-  },
-  {
-   "key": "wedding_l",
-   "name": "Dani's Wedding",
-   "area": "family"
-  },
-  {
-   "key": "home_l",
-   "name": "Home",
-   "area": "home"
-  }
- ],
- "events": [
-  {
-   "key": "coro_1001",
-   "name": "Choir rehearsal",
-   "start": "2026-10-01T19:00",
-   "end": "2026-10-01T20:30",
-   "attendees": [
-    "aurelio",
-    "marilu",
-    "marichuy"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "coro_1008",
-   "name": "Choir rehearsal",
-   "start": "2026-10-08T19:00",
-   "end": "2026-10-08T20:30",
-   "attendees": [
-    "aurelio",
-    "marilu",
-    "marichuy"
-   ],
-   "cancelled": true
-  },
-  {
-   "key": "coro_1015",
-   "name": "Choir rehearsal",
-   "start": "2026-10-15T19:00",
-   "end": "2026-10-15T20:30",
-   "attendees": [
-    "aurelio",
-    "marilu",
-    "marichuy"
-   ],
-   "cancelled": false,
-   "description": "Padre Ignacio lets us use the side chapel"
-  },
-  {
-   "key": "coro_1022",
-   "name": "Choir rehearsal",
-   "start": "2026-10-22T19:00",
-   "end": "2026-10-22T20:30",
-   "attendees": [
-    "aurelio",
-    "marilu",
-    "marichuy"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "coro_1029",
-   "name": "Choir rehearsal",
-   "start": "2026-10-29T19:00",
-   "end": "2026-10-29T20:30",
-   "attendees": [
-    "aurelio",
-    "marilu",
-    "marichuy"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "coro_1105",
-   "name": "Choir rehearsal",
-   "start": "2026-11-05T19:00",
-   "end": "2026-11-05T20:30",
-   "attendees": [
-    "aurelio",
-    "marilu",
-    "marichuy"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "coro_1112",
-   "name": "Choir rehearsal - Christmas program",
-   "start": "2026-11-12T19:00",
-   "end": "2026-11-12T20:30",
-   "attendees": [
-    "aurelio",
-    "marilu",
-    "marichuy"
-   ],
-   "cancelled": false,
-   "description": "Padre Ignacio lets us use the side chapel"
-  },
-  {
-   "key": "coro_1119",
-   "name": "Choir rehearsal - Christmas program",
-   "start": "2026-11-19T19:00",
-   "end": "2026-11-19T20:30",
-   "attendees": [
-    "aurelio",
-    "marilu",
-    "marichuy"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "coro_1126",
-   "name": "Choir rehearsal - Christmas program",
-   "start": "2026-11-26T19:00",
-   "end": "2026-11-26T20:30",
-   "attendees": [
-    "aurelio",
-    "marilu",
-    "marichuy"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "coro_1203",
-   "name": "Choir rehearsal - Christmas program",
-   "start": "2026-12-03T19:00",
-   "end": "2026-12-03T20:30",
-   "attendees": [
-    "aurelio",
-    "marilu",
-    "marichuy"
-   ],
-   "cancelled": false,
-   "description": "Padre Ignacio lets us use the side chapel"
-  },
-  {
-   "key": "coro_1210",
-   "name": "Choir rehearsal - Christmas program",
-   "start": "2026-12-10T19:00",
-   "end": "2026-12-10T20:30",
-   "attendees": [
-    "aurelio",
-    "marilu",
-    "marichuy"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "coro_1217",
-   "name": "Choir rehearsal - Christmas program",
-   "start": "2026-12-17T19:00",
-   "end": "2026-12-17T20:30",
-   "attendees": [
-    "aurelio",
-    "marilu",
-    "marichuy"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "flour_0929",
-   "name": "Flour delivery - Don Teodoro",
-   "start": "2026-09-29T05:30",
-   "end": "2026-09-29T06:15",
-   "attendees": [
-    "teodoro"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "flour_1013",
-   "name": "Flour delivery - Don Teodoro",
-   "start": "2026-10-13T05:30",
-   "end": "2026-10-13T06:15",
-   "attendees": [
-    "teodoro"
-   ],
-   "cancelled": true
-  },
-  {
-   "key": "flour_1027",
-   "name": "Flour delivery - Don Teodoro",
-   "start": "2026-10-27T05:30",
-   "end": "2026-10-27T06:15",
-   "attendees": [
-    "teodoro"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "flour_1110",
-   "name": "Flour delivery - Don Teodoro",
-   "start": "2026-11-10T05:30",
-   "end": "2026-11-10T06:15",
-   "attendees": [
-    "teodoro"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "flour_1124",
-   "name": "Flour delivery - Don Teodoro",
-   "start": "2026-11-24T05:30",
-   "end": "2026-11-24T06:15",
-   "attendees": [
-    "teodoro"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "flour_1208",
-   "name": "Flour delivery - Don Teodoro",
-   "start": "2026-12-08T05:30",
-   "end": "2026-12-08T06:15",
-   "attendees": [
-    "teodoro"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "flour_1222",
-   "name": "Flour delivery - Don Teodoro",
-   "start": "2026-12-22T05:30",
-   "end": "2026-12-22T06:15",
-   "attendees": [
-    "teodoro"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "calldani_1004",
-   "name": "Call Dani",
-   "start": "2026-10-04T20:00",
-   "end": "2026-10-04T20:30",
-   "attendees": [
-    "dani"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "calldani_1011",
-   "name": "Call Dani",
-   "start": "2026-10-11T20:00",
-   "end": "2026-10-11T20:30",
-   "attendees": [
-    "dani"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "calldani_1018",
-   "name": "Call Dani",
-   "start": "2026-10-18T20:00",
-   "end": "2026-10-18T20:30",
-   "attendees": [
-    "dani"
-   ],
-   "cancelled": true
-  },
-  {
-   "key": "calldani_1025",
-   "name": "Call Dani",
-   "start": "2026-10-25T20:00",
-   "end": "2026-10-25T20:30",
-   "attendees": [
-    "dani"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "calldani_1101",
-   "name": "Call Dani",
-   "start": "2026-11-01T20:00",
-   "end": "2026-11-01T20:30",
-   "attendees": [
-    "dani"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "calldani_1108",
-   "name": "Call Dani",
-   "start": "2026-11-08T20:00",
-   "end": "2026-11-08T20:30",
-   "attendees": [
-    "dani"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "calldani_1115",
-   "name": "Call Dani",
-   "start": "2026-11-15T20:00",
-   "end": "2026-11-15T20:30",
-   "attendees": [
-    "dani"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "calldani_1122",
-   "name": "Call Dani",
-   "start": "2026-11-22T20:00",
-   "end": "2026-11-22T20:30",
-   "attendees": [
-    "dani"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "calldani_1129",
-   "name": "Call Dani",
-   "start": "2026-11-29T20:00",
-   "end": "2026-11-29T20:30",
-   "attendees": [
-    "dani"
-   ],
-   "cancelled": false
-  },
-  {
-   "key": "stall_oct31",
-   "name": "Dia de Muertos market stall",
-   "start": "2026-10-31T06:00",
-   "end": "2026-10-31T20:00",
-   "attendees": [
-    "memo",
-    "beto",
-    "yesenia"
-   ]
-  },
-  {
-   "key": "stall_nov01",
-   "name": "Dia de Muertos market stall",
-   "start": "2026-11-01T06:00",
-   "end": "2026-11-01T13:00",
-   "attendees": [
-    "memo",
-    "beto",
-    "yesenia"
-   ]
-  },
-  {
-   "key": "cemetery",
-   "name": "Cemetery visit - Abuelo Delgado",
-   "start": "2026-11-01T15:00",
-   "end": "2026-11-01T17:30",
-   "attendees": [
-    "emi",
-    "carmen"
-   ]
-  },
-  {
-   "key": "stall_nov02",
-   "name": "Dia de Muertos market stall",
-   "start": "2026-11-02T06:00",
-   "end": "2026-11-02T14:00",
-   "attendees": [
-    "memo",
-    "beto"
-   ]
-  },
-  {
-   "key": "mass_muertos",
-   "name": "Mass for the dead at Santo Domingo",
-   "start": "2026-11-02T18:00",
-   "end": "2026-11-02T19:30",
-   "attendees": [
-    "ignacio",
-    "aurelio",
-    "marilu",
-    "marichuy",
-    "lupita"
-   ],
-   "description": "the choir sings the Requiem"
-  },
-  {
-   "key": "dani_arrives",
-   "name": "Dani arrives from Mexico City",
-   "start": "2026-10-30T14:00",
-   "end": "2026-10-30T15:00",
-   "attendees": [
-    "dani"
-   ],
-   "description": "ADO bus, platform 4"
-  },
-  {
-   "key": "dani_leaves",
-   "name": "Dani's bus back",
-   "start": "2026-11-03T07:30",
-   "end": "2026-11-03T08:00",
-   "attendees": [
-    "dani"
-   ]
-  },
-  {
-   "key": "pickup_flor",
-   "name": "Order pickup - Flor",
-   "start": "2026-10-29T10:00",
-   "end": "2026-10-29T10:30",
-   "attendees": [
-    "flor"
-   ]
-  },
-  {
-   "key": "pickup_flor2",
-   "name": "Order pickup - Flor",
-   "start": "2026-11-14T10:00",
-   "end": "2026-11-14T10:30",
-   "attendees": [
-    "flor"
-   ],
-   "description": "three-tier cake for her daughter"
-  },
-  {
-   "key": "pickup_flor_old",
-   "name": "Order pickup - Flor",
-   "start": "2026-09-18T10:00",
-   "end": "2026-09-18T10:30",
-   "attendees": [
-    "flor"
-   ]
-  },
-  {
-   "key": "van_service",
-   "name": "Van service at Don Chuy",
-   "start": "2026-11-03T09:00",
-   "end": "2026-11-03T13:00",
-   "attendees": [
-    "chuy"
-   ]
-  },
-  {
-   "key": "van_tires",
-   "name": "Van tires",
-   "start": "2026-08-12T09:00",
-   "end": "2026-08-12T11:00",
-   "attendees": [
-    "chuy"
-   ]
-  },
-  {
-   "key": "oven_fix",
-   "name": "Oven maintenance",
-   "start": "2026-11-09T06:00",
-   "end": "2026-11-09T09:00",
-   "description": "the thermostat again"
-  },
-  {
-   "key": "oven_old",
-   "name": "Oven maintenance",
-   "start": "2026-09-21T06:00",
-   "end": "2026-09-21T09:00"
-  },
-  {
-   "key": "accountant_a",
-   "name": "Meeting with the accountant",
-   "start": "2026-11-06T10:00",
-   "end": "2026-11-06T11:00",
-   "attendees": [
-    "sofia"
-   ]
-  },
-  {
-   "key": "accountant_b",
-   "name": "Meeting with the accountant",
-   "start": "2026-08-14T10:00",
-   "end": "2026-08-14T11:00",
-   "attendees": [
-    "sofia"
-   ]
-  },
-  {
-   "key": "inspection",
-   "name": "Health inspection at the bakery",
-   "start": "2026-11-12T11:00",
-   "end": "2026-11-12T12:00"
-  },
-  {
-   "key": "workshop_a",
-   "name": "Baking workshop at the primary school",
-   "start": "2026-11-18T09:00",
-   "end": "2026-11-18T11:00",
-   "attendees": [
-    "veronica"
-   ]
-  },
-  {
-   "key": "workshop_b",
-   "name": "Baking workshop at the primary school",
-   "start": "2026-10-21T09:00",
-   "end": "2026-10-21T11:00",
-   "attendees": [
-    "veronica"
-   ]
-  },
-  {
-   "key": "vendors",
-   "name": "Market vendors meeting",
-   "start": "2026-11-05T08:00",
-   "end": "2026-11-05T09:00",
-   "attendees": [
-    "omar",
-    "memo"
-   ]
-  },
-  {
-   "key": "doctor",
-   "name": "Check-up with Dr Cervantes",
-   "start": "2026-11-09T16:30",
-   "end": "2026-11-09T17:15",
-   "attendees": [
-    "pablo"
-   ]
-  },
-  {
-   "key": "emi_bday",
-   "name": "Emi's birthday dinner",
-   "start": "2026-11-20T20:00",
-   "end": "2026-11-20T22:30",
-   "attendees": [
-    "emi",
-    "dani"
-   ]
-  },
-  {
-   "key": "carmen_bday",
-   "name": "Mama Carmen's birthday lunch",
-   "start": "2026-11-22T14:00",
-   "end": "2026-11-22T17:00",
-   "attendees": [
-    "carmen",
-    "maria_o",
-    "emi"
-   ],
-   "description": "mole negro at her house"
-  },
-  {
-   "key": "call_pepe",
-   "name": "Call Tio Pepe",
-   "start": "2026-11-15T13:00",
-   "end": "2026-11-15T13:30",
-   "attendees": [
-    "pepe"
-   ]
-  },
-  {
-   "key": "dress_fit",
-   "name": "Dani's wedding dress fitting",
-   "start": "2026-12-12T11:00",
-   "end": "2026-12-12T12:30",
-   "attendees": [
-    "dani",
-    "maria_o"
-   ]
-  },
-  {
-   "key": "posada_bakery",
-   "name": "Posada at the bakery",
-   "start": "2026-12-16T18:00",
-   "end": "2026-12-16T21:30",
-   "attendees": [
-    "beto",
-    "yesenia",
-    "emi"
-   ]
-  },
-  {
-   "key": "posada_street",
-   "name": "Posada Vecinal",
-   "start": "2026-12-23T19:00",
-   "end": "2026-12-23T22:00",
-   "attendees": [
-    "chela",
-    "lupe_r"
-   ]
-  },
-  {
-   "key": "concert",
-   "name": "Choir Christmas concert",
-   "start": "2026-12-19T19:00",
-   "end": "2026-12-19T21:00",
-   "attendees": [
-    "aurelio",
-    "ignacio",
-    "marilu",
-    "marichuy",
-    "lupita",
-    "xochitl"
-   ]
-  },
-  {
-   "key": "dentist_ev",
-   "name": "Dentist",
-   "start": "2026-11-24T15:00",
-   "end": "2026-11-24T15:45"
-  },
-  {
-   "key": "tasting",
-   "name": "Wedding cake tasting",
-   "start": "2026-11-28T16:00",
-   "end": "2026-11-28T17:30",
-   "attendees": [
-    "dani",
-    "rodrigo"
-   ],
-   "description": "at Dani's baker friend, bring photos"
-  },
-  {
-   "key": "wedding",
-   "name": "Dani and Rodrigo's wedding",
-   "start": "2027-02-13T13:00",
-   "end": "2027-02-13T23:30",
-   "attendees": [
-    "dani",
-    "rodrigo",
-    "emi",
-    "carmen",
-    "maria_o",
-    "pepe"
-   ]
-  },
-  {
-   "key": "flight_pepe",
-   "name": "Pepe arrives from Chicago",
-   "start": "2027-02-10T17:40",
-   "end": "2027-02-10T18:30",
-   "attendees": [
-    "pepe",
-    "gaby"
-   ]
-  },
-  {
-   "key": "old_tamales",
-   "name": "Tamale sale at the church",
-   "start": "2026-09-12T09:00",
-   "end": "2026-09-12T14:00",
-   "trashed": "2026-09-20T10:00",
-   "attendees": [
-    "marichuy",
-    "lupita"
-   ]
-  },
-  {
-   "key": "old_meet",
-   "name": "Meeting with Karla",
-   "start": "2026-10-09T12:00",
-   "end": "2026-10-09T12:45",
-   "trashed": "2026-10-14T10:30",
-   "attendees": [
-    "old_emp"
-   ]
-  },
-  {
-   "key": "old_zocalo",
-   "name": "Concert in the zocalo",
-   "start": "2026-07-26T19:00",
-   "end": "2026-07-26T21:00",
-   "trashed": "2026-08-02T10:00",
-   "attendees": [
-    "aurelio"
-   ]
-  }
- ],
- "tasks": [
-  {
-   "key": "muertos",
-   "name": "Dia de Muertos orders",
-   "list": "bakery_l",
-   "priority": 2,
-   "status": "in_progress",
-   "due": "2026-11-02"
-  },
-  {
-   "key": "mu_eggs",
-   "name": "Order 40 dozen eggs from Dona Reyna",
-   "parent": "muertos",
-   "list": "bakery_l",
-   "completed": "2026-10-20T10:00"
-  },
-  {
-   "key": "mu_orange",
-   "name": "Buy orange blossom water",
-   "parent": "muertos",
-   "list": "bakery_l",
-   "due": "2026-10-29",
-   "effort": 30
-  },
-  {
-   "key": "mu_boxes",
-   "name": "Print the pan de muerto boxes",
-   "parent": "muertos",
-   "list": "bakery_l",
-   "due": "2026-10-29",
-   "effort": 45
-  },
-  {
-   "key": "mu_sugar",
-   "name": "Pink sugar for the skulls",
-   "parent": "muertos",
-   "list": "bakery_l",
-   "due": "2026-10-30",
-   "effort": 20
-  },
-  {
-   "key": "mu_stall",
-   "name": "Set up the market stall",
-   "parent": "muertos",
-   "list": "bakery_l",
-   "due": "2026-10-31",
-   "effort": 120
-  },
-  {
-   "key": "mu_float",
-   "name": "Get change for the stall",
-   "parent": "muertos",
-   "list": "bakery_l",
-   "due": "2026-10-30",
-   "effort": 20
-  },
-  {
-   "key": "flour_oct",
-   "name": "Pay Don Teodoro for flour",
-   "list": "bakery_l",
-   "due": "2026-10-27",
-   "priority": 1
-  },
-  {
-   "key": "flour_sep",
-   "name": "Pay Don Teodoro for flour",
-   "list": "bakery_l",
-   "due": "2026-09-29",
-   "completed": "2026-09-29T07:00"
-  },
-  {
-   "key": "flour_oct1",
-   "name": "Pay Don Teodoro for flour",
-   "list": "bakery_l",
-   "due": "2026-10-13",
-   "completed": "2026-10-13T06:30"
-  },
-  {
-   "key": "order_flour",
-   "name": "Order flour for the posadas",
-   "list": "bakery_l",
-   "due": "2026-11-20",
-   "effort": 15
-  },
-  {
-   "key": "order_flour_old",
-   "name": "Order flour for the posadas",
-   "list": "bakery_l",
-   "due": "2025-12-01",
-   "completed": "2025-11-28T08:00"
-  },
-  {
-   "key": "cfe",
-   "name": "Pay the CFE electricity bill",
-   "list": "bakery_l",
-   "due": "2026-11-05",
-   "priority": 1
-  },
-  {
-   "key": "cfe_sep",
-   "name": "Pay the CFE electricity bill",
-   "list": "bakery_l",
-   "due": "2026-09-05",
-   "completed": "2026-09-04T09:00"
-  },
-  {
-   "key": "wages",
-   "name": "Pay Beto and Yesenia",
-   "list": "bakery_l",
-   "due": "2026-10-31",
-   "priority": 1
-  },
-  {
-   "key": "wages_prev",
-   "name": "Pay Beto and Yesenia",
-   "list": "bakery_l",
-   "due": "2026-10-24",
-   "completed": "2026-10-24T17:00"
-  },
-  {
-   "key": "sat",
-   "name": "Send invoices to the accountant",
-   "list": "bakery_l",
-   "due": "2026-11-05",
-   "effort": 30
-  },
-  {
-   "key": "sat_tax",
-   "name": "Pay SAT provisional tax",
-   "list": "bakery_l",
-   "due": "2026-11-17",
-   "priority": 2,
-   "effort": 20
-  },
-  {
-   "key": "yeast",
-   "name": "Buy fresh yeast",
-   "list": "bakery_l",
-   "due": "2026-10-29",
-   "effort": 10
-  },
-  {
-   "key": "oven_part",
-   "name": "Order the oven thermostat",
-   "list": "bakery_l",
-   "due": "2026-11-04",
-   "effort": 15
-  },
-  {
-   "key": "recipe_card",
-   "name": "Photocopy the conchas recipe for the workshop",
-   "list": "bakery_l",
-   "due": "2026-11-17",
-   "effort": 10
-  },
-  {
-   "key": "tea_towels",
-   "name": "Wash the stall tablecloths",
-   "list": "bakery_l",
-   "due": "2026-10-30",
-   "effort": 40
-  },
-  {
-   "key": "new_sign",
-   "name": "Repaint the bakery sign",
-   "list": "bakery_l",
-   "status": "cancelled"
-  },
-  {
-   "key": "van_a",
-   "name": "Service the van",
-   "list": "van_l",
-   "due": "2026-11-03",
-   "priority": 1,
-   "effort": 240
-  },
-  {
-   "key": "van_b",
-   "name": "Service the van",
-   "list": "van_l",
-   "due": "2026-02-10",
-   "completed": "2026-02-10T14:00"
-  },
-  {
-   "key": "van_brakes",
-   "name": "Service the van - brakes",
-   "list": "van_l",
-   "due": "2026-11-03"
-  },
-  {
-   "key": "van_ins",
-   "name": "Renew the van insurance",
-   "list": "van_l",
-   "due": "2026-12-01",
-   "effort": 30
-  },
-  {
-   "key": "van_plates",
-   "name": "Pay the van tenencia",
-   "list": "van_l",
-   "due": "2026-11-30",
-   "effort": 20
-  },
-  {
-   "key": "van_noise",
-   "name": "Tell Don Chuy about the noise",
-   "list": "van_l",
-   "completed": "2026-10-25T17:30"
-  },
-  {
-   "key": "van_fuel",
-   "name": "Fill the van before the stall",
-   "list": "van_l",
-   "due": "2026-10-30",
-   "effort": 15
-  },
-  {
-   "key": "copies",
-   "name": "Photocopy the Christmas program",
-   "list": "choir_l",
-   "due": "2026-11-10",
-   "effort": 30
-  },
-  {
-   "key": "dues",
-   "name": "Collect choir dues",
-   "list": "choir_l",
-   "due": "2026-10-30",
-   "priority": 2
-  },
-  {
-   "key": "dues_sep",
-   "name": "Collect choir dues",
-   "list": "choir_l",
-   "due": "2026-09-30",
-   "completed": "2026-10-03T20:30"
-  },
-  {
-   "key": "chapel",
-   "name": "Ask Padre Ignacio for the side chapel",
-   "list": "choir_l",
-   "due": "2026-11-05"
-  },
-  {
-   "key": "solo",
-   "name": "Learn the alto part of Noche de Paz",
-   "list": "choir_l",
-   "due": "2026-12-10",
-   "effort": 120
-  },
-  {
-   "key": "choir_robes",
-   "name": "Iron the choir robes",
-   "list": "choir_l",
-   "due": "2026-12-18",
-   "effort": 60
-  },
-  {
-   "key": "pay_xochitl",
-   "name": "Pay Xochitl for the posters",
-   "list": "choir_l",
-   "due": "2026-10-31"
-  },
-  {
-   "key": "pay_aurelio",
-   "name": "Pay Maestro Aurelio for the copies",
-   "list": "choir_l",
-   "due": "2026-10-29",
-   "effort": 5
-  },
-  {
-   "key": "carmen_meds",
-   "name": "Pick up Mama Carmen's medicine",
-   "list": "family_l",
-   "due": "2026-10-30",
-   "effort": 25
-  },
-  {
-   "key": "carmen_gift",
-   "name": "Buy a gift for Mama Carmen's birthday",
-   "list": "family_l",
-   "due": "2026-11-20",
-   "effort": 60
-  },
-  {
-   "key": "carmen_doctor",
-   "name": "Take Mama Carmen to the doctor",
-   "list": "family_l",
-   "completed": "2026-10-12T11:00"
-  },
-  {
-   "key": "emi_gift",
-   "name": "Buy Emi a birthday present",
-   "list": "family_l",
-   "due": "2026-11-19",
-   "effort": 45
-  },
-  {
-   "key": "call_dani",
-   "name": "Call Dani about the dress",
-   "list": "wedding_l",
-   "due": "2026-10-31",
-   "priority": 1
-  },
-  {
-   "key": "call_dani_old",
-   "name": "Call Dani about the dress",
-   "list": "wedding_l",
-   "due": "2026-10-04",
-   "completed": "2026-10-04T20:40"
-  },
-  {
-   "key": "w_menu",
-   "name": "Choose the wedding menu",
-   "list": "wedding_l",
-   "due": "2026-11-28",
-   "effort": 90
-  },
-  {
-   "key": "w_guests",
-   "name": "Finish the guest list",
-   "list": "wedding_l",
-   "due": "2026-11-15",
-   "priority": 2,
-   "effort": 60
-  },
-  {
-   "key": "w_venue",
-   "name": "Pay the second venue installment",
-   "list": "wedding_l",
-   "due": "2026-12-05",
-   "priority": 1
-  },
-  {
-   "key": "w_cake",
-   "name": "Bake the wedding cake sample",
-   "list": "wedding_l",
-   "due": "2026-11-27",
-   "effort": 180
-  },
-  {
-   "key": "w_rooms",
-   "name": "Book rooms for the Chicago family",
-   "list": "wedding_l",
-   "due": "2026-12-20",
-   "effort": 30
-  },
-  {
-   "key": "w_rings",
-   "name": "Pick up the rings from the jeweller",
-   "list": "wedding_l",
-   "due": "2027-01-30"
-  },
-  {
-   "key": "gas_tank",
-   "name": "Call for the gas tank",
-   "list": "home_l",
-   "due": "2026-10-30",
-   "effort": 5
-  },
-  {
-   "key": "roof_fix",
-   "name": "Get a quote for the roof",
-   "list": "home_l",
-   "due": "2026-11-12",
-   "effort": 30
-  },
-  {
-   "key": "water_tank",
-   "name": "Clean the rooftop water tank",
-   "list": "home_l",
-   "due": "2026-11-15",
-   "effort": 90
-  },
-  {
-   "key": "altar",
-   "name": "Set up the ofrenda at home",
-   "list": "home_l",
-   "due": "2026-10-31",
-   "effort": 120,
-   "priority": 2
-  },
-  {
-   "key": "marigolds",
-   "name": "Buy cempasuchil flowers",
-   "list": "home_l",
-   "due": "2026-10-30",
-   "effort": 40
-  },
-  {
-   "key": "pay_chela",
-   "name": "Pay Dona Chela for the piñatas",
-   "due": "2026-11-02",
-   "effort": 5
-  },
-  {
-   "key": "pay_pepe",
-   "name": "Send Pepe the receipts",
-   "due": "2026-11-10",
-   "effort": 10
-  },
-  {
-   "key": "pay_memo",
-   "name": "Pay Don Memo for the shared flour",
-   "due": "2026-11-04",
-   "priority": 1
-  },
-  {
-   "key": "pay_omar",
-   "name": "Pay Omar the stall fee share",
-   "due": "2026-11-06",
-   "effort": 5
-  },
-  {
-   "key": "old_karla_t",
-   "name": "Send Karla her final wages",
-   "list": "bakery_l",
-   "trashed": "2026-10-14T10:20"
-  },
-  {
-   "key": "old_sup_t",
-   "name": "Cancel the Hilario flour account",
-   "list": "bakery_l",
-   "trashed": "2026-07-18T10:30"
-  },
-  {
-   "key": "old_paint",
-   "name": "Paint the garden wall",
-   "list": "home_l",
-   "trashed": "2026-09-29T09:00"
-  }
- ],
- "notebooks": [
-  {
-   "key": "recipes_nb",
-   "name": "Recetas"
-  },
-  {
-   "key": "bakery_nb",
-   "name": "Bakery Notes"
-  },
-  {
-   "key": "coro_nb",
-   "name": "Coro Notes"
-  },
-  {
-   "key": "ideas_nb",
-   "name": "Ideas"
-  }
- ],
- "notes": [
-  {
-   "key": "r_muerto",
-   "name": "Pan de muerto",
-   "notebook": "recipes_nb",
-   "created": "2024-10-20T06:00",
-   "pinned": true,
-   "body": "orange zest, anise, butter, six eggs for ten loaves, rest two hours, sugar while warm"
-  },
-  {
-   "key": "r_yema",
-   "name": "Pan de yema",
-   "notebook": "recipes_nb",
-   "created": "2024-11-03T06:00",
-   "body": "egg yolk dough, sesame on top, the Oaxaca way with chocolate on the side"
-  },
-  {
-   "key": "r_conchas",
-   "name": "Conchas",
-   "notebook": "recipes_nb",
-   "created": "2025-02-14T06:00",
-   "body": "vanilla and chocolate topping, rest overnight, score before the oven"
-  },
-  {
-   "key": "r_empanada",
-   "name": "Empanadas de amarillo",
-   "notebook": "recipes_nb",
-   "created": "2025-03-01T06:30",
-   "body": "mole amarillo, chicken, hoja santa, fold and crimp, bake until golden"
-  },
-  {
-   "key": "r_polvorones",
-   "name": "Polvorones for the posadas",
-   "notebook": "recipes_nb",
-   "created": "2025-12-10T06:00",
-   "body": "butter, flour, powdered sugar, pecans, bake twelve minutes"
-  },
-  {
-   "key": "r_tamales",
-   "name": "Mama Carmen's tamales",
-   "notebook": "recipes_nb",
-   "created": "2025-12-20T10:00",
-   "body": "masa with lard, mole negro, banana leaf, steam two hours"
-  },
-  {
-   "key": "b_suppliers",
-   "name": "Supplier prices",
-   "notebook": "bakery_nb",
-   "created": "2026-09-01T07:00",
-   "body": "flour 25 kilo bag 520 pesos, eggs 58 a dozen, butter 118 a kilo, sugar 24 a kilo"
-  },
-  {
-   "key": "b_oven",
-   "name": "Oven problems",
-   "notebook": "bakery_nb",
-   "created": "2026-09-21T09:00",
-   "body": "thermostat drifts twenty degrees, left deck runs hot, technician is Don Chato from the Abastos"
-  },
-  {
-   "key": "b_staff",
-   "name": "Staff schedule",
-   "notebook": "bakery_nb",
-   "created": "2026-06-01T07:00",
-   "pinned": true,
-   "body": "Beto starts at three, Yesenia opens the counter at six, Emi does the deliveries"
-  },
-  {
-   "key": "b_prices",
-   "name": "Menu prices 2026",
-   "notebook": "bakery_nb",
-   "created": "2026-01-05T07:30",
-   "body": "concha 12, pan de yema 15, pan de muerto 38, empanada 35, cake slice 45"
-  },
-  {
-   "key": "b_muertos",
-   "name": "Dia de Muertos plan",
-   "notebook": "bakery_nb",
-   "created": "2026-10-10T07:00",
-   "body": "three hundred loaves, boxes from the print shop, stall opens at six on the thirty-first"
-  },
-  {
-   "key": "c_songs",
-   "name": "Christmas program songs",
-   "notebook": "coro_nb",
-   "created": "2026-10-22T21:00",
-   "body": "Noche de Paz, Ven a Cantar, Campanas sobre Campanas, a Oaxacan villancico for the finale"
-  },
-  {
-   "key": "c_parts",
-   "name": "Alto part notes",
-   "notebook": "coro_nb",
-   "created": "2026-10-01T21:30",
-   "body": "Maestro says breathe before the high passage, hold the last note for four counts"
-  },
-  {
-   "key": "c_rota",
-   "name": "Mass rota",
-   "notebook": "coro_nb",
-   "created": "2026-09-05T20:30",
-   "body": "first Sunday Santo Domingo, third Sunday San Felipe, choir arrives forty minutes before"
-  },
-  {
-   "key": "c_dues",
-   "name": "Choir dues record",
-   "notebook": "coro_nb",
-   "created": "2026-09-30T21:00",
-   "body": "fifty pesos a month, Cuauhtemoc is two months behind, Lupita paid until December"
-  },
-  {
-   "key": "diary_hot",
-   "name": "Diary entry - the long night",
-   "created": "2026-10-20T23:15",
-   "body": "baked 200 loaves for the market order, the oven went cold twice, Emi saved the batch"
-  },
-  {
-   "key": "diary_proud",
-   "name": "Diary entry - Dani's call",
-   "created": "2026-10-26T21:20",
-   "body": "she picked the dress, cried a little, Rodrigo's mother will bring the mezcal"
-  },
-  {
-   "key": "wedding_ideas",
-   "name": "Wedding ideas",
-   "created": "2026-08-16T21:00",
-   "body": "marigold centerpieces, the choir sings at the church, tamales for the late supper"
-  },
-  {
-   "key": "n_carmen_meds",
-   "name": "Mama Carmen's medicines",
-   "created": "2026-10-05T18:00",
-   "body": "metformin morning and night, losartan once, vitamin D on Sundays, doctor wants the sugar test"
-  },
-  {
-   "key": "van_log",
-   "name": "Van log",
-   "created": "2026-02-10T14:30",
-   "body": "kilometres 118000 at the last service, brake pads checked, oil every 5000 km, tires in August"
-  },
-  {
-   "key": "home_oaxaca",
-   "name": "House repairs",
-   "created": "2026-09-02T19:00",
-   "body": "roof leak fixed over the kitchen, water tank needs cleaning, the gate hinge squeaks"
-  },
-  {
-   "key": "gift_carmen",
-   "name": "Gift ideas for Mama Carmen",
-   "created": "2026-10-15T20:00",
-   "body": "a rebozo, new glasses, a rocking chair for the patio"
-  },
-  {
-   "key": "budget",
-   "name": "Monthly budget",
-   "created": "2026-01-03T20:00",
-   "body": "flour 14000, wages 16000, electricity 4200, gas 3000, van 2500, save what is left"
-  },
-  {
-   "key": "old_note",
-   "name": "Old shopping list",
-   "created": "2026-09-20T10:00",
-   "body": "tomatoes, cheese, tortillas",
-   "trashed": "2026-10-15T10:00"
-  },
-  {
-   "key": "old_draft",
-   "name": "Draft sign text",
-   "created": "2026-05-12T10:00",
-   "body": "Panaderia La Espiga, bread from the oven since 1998",
-   "trashed": "2026-07-01T10:00"
-  }
- ],
- "folders": [
-  {
-   "key": "bakery_f",
-   "name": "Bakery"
-  },
-  {
-   "key": "van_f",
-   "name": "Van"
-  },
-  {
-   "key": "family_f",
-   "name": "Family"
-  },
-  {
-   "key": "wedding_f",
-   "name": "Wedding"
-  },
-  {
-   "key": "empty_f",
-   "name": "To file"
-  }
- ],
- "documents": [
-  {
-   "key": "d_lease25",
-   "name": "Bakery lease 2025",
-   "folder": "bakery_f",
-   "created": "2025-01-10T10:00"
-  },
-  {
-   "key": "d_lease26",
-   "name": "Bakery lease 2026",
-   "folder": "bakery_f",
-   "created": "2026-01-08T10:00",
-   "starred": true
-  },
-  {
-   "key": "d_permit",
-   "name": "Municipal operating permit 2026",
-   "folder": "bakery_f",
-   "created": "2026-02-02T10:00",
-   "starred": true
-  },
-  {
-   "key": "d_health",
-   "name": "Health inspection certificate 2025",
-   "folder": "bakery_f",
-   "created": "2025-11-14T10:00"
-  },
-  {
-   "key": "d_sat26",
-   "name": "SAT tax return 2025",
-   "folder": "bakery_f",
-   "created": "2026-04-28T10:00"
-  },
-  {
-   "key": "d_cfe",
-   "name": "CFE bill September 2026",
-   "folder": "bakery_f",
-   "created": "2026-09-04T09:10"
-  },
-  {
-   "key": "d_ins25",
-   "name": "Van insurance 2025",
-   "folder": "van_f",
-   "created": "2025-12-02T10:00"
-  },
-  {
-   "key": "d_ins26",
-   "name": "Van insurance 2026",
-   "folder": "van_f",
-   "created": "2026-01-05T10:00",
-   "starred": true
-  },
-  {
-   "key": "d_vanreg",
-   "name": "Van registration card",
-   "folder": "van_f",
-   "created": "2024-06-12T10:00"
-  },
-  {
-   "key": "d_service",
-   "name": "Van service invoice February 2026",
-   "folder": "van_f",
-   "created": "2026-02-10T14:20"
-  },
-  {
-   "key": "d_venue",
-   "name": "Wedding venue contract",
-   "folder": "wedding_f",
-   "created": "2026-09-05T11:00",
-   "starred": true
-  },
-  {
-   "key": "d_invites",
-   "name": "Invitation design draft",
-   "folder": "wedding_f",
-   "created": "2026-09-28T19:00"
-  },
-  {
-   "key": "d_budget_w",
-   "name": "Wedding budget 2027",
-   "folder": "wedding_f",
-   "created": "2026-08-18T21:00"
-  },
-  {
-   "key": "d_carmen_id",
-   "name": "Mama Carmen's INE scan",
-   "folder": "family_f",
-   "created": "2025-08-03T10:00"
-  },
-  {
-   "key": "d_deed",
-   "name": "House deed copy",
-   "folder": "family_f",
-   "created": "2024-02-20T10:00",
-   "starred": true
-  },
-  {
-   "key": "d_curp",
-   "name": "CURP certificate",
-   "created": "2025-01-12T10:00"
-  },
-  {
-   "key": "d_rfc",
-   "name": "RFC constancia 2026",
-   "created": "2026-01-15T10:00"
-  },
-  {
-   "key": "d_old_perm",
-   "name": "Municipal operating permit 2024",
-   "folder": "bakery_f",
-   "created": "2024-02-01T10:00",
-   "trashed": "2026-10-20T10:00"
-  },
-  {
-   "key": "d_old_quote",
-   "name": "Old oven quote",
-   "folder": "bakery_f",
-   "created": "2025-05-10T10:00",
-   "trashed": "2026-08-01T10:00"
-  }
- ],
- "albums": [
-  {
-   "key": "bakery_a",
-   "name": "La Espiga"
-  },
-  {
-   "key": "coro_a",
-   "name": "Coro Photos"
-  },
-  {
-   "key": "kids_a",
-   "name": "Dani and Emi"
-  },
-  {
-   "key": "muertos_a",
-   "name": "Muertos 2025"
-  }
- ],
- "photos": [
-  {
-   "key": "p_ba_oven",
-   "name": "The big oven at dawn",
-   "taken": "2026-09-21T05:40",
-   "albums": [
-    "bakery_a"
-   ],
-   "people": [
-    "beto"
-   ],
-   "starred": true
-  },
-  {
-   "key": "p_ba_counter",
-   "name": "Yesenia at the counter",
-   "taken": "2026-08-12T06:30",
-   "albums": [
-    "bakery_a"
-   ],
-   "people": [
-    "yesenia"
-   ]
-  },
-  {
-   "key": "p_ba_loaves",
-   "name": "Two hundred loaves for the market",
-   "taken": "2026-10-20T04:50",
-   "albums": [
-    "bakery_a"
-   ],
-   "people": [
-    "emi",
-    "beto"
-   ],
-   "starred": true
-  },
-  {
-   "key": "p_ba_sign",
-   "name": "The old sign",
-   "taken": "2026-05-12T09:00",
-   "albums": [
-    "bakery_a"
-   ]
-  },
-  {
-   "key": "p_ba_cake",
-   "name": "Three-tier cake for Flor",
-   "taken": "2026-09-18T09:40",
-   "albums": [
-    "bakery_a"
-   ],
-   "people": [
-    "flor"
-   ]
-  },
-  {
-   "key": "p_ba_van",
-   "name": "The van loaded with bread",
-   "taken": "2026-10-13T05:55",
-   "albums": [
-    "bakery_a"
-   ],
-   "people": [
-    "emi"
-   ]
-  },
-  {
-   "key": "p_ba_flour",
-   "name": "Flour delivery",
-   "taken": "2026-10-27T05:45",
-   "albums": [
-    "bakery_a"
-   ],
-   "people": [
-    "teodoro"
-   ]
-  },
-  {
-   "key": "p_ba_conchas",
-   "name": "Fresh conchas",
-   "taken": "2026-10-02T06:10",
-   "albums": [
-    "bakery_a"
-   ]
-  },
-  {
-   "key": "p_co_mass",
-   "name": "Choir at the Sunday Mass",
-   "taken": "2026-10-04T08:40",
-   "albums": [
-    "coro_a"
-   ],
-   "people": [
-    "aurelio",
-    "marilu",
-    "marichuy",
-    "lupita"
-   ],
-   "starred": true
-  },
-  {
-   "key": "p_co_rehearsal",
-   "name": "Rehearsal in the side chapel",
-   "taken": "2026-10-22T19:30",
-   "albums": [
-    "coro_a"
-   ],
-   "people": [
-    "aurelio",
-    "xochitl"
-   ]
-  },
-  {
-   "key": "p_co_group",
-   "name": "Choir group photo",
-   "taken": "2026-06-14T12:30",
-   "albums": [
-    "coro_a"
-   ],
-   "people": [
-    "aurelio",
-    "marilu",
-    "marichuy",
-    "lupita",
-    "xochitl",
-    "cuauh",
-    "ramiro"
-   ]
-  },
-  {
-   "key": "p_co_ignacio",
-   "name": "Padre Ignacio blesses the choir",
-   "taken": "2026-08-15T11:00",
-   "albums": [
-    "coro_a"
-   ],
-   "people": [
-    "ignacio"
-   ]
-  },
-  {
-   "key": "p_co_bass",
-   "name": "Cuauhtemoc hitting the low note",
-   "taken": "2026-09-17T20:10",
-   "albums": [
-    "coro_a"
-   ],
-   "people": [
-    "cuauh"
-   ]
-  },
-  {
-   "key": "p_co_robes",
-   "name": "Robes drying on the line",
-   "taken": "2026-06-15T10:00",
-   "albums": [
-    "coro_a"
-   ]
-  },
-  {
-   "key": "p_ki_dani",
-   "name": "Dani graduating",
-   "taken": "2022-12-10T12:00",
-   "albums": [
-    "kids_a"
-   ],
-   "people": [
-    "dani"
-   ],
-   "starred": true
-  },
-  {
-   "key": "p_ki_emi",
-   "name": "Emi's first batch of bread",
-   "taken": "2023-03-04T07:00",
-   "albums": [
-    "kids_a"
-   ],
-   "people": [
-    "emi"
-   ]
-  },
-  {
-   "key": "p_ki_both",
-   "name": "Dani and Emi at the Guelaguetza",
-   "taken": "2025-07-21T15:00",
-   "albums": [
-    "kids_a"
-   ],
-   "people": [
-    "dani",
-    "emi"
-   ],
-   "starred": true
-  },
-  {
-   "key": "p_ki_ring",
-   "name": "Dani showing her ring",
-   "taken": "2026-06-20T18:00",
-   "albums": [
-    "kids_a"
-   ],
-   "people": [
-    "dani",
-    "rodrigo"
-   ]
-  },
-  {
-   "key": "p_ki_hike",
-   "name": "Hierve el Agua hike",
-   "taken": "2025-12-27T11:30",
-   "albums": [
-    "kids_a"
-   ],
-   "people": [
-    "emi",
-    "dani"
-   ]
-  },
-  {
-   "key": "p_mu_altar",
-   "name": "The ofrenda for Abuelo",
-   "taken": "2025-11-01T10:00",
-   "albums": [
-    "muertos_a"
-   ],
-   "people": [
-    "carmen"
-   ],
-   "starred": true
-  },
-  {
-   "key": "p_mu_stall",
-   "name": "The market stall at noon",
-   "taken": "2025-11-01T12:00",
-   "albums": [
-    "muertos_a"
-   ],
-   "people": [
-    "memo",
-    "beto"
-   ]
-  },
-  {
-   "key": "p_mu_cemetery",
-   "name": "Candles at the cemetery",
-   "taken": "2025-11-01T19:00",
-   "albums": [
-    "muertos_a"
-   ],
-   "people": [
-    "emi",
-    "carmen"
-   ]
-  },
-  {
-   "key": "p_mu_mass",
-   "name": "Mass for the dead",
-   "taken": "2025-11-02T18:40",
-   "albums": [
-    "muertos_a"
-   ],
-   "people": [
-    "ignacio"
-   ]
-  },
-  {
-   "key": "p_mu_flowers",
-   "name": "Cempasuchil flowers",
-   "taken": "2025-10-31T09:00",
-   "albums": [
-    "muertos_a"
-   ]
-  },
-  {
-   "key": "p_wedding_dress",
-   "name": "Wedding dress inspiration",
-   "taken": "2026-10-26T21:30",
-   "people": [
-    "dani"
-   ]
-  },
-  {
-   "key": "p_wedding_venue",
-   "name": "The hacienda venue",
-   "taken": "2026-08-20T12:00",
-   "people": [
-    "rodrigo"
-   ]
-  },
-  {
-   "key": "p_carmen",
-   "name": "Mama Carmen at her door",
-   "taken": "2026-10-27T18:10",
-   "people": [
-    "carmen"
-   ]
-  },
-  {
-   "key": "p_pepe",
-   "name": "Pepe in Chicago snow",
-   "taken": "2026-01-25T09:00",
-   "people": [
-    "pepe",
-    "gaby"
-   ]
-  },
-  {
-   "key": "p_maria",
-   "name": "Maria and me at the zocalo",
-   "taken": "2026-08-30T17:00",
-   "people": [
-    "maria_o"
-   ]
-  },
-  {
-   "key": "p_chela",
-   "name": "Dona Chela's piñatas",
-   "taken": "2026-10-24T13:00",
-   "people": [
-    "chela"
-   ]
-  },
-  {
-   "key": "p_receipt",
-   "name": "Receipt for the boxes",
-   "taken": "2026-10-19T11:30"
-  },
-  {
-   "key": "p_oven_serial",
-   "name": "Oven serial plate",
-   "taken": "2026-09-21T06:00"
-  },
-  {
-   "key": "p_van_noise",
-   "name": "Van dashboard warning light",
-   "taken": "2026-10-24T07:30"
-  },
-  {
-   "key": "p_blurry",
-   "name": "Blurry photo",
-   "taken": "2026-10-21T09:00",
-   "trashed": "2026-10-23T09:00"
-  },
-  {
-   "key": "p_screen",
-   "name": "Screenshot of the order",
-   "taken": "2026-07-03T12:00",
-   "trashed": "2026-08-05T09:00"
-  }
- ],
- "debts": [
-  {
-   "key": "d_memo_flour",
-   "person": "memo",
-   "direction": "i_owe",
-   "amount": 4800,
-   "name": "my third of the shared flour",
-   "date": "2026-10-13"
-  },
-  {
-   "key": "d_teodoro",
-   "person": "teodoro",
-   "direction": "i_owe",
-   "amount": 5200,
-   "name": "flour on credit",
-   "date": "2026-10-27"
-  },
-  {
-   "key": "d_maria_roof",
-   "person": "maria_o",
-   "direction": "i_owe",
-   "amount": 1600,
-   "name": "half the roof repair",
-   "date": "2026-09-02"
-  },
-  {
-   "key": "d_maria_med",
-   "person": "maria_o",
-   "direction": "owes_me",
-   "amount": 360,
-   "name": "Mama Carmen's medicine share",
-   "date": "2026-10-05"
-  },
-  {
-   "key": "d_emi",
-   "person": "emi",
-   "direction": "owes_me",
-   "amount": 360,
-   "name": "medicine share",
-   "date": "2026-10-05"
-  },
-  {
-   "key": "d_dani",
-   "person": "dani",
-   "direction": "owes_me",
-   "amount": 10000,
-   "name": "wedding venue share",
-   "date": "2026-09-05"
-  },
-  {
-   "key": "d_rodrigo",
-   "person": "rodrigo",
-   "direction": "owes_me",
-   "amount": 10000,
-   "name": "wedding venue other share",
-   "date": "2026-09-05"
-  },
-  {
-   "key": "d_xochitl",
-   "person": "xochitl",
-   "direction": "i_owe",
-   "amount": 104,
-   "name": "concert posters",
-   "date": "2026-10-20"
-  },
-  {
-   "key": "d_aurelio",
-   "person": "aurelio",
-   "direction": "i_owe",
-   "amount": 105,
-   "name": "sheet music copies",
-   "date": "2026-09-10"
-  },
-  {
-   "key": "d_chela",
-   "person": "chela",
-   "direction": "i_owe",
-   "amount": 217,
-   "name": "piñatas and candy",
-   "date": "2026-10-24"
-  },
-  {
-   "key": "d_flor",
-   "person": "flor",
-   "direction": "owes_me",
-   "amount": 1800,
-   "name": "cake deposit",
-   "date": "2026-10-22"
-  },
-  {
-   "key": "d_omar",
-   "person": "omar",
-   "direction": "owes_me",
-   "amount": 600,
-   "name": "stall fee share",
-   "date": "2026-10-26"
-  },
-  {
-   "key": "d_chuy",
-   "person": "chuy",
-   "direction": "i_owe",
-   "amount": 3500,
-   "name": "oil change and filters",
-   "date": "2026-02-10",
-   "settled": "2026-02-12T10:00"
-  },
-  {
-   "key": "d_lupita",
-   "person": "lupita",
-   "direction": "owes_me",
-   "amount": 120,
-   "name": "candles share",
-   "date": "2026-10-02",
-   "settled": "2026-10-09T21:00"
-  }
- ],
- "locker": [
-  {
-   "key": "bbva_login",
-   "name": "BBVA online banking",
-   "type": "login",
-   "username": "rosa.delgado",
-   "url": "https://bbva.mx",
-   "password": "Espiga#Oaxaca1998",
-   "starred": true
-  },
-  {
-   "key": "sat_login",
-   "name": "SAT portal",
-   "type": "login",
-   "username": "DEOR740312XX1",
-   "url": "https://sat.gob.mx",
-   "password": "Facturas!2026Mx"
-  },
-  {
-   "key": "cfe_login",
-   "name": "CFE Mi Espacio",
-   "type": "login",
-   "username": "rosa.delgado@correo.example",
-   "url": "https://cfe.mx",
-   "password": "Horno-Beto44"
-  },
-  {
-   "key": "bbva_card",
-   "name": "BBVA business debit card",
-   "type": "card",
-   "card_number": "4152313344556677",
-   "cvv": "519"
-  },
-  {
-   "key": "credit_card",
-   "name": "Banorte credit card",
-   "type": "card",
-   "card_number": "5470128899001122",
-   "cvv": "334"
-  },
-  {
-   "key": "bbva_acct",
-   "name": "BBVA business account",
-   "type": "bank_account",
-   "notes": "branch Reforma, CLABE 012 610 0123 4567 8901",
-   "starred": true
-  },
-  {
-   "key": "bakery_wifi",
-   "name": "Bakery wifi",
-   "type": "wifi",
-   "password": "LaEspiga1998",
-   "starred": true
-  },
-  {
-   "key": "house_wifi",
-   "name": "House wifi",
-   "type": "wifi",
-   "password": "CasaOrtiz2020"
-  },
-  {
-   "key": "safe_code",
-   "name": "Cash box code",
-   "type": "note",
-   "notes": "3 7 1 9 and the left key"
-  },
-  {
-   "key": "pos_pw",
-   "name": "Card terminal app",
-   "type": "password",
-   "password": "Terminal-Pan77"
-  },
-  {
-   "key": "curp",
-   "name": "CURP",
-   "type": "identity"
-  },
-  {
-   "key": "passport",
-   "name": "Passport - Rosa",
-   "type": "passport",
-   "notes": "no. G12345678, expires 2030-09-14"
-  },
-  {
-   "key": "licence",
-   "name": "Driving licence",
-   "type": "driving_licence",
-   "notes": "Oaxaca licence type A"
-  },
-  {
-   "key": "coro_member",
-   "name": "Coro Santo Domingo membership",
-   "type": "membership",
-   "notes": "alto section, dues paid to October",
-   "starred": true
-  },
-  {
-   "key": "maps_api",
-   "name": "Delivery route API key",
-   "type": "api_credential",
-   "notes": "Emi's delivery planning sheet"
-  },
-  {
-   "key": "camera_ssh",
-   "name": "Shop camera SSH key",
-   "type": "ssh_key",
-   "notes": "recorder behind the counter"
-  },
-  {
-   "key": "pos_licence",
-   "name": "Point of sale software licence",
-   "type": "software_licence",
-   "notes": "annual, renews 15 January"
-  },
-  {
-   "key": "btc",
-   "name": "Crypto wallet",
-   "type": "crypto_wallet",
-   "notes": "Emi set it up, about 3000 pesos"
-  },
-  {
-   "key": "deed_orig",
-   "name": "House deed - original",
-   "type": "document",
-   "notes": "original at the notary, certified copy in the family folder"
-  },
-  {
-   "key": "old_wifi",
-   "name": "Old shop wifi",
-   "type": "wifi",
-   "password": "Espiga2022",
-   "trashed": "2026-08-14T10:00"
-  },
-  {
-   "key": "old_login",
-   "name": "Old Telmex login",
-   "type": "login",
-   "username": "rosa_espiga",
-   "password": "OldTelmex12",
-   "trashed": "2026-10-15T10:00"
-  }
- ],
- "links": [
-  {
-   "from": "mu_eggs",
-   "to": "reyna"
-  },
-  {
-   "from": "flour_oct",
-   "to": "teodoro"
-  },
-  {
-   "from": "flour_sep",
-   "to": "teodoro"
-  },
-  {
-   "from": "flour_oct1",
-   "to": "teodoro"
-  },
-  {
-   "from": "order_flour",
-   "to": "teodoro"
-  },
-  {
-   "from": "wages",
-   "to": "beto"
-  },
-  {
-   "from": "wages_prev",
-   "to": "beto"
-  },
-  {
-   "from": "sat",
-   "to": "sofia"
-  },
-  {
-   "from": "sat_tax",
-   "to": "sofia"
-  },
-  {
-   "from": "van_a",
-   "to": "chuy"
-  },
-  {
-   "from": "van_b",
-   "to": "chuy"
-  },
-  {
-   "from": "van_brakes",
-   "to": "chuy"
-  },
-  {
-   "from": "van_noise",
-   "to": "chuy"
-  },
-  {
-   "from": "dues",
-   "to": "cuauh"
-  },
-  {
-   "from": "chapel",
-   "to": "ignacio"
-  },
-  {
-   "from": "pay_xochitl",
-   "to": "xochitl"
-  },
-  {
-   "from": "pay_aurelio",
-   "to": "aurelio"
-  },
-  {
-   "from": "solo",
-   "to": "aurelio"
-  },
-  {
-   "from": "carmen_meds",
-   "to": "carmen"
-  },
-  {
-   "from": "carmen_gift",
-   "to": "carmen"
-  },
-  {
-   "from": "carmen_doctor",
-   "to": "pablo"
-  },
-  {
-   "from": "emi_gift",
-   "to": "emi"
-  },
-  {
-   "from": "call_dani",
-   "to": "dani"
-  },
-  {
-   "from": "call_dani_old",
-   "to": "dani"
-  },
-  {
-   "from": "w_menu",
-   "to": "rodrigo"
-  },
-  {
-   "from": "w_cake",
-   "to": "flor"
-  },
-  {
-   "from": "w_rooms",
-   "to": "pepe"
-  },
-  {
-   "from": "pay_chela",
-   "to": "chela"
-  },
-  {
-   "from": "pay_pepe",
-   "to": "pepe"
-  },
-  {
-   "from": "pay_memo",
-   "to": "memo"
-  },
-  {
-   "from": "pay_omar",
-   "to": "omar"
-  },
-  {
-   "from": "recipe_card",
-   "to": "veronica"
-  },
-  {
-   "from": "r_tamales",
-   "to": "carmen"
-  },
-  {
-   "from": "b_suppliers",
-   "to": "teodoro"
-  },
-  {
-   "from": "b_oven",
-   "to": "beto"
-  },
-  {
-   "from": "c_songs",
-   "to": "aurelio"
-  },
-  {
-   "from": "c_dues",
-   "to": "cuauh"
-  },
-  {
-   "from": "n_carmen_meds",
-   "to": "carmen"
-  },
-  {
-   "from": "diary_proud",
-   "to": "dani"
-  },
-  {
-   "from": "wedding_ideas",
-   "to": "rodrigo"
-  },
-  {
-   "from": "gift_carmen",
-   "to": "carmen"
-  },
-  {
-   "from": "d_venue",
-   "to": "rodrigo"
-  },
-  {
-   "from": "d_carmen_id",
-   "to": "carmen"
-  }
- ]
+  "me": "Rosa Delgado-Ortiz",
+  "today": "2026-10-28T16:10",
+  "epoch": "2024-03-01T09:00",
+  "seed": "T32",
+  "currency": "MXN",
+  "people": [
+    {
+      "key": "emi",
+      "name": "Emiliano Delgado Ortiz",
+      "role": "son",
+      "nickname": "Emi",
+      "starred": true,
+      "cadence": 1,
+      "last_contacted": "2026-10-28T14:30",
+      "created": "2024-03-01T09:00"
+    },
+    {
+      "key": "dani",
+      "name": "Daniela Delgado Ortiz",
+      "role": "daughter",
+      "nickname": "Dani",
+      "starred": true,
+      "cadence": 3,
+      "last_contacted": "2026-10-26T20:10",
+      "last_contacted_kind": "call",
+      "met": "Mexico City"
+    },
+    {
+      "key": "rodrigo",
+      "name": "Rodrigo Salinas",
+      "role": "Dani's fiance",
+      "met": "Mexico City",
+      "cadence": 30,
+      "last_contacted": "2026-10-04T20:20",
+      "last_contacted_kind": "call"
+    },
+    {
+      "key": "carmen",
+      "name": "Carmen Ortiz",
+      "role": "mum",
+      "nickname": "Mama Carmen",
+      "starred": true,
+      "cadence": 2,
+      "last_contacted": "2026-10-27T18:00",
+      "last_contacted_kind": "visit",
+      "met": "Colonia Reforma"
+    },
+    {
+      "key": "maria_o",
+      "name": "Maria Ortiz",
+      "role": "sister",
+      "cadence": 7,
+      "last_contacted": "2026-10-24T19:00",
+      "last_contacted_kind": "call",
+      "met": "Colonia Reforma"
+    },
+    {
+      "key": "pepe",
+      "name": "Jose Ortiz",
+      "role": "brother",
+      "nickname": "Pepe",
+      "cadence": 21,
+      "last_contacted": "2026-10-04T12:00",
+      "last_contacted_kind": "call",
+      "met": "Chicago"
+    },
+    {
+      "key": "gaby",
+      "name": "Gabriela Ortiz",
+      "role": "niece",
+      "met": "Chicago",
+      "cadence": 30,
+      "last_contacted": "2026-09-27T15:00",
+      "last_contacted_kind": "message"
+    },
+    {
+      "key": "beto",
+      "name": "Alberto Cruz",
+      "role": "baker",
+      "nickname": "Beto",
+      "starred": true,
+      "cadence": 1,
+      "last_contacted": "2026-10-28T05:00",
+      "met": "La Espiga"
+    },
+    {
+      "key": "yesenia",
+      "name": "Yesenia Santiago",
+      "role": "counter",
+      "met": "La Espiga",
+      "cadence": 1,
+      "last_contacted": "2026-10-28T13:00"
+    },
+    {
+      "key": "teodoro",
+      "name": "Teodoro Ramirez",
+      "role": "flour supplier",
+      "nickname": "Don Teodoro",
+      "met": "Harinera del Valle",
+      "cadence": 7,
+      "last_contacted": "2026-10-27T06:00"
+    },
+    {
+      "key": "reyna",
+      "name": "Reyna Matias",
+      "role": "egg supplier",
+      "nickname": "Dona Reyna",
+      "met": "Etla"
+    },
+    {
+      "key": "memo",
+      "name": "Guillermo Aquino",
+      "role": "baker friend",
+      "nickname": "Don Memo",
+      "met": "Mercado Sanchez Pascuas"
+    },
+    {
+      "key": "flor",
+      "name": "Flor Aragon",
+      "role": "client",
+      "starred": true,
+      "met": "Oaxaca",
+      "cadence": 14,
+      "last_contacted": "2026-10-22T11:00",
+      "last_contacted_kind": "message"
+    },
+    {
+      "key": "sofia",
+      "name": "Sofia Martinez",
+      "role": "accountant",
+      "nickname": "Contadora",
+      "cadence": 30,
+      "last_contacted": "2026-09-30T12:00"
+    },
+    {
+      "key": "chuy",
+      "name": "Jesus Hernandez",
+      "role": "mechanic",
+      "nickname": "Don Chuy",
+      "met": "Taller Hernandez"
+    },
+    {
+      "key": "ignacio",
+      "name": "Ignacio Torres",
+      "role": "parish priest",
+      "nickname": "Padre Ignacio",
+      "met": "Santo Domingo"
+    },
+    {
+      "key": "aurelio",
+      "name": "Aurelio Vasquez",
+      "role": "choir director",
+      "nickname": "Maestro Aurelio",
+      "starred": true,
+      "met": "Coro de Santo Domingo",
+      "cadence": 7,
+      "last_contacted": "2026-10-22T20:40"
+    },
+    {
+      "key": "marilu",
+      "name": "Maria Luisa Perez",
+      "role": "choir, soprano",
+      "nickname": "Marilu",
+      "met": "Coro de Santo Domingo"
+    },
+    {
+      "key": "marichuy",
+      "name": "Maria de Jesus Cruz",
+      "role": "choir, alto",
+      "nickname": "Marichuy",
+      "met": "Coro de Santo Domingo"
+    },
+    {
+      "key": "lupita",
+      "name": "Guadalupe Hernandez",
+      "role": "choir, soprano",
+      "nickname": "Lupita",
+      "met": "Coro de Santo Domingo"
+    },
+    {
+      "key": "lupe_r",
+      "name": "Lupe Hernandez Ruiz",
+      "role": "neighbour",
+      "met": "Colonia Reforma"
+    },
+    {
+      "key": "xochitl",
+      "name": "Xochitl Villalobos",
+      "role": "choir, soprano",
+      "met": "Coro de Santo Domingo"
+    },
+    {
+      "key": "cuauh",
+      "name": "Cuauhtemoc Bautista",
+      "role": "choir, bass",
+      "met": "Coro de Santo Domingo",
+      "cadence": 30,
+      "last_contacted": "2026-10-01T21:00"
+    },
+    {
+      "key": "ramiro",
+      "name": "Ramiro Luna",
+      "role": "choir, tenor",
+      "met": "Coro de Santo Domingo"
+    },
+    {
+      "key": "chela",
+      "name": "Consuelo Gomez",
+      "role": "neighbour",
+      "nickname": "Dona Chela",
+      "met": "Colonia Reforma"
+    },
+    {
+      "key": "pablo",
+      "name": "Pablo Cervantes",
+      "role": "doctor",
+      "nickname": "Dr Cervantes"
+    },
+    {
+      "key": "omar",
+      "name": "Omar Jimenez",
+      "role": "market administrator",
+      "met": "Mercado Sanchez Pascuas"
+    },
+    {
+      "key": "veronica",
+      "name": "Veronica Castillo",
+      "role": "school director",
+      "met": "Primaria Benito Juarez"
+    },
+    {
+      "key": "old_sup",
+      "name": "Hilario Mendoza",
+      "role": "old supplier",
+      "met": "Abastos",
+      "trashed": "2026-07-18T10:00"
+    },
+    {
+      "key": "old_emp",
+      "name": "Karla Pineda",
+      "role": "old employee",
+      "met": "La Espiga",
+      "trashed": "2026-10-14T10:00"
+    }
+  ],
+  "groups": [
+    {
+      "key": "coro",
+      "name": "Coro Santo Domingo",
+      "currency": "MXN",
+      "members": [
+        "aurelio",
+        "marilu",
+        "marichuy",
+        "lupita",
+        "xochitl",
+        "cuauh",
+        "ramiro"
+      ],
+      "created": "2024-09-05T20:00"
+    },
+    {
+      "key": "familia",
+      "name": "Familia Delgado Ortiz",
+      "currency": "MXN",
+      "members": ["emi", "dani", "carmen", "maria_o"],
+      "created": "2024-03-01T10:00"
+    },
+    {
+      "key": "boda",
+      "name": "Boda de Dani",
+      "currency": "MXN",
+      "members": ["dani", "emi", "rodrigo"],
+      "created": "2026-08-15T20:00"
+    },
+    {
+      "key": "panaderos",
+      "name": "Panaderos de Sanchez Pascuas",
+      "currency": "MXN",
+      "members": ["memo", "teodoro", "omar"],
+      "created": "2025-02-10T08:00"
+    },
+    {
+      "key": "chicago",
+      "name": "Chicago Cousins",
+      "currency": "USD",
+      "members": ["pepe", "gaby"],
+      "created": "2025-12-01T20:00"
+    },
+    {
+      "key": "posada",
+      "name": "Posada Vecinal 2026",
+      "currency": "MXN",
+      "members": ["chela", "lupe_r"],
+      "created": "2026-10-20T19:00"
+    }
+  ],
+  "expenses": [
+    {
+      "group": "coro",
+      "name": "Sheet music copies",
+      "amount": 840,
+      "paid_by": "aurelio",
+      "split": [
+        "me",
+        "aurelio",
+        "marilu",
+        "marichuy",
+        "lupita",
+        "xochitl",
+        "cuauh",
+        "ramiro"
+      ],
+      "date": "2026-09-10"
+    },
+    {
+      "group": "coro",
+      "name": "Candles for the Mass",
+      "amount": 360,
+      "paid_by": "me",
+      "split": ["me", "marilu", "marichuy", "lupita"],
+      "date": "2026-10-02"
+    },
+    {
+      "group": "coro",
+      "name": "Concert posters",
+      "amount": 520,
+      "paid_by": "xochitl",
+      "split": ["me", "xochitl", "cuauh", "ramiro", "marilu"],
+      "date": "2026-10-20"
+    },
+    {
+      "group": "familia",
+      "name": "Mama Carmen's medicine",
+      "amount": 1450,
+      "paid_by": "me",
+      "split": ["me", "maria_o", "emi", "dani"],
+      "date": "2026-10-05"
+    },
+    {
+      "group": "familia",
+      "name": "Roof leak repair",
+      "amount": 3200,
+      "paid_by": "maria_o",
+      "split": ["me", "maria_o"],
+      "date": "2026-09-02"
+    },
+    {
+      "group": "familia",
+      "name": "Birthday cake supplies",
+      "amount": 480,
+      "paid_by": "emi",
+      "split": ["me", "emi", "dani"],
+      "date": "2026-08-22"
+    },
+    {
+      "group": "boda",
+      "name": "Venue deposit",
+      "amount": 30000,
+      "paid_by": "me",
+      "split": ["me", "dani", "rodrigo"],
+      "date": "2026-09-05"
+    },
+    {
+      "group": "boda",
+      "name": "Wedding invitations",
+      "amount": 4800,
+      "paid_by": "dani",
+      "split": ["me", "dani", "rodrigo"],
+      "date": "2026-10-08"
+    },
+    {
+      "group": "boda",
+      "name": "Cake tasting",
+      "amount": 900,
+      "paid_by": "rodrigo",
+      "split": ["me", "dani", "rodrigo", "emi"],
+      "date": "2026-10-17"
+    },
+    {
+      "group": "panaderos",
+      "name": "Shared flour order",
+      "amount": 14400,
+      "paid_by": "teodoro",
+      "split": ["me", "memo", "teodoro"],
+      "date": "2026-10-13"
+    },
+    {
+      "group": "panaderos",
+      "name": "Market stall fee",
+      "amount": 1800,
+      "paid_by": "me",
+      "split": ["me", "memo", "omar"],
+      "date": "2026-10-26"
+    },
+    {
+      "group": "chicago",
+      "name": "Mama Carmen's hospital top-up",
+      "amount": 300,
+      "paid_by": "pepe",
+      "split": ["me", "pepe", "gaby"],
+      "date": "2026-07-15"
+    },
+    {
+      "group": "chicago",
+      "name": "Gift for Mama Carmen",
+      "amount": 90,
+      "paid_by": "gaby",
+      "split": ["me", "pepe", "gaby"],
+      "date": "2026-09-12"
+    }
+  ],
+  "lists": [
+    {
+      "key": "bakery_l",
+      "name": "Bakery",
+      "area": "work"
+    },
+    {
+      "key": "van_l",
+      "name": "Van",
+      "area": "work"
+    },
+    {
+      "key": "choir_l",
+      "name": "Choir",
+      "area": "social"
+    },
+    {
+      "key": "family_l",
+      "name": "Family",
+      "area": "family"
+    },
+    {
+      "key": "wedding_l",
+      "name": "Dani's Wedding",
+      "area": "family"
+    },
+    {
+      "key": "home_l",
+      "name": "Home",
+      "area": "home"
+    }
+  ],
+  "events": [
+    {
+      "key": "coro_1001",
+      "name": "Choir rehearsal",
+      "start": "2026-10-01T19:00",
+      "end": "2026-10-01T20:30",
+      "attendees": ["aurelio", "marilu", "marichuy"],
+      "cancelled": false
+    },
+    {
+      "key": "coro_1008",
+      "name": "Choir rehearsal",
+      "start": "2026-10-08T19:00",
+      "end": "2026-10-08T20:30",
+      "attendees": ["aurelio", "marilu", "marichuy"],
+      "cancelled": true
+    },
+    {
+      "key": "coro_1015",
+      "name": "Choir rehearsal",
+      "start": "2026-10-15T19:00",
+      "end": "2026-10-15T20:30",
+      "attendees": ["aurelio", "marilu", "marichuy"],
+      "cancelled": false,
+      "description": "Padre Ignacio lets us use the side chapel"
+    },
+    {
+      "key": "coro_1022",
+      "name": "Choir rehearsal",
+      "start": "2026-10-22T19:00",
+      "end": "2026-10-22T20:30",
+      "attendees": ["aurelio", "marilu", "marichuy"],
+      "cancelled": false
+    },
+    {
+      "key": "coro_1029",
+      "name": "Choir rehearsal",
+      "start": "2026-10-29T19:00",
+      "end": "2026-10-29T20:30",
+      "attendees": ["aurelio", "marilu", "marichuy"],
+      "cancelled": false
+    },
+    {
+      "key": "coro_1105",
+      "name": "Choir rehearsal",
+      "start": "2026-11-05T19:00",
+      "end": "2026-11-05T20:30",
+      "attendees": ["aurelio", "marilu", "marichuy"],
+      "cancelled": false
+    },
+    {
+      "key": "coro_1112",
+      "name": "Choir rehearsal - Christmas program",
+      "start": "2026-11-12T19:00",
+      "end": "2026-11-12T20:30",
+      "attendees": ["aurelio", "marilu", "marichuy"],
+      "cancelled": false,
+      "description": "Padre Ignacio lets us use the side chapel"
+    },
+    {
+      "key": "coro_1119",
+      "name": "Choir rehearsal - Christmas program",
+      "start": "2026-11-19T19:00",
+      "end": "2026-11-19T20:30",
+      "attendees": ["aurelio", "marilu", "marichuy"],
+      "cancelled": false
+    },
+    {
+      "key": "coro_1126",
+      "name": "Choir rehearsal - Christmas program",
+      "start": "2026-11-26T19:00",
+      "end": "2026-11-26T20:30",
+      "attendees": ["aurelio", "marilu", "marichuy"],
+      "cancelled": false
+    },
+    {
+      "key": "coro_1203",
+      "name": "Choir rehearsal - Christmas program",
+      "start": "2026-12-03T19:00",
+      "end": "2026-12-03T20:30",
+      "attendees": ["aurelio", "marilu", "marichuy"],
+      "cancelled": false,
+      "description": "Padre Ignacio lets us use the side chapel"
+    },
+    {
+      "key": "coro_1210",
+      "name": "Choir rehearsal - Christmas program",
+      "start": "2026-12-10T19:00",
+      "end": "2026-12-10T20:30",
+      "attendees": ["aurelio", "marilu", "marichuy"],
+      "cancelled": false
+    },
+    {
+      "key": "coro_1217",
+      "name": "Choir rehearsal - Christmas program",
+      "start": "2026-12-17T19:00",
+      "end": "2026-12-17T20:30",
+      "attendees": ["aurelio", "marilu", "marichuy"],
+      "cancelled": false
+    },
+    {
+      "key": "flour_0929",
+      "name": "Flour delivery - Don Teodoro",
+      "start": "2026-09-29T05:30",
+      "end": "2026-09-29T06:15",
+      "attendees": ["teodoro"],
+      "cancelled": false
+    },
+    {
+      "key": "flour_1013",
+      "name": "Flour delivery - Don Teodoro",
+      "start": "2026-10-13T05:30",
+      "end": "2026-10-13T06:15",
+      "attendees": ["teodoro"],
+      "cancelled": true
+    },
+    {
+      "key": "flour_1027",
+      "name": "Flour delivery - Don Teodoro",
+      "start": "2026-10-27T05:30",
+      "end": "2026-10-27T06:15",
+      "attendees": ["teodoro"],
+      "cancelled": false
+    },
+    {
+      "key": "flour_1110",
+      "name": "Flour delivery - Don Teodoro",
+      "start": "2026-11-10T05:30",
+      "end": "2026-11-10T06:15",
+      "attendees": ["teodoro"],
+      "cancelled": false
+    },
+    {
+      "key": "flour_1124",
+      "name": "Flour delivery - Don Teodoro",
+      "start": "2026-11-24T05:30",
+      "end": "2026-11-24T06:15",
+      "attendees": ["teodoro"],
+      "cancelled": false
+    },
+    {
+      "key": "flour_1208",
+      "name": "Flour delivery - Don Teodoro",
+      "start": "2026-12-08T05:30",
+      "end": "2026-12-08T06:15",
+      "attendees": ["teodoro"],
+      "cancelled": false
+    },
+    {
+      "key": "flour_1222",
+      "name": "Flour delivery - Don Teodoro",
+      "start": "2026-12-22T05:30",
+      "end": "2026-12-22T06:15",
+      "attendees": ["teodoro"],
+      "cancelled": false
+    },
+    {
+      "key": "calldani_1004",
+      "name": "Call Dani",
+      "start": "2026-10-04T20:00",
+      "end": "2026-10-04T20:30",
+      "attendees": ["dani"],
+      "cancelled": false
+    },
+    {
+      "key": "calldani_1011",
+      "name": "Call Dani",
+      "start": "2026-10-11T20:00",
+      "end": "2026-10-11T20:30",
+      "attendees": ["dani"],
+      "cancelled": false
+    },
+    {
+      "key": "calldani_1018",
+      "name": "Call Dani",
+      "start": "2026-10-18T20:00",
+      "end": "2026-10-18T20:30",
+      "attendees": ["dani"],
+      "cancelled": true
+    },
+    {
+      "key": "calldani_1025",
+      "name": "Call Dani",
+      "start": "2026-10-25T20:00",
+      "end": "2026-10-25T20:30",
+      "attendees": ["dani"],
+      "cancelled": false
+    },
+    {
+      "key": "calldani_1101",
+      "name": "Call Dani",
+      "start": "2026-11-01T20:00",
+      "end": "2026-11-01T20:30",
+      "attendees": ["dani"],
+      "cancelled": false
+    },
+    {
+      "key": "calldani_1108",
+      "name": "Call Dani",
+      "start": "2026-11-08T20:00",
+      "end": "2026-11-08T20:30",
+      "attendees": ["dani"],
+      "cancelled": false
+    },
+    {
+      "key": "calldani_1115",
+      "name": "Call Dani",
+      "start": "2026-11-15T20:00",
+      "end": "2026-11-15T20:30",
+      "attendees": ["dani"],
+      "cancelled": false
+    },
+    {
+      "key": "calldani_1122",
+      "name": "Call Dani",
+      "start": "2026-11-22T20:00",
+      "end": "2026-11-22T20:30",
+      "attendees": ["dani"],
+      "cancelled": false
+    },
+    {
+      "key": "calldani_1129",
+      "name": "Call Dani",
+      "start": "2026-11-29T20:00",
+      "end": "2026-11-29T20:30",
+      "attendees": ["dani"],
+      "cancelled": false
+    },
+    {
+      "key": "stall_oct31",
+      "name": "Dia de Muertos market stall",
+      "start": "2026-10-31T06:00",
+      "end": "2026-10-31T20:00",
+      "attendees": ["memo", "beto", "yesenia"]
+    },
+    {
+      "key": "stall_nov01",
+      "name": "Dia de Muertos market stall",
+      "start": "2026-11-01T06:00",
+      "end": "2026-11-01T13:00",
+      "attendees": ["memo", "beto", "yesenia"]
+    },
+    {
+      "key": "cemetery",
+      "name": "Cemetery visit - Abuelo Delgado",
+      "start": "2026-11-01T15:00",
+      "end": "2026-11-01T17:30",
+      "attendees": ["emi", "carmen"]
+    },
+    {
+      "key": "stall_nov02",
+      "name": "Dia de Muertos market stall",
+      "start": "2026-11-02T06:00",
+      "end": "2026-11-02T14:00",
+      "attendees": ["memo", "beto"]
+    },
+    {
+      "key": "mass_muertos",
+      "name": "Mass for the dead at Santo Domingo",
+      "start": "2026-11-02T18:00",
+      "end": "2026-11-02T19:30",
+      "attendees": ["ignacio", "aurelio", "marilu", "marichuy", "lupita"],
+      "description": "the choir sings the Requiem"
+    },
+    {
+      "key": "dani_arrives",
+      "name": "Dani arrives from Mexico City",
+      "start": "2026-10-30T14:00",
+      "end": "2026-10-30T15:00",
+      "attendees": ["dani"],
+      "description": "ADO bus, platform 4"
+    },
+    {
+      "key": "dani_leaves",
+      "name": "Dani's bus back",
+      "start": "2026-11-03T07:30",
+      "end": "2026-11-03T08:00",
+      "attendees": ["dani"]
+    },
+    {
+      "key": "pickup_flor",
+      "name": "Order pickup - Flor",
+      "start": "2026-10-29T10:00",
+      "end": "2026-10-29T10:30",
+      "attendees": ["flor"]
+    },
+    {
+      "key": "pickup_flor2",
+      "name": "Order pickup - Flor",
+      "start": "2026-11-14T10:00",
+      "end": "2026-11-14T10:30",
+      "attendees": ["flor"],
+      "description": "three-tier cake for her daughter"
+    },
+    {
+      "key": "pickup_flor_old",
+      "name": "Order pickup - Flor",
+      "start": "2026-09-18T10:00",
+      "end": "2026-09-18T10:30",
+      "attendees": ["flor"]
+    },
+    {
+      "key": "van_service",
+      "name": "Van service at Don Chuy",
+      "start": "2026-11-03T09:00",
+      "end": "2026-11-03T13:00",
+      "attendees": ["chuy"]
+    },
+    {
+      "key": "van_tires",
+      "name": "Van tires",
+      "start": "2026-08-12T09:00",
+      "end": "2026-08-12T11:00",
+      "attendees": ["chuy"]
+    },
+    {
+      "key": "oven_fix",
+      "name": "Oven maintenance",
+      "start": "2026-11-09T06:00",
+      "end": "2026-11-09T09:00",
+      "description": "the thermostat again"
+    },
+    {
+      "key": "oven_old",
+      "name": "Oven maintenance",
+      "start": "2026-09-21T06:00",
+      "end": "2026-09-21T09:00"
+    },
+    {
+      "key": "accountant_a",
+      "name": "Meeting with the accountant",
+      "start": "2026-11-06T10:00",
+      "end": "2026-11-06T11:00",
+      "attendees": ["sofia"]
+    },
+    {
+      "key": "accountant_b",
+      "name": "Meeting with the accountant",
+      "start": "2026-08-14T10:00",
+      "end": "2026-08-14T11:00",
+      "attendees": ["sofia"]
+    },
+    {
+      "key": "inspection",
+      "name": "Health inspection at the bakery",
+      "start": "2026-11-12T11:00",
+      "end": "2026-11-12T12:00"
+    },
+    {
+      "key": "workshop_a",
+      "name": "Baking workshop at the primary school",
+      "start": "2026-11-18T09:00",
+      "end": "2026-11-18T11:00",
+      "attendees": ["veronica"]
+    },
+    {
+      "key": "workshop_b",
+      "name": "Baking workshop at the primary school",
+      "start": "2026-10-21T09:00",
+      "end": "2026-10-21T11:00",
+      "attendees": ["veronica"]
+    },
+    {
+      "key": "vendors",
+      "name": "Market vendors meeting",
+      "start": "2026-11-05T08:00",
+      "end": "2026-11-05T09:00",
+      "attendees": ["omar", "memo"]
+    },
+    {
+      "key": "doctor",
+      "name": "Check-up with Dr Cervantes",
+      "start": "2026-11-09T16:30",
+      "end": "2026-11-09T17:15",
+      "attendees": ["pablo"]
+    },
+    {
+      "key": "emi_bday",
+      "name": "Emi's birthday dinner",
+      "start": "2026-11-20T20:00",
+      "end": "2026-11-20T22:30",
+      "attendees": ["emi", "dani"]
+    },
+    {
+      "key": "carmen_bday",
+      "name": "Mama Carmen's birthday lunch",
+      "start": "2026-11-22T14:00",
+      "end": "2026-11-22T17:00",
+      "attendees": ["carmen", "maria_o", "emi"],
+      "description": "mole negro at her house"
+    },
+    {
+      "key": "call_pepe",
+      "name": "Call Tio Pepe",
+      "start": "2026-11-15T13:00",
+      "end": "2026-11-15T13:30",
+      "attendees": ["pepe"]
+    },
+    {
+      "key": "dress_fit",
+      "name": "Dani's wedding dress fitting",
+      "start": "2026-12-12T11:00",
+      "end": "2026-12-12T12:30",
+      "attendees": ["dani", "maria_o"]
+    },
+    {
+      "key": "posada_bakery",
+      "name": "Posada at the bakery",
+      "start": "2026-12-16T18:00",
+      "end": "2026-12-16T21:30",
+      "attendees": ["beto", "yesenia", "emi"]
+    },
+    {
+      "key": "posada_street",
+      "name": "Posada Vecinal",
+      "start": "2026-12-23T19:00",
+      "end": "2026-12-23T22:00",
+      "attendees": ["chela", "lupe_r"]
+    },
+    {
+      "key": "concert",
+      "name": "Choir Christmas concert",
+      "start": "2026-12-19T19:00",
+      "end": "2026-12-19T21:00",
+      "attendees": [
+        "aurelio",
+        "ignacio",
+        "marilu",
+        "marichuy",
+        "lupita",
+        "xochitl"
+      ]
+    },
+    {
+      "key": "dentist_ev",
+      "name": "Dentist",
+      "start": "2026-11-24T15:00",
+      "end": "2026-11-24T15:45"
+    },
+    {
+      "key": "tasting",
+      "name": "Wedding cake tasting",
+      "start": "2026-11-28T16:00",
+      "end": "2026-11-28T17:30",
+      "attendees": ["dani", "rodrigo"],
+      "description": "at Dani's baker friend, bring photos"
+    },
+    {
+      "key": "wedding",
+      "name": "Dani and Rodrigo's wedding",
+      "start": "2027-02-13T13:00",
+      "end": "2027-02-13T23:30",
+      "attendees": ["dani", "rodrigo", "emi", "carmen", "maria_o", "pepe"]
+    },
+    {
+      "key": "flight_pepe",
+      "name": "Pepe arrives from Chicago",
+      "start": "2027-02-10T17:40",
+      "end": "2027-02-10T18:30",
+      "attendees": ["pepe", "gaby"]
+    },
+    {
+      "key": "old_tamales",
+      "name": "Tamale sale at the church",
+      "start": "2026-09-12T09:00",
+      "end": "2026-09-12T14:00",
+      "trashed": "2026-09-20T10:00",
+      "attendees": ["marichuy", "lupita"]
+    },
+    {
+      "key": "old_meet",
+      "name": "Meeting with Karla",
+      "start": "2026-10-09T12:00",
+      "end": "2026-10-09T12:45",
+      "trashed": "2026-10-14T10:30",
+      "attendees": ["old_emp"]
+    },
+    {
+      "key": "old_zocalo",
+      "name": "Concert in the zocalo",
+      "start": "2026-07-26T19:00",
+      "end": "2026-07-26T21:00",
+      "trashed": "2026-08-02T10:00",
+      "attendees": ["aurelio"]
+    }
+  ],
+  "tasks": [
+    {
+      "key": "muertos",
+      "name": "Dia de Muertos orders",
+      "list": "bakery_l",
+      "priority": 2,
+      "status": "in_progress",
+      "due": "2026-11-02"
+    },
+    {
+      "key": "mu_eggs",
+      "name": "Order 40 dozen eggs from Dona Reyna",
+      "parent": "muertos",
+      "list": "bakery_l",
+      "completed": "2026-10-20T10:00"
+    },
+    {
+      "key": "mu_orange",
+      "name": "Buy orange blossom water",
+      "parent": "muertos",
+      "list": "bakery_l",
+      "due": "2026-10-29",
+      "effort": 30
+    },
+    {
+      "key": "mu_boxes",
+      "name": "Print the pan de muerto boxes",
+      "parent": "muertos",
+      "list": "bakery_l",
+      "due": "2026-10-29",
+      "effort": 45
+    },
+    {
+      "key": "mu_sugar",
+      "name": "Pink sugar for the skulls",
+      "parent": "muertos",
+      "list": "bakery_l",
+      "due": "2026-10-30",
+      "effort": 20
+    },
+    {
+      "key": "mu_stall",
+      "name": "Set up the market stall",
+      "parent": "muertos",
+      "list": "bakery_l",
+      "due": "2026-10-31",
+      "effort": 120
+    },
+    {
+      "key": "mu_float",
+      "name": "Get change for the stall",
+      "parent": "muertos",
+      "list": "bakery_l",
+      "due": "2026-10-30",
+      "effort": 20
+    },
+    {
+      "key": "flour_oct",
+      "name": "Pay Don Teodoro for flour",
+      "list": "bakery_l",
+      "due": "2026-10-27",
+      "priority": 1
+    },
+    {
+      "key": "flour_sep",
+      "name": "Pay Don Teodoro for flour",
+      "list": "bakery_l",
+      "due": "2026-09-29",
+      "completed": "2026-09-29T07:00"
+    },
+    {
+      "key": "flour_oct1",
+      "name": "Pay Don Teodoro for flour",
+      "list": "bakery_l",
+      "due": "2026-10-13",
+      "completed": "2026-10-13T06:30"
+    },
+    {
+      "key": "order_flour",
+      "name": "Order flour for the posadas",
+      "list": "bakery_l",
+      "due": "2026-11-20",
+      "effort": 15
+    },
+    {
+      "key": "order_flour_old",
+      "name": "Order flour for the posadas",
+      "list": "bakery_l",
+      "due": "2025-12-01",
+      "completed": "2025-11-28T08:00"
+    },
+    {
+      "key": "cfe",
+      "name": "Pay the CFE electricity bill",
+      "list": "bakery_l",
+      "due": "2026-11-05",
+      "priority": 1
+    },
+    {
+      "key": "cfe_sep",
+      "name": "Pay the CFE electricity bill",
+      "list": "bakery_l",
+      "due": "2026-09-05",
+      "completed": "2026-09-04T09:00"
+    },
+    {
+      "key": "wages",
+      "name": "Pay Beto and Yesenia",
+      "list": "bakery_l",
+      "due": "2026-10-31",
+      "priority": 1
+    },
+    {
+      "key": "wages_prev",
+      "name": "Pay Beto and Yesenia",
+      "list": "bakery_l",
+      "due": "2026-10-24",
+      "completed": "2026-10-24T17:00"
+    },
+    {
+      "key": "sat",
+      "name": "Send invoices to the accountant",
+      "list": "bakery_l",
+      "due": "2026-11-05",
+      "effort": 30
+    },
+    {
+      "key": "sat_tax",
+      "name": "Pay SAT provisional tax",
+      "list": "bakery_l",
+      "due": "2026-11-17",
+      "priority": 2,
+      "effort": 20
+    },
+    {
+      "key": "yeast",
+      "name": "Buy fresh yeast",
+      "list": "bakery_l",
+      "due": "2026-10-29",
+      "effort": 10
+    },
+    {
+      "key": "oven_part",
+      "name": "Order the oven thermostat",
+      "list": "bakery_l",
+      "due": "2026-11-04",
+      "effort": 15
+    },
+    {
+      "key": "recipe_card",
+      "name": "Photocopy the conchas recipe for the workshop",
+      "list": "bakery_l",
+      "due": "2026-11-17",
+      "effort": 10
+    },
+    {
+      "key": "tea_towels",
+      "name": "Wash the stall tablecloths",
+      "list": "bakery_l",
+      "due": "2026-10-30",
+      "effort": 40
+    },
+    {
+      "key": "new_sign",
+      "name": "Repaint the bakery sign",
+      "list": "bakery_l",
+      "status": "cancelled"
+    },
+    {
+      "key": "van_a",
+      "name": "Service the van",
+      "list": "van_l",
+      "due": "2026-11-03",
+      "priority": 1,
+      "effort": 240
+    },
+    {
+      "key": "van_b",
+      "name": "Service the van",
+      "list": "van_l",
+      "due": "2026-02-10",
+      "completed": "2026-02-10T14:00"
+    },
+    {
+      "key": "van_brakes",
+      "name": "Service the van - brakes",
+      "list": "van_l",
+      "due": "2026-11-03"
+    },
+    {
+      "key": "van_ins",
+      "name": "Renew the van insurance",
+      "list": "van_l",
+      "due": "2026-12-01",
+      "effort": 30
+    },
+    {
+      "key": "van_plates",
+      "name": "Pay the van tenencia",
+      "list": "van_l",
+      "due": "2026-11-30",
+      "effort": 20
+    },
+    {
+      "key": "van_noise",
+      "name": "Tell Don Chuy about the noise",
+      "list": "van_l",
+      "completed": "2026-10-25T17:30"
+    },
+    {
+      "key": "van_fuel",
+      "name": "Fill the van before the stall",
+      "list": "van_l",
+      "due": "2026-10-30",
+      "effort": 15
+    },
+    {
+      "key": "copies",
+      "name": "Photocopy the Christmas program",
+      "list": "choir_l",
+      "due": "2026-11-10",
+      "effort": 30
+    },
+    {
+      "key": "dues",
+      "name": "Collect choir dues",
+      "list": "choir_l",
+      "due": "2026-10-30",
+      "priority": 2
+    },
+    {
+      "key": "dues_sep",
+      "name": "Collect choir dues",
+      "list": "choir_l",
+      "due": "2026-09-30",
+      "completed": "2026-10-03T20:30"
+    },
+    {
+      "key": "chapel",
+      "name": "Ask Padre Ignacio for the side chapel",
+      "list": "choir_l",
+      "due": "2026-11-05"
+    },
+    {
+      "key": "solo",
+      "name": "Learn the alto part of Noche de Paz",
+      "list": "choir_l",
+      "due": "2026-12-10",
+      "effort": 120
+    },
+    {
+      "key": "choir_robes",
+      "name": "Iron the choir robes",
+      "list": "choir_l",
+      "due": "2026-12-18",
+      "effort": 60
+    },
+    {
+      "key": "pay_xochitl",
+      "name": "Pay Xochitl for the posters",
+      "list": "choir_l",
+      "due": "2026-10-31"
+    },
+    {
+      "key": "pay_aurelio",
+      "name": "Pay Maestro Aurelio for the copies",
+      "list": "choir_l",
+      "due": "2026-10-29",
+      "effort": 5
+    },
+    {
+      "key": "carmen_meds",
+      "name": "Pick up Mama Carmen's medicine",
+      "list": "family_l",
+      "due": "2026-10-30",
+      "effort": 25
+    },
+    {
+      "key": "carmen_gift",
+      "name": "Buy a gift for Mama Carmen's birthday",
+      "list": "family_l",
+      "due": "2026-11-20",
+      "effort": 60
+    },
+    {
+      "key": "carmen_doctor",
+      "name": "Take Mama Carmen to the doctor",
+      "list": "family_l",
+      "completed": "2026-10-12T11:00"
+    },
+    {
+      "key": "emi_gift",
+      "name": "Buy Emi a birthday present",
+      "list": "family_l",
+      "due": "2026-11-19",
+      "effort": 45
+    },
+    {
+      "key": "call_dani",
+      "name": "Call Dani about the dress",
+      "list": "wedding_l",
+      "due": "2026-10-31",
+      "priority": 1
+    },
+    {
+      "key": "call_dani_old",
+      "name": "Call Dani about the dress",
+      "list": "wedding_l",
+      "due": "2026-10-04",
+      "completed": "2026-10-04T20:40"
+    },
+    {
+      "key": "w_menu",
+      "name": "Choose the wedding menu",
+      "list": "wedding_l",
+      "due": "2026-11-28",
+      "effort": 90
+    },
+    {
+      "key": "w_guests",
+      "name": "Finish the guest list",
+      "list": "wedding_l",
+      "due": "2026-11-15",
+      "priority": 2,
+      "effort": 60
+    },
+    {
+      "key": "w_venue",
+      "name": "Pay the second venue installment",
+      "list": "wedding_l",
+      "due": "2026-12-05",
+      "priority": 1
+    },
+    {
+      "key": "w_cake",
+      "name": "Bake the wedding cake sample",
+      "list": "wedding_l",
+      "due": "2026-11-27",
+      "effort": 180
+    },
+    {
+      "key": "w_rooms",
+      "name": "Book rooms for the Chicago family",
+      "list": "wedding_l",
+      "due": "2026-12-20",
+      "effort": 30
+    },
+    {
+      "key": "w_rings",
+      "name": "Pick up the rings from the jeweller",
+      "list": "wedding_l",
+      "due": "2027-01-30"
+    },
+    {
+      "key": "gas_tank",
+      "name": "Call for the gas tank",
+      "list": "home_l",
+      "due": "2026-10-30",
+      "effort": 5
+    },
+    {
+      "key": "roof_fix",
+      "name": "Get a quote for the roof",
+      "list": "home_l",
+      "due": "2026-11-12",
+      "effort": 30
+    },
+    {
+      "key": "water_tank",
+      "name": "Clean the rooftop water tank",
+      "list": "home_l",
+      "due": "2026-11-15",
+      "effort": 90
+    },
+    {
+      "key": "altar",
+      "name": "Set up the ofrenda at home",
+      "list": "home_l",
+      "due": "2026-10-31",
+      "effort": 120,
+      "priority": 2
+    },
+    {
+      "key": "marigolds",
+      "name": "Buy cempasuchil flowers",
+      "list": "home_l",
+      "due": "2026-10-30",
+      "effort": 40
+    },
+    {
+      "key": "pay_chela",
+      "name": "Pay Dona Chela for the piñatas",
+      "due": "2026-11-02",
+      "effort": 5
+    },
+    {
+      "key": "pay_pepe",
+      "name": "Send Pepe the receipts",
+      "due": "2026-11-10",
+      "effort": 10
+    },
+    {
+      "key": "pay_memo",
+      "name": "Pay Don Memo for the shared flour",
+      "due": "2026-11-04",
+      "priority": 1
+    },
+    {
+      "key": "pay_omar",
+      "name": "Pay Omar the stall fee share",
+      "due": "2026-11-06",
+      "effort": 5
+    },
+    {
+      "key": "old_karla_t",
+      "name": "Send Karla her final wages",
+      "list": "bakery_l",
+      "trashed": "2026-10-14T10:20"
+    },
+    {
+      "key": "old_sup_t",
+      "name": "Cancel the Hilario flour account",
+      "list": "bakery_l",
+      "trashed": "2026-07-18T10:30"
+    },
+    {
+      "key": "old_paint",
+      "name": "Paint the garden wall",
+      "list": "home_l",
+      "trashed": "2026-09-29T09:00"
+    }
+  ],
+  "notebooks": [
+    {
+      "key": "recipes_nb",
+      "name": "Recetas"
+    },
+    {
+      "key": "bakery_nb",
+      "name": "Bakery Notes"
+    },
+    {
+      "key": "coro_nb",
+      "name": "Coro Notes"
+    },
+    {
+      "key": "ideas_nb",
+      "name": "Ideas"
+    }
+  ],
+  "notes": [
+    {
+      "key": "r_muerto",
+      "name": "Pan de muerto",
+      "notebook": "recipes_nb",
+      "created": "2024-10-20T06:00",
+      "pinned": true,
+      "body": "orange zest, anise, butter, six eggs for ten loaves, rest two hours, sugar while warm"
+    },
+    {
+      "key": "r_yema",
+      "name": "Pan de yema",
+      "notebook": "recipes_nb",
+      "created": "2024-11-03T06:00",
+      "body": "egg yolk dough, sesame on top, the Oaxaca way with chocolate on the side"
+    },
+    {
+      "key": "r_conchas",
+      "name": "Conchas",
+      "notebook": "recipes_nb",
+      "created": "2025-02-14T06:00",
+      "body": "vanilla and chocolate topping, rest overnight, score before the oven"
+    },
+    {
+      "key": "r_empanada",
+      "name": "Empanadas de amarillo",
+      "notebook": "recipes_nb",
+      "created": "2025-03-01T06:30",
+      "body": "mole amarillo, chicken, hoja santa, fold and crimp, bake until golden"
+    },
+    {
+      "key": "r_polvorones",
+      "name": "Polvorones for the posadas",
+      "notebook": "recipes_nb",
+      "created": "2025-12-10T06:00",
+      "body": "butter, flour, powdered sugar, pecans, bake twelve minutes"
+    },
+    {
+      "key": "r_tamales",
+      "name": "Mama Carmen's tamales",
+      "notebook": "recipes_nb",
+      "created": "2025-12-20T10:00",
+      "body": "masa with lard, mole negro, banana leaf, steam two hours"
+    },
+    {
+      "key": "b_suppliers",
+      "name": "Supplier prices",
+      "notebook": "bakery_nb",
+      "created": "2026-09-01T07:00",
+      "body": "flour 25 kilo bag 520 pesos, eggs 58 a dozen, butter 118 a kilo, sugar 24 a kilo"
+    },
+    {
+      "key": "b_oven",
+      "name": "Oven problems",
+      "notebook": "bakery_nb",
+      "created": "2026-09-21T09:00",
+      "body": "thermostat drifts twenty degrees, left deck runs hot, technician is Don Chato from the Abastos"
+    },
+    {
+      "key": "b_staff",
+      "name": "Staff schedule",
+      "notebook": "bakery_nb",
+      "created": "2026-06-01T07:00",
+      "pinned": true,
+      "body": "Beto starts at three, Yesenia opens the counter at six, Emi does the deliveries"
+    },
+    {
+      "key": "b_prices",
+      "name": "Menu prices 2026",
+      "notebook": "bakery_nb",
+      "created": "2026-01-05T07:30",
+      "body": "concha 12, pan de yema 15, pan de muerto 38, empanada 35, cake slice 45"
+    },
+    {
+      "key": "b_muertos",
+      "name": "Dia de Muertos plan",
+      "notebook": "bakery_nb",
+      "created": "2026-10-10T07:00",
+      "body": "three hundred loaves, boxes from the print shop, stall opens at six on the thirty-first"
+    },
+    {
+      "key": "c_songs",
+      "name": "Christmas program songs",
+      "notebook": "coro_nb",
+      "created": "2026-10-22T21:00",
+      "body": "Noche de Paz, Ven a Cantar, Campanas sobre Campanas, a Oaxacan villancico for the finale"
+    },
+    {
+      "key": "c_parts",
+      "name": "Alto part notes",
+      "notebook": "coro_nb",
+      "created": "2026-10-01T21:30",
+      "body": "Maestro says breathe before the high passage, hold the last note for four counts"
+    },
+    {
+      "key": "c_rota",
+      "name": "Mass rota",
+      "notebook": "coro_nb",
+      "created": "2026-09-05T20:30",
+      "body": "first Sunday Santo Domingo, third Sunday San Felipe, choir arrives forty minutes before"
+    },
+    {
+      "key": "c_dues",
+      "name": "Choir dues record",
+      "notebook": "coro_nb",
+      "created": "2026-09-30T21:00",
+      "body": "fifty pesos a month, Cuauhtemoc is two months behind, Lupita paid until December"
+    },
+    {
+      "key": "diary_hot",
+      "name": "Diary entry - the long night",
+      "created": "2026-10-20T23:15",
+      "body": "baked 200 loaves for the market order, the oven went cold twice, Emi saved the batch"
+    },
+    {
+      "key": "diary_proud",
+      "name": "Diary entry - Dani's call",
+      "created": "2026-10-26T21:20",
+      "body": "she picked the dress, cried a little, Rodrigo's mother will bring the mezcal"
+    },
+    {
+      "key": "wedding_ideas",
+      "name": "Wedding ideas",
+      "created": "2026-08-16T21:00",
+      "body": "marigold centerpieces, the choir sings at the church, tamales for the late supper"
+    },
+    {
+      "key": "n_carmen_meds",
+      "name": "Mama Carmen's medicines",
+      "created": "2026-10-05T18:00",
+      "body": "metformin morning and night, losartan once, vitamin D on Sundays, doctor wants the sugar test"
+    },
+    {
+      "key": "van_log",
+      "name": "Van log",
+      "created": "2026-02-10T14:30",
+      "body": "kilometres 118000 at the last service, brake pads checked, oil every 5000 km, tires in August"
+    },
+    {
+      "key": "home_oaxaca",
+      "name": "House repairs",
+      "created": "2026-09-02T19:00",
+      "body": "roof leak fixed over the kitchen, water tank needs cleaning, the gate hinge squeaks"
+    },
+    {
+      "key": "gift_carmen",
+      "name": "Gift ideas for Mama Carmen",
+      "created": "2026-10-15T20:00",
+      "body": "a rebozo, new glasses, a rocking chair for the patio"
+    },
+    {
+      "key": "budget",
+      "name": "Monthly budget",
+      "created": "2026-01-03T20:00",
+      "body": "flour 14000, wages 16000, electricity 4200, gas 3000, van 2500, save what is left"
+    },
+    {
+      "key": "old_note",
+      "name": "Old shopping list",
+      "created": "2026-09-20T10:00",
+      "body": "tomatoes, cheese, tortillas",
+      "trashed": "2026-10-15T10:00"
+    },
+    {
+      "key": "old_draft",
+      "name": "Draft sign text",
+      "created": "2026-05-12T10:00",
+      "body": "Panaderia La Espiga, bread from the oven since 1998",
+      "trashed": "2026-07-01T10:00"
+    }
+  ],
+  "folders": [
+    {
+      "key": "bakery_f",
+      "name": "Bakery"
+    },
+    {
+      "key": "van_f",
+      "name": "Van"
+    },
+    {
+      "key": "family_f",
+      "name": "Family"
+    },
+    {
+      "key": "wedding_f",
+      "name": "Wedding"
+    },
+    {
+      "key": "empty_f",
+      "name": "To file"
+    }
+  ],
+  "documents": [
+    {
+      "key": "d_lease25",
+      "name": "Bakery lease 2025",
+      "folder": "bakery_f",
+      "created": "2025-01-10T10:00"
+    },
+    {
+      "key": "d_lease26",
+      "name": "Bakery lease 2026",
+      "folder": "bakery_f",
+      "created": "2026-01-08T10:00",
+      "starred": true
+    },
+    {
+      "key": "d_permit",
+      "name": "Municipal operating permit 2026",
+      "folder": "bakery_f",
+      "created": "2026-02-02T10:00",
+      "starred": true
+    },
+    {
+      "key": "d_health",
+      "name": "Health inspection certificate 2025",
+      "folder": "bakery_f",
+      "created": "2025-11-14T10:00"
+    },
+    {
+      "key": "d_sat26",
+      "name": "SAT tax return 2025",
+      "folder": "bakery_f",
+      "created": "2026-04-28T10:00"
+    },
+    {
+      "key": "d_cfe",
+      "name": "CFE bill September 2026",
+      "folder": "bakery_f",
+      "created": "2026-09-04T09:10"
+    },
+    {
+      "key": "d_ins25",
+      "name": "Van insurance 2025",
+      "folder": "van_f",
+      "created": "2025-12-02T10:00"
+    },
+    {
+      "key": "d_ins26",
+      "name": "Van insurance 2026",
+      "folder": "van_f",
+      "created": "2026-01-05T10:00",
+      "starred": true
+    },
+    {
+      "key": "d_vanreg",
+      "name": "Van registration card",
+      "folder": "van_f",
+      "created": "2024-06-12T10:00"
+    },
+    {
+      "key": "d_service",
+      "name": "Van service invoice February 2026",
+      "folder": "van_f",
+      "created": "2026-02-10T14:20"
+    },
+    {
+      "key": "d_venue",
+      "name": "Wedding venue contract",
+      "folder": "wedding_f",
+      "created": "2026-09-05T11:00",
+      "starred": true
+    },
+    {
+      "key": "d_invites",
+      "name": "Invitation design draft",
+      "folder": "wedding_f",
+      "created": "2026-09-28T19:00"
+    },
+    {
+      "key": "d_budget_w",
+      "name": "Wedding budget 2027",
+      "folder": "wedding_f",
+      "created": "2026-08-18T21:00"
+    },
+    {
+      "key": "d_carmen_id",
+      "name": "Mama Carmen's INE scan",
+      "folder": "family_f",
+      "created": "2025-08-03T10:00"
+    },
+    {
+      "key": "d_deed",
+      "name": "House deed copy",
+      "folder": "family_f",
+      "created": "2024-02-20T10:00",
+      "starred": true
+    },
+    {
+      "key": "d_curp",
+      "name": "CURP certificate",
+      "created": "2025-01-12T10:00"
+    },
+    {
+      "key": "d_rfc",
+      "name": "RFC constancia 2026",
+      "created": "2026-01-15T10:00"
+    },
+    {
+      "key": "d_old_perm",
+      "name": "Municipal operating permit 2024",
+      "folder": "bakery_f",
+      "created": "2024-02-01T10:00",
+      "trashed": "2026-10-20T10:00"
+    },
+    {
+      "key": "d_old_quote",
+      "name": "Old oven quote",
+      "folder": "bakery_f",
+      "created": "2025-05-10T10:00",
+      "trashed": "2026-08-01T10:00"
+    }
+  ],
+  "albums": [
+    {
+      "key": "bakery_a",
+      "name": "La Espiga"
+    },
+    {
+      "key": "coro_a",
+      "name": "Coro Photos"
+    },
+    {
+      "key": "kids_a",
+      "name": "Dani and Emi"
+    },
+    {
+      "key": "muertos_a",
+      "name": "Muertos 2025"
+    }
+  ],
+  "photos": [
+    {
+      "key": "p_ba_oven",
+      "name": "The big oven at dawn",
+      "taken": "2026-09-21T05:40",
+      "albums": ["bakery_a"],
+      "people": ["beto"],
+      "starred": true
+    },
+    {
+      "key": "p_ba_counter",
+      "name": "Yesenia at the counter",
+      "taken": "2026-08-12T06:30",
+      "albums": ["bakery_a"],
+      "people": ["yesenia"]
+    },
+    {
+      "key": "p_ba_loaves",
+      "name": "Two hundred loaves for the market",
+      "taken": "2026-10-20T04:50",
+      "albums": ["bakery_a"],
+      "people": ["emi", "beto"],
+      "starred": true
+    },
+    {
+      "key": "p_ba_sign",
+      "name": "The old sign",
+      "taken": "2026-05-12T09:00",
+      "albums": ["bakery_a"]
+    },
+    {
+      "key": "p_ba_cake",
+      "name": "Three-tier cake for Flor",
+      "taken": "2026-09-18T09:40",
+      "albums": ["bakery_a"],
+      "people": ["flor"]
+    },
+    {
+      "key": "p_ba_van",
+      "name": "The van loaded with bread",
+      "taken": "2026-10-13T05:55",
+      "albums": ["bakery_a"],
+      "people": ["emi"]
+    },
+    {
+      "key": "p_ba_flour",
+      "name": "Flour delivery",
+      "taken": "2026-10-27T05:45",
+      "albums": ["bakery_a"],
+      "people": ["teodoro"]
+    },
+    {
+      "key": "p_ba_conchas",
+      "name": "Fresh conchas",
+      "taken": "2026-10-02T06:10",
+      "albums": ["bakery_a"]
+    },
+    {
+      "key": "p_co_mass",
+      "name": "Choir at the Sunday Mass",
+      "taken": "2026-10-04T08:40",
+      "albums": ["coro_a"],
+      "people": ["aurelio", "marilu", "marichuy", "lupita"],
+      "starred": true
+    },
+    {
+      "key": "p_co_rehearsal",
+      "name": "Rehearsal in the side chapel",
+      "taken": "2026-10-22T19:30",
+      "albums": ["coro_a"],
+      "people": ["aurelio", "xochitl"]
+    },
+    {
+      "key": "p_co_group",
+      "name": "Choir group photo",
+      "taken": "2026-06-14T12:30",
+      "albums": ["coro_a"],
+      "people": [
+        "aurelio",
+        "marilu",
+        "marichuy",
+        "lupita",
+        "xochitl",
+        "cuauh",
+        "ramiro"
+      ]
+    },
+    {
+      "key": "p_co_ignacio",
+      "name": "Padre Ignacio blesses the choir",
+      "taken": "2026-08-15T11:00",
+      "albums": ["coro_a"],
+      "people": ["ignacio"]
+    },
+    {
+      "key": "p_co_bass",
+      "name": "Cuauhtemoc hitting the low note",
+      "taken": "2026-09-17T20:10",
+      "albums": ["coro_a"],
+      "people": ["cuauh"]
+    },
+    {
+      "key": "p_co_robes",
+      "name": "Robes drying on the line",
+      "taken": "2026-06-15T10:00",
+      "albums": ["coro_a"]
+    },
+    {
+      "key": "p_ki_dani",
+      "name": "Dani graduating",
+      "taken": "2022-12-10T12:00",
+      "albums": ["kids_a"],
+      "people": ["dani"],
+      "starred": true
+    },
+    {
+      "key": "p_ki_emi",
+      "name": "Emi's first batch of bread",
+      "taken": "2023-03-04T07:00",
+      "albums": ["kids_a"],
+      "people": ["emi"]
+    },
+    {
+      "key": "p_ki_both",
+      "name": "Dani and Emi at the Guelaguetza",
+      "taken": "2025-07-21T15:00",
+      "albums": ["kids_a"],
+      "people": ["dani", "emi"],
+      "starred": true
+    },
+    {
+      "key": "p_ki_ring",
+      "name": "Dani showing her ring",
+      "taken": "2026-06-20T18:00",
+      "albums": ["kids_a"],
+      "people": ["dani", "rodrigo"]
+    },
+    {
+      "key": "p_ki_hike",
+      "name": "Hierve el Agua hike",
+      "taken": "2025-12-27T11:30",
+      "albums": ["kids_a"],
+      "people": ["emi", "dani"]
+    },
+    {
+      "key": "p_mu_altar",
+      "name": "The ofrenda for Abuelo",
+      "taken": "2025-11-01T10:00",
+      "albums": ["muertos_a"],
+      "people": ["carmen"],
+      "starred": true
+    },
+    {
+      "key": "p_mu_stall",
+      "name": "The market stall at noon",
+      "taken": "2025-11-01T12:00",
+      "albums": ["muertos_a"],
+      "people": ["memo", "beto"]
+    },
+    {
+      "key": "p_mu_cemetery",
+      "name": "Candles at the cemetery",
+      "taken": "2025-11-01T19:00",
+      "albums": ["muertos_a"],
+      "people": ["emi", "carmen"]
+    },
+    {
+      "key": "p_mu_mass",
+      "name": "Mass for the dead",
+      "taken": "2025-11-02T18:40",
+      "albums": ["muertos_a"],
+      "people": ["ignacio"]
+    },
+    {
+      "key": "p_mu_flowers",
+      "name": "Cempasuchil flowers",
+      "taken": "2025-10-31T09:00",
+      "albums": ["muertos_a"]
+    },
+    {
+      "key": "p_wedding_dress",
+      "name": "Wedding dress inspiration",
+      "taken": "2026-10-26T21:30",
+      "people": ["dani"]
+    },
+    {
+      "key": "p_wedding_venue",
+      "name": "The hacienda venue",
+      "taken": "2026-08-20T12:00",
+      "people": ["rodrigo"]
+    },
+    {
+      "key": "p_carmen",
+      "name": "Mama Carmen at her door",
+      "taken": "2026-10-27T18:10",
+      "people": ["carmen"]
+    },
+    {
+      "key": "p_pepe",
+      "name": "Pepe in Chicago snow",
+      "taken": "2026-01-25T09:00",
+      "people": ["pepe", "gaby"]
+    },
+    {
+      "key": "p_maria",
+      "name": "Maria and me at the zocalo",
+      "taken": "2026-08-30T17:00",
+      "people": ["maria_o"]
+    },
+    {
+      "key": "p_chela",
+      "name": "Dona Chela's piñatas",
+      "taken": "2026-10-24T13:00",
+      "people": ["chela"]
+    },
+    {
+      "key": "p_receipt",
+      "name": "Receipt for the boxes",
+      "taken": "2026-10-19T11:30"
+    },
+    {
+      "key": "p_oven_serial",
+      "name": "Oven serial plate",
+      "taken": "2026-09-21T06:00"
+    },
+    {
+      "key": "p_van_noise",
+      "name": "Van dashboard warning light",
+      "taken": "2026-10-24T07:30"
+    },
+    {
+      "key": "p_blurry",
+      "name": "Blurry photo",
+      "taken": "2026-10-21T09:00",
+      "trashed": "2026-10-23T09:00"
+    },
+    {
+      "key": "p_screen",
+      "name": "Screenshot of the order",
+      "taken": "2026-07-03T12:00",
+      "trashed": "2026-08-05T09:00"
+    }
+  ],
+  "debts": [
+    {
+      "key": "d_memo_flour",
+      "person": "memo",
+      "direction": "i_owe",
+      "amount": 4800,
+      "name": "my third of the shared flour",
+      "date": "2026-10-13"
+    },
+    {
+      "key": "d_teodoro",
+      "person": "teodoro",
+      "direction": "i_owe",
+      "amount": 5200,
+      "name": "flour on credit",
+      "date": "2026-10-27"
+    },
+    {
+      "key": "d_maria_roof",
+      "person": "maria_o",
+      "direction": "i_owe",
+      "amount": 1600,
+      "name": "half the roof repair",
+      "date": "2026-09-02"
+    },
+    {
+      "key": "d_maria_med",
+      "person": "maria_o",
+      "direction": "owes_me",
+      "amount": 360,
+      "name": "Mama Carmen's medicine share",
+      "date": "2026-10-05"
+    },
+    {
+      "key": "d_emi",
+      "person": "emi",
+      "direction": "owes_me",
+      "amount": 360,
+      "name": "medicine share",
+      "date": "2026-10-05"
+    },
+    {
+      "key": "d_dani",
+      "person": "dani",
+      "direction": "owes_me",
+      "amount": 10000,
+      "name": "wedding venue share",
+      "date": "2026-09-05"
+    },
+    {
+      "key": "d_rodrigo",
+      "person": "rodrigo",
+      "direction": "owes_me",
+      "amount": 10000,
+      "name": "wedding venue other share",
+      "date": "2026-09-05"
+    },
+    {
+      "key": "d_xochitl",
+      "person": "xochitl",
+      "direction": "i_owe",
+      "amount": 104,
+      "name": "concert posters",
+      "date": "2026-10-20"
+    },
+    {
+      "key": "d_aurelio",
+      "person": "aurelio",
+      "direction": "i_owe",
+      "amount": 105,
+      "name": "sheet music copies",
+      "date": "2026-09-10"
+    },
+    {
+      "key": "d_chela",
+      "person": "chela",
+      "direction": "i_owe",
+      "amount": 217,
+      "name": "piñatas and candy",
+      "date": "2026-10-24"
+    },
+    {
+      "key": "d_flor",
+      "person": "flor",
+      "direction": "owes_me",
+      "amount": 1800,
+      "name": "cake deposit",
+      "date": "2026-10-22"
+    },
+    {
+      "key": "d_omar",
+      "person": "omar",
+      "direction": "owes_me",
+      "amount": 600,
+      "name": "stall fee share",
+      "date": "2026-10-26"
+    },
+    {
+      "key": "d_chuy",
+      "person": "chuy",
+      "direction": "i_owe",
+      "amount": 3500,
+      "name": "oil change and filters",
+      "date": "2026-02-10",
+      "settled": "2026-02-12T10:00"
+    },
+    {
+      "key": "d_lupita",
+      "person": "lupita",
+      "direction": "owes_me",
+      "amount": 120,
+      "name": "candles share",
+      "date": "2026-10-02",
+      "settled": "2026-10-09T21:00"
+    }
+  ],
+  "locker": [
+    {
+      "key": "bbva_login",
+      "name": "BBVA online banking",
+      "type": "login",
+      "username": "rosa.delgado",
+      "url": "https://bbva.mx",
+      "password": "Espiga#Oaxaca1998",
+      "starred": true
+    },
+    {
+      "key": "sat_login",
+      "name": "SAT portal",
+      "type": "login",
+      "username": "DEOR740312XX1",
+      "url": "https://sat.gob.mx",
+      "password": "Facturas!2026Mx"
+    },
+    {
+      "key": "cfe_login",
+      "name": "CFE Mi Espacio",
+      "type": "login",
+      "username": "rosa.delgado@correo.example",
+      "url": "https://cfe.mx",
+      "password": "Horno-Beto44"
+    },
+    {
+      "key": "bbva_card",
+      "name": "BBVA business debit card",
+      "type": "card",
+      "card_number": "4152313344556677",
+      "cvv": "519"
+    },
+    {
+      "key": "credit_card",
+      "name": "Banorte credit card",
+      "type": "card",
+      "card_number": "5470128899001122",
+      "cvv": "334"
+    },
+    {
+      "key": "bbva_acct",
+      "name": "BBVA business account",
+      "type": "bank_account",
+      "notes": "branch Reforma, CLABE 012 610 0123 4567 8901",
+      "starred": true
+    },
+    {
+      "key": "bakery_wifi",
+      "name": "Bakery wifi",
+      "type": "wifi",
+      "password": "LaEspiga1998",
+      "starred": true
+    },
+    {
+      "key": "house_wifi",
+      "name": "House wifi",
+      "type": "wifi",
+      "password": "CasaOrtiz2020"
+    },
+    {
+      "key": "safe_code",
+      "name": "Cash box code",
+      "type": "note",
+      "notes": "3 7 1 9 and the left key"
+    },
+    {
+      "key": "pos_pw",
+      "name": "Card terminal app",
+      "type": "password",
+      "password": "Terminal-Pan77"
+    },
+    {
+      "key": "curp",
+      "name": "CURP",
+      "type": "identity"
+    },
+    {
+      "key": "passport",
+      "name": "Passport - Rosa",
+      "type": "passport",
+      "notes": "no. G12345678, expires 2030-09-14"
+    },
+    {
+      "key": "licence",
+      "name": "Driving licence",
+      "type": "driving_licence",
+      "notes": "Oaxaca licence type A"
+    },
+    {
+      "key": "coro_member",
+      "name": "Coro Santo Domingo membership",
+      "type": "membership",
+      "notes": "alto section, dues paid to October",
+      "starred": true
+    },
+    {
+      "key": "maps_api",
+      "name": "Delivery route API key",
+      "type": "api_credential",
+      "notes": "Emi's delivery planning sheet"
+    },
+    {
+      "key": "camera_ssh",
+      "name": "Shop camera SSH key",
+      "type": "ssh_key",
+      "notes": "recorder behind the counter"
+    },
+    {
+      "key": "pos_licence",
+      "name": "Point of sale software licence",
+      "type": "software_licence",
+      "notes": "annual, renews 15 January"
+    },
+    {
+      "key": "btc",
+      "name": "Crypto wallet",
+      "type": "crypto_wallet",
+      "notes": "Emi set it up, about 3000 pesos"
+    },
+    {
+      "key": "deed_orig",
+      "name": "House deed - original",
+      "type": "document",
+      "notes": "original at the notary, certified copy in the family folder"
+    },
+    {
+      "key": "old_wifi",
+      "name": "Old shop wifi",
+      "type": "wifi",
+      "password": "Espiga2022",
+      "trashed": "2026-08-14T10:00"
+    },
+    {
+      "key": "old_login",
+      "name": "Old Telmex login",
+      "type": "login",
+      "username": "rosa_espiga",
+      "password": "OldTelmex12",
+      "trashed": "2026-10-15T10:00"
+    }
+  ],
+  "links": [
+    {
+      "from": "mu_eggs",
+      "to": "reyna"
+    },
+    {
+      "from": "flour_oct",
+      "to": "teodoro"
+    },
+    {
+      "from": "flour_sep",
+      "to": "teodoro"
+    },
+    {
+      "from": "flour_oct1",
+      "to": "teodoro"
+    },
+    {
+      "from": "order_flour",
+      "to": "teodoro"
+    },
+    {
+      "from": "wages",
+      "to": "beto"
+    },
+    {
+      "from": "wages_prev",
+      "to": "beto"
+    },
+    {
+      "from": "sat",
+      "to": "sofia"
+    },
+    {
+      "from": "sat_tax",
+      "to": "sofia"
+    },
+    {
+      "from": "van_a",
+      "to": "chuy"
+    },
+    {
+      "from": "van_b",
+      "to": "chuy"
+    },
+    {
+      "from": "van_brakes",
+      "to": "chuy"
+    },
+    {
+      "from": "van_noise",
+      "to": "chuy"
+    },
+    {
+      "from": "dues",
+      "to": "cuauh"
+    },
+    {
+      "from": "chapel",
+      "to": "ignacio"
+    },
+    {
+      "from": "pay_xochitl",
+      "to": "xochitl"
+    },
+    {
+      "from": "pay_aurelio",
+      "to": "aurelio"
+    },
+    {
+      "from": "solo",
+      "to": "aurelio"
+    },
+    {
+      "from": "carmen_meds",
+      "to": "carmen"
+    },
+    {
+      "from": "carmen_gift",
+      "to": "carmen"
+    },
+    {
+      "from": "carmen_doctor",
+      "to": "pablo"
+    },
+    {
+      "from": "emi_gift",
+      "to": "emi"
+    },
+    {
+      "from": "call_dani",
+      "to": "dani"
+    },
+    {
+      "from": "call_dani_old",
+      "to": "dani"
+    },
+    {
+      "from": "w_menu",
+      "to": "rodrigo"
+    },
+    {
+      "from": "w_cake",
+      "to": "flor"
+    },
+    {
+      "from": "w_rooms",
+      "to": "pepe"
+    },
+    {
+      "from": "pay_chela",
+      "to": "chela"
+    },
+    {
+      "from": "pay_pepe",
+      "to": "pepe"
+    },
+    {
+      "from": "pay_memo",
+      "to": "memo"
+    },
+    {
+      "from": "pay_omar",
+      "to": "omar"
+    },
+    {
+      "from": "recipe_card",
+      "to": "veronica"
+    },
+    {
+      "from": "r_tamales",
+      "to": "carmen"
+    },
+    {
+      "from": "b_suppliers",
+      "to": "teodoro"
+    },
+    {
+      "from": "b_oven",
+      "to": "beto"
+    },
+    {
+      "from": "c_songs",
+      "to": "aurelio"
+    },
+    {
+      "from": "c_dues",
+      "to": "cuauh"
+    },
+    {
+      "from": "n_carmen_meds",
+      "to": "carmen"
+    },
+    {
+      "from": "diary_proud",
+      "to": "dani"
+    },
+    {
+      "from": "wedding_ideas",
+      "to": "rodrigo"
+    },
+    {
+      "from": "gift_carmen",
+      "to": "carmen"
+    },
+    {
+      "from": "d_venue",
+      "to": "rodrigo"
+    },
+    {
+      "from": "d_carmen_id",
+      "to": "carmen"
+    }
+  ]
 }
