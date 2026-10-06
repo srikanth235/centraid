@@ -163,3 +163,41 @@ pub fn named(world: &World, number: usize, key: &crate::world::Key) -> String {
         .row(key)
         .map_or_else(|| format!("#{number}"), |row| short(number, row))
 }
+
+/// How many live rows a container holds, with the word for them: `(75,
+/// "tasks")`. A list, notebook, album, folder or group is a container, and so
+/// is a task that has subtasks; nothing else holds rows.
+#[must_use]
+pub fn contents(world: &World, key: &crate::world::Key) -> Option<(usize, &'static str)> {
+    let link = key.0.holds()?;
+    let count = world
+        .edges
+        .iter()
+        .filter(|edge| {
+            edge.from == *key
+                && edge.via == link.via
+                && edge.to.0 == link.kind
+                && world.row(&edge.to).is_some_and(|row| !row.trashed)
+        })
+        .count();
+    Some((count, link.label))
+}
+
+/// A row of the vault block: `#37 list "Kids" (75 tasks)`. A container adds
+/// how many rows it holds after the closing quote, so the name part reads
+/// exactly as `named`'s; a task shows its subtasks only when it has some.
+#[must_use]
+pub fn grounded(world: &World, number: usize, key: &crate::world::Key) -> String {
+    let line = named(world, number, key);
+    match contents(world, key) {
+        Some((count, label)) if count > 0 || key.0.spec().container => {
+            let word = if count == 1 {
+                label.strip_suffix('s').unwrap_or(label)
+            } else {
+                label
+            };
+            format!("{line} ({count} {word})")
+        }
+        _ => line,
+    }
+}

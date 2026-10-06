@@ -1,6 +1,6 @@
-//! THE TRACE GUARD (`experiments/toolchat/native/CONTRACT_V2.md` §2, §4).
+//! THE TRACE GUARD (`experiments/toolchat/native/CONTRACT_V3.md` §2 to §4).
 //!
-//! A v2 `<think>` block is a fixed-order list of slots the model writes before its call:
+//! A slot-trace `<think>` block is a fixed-order list of slots the model writes before its call:
 //!
 //! ```text
 //! intent: write "cancel it"
@@ -23,14 +23,13 @@
 //! asked of the model or the driver: [`think_of`] takes the think text from the same message. A
 //! harness that sends `call` (tool and args as JSON) may pass it as the optional `"think"` field.
 //!
-//! WHEN IT APPLIES. Only when the think parses as a v2 trace ([`parse`]): an `intent:` line of the
+//! WHEN IT APPLIES. Only when the think parses as a slot trace ([`parse`]): an `intent:` line of the
 //! exact form `intent: <read|count|write|ask|decline>` with an optional quoted phrase. The old
 //! line (`saw: … · intent: write star · plan: act`) never matches, so old-format gold replays
 //! untouched. A malformed `scope` or `refer` line is ignored, never punished.
 //!
-//! The bulk-write guard (`act.rs`, more rows than a result shows) reads the trace's `scope` when a
-//! trace is present (`all` is the only scope that lets it through) and falls back to the words of
-//! the message when the trace has no scope line.
+//! The cap on a write's rows does not read the trace: a write on more than `ROW_CAP` rows ends in
+//! the runtime's own ask whatever `scope` says (`act.rs`, `Session::bulk_ask`).
 
 use std::collections::BTreeSet;
 
@@ -88,14 +87,6 @@ impl Scope {
             "all" => Self::All,
             _ => return None,
         })
-    }
-
-    fn name(self) -> &'static str {
-        match self {
-            Self::One => "one",
-            Self::Some => "some",
-            Self::All => "all",
-        }
     }
 }
 
@@ -170,7 +161,7 @@ fn parse_refer(rest: &str) -> Option<Refer> {
     Some(Refer { kind, handles })
 }
 
-/// The trace in a think block, when it is a v2 trace (it has a well-formed `intent:` line).
+/// The trace in a think block, when it is a slot trace (it has a well-formed `intent:` line).
 #[must_use]
 pub fn parse(think: &str) -> Option<Trace> {
     let mut intent = None;
@@ -292,28 +283,6 @@ impl Session {
         }
         None
     }
-
-    /// Whether a write on more rows than a result shows may go ahead: with a trace, only `scope:
-    /// all` lets it through (without a scope line, the message's own "all" / "every" decides).
-    pub(crate) fn bulk_allowed(&self) -> bool {
-        match self.trace.as_ref().and_then(|trace| trace.scope) {
-            Some(scope) => scope == Scope::All,
-            None => self.said_all(),
-        }
-    }
-
-    /// The refusal a bulk write gets.
-    pub(crate) fn bulk_refusal(&self, rows: usize, cap: usize) -> String {
-        match self.trace.as_ref().and_then(|trace| trace.scope) {
-            Some(scope) => format!(
-                "error: {rows} rows would change (a result shows {cap} at most) and the trace says scope {}, not all; nothing was done. Narrow the rows to the ones meant, or ask.",
-                scope.name()
-            ),
-            None => format!(
-                "error: {rows} rows would change (a result shows {cap} at most) and the message does not say all or every; nothing was done. Narrow the rows to the ones meant, or ask."
-            ),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -333,9 +302,9 @@ mod tests {
     }
 
     #[test]
-    fn a_v2_trace_parses_and_the_old_line_does_not() {
+    fn a_slot_trace_parses_and_the_old_line_does_not() {
         let trace = parse("intent: write \"cancel it\"\nverb: cancel\nscope: one\nrefer: it \"it\" -> @3\ntarget: \"night shift\"")
-            .expect("a v2 trace");
+            .expect("a slot trace");
         assert_eq!(trace.intent, Intent::Write);
         assert_eq!(trace.scope, Some(Scope::One));
         assert_eq!(
@@ -349,7 +318,7 @@ mod tests {
             parse("retry: rejected\nintent: read\nrefer: both -> #7, #9").expect("bare forms");
         assert_eq!(trace.intent, Intent::Read);
         assert_eq!(trace.refer.expect("refer").handles, ["#7", "#9"]);
-        // the old single-line trace is never a v2 trace, whatever words it shares
+        // the old single-line trace is never a slot trace, whatever words it shares
         for old in [
             "saw: #34 Buy euros · plan: search",
             "intent: read · kind: group · cond: linked_to · plan: answer",

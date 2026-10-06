@@ -1,16 +1,90 @@
 //! `act` (SPEC §4.2): every write through the vault's typed commands, the
 //! call-only ambiguity check (§3.3), already-so writes, and `undo`.
+//!
+//! Two things end a turn here that the model would otherwise have to settle,
+//! and the runtime composes both itself (D-1044-10, SPEC §4.6):
+//!
+//! - THE CAP. A write on more than `ROW_CAP` rows is never run outright,
+//!   whatever the trace's `scope` and the call's `more` say: the turn ends in an
+//!   ask with the count (`this would delete 734 tasks; delete all of them?`),
+//!   and the same write, sent in the turn right after a yes, goes through.
+//! - A REFUSAL OF THE VAULT to restore or to delete. A restore the vault will
+//!   not make because the row's window has run out ends in `decline not_found`;
+//!   a delete it refuses because the row still holds others (a folder with
+//!   documents, a group with expenses, a notebook with notebooks) ends in an ask
+//!   that names what the person can do. Every other refusal (a call the
+//!   command's schema rejects, a check this file does not name, any other
+//!   verb) stays an `error:` for the model to repair.
+//!
+//! With `Flags::compose` the same hands-off rule reaches the selector and the refusals the
+//! person can lift (`compose.rs`, SPEC §4.8): a selector that fits several rows or none ends in
+//! the ask or the decline the runtime writes, a verb that does not apply to the kind and a row
+//! in the trash end in a decline, and a member with a balance, a cancelled event to move and a
+//! clash of time end in an ask over the rows involved. Two things the person's words settle
+//! before that: a selector that fits several rows takes every one of them when the message (or
+//! the trace) says all, and a name that reached nothing goes to the one near spelling of its
+//! kind (`Targets::decided`, said in the reply and the effect by `Session::say_decided`).
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
 use crate::dates::{self, Stamp};
-use crate::meta::{self, FieldType, Kind, Verb, Via};
+use crate::meta::{self, FieldType, Kind, ROW_CAP, Verb, Via};
 use crate::render;
-use crate::session::{Inverse, Outcome, Session, arg_bool, arg_str};
+use crate::session::{
+    Inverse, Outcome, ResultSet, Selector, Session, arg_bool, arg_str, canonical_json,
+};
+use crate::vaultio::Ran;
 use crate::whr;
 use crate::world::{Key, Row, SEALED, Val, World, minor_of};
+
+/// A write over `ROW_CAP` rows that the runtime asked about (`Session::bulk_ask`).
+/// The person's yes in the turn right after the ask lets that same write through
+/// (`Session::confirmed`): the same verb, the same rows, the same `args`.
+#[derive(Debug, Clone)]
+pub(crate) struct PendingBulk {
+    /// The turn the ask ended.
+    pub turn: usize,
+    pub verb: Verb,
+    pub keys: BTreeSet<Key>,
+    /// The call's `args`, as canonical JSON.
+    pub args: String,
+}
+
+/// The args a `create` of `kind` takes: `name`, the kind's creatable fields, and the
+/// references and secrets its command carries.
+pub(crate) fn create_allowed(kind: Kind) -> Vec<&'static str> {
+    let mut allowed: Vec<&str> = vec!["name"];
+    allowed.extend(
+        kind.spec()
+            .fields
+            .iter()
+            .filter(|field| field.create)
+            .map(|field| field.name),
+    );
+    match kind {
+        Kind::Task => allowed.extend(["date", "parent", "list"]),
+        Kind::Event => allowed.push("date"),
+        Kind::Note => allowed.push("notebook"),
+        Kind::Document => allowed.extend(["folder", "text"]),
+        Kind::Debt => allowed.push("person"),
+        Kind::LockerItem => allowed.extend(["password", "code", "card_number", "cvv"]),
+        _ => {}
+    }
+    allowed
+}
+
+/// The field a create arg is another spelling of: the kind's own word for its date (`due` for a
+/// task, `start` for an event) is `date`. The one resolver of a create's arg names: `create`
+/// reads args through it, and so does the normaliser (`normalize.rs`) before it decides an arg
+/// is one the kind does not take.
+pub(crate) fn create_arg_alias(kind: Kind, key: &str) -> Option<&'static str> {
+    kind.spec()
+        .date
+        .filter(|date| date.label == key)
+        .map(|_| "date")
+}
 
 /// The input key that names a row of each kind in its commands.
 #[must_use]
@@ -59,27 +133,41 @@ pub fn act_args(value: Option<&Value>) -> Result<Map<String, Value>, String> {
                 return Ok(map);
             }
             let mut map = Map::new();
-            for line in trimmed.lines().flat_map(split_semis) {
-                let line = line.trim();
-                if line.is_empty() {
-                    continue;
-                }
-                let (key, value) = line.split_once(':').ok_or_else(|| {
-                    format!("error: could not read the args line \"{line}\"; args are \"field: value\" lines.")
-                })?;
-                let value = value.trim();
-                let parsed = if value.starts_with(['{', '[', '"']) || value.parse::<f64>().is_ok() {
-                    serde_json::from_str(value).unwrap_or_else(|_| Value::String(value.to_owned()))
-                } else {
-                    Value::String(value.to_owned())
-                };
-                map.insert(key.trim().to_lowercase(), parsed);
+            for (key, raw) in arg_lines(trimmed)? {
+                map.insert(key, arg_value(&raw));
             }
             Ok(map)
         }
         Some(other) => Err(format!(
             "error: args are \"field: value\" lines, not {other}."
         )),
+    }
+}
+
+/// The `(field, value text)` pairs of `field: value` lines, in the order written.
+pub(crate) fn arg_lines(text: &str) -> Result<Vec<(String, String)>, String> {
+    let mut out = Vec::new();
+    for line in text.lines().flat_map(split_semis) {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let (key, value) = line.split_once(':').ok_or_else(|| {
+            format!(
+                "error: could not read the args line \"{line}\"; args are \"field: value\" lines."
+            )
+        })?;
+        out.push((key.trim().to_lowercase(), value.trim().to_owned()));
+    }
+    Ok(out)
+}
+
+/// The value a line's text stands for: JSON when it parses as JSON, else text.
+pub(crate) fn arg_value(value: &str) -> Value {
+    if value.starts_with(['{', '[', '"']) || value.parse::<f64>().is_ok() {
+        serde_json::from_str(value).unwrap_or_else(|_| Value::String(value.to_owned()))
+    } else {
+        Value::String(value.to_owned())
     }
 }
 
@@ -140,8 +228,169 @@ enum Plan {
     },
 }
 
+/// How `complete` and `reopen` stand to a task's status: the ONE applicability the plan and the
+/// candidate filter share (SPEC §14.1, nt12 B3). `Already`: the status is what the verb sets.
+/// `Passed`: a cancelled task completes when it is the only row the name fits, and gives way to
+/// an open one when the name fits both (`fits` says no, the plan still runs it). `Changes`: the
+/// verb leaves the row different and it is a candidate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Stand {
+    Changes,
+    Passed,
+    Already,
+}
+
+fn task_stand(verb: Verb, status: &str) -> Stand {
+    match (verb, status) {
+        (Verb::Complete, "completed") | (Verb::Reopen, "open") => Stand::Already,
+        (Verb::Complete, "cancelled") => Stand::Passed,
+        _ => Stand::Changes,
+    }
+}
+
+/// A task's status as the model reads it; a row without one is open.
+fn status_of(value: Option<&Val>) -> &'static str {
+    match value {
+        Some(Val::Enum(status)) => status,
+        _ => "open",
+    }
+}
+
+/// Whether a verb can change a row as it stands (`Session::fits`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Fit {
+    Yes,
+    No,
+    /// The call cannot be planned (a bad argument): the write says why.
+    Unknown,
+}
+
+/// What the runtime decided about the rows of a write by selector (SPEC §4.8), for the effect and
+/// the reply of the write that follows.
+enum Decided {
+    /// The selector fits several rows, and the person (or the trace) said all of them (SPEC §4.8).
+    EveryFit,
+    /// The name reached nothing of the kind, and the one row of another kind it reaches as it is
+    /// said (`resolve`, tiers 1 to 3) is the target (SPEC §4.8).
+    OtherKind { name: String, kind: Kind, key: Key },
+}
+
+/// The rows an act applies to, and what the runtime decided to get there.
+struct Targets {
+    keys: Vec<Key>,
+    decided: Option<Decided>,
+    /// A selector (not `rows=`) that reached exactly one row by itself: no narrowing, no near
+    /// spelling, no other-kind fallback picked it.
+    by_selector: bool,
+}
+
+impl Targets {
+    fn of(keys: Vec<Key>) -> Self {
+        Self {
+            keys,
+            decided: None,
+            by_selector: false,
+        }
+    }
+}
+
+/// Words that are not part of naming a row: articles, prepositions, the
+/// commands themselves.
+const UNNAMING: [&str; 52] = [
+    "the", "a", "an", "to", "on", "in", "at", "for", "of", "and", "my", "with", "from", "by", "is",
+    "be", "as", "up", "off", "out", "do", "did", "i", "me", "we", "you", "was", "just", "please",
+    "now", "all", "s", "tick", "star", "unstar", "cancel", "delete", "restore", "complete",
+    "reopen", "move", "push", "add", "put", "file", "remove", "take", "mark", "log", "settle",
+    "reveal", "undo",
+];
+
+/// Words by which a person points at a row instead of naming it, or says
+/// which of several: the pick is theirs, not a guess.
+const PICKED: [&str; 38] = [
+    "it", "them", "that", "this", "those", "these", "he", "she", "her", "him", "his", "they",
+    "one", "ones", "too", "also", "same", "again", "both", "other", "another", "first", "second",
+    "third", "last", "latest", "previous", "next", "earlier", "later", "open", "done", "finished",
+    "paid", "old", "new", "oldest", "newest",
+];
+
+/// The personal pronouns of `PICKED`: they refer to a row only when one is in focus.
+const PRONOUNS: [&str; 8] = ["it", "them", "he", "she", "her", "him", "his", "they"];
+
+/// Nouns that a number follows as part of a name or a rank ("priority one", "level one", "step
+/// one", "day one"): the "one" after them is a number, not a row.
+const NUMBER_NOUNS: [&str; 20] = [
+    "priority", "level", "step", "day", "number", "grade", "chapter", "page", "week", "phase",
+    "round", "part", "version", "tier", "stage", "rank", "item", "episode", "season", "class",
+];
+
+/// Whether the word at `at` settles which row the person means: a pick word of `PICKED`, except
+/// "one" and "ones" after a number noun, where they are a number.
+fn picks_by_word(words: &[String], at: usize) -> bool {
+    let word = words[at].as_str();
+    if !PICKED.contains(&word) {
+        return false;
+    }
+    if matches!(word, "one" | "ones") {
+        return !at
+            .checked_sub(1)
+            .is_some_and(|before| NUMBER_NOUNS.contains(&words[before].as_str()));
+    }
+    true
+}
+
+/// A weekday in the plural ("dress fitting, saturdays"): it names the row by
+/// the day it is on, as "saturday's" does.
+fn plural_weekday(word: &str) -> bool {
+    word.strip_suffix('s')
+        .is_some_and(|day| crate::ground::weekday_of(day).is_some())
+}
+
 impl Session {
     pub(crate) fn act(&mut self, args: &Map<String, Value>) -> Result<Outcome, String> {
+        let mut decided = None;
+        let outcome = self.act_run(args, &mut decided)?;
+        Ok(self.say_decided(outcome, decided))
+    }
+
+    /// What the runtime decided about the rows of the write is said in its reply and its effect:
+    /// `compose` for audit, unless the turn ended in an outcome the runtime composed (a refusal
+    /// at the row), which keeps its own. A write that ran on a row the runtime chose says so in a
+    /// note: a row of another kind leads the reply, the rows of a write on every row follow the
+    /// write's lines (`pending_notes`).
+    fn say_decided(&mut self, mut outcome: Outcome, decided: Option<Decided>) -> Outcome {
+        // The note only reads true of a write that ran: a refusal composed at the row names the
+        // row itself.
+        let ran = outcome.effect.contains_key("diff")
+            && !outcome.effect.contains_key("error")
+            && !outcome.effect.contains_key("refusal");
+        let (family, action) = match decided {
+            None => return outcome,
+            Some(Decided::EveryFit) => ("ambiguous_write", "apply_all"),
+            Some(Decided::OtherKind { name, kind, key }) => {
+                if ran {
+                    let n = self.number(&key);
+                    let named = render::named(&self.world, n, &key);
+                    outcome.text = format!(
+                        "note: no {} called \"{name}\"; applied to {named}\n{}",
+                        kind.name(),
+                        outcome.text
+                    );
+                }
+                ("unmatched_write", "apply_other_kind")
+            }
+        };
+        if outcome.effect.contains_key("compose") {
+            outcome
+        } else {
+            crate::compose::marked(outcome, family, action)
+        }
+    }
+
+    fn act_run(
+        &mut self,
+        args: &Map<String, Value>,
+        decided: &mut Option<Decided>,
+    ) -> Result<Outcome, String> {
         let verb_text = match args.get("verb") {
             Some(Value::String(text)) => text.clone(),
             _ => String::new(),
@@ -155,6 +404,8 @@ impl Session {
         })?;
         let more = arg_bool(args, "more")?.unwrap_or(false);
         let extra = act_args(args.get("args"))?;
+        let (verb, extra, redirected) = self.redirect_verb(verb, args, extra);
+        let mut logged: Vec<Key> = Vec::new();
         let mut outcome = match verb {
             Verb::Undo => {
                 if args.contains_key("rows") || Self::has_selector(args) || !extra.is_empty() {
@@ -183,16 +434,51 @@ impl Session {
                 self.create(kind.as_deref(), &extra)?
             }
             _ => {
-                let targets = match self.targets(verb, args, &extra)? {
-                    Ok(targets) => targets,
+                let (mut targets, how, by_selector) = match self.targets(verb, args, &extra)? {
+                    Ok(found) => (found.keys, found.decided, found.by_selector),
                     Err(outcome) => return Ok(outcome),
                 };
-                self.write(verb, &targets, &extra)?
+                if let Some(asked) =
+                    self.ambiguous_pick(verb, &mut targets, args, &extra, by_selector)
+                {
+                    return Ok(asked);
+                }
+                *decided = how;
+                if verb == Verb::Reschedule
+                    && let [only] = targets.as_slice()
+                    && let Some(planned) = self.plan_anew(only, &extra)?
+                {
+                    return Ok(planned);
+                }
+                let count = targets.len();
+                if verb == Verb::Log {
+                    logged.clone_from(&targets);
+                }
+                let mut written = self.write(verb, &targets, &extra)?;
+                // Only a confirmed write reaches here over the cap (`targets`).
+                if count > ROW_CAP && !written.effect.contains_key("tool") {
+                    written.effect.insert(
+                        "bulk".to_owned(),
+                        json!({"count": count, "cap": ROW_CAP, "confirmed": true}),
+                    );
+                }
+                written
             }
         };
+        // what the redirect used is said when the write it made landed or was already so
+        if let Some(note) = redirected
+            && (outcome.effect.contains_key("diff") || outcome.effect.contains_key("already"))
+        {
+            self.pending_notes.push(note);
+        }
         outcome
             .effect
             .insert("verb".to_owned(), json!(verb.spec().name));
+        // A TURN THE RUNTIME ENDED BY ITSELF (a refusal composed in `execute`) is
+        // not paged: `more` does not keep it open.
+        if outcome.ends_turn && outcome.effect.contains_key("tool") {
+            return Ok(outcome);
+        }
         // AN ALREADY-SO WRITE ENDS NOTHING (SPEC §4.2): the vault did not
         // change, and the model answers with the state the runtime reported.
         let wrote = outcome.effect.get("diff").is_some_and(|diff| {
@@ -202,10 +488,134 @@ impl Session {
                     .is_some_and(|links| !links.is_empty())
         }) || verb == Verb::Reveal;
         if !wrote && outcome.effect.contains_key("already") {
+            // `undo` looks past a turn that changed nothing (`undo_entry`).
+            self.noops.insert(self.turn);
             outcome.ends_turn = false;
             return Ok(outcome);
         }
-        Ok(finish(outcome, more))
+        let mut outcome = finish(outcome, more);
+        // A LOG THAT ENDS THE TURN ALSO ANSWERS THE ROW: the contact is
+        // the whole of what was asked, and the person reads the row it was
+        // logged on.
+        if verb == Verb::Log && outcome.ends_turn && !outcome.effect.contains_key("error") {
+            self.answer_logged(&logged, &mut outcome);
+        }
+        Ok(outcome)
+    }
+
+    /// THE VERB A CALL MEANS WHEN IT NAMES ANOTHER (nt12 R4): an `edit` of a date is the
+    /// `reschedule` it names (`edit date: …` is `reschedule to: …`); an `edit` of `starred`,
+    /// `status` or `completed` is `star` or `unstar`, `cancel`, `complete` or `reopen`; args on a
+    /// verb that takes none are dropped. One `note:` line says what was used; a call it cannot
+    /// read as one of these stays as it was, for the verb's own refusal.
+    fn redirect_verb(
+        &mut self,
+        verb: Verb,
+        args: &Map<String, Value>,
+        extra: Map<String, Value>,
+    ) -> (Verb, Map<String, Value>, Option<String>) {
+        // a best-effort repair of a malformed call: off under `--no-normalize` (the replay of an
+        // author's bad steps)
+        if !self.flags.normalize {
+            return (verb, extra, None);
+        }
+        if verb == Verb::Edit
+            && let [(key, value)] = extra.iter().collect::<Vec<_>>().as_slice()
+        {
+            let kind = arg_str(args, "kind")
+                .and_then(|kind| Kind::parse(kind.trim()))
+                .or_else(|| {
+                    let rows = self.resolve_rows(args.get("rows")?).ok()?;
+                    rows.first().map(|key| key.0)
+                });
+            let field = if key.as_str() == "date" {
+                Some("date")
+            } else {
+                kind.and_then(|kind| whr::resolve_field(kind, key))
+            };
+            // a date that is no readable expression keeps the edit's own refusal, which names the
+            // reschedule and its `to`
+            let field = field
+                .filter(|field| *field != "date" || dates::parse(&dates::lenient(value).0).is_ok());
+            let said = text_of(value).trim().trim_matches('"').to_lowercase();
+            let redirected = match (field, kind) {
+                (Some("date"), _) => Some((Verb::Reschedule, {
+                    let mut to = Map::new();
+                    to.insert("to".to_owned(), (*value).clone());
+                    to
+                })),
+                (Some("starred"), _) => whr::parse_bool(&said)
+                    .map(|on| (if on { Verb::Star } else { Verb::Unstar }, Map::new())),
+                (Some("completed"), Some(Kind::Task)) => whr::parse_bool(&said)
+                    .map(|on| (if on { Verb::Complete } else { Verb::Reopen }, Map::new())),
+                (Some("status"), Some(Kind::Event)) if said == "cancelled" => {
+                    Some((Verb::Cancel, Map::new()))
+                }
+                (Some("status"), Some(Kind::Task)) => match said.as_str() {
+                    "completed" | "done" => Some((Verb::Complete, Map::new())),
+                    "open" | "needs-action" | "needs_action" => Some((Verb::Reopen, Map::new())),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some((to, left)) = redirected {
+                let note = format!("note: used {} for the edit of {key}", to.spec().name);
+                return (to, left, Some(note));
+            }
+        }
+        if !matches!(verb, Verb::Undo | Verb::Create)
+            && verb.spec().args.is_empty()
+            && !extra.is_empty()
+        {
+            let dropped: Vec<String> = extra
+                .iter()
+                .map(|(key, value)| format!("{key}: {}", text_of(value)))
+                .collect();
+            let note = format!(
+                "note: ignored args {} ({} takes none)",
+                dropped.join("; "),
+                verb.spec().name
+            );
+            return (verb, Map::new(), Some(note));
+        }
+        (verb, extra, None)
+    }
+
+    /// The logged rows as the answer of the turn: the effect an `answer
+    /// rows: [#n]` makes, beside the diff, and the row's readout line under
+    /// the change line (`render::row_line`, as `answer` prints it).
+    fn answer_logged(&mut self, keys: &[Key], outcome: &mut Outcome) {
+        if keys.is_empty() {
+            return;
+        }
+        let mut kinds: Vec<Kind> = Vec::new();
+        for key in keys {
+            if !kinds.contains(&key.0) {
+                kinds.push(key.0);
+            }
+        }
+        self.results.push(ResultSet {
+            kinds,
+            keys: keys.to_vec(),
+            value: None,
+        });
+        let handle = self.results.len();
+        for (position, key) in keys.iter().take(ROW_CAP).enumerate() {
+            let number = self.number(key);
+            if let Some(row) = self.world.row(key) {
+                outcome.text.push('\n');
+                outcome.text.push_str(&render::row_line(
+                    number,
+                    Some(position + 1),
+                    row,
+                    self.today(),
+                ));
+            }
+        }
+        outcome.effect.insert(
+            "answer".to_owned(),
+            json!({"rows": self.keys_json(keys), "ordered": false, "result": format!("@{handle}")}),
+        );
     }
 
     /// The rows an act applies to, or the observation that stops it.
@@ -214,20 +624,31 @@ impl Session {
         verb: Verb,
         args: &Map<String, Value>,
         extra: &Map<String, Value>,
-    ) -> Result<Result<Vec<Key>, Outcome>, String> {
+    ) -> Result<Result<Targets, Outcome>, String> {
         if let Some(keys) = self.rows_arg(
             args,
             "error: act takes rows or a selector, not both; narrow with within=@n.",
         )? {
-            // A BULK WRITE THE MESSAGE DID NOT ASK FOR: more rows than a
-            // result shows, with no "all"/"every" in the person's words, is
-            // a slip (a whole-vault find fed to a cancel), not a request. When
-            // the call carries a v2 trace, its `scope` decides instead of the
-            // words (`Session::bulk_allowed`).
-            if keys.len() > meta::ROW_CAP && !self.bulk_allowed() {
-                return Err(self.bulk_refusal(keys.len(), meta::ROW_CAP));
+            // THE CAP HOLDS (SPEC §4.6). A write on more rows than a result
+            // shows is never run outright: not when the slot trace says `scope:
+            // all`, not when the message says "all" or "every", not under
+            // `more`. The turn ends in the ask the runtime composes
+            // (`bulk_ask`), and the same write, sent in the turn after the
+            // person's yes, goes through (`confirmed`).
+            if keys.len() > ROW_CAP && !self.confirmed(verb, &keys, extra) {
+                // the ask the selector that made the handle ends in (nt11 R5)
+                let what = args
+                    .get("rows")
+                    .map(crate::session::handle_list)
+                    .and_then(|parts| match parts.as_slice() {
+                        [only] => only.strip_prefix('@')?.parse::<usize>().ok(),
+                        _ => None,
+                    })
+                    .and_then(|handle| self.result_whats.get(&handle).cloned())
+                    .unwrap_or_else(|| "the selector".to_owned());
+                return self.settle_rows(verb, keys, args, extra, &what);
             }
-            return Ok(Ok(keys));
+            return Ok(Ok(Targets::of(keys)));
         }
         if !Self::has_selector(args) {
             return Err("error: act needs rows=#n or a selector (kind, name, …).".to_owned());
@@ -241,76 +662,617 @@ impl Session {
         if let Some(outcome) = self.no_link(&selector) {
             return Ok(Err(outcome));
         }
-        let keys = self.select(&selector);
+        // A NAME IS RESOLVED IN TIERS (`resolve`; nt11 R3, nt12 R6): a write acts when exactly one
+        // row reaches any of tiers 1 to 3 (several are the ask over all of them, even when one of
+        // them is the name as it is said); a name only a typo reaches (tier 4) acts on the one
+        // row of the stated kind it reaches, with `matched "<name>" for "<query>"` (not a delete, a
+        // removal, money, a secret or a write on every row: those ask), and asks over several.
+        let mut named = self.select_named(&selector);
+        // a restore is of the trashed rows, whether or not the call says `trashed`: the trashed
+        // rows the name reaches as it is said come before a live row it reaches less well
+        if verb == Verb::Restore && !selector.trashed {
+            let trashed = self.select_named(&Selector {
+                trashed: true,
+                ..selector.clone()
+            });
+            if named.keys.is_empty()
+                || trashed
+                    .tier
+                    .is_some_and(|tier| tier < named.tier.unwrap_or(crate::resolve::Tier::Typo))
+            {
+                named = trashed;
+            }
+        }
+        let keys = if named.tier == Some(crate::resolve::Tier::Typo) {
+            // the writes a guess must not make stay the ask: a delete or a removal (destructive),
+            // money, a secret (egress), and a write the message says takes every row
+            let guess_ok = !matches!(
+                verb,
+                Verb::Delete | Verb::RemoveFrom | Verb::SettleUp | Verb::SettleDebt | Verb::Reveal
+            ) && self.said_every_row().is_none();
+            match named.keys.as_slice() {
+                [_] if self.flags.compose && guess_ok => {
+                    self.pending_notes.extend(named.typo_line.take());
+                    named.keys
+                }
+                _ => Vec::new(),
+            }
+        } else {
+            named.keys
+        };
+        // A TEXT LITERAL THAT REACHED NO ROW, read by the tiers, acts when exactly one row
+        // results (nt13 R2); several are the ask or the decline it was
+        let mut keys = keys;
+        if keys.is_empty()
+            && let Some((_, found, notes)) = self.text_by_tiers(&selector)
+            && found.len() == 1
+        {
+            self.pending_notes.extend(notes);
+            keys = found;
+        }
+        if keys.is_empty() && self.flags.compose {
+            // A NAME THAT REACHED NOTHING and names, as it is said, the one row of another kind is
+            // that row (`unmatched_target`); anything else is the ask or the decline the runtime
+            // composes.
+            let name = selector.name.clone().unwrap_or_default();
+            // THE STATED KIND RESTRICTS THE NAME (nt13 B1): a call that says where the row goes
+            // is for the rows that container holds
+            let into = self.destination_kind(verb, extra);
+            if let Some(key) = self.unmatched_target(verb, &selector, into) {
+                return Ok(Ok(Targets {
+                    keys: vec![key.clone()],
+                    decided: Some(Decided::OtherKind {
+                        name,
+                        kind: selector.kinds[0],
+                        key,
+                    }),
+                    by_selector: false,
+                }));
+            }
+            return Ok(Err(self.compose_unmatched_write(verb, &selector, into)));
+        }
         if keys.is_empty() {
             let mut outcome = Outcome::text("");
             self.empty(&selector, &mut outcome);
-            outcome.text.push_str("\nnothing was done.");
+            if !outcome.text.ends_with("nothing was done.") {
+                outcome.text.push_str("\nnothing was done.");
+            }
             return Ok(Err(outcome));
         }
+        self.settle_rows(verb, keys, args, extra, &selector.what())
+    }
+
+    /// THE YES TO "PLAN A NEW ONE INSTEAD?" (nt13 R6): the runtime's last turn ended offering to
+    /// plan a new event because the one the person moved was cancelled, and this turn's
+    /// reschedule is of that same row. It is the create the offer meant: a new event with the old
+    /// one's name, length, description and people, on the day the reschedule says (a day with no
+    /// time keeps the old time), with `note: planned a new event (the old one is cancelled)`. The
+    /// offer is used once, and only by the turn after it. `None` when any of that is not so: the
+    /// reschedule is the refusal it was.
+    fn plan_anew(
+        &mut self,
+        key: &Key,
+        extra: &Map<String, Value>,
+    ) -> Result<Option<Outcome>, String> {
+        let offered = self
+            .plan_offer
+            .as_ref()
+            .is_some_and(|(turn, row)| turn + 1 == self.turn && row == key);
+        if !offered || !self.flags.normalize || key.0 != Kind::Event {
+            return Ok(None);
+        }
+        let Some(row) = self.world.row(key).cloned() else {
+            return Ok(None);
+        };
+        if row.field("status") != Some(&Val::Enum("cancelled")) {
+            return Ok(None);
+        }
+        let (Some(to), true) = (extra.get("to"), extra.len() == 1) else {
+            return Ok(None);
+        };
+        let expr = self.date_expr(to)?;
+        let resolved =
+            dates::evaluate(&expr, self.now, row.date).map_err(|why| dates::rejection(&why))?;
+        if resolved.is_open() {
+            return Ok(None);
+        }
+        let (resolved, _) = self.settle_by_the_row(&row, &expr, resolved);
+        let mut args = Map::new();
+        args.insert("name".to_owned(), json!(row.name));
+        let mut date = to.clone();
+        if !matches!(resolved, dates::Resolved::Between { .. }) {
+            let Some(point) = resolved.point() else {
+                return Ok(None);
+            };
+            let point = keep_time(point, row.date);
+            date = match point.time {
+                Some(time) => json!({"date": point.date.to_string(), "time": dates::clock(time)}),
+                None => json!({"date": point.date.to_string()}),
+            };
+            if point.time.is_some() && row.date.is_some_and(|stamp| stamp.time.is_some()) {
+                let (start, end) = event_span(&row);
+                args.insert(
+                    "duration".to_owned(),
+                    json!(end.duration_since(start).as_mins().max(1)),
+                );
+            }
+        }
+        args.insert("date".to_owned(), date);
+        if let Some(Val::Text(description)) = row.field("description") {
+            args.insert("description".to_owned(), json!(description));
+        }
+        let attendees: Vec<String> = self
+            .world
+            .neighbours(key)
+            .remove(&Kind::Person)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|person| self.world.row(person).is_some_and(|row| !row.trashed))
+            .map(|person| person.1)
+            .collect();
+        self.plan_offer = None;
+        let mut outcome = self.create_with(Some("event"), &args, &attendees)?;
+        if outcome.effect.contains_key("diff") {
+            self.pending_notes
+                .push("note: planned a new event (the old one is cancelled)".to_owned());
+        }
+        outcome.effect.insert("verb".to_owned(), json!("create"));
+        Ok(Some(finish(outcome, false)))
+    }
+
+    /// The kind of the container a container verb puts its row in or takes it out of (`add_to
+    /// to: #n`, `remove_from from: #n`), when the call names one row.
+    fn destination_kind(&self, verb: Verb, extra: &Map<String, Value>) -> Option<Kind> {
+        let slot = match verb {
+            Verb::AddTo => "to",
+            Verb::RemoveFrom => "from",
+            _ => return None,
+        };
+        match self.resolve_rows(extra.get(slot)?).ok()?.as_slice() {
+            [only] => Some(only.0),
+            _ => None,
+        }
+    }
+
+    /// WHAT A WRITE DOES WITH THE SEVERAL ROWS ITS SELECTOR (OR A RESULT HANDLE OVER THE CAP,
+    /// nt11 R5) REACHED: the one row the person's words and the conversation single out
+    /// (`narrow`); every row when the person or the trace says all (the cap holding); else the
+    /// one safety check, the ask `Which one?` over the candidates (`--no-compose`: the
+    /// `ambiguous:` reply). A write over a handle of more than `ROW_CAP` rows ends exactly as the
+    /// same write by the selector that made it. `what` names the rows in the note.
+    fn settle_rows(
+        &mut self,
+        verb: Verb,
+        keys: Vec<Key>,
+        args: &Map<String, Value>,
+        extra: &Map<String, Value>,
+        what: &str,
+    ) -> Result<Result<Targets, Outcome>, String> {
+        // A WRITE THE PERSON (OR THE TRACE) SAYS TAKES EVERY ROW is not narrowed to the one in
+        // focus: "unstar all my cousins" is every cousin the selector fits (SPEC §3.3).
+        let every = if self.flags.compose {
+            self.said_every_row()
+        } else {
+            None
+        };
         if keys.len() > 1
-            && let Some((key, why)) = self.narrow(verb, &keys, extra)
+            && every.is_none()
+            && let Some((key, why)) = self.narrow(verb, &keys, extra, true)
         {
             self.pending_notes.push(why);
-            return Ok(Ok(vec![key]));
+            return Ok(Ok(Targets::of(vec![key])));
         }
         if keys.len() > 1 {
+            // The cap holds for every row the person said (SPEC §4.6): over it the turn ends in
+            // the runtime's ask, and the same write after a plain yes goes through, whatever the
+            // words of that yes say about the rows.
+            let over = keys.len() > ROW_CAP;
+            if self.flags.compose && (every.is_some() || over) {
+                let confirmed =
+                    over && self.pending_bulk.is_some() && self.confirmed(verb, &keys, extra);
+                if confirmed || (every.is_some() && !over) {
+                    if let Some(by) = every {
+                        self.pending_notes.push(format!(
+                            "note: {} rows fit; the {by} says all, so the write took every one of them.",
+                            keys.len()
+                        ));
+                    }
+                    return Ok(Ok(Targets {
+                        keys,
+                        decided: Some(Decided::EveryFit),
+                        by_selector: false,
+                    }));
+                }
+                if every.is_some() {
+                    return Ok(Err(self.bulk_ask(verb, &keys, args, extra)));
+                }
+            }
             // THE ONE SAFETY CHECK (SPEC §3.3), on the call alone.
-            let mut lines = Vec::new();
-            let mut names = Vec::new();
-            for key in keys.iter().take(meta::ROW_CAP) {
-                let n = self.number(key);
-                let short = render::named(&self.world, n, key);
-                lines.push((vec![n], short.clone()));
-                names.push(short);
+            if self.flags.compose {
+                // a `Which one?` over more than the cap remembers the write, as the cap's own ask
+                // does: the person's plain yes ("all of them") in the next turn is that write
+                if over {
+                    self.pending_bulk = Some(PendingBulk {
+                        turn: self.turn,
+                        verb,
+                        keys: keys.iter().cloned().collect(),
+                        args: canonical_json(&Value::Object(extra.clone())),
+                    });
+                }
+                return Ok(Err(self.compose_ambiguous_write(
+                    verb,
+                    what,
+                    &keys,
+                    extra,
+                    |_| crate::compose::WHICH_ONE.to_owned(),
+                )));
             }
-            let more = keys.len().saturating_sub(meta::ROW_CAP);
-            let what = selector
-                .name
-                .as_ref()
-                .map_or_else(|| "the selector".to_owned(), |name| format!("\"{name}\""));
-            let mut text = format!("ambiguous: {what} fits {}", names.join(", "));
-            if more > 0 {
-                text.push_str(&format!(" and {more} more"));
-            }
-            text.push_str("; nothing was done.");
-            let mut outcome = Outcome::text("");
-            outcome
-                .effect
-                .insert("ambiguous".to_owned(), self.keys_json(&keys));
-            let summary = format!("ambiguous: {what}; nothing was done");
-            self.push_obs_with(true, None, summary, text, lines, &mut outcome, true);
-            return Ok(Err(outcome));
+            return Ok(Err(self.ambiguous_block(what, &keys)));
         }
-        Ok(Ok(keys))
+        Ok(Ok(Targets {
+            by_selector: true,
+            ..Targets::of(keys)
+        }))
+    }
+
+    /// A ROW PICKED BY NUMBER THAT THE PERSON'S WORDS DO NOT SINGLE OUT
+    /// (SPEC §3.3, the pick path of the one safety check). `act rows=#n` names
+    /// one row, but the person said "star pedro" and two people are Pedro: the
+    /// model chose, and a guess at a write is the worst case. The runtime ends
+    /// the turn as an `ask` with the rows the words fit.
+    ///
+    /// The words that name the row are the message's words (and the previous
+    /// message's: a row named there and only pointed at now is still named)
+    /// that are also words of its name (exactly, folded of accents, in another
+    /// form, one letter off: "aadhar" for "Aadhaar", "9" for "9B"). The rows
+    /// they fit are the live rows of that kind that have every one of them. It
+    /// asks only when
+    ///
+    /// - the call is not already narrowed by its own `where`, `when` or
+    ///   `linked_to`: the model has stated what singles the row out;
+    /// - at least two of those rows are ones the verb applies to (SPEC §14.1:
+    ///   a `complete` on a done task, a `star` on a starred row is not a
+    ///   candidate). When exactly one is, it is the row meant: a pick of a row
+    ///   the verb cannot change goes to it, with a note;
+    /// - the picked row's whole name is not what the message states while
+    ///   the others only extend it ("tb test" is not "TB test reading");
+    /// - nothing in the message settles which: a date phrase or a plural
+    ///   weekday for the row ("saturdays"), an ordinal or "one", "it", "the
+    ///   other", a state ("open", "done"), or any other pick word of `PICKED`;
+    ///   and
+    /// - neither the date nor the focus of the previous turn (`narrow`: rows
+    ///   acted on, offered by an `ask`, shown in a short list) leaves one, nor
+    ///   does a longer list the previous turn showed that holds the picked
+    ///   row and no other row the verb changes: there the model's pick is
+    ///   borne out by what the person saw; and
+    /// - no lookup of this turn that carried a `where`, a `when` or a
+    ///   `linked_to` of its own (`Session::narrowed`) left the picked row, a
+    ///   row the verb changes, and no other such row: the model has stated
+    ///   what singles it out, as a call with a condition of its own does. A
+    ///   lookup by the name alone bears out nothing.
+    ///
+    /// The ask is over the rows the verb can change (`ask_options`).
+    fn ambiguous_pick(
+        &mut self,
+        verb: Verb,
+        keys: &mut Vec<Key>,
+        args: &Map<String, Value>,
+        extra: &Map<String, Value>,
+        by_selector: bool,
+    ) -> Option<Outcome> {
+        let [key] = keys.as_slice() else {
+            return None;
+        };
+        if matches!(verb, Verb::Create | Verb::Undo) {
+            return None;
+        }
+        if ["where", "when", "linked_to"]
+            .iter()
+            .any(|param| args.get(*param).is_some_and(|value| !value.is_null()))
+        {
+            return None;
+        }
+        let said = self.said();
+        let message_words = crate::session::words(&self.message);
+        // A PERSONAL PRONOUN POINTS AT A ROW IN FOCUS: with none of the picked row's kind there,
+        // "it" at the end of a sentence ("star the wifi, i keep needing it") settles nothing.
+        let referable = self.focus(false, true).iter().any(|number| {
+            self.by_number
+                .get(number.wrapping_sub(1))
+                .is_some_and(|other| other.0 == key.0)
+        });
+        if message_words.iter().enumerate().any(|(at, word)| {
+            (picks_by_word(&message_words, at) && (referable || !PRONOUNS.contains(&word.as_str())))
+                || plural_weekday(word)
+        }) || !said.settles_nothing()
+        {
+            return None;
+        }
+        // A BY-NAME ACT THAT REACHED ONE ROW BY THE PERSON'S OWN WORDS (SPEC §3.3 (c): a by-name
+        // act takes none of these steps): every word of the call's `name` is a word the message
+        // says, and the selector alone singled the row out. An over-specific name (a word the
+        // person did not say) is still the check's case.
+        if by_selector && let Some(name) = arg_str(args, "name") {
+            let own: Vec<String> = crate::session::words(&name)
+                .into_iter()
+                .filter(|word| !UNNAMING.contains(&word.as_str()))
+                .collect();
+            if !own.is_empty()
+                && own.iter().all(|word| {
+                    message_words
+                        .iter()
+                        .any(|said| crate::resolve::word_near(word, &crate::search::fold(said)))
+                })
+            {
+                return None;
+            }
+        }
+        let row = self.world.row(key)?;
+        let name_words = crate::search::spellings_of(&row.name);
+        // A word that extends a name word of four letters or more ("renewal" for "Renew") names
+        // it too: "put the passport renewal on it" fits "Renew passport" and not "Get passport photos".
+        let names_it = |word: &String| {
+            !UNNAMING.contains(&word.as_str())
+                && name_words.iter().any(|name| {
+                    crate::resolve::word_near(name, word)
+                        || (name.chars().count() >= 4
+                            && word.chars().count() > name.chars().count()
+                            && word.starts_with(name.as_str()))
+                })
+        };
+        // A message that names no word of the row ("the driver" answering an
+        // ask) names nothing; the message before it only adds to a naming one.
+        let now: Vec<String> = message_words
+            .iter()
+            .map(|word| crate::search::fold(word))
+            .collect();
+        if !now.iter().any(&names_it) {
+            return None;
+        }
+        let mut spoken = now;
+        for word in crate::session::words(&self.prev_message) {
+            let word = crate::search::fold(&word);
+            if !spoken.contains(&word) {
+                spoken.push(word);
+            }
+        }
+        let reference: Vec<String> = spoken
+            .iter()
+            .filter(|word| names_it(word))
+            .cloned()
+            .collect();
+        let fits: Vec<Key> = self
+            .world
+            .of_kind(key.0)
+            .filter(|other| !other.trashed)
+            .filter(|other| {
+                let have = crate::search::spellings_of(&other.name);
+                reference.iter().all(|word| {
+                    have.iter()
+                        .any(|name| crate::resolve::word_near(name, word))
+                })
+            })
+            .map(Row::key)
+            .collect();
+        if fits.len() < 2 || !fits.contains(key) {
+            return None;
+        }
+        // THE WHOLE NAME, STATED: of the rows that fit, only the picked one is
+        // named in full by the words ("tb test"; the others only extend it).
+        let named_in_full: Vec<&Key> = fits
+            .iter()
+            .filter(|other| {
+                let Some(row) = self.world.row(other) else {
+                    return false;
+                };
+                // THE NAME OR, FOR A PERSON, THE NICKNAME: a message that states a row's whole
+                // nickname ("big dan") singles that row out as its whole name does.
+                let nickname = match row.field("nickname") {
+                    Some(Val::Text(nickname)) => Some(nickname.as_str()),
+                    _ => None,
+                };
+                std::iter::once(row.name.as_str())
+                    .chain(nickname)
+                    .any(|alias| {
+                        // a word of the name spelled with its joiners or without (`Yun-ho`, `yunho`)
+                        let words: Vec<_> = crate::search::spoken_tokens(alias)
+                            .into_iter()
+                            .filter(|token| {
+                                token.single().is_none_or(|word| !UNNAMING.contains(&word))
+                            })
+                            .collect();
+                        !words.is_empty()
+                            && words.iter().all(|token| {
+                                token.is_among(true, |name| {
+                                    spoken
+                                        .iter()
+                                        .any(|word| crate::resolve::word_near(name, word))
+                                })
+                            })
+                    })
+            })
+            .collect();
+        if named_in_full == [key] {
+            return None;
+        }
+        let changes: Vec<Key> = self
+            .fits(verb, &fits, extra)
+            .into_iter()
+            .filter_map(|(other, fit)| (fit == Fit::Yes).then_some(other))
+            .collect();
+        if let [only] = changes.as_slice()
+            && only != key
+            && self.fits(verb, std::slice::from_ref(key), extra)[0].1 == Fit::No
+        {
+            // EXACTLY ONE CANDIDATE THE VERB APPLIES TO (R4): it is the row
+            // meant, whichever the model picked.
+            let n = self.number(only);
+            let named = render::named(&self.world, n, only);
+            self.pending_notes.push(format!(
+                "note: {} rows fit; used {named} because it is the only one {} applies to.",
+                fits.len(),
+                verb.spec().name
+            ));
+            *keys = vec![only.clone()];
+            return None;
+        }
+        if changes.len() < 2 || self.narrow(verb, &fits, extra, false).is_some() {
+            return None;
+        }
+        // A PICK OF THE ONE ROW THAT IS NOT OVER: moving or calling off an
+        // event that has ended, or a task that is done, is not what a person
+        // means when another row of that name is still ahead.
+        if matches!(verb, Verb::Reschedule | Verb::Cancel) {
+            let ahead: Vec<&Key> = fits
+                .iter()
+                .filter(|other| self.world.row(other).is_some_and(|row| !self.is_over(row)))
+                .collect();
+            if ahead == [key] {
+                return None;
+            }
+        }
+        // A LOOKUP THE MODEL NARROWED ITSELF: a find of this turn with a `where`, a `when` or a
+        // `linked_to` of its own whose result holds the picked row, a row the verb changes, and
+        // no other such row. The model has stated what singles the row out, as a call that
+        // carries one does; a lookup by the name alone (an over-specific name) bears out nothing.
+        let own = changes.contains(key)
+            && self.narrowed.iter().any(|(turn, handle)| {
+                let result = &self.results[handle - 1].keys;
+                *turn == self.turn
+                    && result.contains(key)
+                    && changes
+                        .iter()
+                        .all(|other| other == key || !result.contains(other))
+            });
+        if own {
+            return None;
+        }
+        // A LONGER LIST THE PERSON SAW: the picked row is the one fit in it, of the rows the
+        // verb changes.
+        let seen = self.focus(false, true);
+        let saw = |other: &Key| self.numbers.get(other).is_some_and(|n| seen.contains(n));
+        if saw(key) && changes.iter().all(|other| other == key || !saw(other)) {
+            return None;
+        }
+        let what = format!("\"{}\"", reference.join(" "));
+        if self.flags.compose {
+            return Some(
+                self.compose_ambiguous_write(verb, &what, &fits, extra, |options| {
+                    format!("which one of the {options} did you mean?")
+                }),
+            );
+        }
+        let question = format!("which one of the {} did you mean?", fits.len());
+        let mut outcome = self.ambiguous_block(&what, &fits);
+        outcome.ends_turn = true;
+        outcome.effect.insert(
+            "ask".to_owned(),
+            json!({"question": question, "options": self.keys_json(&fits)}),
+        );
+        outcome.effect.insert("tool".to_owned(), json!("ask"));
+        self.mark_offered(&fits);
+        Some(outcome)
+    }
+
+    /// The `ambiguous:` observation: every candidate, nothing done. The reply
+    /// lists the first `ROW_CAP` and counts the rest; those are the rows an
+    /// `ask` after it offers (`Session::complete_options`), so they are the
+    /// rows the person most likely means (`live_first`).
+    pub(crate) fn ambiguous_block(&mut self, what: &str, keys: &[Key]) -> Outcome {
+        let keys = self.live_first(keys);
+        let mut lines = Vec::new();
+        let mut names = Vec::new();
+        for key in keys.iter().take(ROW_CAP) {
+            let n = self.number(key);
+            let short = render::named(&self.world, n, key);
+            lines.push((vec![n], short.clone()));
+            names.push(short);
+        }
+        let more = keys.len().saturating_sub(ROW_CAP);
+        let mut text = format!("ambiguous: {what} fits {}", names.join(", "));
+        if more > 0 {
+            text.push_str(&format!(" and {more} more"));
+        }
+        text.push_str("; nothing was done.");
+        let mut outcome = Outcome::text("");
+        outcome
+            .effect
+            .insert("ambiguous".to_owned(), self.keys_json(&keys));
+        let summary = format!("ambiguous: {what}; nothing was done");
+        self.push_obs_with(true, None, summary, text, lines, &mut outcome, true);
+        outcome
+    }
+
+    /// THE CANDIDATES OF AN AMBIGUITY IN THE ORDER THE REPLY LISTS THEM: the
+    /// rows that are not over first (a task not done or cancelled, an event
+    /// that has not ended, a row with no date), the nearest to today first, a
+    /// row with no date after the dated ones; then the rows that are over, in
+    /// the order the selector gave. A long list is cut at `ROW_CAP`, and the
+    /// selector's order is oldest first: without this the twelve rows shown
+    /// were the oldest completed tasks and the past events, and the row the
+    /// person means sat past the cut.
+    pub(crate) fn live_first(&self, keys: &[Key]) -> Vec<Key> {
+        let today = self.today();
+        let (mut live, over): (Vec<Key>, Vec<Key>) = keys
+            .iter()
+            .cloned()
+            .partition(|key| self.world.row(key).is_some_and(|row| !self.is_over(row)));
+        live.sort_by_key(|key| {
+            let days = self
+                .world
+                .row(key)
+                .and_then(|row| row.date)
+                .map(|stamp| (stamp.date - today).get_days().unsigned_abs());
+            (days.is_none(), days)
+        });
+        live.extend(over);
+        live
     }
 
     /// A name that fits several rows is settled only by what the person's
     /// words and the conversation already fix, each step used only if it
     /// leaves rows:
     ///
+    /// 0. APPLICABILITY (SPEC §14.1): rows the verb cannot change as they
+    ///    stand drop out (`Session::fits`);
+    ///
     /// 1. the one date the message states ("cancel the swim class on
     ///    saturday"), for verbs that act on a row where it stands (a bare
     ///    weekday only for `cancel`, which looks ahead);
+    ///
     /// 2. FOCUS: the rows the previous turn and this turn have acted on,
-    ///    opened, or answered in a short list (`Session::focus`: at most
-    ///    `FOCUS_RESULT_MAX` rows; a longer list names a row only because it
-    ///    met a condition); exactly one candidate in it is the row the person
-    ///    is still talking about.
+    ///    opened, offered in an `ask`, or answered in a short list
+    ///    (`Session::focus`: at most `FOCUS_RESULT_MAX` rows; a longer list
+    ///    names a row only because it met a condition); exactly one candidate
+    ///    in it is the row the person is still talking about.
     ///
     /// The row is returned only when exactly one candidate is left; two or
-    /// more stay `ambiguous:` with the full list (SPEC §3.3). What a verb
-    /// would change is deliberately NOT a step: "already completed" rows are
-    /// as often the row meant as not, and the authored gold asks there.
+    /// more stay `ambiguous:` with the full list (SPEC §3.3).
     fn narrow(
         &mut self,
         verb: Verb,
         keys: &[Key],
         extra: &Map<String, Value>,
+        own_turn: bool,
     ) -> Option<(Key, String)> {
         let mut cands: Vec<Key> = keys.to_vec();
         let mut why: Vec<String> = Vec::new();
-        let _ = extra;
+        // 0. APPLICABILITY FIRST (SPEC §14.1): rows the verb cannot change are
+        //    not candidates, so a name that fits one open and one done task is
+        //    not ambiguous for "tick off". Used only if it leaves rows; two or
+        //    more it leaves go on to the steps below.
+        let live: Vec<Key> = self
+            .fits(verb, &cands, extra)
+            .into_iter()
+            .filter_map(|(key, fit)| (fit != Fit::No).then_some(key))
+            .collect();
+        if !live.is_empty() && live.len() < cands.len() {
+            cands = live;
+            why.push(format!(
+                "only that one is a row {} can change",
+                verb.spec().name
+            ));
+        }
         if cands.len() > 1
             && !matches!(verb, Verb::Reschedule | Verb::Create)
             && let Some((day, text)) = self.said().only_day(verb == Verb::Cancel)
@@ -331,7 +1293,7 @@ impl Session {
             }
         }
         if cands.len() > 1 {
-            let focus = self.focus();
+            let focus = self.focus(own_turn, false);
             let seen: Vec<Key> = cands
                 .iter()
                 .filter(|key| self.numbers.get(*key).is_some_and(|n| focus.contains(n)))
@@ -354,6 +1316,101 @@ impl Session {
             return Some((key, what));
         }
         None
+    }
+
+    /// Whether a row is over: an event that has ended, a task that is done or
+    /// cancelled.
+    fn is_over(&self, row: &Row) -> bool {
+        match row.kind {
+            Kind::Event => event_span(row).1 < self.now,
+            Kind::Task => matches!(
+                row.field("status"),
+                Some(Val::Enum("completed" | "cancelled"))
+            ),
+            _ => false,
+        }
+    }
+
+    /// WHETHER THE VERB CAN CHANGE EACH ROW as it stands (SPEC §14.1): the
+    /// verb would leave the row different. `complete` an open task, `restore`
+    /// a trashed row, `delete` a live one, `star` an unstarred row, `unstar`
+    /// a starred one, `settle_debt` an open debt, and for every other verb the
+    /// write's own already-so test: `cancel` an event not cancelled, `add_to`
+    /// a row that is not a member, `reopen` a task not open, an `edit` that
+    /// changes a field (the pin of a pinned note is no change), `settle_up` a
+    /// person with a balance, `reveal` an item that has the field asked for.
+    /// The one exception is `reschedule`: a row already at the time asked is
+    /// still a candidate, since the person may be re-confirming it. A call
+    /// that cannot be planned at all (a malformed argument) is `Unknown`: the
+    /// write reports the error, so such a row is neither kept out nor counted.
+    fn fits(&mut self, verb: Verb, keys: &[Key], extra: &Map<String, Value>) -> Vec<(Key, Fit)> {
+        let mut out = Vec::new();
+        for key in keys {
+            let Some(row) = self.world.row(key).cloned() else {
+                continue;
+            };
+            let yes = |applies: bool| if applies { Fit::Yes } else { Fit::No };
+            let fit = match verb {
+                Verb::Complete => {
+                    yes(task_stand(verb, status_of(row.field("status"))) == Stand::Changes)
+                }
+                Verb::Restore => yes(row.trashed),
+                Verb::Delete => yes(!row.trashed),
+                Verb::Star => yes(!row.starred()),
+                Verb::Unstar => yes(row.starred()),
+                Verb::SettleDebt => yes(row.field("status") != Some(&Val::Enum("settled"))),
+                _ => {
+                    // Planning names rows (`named`), which would put them in
+                    // the conversation's focus: the filter leaves no trace.
+                    let acted = self.acted.clone();
+                    let planned = self.plan(verb, &row, extra);
+                    self.acted = acted;
+                    match planned {
+                        Ok(Plan::Run { .. }) => Fit::Yes,
+                        // A reschedule to where the row already is stays a
+                        // candidate: the person may be re-confirming it.
+                        Ok(Plan::Already(_)) if verb == Verb::Reschedule => Fit::Yes,
+                        Ok(Plan::Already(_)) => Fit::No,
+                        Err(_) => Fit::Unknown,
+                    }
+                }
+            };
+            out.push((key.clone(), fit));
+        }
+        out
+    }
+
+    /// THE ROWS A "WHICH ONE?" OFFERS (SPEC §4.8): of the rows a name fits, the ones the verb can
+    /// change as they stand (`fits`), so `unstar` is asked over the starred rows and `complete`
+    /// over the open ones, and for `cancel` those that are not over too (an event that has ended
+    /// is not what a person calls off). When that leaves none, every row stays and the write
+    /// reports what it finds. The count is how many rows it left out.
+    pub(crate) fn ask_options(
+        &mut self,
+        verb: Verb,
+        keys: &[Key],
+        extra: &Map<String, Value>,
+    ) -> (Vec<Key>, usize) {
+        let mut kept: Vec<Key> = self
+            .fits(verb, keys, extra)
+            .into_iter()
+            .filter_map(|(key, fit)| (fit != Fit::No).then_some(key))
+            .collect();
+        if verb == Verb::Cancel {
+            let ahead: Vec<Key> = kept
+                .iter()
+                .filter(|key| self.world.row(key).is_some_and(|row| !self.is_over(row)))
+                .cloned()
+                .collect();
+            if !ahead.is_empty() {
+                kept = ahead;
+            }
+        }
+        if kept.is_empty() {
+            return (keys.to_vec(), 0);
+        }
+        let left_out = keys.len() - kept.len();
+        (kept, left_out)
     }
 
     fn row_of(&self, key: &Key) -> Result<Row, String> {
@@ -382,22 +1439,62 @@ impl Session {
         for key in targets {
             if verb.command(key.0).is_none() {
                 let kinds: Vec<&str> = verb.kinds().iter().map(|kind| kind.name()).collect();
-                return Err(format!(
+                let mut refusal = format!(
                     "error: {} does not apply to {}. {} applies to: {}.",
                     verb.spec().name,
                     key.0.plural(),
                     verb.spec().name,
                     kinds.join(", ")
-                ));
+                );
+                // A ROW OF THE RIGHT KIND THE WORDS FIT is a repair, not a decline: the model
+                // picked the wrong kind (a document where the verb wants a person)
+                let fits = self.did_you_mean(&verb.kinds(), key);
+                refusal.push_str(&fits);
+                if self.flags.compose && fits.is_empty() {
+                    return Ok(self.compose_declined_write(
+                        verb,
+                        key,
+                        &refusal,
+                        "does_not_apply",
+                        "out_of_scope",
+                    ));
+                }
+                return Err(refusal);
             }
             let row = self.row_of(key)?;
             if row.trashed && !matches!(verb, Verb::Restore | Verb::Delete) {
                 let name = self.named(key);
-                return Err(format!(
-                    "error: {name} is in the trash; restore it first. Nothing was done."
-                ));
+                let refusal =
+                    format!("error: {name} is in the trash; restore it first. Nothing was done.");
+                if self.flags.compose {
+                    return Ok(self.compose_declined_write(
+                        verb,
+                        key,
+                        &refusal,
+                        "trashed_target",
+                        "not_found",
+                    ));
+                }
+                return Err(refusal);
             }
-            let plan = self.plan(verb, &row, args)?;
+            let plan = match self.plan(verb, &row, args) {
+                // A ROW FOR A CONTAINER OF ANOTHER KIND (a person into an event): nothing can
+                // lift it. The sentence is the runtime's own, `plan_membership`'s.
+                Err(refusal)
+                    if self.flags.compose
+                        && refusal.contains(" goes into a ")
+                        && !refusal.contains(" Did you mean ") =>
+                {
+                    return Ok(self.compose_declined_write(
+                        verb,
+                        key,
+                        &refusal,
+                        "wrong_container",
+                        "out_of_scope",
+                    ));
+                }
+                other => other?,
+            };
             plans.push((key.clone(), plan));
         }
         self.execute(verb, plans, None)
@@ -412,6 +1509,7 @@ impl Session {
     ) -> Result<Outcome, String> {
         let before = self.world.clone();
         let mut already = Vec::new();
+        let mut already_keys: Vec<Key> = Vec::new();
         let mut already_lines = Vec::new();
         let mut inverses = Vec::new();
         let mut not_undoable = Vec::new();
@@ -419,11 +1517,17 @@ impl Session {
         let mut failure = None;
         let mut touched: Vec<Key> = Vec::new();
         let mut revealed = None;
+        // A RESTORE OVER SEVERAL ROWS does not depend on their order: a row past the vault's
+        // window is set aside and the others still come back; the set-aside rows are reported
+        // (nt9, rule 6), or, when none came back, the first of them ends the turn as before.
+        let several = plans.len() > 1;
+        let mut set_aside: Vec<(Key, &'static str, Value, Ran, String)> = Vec::new();
         for (key, plan) in plans {
             match plan {
                 Plan::Already(state) => {
                     let name = self.named(&key);
                     already_lines.push(format!("already: {name} {state}"));
+                    already_keys.push(key.clone());
                     already.push(json!({"kind": key.0.name(), "id": key.1, "n": self.numbers.get(&key), "state": state}));
                 }
                 Plan::Run {
@@ -433,9 +1537,47 @@ impl Session {
                     note,
                 } => {
                     let mut outputs = Vec::new();
+                    let mut lapsed_row = false;
                     for step in steps {
-                        let ran = self.handle.step(step.command, step.input)?;
+                        let ran = self.handle.step(step.command, step.input.clone())?;
                         if !ran.ok {
+                            if verb == Verb::Restore
+                                && several
+                                && outputs.is_empty()
+                                && before.row(&key).is_some_and(|row| row.trashed)
+                            {
+                                let name = self.named(&key);
+                                let reason = ran.reason.clone().unwrap_or_default();
+                                let said = format!(
+                                    "error: restore {name} was refused: it is in the trash but past the vault's restore window, so it cannot come back (vault: {reason})."
+                                );
+                                set_aside.push((
+                                    key.clone(),
+                                    step.command,
+                                    step.input.clone(),
+                                    ran,
+                                    said,
+                                ));
+                                lapsed_row = true;
+                                break;
+                            }
+                            // NOTHING HAS LANDED YET, so the runtime can end the
+                            // turn itself (D-1044-10): a decline when nothing can
+                            // lift the refusal, an ask when the person can still
+                            // act on it (`Session::refusal`).
+                            if touched.is_empty()
+                                && outputs.is_empty()
+                                && let Some(ended) = self.refusal(
+                                    verb,
+                                    &key,
+                                    (step.command, &step.input),
+                                    &ran,
+                                    &before,
+                                )
+                            {
+                                self.settling.clear();
+                                return Ok(ended);
+                            }
                             let name = self.named(&key);
                             let reason = ran.reason.unwrap_or_default();
                             // RETENTION: the row lists as trashed, so the only
@@ -455,6 +1597,9 @@ impl Session {
                             break;
                         }
                         outputs.push(ran.output);
+                    }
+                    if lapsed_row {
+                        continue;
                     }
                     if failure.is_some() {
                         break;
@@ -497,6 +1642,19 @@ impl Session {
                 }
             }
         }
+        if touched.is_empty()
+            && failure.is_none()
+            && let Some((key, command, input, ran, _)) = set_aside.first()
+            && let Some(ended) = self.refusal(verb, key, (command, input), ran, &before)
+        {
+            self.settling.clear();
+            return Ok(ended);
+        }
+        if !set_aside.is_empty() {
+            let mut said: Vec<String> = set_aside.into_iter().map(|(.., said)| said).collect();
+            said.extend(failure);
+            failure = Some(said.join("\n"));
+        }
         if let Some(created) = &created {
             touched.push(created.clone());
         }
@@ -529,12 +1687,22 @@ impl Session {
             }
         }
         let mut lines = Vec::new();
-        for key in &touched {
+        self.mark_acted(&touched);
+        self.mark_acted(&already_keys);
+        for (shown, key) in touched.iter().enumerate() {
             let n = self.number(key);
             self.acted.insert(n);
-            if verb != Verb::Reveal {
+            if verb != Verb::Reveal && shown < ROW_CAP {
                 lines.push(self.change_line(verb, &before, key, n));
             }
+        }
+        if verb != Verb::Reveal && touched.len() > ROW_CAP {
+            // A CONFIRMED BULK WRITE echoes the first `ROW_CAP` rows; the
+            // effect lists every one.
+            lines.push(format!(
+                "… {} more changed (the effect lists every row)",
+                touched.len() - ROW_CAP
+            ));
         }
         lines.extend(notes.iter().cloned());
         lines.extend(already_lines);
@@ -675,17 +1843,13 @@ impl Session {
         Ok(match verb {
             Verb::Complete | Verb::Reopen => {
                 check_args(&[])?;
-                let status = row.field("status").cloned();
-                let old = match &status {
-                    Some(Val::Enum(value)) => *value,
-                    _ => "open",
-                };
+                let old = status_of(row.field("status"));
                 let (want, vault) = if verb == Verb::Complete {
                     ("completed", "completed")
                 } else {
                     ("open", "needs-action")
                 };
-                if old == want {
+                if task_stand(verb, old) == Stand::Already {
                     let when = row
                         .field("completed")
                         .map(|value| format!(" ({})", value.show(None)))
@@ -886,17 +2050,57 @@ impl Session {
                 ));
             }
         }
-        let value = args
-            .get(slot)
-            .ok_or_else(|| format!("error: {} needs {slot}: #n.", verb.spec().name))?;
-        let containers = self.resolve_rows(value)?;
+        // NO `from`: the one container of that kind the row is in (nt12 R4)
+        let mut by_default = false;
+        let containers = match args.get(slot) {
+            Some(value) => self.resolve_rows(value)?,
+            None if verb == Verb::RemoveFrom && self.flags.normalize => {
+                let expected = container_of(row.kind).unwrap_or(Kind::Group);
+                let inside = self
+                    .world
+                    .neighbours(&row.key())
+                    .remove(&expected)
+                    .unwrap_or_default();
+                let [only] = inside.as_slice() else {
+                    return Err(format!("error: {} needs {slot}: #n.", verb.spec().name));
+                };
+                by_default = true;
+                vec![only.clone()]
+            }
+            None => return Err(format!("error: {} needs {slot}: #n.", verb.spec().name)),
+        };
         let [container] = containers.as_slice() else {
             return Err(format!("error: {slot} is exactly one #n."));
         };
         let expected = container_of(row.kind).unwrap_or(Kind::Group);
+        // A DESTINATION OF A KIND THAT CANNOT HOLD THE ROW whose name is the name of exactly one
+        // container that can (nt13 R4) is that container: the Send of "Did you mean" would change
+        // only the destination to the same-named container, which is no guess
+        let mut redirected: Option<String> = None;
+        let mut container = container.clone();
+        if container.0 != expected
+            && self.flags.normalize
+            && let Some(name) = self.world.row(&container).map(|row| row.name.clone())
+        {
+            let found = self.resolve_name(&name, &[expected], false, None);
+            if matches!(
+                found.tier,
+                Some(crate::resolve::Tier::Equal | crate::resolve::Tier::Words)
+            ) && let [only] = found.matches.as_slice()
+            {
+                container = only.clone();
+                let n = self.number(&container);
+                redirected = Some(format!(
+                    "note: used {}",
+                    render::named(&self.world, n, &container)
+                ));
+            }
+        }
+        let container = &container;
         if container.0 != expected {
+            let fits = self.did_you_mean(&[expected], container);
             return Err(format!(
-                "error: a {} goes into a {}, and {} is a {}.",
+                "error: a {} goes into a {}, and {} is a {}.{fits}",
                 row.kind.name(),
                 expected.name(),
                 self.named(container),
@@ -952,7 +2156,7 @@ impl Session {
             };
             Step { command, input }
         };
-        Ok(match row.kind {
+        let mut planned = match row.kind {
             Kind::Person | Kind::Photo => {
                 let (add, remove) = if row.kind == Kind::Person {
                     ("tally.add_group_member", "tally.remove_group_member")
@@ -988,7 +2192,45 @@ impl Session {
                     note: None,
                 }
             }
-        })
+        };
+        if let Some(said) = redirected
+            && let Plan::Run { note, .. } = &mut planned
+        {
+            *note = Some(said);
+        }
+        if by_default && let Plan::Run { note, .. } = &mut planned {
+            *note = Some(format!(
+                "note: used {slot} {name} (the only {} it is in)",
+                expected.name()
+            ));
+        }
+        Ok(planned)
+    }
+
+    /// ` Did you mean #7 task "Lease review"?`: the live rows of `kinds` (the kinds the verb, the
+    /// container or the slot wants) that the name of `wrong`, a row of another kind, reaches by
+    /// a word, at most three; nothing when none. A refusal for a wrong-kind row ends in it, so
+    /// the model can send the right row instead (SPEC §5).
+    fn did_you_mean(&mut self, kinds: &[Kind], wrong: &Key) -> String {
+        let Some(name) = self.world.row(wrong).map(|row| row.name.clone()) else {
+            return String::new();
+        };
+        let fits: Vec<Key> = crate::search::name_reach(self, &name, kinds)
+            .into_iter()
+            .filter(|key| key != wrong && self.world.row(key).is_some_and(|row| !row.trashed))
+            .take(3)
+            .collect();
+        if fits.is_empty() {
+            return String::new();
+        }
+        let named: Vec<String> = fits
+            .iter()
+            .map(|key| {
+                let n = self.number(key);
+                render::named(&self.world, n, key)
+            })
+            .collect();
+        format!(" Did you mean {}?", named.join(" or "))
     }
 
     fn plan_settle_up(&mut self, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
@@ -1002,17 +2244,28 @@ impl Session {
         if row.id == self.world.me {
             return Err("error: settle_up is with someone else, not you.".to_owned());
         }
-        let group = args
-            .get("group")
-            .ok_or("error: settle_up needs group: #n.")?;
-        let groups = self.resolve_rows(group)?;
+        // NO GROUP: the one group in which this person and you have a balance (nt12 R4)
+        let mut by_default: Option<Key> = None;
+        let groups = match args.get("group") {
+            Some(group) => self.resolve_rows(group)?,
+            None if self.flags.normalize => {
+                let held = self.groups_holding_balance(row);
+                let [only] = held.as_slice() else {
+                    return Err("error: settle_up needs group: #n.".to_owned());
+                };
+                by_default = Some(only.clone());
+                held
+            }
+            None => return Err("error: settle_up needs group: #n.".to_owned()),
+        };
         let [group] = groups.as_slice() else {
             return Err("error: group is exactly one #n.".to_owned());
         };
         if group.0 != Kind::Group {
             let name = self.named(group);
+            let fits = self.did_you_mean(&[Kind::Group], group);
             return Err(format!(
-                "error: group: names a group, and {name} is not one."
+                "error: group: names a group, and {name} is not one.{fits}"
             ));
         }
         let currency = self
@@ -1030,10 +2283,10 @@ impl Session {
             .unwrap_or(0);
         let amount = match args.get("amount") {
             Some(value) => {
-                let number = text_of(value)
-                    .trim()
-                    .parse::<f64>()
-                    .map_err(|_| "error: amount is a number in currency units.".to_owned())?;
+                let given = text_of(value);
+                whr::symbol_conflict(&given, &currency)?;
+                let number = whr::parse_amount(&given)
+                    .ok_or_else(|| "error: amount is a number in currency units.".to_owned())?;
                 Some(minor_of(number, &currency))
             }
             None => None,
@@ -1071,11 +2324,34 @@ impl Session {
             inverse: Vec::new(),
             not_undoable: Some("a settlement is real cash and stays recorded".to_owned()),
             note: Some(format!(
-                "settlement: {} paid {}",
+                "settlement: {} paid {}{}",
                 crate::world::money(amount, &currency),
-                if owes >= 0 { "to you" } else { "by you" }
+                if owes >= 0 { "to you" } else { "by you" },
+                by_default.map_or_else(String::new, |key| format!(
+                    "\nnote: used group {} (the only group with a balance between you and {})",
+                    self.named(&key),
+                    row.name
+                ))
             )),
         })
+    }
+
+    /// The groups in which `person` and you have a balance.
+    fn groups_holding_balance(&self, person: &Row) -> Vec<Key> {
+        let data = self.world.tally.balance_data();
+        let me = self.world.me.clone();
+        self.world
+            .rows
+            .values()
+            .filter(|group| group.kind == Kind::Group && !group.trashed)
+            .filter(|group| {
+                centraid_apps_tally::balance::group_pair_nets(&data, &group.id)
+                    .get(&person.id)
+                    .and_then(|owed| owed.get(&me))
+                    .is_some_and(|net| *net != 0)
+            })
+            .map(Row::key)
+            .collect()
     }
 
     fn plan_reveal(&mut self, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
@@ -1111,11 +2387,15 @@ impl Session {
                 .map(|(name, _)| *name)
                 .collect();
             return Err(format!(
-                "error: {name} has no {field}. It holds: {}.",
+                "error: {name} has no {field}. It holds: {}.{}",
                 if has.is_empty() {
                     "no secrets".to_owned()
                 } else {
                     has.join(", ")
+                },
+                match has.as_slice() {
+                    [only] => format!(" Send reveal field: {only}."),
+                    _ => String::new(),
                 }
             ));
         };
@@ -1169,7 +2449,7 @@ impl Session {
         let to = args
             .get("to")
             .ok_or_else(|| dates::rejection("reschedule needs to: <date expression>"))?;
-        let expr = dates::parse(to).map_err(|why| dates::rejection(&why))?;
+        let expr = self.date_expr(to)?;
         let resolved =
             dates::evaluate(&expr, self.now, row.date).map_err(|why| dates::rejection(&why))?;
         if resolved.is_open() {
@@ -1178,6 +2458,8 @@ impl Session {
                 resolved.echo()
             ));
         }
+        let (resolved, said) = self.settle_by_the_row(row, &expr, resolved);
+        let said = (!said.is_empty()).then(|| said.join("\n"));
         match row.kind {
             Kind::Task => {
                 let point = resolved.point().ok_or_else(|| {
@@ -1204,7 +2486,7 @@ impl Session {
                         input: inverse,
                     }],
                     not_undoable: None,
-                    note: None,
+                    note: said,
                 })
             }
             Kind::Event => {
@@ -1243,7 +2525,7 @@ impl Session {
                         input: json!({"event_id": row.id, "dtstart": spell(old_start), "dtend": spell(old_end)}),
                     }],
                     not_undoable: None,
-                    note: None,
+                    note: said,
                 })
             }
             other => Err(format!(
@@ -1251,6 +2533,67 @@ impl Session {
                 other.plural()
             )),
         }
+    }
+
+    /// WHAT THE ROW SETTLES OF A RESCHEDULE'S CLOCK (SPEC §14.1, "time only" and "at N"):
+    /// the message names a time and no day, so the row keeps its day (a call that is not
+    /// anchored on the row and puts another day, the model's today, is moved back to the row's);
+    /// and a bare hour from 1 to 8 of a row that is at an afternoon or evening time is the
+    /// afternoon or evening reading (19:00 and "to 8" is 20:00) when the call wrote the early one;
+    /// every other time a call states stays. A day the message states otherwise is the call's own.
+    fn settle_by_the_row(
+        &self,
+        row: &Row,
+        expr: &dates::Expr,
+        resolved: dates::Resolved,
+    ) -> (dates::Resolved, Vec<String>) {
+        let (Some(stamp), dates::Resolved::At(mut at)) = (row.date, resolved) else {
+            return (resolved, Vec::new());
+        };
+        // "SAME TIME" keeps the row's time: the call states another one, the message states none
+        if let Some(clock) = stamp.time
+            && at.time() != clock
+            && !dates::uses_row(expr)
+            && self.said_same_time()
+        {
+            at = at.date().to_datetime(clock);
+            return (
+                dates::Resolved::At(at),
+                vec![format!(
+                    "date: \"same time\" keeps the row's time ({}).",
+                    dates::clock(clock)
+                )],
+            );
+        }
+        let Some(words) = self.time_words() else {
+            return (resolved, Vec::new());
+        };
+        let mut notes = Vec::new();
+        if words.day_less && !dates::uses_row(expr) && at.date() != stamp.date {
+            at = stamp.date.to_datetime(at.time());
+            notes.push(format!(
+                "date: \"{}\" names no day; kept the row's day ({}).",
+                words.phrase, stamp.date
+            ));
+        }
+        // an hour from 1 to 8 reads as the afternoon or evening (SPEC at_n); the call wrote the
+        // early reading for a row that is in the afternoon or evening: the row's clock decides
+        if let (Some((am, pm)), Some(clock)) = (words.bare, stamp.time)
+            && clock.hour() >= 12
+            && crate::phrases::at_hour(am.hour(), None, Some(clock)).0 == pm.hour()
+            && at.time() == am
+        {
+            at = at.date().to_datetime(pm);
+            notes.push(format!(
+                "date: \"{}\" is {} or {}; the row is at {}; used {} (the row's own time decides: an hour from 1 to 8 is the afternoon or evening).",
+                words.phrase,
+                dates::clock(pm),
+                dates::clock(am),
+                dates::clock(clock),
+                dates::clock(pm),
+            ));
+        }
+        (dates::Resolved::At(at), notes)
     }
 
     fn plan_edit(&mut self, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
@@ -1296,10 +2639,11 @@ impl Session {
             }
             let Some(spec_field) = spec.field(field) else {
                 return Err(format!(
-                    "error: {} have no field \"{field}\". {} editable fields: {}.",
+                    "error: {} have no field \"{field}\". {} editable fields: {}.{}",
                     kind.plural(),
                     kind.name(),
-                    editable(kind)
+                    editable(kind),
+                    whr::field_fix(kind, field, whr::FieldUse::Edit)
                 ));
             };
             let Some(command) = spec_field.edit else {
@@ -1325,7 +2669,9 @@ impl Session {
                     (json!(number), Some(Val::Num(number)))
                 }
                 FieldType::Bool => {
-                    let on = matches!(text_of(value).to_lowercase().as_str(), "yes" | "true" | "1");
+                    let given = text_of(value);
+                    let on =
+                        whr::parse_bool(&given).ok_or_else(|| whr::bool_error(field, &given))?;
                     (json!(i64::from(on)), Some(Val::Bool(on)))
                 }
                 FieldType::Enum => {
@@ -1373,8 +2719,9 @@ impl Session {
             if kind == Kind::Event && field == "duration" {
                 let (start, end) = event_span(row);
                 let minutes = new_json.as_i64().unwrap_or(60).max(1);
-                let new_end = start
-                    .checked_add(jiff::Span::new().minutes(minutes))
+                let new_end = jiff::Span::new()
+                    .try_minutes(minutes)
+                    .and_then(|span| start.checked_add(span))
                     .map_err(|_| "error: that duration is out of range.".to_owned())?;
                 let spell = |at: jiff::civil::DateTime| {
                     format!("{}T{}:00", at.date(), dates::clock(at.time()))
@@ -1546,6 +2893,16 @@ impl Session {
     // -----------------------------------------------------------------
 
     fn create(&mut self, kind: Option<&str>, args: &Map<String, Value>) -> Result<Outcome, String> {
+        self.create_with(kind, args, &[])
+    }
+
+    /// `create`, with the people a new event is for (their vault ids; only an event takes them).
+    fn create_with(
+        &mut self,
+        kind: Option<&str>,
+        args: &Map<String, Value>,
+        attendees: &[String],
+    ) -> Result<Outcome, String> {
         let kind_text = kind.unwrap_or_default().trim().to_owned();
         let creatable: Vec<&str> = Verb::Create
             .kinds()
@@ -1561,27 +2918,25 @@ impl Session {
                 )
             })?;
         let spec = kind.spec();
-        let mut allowed: Vec<&str> = vec!["name"];
-        allowed.extend(
-            spec.fields
-                .iter()
-                .filter(|field| field.create)
-                .map(|field| field.name),
-        );
-        match kind {
-            Kind::Task => allowed.extend(["date", "parent", "list"]),
-            Kind::Event => allowed.push("date"),
-            Kind::Note => allowed.push("notebook"),
-            Kind::Document => allowed.extend(["folder", "text"]),
-            Kind::Debt => allowed.push("person"),
-            _ => {}
+        let allowed = create_allowed(kind);
+        // an arg under another spelling of a field is that field (`create_arg_alias`)
+        let mut spelled = args.clone();
+        for key in args.keys() {
+            if let Some(field) = create_arg_alias(kind, key)
+                && !spelled.contains_key(field)
+                && let Some(value) = spelled.remove(key)
+            {
+                spelled.insert(field.to_owned(), value);
+            }
         }
+        let args = &spelled;
         for key in args.keys() {
             if !allowed.contains(&key.as_str()) {
                 return Err(format!(
-                    "error: create {} args take {}; not \"{key}\".",
+                    "error: create {} args take {}; not \"{key}\".{}",
                     kind.name(),
-                    allowed.join(", ")
+                    allowed.join(", "),
+                    whr::field_fix(kind, key, whr::FieldUse::Create)
                 ));
             }
         }
@@ -1618,7 +2973,7 @@ impl Session {
         };
         let date = match args.get("date") {
             Some(value) => {
-                let expr = dates::parse(value).map_err(|why| dates::rejection(&why))?;
+                let expr = self.date_expr(value)?;
                 let resolved =
                     dates::evaluate(&expr, self.now, None).map_err(|why| dates::rejection(&why))?;
                 if resolved.is_open() {
@@ -1667,11 +3022,11 @@ impl Session {
                     dates::Resolved::Between { from, to } => (from, to),
                     dates::Resolved::At(at) => {
                         let minutes = number("duration")?.unwrap_or(60).max(1);
-                        (
-                            at,
-                            at.checked_add(jiff::Span::new().minutes(minutes))
-                                .unwrap_or(at),
-                        )
+                        let end = jiff::Span::new()
+                            .try_minutes(minutes)
+                            .and_then(|span| at.checked_add(span))
+                            .map_err(|_| "error: that duration is out of range.".to_owned())?;
+                        (at, end)
                     }
                     dates::Resolved::Days { from, to } => (
                         from.to_datetime(jiff::civil::Time::midnight()),
@@ -1689,6 +3044,9 @@ impl Session {
                 });
                 if let Some(description) = text("description") {
                     input["description"] = json!(description);
+                }
+                if !attendees.is_empty() {
+                    input["attendee_party_ids"] = json!(attendees);
                 }
                 ("schedule.propose_event", input, "event_id")
             }
@@ -1762,16 +3120,9 @@ impl Session {
             Kind::Debt => {
                 let person = one_row(self, "person", Kind::Person)?
                     .ok_or("error: create debt needs person: #n.")?;
-                let amount = args
-                    .get("amount")
-                    .map(text_of)
-                    .and_then(|value| {
-                        value
-                            .trim()
-                            .trim_start_matches(['$', '€', '£'])
-                            .parse::<f64>()
-                            .ok()
-                    })
+                let given = args.get("amount").map(text_of).unwrap_or_default();
+                whr::symbol_conflict(&given, &self.world.currency)?;
+                let amount = whr::parse_amount(&given)
                     .ok_or("error: create debt needs amount: N (currency units).")?;
                 let direction = whr::enum_value(
                     Kind::Debt,
@@ -1819,13 +3170,39 @@ impl Session {
                         input[column] = json!(value);
                     }
                 }
+                // A SECRET IS SEALED ON THE WAY IN, like a note's content: the vault
+                // takes ciphertext only.
+                for (field, _) in meta::REVEAL_FIELDS {
+                    let Some(value) = text(field).filter(|_| *field != "content") else {
+                        continue;
+                    };
+                    // `normalize.rs` already left out what the type cannot keep
+                    let Some(column) = meta::locker_secret_column(kind_value, field) else {
+                        continue;
+                    };
+                    let (key_id, sealed) = self.handle.seal(&item_id, &value)?;
+                    input[column] = json!(sealed);
+                    input["key_id"] = json!(key_id);
+                    if column == "password" {
+                        input["password_rotated"] = json!(true);
+                    }
+                }
                 ("locker.add_item", input, "item_id")
             }
             Kind::Photo => unreachable!("photos are not created by a call"),
         };
         let before = self.world.clone();
-        let ran = self.handle.step(command, input)?;
+        let ran = self.handle.step(command, input.clone())?;
         if !ran.ok {
+            // A NEW EVENT THAT CLASHES WITH ANOTHER is a refusal the person can lift by
+            // choosing another time (`compose_busy_conflict`).
+            if self.flags.compose
+                && ran.predicate.as_deref() == Some("no_busy_conflict")
+                && let Some(asked) =
+                    self.compose_busy_conflict(&input, ran.reason.as_deref().unwrap_or_default())
+            {
+                return Ok(asked);
+            }
             return Err(format!(
                 "error: create {} was refused: {}",
                 kind.name(),
@@ -1888,16 +3265,26 @@ impl Session {
     // undo
     // -----------------------------------------------------------------
 
+    /// THE WRITES `undo` REVERTS (SPEC §4.2), as an index into `writes`: the previous turn's,
+    /// when it wrote something, and otherwise those of the last turn that did, looking back only
+    /// over turns whose writes were all already-so (`already: …`, nothing changed). Such a turn
+    /// neither pushes onto the undo memory nor clears it: `restore`, `restore` again, `undo`
+    /// undoes the first restore. A turn that read, asked, declined or undid something between
+    /// ends it, as before, and so does a turn already undone.
+    fn undo_entry(&self) -> Option<usize> {
+        let entry = |turn: usize| self.writes.iter().position(|(at, _, _)| *at == turn);
+        let mut turn = self.turn.checked_sub(1)?;
+        while turn > 0 && self.noops.contains(&turn) && entry(turn).is_none() {
+            turn -= 1;
+        }
+        entry(turn).filter(|_| turn > 0 && !self.undone.contains(&turn))
+    }
+
     fn undo(&mut self) -> Result<Outcome, String> {
-        let previous = self.turn.saturating_sub(1);
-        let entry = self
-            .writes
-            .iter()
-            .position(|(turn, _, _)| *turn == previous && previous > 0)
-            .filter(|_| !self.undone.contains(&previous));
-        let Some(index) = entry else {
+        let Some(index) = self.undo_entry() else {
             return Err("error: nothing to undo".to_owned());
         };
+        let previous = self.writes[index].0;
         let (_, inverses, notes) = self.writes[index].clone();
         self.undone.insert(previous);
         let before = self.world.clone();
@@ -1943,11 +3330,22 @@ impl Session {
                 ));
             }
         }
+        self.mark_acted(&touched);
         let mut out = Vec::new();
-        for key in &touched {
+        for (shown, key) in touched.iter().enumerate() {
             let n = self.number(key);
             self.acted.insert(n);
-            out.push(self.change_line(Verb::Undo, &before, key, n));
+            if shown < ROW_CAP {
+                out.push(self.change_line(Verb::Undo, &before, key, n));
+            }
+        }
+        if touched.len() > ROW_CAP {
+            // THE UNDO OF A CONFIRMED BULK WRITE echoes its first `ROW_CAP` rows
+            // too; the effect lists every one.
+            out.push(format!(
+                "… {} more changed (the effect lists every row)",
+                touched.len() - ROW_CAP
+            ));
         }
         out.extend(lines);
         out.extend(notes.iter().map(|note| format!("not undone: {note}")));
@@ -1959,6 +3357,393 @@ impl Session {
         outcome.effect.insert("diff".to_owned(), diff_json);
         Ok(outcome)
     }
+}
+
+// ---------------------------------------------------------------------
+// The turns the runtime ends itself: the cap and the vault's refusals
+// ---------------------------------------------------------------------
+
+/// A verb as a question names it: `delete`, `complete`, `change`.
+fn verb_phrase(verb: Verb) -> &'static str {
+    match verb {
+        Verb::Edit => "change",
+        Verb::AddTo => "add",
+        Verb::RemoveFrom => "remove",
+        Verb::Log => "log a contact with",
+        Verb::SettleUp | Verb::SettleDebt => "settle",
+        other => other.spec().name,
+    }
+}
+
+/// Words that answer the runtime's yes-or-no question with a yes ("all of
+/// them" answers `delete all of them?` too).
+const YES: [&str; 38] = [
+    "yes",
+    "yeah",
+    "yea",
+    "yep",
+    "yup",
+    "ya",
+    "yah",
+    "sure",
+    "ok",
+    "okay",
+    "k",
+    "y",
+    "confirm",
+    "confirmed",
+    "proceed",
+    "go",
+    "ahead",
+    "do",
+    "please",
+    "absolutely",
+    "definitely",
+    "certainly",
+    "agreed",
+    "alright",
+    "fine",
+    "correct",
+    "right",
+    "affirmative",
+    "si",
+    "sim",
+    "oui",
+    "ja",
+    "all",
+    "every",
+    "everything",
+    "each",
+    "whole",
+    "entire",
+];
+
+/// Words that hold a yes back: a no, a narrowing ("just the done ones"), an
+/// addition ("and the events too"). A message that has one is not a plain yes.
+const WITHHOLD: [&str; 31] = [
+    "no", "nope", "nah", "not", "never", "dont", "cant", "wont", "stop", "wait", "hold", "cancel",
+    "abort", "undo", "only", "just", "except", "but", "instead", "rather", "keep", "leave",
+    "unless", "without", "also", "plus", "too", "nothing", "none", "skip", "rest",
+];
+
+/// The longest message that counts as a plain yes, in words.
+const YES_WORDS: usize = 10;
+
+/// Whether the message answers an ask with a plain yes: short, with a word of
+/// `YES`, and without a contraction of "not" or a word of `WITHHOLD`. The
+/// person's yes is what lets a write over the cap through, so the runtime
+/// reads it, and reads it narrowly: a message it does not take for a yes only
+/// gets the question asked again.
+fn says_yes(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    if lower.contains("n't") || lower.contains("n\u{2019}t") {
+        return false;
+    }
+    let words = crate::session::words(message);
+    !words.is_empty()
+        && words.len() <= YES_WORDS
+        && words.iter().any(|word| YES.contains(&word.as_str()))
+        && !words.iter().any(|word| WITHHOLD.contains(&word.as_str()))
+}
+
+impl Session {
+    /// WHETHER THIS WRITE IS THE ONE THE RUNTIME ASKED ABOUT and the person
+    /// answered with a yes: the ask of `bulk_ask` ended the previous turn, the
+    /// call has the same verb, the same rows and the same `args`, and the
+    /// message is a plain yes (`says_yes`). A confirmation is used once.
+    pub(crate) fn confirmed(
+        &mut self,
+        verb: Verb,
+        keys: &[Key],
+        extra: &Map<String, Value>,
+    ) -> bool {
+        let Some(pending) = &self.pending_bulk else {
+            return false;
+        };
+        let same = pending.turn + 1 == self.turn
+            && pending.verb == verb
+            && pending.keys == keys.iter().cloned().collect::<BTreeSet<Key>>()
+            && pending.args == canonical_json(&Value::Object(extra.clone()));
+        if !same || !says_yes(&self.message) {
+            return false;
+        }
+        self.pending_bulk = None;
+        self.pending_notes.push(format!(
+            "note: confirmed, the {} rows the runtime asked about.",
+            keys.len()
+        ));
+        true
+    }
+
+    /// THE CAP HOLDS (SPEC §4.6): the turn ends in the ask the runtime composes
+    /// for a write on more than `ROW_CAP` rows, with the count and the rows the
+    /// call named in its effect. Nothing is written. The write is remembered
+    /// (`PendingBulk`) so that the same call, sent in the turn after the
+    /// person's yes, goes through (`confirmed`).
+    pub(crate) fn bulk_ask(
+        &mut self,
+        verb: Verb,
+        keys: &[Key],
+        args: &Map<String, Value>,
+        extra: &Map<String, Value>,
+    ) -> Outcome {
+        let rows: Vec<&Row> = keys.iter().filter_map(|key| self.world.row(key)).collect();
+        let mut kinds: Vec<Kind> = Vec::new();
+        for key in keys {
+            if !kinds.contains(&key.0) {
+                kinds.push(key.0);
+            }
+        }
+        let what = render::count_phrase(&kinds, &rows);
+        let phrase = verb_phrase(verb);
+        let destination = self.destination(verb, extra);
+        let question = format!("this would {phrase} {what}{destination}; {phrase} all of them?");
+        let selector = args
+            .get("rows")
+            .map(|value| crate::session::handle_list(value).join(", "))
+            .unwrap_or_default();
+        let kind_names = kinds
+            .iter()
+            .map(|kind| kind.name())
+            .collect::<Vec<_>>()
+            .join(",");
+        self.pending_bulk = Some(PendingBulk {
+            turn: self.turn,
+            verb,
+            keys: keys.iter().cloned().collect(),
+            args: canonical_json(&Value::Object(extra.clone())),
+        });
+        let note = format!(
+            "the runtime ended the turn: {} rows is over the cap of {ROW_CAP} and nothing was done; after a yes, send the same write again",
+            keys.len()
+        );
+        let mut outcome = self.ends_in_ask(None, &question, &[], &note);
+        if let Some(Value::Object(ask)) = outcome.effect.get_mut("ask") {
+            ask.insert("count".to_owned(), json!(keys.len()));
+            ask.insert("verb".to_owned(), json!(verb.spec().name));
+            ask.insert("kind".to_owned(), json!(kind_names));
+            ask.insert("selector".to_owned(), json!(selector));
+        }
+        outcome.effect.insert(
+            "bulk".to_owned(),
+            json!({
+                "count": keys.len(),
+                "cap": ROW_CAP,
+                "verb": verb.spec().name,
+                "kind": kind_names,
+                "rows": selector,
+                "confirmed": false,
+            }),
+        );
+        outcome
+            .effect
+            .insert("verb".to_owned(), json!(verb.spec().name));
+        outcome
+    }
+
+    /// ` to the Summer album` for an `add_to`, ` from the …` for a `remove_from`:
+    /// where the rows of a bulk write go.
+    fn destination(&self, verb: Verb, extra: &Map<String, Value>) -> String {
+        let slot = match verb {
+            Verb::AddTo => "to",
+            Verb::RemoveFrom => "from",
+            _ => return String::new(),
+        };
+        let Some(value) = extra.get(slot) else {
+            return String::new();
+        };
+        match self.resolve_rows(value).as_deref() {
+            Ok([key]) => self.world.row(key).map_or_else(String::new, |row| {
+                format!(" {slot} the {} {}", row.name, key.0.name())
+            }),
+            _ => String::new(),
+        }
+    }
+
+    /// WHAT THE RUNTIME DOES WITH A REFUSAL OF THE VAULT (D-1044-10), told by
+    /// the id of the check that failed and by what the person can still do,
+    /// never by the vault's sentence. It reads the refusals of a `restore` and of
+    /// a `delete`, and only when the refused step is the first that landed
+    /// anything, so the turn can end without a half-made write.
+    ///
+    /// - A `restore` of a row the vault lists as trashed and will not bring
+    ///   back has run past its window: nothing can lift that, so the turn
+    ///   ends in `decline not_found`.
+    /// - A `delete` the vault refuses because the row still holds others (a
+    ///   folder with documents, a group with expenses, a notebook with
+    ///   notebooks) ends in an ask that names what the person can do
+    ///   (`refusal_question`).
+    ///
+    /// With `Flags::compose` the refusals a confirmation or a choice can lift end in an ask
+    /// over the rows involved (`refusal_question`): a member removed from a group with an
+    /// unsettled balance (`member_off_ledger`), a cancelled event to reschedule
+    /// (`event_exists_not_cancelled`). A new event that clashes in time is `create`'s
+    /// (`Session::compose_busy_conflict`).
+    ///
+    /// `None` leaves the refusal an `error:` for the model: an input the
+    /// command's schema rejects, a caller it does not allow, a check this
+    /// file does not name, any other verb.
+    fn refusal(
+        &mut self,
+        verb: Verb,
+        key: &Key,
+        (command, input): (&str, &Value),
+        ran: &Ran,
+        before: &World,
+    ) -> Option<Outcome> {
+        let predicate = ran.predicate.as_deref().unwrap_or_default();
+        let lifted = self.flags.compose
+            && matches!(
+                (verb, predicate),
+                (Verb::RemoveFrom, "member_off_ledger")
+                    | (Verb::Reschedule, "event_exists_not_cancelled")
+            );
+        if !(matches!(verb, Verb::Restore | Verb::Delete) || lifted)
+            || matches!(predicate, "" | "schema" | "authority")
+        {
+            return None;
+        }
+        let restore_lapsed =
+            verb == Verb::Restore && before.row(key).is_some_and(|row| row.trashed);
+        let question = if restore_lapsed {
+            None
+        } else {
+            Some(self.refusal_question(key, command, input, predicate)?)
+        };
+        let reason = ran.reason.clone().unwrap_or_default();
+        let said = reason.trim_end_matches('.').to_owned();
+        let name = self.named(key);
+        let facts = json!({
+            "verb": verb.spec().name,
+            "kind": key.0.name(),
+            "id": key.1,
+            "n": self.numbers.get(key),
+            "command": command,
+            "predicate": predicate,
+            "reason": reason,
+        });
+        let mut outcome = if let Some((question, options)) = question {
+            let lead = format!("refused: {} {name}: {said}.", verb.spec().name);
+            let mut asked = self.ends_in_ask(
+                Some(lead),
+                &question,
+                &options,
+                "the runtime ended the turn and nothing was done",
+            );
+            if verb == Verb::Reschedule && predicate == "event_exists_not_cancelled" {
+                self.plan_offer = Some((self.turn, key.clone()));
+            }
+            asked
+                .effect
+                .insert("refusal".to_owned(), with_outcome(facts, "ask"));
+            crate::compose::marked(asked, "refused_write", "ask_options")
+        } else {
+            let lead = format!(
+                "refused: restore {name}: it is in the trash but past the vault's restore window, so it cannot come back (vault: {said})."
+            );
+            let mut declined = self.ends_in_decline(
+                Some(lead),
+                "not_found",
+                "the runtime ended the turn: a row past its restore window cannot be brought back",
+            );
+            declined
+                .effect
+                .insert("refusal".to_owned(), with_outcome(facts, "decline"));
+            crate::compose::marked(declined, "refused_write", "decline")
+        };
+        outcome
+            .effect
+            .insert("verb".to_owned(), json!(verb.spec().name));
+        Some(outcome)
+    }
+
+    /// The question a `delete` the vault refused becomes, and the rows it is
+    /// about (at most `ROW_CAP`), by the command and the check that refused.
+    fn refusal_question(
+        &mut self,
+        key: &Key,
+        command: &str,
+        input: &Value,
+        predicate: &str,
+    ) -> Option<(String, Vec<Key>)> {
+        let row_name = self
+            .world
+            .row(key)
+            .map(|row| row.name.clone())
+            .unwrap_or_default();
+        Some(match (command, predicate) {
+            ("core.delete_folder", "folder_is_empty") => {
+                let held = self
+                    .world
+                    .neighbours(key)
+                    .remove(&Kind::Document)
+                    .unwrap_or_default();
+                let in_trash = |held: &Key| self.world.row(held).is_some_and(|row| row.trashed);
+                let mut live: Vec<Key> = held
+                    .iter()
+                    .filter(|held| !in_trash(held))
+                    .cloned()
+                    .collect();
+                let trashed: Vec<Key> =
+                    held.iter().filter(|held| in_trash(held)).cloned().collect();
+                let holds = match (live.len(), trashed.len()) {
+                    (0, 0) => "other folders".to_owned(),
+                    (live, 0) => Kind::Document.count(live),
+                    (0, trashed) => format!("{} in the trash", Kind::Document.count(trashed)),
+                    (live, trashed) => format!(
+                        "{} and {} in the trash",
+                        Kind::Document.count(live),
+                        Kind::Document.count(trashed)
+                    ),
+                };
+                let them = if held.len() == 1 { "it" } else { "them" };
+                live.extend(trashed);
+                live.truncate(ROW_CAP);
+                (
+                    format!(
+                        "the {row_name} folder still holds {holds}; take {them} out first, then delete the folder?"
+                    ),
+                    live,
+                )
+            }
+            ("knowledge.delete_notebook", "notebook_has_no_children") => (
+                format!(
+                    "the {row_name} notebook still holds other notebooks, so it cannot be deleted; keep it?"
+                ),
+                Vec::new(),
+            ),
+            ("tally.delete_group", "group_empty") => (
+                format!(
+                    "the {row_name} group still has expenses, so it cannot be deleted; keep it, or rename it instead?"
+                ),
+                Vec::new(),
+            ),
+            // THE PERSON AND THE GROUP they are in the way of: settling up lifts the refusal.
+            ("tally.remove_group_member", "member_off_ledger") => {
+                let group: Key = (Kind::Group, input.get("group_id")?.as_str()?.to_owned());
+                let group_name = self.world.row(&group)?.name.clone();
+                (
+                    format!(
+                        "{row_name} still has an unsettled balance in the {group_name} group; settle up first?"
+                    ),
+                    vec![key.clone(), group],
+                )
+            }
+            ("schedule.reschedule_event", "event_exists_not_cancelled") => (
+                format!(
+                    "the {row_name} event was cancelled, so it cannot be moved; plan a new one instead?"
+                ),
+                vec![key.clone()],
+            ),
+            _ => return None,
+        })
+    }
+}
+
+/// `facts` with the outcome the runtime gave the refusal.
+fn with_outcome(mut facts: Value, outcome: &str) -> Value {
+    facts["outcome"] = json!(outcome);
+    facts
 }
 
 fn finish(mut outcome: Outcome, more: bool) -> Outcome {
@@ -1979,11 +3764,12 @@ fn keep_time(point: Stamp, row: Option<Stamp>) -> Stamp {
 }
 
 /// An event's start and end as the vault holds them.
-fn event_span(row: &Row) -> (jiff::civil::DateTime, jiff::civil::DateTime) {
+pub(crate) fn event_span(row: &Row) -> (jiff::civil::DateTime, jiff::civil::DateTime) {
     let start = row.date.map(Stamp::at).unwrap_or_default();
     let end = match (row.date.and_then(|stamp| stamp.time), row.field("duration")) {
-        (_, Some(Val::Num(minutes))) => start
-            .checked_add(jiff::Span::new().minutes(*minutes))
+        (_, Some(Val::Num(minutes))) => jiff::Span::new()
+            .try_minutes(*minutes)
+            .and_then(|span| start.checked_add(span))
             .unwrap_or(start),
         (None, _) => start
             .checked_add(jiff::Span::new().days(1))
@@ -2229,4 +4015,55 @@ fn edge_changes(before: &World, after: &World, key: &Key) -> Vec<(bool, Key)> {
     let mut out: Vec<(bool, Key)> = b.difference(&a).map(|key| (true, key.clone())).collect();
     out.extend(a.difference(&b).map(|key| (false, key.clone())));
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::says_yes;
+
+    #[test]
+    fn a_plain_yes_is_a_yes() {
+        for message in [
+            "yes",
+            "Yes.",
+            "yes please",
+            "yeah go ahead",
+            "ok do it",
+            "okay",
+            "sure",
+            "yep!",
+            "all of them",
+            "yes, delete them all",
+            "go ahead",
+            "confirmed",
+            "Sí, adelante todo",
+        ] {
+            assert!(says_yes(message), "{message}");
+        }
+    }
+
+    #[test]
+    fn a_no_a_narrowing_or_an_addition_is_not_a_yes() {
+        for message in [
+            "",
+            "no",
+            "nope, wait",
+            "yes but only the done ones",
+            "fine just the ones i already finished, keep the open",
+            "yes keep the open ones",
+            "yes and the events too",
+            "yes, also the notes",
+            "don't",
+            "no don\u{2019}t do it",
+            "do not delete them",
+            "never mind",
+            "stop",
+            "cancel that",
+            "what is left on the list",
+            "delete them",
+            "yes it is fine to delete them all but first tell me what is on the list again please",
+        ] {
+            assert!(!says_yes(message), "{message}");
+        }
+    }
 }

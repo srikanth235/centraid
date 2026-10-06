@@ -76,7 +76,7 @@ fn complete_then_reopen_and_already_so() {
 #[test]
 fn an_impossible_write_is_a_schema_error_naming_the_kinds() {
     let world = seeded();
-    let mut session = world.session();
+    let mut session = world.session_uncomposed();
     let found = numbers(&mut session, &[("event", "dentist"), ("person", "Ray")]);
     let refused = text(
         &mut session,
@@ -101,12 +101,14 @@ fn an_impossible_write_is_a_schema_error_naming_the_kinds() {
 #[test]
 fn a_selector_that_fits_two_rows_is_ambiguous_and_does_nothing() {
     let world = seeded();
-    let mut session = world.session();
-    session.user("star Neha");
+    let mut session = world.session_uncomposed();
+    // `log` applies to both Nehas (a `star` would apply only to the one not
+    // yet starred, SPEC §14).
+    session.user("log a call with Neha");
     let response = call(
         &mut session,
         "act",
-        json!({"verb": "star", "kind": "person", "name": "Neha"}),
+        json!({"verb": "log", "kind": "person", "name": "Neha", "args": "kind: call"}),
     );
     let text = response["text"].as_str().unwrap();
     assert!(text.starts_with("ambiguous: \"Neha\" fits #"), "{text}");
@@ -127,17 +129,19 @@ fn a_selector_that_fits_two_rows_is_ambiguous_and_does_nothing() {
     let both = call(
         &mut session,
         "act",
-        json!({"verb": "star", "rows": listed.join(", ")}),
+        json!({"verb": "log", "rows": listed.join(", "), "args": "kind: call"}),
     );
-    // Neha Rao is starred already; Neha Kulkarni is not.
-    assert_eq!(diff_rows(&both).len(), 1, "{}", both["text"]);
-    assert_eq!(both["effect"]["already"].as_array().unwrap().len(), 1);
+    assert!(
+        both["text"].as_str().unwrap().starts_with("logged"),
+        "{}",
+        both["text"]
+    );
 }
 
 #[test]
 fn delete_restore_and_the_trash_answers() {
     let world = seeded();
-    let mut session = world.session();
+    let mut session = world.session_uncomposed();
     let reed = number(&mut session, "task", "reed");
     let deleted = call(&mut session, "act", json!({"verb": "delete", "rows": reed}));
     assert_eq!(
@@ -212,7 +216,7 @@ fn star_and_unstar_on_every_starrable_kind() {
 #[test]
 fn add_to_and_remove_from_every_container() {
     let world = seeded();
-    let mut session = world.session();
+    let mut session = world.session_uncomposed();
     for (kind, name, container_kind, container) in [
         ("person", "Benedikt", "group", "Tahoe"),
         ("photo", "Hike", "album", "Wedding"),
@@ -424,13 +428,14 @@ fn edit_changes_fields_through_their_commands() {
         json!({"verb": "edit", "rows": cabin, "args": {"date": {"unit": "day", "rel": 1}}}),
     );
     assert!(date.contains("reschedule"), "{date}");
+    session.user("");
     let unknown = text(
         &mut session,
         "act",
-        json!({"verb": "edit", "rows": cabin, "args": {"due_on": "x"}}),
+        json!({"verb": "edit", "rows": cabin, "args": {"flavour": "x"}}),
     );
     assert!(
-        unknown.starts_with("error: tasks have no field \"due_on\". task editable fields:"),
+        unknown.starts_with("error: tasks have no field \"flavour\". task editable fields:"),
         "{unknown}"
     );
     let bad_enum = text(
@@ -656,4 +661,21 @@ fn more_keeps_the_turn_open_and_act_then_answer_works() {
     let answered = ids(&left["effect"]["answer"]["rows"]);
     assert!(!answered.is_empty());
     assert!(!answered.contains(&world.id("cabin")));
+}
+
+#[test]
+fn a_suffixed_amount_creates_a_debt() {
+    let world = seeded();
+    let mut session = world.session();
+    let neha = number(&mut session, "person", "Neha Rao");
+    session.user("neha owes me 2.5k for the course");
+    let response = call(
+        &mut session,
+        "act",
+        json!({"verb": "create", "kind": "debt", "args": {
+            "name": "course", "person": neha, "amount": "2.5k", "direction": "owes_me"}}),
+    );
+    let made = response["text"].as_str().unwrap();
+    assert!(made.starts_with("created: #"), "{made}");
+    assert!(made.contains("2500"), "{made}");
 }

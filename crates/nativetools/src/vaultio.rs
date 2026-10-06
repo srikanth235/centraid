@@ -129,11 +129,19 @@ pub struct Handle {
 }
 
 /// What running one command produced, reduced to what the runtime reads.
+///
+/// A refusal is a value: `reason` is the vault's owner-facing sentence and
+/// `predicate` the id of the check that failed (`folder_is_empty`,
+/// `group_empty`, `no_busy_conflict`, ...), or `schema` for an input the
+/// command's schema rejects and `authority` for a caller it does not allow.
+/// The runtime classifies a refusal by that id, never by the sentence
+/// (`act.rs`, `Session::refusal`).
 #[derive(Debug, Clone)]
 pub struct Ran {
     pub ok: bool,
     pub output: serde_json::Value,
     pub reason: Option<String>,
+    pub predicate: Option<String>,
 }
 
 impl Handle {
@@ -207,6 +215,7 @@ impl Handle {
             ok: outcome.status == CommandStatus::Executed,
             output: outcome.output,
             reason: outcome.reason,
+            predicate: outcome.predicate,
         })
     }
 

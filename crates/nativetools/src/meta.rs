@@ -30,8 +30,9 @@ pub const fn lookup_shown(total: usize) -> usize {
 pub const STEP_CAP: usize = 6;
 /// Containers listed per kind in the vault directory (SPEC §6.0.4, §14).
 pub const DIRECTORY_CAP: usize = 8;
-/// Rows in a pre-grounding block (SPEC §6.1).
-pub const PREGROUND_CAP: usize = 5;
+/// Rows in a pre-grounding block (SPEC §6.1). No kind takes more than half of
+/// them while another kind has a hit (`search::preground`).
+pub const PREGROUND_CAP: usize = 8;
 /// Linked rows `open` names per linked kind.
 pub const OPEN_LINK_CAP: usize = 8;
 
@@ -106,6 +107,19 @@ impl Kind {
             format!("1 {}", self.name())
         } else {
             format!("{count} {}", self.plural())
+        }
+    }
+
+    /// The link a row of this kind holds its contents by: a list its tasks, a
+    /// notebook its notes, an album its photos, a folder its documents, a group
+    /// its members, a task its subtasks. `None` for a kind that holds nothing.
+    #[must_use]
+    pub fn holds(self) -> Option<&'static Link> {
+        let spec = self.spec();
+        if spec.container {
+            spec.links.first()
+        } else {
+            spec.links.iter().find(|link| link.via == Via::Subtask)
         }
     }
 }
@@ -1026,6 +1040,26 @@ pub fn locker_types_holding(field: &str) -> Vec<&'static str> {
         .copied()
         .filter(|item_type| locker_column(item_type, field).is_some())
         .collect()
+}
+
+/// The sealed column a locker type keeps for a secret field, when it keeps it:
+/// `password` on a login, wifi or password item, `code` (the one-time seed) on a
+/// login, `card_number` and `cvv` on a card. `create` seals the value under the
+/// locker key; any other type would null it without a word, so a create that
+/// carries one is normalised first (`normalize.rs`).
+#[must_use]
+pub fn locker_secret_column(item_type: &str, field: &str) -> Option<&'static str> {
+    let column = REVEAL_FIELDS
+        .iter()
+        .find(|(name, column)| *name == field && *column != "content")
+        .map(|(_, column)| *column)?;
+    let keeps: &[&str] = match item_type {
+        "login" => &["password", "otp_seed"],
+        "card" => &["card_number", "cvv"],
+        "wifi" | "password" => &["password"],
+        _ => &[],
+    };
+    keeps.contains(&column).then_some(column)
 }
 
 pub const REVEAL_FIELDS: &[(&str, &str)] = &[

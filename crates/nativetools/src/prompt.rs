@@ -1,10 +1,15 @@
 //! THE SYSTEM PROMPT (SPEC §6.0): today and me, the tools as JSON schemas in
-//! Qwen3.5's native `<tools>` block, the kind card, the vault directory.
+//! Qwen3.5's native `<tools>` block, the kind card, the vault directory; and
+//! the block that leads every user turn (SPEC §6.1): the `vault:`, `focus:`
+//! and `dates:` lines, rendered here so training and inference read the same
+//! text.
+
+use std::collections::BTreeSet;
 
 use serde_json::{Value, json};
 
 use crate::dates::Unit;
-use crate::meta::{self, Kind, VERBS};
+use crate::meta::{self, Kind, LOOKUP_CAP, VERBS};
 use crate::render;
 use crate::session::Session;
 
@@ -494,4 +499,91 @@ pub fn prompt(session: &mut Session) -> Value {
         "rendered": rendered,
         "directory": session.directory,
     })
+}
+
+/// The numbers of `numbers` whose rows the vault still holds, in order.
+pub(crate) fn live_numbers(session: &Session, numbers: &[usize]) -> Vec<usize> {
+    numbers
+        .iter()
+        .copied()
+        .filter(|number| {
+            session
+                .by_number
+                .get(number.wrapping_sub(1))
+                .is_some_and(|key| session.world.row(key).is_some())
+        })
+        .collect()
+}
+
+/// The rows `numbers` name, as `#n kind "name"`, one each. A row the vault no
+/// longer holds is left out.
+pub(crate) fn named_rows(session: &Session, numbers: &[usize]) -> Vec<String> {
+    live_numbers(session, numbers)
+        .into_iter()
+        .map(|number| render::named(&session.world, number, &session.by_number[number - 1]))
+        .collect()
+}
+
+/// THE FOCUS LINE of a user turn's block (SPEC §6.1): what the conversation
+/// holds on to, so a follow-up ("put it in the new group", "the second one",
+/// "the first Neha") points at rows the model reads again here instead of
+/// finding them in a long transcript. Up to five parts, each only when the
+/// session has something to say (`crate::block` renders all but the first):
+///
+/// - `created #52 group "Lisboa"`: the rows an `act` created, the last
+///   `LOOKUP_CAP` of them (`+N earlier` for the rest);
+/// - `@4: #44 task "Pay rent", #45 … · in #8 list "Home"`: the newest result
+///   that holds rows, in the one-set form, naming the container its rows
+///   share;
+/// - `earlier: @3 (counted 10 documents in #39 folder "Taxes"), @2: #30 …`:
+///   the other sets of the last `FOCUS_SETS`, newest first, a count or value
+///   in brackets with its word first; at most `FOCUS_ROWS` rows in all across
+///   the sets (`+N more` on the set that does not fit);
+/// - `acted #12 event "Dentist", #13 task "Pay rent"`: the rows a write
+///   changed, an already-so answer named or an undo touched in the last
+///   `ACTED_TURNS` turns, that no part above names, the last `LOOKUP_CAP` of
+///   them (`+N earlier` for the rest): a row a write reached by a selector or
+///   off the `vault:` line is in no result set, so it is here;
+/// - `asked: #41 person "Neha Rao" (designer · NK · Tahoe Trip), #39 …`: the
+///   options of the `ask` that ended the previous turn, each with what tells
+///   it apart, at most `ROW_CAP` (`+N more`); it is there for the one turn
+///   that answers it.
+///
+/// Every row is one the session already numbered; the line never mints a
+/// number (`Session::user` numbers the containers first). `None` when there is
+/// nothing to say.
+#[must_use]
+pub fn focus_line(session: &Session) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    // the rows the parts name: a row is named once, and `acted` leaves out the
+    // ones `created` and the result sets already name
+    let mut named: BTreeSet<usize> = BTreeSet::new();
+    let created = live_numbers(session, &session.created);
+    if !created.is_empty() {
+        let hidden = created.len().saturating_sub(LOOKUP_CAP);
+        let mut part = format!(
+            "created {}",
+            named_rows(session, &created[hidden..]).join(", ")
+        );
+        if hidden > 0 {
+            part.push_str(&format!(" +{hidden} earlier"));
+        }
+        named.extend(created[hidden..].iter().copied());
+        parts.push(part);
+    }
+    let sets = crate::block::sets_parts(session);
+    named.extend(sets.rows.iter().copied());
+    parts.extend(sets.parts);
+    parts.extend(crate::block::acted_part(session, &named));
+    parts.extend(crate::block::asked_part(session));
+    (!parts.is_empty()).then(|| format!("focus: {}", parts.join(" · ")))
+}
+
+/// The block that leads a user turn: the lines that exist (`vault:`,
+/// `focus:`, `answer:`, `dates:`), one per line, in that order. The Python renderer puts
+/// a blank line between it and the message (`render.user_content`).
+#[must_use]
+pub fn user_block(lines: &[&Option<String>]) -> Option<String> {
+    let lines: Vec<&str> = lines.iter().filter_map(|line| line.as_deref()).collect();
+    (!lines.is_empty()).then(|| lines.join("\n"))
 }

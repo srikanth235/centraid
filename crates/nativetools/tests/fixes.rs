@@ -129,7 +129,7 @@ fn issue_12_settle_up_carries_the_balance_it_moved() {
 #[test]
 fn issue_16_a_refused_create_leaves_no_row_behind() {
     let world = seeded();
-    let mut session = world.session();
+    let mut session = world.session_uncomposed();
     session.user("");
     let refused = text(
         &mut session,
@@ -324,7 +324,7 @@ fn issue_3_search_reads_nicknames_roles_and_the_trash() {
 #[test]
 fn issue_8_an_answer_that_hits_a_recovery_does_not_end_the_turn() {
     let world = seeded();
-    let mut session = world.session();
+    let mut session = world.session_uncomposed();
     session.user("");
     let empty = call(
         &mut session,
@@ -354,7 +354,8 @@ fn issue_8_an_answer_that_hits_a_recovery_does_not_end_the_turn() {
 }
 
 #[test]
-fn issue_9_a_message_with_two_calls_runs_neither() {
+fn issue_9_a_message_with_two_calls_runs_the_first_and_says_so() {
+    // nt12 R5 (owner ruling): the first call runs, the second does not, and the reply says so
     let world = seeded();
     let mut session = world.session();
     session.user("");
@@ -364,19 +365,26 @@ fn issue_9_a_message_with_two_calls_runs_neither() {
         )
     };
     let message = format!("{}\n{}", call_block("complete"), call_block("delete"));
-    let error = parse::parse_call(&message).unwrap_err();
-    assert_eq!(error, "error: one call per message");
-    let response = session.call_unreadable(&error);
-    assert_eq!(response["text"], "error: one call per message");
+    let parsed = parse::parse_call(&message).unwrap();
+    assert_eq!(parsed["args"]["verb"], "complete");
+    assert_eq!(parsed["extra_calls"], 1);
+    let response = session.call_text(&message);
+    assert!(
+        response["text"]
+            .as_str()
+            .unwrap()
+            .ends_with("note: only the first call ran"),
+        "{response}"
+    );
     assert_eq!(response["step"], 1);
-    assert_eq!(response["ends_turn"], false);
+    session.user("");
     let cabin = call(
         &mut session,
         "find",
         json!({"kind": "task", "name": "cabin"}),
     );
     assert!(
-        cabin["text"].as_str().unwrap().contains("status open"),
+        cabin["text"].as_str().unwrap().contains("status completed"),
         "{cabin}"
     );
 }
@@ -391,13 +399,23 @@ fn issue_11_a_restore_past_the_window_says_so() {
     let seeded = seeded_with(&world);
     let mut session = seeded.session();
     let gym = common::trashed_number(&mut session, "locker item", "gym");
-    let refused = text(&mut session, "act", json!({"verb": "restore", "rows": gym}));
+    let refused = call(&mut session, "act", json!({"verb": "restore", "rows": gym}));
+    let reply = refused["text"].as_str().unwrap();
     assert!(
-        refused.contains(
+        reply.contains(
             "it is in the trash but past the vault's restore window, so it cannot come back"
         ),
-        "{refused}"
+        "{reply}"
     );
+    // nothing can lift it: the runtime ends the turn in a decline (D-1044-10), not an
+    // `error:` the model would have to act on
+    assert_eq!(refused["ends_turn"], true, "{reply}");
+    assert_eq!(refused["effect"]["tool"], "decline", "{reply}");
+    assert_eq!(refused["effect"]["decline"]["reason"], "not_found");
+    assert!(refused["effect"].get("error").is_none(), "{reply}");
+    assert!(reply.ends_with(
+        "declined: not_found · the runtime ended the turn: a row past its restore window cannot be brought back"
+    ), "{reply}");
 }
 
 #[test]
@@ -437,8 +455,10 @@ fn issue_15_kind_beside_rows_is_a_check_and_ask_takes_results() {
         "act",
         json!({"verb": "cancel", "kind": "event", "name": "tabla", "rows": tabla}),
     );
+    // rows beside a selector: the rows were named, so the selector is left out (normalize.rs)
+    assert!(mixed.starts_with("cancelled: "), "{mixed}");
     assert!(
-        mixed.starts_with("error: act takes rows or a selector"),
+        mixed.ends_with("note: ignored name (the rows were named)"),
         "{mixed}"
     );
     session.user("");
@@ -505,16 +525,17 @@ fn issue_18_a_span_may_leave_one_end_open() {
 #[test]
 fn issue_19_an_empty_answer_from_conditions_alone_ends_the_turn() {
     let world = seeded();
-    let mut session = world.session();
+    let mut session = world.session_uncomposed();
     session.user("what is due the friday after next?");
     let nothing = call(
         &mut session,
         "answer",
         json!({"kind": "task", "when": {"unit": "week", "rel": 2, "weekday": 5}}),
     );
+    // "due" is a status word of a readout (B2, #1044 r3): the runtime adds status = open, says so
     assert_eq!(
         nothing["text"],
-        "answered: 0 tasks match (when: Fri 2026-10-09)"
+        "answered: 0 tasks match (when: Fri 2026-10-09)\nstatus: the message asks what is left; used status = open."
     );
     assert_eq!(nothing["ends_turn"], true);
     assert_eq!(nothing["effect"]["answer"]["rows"], json!([]));
@@ -533,7 +554,7 @@ fn issue_19_an_empty_answer_from_conditions_alone_ends_the_turn() {
 #[test]
 fn issue_22_only_a_name_that_reaches_nothing_or_a_missing_link_is_a_dead_end() {
     let world = seeded();
-    let mut session = world.session();
+    let mut session = world.session_uncomposed();
     // A linked row with no linked rows of the kind is an answer.
     let ray = number(&mut session, "person", "ray");
     let unlinked = call(
@@ -551,9 +572,11 @@ fn issue_22_only_a_name_that_reaches_nothing_or_a_missing_link_is_a_dead_end() {
         "find",
         json!({"kind": "task", "name": "cabin", "when": when}),
     );
-    assert_eq!(
-        found["text"],
-        "0 tasks called \"cabin\" match (when: Fri 2026-10-09)"
+    assert!(
+        found["text"].as_str().unwrap().starts_with(
+            "0 tasks called \"cabin\" match (when: Fri 2026-10-09)\nrows you can still use: "
+        ),
+        "{found}"
     );
     assert!(found["effect"]["recovery"].is_null(), "{found}");
     assert_eq!(found["ends_turn"], false);
@@ -686,10 +709,13 @@ fn issue_21_create_takes_its_kind_from_the_kind_parameter() {
         "act",
         json!({"verb": "create", "kind": "note", "args": "name: Ideas\ncolour: red"}),
     );
+    // an arg the kind does not take is left out, and the row is created (normalize.rs)
+    assert!(unknown.starts_with("created: "), "{unknown}");
     assert!(
-        unknown.starts_with("error: create note args take name, "),
+        unknown.contains("note: ignored colour: red (notes have no colour)"),
         "{unknown}"
     );
+    session.user("");
     let created = call(
         &mut session,
         "act",
@@ -769,10 +795,23 @@ fn issue_28_an_edit_refuses_a_number_in_the_wrong_unit() {
     let world = seeded();
     let mut session = world.session();
     let task = number(&mut session, "task", "Book the cabin");
-    let refused = text(
+    // hours have a fixed conversion to minutes (nt12 R3): they are read, with a note
+    let hours = text(
         &mut session,
         "act",
         json!({"verb": "edit", "rows": task, "args": "effort: 1.5 hours"}),
+    );
+    assert!(hours.contains("90 min"), "{hours}");
+    assert!(
+        hours.contains("note: read 1.5 hours as 90 minutes"),
+        "{hours}"
+    );
+    let task = number(&mut session, "task", "Book the cabin");
+    // a unit with no fixed conversion stays refused
+    let refused = text(
+        &mut session,
+        "act",
+        json!({"verb": "edit", "rows": task, "args": "effort: 2 sprints"}),
     );
     assert!(
         refused.starts_with("error: effort is a number of minutes"),
@@ -781,7 +820,7 @@ fn issue_28_an_edit_refuses_a_number_in_the_wrong_unit() {
     let edited = text(
         &mut session,
         "act",
-        json!({"verb": "edit", "rows": task, "args": "effort: 90 minutes"}),
+        json!({"verb": "edit", "rows": task, "args": "effort: 45 minutes"}),
     );
-    assert!(edited.contains("90 min"), "{edited}");
+    assert!(edited.contains("45 min"), "{edited}");
 }

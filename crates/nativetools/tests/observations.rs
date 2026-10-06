@@ -11,7 +11,7 @@ const CARD: &str = "[task: date (due), status, effort, priority, completed, desc
 #[test]
 fn the_observations_read_exactly_as_specified() {
     let world = seeded();
-    let mut session = world.session();
+    let mut session = world.session_uncomposed();
     let prompt = session.prompt();
     // Eight containers are pre-numbered before anything else is shown.
     assert_eq!(prompt["directory"], json!([1, 2, 3, 4, 5, 6, 7, 8]));
@@ -59,7 +59,7 @@ fn the_observations_read_exactly_as_specified() {
         text(
             &mut session,
             "act",
-            json!({"verb": "star", "kind": "person", "name": "Neha"})
+            json!({"verb": "log", "kind": "person", "name": "Neha", "args": "kind: call"})
         ),
         "ambiguous: \"Neha\" fits #13 person \"Neha Rao\", #14 person \"Neha Kulkarni\"; nothing was done."
     );
@@ -78,9 +78,7 @@ fn the_observations_read_exactly_as_specified() {
     );
     session.user("");
     // A compacted row keeps its session-stable number and is still addressable.
-    assert!(
-        !text(&mut session, "open", json!({"row": "#10"})).starts_with("error")
-    );
+    assert!(!text(&mut session, "open", json!({"row": "#10"})).starts_with("error"));
     assert_eq!(
         text(
             &mut session,
@@ -156,12 +154,66 @@ fn compaction_keeps_the_header_and_the_rows_later_calls_referenced() {
         json!({"within": "@1", "where": "status = completed"}),
     );
     assert_eq!(reach["effect"]["rows"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        text(&mut session, "open", json!({"row": "#99"})),
-        "error: #99 was never shown."
+    // A handle that was never shown: the error, then the rows that can be used.
+    let never = text(&mut session, "open", json!({"row": "#99"}));
+    assert!(
+        never.starts_with("error: #99 was never shown.\nrows you can still use: #"),
+        "{never}"
     );
     assert!(
         text(&mut session, "find", json!({"within": "@9"}))
             .starts_with("error: @9 was never issued")
+    );
+}
+
+#[test]
+fn an_ask_completed_from_the_candidates_and_a_refused_call_repeated_read_exactly_as_specified() {
+    let world = seeded();
+    let mut session = world.session_uncomposed();
+    session.user("");
+    assert_eq!(
+        text(
+            &mut session,
+            "act",
+            json!({"verb": "log", "kind": "person", "name": "Neha", "args": "kind: call"})
+        ),
+        "ambiguous: \"Neha\" fits #9 person \"Neha Rao\", #10 person \"Neha Kulkarni\"; nothing was done."
+    );
+    // the model names one candidate; the runtime lists them all (D-1044-9)
+    assert_eq!(
+        text(
+            &mut session,
+            "ask",
+            json!({"question": "which neha?", "options": "#10"})
+        ),
+        "asked: \"which neha?\" · options: #9 person \"Neha Rao\", #10 person \"Neha Kulkarni\" · options completed from the candidates"
+    );
+    // a call the runtime refused as invalid, sent again, gets one hint (nt10 G1); the second
+    // resend ends the turn
+    session.user("");
+    let bad = json!({"kind": "task", "sort": "date"});
+    let refused = text(&mut session, "find", bad.clone());
+    assert!(
+        refused.starts_with("error: find has no parameter \"sort\". find parameters: kind, name,"),
+        "{refused}"
+    );
+    let hint = text(&mut session, "find", bad.clone());
+    assert!(
+        hint.starts_with("error: that is the same call again. "),
+        "{hint}"
+    );
+    let again = text(&mut session, "find", bad);
+    let (head, rest) = again
+        .split_once('\n')
+        .expect("the reply, then the typed end");
+    assert_eq!(
+        head,
+        "error: repeated call at step 3: step 1 sent the same call and the runtime refused it as invalid."
+    );
+    // the unknown `sort` is left out and the rest runs as the runtime's own step
+    assert!(rest.starts_with("answered:\n@"), "{rest}");
+    assert!(
+        rest.ends_with("note: ignored sort (find has no parameter \"sort\")"),
+        "{rest}"
     );
 }

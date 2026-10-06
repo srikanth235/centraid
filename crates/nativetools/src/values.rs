@@ -209,6 +209,14 @@ pub fn balance(
                     .find(|key| key.0 == Kind::Person)
                     .cloned()
                     .unwrap_or_default_key(),
+                // no person named: a group's balance is the person's own, unless the message is
+                // about someone else (a name, a pronoun for them, a person in focus): the model
+                // left that person out and the error says to add them
+                0 if session.world.row(&session.world.me_key()).is_some()
+                    && !session.names_someone_else() =>
+                {
+                    session.world.me_key()
+                }
                 _ => {
                     return Err(
                         "error: a group's balance is one person's: kind=group linked_to=#n (the person) op=balance."

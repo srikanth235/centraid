@@ -1304,8 +1304,10 @@ pub fn links_paragraph() -> String {
             targets.push(link.to);
         }
     }
+    // the layout oxfmt gives a markdown list (blank lines around it, no indent),
+    // so formatting TOOLS.md never makes it differ from this block
     let mut out =
-        String::from("<!-- links: printed from EDGES in crates/candidates/src/exec.rs -->\n");
+        String::from("<!-- links: printed from EDGES in crates/candidates/src/exec.rs -->\n\n");
     for to in targets {
         let froms: Vec<String> = EDGES
             .iter()
@@ -1320,9 +1322,9 @@ pub fn links_paragraph() -> String {
                 format!("{article} {noun}")
             })
             .collect();
-        out.push_str(&format!("  - `{to} of (…)` from {}\n", froms.join(", ")));
+        out.push_str(&format!("- `{to} of (…)` from {}\n", froms.join(", ")));
     }
-    out.push_str("<!-- /links -->\n");
+    out.push_str("\n<!-- /links -->\n");
     out
 }
 

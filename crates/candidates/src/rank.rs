@@ -1844,12 +1844,10 @@ impl Ranker {
                 .win
                 .as_ref()
                 .is_some_and(|win| self.in_window(r, win, st.overdue))
-            {
-                sc += 3.0;
-            } else if st
-                .asked
-                .as_ref()
-                .is_some_and(|(win, overdue)| self.in_window(r, win, *overdue))
+                || st
+                    .asked
+                    .as_ref()
+                    .is_some_and(|(win, overdue)| self.in_window(r, win, *overdue))
             {
                 sc += 3.0;
             }

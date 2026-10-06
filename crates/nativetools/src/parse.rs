@@ -15,8 +15,8 @@ const BOOLEANS: &[&str] = &["more", "trashed"];
 /// Parameters whose value is a date expression.
 const DATES: &[&str] = &["when"];
 
-/// The observation a message with more than one call gets.
-pub const ONE_CALL: &str = "error: one call per message";
+/// The line a message with more than one call ends its reply with (the first call ran).
+pub const ONLY_FIRST: &str = "note: only the first call ran";
 
 /// The observation a call that cannot be read gets.
 #[must_use]
@@ -42,14 +42,13 @@ fn trim_one_newline(value: &str) -> &str {
 /// Parse a model message into `{"tool", "args"}`. Anything before the
 /// `<tool_call>` (thinking) is ignored.
 pub fn parse_call(text: &str) -> Result<Value, String> {
-    // ONE CALL PER MESSAGE: a second block is not queued, and running either
-    // one would act on a plan the model did not get to check. None runs.
+    // ONE CALL PER MESSAGE (nt12 R5): a second call is not queued; the first runs and the reply
+    // says so (`ONLY_FIRST`, `extra_calls`). The model could not have meant the second to run
+    // first, and the reply tells it the second did not run.
     let calls = text.matches("<tool_call>").count();
     let functions = text.matches("<function=").count();
-    if calls > 1 || functions > 1 {
-        return Err(ONE_CALL.to_owned());
-    }
-    let body = match text.rfind("<tool_call>") {
+    let extra = calls.max(functions).saturating_sub(1);
+    let body = match text.find("<tool_call>") {
         Some(start) => {
             let rest = &text[start + "<tool_call>".len()..];
             rest.find("</tool_call>").map_or(rest, |end| &rest[..end])
@@ -90,7 +89,11 @@ pub fn parse_call(text: &str) -> Result<Value, String> {
         args.entry(key).or_insert(value);
         cursor = &value_start[end + "</parameter>".len()..];
     }
-    Ok(json!({"tool": name, "args": Value::Object(args)}))
+    let mut call = json!({"tool": name, "args": Value::Object(args)});
+    if extra > 0 {
+        call["extra_calls"] = json!(extra);
+    }
+    Ok(call)
 }
 
 /// A parameter the model invented for what a real one carries: `result` (the

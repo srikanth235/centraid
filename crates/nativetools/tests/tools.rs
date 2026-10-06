@@ -69,14 +69,21 @@ fn name_is_whole_words_in_any_order() {
         json!({"kind": "person", "name": "Rao Neha"}),
     );
     assert_eq!(ids(&one["effect"]["rows"]), vec![world.id("neha_r")]);
-    let partial = call(
+    // nt11 R1: a start of three letters is a word start (tier 3); two letters are none
+    let start = call(
         &mut session,
         "find",
         json!({"kind": "person", "name": "Neh"}),
     );
+    assert_eq!(ids(&start["effect"]["rows"]).len(), 2, "{start}");
+    let partial = call(
+        &mut session,
+        "find",
+        json!({"kind": "person", "name": "Ne"}),
+    );
     assert!(
         ids(&partial["effect"]["rows"]).is_empty(),
-        "a prefix is search's, not name's"
+        "two letters are no word start"
     );
 }
 
@@ -267,7 +274,10 @@ fn open_shows_every_fact_and_its_links_with_counts() {
     assert!(opened.contains("photos (1): #"), "{opened}");
     assert!(opened.contains("debts (1): #"), "{opened}");
     let many = text(&mut session, "open", json!({"row": "#1, #2"}));
-    assert_eq!(many, "error: open takes exactly one row, #n.");
+    assert!(
+        many.starts_with("error: open takes exactly one row, #n.\nrows you can still use: #"),
+        "{many}"
+    );
 }
 
 #[test]
@@ -390,7 +400,7 @@ fn ask_and_decline_end_the_turn() {
 #[test]
 fn recovery_observations_name_what_exists() {
     let world = seeded();
-    let mut session = world.session();
+    let mut session = world.session_uncomposed();
     session.user("");
     let other = text(
         &mut session,
@@ -455,7 +465,7 @@ fn recovery_observations_name_what_exists() {
     );
     assert_eq!(
         error,
-        "error: tasks have no field \"due_on\". task fields: date, status, effort, priority, completed, description."
+        "error: tasks have no field \"due_on\". task fields: date, status, effort, priority, completed, description. For that use date."
     );
 }
 
@@ -515,9 +525,18 @@ fn an_identical_call_repeated_escalates_hint_nudge_then_ends_the_turn() {
     assert_eq!(nudge["ends_turn"], false);
     assert_eq!(nudge["effect"]["repeat"], 2);
     let cut = call(&mut session, "find", args);
-    assert_eq!(cut["text"], "error: repeated call");
+    // The third repeat ends the turn as an ask with the rows the turn saw (A.3).
+    assert!(
+        cut["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("error: repeated call\nasked: \""),
+        "{cut}"
+    );
     assert_eq!(cut["ends_turn"], true);
-    assert_eq!(cut["effect"]["loop"], true);
+    assert_eq!(cut["effect"]["failsoft"], "loop");
+    assert_eq!(cut["effect"]["tool"], "ask");
+    assert!(cut["effect"].get("loop").is_none());
 }
 
 #[test]
@@ -580,12 +599,14 @@ fn the_sixth_call_that_does_not_end_the_turn_hits_the_cap() {
     }
     let sixth = call(&mut session, "find", json!({"kind": "task", "limit": 6}));
     assert_eq!(sixth["ends_turn"], true);
-    assert_eq!(sixth["effect"]["cap"], true);
+    // The cap ends in an ask (see tests/reanchor.rs), not in a bare cap error.
+    assert_eq!(sixth["effect"]["failsoft"], "cap");
+    assert_eq!(sixth["effect"]["tool"], "ask");
     assert!(
         sixth["text"]
             .as_str()
             .unwrap()
-            .ends_with("error: step cap (6) reached; the turn ends.")
+            .contains("I could not settle this in 6 steps")
     );
     let after = call(&mut session, "find", json!({"kind": "task"}));
     assert!(

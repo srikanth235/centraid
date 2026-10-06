@@ -5,7 +5,7 @@
 
 use jiff::civil::{Date, DateTime, Time};
 use jiff::{Span, ToSpan as _};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// A unit of a relative expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -151,6 +151,43 @@ impl Resolved {
         }
     }
 
+    /// The resolution as the prompt's `dates:` line writes it: ISO days and
+    /// `HH:MM` clocks without weekday labels (`2026-10-03`,
+    /// `2026-09-21..2026-09-27`, `2026-10-03 15:00`); an open end is left
+    /// empty (`..2026-10-01`).
+    #[must_use]
+    pub fn plain(self) -> String {
+        if self.is_open() {
+            let (from, to) = self.ends();
+            let side = |at: DateTime, open: bool| {
+                if open {
+                    String::new()
+                } else if at.time() == Time::midnight() || matches!(self, Self::Days { .. }) {
+                    at.date().to_string()
+                } else {
+                    format!("{} {}", at.date(), clock(at.time()))
+                }
+            };
+            return format!(
+                "{}..{}",
+                side(from, from.date() == Date::MIN),
+                side(to, to.date() == Date::MAX)
+            );
+        }
+        match self {
+            Self::Days { from, to } if from == to => from.to_string(),
+            Self::Days { from, to } => format!("{from}..{to}"),
+            Self::At(at) => format!("{} {}", at.date(), clock(at.time())),
+            Self::Between { from, to } => format!(
+                "{} {}..{} {}",
+                from.date(),
+                clock(from.time()),
+                to.date(),
+                clock(to.time())
+            ),
+        }
+    }
+
     /// Whether a row's date falls inside.
     #[must_use]
     pub fn contains(self, stamp: Stamp) -> bool {
@@ -264,17 +301,169 @@ pub const EXAMPLES: &[(&str, &str)] = &[
     (r#"{"to":{"unit":"day","rel":-1}}"#, "before today"),
 ];
 
-/// `error: …` plus the examples.
+/// `error: …` plus the example of the key that failed (the grammar's examples when no key is
+/// named): a bad time quotes the date with a time, a bad weekday the weekday, and so on.
 #[must_use]
 pub fn rejection(why: &str) -> String {
+    let words: Vec<&str> = why.split_whitespace().collect();
+    let wanted: &[&str] = match words.first().copied() {
+        Some("time") => &["a date with a time"],
+        Some("date") => &["a date", "a date with a time"],
+        Some("weekday") => &["next monday at 2"],
+        Some("name") => &["last november"],
+        Some("rel" | "unit") => &["today", "tomorrow", "three days ago", "this week"],
+        Some("anchor") => &["an hour earlier"],
+        Some("a" | "span") if why.contains("span") => &["a span", "before today"],
+        _ => &[],
+    };
     let examples: Vec<String> = EXAMPLES
         .iter()
+        .filter(|(_, gloss)| wanted.is_empty() || wanted.contains(gloss))
         .map(|(expr, gloss)| format!("{expr} = {gloss}"))
         .collect();
     format!(
         "error: could not read the date expression ({why}). Date expressions: {}",
         examples.join(" · ")
     )
+}
+
+/// THE LEXICAL LENIENCY OF A DATE EXPRESSION (SPEC §4.4, nt12 R3): a form that is not ambiguous
+/// is read as the grammar's own, with one note each: a time `9:30`, `9pm`, `9 pm`, `21:00:00`
+/// (a bare `9` stays an error: it is 9 or 21), a `rel` written as text (`"1"`), a `weekday` or a
+/// month `name` written as a word (`friday`, `november`). Spans are read end by end; the
+/// expression may be an object or its JSON text. What it does not read it leaves as it is for
+/// `parse` to refuse.
+#[must_use]
+pub fn lenient(value: &Value) -> (Value, Vec<String>) {
+    let mut notes = Vec::new();
+    let fixed = lenient_in(value, &mut notes);
+    (fixed, notes)
+}
+
+fn lenient_in(value: &Value, notes: &mut Vec<String>) -> Value {
+    // a date written as its text (`2026-10-05`, `2026-10-05T09:30`) is the absolute expression
+    if let Value::String(text) = value
+        && let Some(expr) = text_date(text)
+    {
+        notes.push(format!("note: read {} as {expr}", text.trim()));
+        return expr;
+    }
+    let owned;
+    let value = match value {
+        Value::String(text) if text.trim_start().starts_with('{') => {
+            match serde_json::from_str::<Value>(text) {
+                Ok(parsed) => {
+                    owned = parsed;
+                    &owned
+                }
+                Err(_) => return value.clone(),
+            }
+        }
+        other => other,
+    };
+    let Some(object) = value.as_object() else {
+        return value.clone();
+    };
+    let mut out = object.clone();
+    for end in ["from", "to"] {
+        if let Some(inner) = object.get(end).filter(|inner| !inner.is_null()) {
+            out.insert(end.to_owned(), lenient_in(inner, notes));
+        }
+    }
+    if let Some(Value::String(text)) = object.get("time")
+        && let Some(clock) = lenient_time(text)
+        && clock != *text
+    {
+        notes.push(format!("note: read time {text} as {clock}"));
+        out.insert("time".to_owned(), json!(clock));
+    }
+    if let Some(Value::String(text)) = object.get("rel")
+        && let Ok(number) = text.trim().trim_start_matches('+').parse::<i64>()
+    {
+        notes.push(format!("note: read rel \"{text}\" as {number}"));
+        out.insert("rel".to_owned(), json!(number));
+    }
+    for (key, numbered) in [
+        ("weekday", weekday_number as fn(&str) -> Option<i64>),
+        ("name", month_number),
+    ] {
+        if let Some(Value::String(text)) = object.get(key)
+            && let Some(number) = numbered(text)
+        {
+            notes.push(format!("note: read {key} {text} as {number}"));
+            out.insert(key.to_owned(), json!(number));
+        }
+    }
+    Value::Object(out)
+}
+
+/// `{"date": …}` (with a `time` when the text has one) for a date written as `YYYY-MM-DD` or
+/// `YYYY-MM-DDTHH:MM`: the one reading it has.
+fn text_date(text: &str) -> Option<Value> {
+    let stamp = Stamp::parse(text.trim())?;
+    let mut out = serde_json::Map::new();
+    out.insert("date".to_owned(), json!(stamp.date.to_string()));
+    if let Some(time) = stamp.time {
+        out.insert("time".to_owned(), json!(clock(time)));
+    }
+    Some(Value::Object(out))
+}
+
+/// A clock in a form that is no ambiguity, as `HH:MM`: `9:30`, `9pm`, `9 pm`, `9:30pm`,
+/// `21:00:00`; `None` for what it cannot read, and for a bare hour.
+fn lenient_time(text: &str) -> Option<String> {
+    let lower = text.trim().to_lowercase();
+    let (body, pm) = match (lower.strip_suffix("pm"), lower.strip_suffix("am")) {
+        (Some(body), _) => (body.trim_end(), Some(true)),
+        (_, Some(body)) => (body.trim_end(), Some(false)),
+        _ => (lower.as_str(), None),
+    };
+    let mut parts = body.split(':');
+    let hour: i8 = parts.next()?.trim().parse().ok()?;
+    let minute: i8 = match parts.next() {
+        Some(minute) => minute.parse().ok()?,
+        None if pm.is_some() => 0,
+        None => return None,
+    };
+    match parts.next() {
+        None => {}
+        Some("00") if parts.next().is_none() => {}
+        Some(_) => return None,
+    }
+    let hour = match pm {
+        Some(pm) => {
+            if !(1..=12).contains(&hour) {
+                return None;
+            }
+            hour % 12 + if pm { 12 } else { 0 }
+        }
+        None => hour,
+    };
+    Time::new(hour, minute, 0, 0).ok().map(clock)
+}
+
+fn weekday_number(text: &str) -> Option<i64> {
+    let word = text.trim().to_lowercase();
+    if let Ok(number) = word.parse::<i64>() {
+        return Some(number);
+    }
+    ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        .iter()
+        .position(|short| word.len() >= 3 && word.starts_with(short))
+        .map(|at| at as i64 + 1)
+}
+
+fn month_number(text: &str) -> Option<i64> {
+    let word = text.trim().to_lowercase();
+    if let Ok(number) = word.parse::<i64>() {
+        return Some(number);
+    }
+    [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ]
+    .iter()
+    .position(|short| word.len() >= 3 && word.starts_with(short))
+    .map(|at| at as i64 + 1)
 }
 
 /// Parse an expression, strictly. `why` in the error is the first problem.

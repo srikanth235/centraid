@@ -36,6 +36,20 @@ impl World {
         self.session_with(TODAY, Flags::default())
     }
 
+    /// A session with the asks and declines the model used to write left to it (`Flags::compose`
+    /// off): the legacy replies (`ambiguous:`, `0 … called …`, `error: … was refused`) the
+    /// older suites pin, as `--no-compose` runs them.
+    #[must_use]
+    pub fn session_uncomposed(&self) -> Session {
+        self.session_with(
+            TODAY,
+            Flags {
+                compose: false,
+                ..Flags::default()
+            },
+        )
+    }
+
     #[must_use]
     pub fn session_with(&self, today: &str, flags: Flags) -> Session {
         Session::open(

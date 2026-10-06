@@ -5,7 +5,7 @@
 //! nativetools seed <world.json> <vault path>
 //! nativetools copy <vault path> <new vault path>
 //! nativetools session <vault path> --today <YYYY-MM-DD[THH:MM]> [--me <name>]
-//!                     [--no-directory] [--no-preground] [--tools sig|compact|full]
+//!                     [--no-directory] [--no-preground] [--no-normalize] [--no-compose] [--tools sig|compact|full]
 //! ```
 //!
 //! `--tools` picks the tools block's spelling (`sig`, the default:
@@ -14,6 +14,8 @@
 //! `session` reads one JSON request per line on stdin and answers one JSON
 //! line on stdout: `{"op":"prompt"}`, `{"op":"user","text":…}`,
 //! `{"op":"call","tool":…,"args":{…}[,"think":<think text>]}`,
+//! `{"op":"compile","slots":{…}}` (the slots of a v3 trace, compiled to the call the runtime will
+//! execute; `compile.rs`),
 //! `{"op":"call_text","text":<raw model message>}` (the think block in front
 //! of the call is the trace the guard of `trace.rs` reads),
 //! `{"op":"parse","text":<raw model message>}` and
@@ -25,14 +27,14 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use centraid_nativetools::prompt::ToolsMode;
-use centraid_nativetools::{Flags, Session, dates, export, parse, seed, trace};
+use centraid_nativetools::{Flags, Session, dates, export, parse, seed};
 use serde_json::{Value, json};
 
 fn usage() -> ExitCode {
     eprintln!(
         "usage:\n  nativetools export <dir>\n  nativetools seed <world.json> <vault path>\n  nativetools copy <vault> <new vault>\n  \
          nativetools session <vault path> --today <YYYY-MM-DD[THH:MM]> [--me <name>] \
-         [--no-directory] [--no-preground] [--tools sig|compact|full]"
+         [--no-directory] [--no-preground] [--no-normalize] [--no-compose] [--tools sig|compact|full]"
     );
     ExitCode::from(2)
 }
@@ -100,6 +102,8 @@ fn session(path: &str, rest: &[String]) -> ExitCode {
             "--me" => me = iter.next().cloned().unwrap_or_default(),
             "--no-directory" => flags.directory = false,
             "--no-preground" => flags.preground = false,
+            "--no-normalize" => flags.normalize = false,
+            "--no-compose" => flags.compose = false,
             "--tools" => match iter.next().and_then(|mode| ToolsMode::parse(mode)) {
                 Some(mode) => flags.tools = mode,
                 None => return fail("--tools takes sig, compact or full"),
@@ -153,19 +157,12 @@ fn answer(session: &mut Session, request: &Value) -> Value {
                 .and_then(Value::as_str)
                 .unwrap_or_default();
             let args = request.get("args").cloned().unwrap_or_else(|| json!({}));
-            // the optional think block the call was written under (its v2 trace is enforced)
+            // the optional think block the call was written under (its slot trace is enforced)
             session.call_traced(tool, &args, request.get("think").and_then(Value::as_str))
         }
-        Some("call_text") => match parse::parse_call(text) {
-            Ok(call) => {
-                let tool = call["tool"].as_str().unwrap_or_default().to_owned();
-                // the think block in front of the call is the trace the guard reads
-                let mut response = session.call_traced(&tool, &call["args"], trace::think_of(text));
-                response["call"] = call;
-                response
-            }
-            Err(message) => session.call_unreadable(&message),
-        },
+        // the slots of a v3 trace, compiled to the call the runtime will execute (`compile.rs`)
+        Some("compile") => session.compile(request.get("slots").unwrap_or(&Value::Null)),
+        Some("call_text") => session.call_text(text),
         Some("peek_repeat") => match parse::parse_call(text) {
             Ok(call) => {
                 let tool = call["tool"].as_str().unwrap_or_default();
@@ -179,7 +176,7 @@ fn answer(session: &mut Session, request: &Value) -> Value {
             Err(error) => json!({"error": error}),
         },
         other => json!({"error": format!(
-            "unknown op {other:?}; ops: prompt, user, call, call_text, peek_repeat, parse"
+            "unknown op {other:?}; ops: prompt, user, call, compile, call_text, peek_repeat, parse"
         )}),
     }
 }

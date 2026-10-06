@@ -1,5 +1,5 @@
-//! The trace guard (`src/trace.rs`): a call that contradicts its own v2 trace is refused as an
-//! error observation, and a call without a v2 trace is untouched.
+//! The trace guard (`src/trace.rs`): a call that contradicts its own slot trace is refused as an
+//! error observation, and a call without a slot trace is untouched.
 
 mod common;
 
@@ -7,7 +7,7 @@ use std::io::Write as _;
 use std::process::{Command, Stdio};
 
 use centraid_nativetools::Session;
-use common::{seeded, seeded_with};
+use common::seeded;
 use serde_json::{Value, json};
 
 fn traced(session: &mut Session, tool: &str, args: Value, think: &str) -> Value {
@@ -39,15 +39,6 @@ fn found(response: &Value) -> (Vec<String>, String) {
             .expect("a result handle")
             .to_owned(),
     )
-}
-
-fn many_tasks(count: usize) -> Value {
-    let mut world: Value = serde_json::from_str(common::FIXTURE).unwrap();
-    let tasks = world["tasks"].as_array_mut().unwrap();
-    for i in 0..count {
-        tasks.push(json!({"key": format!("bulk{i}"), "name": format!("Bulk chore {i}"), "due": "2026-11-01"}));
-    }
-    world
 }
 
 #[test]
@@ -255,7 +246,7 @@ fn a_call_without_a_v2_trace_is_untouched() {
     let response = session.call_traced("answer", &json!({"kind": "event"}), None);
     assert!(text(&response).starts_with("answered:"), "{response}");
     session.user("and");
-    // a v2 trace with no slot the call contradicts
+    // a slot trace with no slot the call contradicts
     let response = traced(
         &mut session,
         "answer",
@@ -263,65 +254,6 @@ fn a_call_without_a_v2_trace_is_untouched() {
         "intent: read \"what\"\nscope: one\nrefer: it -> nowhere",
     );
     assert!(text(&response).starts_with("answered:"), "{response}");
-}
-
-#[test]
-fn the_bulk_write_guard_reads_the_scope_when_there_is_a_trace() {
-    let act = |session: &mut Session, list: &str, think: Option<&str>| {
-        session.call_traced("act", &json!({"verb": "complete", "rows": list}), think)
-    };
-    let bulk = |message: &str, think: Option<&str>| {
-        let world = seeded_with(&many_tasks(14));
-        let mut session = world.session();
-        session.user("");
-        let (rows, list) = found(&common::call(&mut session, "find", json!({"kind": "task"})));
-        assert!(
-            rows.len() > 12,
-            "more rows than a write may take without all"
-        );
-        session.user(message);
-        act(&mut session, &list, think)
-    };
-    // no trace: the words of the message decide, as before
-    let response = bulk("finish the chores", None);
-    assert!(
-        text(&response).contains("the message does not say all or every"),
-        "{response}"
-    );
-    let response = bulk("finish all the chores", None);
-    assert!(
-        response["effect"]["diff"]["rows"].as_array().unwrap().len() > 12,
-        "{response}"
-    );
-    // a trace: its scope decides, the words do not
-    let response = bulk(
-        "finish the chores",
-        Some("intent: write\nverb: complete\nscope: all \"the chores\""),
-    );
-    assert!(
-        response["effect"]["diff"]["rows"].as_array().unwrap().len() > 12,
-        "{response}"
-    );
-    let response = bulk(
-        "finish all the chores",
-        Some("intent: write\nverb: complete\nscope: some"),
-    );
-    assert!(
-        text(&response).contains("the trace says scope some, not all"),
-        "{response}"
-    );
-    assert!(response["effect"]["diff"].is_null());
-    // a trace with no scope line falls back to the words
-    let response = bulk("finish the chores", Some("intent: write\nverb: complete"));
-    assert!(
-        text(&response).contains("the message does not say all or every"),
-        "{response}"
-    );
-    let response = bulk("finish every chore", Some("intent: write\nverb: complete"));
-    assert!(
-        response["effect"]["diff"]["rows"].as_array().unwrap().len() > 12,
-        "{response}"
-    );
 }
 
 #[test]

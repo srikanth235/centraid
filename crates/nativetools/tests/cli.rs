@@ -203,3 +203,56 @@ fn the_tools_flag_picks_the_spelling_and_rejects_an_unknown_one() {
     assert!(!bad.status.success());
     assert!(String::from_utf8_lossy(&bad.stderr).contains("--tools takes sig, compact or full"));
 }
+
+#[test]
+fn the_no_compose_flag_restores_the_old_replies() {
+    let dir = tempfile::tempdir().unwrap();
+    let world = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/world.json");
+    let vault = dir.path().join("vault.db");
+    let seeded = Command::new(BIN)
+        .arg("seed")
+        .arg(world)
+        .arg(&vault)
+        .output()
+        .unwrap();
+    assert!(seeded.status.success());
+    let reply = |flags: &[&str]| -> Value {
+        let mut child = Command::new(BIN)
+            .arg("session")
+            .arg(&vault)
+            .args(["--today", "2026-09-27"])
+            .args(flags)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let requests = [
+            json!({"op": "user", "text": "log a call with neha"}),
+            json!({"op": "call", "tool": "act", "args": {"verb": "log", "kind": "person", "name": "Neha", "args": "kind: call"}}),
+        ];
+        for request in &requests {
+            writeln!(child.stdin.as_mut().unwrap(), "{request}").unwrap();
+        }
+        let output = child.wait_with_output().unwrap();
+        let line = String::from_utf8(output.stdout)
+            .unwrap()
+            .lines()
+            .last()
+            .unwrap()
+            .to_owned();
+        serde_json::from_str(&line).unwrap()
+    };
+    let composed = reply(&[]);
+    assert_eq!(composed["ends_turn"], true, "{composed}");
+    assert_eq!(composed["effect"]["tool"], "ask", "{composed}");
+    assert_eq!(composed["effect"]["composed"], true, "{composed}");
+    let old = reply(&["--no-compose"]);
+    assert_eq!(old["ends_turn"], false, "{old}");
+    assert!(
+        old["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("ambiguous: \"Neha\" fits"),
+        "{old}"
+    );
+}
