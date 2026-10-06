@@ -66,6 +66,23 @@
   so the scorer takes it like any checkpoint); marks.json, best.json and FINAL never name it. Its mean age is D / (1 - D) steps: 0.999
   averages about the last 1,000 steps, close to the plain average of the 75 % and 100 % marks of a 4-epoch run (#1044: that average
   gained +13 sessions over ckpt-100). The training itself is unchanged, bit for bit; a resume checkpoint carries the shadow.
+- DPO (off unless asked: --dpo PAIRS.jsonl[.gz], opt-in; no --dpo = the SFT trainer above, bit for bit). One JSON object per line,
+  {"id": str, "chosen": R, "rejected": R}, each R a record in the format of a line of data/train.jsonl.gz (the same session; the messages
+  may differ in any assistant / tool message after the point where they diverge). The loss of a pair is
+  -logsigmoid(beta * ((logp_pi(c) - logp_ref(c)) - (logp_pi(r) - logp_ref(r)))) + --dpo-sft * SFT(c), where logp is the SUM of the log-probs of
+  the record's label tokens (the SFT loss mask: assistant think + call; shared-prefix tokens cancel in the difference) and SFT(c) is the
+  decision-weighted mean CE of the chosen record, exactly its SFT loss (--decision-weight / --copy-weight apply). --dpo-beta (default 0.1).
+  --dpo-sft (default 0.2): the RPO / TRL `rpo_alpha` convention, a light likelihood anchor that keeps the chosen record from drifting
+  down while the margin grows (its gradient is ~1/N of the summed DPO one, so it never outvotes the preference signal; 1.0 = RPO's value,
+  0 = plain DPO). The reference is the frozen initial model, held as a table: its two log-probs per pair are computed in ONE no-grad pass
+  before training (after the init weights load, before any resume state), through the same forward path as the policy, so the first step's
+  margin is exactly 0, no second 0.8B model sits on the device, and every epoch reuses the table (a resume recomputes it from the
+  same init weights). One pair = two forward passes (chosen, rejected) held for one backward; --bs pairs per optimizer step. The epochs
+  walk the pairs (plain shuffle, a pure function of seed and epoch); marks, EMA, resume, val eval and the SFT metrics are those of the SFT
+  run. --train is optional with --dpo and never trained on: when given, it is the sample the TRAIN metrics score (original-data drift);
+  when omitted the TRAIN metrics score the chosen records. The step line's `loss` is the chosen record's NLL per label token; every
+  --log-every steps a `DPO step` line gives the window means of the DPO loss, the implicit reward margin
+  beta * ((logp_pi - logp_ref)(c) - (logp_pi - logp_ref)(r)) and the accuracy (pairs with margin > 0), also kept in meta `dpo`.
 """
 from __future__ import annotations
 
@@ -103,6 +120,8 @@ DECISION_WEIGHT = 2.0              # --decision-weight: a decision token counts 
 COPY_WEIGHT = 0.0                  # --copy-weight: a token inside a verbatim copy of the user's message carries no loss (1.0 = as any other)
 CHECKPOINTS = "0.25,0.5,0.75,1.0"  # --checkpoints: the marks, as fractions of the steps
 EMA = 0.0                          # --ema: the decay of the weight EMA; 0 = none
+DPO_BETA = 0.1                     # --dpo-beta: the KL strength of the DPO loss
+DPO_SFT = 0.2                      # --dpo-sft: weight of the SFT term on the chosen record (0 = plain DPO)
 EMA_SUFFIX = "-ema"                # the EMA weights of mark ckpt-NNN are saved as ckpt-NNN-ema
 LEGACY_LOSS = "--decision-weight 1 --copy-weight 1 --no-pair-batches"  # the loss and the order before these defaults, bit for bit
 
@@ -190,10 +209,11 @@ def load(tok, path, max_len, limit, default_tools, check_n, tag, cfg):
     return data
 
 
-def assert_mask_sample(tok, path, default_tools, cfg, n=8):
+def assert_mask_sample(tok, path, default_tools, cfg, n=8, examples=None):
     """SPEC §11.3: show and assert, on a sample, that the trained tokens are exactly the assistant
-    messages' think + call tokens (through `<|im_end|>`), and nothing of system, user or tool."""
-    for i, ex in enumerate(fmt.read_examples(path)):
+    messages' think + call tokens (through `<|im_end|>`), and nothing of system, user or tool. `examples` (an iterable of
+    records) stands in for the file `path`."""
+    for i, ex in enumerate(fmt.read_examples(path) if examples is None else examples):
         if i >= n:
             break
         enc = fmt.encode(tok, ex, default_tools, cfg)
@@ -243,23 +263,32 @@ def show_decisions(tok, ids, labels, decision, run):
     return "".join(out)
 
 
-def probe_memory(model, data, dev, n_train, weight=1.0, lengths=(None, 6144, 4096), enable_ckpt=None, copy_weight=1.0):
+def probe_memory(model, data, dev, n_train, weight=1.0, lengths=(None, 6144, 4096), enable_ckpt=None, copy_weight=1.0, pair_step=None):
     """Fail fast instead of hours in: one forward + backward on the longest example (no update),
     with AdamW's two fp32 states (allocated lazily at the first step) held as ballast.
     On CUDA OOM, first (if `enable_ckpt` is given: gradient checkpointing is off by default) switch
     checkpointing on and retry the same length (same math, less memory), then retry at shorter caps;
-    returns the largest length that fit (None = all)."""
+    returns the largest length that fit (None = all). With `pair_step` (DPO: `data` is a list of DpoPairs; `pair_step(pair)` is the loss of one)
+    the unit is a pair, sized by its two records together."""
     if dev.type != "cuda" or not data:
         return None
     ballast = torch.empty(2 * n_train, dtype=torch.float32, device=dev)
     for cap in lengths:
-        pool = [d for d in data if cap is None or len(d[0]) <= cap]
-        ids, labels, dec = max(pool, key=lambda d: len(d[0]))
+        if pair_step:
+            pool = [d for d in data if cap is None or max(len(d.chosen[0]), len(d.rejected[0])) <= cap]
+            big = max(pool, key=lambda d: len(d.chosen[0]) + len(d.rejected[0]))
+            ids = big.chosen[0] + big.rejected[0]
+        else:
+            pool = [d for d in data if cap is None or len(d[0]) <= cap]
+            ids, labels, dec = max(pool, key=lambda d: len(d[0]))
         while True:
             try:
                 torch.cuda.reset_peak_memory_stats(dev)
-                loss, n, _, _ = forward_loss(model, ids, labels, dev, dec, weight, copy_weight)
-                (loss / n).backward()
+                if pair_step:
+                    pair_step(big).backward()
+                else:
+                    loss, n, _, _ = forward_loss(model, ids, labels, dev, dec, weight, copy_weight)
+                    (loss / n).backward()
                 model.zero_grad(set_to_none=True)
                 log("MEMORY probe: %d tokens forward+backward with optimizer state, peak %.1f GiB of %.1f GiB"
                     % (len(ids), torch.cuda.max_memory_allocated(dev) / 2**30,
@@ -560,13 +589,113 @@ class Ema:
             swap()
 
 
+# ---- DPO ------------------------------------------------------------------------------------------
+class DpoPair:
+    """One preference pair as the trainer holds it: `chosen` and `rejected` are Examples (the SFT triples), `id` the pair file's id. `.pair`
+    is '' (no minimal-pair batching: the epochs shuffle the pairs plainly)."""
+    pair = ""
+
+    def __init__(self, pid, chosen, rejected):
+        self.id, self.chosen, self.rejected = pid, chosen, rejected
+
+
+def load_pairs(tok, path, max_len, limit, default_tools, check_n, cfg):
+    """DpoPairs from a pair file: {"id", "chosen", "rejected"} per line, both records in the train.jsonl.gz format. A pair either record of
+    which is malformed, unrenderable, over `max_len` or has no label token is skipped (logged, counted); none left is a stop."""
+    data, bad, long_, empty = [], 0, 0, 0
+    for i, ob in enumerate(fmt.read_examples(path)):
+        if limit and len(data) >= limit:
+            break
+        try:
+            if not isinstance(ob, dict) or not isinstance(ob.get("chosen"), dict) or not isinstance(ob.get("rejected"), dict):
+                raise ValueError('a pair is {"id", "chosen": record, "rejected": record}')
+            encs = []
+            for side in ("chosen", "rejected"):
+                enc = mark_date_indexes(fmt.encode(tok, ob[side], default_tools, cfg), cfg)
+                if i < check_n:
+                    fmt.check_spans(ob[side], enc)
+                    fmt.check_decisions(enc, cfg)
+                encs.append(enc)
+        except (ValueError, KeyError, TypeError) as e:
+            bad += 1
+            if bad <= 3:
+                log("SKIP pairs #%d: %s" % (i, e))
+            continue
+        if any(len(e["input_ids"]) > max_len for e in encs):
+            long_ += 1
+            continue
+        if any(all(y == fmt.IGNORE for y in e["labels"][1:]) for e in encs):
+            empty += 1
+            continue
+        c, r = (Example(e["input_ids"], e["labels"], e["decision"]) for e in encs)
+        data.append(DpoPair(str(ob.get("id", i)), c, r))
+    log("pairs: %d pairs, %d over max-len %d dropped, %d unrenderable or malformed skipped, %d without a label token skipped; %d + %d tokens"
+        % (len(data), long_, max_len, bad, empty, sum(len(p.chosen[0]) for p in data), sum(len(p.rejected[0]) for p in data)))
+    if not data:
+        raise SystemExit("pairs: no usable pair in %s" % path)
+    return data
+
+
+def dpo_records(pairs):
+    """Every record of the pairs (chosen, rejected, chosen, ...) as the SFT triples the memory and precision probes take."""
+    return [r for p in pairs for r in (p.chosen, p.rejected)]
+
+
+def forward_logp(model, ex, dev, weight=1.0, copy_weight=1.0):
+    """One record's (logp, sft, plain, n): `logp` the SUM of the log-probs of its label tokens (what DPO compares), `sft` its SFT loss
+    (the decision- / copy-weighted CE sum over the weight mass of the record, so its per-record mean), `plain` the unweighted CE sum
+    (detached) and `n` the label tokens. One forward; the label-position logits are shared by all three."""
+    ids, labels, dec = ex
+    logits, tgt, pos = label_logits(model, ids, labels, dev)
+    ce = torch.nn.functional.cross_entropy(logits, tgt, reduction="none")
+    loss = loss_from_logits(logits, tgt, pos, dec, weight, dev, copy_weight)[0]
+    mass = weight_mass(labels, dec, weight, copy_weight)[2]
+    return -ce.sum(), loss / max(mass, 1e-9), ce.detach().sum(), pos.numel()
+
+
+def dpo_loss(pc, pr, rc, rr, beta):
+    """The DPO loss of one pair, -logsigmoid(margin), and its implicit reward margin
+    beta * ((pc - rc) - (pr - rr)): `pc`, `pr` the policy's summed label log-probs of the chosen and rejected record, `rc`, `rr` the
+    reference's. Shared-prefix tokens contribute the same to pc and pr (and to rc and rr), so they cancel in the margin."""
+    margin = beta * ((pc - rc) - (pr - rr))
+    return -torch.nn.functional.logsigmoid(margin), margin
+
+
+@torch.no_grad()
+def dpo_reference(model, pairs, dev, weight=1.0, copy_weight=1.0):
+    """The frozen reference's summed label log-probs of every pair, [n, 2] float64 on `dev` (chosen, rejected): the model as it is now
+    (the initial weights), eval mode, no grad, the policy's own forward path. Each rank scores its share of the pairs and the table is
+    summed across ranks."""
+    model.eval()
+    ref = torch.zeros(len(pairs), 2, dtype=torch.float64, device=dev)
+    for i in range(RANK, len(pairs), WORLD):
+        for j, ex in enumerate((pairs[i].chosen, pairs[i].rejected)):
+            ref[i, j] = forward_logp(model, ex, dev, weight, copy_weight)[0].double()
+    if WORLD > 1:
+        torch.distributed.all_reduce(ref)
+    model.train()
+    return ref
+
+
+def dpo_pair_loss(model, pair, ref_row, beta, sft, dev, weight=1.0, copy_weight=1.0):
+    """One pair, two forwards (both graphs held for the one backward). Returns (loss, dpo, margin, plain NLL sum of the chosen record): loss =
+    dpo + sft * SFT(chosen) is what backward sees; `dpo` and `margin` (the implicit reward margin) are detached.
+    `ref_row` = the reference's (chosen, rejected) summed log-probs."""
+    pc, sc, plain, n = forward_logp(model, pair.chosen, dev, weight, copy_weight)
+    pr = forward_logp(model, pair.rejected, dev, weight, copy_weight)[0]
+    dpo, margin = dpo_loss(pc.double(), pr.double(), ref_row[0], ref_row[1], beta)
+    loss = dpo + sft * sc.double() if sft else dpo
+    return loss, dpo.detach(), margin.detach(), plain
+
+
 # ---- resume checkpoints -------------------------------------------------------------------------
 RESUME_PREFIX = "resume-step-"
 RESUME_KEEP = 2
 FP_ARGS = ("bs", "lr", "warmup", "min_lr", "max_len", "seed", "embed", "lora", "decision_weight", "copy_weight", "pair_batches",
-           "n", "epochs", "tf32", "autocast", "ema")  # the precision, the loss weights and the order change the numbers: a resume must not switch them mid-run
+           "n", "epochs", "tf32", "autocast", "ema", "dpo", "dpo_beta", "dpo_sft")  # the precision, the loss weights and the order change the numbers: a resume must not switch them mid-run
 # what a checkpoint written before these flags existed ran with: pure fp32, TF32 off, copy tokens weighing 1, the plain shuffle
-FP_LEGACY = {"tf32": False, "autocast": "none", "copy_weight": 1.0, "pair_batches": False, "ema": 0.0}
+FP_LEGACY = {"tf32": False, "autocast": "none", "copy_weight": 1.0, "pair_batches": False, "ema": 0.0,
+             "dpo": None, "dpo_beta": DPO_BETA, "dpo_sft": DPO_SFT}
 
 
 def _fsync_path(p):
@@ -842,7 +971,8 @@ def parser() -> argparse.ArgumentParser:
     """The command line (a function of its own so that the defaults can be read, and tested, without running a training)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen3.5-0.8B")
-    ap.add_argument("--train", required=True)
+    ap.add_argument("--train", help="train file (required unless --dpo; with --dpo it is never trained on: it is the sample the TRAIN "
+                    "metrics score)")
     ap.add_argument("--val")
     ap.add_argument("--tools", help="tools.json when examples carry none (nativetools export)")
     ap.add_argument("--out", help="checkpoint folder (required unless --dry-run)")
@@ -921,6 +1051,11 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--ema", type=float, default=EMA, metavar="D", help="keep an EMA of the trainable weights with decay D (e.g. "
                     "0.999, a mean age of D/(1-D) steps), evaluated on val and saved beside every mark as ckpt-NNN%s; 0 (default) "
                     "= none" % EMA_SUFFIX)
+    ap.add_argument("--dpo", metavar="PAIRS", help="DPO instead of SFT: a (gzipped) JSONL of {id, chosen, rejected} records "
+                    "(each in the train file's format); the reference is the frozen initial model (see the module docstring)")
+    ap.add_argument("--dpo-beta", type=float, default=DPO_BETA, metavar="B", help="DPO beta (default %g)" % DPO_BETA)
+    ap.add_argument("--dpo-sft", type=float, default=DPO_SFT, metavar="S", help="with --dpo: weight of the SFT loss (mean CE) of "
+                    "the chosen record added to the DPO loss (default %g; 0 = plain DPO, 1 = RPO)" % DPO_SFT)
     ap.add_argument("--lora", type=int, default=0, help="LoRA rank on every language-model linear layer "
                     "(0 = full fine-tune); for models whose fp32 AdamW state does not fit a T4, e.g. Qwen3.5-2B")
     return ap
@@ -933,6 +1068,12 @@ def main():
         ap.error("--out is required (except with --dry-run)")
     if a.save_every < 0 or a.epochs < 1:
         ap.error("--save-every must be >= 0 and --epochs >= 1")
+    if not a.train and not a.dpo:
+        ap.error("--train is required (except with --dpo)")
+    if a.dpo and not a.dpo_beta > 0:
+        ap.error("--dpo-beta must be positive")
+    if a.dpo and a.dpo_sft < 0:
+        ap.error("--dpo-sft must not be negative")
     if not 0.0 <= a.ema < 1.0:
         ap.error("--ema must be in [0, 1): a decay such as 0.999, or 0 for none")
     if a.resume and not a.dry_run and (Path(a.out) / "DONE").exists():
@@ -960,8 +1101,17 @@ def main():
     cfg = fmt.DecisionConfig.parse(a.decision_labels, a.decision_ref_labels, a.decision_params,
                                    a.decision_skip_params, hard=hard, copy=fmt.CopyConfig.parse(a.copy_labels))
     log("decision config: W %g copy weight %g pair batches %s %s copy %s" % (W, CW, a.pair_batches, cfg, cfg.copy))
-    assert_mask_sample(tok, a.train, default_tools, cfg)
-    data = load(tok, a.train, a.max_len, a.dry_run or a.n, default_tools, 64, "train", cfg)
+    dpo = bool(a.dpo)
+    if a.train:
+        assert_mask_sample(tok, a.train, default_tools, cfg)
+    data = load(tok, a.train, a.max_len, a.dry_run or a.n, default_tools, 64, "train", cfg) if a.train else []
+    if dpo:  # `data` stays the SFT file (the TRAIN metrics' sample); `units` is what the epochs walk
+        units = load_pairs(tok, a.dpo, a.max_len, a.dry_run or a.n, default_tools, 64, cfg)
+        assert_mask_sample(tok, None, default_tools, cfg, examples=(ob["chosen"] for ob in fmt.read_examples(a.dpo)
+                                                                if isinstance(ob, dict) and isinstance(ob.get("chosen"), dict)))
+        log("DPO: beta %g sft %g, reference = the frozen initial model (one no-grad pass before training)" % (a.dpo_beta, a.dpo_sft))
+    else:
+        units = data
     vdata = [] if a.dry_run else load(tok, a.val, a.max_len, a.val_n, default_tools, 16, "val", cfg) if a.val else []
 
     model = AutoModelForCausalLM.from_pretrained(a.model, dtype=torch.float32).to(dev)
@@ -974,9 +1124,10 @@ def main():
     AMP["dtype"] = torch.bfloat16 if a.autocast == "bf16" else None
     log("precision: tf32 %s autocast %s grad-ckpt %s fused-adam %s" % (a.tf32, a.autocast, a.grad_ckpt, a.fused_adam))
     if a.dry_run:
-        n_pairs, n_pair_recs, n_orphans = pair_stats([d.pair for d in data])
-        log("PAIRS: %d pairs (%d of %d records), %d records whose partner is not among them" % (n_pairs, n_pair_recs, len(data), n_orphans))
-        dry_run(model, data, dev, W, launch_flags(a), CW)
+        recs = dpo_records(units) if dpo else data
+        n_pairs, n_pair_recs, n_orphans = pair_stats([d.pair for d in recs])
+        log("PAIRS: %d pairs (%d of %d records), %d records whose partner is not among them" % (n_pairs, n_pair_recs, len(recs), n_orphans))
+        dry_run(model, recs, dev, W, launch_flags(a), CW)
         log("DRY-RUN done: no training step was taken")
         if WORLD > 1:
             torch.distributed.destroy_process_group()
@@ -1001,40 +1152,55 @@ def main():
     if a.grad_ckpt:
         enable_ckpt()
     model.train()
-    if AMP["dtype"] is not None and data:
-        if not amp_smoke(model, data, dev, W, explicit=a.autocast_explicit, copy_weight=CW):
+    if AMP["dtype"] is not None and units:
+        if not amp_smoke(model, dpo_records(units) if dpo else data, dev, W, explicit=a.autocast_explicit, copy_weight=CW):
             a.autocast = "none"  # recorded as what ran
-    cap = probe_memory(model, data, dev, sum(p.numel() for p in params), W, enable_ckpt=None if a.grad_ckpt else enable_ckpt,
-                       copy_weight=CW)
+    zero_ref = torch.zeros(2, dtype=torch.float64, device=dev)
+    cap = probe_memory(model, units, dev, sum(p.numel() for p in params), W, enable_ckpt=None if a.grad_ckpt else enable_ckpt,
+                       copy_weight=CW, pair_step=(lambda p: dpo_pair_loss(model, p, zero_ref, a.dpo_beta, a.dpo_sft, dev, W, CW)[0])
+                       if dpo else None)
     if cap is not None:
-        keep = [d for d in data if len(d[0]) <= cap]
-        log("MEMORY cap %d tokens: dropped %d of %d examples" % (cap, len(data) - len(keep), len(data)))
-        data, vdata = keep, [d for d in vdata if len(d[0]) <= cap]
-    # a fixed sample of the train records, scored in eval mode next to val (before the shuffle)
-    tsample = [data[i] for i in sorted(random.Random(1234).sample(range(len(data)), min(a.train_eval_n, len(data))))]
+        if dpo:
+            keep = [p for p in units if max(len(p.chosen[0]), len(p.rejected[0])) <= cap]
+            log("MEMORY cap %d tokens: dropped %d of %d pairs" % (cap, len(units) - len(keep), len(units)))
+            units, data = keep, [d for d in data if len(d[0]) <= cap]
+        else:
+            keep = [d for d in data if len(d[0]) <= cap]
+            log("MEMORY cap %d tokens: dropped %d of %d examples" % (cap, len(data) - len(keep), len(data)))
+            data = units = keep
+        vdata = [d for d in vdata if len(d[0]) <= cap]
+    # a fixed sample of the train records (DPO without --train: of the chosen records), scored in eval mode next to val (before the shuffle)
+    tsrc = data if data or not dpo else [p.chosen for p in units]
+    tsample = [tsrc[i] for i in sorted(random.Random(1234).sample(range(len(tsrc)), min(a.train_eval_n, len(tsrc))))]
     n_train = sum(p.numel() for p in params)
     log("model %s params %d trainable %d (embed %s, tied %s) dev %s world %d"
         % (type(model).__name__, sum(p.numel() for p in model.parameters()), n_train, a.embed, tied, dev, WORLD))
+    ref_table = None
+    if dpo:  # the frozen reference: the initial weights, scored once, before any resume state or training step touches them
+        t_ref = time.time()
+        ref_table = dpo_reference(model, units, dev, W, CW)
+        log("DPO reference: %d pairs scored in %.0fs (mean summed log-prob chosen %.2f rejected %.2f)"
+            % (len(units), time.time() - t_ref, ref_table[:, 0].mean().item(), ref_table[:, 1].mean().item()))
     try:
         opt = torch.optim.AdamW(params, lr=a.lr, weight_decay=0.0, betas=(0.9, 0.95),
                                 fused=a.fused_adam and dev.type == "cuda")
     except (RuntimeError, TypeError):
         opt = torch.optim.AdamW(params, lr=a.lr, weight_decay=0.0, betas=(0.9, 0.95))
 
-    spe = len(data) // a.bs  # steps per epoch (a partial last batch is dropped, as before)
+    spe = len(units) // a.bs  # steps per epoch (a partial last batch is dropped, as before)
     steps = spe * a.epochs
     if a.max_steps:
         steps = min(steps, a.max_steps)
-    assert steps > 0, "fewer examples than one batch"
+    assert steps > 0, "fewer %s than one batch" % ("pairs" if dpo else "examples")
     warm = max(1, int(a.warmup * steps))
     # minimal pairs: the order of an epoch is a function of (seed, epoch, the pair ids, bs), so a resume recomputes it
-    pairs = [getattr(d, "pair", "") for d in data]
-    order_of = lambda epoch: epoch_order(len(data), a.seed, epoch, pairs if a.pair_batches else None, a.bs)  # noqa: E731
+    pairs = [getattr(d, "pair", "") for d in units]
+    order_of = lambda epoch: epoch_order(len(units), a.seed, epoch, pairs if a.pair_batches else None, a.bs)  # noqa: E731
     order0 = order_of(0)
     n_pairs, n_pair_recs, n_orphans = pair_stats(pairs)
     split0 = split_steps(order0, pairs, a.bs, spe)
     log("PAIRS: %d pairs (%d of %d records), %d records whose partner is gone; pair batching %s; epoch 0: %d of %d steps hold a split "
-        "pair%s" % (n_pairs, n_pair_recs, len(data), n_orphans, "on" if a.pair_batches else "off (--no-pair-batches)", split0, spe,
+        "pair%s" % (n_pairs, n_pair_recs, len(units), n_orphans, "on" if a.pair_batches else "off (--no-pair-batches)", split0, spe,
                     " (must be 0 with pair batching: --bs odd or below a group, or too few single records to fill the gaps)"
                     if split0 and a.pair_batches else ""))
 
@@ -1047,7 +1213,7 @@ def main():
     marks = mark_steps(steps, a.checkpoints)
     log("steps %d bs %d warmup %d lr %g checkpoints %s budget %.2fh" % (steps, a.bs, warm, a.lr, marks, a.hours))
 
-    meta = {"args": vars(a), "steps": steps, "examples": len(data), "decision_config": repr(cfg),
+    meta = {"args": vars(a), "steps": steps, "examples": len(units), "decision_config": repr(cfg),
             "hard_config": repr(cfg.hard), "hard_note": "hn/hloss/hacc in train/val/test: the hard tier, a subset of dn",
             "copy_config": repr(cfg.copy), "copy_note": "cn/closs/cacc: copy tokens, verbatim copies of the user's message, outside dn"}
 
@@ -1079,7 +1245,7 @@ def main():
     t0 = time.time()
     win = [0.0, 0, 0, time.time()]  # loss sum, label tokens, all tokens, window start
     out_dir = Path(a.out) if a.out else None
-    fp = {"args": {k: getattr(a, k) for k in FP_ARGS}, "steps": steps, "spe": spe, "examples": len(data),
+    fp = {"args": {k: getattr(a, k) for k in FP_ARGS}, "steps": steps, "spe": spe, "examples": len(units),
           "cfg": repr(cfg), "order": hashlib.sha1(json.dumps(order0).encode()).hexdigest(),
           "params": hashlib.sha1(json.dumps([(n, list(p.shape)) for n, p in named.items()]).encode()).hexdigest()}
     if CW != 1.0:  # which tokens are copies changes the numbers only when they weigh something else than 1
@@ -1119,7 +1285,7 @@ def main():
         meta.update(st0["meta_hist"])
         write_marks(a.out, meta.get("marks", []))  # the files follow the restored history (a fresh disk may hold none, or older ones)
         log("RESUMED from %s: step %d/%d (epoch %d, example %d of %d), %.0fs of training already done, %d eval "
-            "entries restored; the next step is %d" % (ck, start, steps, st0["epoch"], st0["pos"], len(data),
+            "entries restored; the next step is %d" % (ck, start, steps, st0["epoch"], st0["pos"], len(units),
                                                       m["elapsed"],
                                                       sum(len(v) for v in st0["meta_hist"].values()), start + 1))
         del st0
@@ -1142,8 +1308,8 @@ def main():
                 "rng": {"python": random.getstate(), "torch": torch.get_rng_state(),
                         "cuda": torch.cuda.get_rng_state_all() if dev.type == "cuda" else []},
                 "meters": {"tok_all": tok_all, "tok_lab": tok_lab, "win": win[:3], "win_age": time.time() - win[3],
-                           "elapsed": time.time() - t0},
-                "meta_hist": {k: meta[k] for k in ("train", "val", "test", "marks") if k in meta}}
+                           "elapsed": time.time() - t0, **({"dwin": dwin.tolist()} if dpo else {})},
+                "meta_hist": {k: meta[k] for k in ("train", "val", "test", "marks", "dpo") if k in meta}}
 
     def write_resume(st, why):
         nonlocal last_save_s, last_saved
@@ -1159,6 +1325,9 @@ def main():
     st = start
     plain_loss = W == 1.0 and CW == 1.0  # every token weighs 1: the old plain mean CE, normalised by the label tokens
     cur_epoch, order = -1, None
+    dwin = torch.zeros(4, dtype=torch.float64, device=dev)  # DPO window sums: loss, margin, wins, pairs (zero and unused without --dpo)
+    if ck and dpo and RANK == 0 and "dwin" in m:  # the log window a resume cuts into (rank 0's share: a logging aid, not training state)
+        dwin += torch.tensor(m["dwin"], dtype=torch.float64, device=dev)
     for s in range(start, steps):
         if s // spe != cur_epoch:
             cur_epoch = s // spe
@@ -1166,16 +1335,28 @@ def main():
             if n_pairs and cur_epoch:  # epoch 0 is in the PAIRS line
                 log("EPOCH %d: %d of %d steps hold a split pair" % (cur_epoch, split_steps(order, pairs, a.bs, spe), spe))
         k = s % spe
-        batch = [data[i] for i in order[k * a.bs:(k + 1) * a.bs]]
-        n_lab = sum(sum(1 for y in l[1:] if y != fmt.IGNORE) for _, l, _ in batch)
-        # the weight mass of the batch: n_lab at W = 1 (the old normaliser), else decisions count W each, copies CW each
-        mass = sum(weight_mass(l, dc, W, CW)[2] for _, l, dc in batch)
+        idx = order[k * a.bs:(k + 1) * a.bs]
+        batch = [units[i] for i in idx]
         step_loss = torch.zeros((), dtype=torch.float64, device=dev)  # summed on the device: one sync per step
-        for ids, labels, dec in batch[RANK::WORLD]:
-            loss, n, _, plain = forward_loss(model, ids, labels, dev, dec, W, CW)
-            (loss / (n_lab if plain_loss else max(mass, 1e-9))).backward()
-            step_loss += plain.double()
-            win[2] += len(ids)
+        if dpo:  # the chosen record is the batch's "label" side: its NLL is the step line's loss, its tokens the label count
+            n_lab = sum(sum(1 for y in p.chosen[1][1:] if y != fmt.IGNORE) for p in batch)
+            tok_step = sum(len(p.chosen[0]) + len(p.rejected[0]) for p in batch)
+            for i in idx[RANK::WORLD]:
+                loss, dloss, margin, plain = dpo_pair_loss(model, units[i], ref_table[i], a.dpo_beta, a.dpo_sft, dev, W, CW)
+                (loss / len(batch)).backward()
+                step_loss += plain.double()
+                win[2] += len(units[i].chosen[0]) + len(units[i].rejected[0])
+                dwin += torch.stack([dloss, margin, (margin > 0).double(), torch.ones_like(margin)])
+        else:
+            n_lab = sum(sum(1 for y in l[1:] if y != fmt.IGNORE) for _, l, _ in batch)
+            tok_step = sum(len(x) for x, _, _ in batch)
+            # the weight mass of the batch: n_lab at W = 1 (the old normaliser), else decisions count W each, copies CW each
+            mass = sum(weight_mass(l, dc, W, CW)[2] for _, l, dc in batch)
+            for ids, labels, dec in batch[RANK::WORLD]:
+                loss, n, _, plain = forward_loss(model, ids, labels, dev, dec, W, CW)
+                (loss / (n_lab if plain_loss else max(mass, 1e-9))).backward()
+                step_loss += plain.double()
+                win[2] += len(ids)
         win[0] += step_loss.item()
         win[1] += n_lab
         if WORLD > 1:
@@ -1188,7 +1369,7 @@ def main():
         opt.zero_grad(set_to_none=True)
         if ema is not None:
             ema.update(named, s + 1)
-        tok_all += sum(len(x) for x, _, _ in batch)
+        tok_all += tok_step
         tok_lab += n_lab
         st = s + 1
         if st % a.log_every == 0 or st == steps:
@@ -1200,6 +1381,15 @@ def main():
             log("step %d/%d loss %.4f gnorm %.2f lr %.2e tok/s %.0f (label %.0f) elapsed %.0fs peak %.1fGiB"
                 % (st, steps, stats[0].item() / max(win[1], 1), gnorm.item(), sched.get_last_lr()[0],
                    stats[1].item() / dt, win[1] / dt, time.time() - t0, mem))
+            if dpo:
+                dstats = dwin.clone()
+                if WORLD > 1:
+                    torch.distributed.all_reduce(dstats)
+                dl, dm, dacc, dn = (x / max(dstats[3].item(), 1.0) for x in dstats.tolist())
+                log("DPO step %d/%d dpo-loss %.4f margin %.4f acc %.3f (mean of %d pairs since the last line)"
+                    % (st, steps, dl, dm, dacc, dstats[3].item()))
+                meta.setdefault("dpo", []).append({"step": st, "loss": dl, "margin": dm, "acc": dacc, "pairs": int(dstats[3].item())})
+                dwin.zero_()
             win = [0.0, 0, 0, time.time()]
         flags = torch.tensor([float(time.time() > deadline), float(term["at"] is not None)], device=dev)
         if WORLD > 1:

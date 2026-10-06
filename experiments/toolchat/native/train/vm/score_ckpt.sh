@@ -2,7 +2,8 @@
 # score_ckpt.sh: score ONE checkpoint on the three sets (trainfit 300, val 655, test 656 sessions) with the optimized scoring settings.
 #
 #   JOB=final-v2 BUCKET=centraid-train-clawgnition ./score_ckpt.sh <checkpoint> [--mark MARK] [--name NAME] [--sets trainfit,val,test]
-#                                                                 [--bundles-prefix PREFIX] [--new-vm | --vm NAME] [--watch] [--dry-run]
+#                                                                 [--bundles-prefix PREFIX] [--fast-kernels] [--dtype bfloat16|float16|float32]
+#                                                                 [--new-vm | --vm NAME] [--watch] [--dry-run]
 #
 # Per set the run reports session pass (the outcome), clean turn pass (turns not downstream of a session's first failure: the number
 # to steer by) and turn pass. Greedy decoding only. Test is scored at milestones only; every fix is derived on val.
@@ -17,6 +18,13 @@
 #                 BUNDLES_DIR defaults to ${BUNDLE_STAGE:-${TMPDIR:-/tmp}/centraid-bundles}/bundles; a missing bundle stops the run)
 #   --bundles-prefix  bucket folder the bundles are uploaded to and read from (default bundles, i.e. gs://$BUCKET/bundles/<set>/);
 #                 use a different one (e.g. bundles-v2) so scoring with other bundles never overwrites the existing ones
+#   --fast-kernels  try the fused linear-attention kernels (flash-linear-attention, causal-conv1d) for the scoring run: each is pip-installed
+#                 and kept only if a probe loss (a fixed passage, forward pass) matches the PyTorch fallback's within 1e-3, else uninstalled;
+#                 default off (SCORE_FAST_KERNELS=1 is the same). summary.json records "fast_kernels": {"requested", "kept": {pkg: bool}}.
+#                 Needs bundles built with the current kernel.py (rebuild with bundles.sh), else the run stops with a message saying so.
+#   --dtype D     the eval model's dtype (NATIVE_DTYPE of the eval arms): bfloat16, float16 or float32 (default: the bundle's, i.e. float32;
+#                 SCORE_DTYPE is the same). Scores in a lower precision are not comparable bit for bit with float32 ones: summary.json
+#                 records "dtype" so a score is never mistaken for a float32 one.
 #   (default)     restart the training job's own stopped VM ($VM_NAME = ct-train-<job>) with mode=score
 #   --vm NAME     restart that stopped VM instead
 #   --new-vm      create ct-score-<name> ($SCORE_DISK_GB GB, Spot GPU shapes cycled by launch.sh's logic)
@@ -31,12 +39,15 @@ SCORE_DISK_GB=${SCORE_DISK_GB:-100}
 JOB=${JOB:-score}
 BPREFIX=${BUNDLES_PREFIX:-bundles}
 CKPT="" MARK="" NAME="" SETS=trainfit,val,test MODE_VM=job VMARG="" WATCH=0 DRY=0
+FAST=${SCORE_FAST_KERNELS:-0} DTYPE=${SCORE_DTYPE:-}
 while [ $# -gt 0 ]; do
   case $1 in
     --mark) MARK=${2:?--mark needs a value (best, or a mark name such as ckpt-050)}; shift ;;
     --name) NAME=${2:?--name needs a value}; shift ;;
     --sets) SETS=${2:?--sets needs a value}; shift ;;
     --bundles-prefix) BPREFIX=${2:?--bundles-prefix needs a value}; shift ;;
+    --fast-kernels) FAST=1 ;;
+    --dtype) DTYPE=${2:?--dtype needs a value (bfloat16, float16 or float32)}; shift ;;
     --new-vm) MODE_VM=new ;;
     --vm) MODE_VM=named; VMARG=${2:?--vm needs a name}; shift ;;
     --watch) WATCH=1 ;;
@@ -48,6 +59,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -n "$CKPT" ] || die "usage: score_ckpt.sh <gs://.../ckpt-050 | local dir> [options] (see -h)"
+case $FAST in 0 | 1) ;; *) die "SCORE_FAST_KERNELS must be 0 or 1 (got $FAST)" ;; esac
+case $DTYPE in "" | float32 | bfloat16 | float16) ;; *) die "--dtype $DTYPE: bfloat16, float16 or float32" ;; esac
 [ "$DRY" = 1 ] || command -v gcloud >/dev/null 2>&1 || die "gcloud not found"
 [ "$DRY" = 1 ] || sa_login   # GCP_SA_KEY_JSON / _FILE: the throwaway service-account config, as launch.sh and watch.sh use
 
@@ -94,8 +107,8 @@ done
 case $MODE_VM in
   job) VM=$VM_NAME ;; named) VM=$VMARG ;; new) VM=ct-score-$(sanitize "$NAME") ;;
 esac
-MANIFEST=$(printf '{"name": "%s", "checkpoint": "%s", "sets": [%s], "bundles": "%s", "created": "%s"}' "$NAME" "$CKPT_SRC" \
-  "$(printf '"%s", ' $SETS | sed 's/, $//')" "$BGS" "$(ts)")
+MANIFEST=$(printf '{"name": "%s", "checkpoint": "%s", "sets": [%s], "bundles": "%s", "created": "%s", "fast_kernels": %s, "dtype": "%s"}' "$NAME" "$CKPT_SRC" \
+  "$(printf '"%s", ' $SETS | sed 's/, $//')" "$BGS" "$(ts)" "$([ "$FAST" = 1 ] && echo true || echo false)" "${DTYPE:-default}")
 
 run() { if [ "$DRY" = 1 ]; then log "[dry-run] $*"; else "$@"; fi; }
 
@@ -113,6 +126,10 @@ META="mode=score,manifest=$SGS/manifest.json"
 KEYS=mode,manifest
 # SCORE_SEPARATE=1: one kernel launch per set (the old behaviour) instead of one combined launch
 [ "${SCORE_SEPARATE:-0}" = 1 ] && { META="$META,score_separate=1"; KEYS=mode,manifest,score_separate; }
+
+# --fast-kernels / --dtype travel as instance metadata like score_separate: run_job.sh (MODE=score) reads score_fast_kernels / score_dtype
+[ "$FAST" = 1 ] && { META="$META,score_fast_kernels=1"; KEYS="$KEYS,score_fast_kernels"; }
+[ -n "$DTYPE" ] && { META="$META,score_dtype=$DTYPE"; KEYS="$KEYS,score_dtype"; }
 
 # (c) the VM
 ZONE=""
@@ -153,7 +170,7 @@ log "results will land in $SGS/ (summary.json, DONE)"
 
 # (d) watch
 if [ "$WATCH" = 1 ]; then
-  if [ "$DRY" = 1 ]; then log "[dry-run] would poll $SGS/DONE|FAILED every 60 s, print summary.json${ZONE:+}$([ "$MODE_VM" != new ] && echo ", then remove-metadata mode,manifest from $VM")"; exit 0; fi
+  if [ "$DRY" = 1 ]; then log "[dry-run] would poll $SGS/DONE|FAILED every 60 s, print summary.json${ZONE:+}$([ "$MODE_VM" != new ] && echo ", then remove-metadata $KEYS from $VM")"; exit 0; fi
   log "watching $SGS/ (Ctrl-C is safe: the VM keeps scoring)"
   if [ "${STREAM:-1}" = 1 ] && [ -n "$ZONE" ]; then
     log "streaming $VM's live logs ([score] kernel, [vm] supervisor); STREAM=0 for the quiet 60 s poll"
@@ -165,7 +182,7 @@ if [ "$WATCH" = 1 ]; then
     if bucket_has "$SGS/FAILED"; then res=FAILED; break; fi
     sleep 60
   done
-  if [ "$MODE_VM" != new ]; then gc compute instances remove-metadata "$VM" --zone "$ZONE" --keys=$KEYS >/dev/null 2>&1 || log "note: remove mode,manifest from $VM by hand"; fi
+  if [ "$MODE_VM" != new ]; then gc compute instances remove-metadata "$VM" --zone "$ZONE" --keys=$KEYS >/dev/null 2>&1 || log "note: remove $KEYS from $VM by hand"; fi
   [ "$res" = FAILED ] && { log "FAILED: $(gcloud storage cat "$SGS/FAILED" 2>&1)"; }
   gcloud storage cat "$SGS/summary.json" 2>/dev/null | python3 -c '
 import json, sys
@@ -173,6 +190,7 @@ try: d = json.load(sys.stdin)
 except Exception: sys.exit(0)
 def cell(e, k, n, r):  # rate (passed/of)
     return "%s (%s/%s)" % (e.get(r), e.get(k), e.get(n)) if e.get(r) is not None else "-"
+print("eval dtype %s; fast kernels %s" % (d.get("dtype"), d.get("fast_kernels")))
 print("%-9s %-19s %-21s %-21s %8s" % ("set", "session pass", "clean turn pass", "turn pass", "seconds"))
 for s, e in d["sets"].items():
     print("%-9s %-19s %-21s %-21s %8s" % (s, cell(e, "session_pass", "sessions", "session_pass_rate"),

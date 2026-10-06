@@ -57,6 +57,87 @@ class TrainArgs(unittest.TestCase):
         a = args("--copy-labels", "")  # '' = no copy tokens at all, as --hard-labels ''
         self.assertEqual(a[a.index("--copy-labels") + 1], "")
 
+    # ---- --continue-from: the continuation preset ----------------------------------------------------
+
+    def parsed(self, *flags):
+        a = bundle.parser().parse_args(["build", "job", "--train", "t.jsonl.gz", *flags])
+        return a, bundle.train_args(a)
+
+    def value(self, a, flag):
+        return a[a.index(flag) + 1]
+
+    def test_continue_from_sets_the_continuation_defaults_in_one_flag(self):
+        a, t = self.parsed("--continue-from", "gs://b/soup/ckpt")
+        self.assertEqual(a.init_ckpt, "gs://b/soup/ckpt")  # job.json `init`: build() reads a.init_ckpt
+        self.assertEqual([self.value(t, f) for f in ("--epochs", "--lr", "--min-lr", "--warmup", "--ema")],
+                         ["1", "4e-06", "0.05", "0.02", "0.999"])
+        self.assertEqual(float(self.value(t, "--lr")), 4e-6)
+
+    def test_an_explicit_flag_beats_the_preset(self):
+        _, t = self.parsed("--continue-from", "gs://b/soup/ckpt", "--lr", "1e-5", "--epochs", "2", "--min-lr", "0.2",
+                           "--warmup", "0", "--ema", "0")
+        self.assertEqual([self.value(t, f) for f in ("--epochs", "--lr", "--min-lr", "--warmup")], ["2", "1e-05", "0.2", "0.0"])
+        self.assertNotIn("--ema", t)  # an explicit 0 = no EMA, which train.py's default already is
+        _, t = self.parsed("--continue-from", "gs://b/soup/ckpt", "--ema", "0.99")
+        self.assertEqual(self.value(t, "--ema"), "0.99")
+        self.assertEqual(self.value(t, "--lr"), "4e-06")  # the others keep the preset
+
+    def test_without_it_nothing_changes(self):
+        a, t = self.parsed()
+        self.assertIsNone(a.init_ckpt)
+        for flag in ("--epochs", "--warmup", "--min-lr", "--ema", "--dpo"):
+            self.assertNotIn(flag, t)
+        self.assertEqual(self.value(t, "--lr"), "2e-05")
+        a, t = self.parsed("--init-ckpt", "gs://b/p7/ckpt-100")  # --init-ckpt alone: init only, no preset
+        self.assertEqual(a.init_ckpt, "gs://b/p7/ckpt-100")
+        self.assertEqual(self.value(t, "--lr"), "2e-05")
+        for flag in ("--epochs", "--min-lr", "--ema"):
+            self.assertNotIn(flag, t)
+
+    def test_continue_from_and_a_different_init_ckpt_is_an_error(self):
+        a = bundle.parser().parse_args(["build", "job", "--train", "t", "--continue-from", "gs://b/a", "--init-ckpt", "gs://b/c"])
+        with self.assertRaises(SystemExit):
+            bundle.resolve(a)
+        a = bundle.parser().parse_args(["build", "job", "--train", "t", "--continue-from", "gs://b/a", "--init-ckpt", "gs://b/a"])
+        bundle.resolve(a)  # the same checkpoint twice is not a conflict
+        self.assertEqual(a.init_ckpt, "gs://b/a")
+
+    def test_resolve_is_idempotent(self):
+        a = bundle.parser().parse_args(["build", "job", "--train", "t", "--continue-from", "gs://b/a", "--lr", "1e-5"])
+        bundle.resolve(a)
+        first = bundle.train_args(a)
+        self.assertEqual(bundle.train_args(a), first)
+
+    def test_epochs_alone_is_carried(self):
+        self.assertEqual(self.value(args("--epochs", "3"), "--epochs"), "3")
+
+    # ---- --dpo ----------------------------------------------------------------------------------------
+
+    def test_dpo_flags_are_carried_only_when_given(self):
+        for flag in ("--dpo", "--dpo-beta", "--dpo-sft"):
+            self.assertNotIn(flag, args())
+        t = args("--dpo", "/x/pairs.jsonl.gz")
+        self.assertEqual(self.value(t, "--dpo"), "data/dpo.jsonl.gz")  # the name inside the bundle, not the local path
+        self.assertNotIn("--dpo-beta", t)
+        self.assertNotIn("--dpo-sft", t)
+        t = args("--dpo", "pairs.jsonl", "--dpo-beta", "0.2", "--dpo-sft", "0")
+        self.assertEqual([self.value(t, f) for f in ("--dpo", "--dpo-beta", "--dpo-sft")], ["data/dpo.jsonl", "0.2", "0.0"])
+
+    def test_dpo_on_top_of_the_continuation(self):
+        t = args("--continue-from", "gs://b/rft/ckpt-100", "--dpo", "p.jsonl.gz", "--dpo-beta", "0.1")
+        self.assertEqual(self.value(t, "--lr"), "4e-06")
+        self.assertEqual(self.value(t, "--dpo"), "data/dpo.jsonl.gz")
+
+    def test_main_refuses_the_misuses_before_staging_anything(self):
+        from unittest import mock
+        for argv, why in ((["build", "j", "--train", "t", "--continue-from", "/local/ckpt"], "gs://"),
+                          (["build", "j", "--dpo", "p.jsonl"], "--train"),
+                          (["build", "j", "--train", "t", "--dpo", "/no/such/pairs.jsonl"], "not a file"),
+                          (["build", "j", "--base", "--continue-from", "gs://b/c"], "training flags")):
+            with mock.patch.object(sys, "argv", ["bundle.py", *argv]), self.assertRaises(SystemExit) as cm:
+                bundle.main()
+            self.assertIn(why, str(cm.exception), argv)
+
     def test_the_flags_are_ones_train_py_accepts(self):
         import importlib.util
         try:
@@ -70,6 +151,10 @@ class TrainArgs(unittest.TestCase):
         got = train.parser().parse_args(["--train", "t", "--out", "o", *a])  # the same list run_job.sh hands the trainer
         self.assertEqual((got.decision_weight, got.copy_weight, got.copy_labels, got.pair_batches, got.checkpoints),
                          (1.0, 0.0, "intent", False, "0.25,0.5,0.75,1.0"))
+        a = args("--continue-from", "gs://b/soup/ckpt", "--dpo", "p.jsonl.gz", "--dpo-beta", "0.2", "--dpo-sft", "0.1")
+        got = train.parser().parse_args(["--out", "o", *a])  # --train is optional with --dpo
+        self.assertEqual((got.epochs, got.lr, got.min_lr, got.warmup, got.ema, got.dpo, got.dpo_beta, got.dpo_sft),
+                         (1, 4e-6, 0.05, 0.02, 0.999, "data/dpo.jsonl.gz", 0.2, 0.1))
 
 
 if __name__ == "__main__":

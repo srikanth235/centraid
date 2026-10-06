@@ -9,6 +9,9 @@
 #   BUNDLES_DIR   output, <BUNDLES_DIR>/<set>/{bundle.dat,job.json,kernel.py} (default ${BUNDLE_STAGE:-${TMPDIR:-/tmp}/centraid-bundles}/bundles)
 #   BUNDLE_STAGE  bundle.py's staging root; each set is staged there as score-<set> first
 #   PYTHON        interpreter for bundle.py (default python3)
+#   BUNDLE_EVAL_ENV  JSON env merged over the eval arms' (bundle.py --eval-env), e.g. '{"NATIVE_SAMPLE": "1"}' for a rollout sample set
+#   BUNDLE_WORLDS    a directory of <W>.json / <W>.keys.json that bundle.py ships instead of authored/worlds' (the worlds a rollout
+#                 set was built on; see eval/rollout.py)
 # Each bundle is `bundle.py build score-<set> --base --dry --set eval/sets/<set>.jsonl`. The optimized scoring settings are bundle.py's
 # defaults (eval_procs 4, eval_chunks 4, run_batched.py --threads 16 --wait 0.05, OMP_NUM_THREADS 4, arm free), so the bundles differ only in
 # eval_set and eval_setup. score_ckpt.sh scores several sets in one launch only when everything else is identical: build the sets you
@@ -33,13 +36,13 @@ SETS=${SETS//,/ }
 [ -n "${SETS// /}" ] || die "no sets (--sets trainfit,val,test)"
 for s in $SETS; do [ -f "$NATIVE/eval/sets/$s.jsonl" ] || die "eval/sets/$s.jsonl is missing in $NATIVE"; done
 
-export BUNDLE_STAGE BUNDLE_NATIVETOOLS
+export BUNDLE_STAGE BUNDLE_NATIVETOOLS BUNDLE_WORLDS
 mkdir -p "$BUNDLE_STAGE" "$BUNDLES_DIR"
 log "runtime $BUNDLE_NATIVETOOLS (sha256 $(sha256sum "$BUNDLE_NATIVETOOLS" | cut -c1-12)); bundles go to $BUNDLES_DIR"
 for s in $SETS; do
   job=score-$s
   build_log=$BUNDLE_STAGE/$job.build.log
-  "$PYTHON" "$NATIVE/train/bundle.py" build "$job" --base --dry --set "eval/sets/$s.jsonl" >"$build_log" 2>&1 ||
+  "$PYTHON" "$NATIVE/train/bundle.py" build "$job" --base --dry --set "eval/sets/$s.jsonl" ${BUNDLE_EVAL_ENV:+--eval-env "$BUNDLE_EVAL_ENV"} >"$build_log" 2>&1 ||
     { tail -n 20 "$build_log" >&2; die "bundle.py build failed for $s (log: $build_log)"; }
   d=$BUNDLES_DIR/$s
   rm -rf "$d"

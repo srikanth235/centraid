@@ -20,6 +20,13 @@ copy tier), --pair-batches / --no-pair-batches (minimal pairs in one step), --ch
 Their defaults live in train.py (decision weight 2, copy weight 0, pair batching on, marks at 25 / 50 / 75 / 100 %); a flag
 given here pins that choice in the job, e.g. `--decision-weight 1 --copy-weight 1 --no-pair-batches` is the legacy loss and order.
 
+Continuation (`--continue-from gs://.../ckpt`, e.g. an RFT or DPO step on the soup): one flag for the continuation defaults, init from that
+checkpoint (job.json `init`, as --init-ckpt), 1 epoch (`--epochs 1` in `train_args`, else run_job.sh's per-launch default applies), lr 4e-6
+decaying to --min-lr 0.05, --warmup 0.02, --ema 0.999. A flag given explicitly wins over the preset's value; --init-ckpt stays as it
+was (give --continue-from or --init-ckpt, not both). DPO (`--dpo PAIRS.jsonl[.gz] --dpo-beta B --dpo-sft S`): the pair file is staged as
+data/dpo.jsonl[.gz] and train.py runs the DPO loss (see its docstring); --train is still required (run_job.sh passes job.json `train`
+to the trainer unconditionally), and train.py only scores it (the original-data drift sample), never trains on it.
+
 Scoring defaults, the same for every bundle: arm `free`, eval/run_batched.py with 16 sessions per process and a 0.05 s batch
 wait, 4 processes sharing one GPU and one claims directory (--eval-procs, --eval-chunks), OMP_NUM_THREADS=4 and expandable
 CUDA segments. --eval-drive, --eval-env, --eval-chunks and --eval-procs override them.
@@ -159,9 +166,12 @@ def stage_eval(tree: Path, a, worlds: set[str]) -> None:
     for f in ("split.py", "split.json", "trace.py"):
         if (auth / f).exists():
             shutil.copy(auth / f, tree / "authored" / f)
+    # BUNDLE_WORLDS: a directory of <W>.json / <W>.keys.json that win over authored/worlds (the worlds a rollout set's gold was built
+    # on: the collision worlds, `authored/build.py --worlds-dir`); the bundle then seeds those, so the gold's keys exist in the vault
+    over = Path(os.environ["BUNDLE_WORLDS"]) if os.environ.get("BUNDLE_WORLDS") else None
     for w in sorted(worlds):
         for suffix in (".json", ".keys.json"):
-            f = auth / "worlds" / (w + suffix)
+            f = over / (w + suffix) if over is not None and (over / (w + suffix)).exists() else auth / "worlds" / (w + suffix)
             if f.exists():
                 shutil.copy(f, tree / "authored" / "worlds" / f.name)
 
@@ -186,6 +196,33 @@ def decision_args(a):
     return out
 
 
+CONTINUE = {"lr": 4e-6, "min_lr": 0.05, "warmup": 0.02, "ema": 0.999, "epochs": 1}  # --continue-from's defaults
+LR = 2e-5                                                                           # --lr without --continue-from
+
+
+def resolve(a) -> None:
+    """Fill the flags the user left out (they parse as None): --continue-from sets init, 1 epoch, lr 4e-6, min-lr 0.05, warmup 0.02 and ema
+    0.999; without it only --lr has a value of its own (2e-5; the others stay unset and train.py's defaults apply). An explicit flag wins.
+    Idempotent."""
+    if a.continue_from:
+        if a.init_ckpt and a.init_ckpt != a.continue_from:
+            sys.exit("--continue-from %s and --init-ckpt %s name two starting points: give one" % (a.continue_from, a.init_ckpt))
+        a.init_ckpt = a.continue_from
+        for k, v in CONTINUE.items():
+            if getattr(a, k) is None:
+                setattr(a, k, v)
+    if a.lr is None:
+        a.lr = LR
+
+
+def dpo_args(a):
+    """train.py's --dpo (the file as staged inside the bundle), --dpo-beta and --dpo-sft, passed through only when given."""
+    if not a.dpo:
+        return []
+    return ["--dpo", "data/dpo" + "".join(Path(a.dpo).suffixes)] + sum(
+        ([flag, str(v)] for flag, v in (("--dpo-beta", a.dpo_beta), ("--dpo-sft", a.dpo_sft)) if v is not None), [])
+
+
 def resume_args(a):
     """train.py's --save-every / --resume, passed through only when given (no flag: no resume checkpoints)."""
     return (["--save-every", str(a.save_every)] if a.save_every else []) + (["--resume"] if a.resume else [])
@@ -194,11 +231,12 @@ def resume_args(a):
 def train_args(a):
     """The trainer flags the staged job carries (job.json `train_args`; run_job.sh adds --model/--train/--out/--hours, --epochs and
     --save-every). Optional flags are there only when given."""
+    resolve(a)
     return (["--bs", str(a.bs), "--lr", str(a.lr), "--max-len", str(a.max_len), "--embed", a.embed, "--val-n", str(a.val_n)]
             + (["--lora", str(a.lora)] if a.lora else []) + (["--max-steps", str(a.max_steps)] if a.max_steps else [])
             + (["--warmup", str(a.warmup)] if a.warmup is not None else []) + (["--min-lr", str(a.min_lr)] if a.min_lr is not None else [])
             + decision_args(a) + (["--ema", str(a.ema)] if a.ema else []) + (["--no-grad-ckpt"] if a.no_grad_ckpt else [])
-            + resume_args(a))
+            + (["--epochs", str(a.epochs)] if a.epochs is not None else []) + dpo_args(a) + resume_args(a))
 
 
 def check_set(a) -> None:
@@ -214,6 +252,7 @@ def check_set(a) -> None:
 
 
 def build(a):
+    resolve(a)
     job_dir = STAGE / a.job
     shutil.rmtree(job_dir, ignore_errors=True)
     ds, kd, tree = job_dir / "data", job_dir / "kernel", job_dir / "tree"
@@ -266,6 +305,8 @@ def build(a):
     if a.val:
         job["val"] = "data/val" + "".join(Path(a.val).suffixes)
         shutil.copy(a.val, tree / job["val"])
+    if a.dpo:  # the pair file, beside train; train_args names it (`--dpo data/dpo.jsonl[.gz]`)
+        shutil.copy(a.dpo, tree / "data" / ("dpo" + "".join(Path(a.dpo).suffixes)))
     if a.test:  # the trainer opens it only for the last eval (kernel.py passes --test)
         job["test"] = "data/test" + "".join(Path(a.test).suffixes)
         shutil.copy(a.test, tree / job["test"])
@@ -324,8 +365,17 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--hard-param-names", type=int, choices=(0, 1), help="train.py --hard-param-names (default 0)")
     ap.add_argument("--hard-ref-sigil", type=int, choices=(0, 1), help="train.py --hard-ref-sigil (default 0)")
     ap.add_argument("--train-eval-n", type=int, help="train.py --train-eval-n (default 300)")
-    ap.add_argument("--ema", type=float, default=0.0, metavar="D", help="train.py --ema D (weight EMA saved beside every mark as "
-                    "ckpt-NNN-ema; e.g. 0.999; passed only when given)")
+    ap.add_argument("--ema", type=float, metavar="D", help="train.py --ema D (weight EMA saved beside every mark as "
+                    "ckpt-NNN-ema; e.g. 0.999; passed only when given; 0 = none)")
+    ap.add_argument("--epochs", type=int, help="train.py --epochs N (passed only when given, else run_job.sh's per-launch epochs "
+                    "apply; --continue-from sets 1)")
+    ap.add_argument("--continue-from", metavar="GS_CKPT", help="a continuation in one flag: --init-ckpt GS_CKPT, --epochs 1, --lr 4e-6 "
+                    "decaying to --min-lr 0.05, --warmup 0.02, --ema 0.999; each explicit flag wins over the preset")
+    ap.add_argument("--dpo", metavar="PAIRS", help="train.py --dpo: DPO on a (gzipped) JSONL of {id, chosen, rejected} records, "
+                    "staged into the bundle; needs --train too (scored for drift, never trained on)")
+    ap.add_argument("--dpo-beta", type=float, help="train.py --dpo-beta (default 0.1; passed only when given)")
+    ap.add_argument("--dpo-sft", type=float, help="train.py --dpo-sft (weight of the SFT term on the chosen record, default 0.2; "
+                    "passed only when given)")
     ap.add_argument("--no-grad-ckpt", action="store_true", help="train.py --no-grad-ckpt (more memory, faster)")
     ap.add_argument("--save-every", type=int, default=0, help="train.py --save-every N (resume checkpoint every N steps; "
                     "default 0 = none)")
@@ -338,7 +388,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--kernel-hours", type=float, default=11.5, help="whole-kernel deadline for eval (hours): kernel.py "
                     "kills the eval processes still running then and scores what they finished")
     ap.add_argument("--bs", type=int, default=16)
-    ap.add_argument("--lr", type=float, default=2e-5)
+    ap.add_argument("--lr", type=float, help="learning rate (default 2e-5; 4e-6 with --continue-from)")
     ap.add_argument("--warmup", type=float, help="train.py --warmup (fraction of steps; passed only when given)")
     ap.add_argument("--min-lr", type=float, help="train.py --min-lr (final lr as a fraction of --lr; passed only when given)")
     ap.add_argument("--max-len", type=int, default=8192)
@@ -386,6 +436,16 @@ def parser() -> argparse.ArgumentParser:
 
 def main():
     a = parser().parse_args()
+    resolve(a)
+    if a.continue_from and not a.continue_from.startswith("gs://"):
+        sys.exit("--continue-from %s: a gs:// checkpoint directory (run_job.sh pulls it)" % a.continue_from)
+    if a.dpo and not a.train:
+        sys.exit("--dpo needs --train as well: run_job.sh hands the trainer job.json `train` unconditionally, and train.py scores it "
+                 "(the original-data sample of the TRAIN metrics) without training on it")
+    if a.dpo and not Path(a.dpo).is_file():
+        sys.exit("--dpo %s is not a file" % a.dpo)
+    if (a.continue_from or a.dpo) and (a.base or a.ckpt_dir):
+        sys.exit("--continue-from / --dpo are training flags: not with --base or --ckpt-dir")
     if a.train and a.ckpt_dir:
         sys.exit("--ckpt-dir is an eval-only job: drop --train")
     if not a.train and not a.base and not a.ckpt_dir:

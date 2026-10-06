@@ -647,6 +647,27 @@ score_fail() {
   finish_idle "scoring failed: $reason"
 }
 
+# `score_ckpt.sh --fast-kernels` (metadata score_fast_kernels=1 / env SCORE_FAST_KERNELS=1) sets job.json fast_kernels for the scoring run:
+# kernel.py pip-installs flash-linear-attention and causal-conv1d and keeps each only if a fixed-passage probe loss matches the PyTorch
+# fallback's within 1e-3. `--dtype` (metadata score_dtype / env SCORE_DTYPE) sets eval_env NATIVE_DTYPE of the eval arms. Neither set: the
+# job.json as bundled (fast_kernels false, the bundle's own dtype, float32 by default).
+# A bundle's kernel.py from before the option cannot probe a job without a train/val file (it would crash): refuse it by name.
+score_kernels_supported() {  # FILE: 0 = fine
+  [ "${SCORE_FAST_KERNELS:-0}" = 1 ] || return 0
+  grep -q PROBE_TEXT "$1" 2>/dev/null && return 0
+  say "WARN: $1 predates scoring with fast kernels (no PROBE_TEXT): rebuild the bundles (bundles.sh) or drop --fast-kernels"
+  return 1
+}
+
+# score_record_kernels WORKDIR: the fast-kernel verdicts of kernel.py's summary.json ({pkg: kept}) into $STATE/sc-<NAME>.kernels.json, for summary.json
+score_record_kernels() {
+  [ "${SCORE_FAST_KERNELS:-0}" = 1 ] && [ -f "$1/summary.json" ] || return 0
+  "$VENV/bin/python" - "$1/summary.json" >"$STATE/sc-$SNAME.kernels.json" 2>>"$SUPLOG" <<'PY' || rm -f "$STATE/sc-$SNAME.kernels.json"
+import json, sys
+print(json.dumps(json.load(open(sys.argv[1])).get("fast_kernels")))
+PY
+}
+
 # score_one SET: 0 = done (marker written), 1 = failed (rerun on the next boot)
 score_one() {
   local set=$1 x w sd rc t0 secs b="" f
@@ -667,9 +688,12 @@ j = json.load(open(src))
 files = sorted(f for f in os.listdir(ck) if os.path.isfile(os.path.join(ck, f)))
 for f in files:
     os.symlink(os.path.realpath(os.path.join(ck, f)), os.path.join(sd, "ckpt." + f))
-j.update(train=None, val=None, fast_kernels=False, ckpt_prefix="ckpt.", ckpt_files=files)
+j.update(train=None, val=None, fast_kernels=os.environ.get("SCORE_FAST_KERNELS") == "1", ckpt_prefix="ckpt.", ckpt_files=files)
+if os.environ.get("SCORE_DTYPE"):  # score_ckpt.sh --dtype: the eval model's dtype (hf_backend.py reads NATIVE_DTYPE)
+    j["eval_env"] = dict(j.get("eval_env") or {}, NATIVE_DTYPE=os.environ["SCORE_DTYPE"])
 json.dump(j, open(os.path.join(sd, "job.json"), "w"), indent=1)
 PY
+  score_kernels_supported "$x/kernel.py" || return 1
   console_follow "$LOGDIR/score-$set-$STAMP.log" "score:$set"
   say "scoring set $set of checkpoint $SNAME with kernel.py"
   t0=$(date +%s)
@@ -681,6 +705,7 @@ PY
   say "kernel.py ($set) exit $rc after ${secs}s"
   rm -rf "$w/ckpt-in" "$w/code" "$w/vaults"   # symlinks to the weights would be followed by the upload
   cp "$LOGDIR/score-$set-$STAMP.log" "$w/kernel.log" 2>/dev/null
+  score_record_kernels "$w"
   score_sync_logs
   retry 3 gcs rsync -r "$w" "$SGS/$set" >>"$SUPLOG" 2>&1 || { say "WARN: results upload for $set failed; they stay in $w"; return 1; }
   f=$(find "$w" -name report.json 2>/dev/null | head -1)
@@ -695,7 +720,7 @@ PY
 }
 
 write_score_summary() {  # combined summary.json from the per-set markers and reports
-  "$VENV/bin/python" - "$SNAME" "$SCKPT_SRC" "$STATE" "$@" <<'PY'
+  JOBDIR=$JOBDIR "$VENV/bin/python" - "$SNAME" "$SCKPT_SRC" "$STATE" "$@" <<'PY'
 import json, os, sys, time
 name, ck, st, sets = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:]
 out = {"name": name, "checkpoint": ck, "finished": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "sets": {}}
@@ -722,6 +747,21 @@ def rd(f):
         return open(os.path.join(st, f)).read().strip()
     except Exception:
         return None
+# the settings that make a score comparable: the eval model's dtype (the job's own when --dtype was not given; float32 is hf_backend.py's
+# default) and the fast kernels (requested, and which ones the exactness probe kept: {pkg: bool}, null before the probe ran)
+dtype = os.environ.get("SCORE_DTYPE")
+if not dtype:
+    try:
+        dtype = (json.load(open(os.path.join(os.environ["JOBDIR"], "job.json"))).get("eval_env") or {}).get("NATIVE_DTYPE")
+    except Exception:
+        dtype = None
+out["dtype"] = dtype or "float32"
+asked = os.environ.get("SCORE_FAST_KERNELS") == "1"
+try:
+    kept = json.loads(rd("sc-%s.kernels.json" % name)) if asked else None
+except Exception:
+    kept = None
+out["fast_kernels"] = {"requested": asked, "kept": kept}
 out["mode"] = rd("sc-%s.mode" % name) or "separate"
 ls = rd("sc-%s.launch.secs" % name) if out["mode"] == "combined" else None
 out["launch_seconds"] = int(ls) if ls else None  # the single kernel run of a combined score (summed over the boots of a resumed run)
@@ -870,7 +910,9 @@ def build(cdir, sd, ckpt, bases, sets):
             fh.writelines(parts[s])
     job = dict(jobs[first])
     job.update(eval_set=comb, eval_setup=seed_union([jobs[s].get("eval_setup") for s in sets]),
-               train=None, val=None, fast_kernels=False)
+               train=None, val=None, fast_kernels=os.environ.get("SCORE_FAST_KERNELS") == "1")
+    if os.environ.get("SCORE_DTYPE"):  # score_ckpt.sh --dtype: the eval model's dtype (hf_backend.py reads NATIVE_DTYPE)
+        job["eval_env"] = dict(job.get("eval_env") or {}, NATIVE_DTYPE=os.environ["SCORE_DTYPE"])
     files = sorted(f for f in os.listdir(ckpt) if os.path.isfile(os.path.join(ckpt, f)))
     for f in files:
         os.symlink(os.path.realpath(os.path.join(ckpt, f)), os.path.join(sd, "ckpt." + f))
@@ -973,6 +1015,7 @@ score_combined() {
   say "$res"
   arm=$(score_combine json "$sd/combined.json" arm)
   kern=$(score_combine json "$sd/combined.json" kernel)
+  score_kernels_supported "$kern" || return 1
   free=$cw/eval/$arm
   # (2) the one kernel launch: fresh, or a resume of a killed one (finished records kept aside, unfinished claims released)
   if [ -f "$st" ] && [ "$(cat "$st")" = "$sets" ] && [ -d "$cw" ]; then
@@ -1001,6 +1044,7 @@ score_combined() {
     prev=$(cat "$STATE/sc-$SNAME.launch.secs" 2>/dev/null || echo 0)
     echo $((prev + secs)) >"$STATE/sc-$SNAME.launch.secs"   # summed over the boots of a resumed run
     cat "$LOGDIR/score-combined-$STAMP.log" >>"$cw/kernel.log" 2>/dev/null
+    score_record_kernels "$cw"
   fi
   rm -rf "$cw/ckpt-in" "$cw/code" "$cw/vaults" "$cw"/tmp-*   # symlinks to the weights would be followed by the upload; all rebuilt by a rerun
   score_sync_logs
@@ -1052,6 +1096,11 @@ PY
   ) || { SNAME=unknown; score_fail "bad manifest $man"; }
   read -r SNAME SCKPT_SRC SBUNDLES sets <<<"$info"
   say "score mode: name=$SNAME checkpoint=$SCKPT_SRC sets=$sets"
+  SCORE_FAST_KERNELS=${SCORE_FAST_KERNELS:-$(attr score_fast_kernels)}
+  SCORE_DTYPE=${SCORE_DTYPE:-$(attr score_dtype)}
+  case ${SCORE_DTYPE:-} in "" | float32 | bfloat16 | float16) ;; *) score_fail "score_dtype '$SCORE_DTYPE': float32, bfloat16 or float16" ;; esac
+  export SCORE_FAST_KERNELS SCORE_DTYPE   # read by the job.json preparation below; unset = the bundle's own settings
+  [ -z "${SCORE_FAST_KERNELS:-}${SCORE_DTYPE:-}" ] || say "scoring options: fast_kernels=${SCORE_FAST_KERNELS:-0} dtype=${SCORE_DTYPE:-bundle default}"
   if [ -f "$STATE/sc-$SNAME.all.done" ] && gcs_has "$SGS/DONE"; then finish_idle "$SNAME already scored"; fi
   wait_gpu || score_fail "no NVIDIA driver/GPU on this VM"
   SCKPT=$BASE/score-ckpt/$SNAME

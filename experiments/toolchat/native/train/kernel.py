@@ -13,7 +13,8 @@ it writes lands in KERNEL_WORK (default /opt/centraid/score), as run_job.sh lays
     ckpt/ckpt-025|050|075|100/   bf16 checkpoints (ckpt/FINAL names the last one; marks.json, best.json); ckpt/train_meta.json
     eval/<arm>/...           the eval driver's outputs per decoding arm; eval/<arm>.log (batched: one
                              eval/<arm>-gpu<g>.log per GPU process, run-<g>.jsonl written as sessions finish)
-    summary.json             job, timings, final checkpoint, arms run and their exit codes
+    summary.json             job, timings, final checkpoint, arms run and their exit codes, and (job.json `fast_kernels`)
+                             which fused kernels the exactness probe kept: {"fast_kernels": {"<pkg>": bool}}
 
 `kernel_hours` of job.json is the job's own wall-clock budget for the run: eval processes still running at the deadline
 are killed and the sessions they finished are scored.
@@ -107,24 +108,48 @@ NGPU = int(subprocess.run([sys.executable, "-c", "import torch; print(torch.cuda
 say("GPUs", NGPU)
 SUMMARY["gpus"] = NGPU
 
-# ---- 2. optional fused kernels for Qwen3.5's linear-attention layers, kept only if the loss on
-# a val example matches the PyTorch fallback's (they change speed, never the math)
+# ---- 2. optional fused kernels for Qwen3.5's linear-attention layers, kept only if the loss of a probe matches the
+# PyTorch fallback's (they change speed, never the math). The probe input is the job's val (else train) file; a scoring job
+# (SCORE_PROBE: `train` and `val` null, see run_job.sh `--fast-kernels`) has neither, so it probes on PROBE_TEXT, a fixed passage:
+# the loss of a forward pass over the same tokens, which needs no data file and no knowledge of the eval set's format.
+PROBE_TEXT = (
+    "The quick brown fox jumps over the lazy dog. Alice keeps her calendar, her notes and her contacts in one vault on her "
+    "own device. On Tuesday she asked the assistant to move the dentist appointment from 3pm to Thursday morning, to tell "
+    "Bob that she would be late for lunch, and to add a note that the invoice for 1,250 euros is due on the 14th of March. "
+    "The assistant looked up the appointment, proposed two free slots, and waited for her to confirm before changing "
+    "anything. {\"tool\": \"calendar.move\", \"id\": \"evt_42\", \"start\": \"2025-03-06T09:00:00Z\"} def total(xs): "
+    "return sum(x * x for x in xs if x > 0) # squares of the positive numbers. 17 * 23 = 391; 2 ** 10 = 1024; "
+    "the capital of France is Paris, and water boils at one hundred degrees Celsius at sea level. "
+) * 2
 PROBE = r"""
 import json, sys, torch
 sys.path.insert(0, "train")
-import fmt, train
 from transformers import AutoModelForCausalLM, AutoTokenizer
-tok = AutoTokenizer.from_pretrained(sys.argv[1]); ex = next(fmt.read_examples(sys.argv[2]))
-e = fmt.encode(tok, ex, json.load(open("export/tools-sig.json")))
+tok = AutoTokenizer.from_pretrained(sys.argv[1])
 m = AutoModelForCausalLM.from_pretrained(sys.argv[1], dtype=torch.float32).cuda()
-with torch.no_grad():
-    loss, n, _, _ = train.forward_loss(m, e["input_ids"], e["labels"], torch.device("cuda"))
-print("PROBE", loss.item() / n)
+if sys.argv[2] == "-":  # a scoring job: the loss over a fixed passage (argv[3]), tokens predicted from their predecessors
+    ids = tok(sys.argv[3], return_tensors="pt").input_ids.cuda()
+    with torch.no_grad():
+        logits = m(input_ids=ids).logits.float()
+    print("PROBE", torch.nn.functional.cross_entropy(logits[0, :-1], ids[0, 1:]).item())
+else:
+    import fmt, train
+    ex = next(fmt.read_examples(sys.argv[2]))
+    e = fmt.encode(tok, ex, json.load(open("export/tools-sig.json")))
+    with torch.no_grad():
+        loss, n, _, _ = train.forward_loss(m, e["input_ids"], e["labels"], torch.device("cuda"))
+    print("PROBE", loss.item() / n)
 """
 
 
+def probe_args(job, code_dir):
+    """The PROBE script's arguments after the model: a val/train file of the job, else ("-", PROBE_TEXT)."""
+    f = job.get("val") or job.get("train")
+    return [os.path.join(code_dir, f)] if f else ["-", PROBE_TEXT]
+
+
 def probe():
-    r = subprocess.run([sys.executable, "-c", PROBE, JOB["model"], os.path.join(C, JOB["val"] or JOB["train"])],
+    r = subprocess.run([sys.executable, "-c", PROBE, JOB["model"], *probe_args(JOB, C)],
                        capture_output=True, text=True, cwd=C, env=ENV, timeout=900)
     for line in r.stdout.splitlines():
         if line.startswith("PROBE"):
@@ -134,6 +159,8 @@ def probe():
 
 
 if JOB.get("fast_kernels") and NGPU:
+    if not (JOB.get("val") or JOB.get("train")):
+        SUMMARY["fast_kernels_probe"] = "fixed-passage loss (scoring job)"
     ref = probe()
     for pkg, extra in (("flash-linear-attention", []), ("causal-conv1d", ["--no-build-isolation"])):
         t = time.time()
