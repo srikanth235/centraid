@@ -12,6 +12,7 @@ Runs are built as the runtime reports them (crates/nativetools/src/compose.rs) a
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 import gold
 import regen
@@ -178,6 +179,12 @@ class Unreached(unittest.TestCase):
 class ComposedAnswer(unittest.TestCase):
     """`composed-answer` is a widening (M1b): the old gold of a read that dead-ends, a decline not_found or an ask,
     stays, and what the read answered is accepted beside it."""
+
+    def setUp(self):
+        # N7 widens every decline gold; these tests are about `composed-answer` alone (test_regen.DeclineAnyReason has N7)
+        patcher = mock.patch.object(regen, "WIDENING", tuple(c for c in regen.WIDENING if c != "decline-any-reason"))
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def one(self, old: dict, steps: list[dict], reference: list[str]) -> dict:
         gt = {"user": "who is zzyzx", "gold": [old], "ref": ref(*reference), "tags": []}

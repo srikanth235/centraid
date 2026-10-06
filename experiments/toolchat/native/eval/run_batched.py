@@ -11,7 +11,9 @@ the one the runtime compiles from the think; `compile` counts of the run (compil
 (NATIVE_DECODING hard|soft|free, NATIVE_LARK, NATIVE_THINK_LIMIT, NATIVE_DTYPE, NATIVE_MAX_NEW,
 NATIVE_HANDLES, NATIVE_TOOLS); the run file has the same records, so score.py reads it as is.
 One greedy draw per step (NATIVE_SAMPLE=0, the default); the only sampled draw is the loop breaker's
-single resample of a repeated call (run.py `break_loop`).
+single resample of a repeated call (run.py `break_loop`), plus, when NATIVE_RETRY is set (run.py docstring:
+`NATIVE_RETRY=empty,error,refused`, `NATIVE_RETRY_MAX` per turn, default 1), one re-draw of a step whose
+reply was empty / an error / a refusal; their count is `retry` in the stats.
 
 Records are appended to --out as sessions finish (a killed run keeps what it finished). Two
 processes on two GPUs share the work through `--claim DIR`: a session is taken by whoever creates
@@ -185,7 +187,8 @@ def main() -> None:
     stats = {"sessions": len(results), "errors": sum(1 for r in results.values() if r.get("error")),
              "seconds": round(secs, 1), "batches": len(sizes), "mean_batch": round(sum(sizes) / max(1, len(sizes)), 2),
              "max_batch": max(sizes, default=0), "oom_splits": proxy.oom, **hf.stats,
-             "compile": run.compile_counts(results.values())}
+             "compile": run.compile_counts(results.values()),
+             **({"retry": r} if (r := run.retry_counts(results.values())) else {})}
     Path(args.out + ".stats.json").write_text(json.dumps(stats, indent=1))
     print("wrote %d sessions to %s in %.0fs; %s" % (len(results), args.out, secs, json.dumps(stats)))
     proxy.close()

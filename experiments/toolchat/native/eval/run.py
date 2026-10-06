@@ -12,6 +12,22 @@ guard). A call identical to the previous one is not cut at once: the runtime ans
 hint, then a nudge, and ends the turn on the third; the driver resamples once in between
 (`break_loop`). Each session runs on a private copy of its world's vault, deleted afterwards.
 
+Retry on a runtime signal (opt-in; `NATIVE_RETRY` unset or empty = off, the loop above bit for bit).
+`NATIVE_RETRY=empty,error,refused` lists the signals (`retry_signal` classifies a response):
+  empty    a read that found nothing (`recovery: empty`, a `find`/`answer` miss, text `answered: 0 ...`)
+  error    an `error:` reply (the runtime refused the call as invalid, or could not read it)
+  refused  a `refused: ...` reply (the vault refused the write)
+When a response carries a listed signal, the turn is still open, nothing was written (`retry_signal` is None for
+a response with a `diff` or `created`) and this turn has used fewer than `NATIVE_RETRY_MAX` (default 1) retries,
+the driver re-draws that SAME step once: `backend.resample` at temperature > 0 on the transcript as it stood
+BEFORE the failed call (the model does not see the failed call or its reply), the failed call's text excluded.
+The runtime cannot take a call back: the first call already ran (a read, an error or a refusal changed nothing, so
+this is safe) and stays in the runtime's session, so the re-drawn call is simply the turn's NEXT step and the
+runtime's STEP_CAP counts both. The model's history keeps both pairs (failed call, reply, re-drawn call, reply),
+as the runtime holds them, so the compaction indices and the later steps' view stay in line. The re-drawn step is
+recorded with `retry: <signal>` (the first step is untouched); `<out>.stats.json` counts them under `retry`
+({signal: steps}). A backend that cannot sample (`resample` returns None) never retries.
+
 Backends
   ref     the reference call sequence stored with the gold (`ref`), `$key` -> the row's `#n`;
           running it and scoring is how every gold item is verified.
@@ -355,8 +371,52 @@ def break_loop(rt: Runtime, backend: Backend, transcript: Transcript, ctx: dict,
     return alt
 
 
+RETRY_SIGNALS = ("empty", "error", "refused")
+
+
+def retry_config() -> tuple[frozenset, int]:
+    """(signals, per-turn cap) from NATIVE_RETRY / NATIVE_RETRY_MAX; no signals = retry off."""
+    names = [n.strip() for n in os.environ.get("NATIVE_RETRY", "").split(",") if n.strip()]
+    unknown = [n for n in names if n not in RETRY_SIGNALS]
+    if unknown:
+        raise SystemExit(f"NATIVE_RETRY: unknown signal {unknown} (known: {', '.join(RETRY_SIGNALS)})")
+    return frozenset(names), int(os.environ.get("NATIVE_RETRY_MAX", "1"))
+
+
+def retry_signal(resp: dict) -> str | None:
+    """Which retry signal a runtime response carries (`refused` | `error` | `empty`), else None.
+
+    Only a response that left the turn open and changed nothing counts: a response that ends the turn, that
+    wrote (`diff` or `created` in the effect, even beside an `error`), or that is the runtime's own loop
+    breaker (`repeat`, `loop`, `cap`) is None."""
+    eff = resp.get("effect") or {}
+    text = resp.get("text") or ""
+    if resp.get("ends_turn") or any(eff.get(k) for k in ("diff", "created", "repeat", "loop", "cap")):
+        return None
+    if text.startswith("refused:"):
+        return "refused"
+    if eff.get("error") or text.startswith("error:"):
+        return "error"
+    if (eff.get("recovery") == "empty" or (eff.get("compose") or {}).get("action") in ("find_miss", "answer_miss")
+            or text.startswith("answered: 0")):
+        return "empty"
+    return None
+
+
+def retry_counts(records) -> dict:
+    """{signal: steps} over the `retry` keys of run records (empty when no step was a retry)."""
+    counts: dict[str, int] = {}
+    for rec in records:
+        for turn in rec.get("turns", []):
+            for step in turn.get("steps", []):
+                if "retry" in step:
+                    counts[step["retry"]] = counts.get(step["retry"], 0) + 1
+    return dict(sorted(counts.items()))
+
+
 def run_session(session: dict, backend: Backend) -> dict:
     backend.start_session(session)
+    retry_on, retry_max = retry_config()
     record = {"id": session["id"], "model": backend.name, "tools_mode": backend.tools_mode, "turns": []}
     with Runtime(session["world"], session["today"], session["me"], tmp_root=TMP,
                  flags=["--tools", backend.tools_mode, *backend.runtime_flags]) as rt:
@@ -377,11 +437,10 @@ def run_session(session: dict, backend: Backend) -> dict:
             ended = user.get("ended")
             if ended:
                 steps.append({"model": "", "response": slim(ended), "runtime": "never_mind"})
-            for si in range(0 if ended else STEP_CAP + 2):
-                ctx.update(turn=ti, step=si)
-                out = backend.step(transcript, ctx)
-                sent = first_call(out["text"])
-                out = break_loop(rt, backend, transcript, ctx, out)
+            retries = 0
+
+            def execute(out: StepOut) -> dict:
+                """Send the model's call to the runtime; record the step and extend the history."""
                 sent = first_call(out["text"])
                 resp = rt.req({"op": "call_text", "text": sent})
                 eff = resp.get("effect") or {}
@@ -397,9 +456,31 @@ def run_session(session: dict, backend: Backend) -> dict:
                 transcript.assistant(sent)
                 transcript.tool(resp.get("obs"), resp.get("text", ""))
                 steps.append({"model": out["text"], "response": slim(resp), "think_cut": out.get("think_cut", False),
-                              **{k: out[k] for k in ("override", "decoding", "resampled_from", "compile") if k in out}})
+                              **{k: out[k] for k in ("override", "decoding", "resampled_from", "compile", "retry")
+                                 if k in out}})
+                return resp
+
+            for si in range(0 if ended else STEP_CAP + 2):
+                ctx.update(turn=ti, step=si)
+                out = backend.step(transcript, ctx)
+                out = break_loop(rt, backend, transcript, ctx, out)
+                before = len(transcript.messages)
+                resp = execute(out)
                 if resp.get("ends_turn"):
                     break
+                signal = retry_signal(resp) if retry_on else None
+                if signal in retry_on and retries < retry_max:
+                    kept = transcript.messages[before:]  # the failed call and its reply
+                    del transcript.messages[before:]
+                    try:
+                        alt = backend.resample(transcript, ctx, first_call(out["text"]))
+                    finally:
+                        transcript.messages.extend(kept)
+                    if alt is not None:
+                        retries += 1
+                        alt["retry"] = signal
+                        if execute(alt).get("ends_turn"):
+                            break
             record["turns"].append({"user": turn["user"], "preground": user.get("block"), "steps": steps})
     return record
 
@@ -462,9 +543,13 @@ def main() -> None:
         for session in sessions:
             handle.write(json.dumps(results[session["id"]], ensure_ascii=False) + "\n")
     counts = compile_counts(results.values())
-    if counts:
-        Path(args.out + ".stats.json").write_text(json.dumps({"sessions": len(results), "compile": counts}, indent=1))
-    print(f"wrote {len(results)} sessions to {args.out}" + (f"; compile {json.dumps(counts)}" if counts else ""))
+    retried = retry_counts(results.values())
+    if counts or retried:
+        stats = {"sessions": len(results), **({"compile": counts} if counts else {}),
+                 **({"retry": retried} if retried else {})}
+        Path(args.out + ".stats.json").write_text(json.dumps(stats, indent=1))
+    print(f"wrote {len(results)} sessions to {args.out}" + (f"; compile {json.dumps(counts)}" if counts else "")
+          + (f"; retry {json.dumps(retried)}" if retried else ""))
 
 
 if __name__ == "__main__":

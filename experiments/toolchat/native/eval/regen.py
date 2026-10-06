@@ -57,6 +57,16 @@ M5d and M5e (ruled on val) add one, over the message and the run:
                      runtime's ask over the series; an old gold that wrote to one instance (the next upcoming, the one
                      open) is replaced by it. A pronoun for a name the message itself states ("Order composite resin,
                      push it to monday") picks nothing
+N7 (owner ruling 2026-10-06) adds one, over the gold alone:
+  `decline-any-reason` (widen) a turn whose gold is a decline accepts a decline for any reason (SPEC §4's table: "the person
+                     sees a polite can't either way"): the old accept stays and one accept with every reason is added beside
+                     it, val and test alike. A gold with no decline is untouched
+G1 and G2 (owner ruling 2026-10-06) add one convention and widen another, over the message and the run:
+  `superlative`      (widen) also "needs the most time", "most effort", "least time", "least work": the row and its value
+  `after-series-ask` (explain + widen) the turn after a turn that ended in the runtime's `series-ask` (the run's composed
+                     `Which one?` over a series, accepted by the gold, where the gold on file does not itself ask over named
+                     rows, so the reference's dialog was another one): a turn whose gold writes also accepts the same ask
+                     again, over the series. A gold that does not write (a retraction, a read) gets nothing
 A fixed turn is pinned: a run that fails its gold is UNEXPLAINED, never re-derived. Test ids are never in FIXES.
 
 API (everything else is internal):
@@ -299,6 +309,8 @@ class Sess:
         self.due_turns: set[int] = set()  # turns explained by `due-active`: a follow-up that reads their result follows
         self.dated_kinds: dict[int, str | None] = {}  # turn -> the task or event it read or wrote (`kindless`, K1)
         self.balances: dict[int, tuple[str | None, list[dict]]] = {}  # turn -> (person, values) of a person's balance (K2)
+        self.series_asks: dict[int, list[str]] = {}  # turn -> the keys of the series the runtime asked over, where the
+        #                                              reference's own dialog was another one (`after-series-ask`)
 
     def in_progress(self) -> list[str]:
         return [vid for vid, t in self.task.items() if t.get("status") == "in_progress"]
@@ -1130,7 +1142,8 @@ def explain_messaging(old: dict, new: dict, cx: Cx) -> str | None:
     return "a request to message someone is out of scope" if old["type"] in ("ask", "diff") else None
 
 
-SUPERLATIVE = re.compile(r"\b(?:longest|shortest|biggest|smallest|largest|how long|how big)\b", re.I)
+SUPERLATIVE = re.compile(r"\b(?:longest|shortest|biggest|smallest|largest|how long|how big"
+                         r"|(?:most|least)\s+(?:amount\s+of\s+)?(?:time|effort|work))\b", re.I)  # "needs the most time" (G1)
 STILL_IN = re.compile(r"\bstill\s+(?:in|on)\b", re.I)
 CONTAINERS = ("folder", "album", "list", "notebook", "group")
 
@@ -1849,6 +1862,8 @@ def regen_turn(gt: dict, steps: list[dict], sess: Sess, ti: int) -> dict:
     if res["convention"] == UNEXPLAINED or res["held"]:
         return {**res, "gold": gt["gold"], "changed": False}
     final, more, why2 = widen_gold(res["gold"], gt["user"], ref, sess, ti, steps)
+    if res["changed"] and res["gold"][: len(wide)] != wide:  # the gold was replaced: what was added is gone with it
+        added, why = [], []
     if not (added or more or res["changed"]):
         return res
     names = [c for c in (res["convention"] or "").split("+") if c] + added + more
@@ -1976,6 +1991,11 @@ def regen_session(session: dict, record: dict) -> tuple[dict, list[dict]]:
             sess.status_turns[ti] = _status_record(gt, res, ids, cx.terminal_handle)
         ids.created += [r["id"] for r in res["effect"]["diff"]["rows"] if r["change"] == "created"]
         sess.after_turn(ti, steps)
+        if steps and (asked := series_ask_keys(Cx(sess, ti, gt["user"], gt.get("ref") or [], steps, res["effect"]))):
+            # G2: the run ended the turn in the runtime's ask over a series, the gold accepts it, and the reference's own
+            # dialog was not a Which one? over rows: the next turn was written for another dialog
+            if not _ref_asked_over_rows(gt["gold"]) and any(judge_accept(a, res["effect"], ids)[0] for a in final):
+                sess.series_asks[ti] = asked
     return ({**session, "turns": turns} if any(r["applied"] for r in rows) else session), rows
 
 
@@ -2206,6 +2226,100 @@ CONVENTIONS = (*CONVENTIONS, "composed-answer")
 RULES["composed-answer"] = explain_composed_answer
 WIDENING = (*WIDENING, "composed-answer")
 WIDENERS["composed-answer"] = widen_composed_answer
+
+# N7 (owner ruling 2026-10-06): when the gold of a turn is a decline, a decline with any reason passes, "the person sees
+# a polite can't either way". The reasons the scorer knows, SPEC §4's table.
+DECLINE_REASONS = ("out_of_scope", "unbounded_destruction", "sealed_egress", "fabricated_secret", "never_mind",
+                   "not_found")
+
+
+def explain_decline_any_reason(old: dict, new: dict, cx: Cx) -> str | None:
+    """N7: explains the accept the widening adds (one with every reason), which a turn whose run fails the gold has to
+    explain beside the old declines, and a derived decline for a reason the old decline does not list. The other
+    conventions are tried first, so the old declines keep their own."""
+    if old["type"] != "decline":
+        return None
+    if set(DECLINE_REASONS) <= set(old["reasons"]):
+        return "the accept N7 adds beside a decline gold: a decline for any reason"
+    if new["type"] != "decline":
+        return None
+    other = sorted(set(new["reasons"]) - set(old["reasons"]))
+    return f"a decline for {'/'.join(other)} where the gold lists {'/'.join(old['reasons'])}" if other else None
+
+
+def widen_decline_any_reason(gold: list[dict], user: str, ref: list[dict], sess: Sess, ti: int,
+                             steps: list[dict]) -> list[dict]:
+    """N7: a gold with a decline accept also accepts a decline for any reason. One accept is added beside the old
+    gold (which stays as it is): the reasons of the declines on file first, then the others, in the table's order. A
+    gold that already accepts every reason, and a gold with no decline, gets nothing."""
+    declines = [a for a in gold if a["type"] == "decline"]
+    if not declines:
+        return []
+    have = {r for a in declines for r in a["reasons"]}
+    if have >= set(DECLINE_REASONS):
+        return []
+    reasons = list(dict.fromkeys(r for a in declines for r in a["reasons"]))
+    return [{"type": "decline", "reasons": reasons + [r for r in DECLINE_REASONS if r not in reasons]}]
+
+
+CONVENTIONS = (*CONVENTIONS, "decline-any-reason")
+RULES["decline-any-reason"] = explain_decline_any_reason
+WIDENING = (*WIDENING, "decline-any-reason")
+WIDENERS["decline-any-reason"] = widen_decline_any_reason
+
+
+# G2 (owner ruling 2026-10-06): the turn after a runtime `series-ask`. "move my haircut to saturday" is the runtime's
+# `Which one?` over a dozen past haircuts where the reference said "no haircut coming up, want me to book one?", and the
+# next turn ("yeah saturday at 11") was written as a reply to that. The user now sees another dialog, so the turn's
+# write is accepted and so is the same ask again.
+def series_ask_keys(cx: Cx) -> list[str] | None:
+    """The world keys of the series the runtime's `Which one?` ended the turn over: the ask the runtime composed (for no
+    cap and no refusal) for a write by the name of a series (`series_of`: two or more live rows of one name and kind).
+    None for any other turn."""
+    if cx.last.get("tool") != "ask" or not _composed_plain(cx):
+        return None
+    if (cx.last.get("compose") or {}).get("family", "ambiguous_write") != "ambiguous_write":
+        return None
+    keys = [key_of(cx.ids, o["id"]) for o in (cx.last.get("ask") or {}).get("options") or [] if "id" in o]
+    return keys if keys and None not in keys and series_of(keys, cx.sess) else None
+
+
+def _ref_asked_over_rows(old: list[dict]) -> bool:
+    """The gold on file of the turn asks over named rows: the reference's dialog was a `Which one?` too, and the
+    next turn follows it, whatever the options the runtime now composes."""
+    return any(a["type"] == "ask" and a.get("candidates") for a in old)
+
+
+def explain_after_series_ask(old: dict, new: dict, cx: Cx) -> str | None:
+    """G2: explains the accept the widening adds (the ask over the series, beside a write), and a run that asks over the
+    series again where the gold on file writes. The other conventions are tried first."""
+    keys = cx.sess.series_asks.get(cx.turn - 1)
+    if not keys:
+        return None
+    if old["type"] == "ask" and old.get("candidates") and set(old["candidates"]) == set(keys):
+        return "the accept G2 adds beside a write after a series ask: the same Which one? again"
+    if old["type"] == "diff" and new["type"] == "ask" and new["candidates"] and set(new["candidates"]) <= set(keys):
+        return f"the turn before ended in the runtime's Which one? over {len(keys)} rows, and the message answers it with an ask again"
+    return None
+
+
+def widen_after_series_ask(gold: list[dict], user: str, ref: list[dict], sess: Sess, ti: int,
+                           steps: list[dict]) -> list[dict]:
+    """G2: in a turn whose gold writes, after a turn that ended in the runtime's ask over a series where the reference's
+    dialog was another one, a repeated ask over the same series is accepted beside the write. A gold that does not
+    write (a retraction, a read) is the same in either dialog and gets nothing."""
+    keys = sess.series_asks.get(ti - 1)
+    if not keys or not any(a["type"] == "diff" for a in gold):
+        return []
+    series = series_of(keys, sess)
+    return [({"type": "ask", "candidates": list(keys)},
+             f"the turn before ended in the runtime's Which one? over {len(keys)} {series[0]}s called {series[1]!r}")]
+
+
+CONVENTIONS = (*CONVENTIONS, "after-series-ask")
+RULES["after-series-ask"] = explain_after_series_ask
+WIDENING = (*WIDENING, "after-series-ask")
+WIDENERS["after-series-ask"] = widen_after_series_ask
 
 
 # ---------------------------------------------------------------------------------------------
