@@ -55,6 +55,10 @@ export default defineConfig({
     // The public site's token sheet is lowered from @centraid/design by
     // scripts/site-tokens.mjs; `lint:site-tokens` asserts it byte-for-byte.
     "scripts/*-site/public/assets/centraid-tokens.css",
+    // The frozen eval sets of the native tool task (#1044): every file's sha256
+    // is recorded in eval/FROZEN.md and `eval/build_sets.py check` compares it,
+    // so a reformat is a new set version, not a style fix.
+    "experiments/toolchat/native/eval/sets/**",
     // The nightly report's sheet (#853) is the same lowering from the same
     // emitter, gated the same way — one file rather than a per-surface
     // `assets/` copy, because the report is published at two depths and
