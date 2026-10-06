@@ -96,19 +96,6 @@ S("T11-057", "notes open span date within notebook count note count",
   T("which of the gaa crowd have one note or fewer about them", rows("eileen"),
     ref=[ans(kind="person", where='role contains "GAA" and note count <= 1')]))
 
-S("T11-058", "create task add_to new week list complete write read",
-  T("add book the vet for the heifer scan, due friday week, on the farm list",
-    diff(new("task", name=has("scan"), date="2026-08-07"), link("farm_l", "new")),
-    ref=[act("create", more=True, args=lines(kind="task", name="Book the vet for the heifer scan", date=U("week", 2, weekday=5))),
-         act("add_to", rows="$new", args=lines(to="$farm_l"))]),
-  T("what's on the farm list due next week", rows("tb_prep", "herd_reg", "fence", "minerals", "fert", "nuts_08"),
-    ref=[ans(kind="task", linked_to="$farm_l", when=W(U("week", 1)))]),
-  T("tick off order mineral buckets and tell me what's left open for next week",
-    rows("tb_prep", "herd_reg", "fence", "fert", "nuts_08",
-         also=diff(upd("minerals", status="completed", completed=ANY))),
-    ref=[act("complete", kind="task", name="Order mineral buckets", more=True),
-         ans(kind="task", linked_to="$farm_l", when=W(U("week", 1)), where='status = "open"')]))
-
 S("T11-059", "create debt balance write read log",
   T("i owe clodagh barry 18 for the swimming togs, add that and tell me where i am with her",
     val((7, "EUR"), also=diff(new("debt", name=has("togs"), amount=18, direction="i_owe"), link("new", "clodagh"))),

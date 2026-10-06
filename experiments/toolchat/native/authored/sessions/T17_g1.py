@@ -45,16 +45,6 @@ S("T17-104", "ask event reschedule pick contrast",
   T("same for the eighth", diff(upd("handover_0208", date="2026-02-08T19:00")),
     ref=[act("reschedule", rows="$handover_0208", args=lines(to=U("day", 0, anchor="row", time="19:00")))]))
 
-S("T17-105", "ask task delete pick undo",
-  T("delete buy sheet music", ask("sheet_1", "sheet_2"),
-    ref=[act("delete", kind="task", name="Buy sheet music"),
-         find(kind="task", name="Buy sheet music"),
-         askc("the one for boris due on the 6th or the done one from 9 jan?", options="$sheet_1, $sheet_2")]),
-  T("the czerny one", diff(trash("sheet_1")),
-    ref=[act("delete", rows="$sheet_1")]),
-  T("no wait cancel that, i'm still going to need it", diff(restore("sheet_1")),
-    ref=[act("undo")]))
-
 S("T17-106", "task complete where contrast read prev complete",
   T("tick off buy sheet music", diff(upd("sheet_1", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="Buy sheet music", where='status = "open"')]),
@@ -83,11 +73,8 @@ S("T17-108", "document star ask pick prev contrast",
     ref=[act("star", rows="$scan_71")]))
 
 S("T17-109", "locker star ask pick already",
-  T("star dsk", ask("dsk", "visa"),
-    ref=[act("star", kind="locker item", name="DSK"),
-         askc("the online banking login or the visa card?", options="$dsk, $visa")]),
-  T("the banking login", diff(upd("dsk", starred=True)),
-    ref=[act("star", rows="$dsk")]),
+  T("star dsk", diff(upd("dsk", starred=True)),
+    ref=[act("star", kind="locker item", name="DSK")]),
   T("star the dsk visa card too", diff(already=["visa"]),
     ref=[act("star", kind="locker item", name="DSK Visa card"), ans(rows="$visa")]))
 
@@ -102,8 +89,7 @@ S("T17-110", "locker star ask pick contrast",
 
 S("T17-111", "star ask person pick balance",
   T("star petrov", ask("stefan", "viktor"),
-    ref=[act("star", kind="person", name="Petrov"),
-         askc("stefan or viktor?", options="$stefan, $viktor")]),
+    ref=[act("star", kind="person", name="Petrov")]),
   T("the ex", diff(upd("stefan", starred=True)),
     ref=[act("star", rows="$stefan")]),
   T("tally between him and me right now", val((135, "BGN")),
@@ -119,11 +105,8 @@ S("T17-112", "log ask person pick contrast nickname",
     ref=[search("vesi", kind="person"), act("log", rows="$vesi", args=lines(kind="call"))]))
 
 S("T17-113", "note pin ask pick count",
-  T("pin the bathroom note", ask("reno_budget", "measurements"),
-    ref=[act("edit", kind="note", name="Bathroom", args=lines(pinned="yes")),
-         askc("bathroom budget or bathroom measurements?", options="$reno_budget, $measurements")]),
-  T("measurements", diff(upd("measurements", pinned=True)),
-    ref=[act("edit", rows="$measurements", args=lines(pinned="yes"))]),
+  T("pin the bathroom note", diff(upd("measurements", pinned=True)),
+    ref=[act("edit", kind="note", name="Bathroom", args=lines(pinned="yes"))]),
   T("how many are pinned now", val(5),
     ref=[ans(op="count", kind="note", where="pinned = yes")]))
 

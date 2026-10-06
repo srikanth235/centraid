@@ -55,12 +55,11 @@ S("T25-120", "decline out_of_scope email long then tasks linked reschedule at-n 
   T("star priya raman", diff(upd("priya", starred=True)),
     ref=[act("star", kind="person", name="Priya Raman")]))
 
-S("T25-121", "decline booking then repair create date balance positive star",
+S("T25-121", "decline booking then create date balance positive star",
   T("book us a table for thanksgiving dinner", decline("out_of_scope"),
     ref=[dec("out_of_scope")]),
   T("just add a reminder to order the turkey, tomorrow", diff(new("task", name=has("turkey"), date="2026-10-12")),
-    ref=[bad(act("create", args=lines(kind="task", name="Order the turkey", date={"rel": 1}))),
-         act("create", args=lines(kind="task", name="Order the turkey", date=U("day", 1)))]),
+    ref=[act("create", args=lines(kind="task", name="Order the turkey", date=U("day", 1)))]),
   T("does matthieu still owe me for the dolly", val((40, "CAD")),
     ref=[ans(op="balance", kind="person", name="Matthieu Girard")]),
   T("star him", diff(upd("matthieu", starred=True)),

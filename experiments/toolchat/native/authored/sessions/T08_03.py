@@ -130,26 +130,11 @@ S("T08-062", "compute min group status",
   T("who's the 12 bucks from", rows("coach_t"),
     ref=[find(kind="debt", where="amount = 12"), ans(kind="person", linked_to="@prev")]))
 
-S("T08-063", "four calls school tasks",
-  T("mark jada's field trip form done, push the poster board to wednesday, delete the lunch one, and what's left for school",
-    rows("sched_physical", "band_shirt", "field_trip", "poster",
-         also=diff(upd("field_trip", status="completed", completed=ANY), upd("poster", date=ANY), trash("lunch"))),
-    ref=[act("complete", kind="task", name="Sign Jada's field trip form", more=True),
-         act("reschedule", kind="task", name="poster board", args=lines(to=U("week", 0, weekday=3)), more=True),
-         act("delete", kind="task", name="lunch", more=True),
-         ans(kind="task", linked_to="$school_l")]))
-
 S("T08-064", "search nickname find-only",
   T("who's keisha again", rows("keisha"),
     ref=[search("Keisha", kind="person"), ans(rows="@prev")]),
   T("what's her balance in carter reunion 2026", val((85, "USD")),
     ref=[ans(op="balance", kind="group", name="Carter reunion 2026", linked_to="$keisha")]))
-
-S("T08-065", "create undo create",
-  T("add a task to buy a new vacuum pump for work", diff(new("task", name=has("vacuum pump"))),
-    ref=[act("create", args=lines(kind="task", name="Buy a new vacuum pump"))]),
-  T("undo that, the shop's buying it", diff(trash("+1")),
-    ref=[act("undo")]))
 
 S("T08-066", "restore undo restore",
   T("get the old pay stub back out of the trash", diff(restore("paystub")),

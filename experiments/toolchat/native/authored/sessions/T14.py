@@ -59,12 +59,6 @@ S("T14-006", "compute min debts group direction",
   T("who's the 35 with", rows("d_wesley"),
     ref=[ans(kind="debt", where='status = "open" and direction = "i_owe" and amount = 35 BRL')]))
 
-S("T14-007", "create task undo",
-  T("add a task buy new slipmats, due next friday", diff(new("task", name="Buy new slipmats", date="2026-10-30")),
-    ref=[act("create", args=lines(kind="task", name="Buy new slipmats", date=U("week", 1, weekday=5)))]),
-  T("undo that, guga has spares", diff(trash("+1")),
-    ref=[act("undo")]))
-
 S("T14-008", "role contains cadence literal",
   T("who's in the car pool again, by role", rows("rafa_s", "junior"),
     ref=[find(kind="person", where='role contains "car pool"'), ans(rows="@prev")]),
@@ -183,15 +177,3 @@ S("T14-023", "add_to photo multi album",
          act("add_to", rows="$vinyl_haul, $cv_lights", args=lines(to="$gigs_album"))]),
   T("how's the count on that album", val(6),
     ref=[ans(op="count", kind="photo", linked_to="$gigs_album")]))
-
-S("T14-024", "settle_debt prev",
-  T("does guga owe me for the headphones", rows("d_guga"),
-    ref=[ans(kind="debt", name="headphones")]),
-  T("he pixed me, settle it", diff(upd("d_guga", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]))
-
-S("T14-025", "delete locker named",
-  T("delete the smart fit entry, cancelled the gym", diff(trash("smart_fit")),
-    ref=[act("delete", rows="$smart_fit")]),
-  T("and sign up for the gym, is that task around", rows("gym"),
-    ref=[ans(kind="task", name="Sign up for the gym"), ans(kind="task", name="Sign up for the gym", trashed=True)]))

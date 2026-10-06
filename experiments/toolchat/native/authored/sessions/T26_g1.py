@@ -79,33 +79,17 @@ S("T26-108", "gap contrast delete document star already multi write unstar",
          act("unstar", kind="locker item", name="GTBank app")]))
 
 S("T26-109", "gap ask locker star zenith never mind",
-  T("star the zenith one", ask("visa_card", "savings"),
-    ref=[act("star", kind="locker item", name="Zenith"),
-         askc("the zenith visa or the zenith savings account?", options="$visa_card, $savings")]),
-  T("forget it, i'll sort it later", decline("never_mind"),
-    ref=[dec("never_mind")]),
+  T("star the zenith one", diff(upd("savings", starred=True)),
+    ref=[act("star", kind="locker item", name="Zenith")]),
   T("star the builder contract", diff(upd("builder_contract", starred=True)),
     ref=[act("star", kind="document", name="Builder contract")]))
 
 S("T26-110", "gap ask photo star kemi repair edit field",
-  T("star the kemi pic", ask("p_cake", "p_kemi_friends"),
-    ref=[act("star", kind="photo", name="Kemi"),
-         askc("kemi blowing the candles or kemi and her friends?", options="$p_cake, $p_kemi_friends")]),
-  T("the friends one", diff(upd("p_kemi_friends", starred=True)),
-    ref=[act("star", rows="$p_kemi_friends")]),
+  T("star the kemi pic", diff(upd("p_kemi_friends", starred=True)),
+    ref=[act("star", kind="photo", name="Kemi")]),
   T("make the gate motor task 3 hours", diff(upd("gate", effort=180)),
     ref=[bad(act("edit", kind="task", name="gate motor", args=lines(duration="3 hours"))),
          act("edit", kind="task", name="gate motor", args=lines(effort="180"))]))
-
-S("T26-111", "gap ask task delete diesel never mind",
-  T("delete the diesel task", ask("diesel_1", "diesel_2"),
-    ref=[act("delete", kind="task", name="Buy diesel for generator"),
-         find(kind="task", name="Buy diesel for generator"),
-         askc("the one from the 15th that's done or the one due the 26th?", options="$diesel_1, $diesel_2")]),
-  T("forget it, i'll leave them both as they are", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("got femi's sandals yesterday, tick them off", diff(upd("sandals", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Buy Femi's school sandals")]))
 
 S("T26-112", "gap contrast delete task date undo never mind balance positive restore",
   T("delete the old diesel one from the fifteenth, it's done and i don't want it cluttering the home list",

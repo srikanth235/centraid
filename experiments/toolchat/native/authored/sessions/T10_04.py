@@ -35,15 +35,6 @@ S("T10-078", "task read add_to prev",
   T("can you add it to the home list too", diff(link("home_l", "bike")),
     ref=[act("add_to", rows="@prev", args=lines(to="$home_l"))]))
 
-S("T10-079", "repair cadence weeks within to-date log",
-  T("who am i meant to keep up with less than every two weeks", rows("abu_fadi", "jamal", "nizar", "umm_khalil"),
-    ref=[bad(ans(kind="person", where="cadence > 2 weeks")),
-         ans(kind="person", where="cadence > 14")]),
-  T("which of them haven't i talked to since before april", rows("jamal", "nizar"),
-    ref=[ans(within="@prev", when=W({"to": D("2026-03-31")}))]),
-  T("rang jamal now, log it", diff(upd("jamal", date=ANY)),
-    ref=[act("log", rows="$jamal", args=lines(kind="call"))]))
-
 S("T10-080", "linked_to all album folder rename add_to",
   T("which albums have both zaid and sami in the snow and the eid video call screenshot", rows("grand_album"),
     ref=[ans(kind="album", linked_to="$zaid_sami_snow, $adha_call")]),
@@ -150,10 +141,6 @@ S("T10-090", "album photo count delete multi",
          unlink("blurry_album", "blur_1"), unlink("blurry_album", "blur_2")),
     ref=[act("delete", rows="$dump_album, $blurry_album")]))
 
-S("T10-091", "single sum owed",
-  T("total of what i owe everyone", val((160, "JOD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))
-
 S("T10-092", "person count lte week within event spans",
   T("this weeks things with one person or fewer", rows("physio_0615", "walid_coffee", "nabil_lunch_0619", "satellite", "ac_service"),
     ref=[ans(kind="event", when=W(U("week", 0)), where="person count <= 1")]),
@@ -165,10 +152,6 @@ S("T10-092", "person count lte week within event spans",
          askc("today's one or next friday?", options="$nabil_lunch_0619, $nabil_lunch_0626")]),
   T("next week's", diff(upd("nabil_lunch_0626", date="2026-06-26T13:30")),
     ref=[act("reschedule", rows="$nabil_lunch_0626", args=lines(to=U("day", 0, anchor="row", time="13:30")))]))
-
-S("T10-093", "single priority empty chess list",
-  T("which chess tasks have no priority", rows("clocks", "chess_fee", "yousef_chess", "endgames"),
-    ref=[find(kind="task", linked_to="$chess_l", where="priority is empty"), ans(rows="@prev")]))
 
 S("T10-094", "task count home open order limit spans",
   T("open home tasks with no subtasks", rows("leak", "ac", "gas", "prop_tax", "water_q2", "elec_07"),
@@ -263,8 +246,7 @@ X("T10-028",
 
 X("T10-029",
   T("mark renew car license done, did it this morning", diff(upd("license_26", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Renew car license"),
-         act("complete", kind="task", name="Renew car license", where='status = "open"')]))
+    ref=[act("complete", kind="task", name="Renew car license")]))
 
 X("T10-037",
   T("log a call with khaled", ask("khaled_o", "khaled_s"),
@@ -276,8 +258,7 @@ X("T10-037",
 X("T10-041",
   T("pay water bill is done, paid at the post office",
     diff(upd("water_q2", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pay water bill"),
-         act("complete", kind="task", name="Pay water bill", where='status = "open"')]),
+    ref=[act("complete", kind="task", name="Pay water bill")]),
   T("tick the carpet receipts one too and tell me what's left on the mosque list",
     rows("quotes", "pledges", "statement", also=diff(upd("receipts", status="completed", completed=ANY))),
     ref=[act("complete", kind="task", name="Scan the carpet receipts", more=True),
@@ -342,10 +323,6 @@ X("T10-032",
   T("find mounier from chess", rows("mounir"),
     ref=[find(kind="person", name="Mounier"), search("Mounier", kind="person"), ans(rows="$mounir")]))
 
-X("T10-034",
-  T("when's the gas bill due", rows("gas"),
-    ref=[ans(kind="task", name="gas bill"), search("gas", kind="task"), ans(rows="$gas")]))
-
 X("T10-035",
   T("open the maqlouba note", rows("maqluba"),
     ref=[ans(kind="note", name="Maqlouba"), search("maqlouba", kind="note"), ans(rows="$maqluba")]))
@@ -398,7 +375,7 @@ X("T10-066",
     ref=[ans(kind="person", when=W(span(U("week", 0, weekday=1, time="09:00"), U("day", 0))))]))
 
 X("T10-050",
-  T("what's on between today and the end of the month", rows("nabil_lunch_0619", "satellite", "ac_service", "call_layla_0620", "call_omar_kids", "physio_0622", "huda_visit", "lecture", "blood_test", "site_visit", "chess_0623", "dentist", "abu_fadi_coffee", "nabil_lunch_0626", "tournament", "call_yousef_0628", "physio_0629", "contractor", "chess_0630"),
+  T("what's on between today and the end of the month", rows("nabil_lunch_0619", "satellite", "ac_service", "call_layla_0620", "call_omar_kids", "physio_0622", "huda_visit", "lecture", "blood_test", "site_visit", "chess_0623", "dentist", "abu_fadi_coffee", "simul", "nabil_lunch_0626", "tournament", "call_yousef_0628", "physio_0629", "contractor", "chess_0630"),
     ref=[ans(kind="event", when=W(span(U("day", 0), U("month", 0))))]))
 
 X("T10-010",

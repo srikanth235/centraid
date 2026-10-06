@@ -37,26 +37,12 @@ S("T05-028", "groups person count balance compute",
   T("where do i stand in it", val((740, "INR")),
     ref=[comp(op="balance", kind="group", name="Night shift carpool", linked_to="$me"), ans(value="@prev")]))
 
-S("T05-029", "event short no description",
-  T("anything under an hour this week", rows("appraisal"),
-    ref=[ans(kind="event", when=W(U("week", 0)), where="duration < 60")]),
-  T("and next week", rows("dentist_ev", "duty_swap", "bank"),
-    ref=[ans(kind="event", when=W(U("week", 1)), where="duration < 60")]))
-
 S("T05-030", "events no description edit prev",
   T("which of my events next week have no description", rows("dentist_ev", "duty_swap", "accounts", "electrician",
                                                               "bank", "nets", "cne", "farewell"),
     ref=[ans(kind="event", when=W(U("week", 1)), where="description is empty")]),
   T("the electrician one, say he's fixing the geyser", diff(upd("electrician", description="fixing the geyser")),
     ref=[act("edit", rows="$electrician", args=lines(description="fixing the geyser"))]))
-
-S("T05-031", "task where priority description",
-  T("what's on the home list with a priority set", rows("eb_jan", "selvi_pay", "tax"),
-    ref=[ans(kind="task", linked_to="$homelist", where='priority != 0 and status = "open"')]),
-  T("which tasks are cash or at the bank", rows("gas", "fridge", "selvi_pay", "banner"),
-    ref=[ans(kind="task", where='description in ("cash", "at the bank")')]),
-  T("sum of effort on those", val(40),
-    ref=[ans(op="sum", field="effort", within="@prev")]))
 
 S("T05-032", "task list count where",
   T("which open tasks aren't on any list", rows("inverter", "passport", "dubai_visa", "kavya_gift", "phone", "recipe",
@@ -130,13 +116,6 @@ S("T05-041", "tasks due dates",
   T("push the banner one to tomorrow 6pm", diff(upd("banner", date="2026-01-21T18:00")),
     ref=[act("reschedule", rows="$banner", args=lines(to=U("day", 1, time="18:00")))]))
 
-S("T05-042", "tasks span weekday",
-  T("what's due between wednesday and sunday", rows("water_can", "projector", "reports", "gas", "vol_call", "kavya_gift",
-                                                    "flowers_1", "leave", "volunteers", "receipts", "eb_jan"),
-    ref=[ans(kind="task", when=W({"from": U("week", 0, weekday=3), "to": U("week", 0, weekday=7)}))]),
-  T("and from next monday on, the priority 1s", rows("selvi_pay", "bls_cert", "insurance_claim"),
-    ref=[ans(kind="task", when=W({"from": U("week", 1, weekday=1)}), where="priority = 1")]))
-
 S("T05-043", "notes by created date",
   T("notes i made since the tenth", rows("poosam_plan", "donors", "tc_minutes", "vathal", "pongal_r", "fantasy_n",
                                         "match_bets", "night_journal", "pongal_journal", "sedation", "surgery_n"),
@@ -158,13 +137,6 @@ S("T05-045", "documents created recently",
   T("up to this monday only", rows("payslip_dec", "roster_doc", "my_blood", "eb_receipt", "donor_sheet",
                                    "volunteer_doc", "amma_scan"),
     ref=[ans(kind="document", when=W({"from": U("month", -1), "to": U("week", 0, weekday=1)}))]))
-
-S("T05-046", "photos dates",
-  T("photos from the last week", rows("sugarcane", "pot", "family_pongal", "big_temple", "kolam_pic", "cows",
-                                      "blurry_kolam", "farhan_pic", "receipt_pic", "meme_2"),
-    ref=[ans(kind="photo", when=W(U("week", -1, anchor="today")))]),
-  T("pongal day to the fifteenth morning", rows("kolam_pic", "blurry_kolam", "pot", "sugarcane", "family_pongal", "cows"),
-    ref=[ans(kind="photo", when=W({"from": D("2026-01-14"), "to": D("2026-01-15", "12:00")}))]))
 
 S("T05-047", "photos from month",
   T("pics since november", rows("biryani", "final_score", "amma_appa", "lamp", "rain", "gopuram", "beach",

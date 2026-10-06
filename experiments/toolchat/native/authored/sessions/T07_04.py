@@ -185,7 +185,7 @@ S("T07-092", "debt spans order balance",
   T("what's rosa mamani's balance", val((20, "PEN")),
     ref=[ans(op="balance", kind="person", name="Rosa Mamani")]))
 
-S("T07-093", "note spans misspelled recipe body contains",
+S("T07-093", "note spans accent fold recipe body contains",
   T("notes from second march 9pm to eighth march 9pm", rows("seed_2026", "soil_notes", "loan_notes", "julio_gifts", "vale_courses"),
     ref=[ans(kind="note", when=W(span(D("2026-03-02", "21:00"), D("2026-03-08", "21:00"))))]),
   T("and fifth march 11am till today", rows("loan_notes", "julio_gifts", "vale_courses", "prices", "mar_agenda", "hugo_qs"),
@@ -194,8 +194,7 @@ S("T07-093", "note spans misspelled recipe body contains",
     ref=[ans(kind="note", when=W({"to": U("month", 0, name=1)}))]),
   T("the chuño soup one, add 'or alpaca instead of lamb'",
     diff(upd("chuno", body="soak the chuno overnight, lamb, mint, a little aji; or alpaca instead of lamb")),
-    ref=[ans(kind="note", name="chuño"), search("chuño soup", kind="note"),
-         act("edit", rows="$chuno", args=lines(body="soak the chuno overnight, lamb, mint, a little aji; or alpaca instead of lamb"))]),
+    ref=[act("edit", rows="$chuno", args=lines(body="soak the chuno overnight, lamb, mint, a little aji; or alpaca instead of lamb"))]),
   T("which recipes use aji", rows("chuno", "ocopa", "huancaina"),
     ref=[ans(kind="note", linked_to="$recipes_nb", where='body contains "aji"')]))
 

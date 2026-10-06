@@ -1,0 +1,2623 @@
+{
+ "me": "Achieng Odhiambo",
+ "today": "2026-09-23T18:10",
+ "epoch": "2026-01-05T09:00",
+ "seed": "T29",
+ "currency": "KES",
+ "people": [
+  {
+   "key": "wambui",
+   "name": "Wambui Njoroge",
+   "role": "flatmate",
+   "nickname": "Wambs",
+   "starred": true,
+   "cadence": 1,
+   "last_contacted": "2026-09-23T07:30",
+   "created": "2026-01-05T09:00"
+  },
+  {
+   "key": "baba",
+   "name": "Joseph Odhiambo",
+   "role": "dad",
+   "nickname": "Baba",
+   "starred": true,
+   "cadence": 7,
+   "last_contacted": "2026-09-20T19:00",
+   "met": "Kisumu"
+  },
+  {
+   "key": "mama",
+   "name": "Grace Odhiambo",
+   "role": "mum",
+   "nickname": "Mama",
+   "starred": true,
+   "cadence": 3,
+   "last_contacted": "2026-09-22T20:15",
+   "met": "Kisumu"
+  },
+  {
+   "key": "otieno",
+   "name": "Otieno Odhiambo",
+   "role": "brother",
+   "cadence": 14,
+   "last_contacted": "2026-09-05T21:00",
+   "last_contacted_kind": "message",
+   "met": "Mombasa"
+  },
+  {
+   "key": "akinyi",
+   "name": "Akinyi Odhiambo",
+   "role": "sister",
+   "cadence": 10,
+   "last_contacted": "2026-09-12T18:30",
+   "met": "Kisumu"
+  },
+  {
+   "key": "aunt_atieno",
+   "name": "Atieno Owino",
+   "role": "aunt",
+   "nickname": "Auntie Atieno",
+   "met": "Kisumu"
+  },
+  {
+   "key": "kevin_m",
+   "name": "Kevin Mwangi",
+   "role": "club rider",
+   "met": "Ngong Road Riders",
+   "cadence": 7,
+   "last_contacted": "2026-09-19T09:30",
+   "last_contacted_kind": "coffee"
+  },
+  {
+   "key": "kevin_o",
+   "name": "Kevin Otieno",
+   "role": "contractor",
+   "met": "Karen site"
+  },
+  {
+   "key": "kip",
+   "name": "Kipchoge Rotich",
+   "role": "club captain",
+   "nickname": "Kip",
+   "starred": true,
+   "met": "Ngong Road Riders",
+   "cadence": 14,
+   "last_contacted": "2026-09-10T08:00"
+  },
+  {
+   "key": "mwende",
+   "name": "Mwende Kyalo",
+   "role": "club rider",
+   "met": "Ngong Road Riders"
+  },
+  {
+   "key": "juma",
+   "name": "Juma Barasa",
+   "role": "club rider",
+   "met": "Ngong Road Riders"
+  },
+  {
+   "key": "nyambura",
+   "name": "Nyambura Gathoni",
+   "role": "club secretary",
+   "met": "Ngong Road Riders",
+   "cadence": 30,
+   "last_contacted": "2026-08-30T17:00",
+   "last_contacted_kind": "message"
+  },
+  {
+   "key": "faith",
+   "name": "Faith Chepkoech",
+   "role": "client",
+   "met": "Karen",
+   "starred": true,
+   "cadence": 7,
+   "last_contacted": "2026-09-21T15:00",
+   "last_contacted_kind": "message"
+  },
+  {
+   "key": "dennis",
+   "name": "Dennis Kariuki",
+   "role": "client",
+   "met": "Runda",
+   "cadence": 14,
+   "last_contacted": "2026-09-14T11:00"
+  },
+  {
+   "key": "samuel",
+   "name": "Samuel Ouma",
+   "role": "quantity surveyor",
+   "met": "Karen site"
+  },
+  {
+   "key": "peter",
+   "name": "Peter Kimani",
+   "role": "structural engineer"
+  },
+  {
+   "key": "mwanaisha",
+   "name": "Mwanaisha Abdallah",
+   "role": "county planning officer",
+   "met": "City Hall"
+  },
+  {
+   "key": "lena",
+   "name": "Lena Fischer",
+   "role": "colleague",
+   "met": "Berlin",
+   "nickname": "Lenchen"
+  },
+  {
+   "key": "hanna",
+   "name": "Hanna Berg",
+   "role": "colleague",
+   "met": "Berlin"
+  },
+  {
+   "key": "salma",
+   "name": "Salma Hassan",
+   "role": "landlady",
+   "met": "Kilimani"
+  },
+  {
+   "key": "wafula",
+   "name": "Wafula Simiyu",
+   "role": "vet",
+   "nickname": "Dr Wafula"
+  },
+  {
+   "key": "tabitha",
+   "name": "Tabitha Wairimu",
+   "role": "dog groomer"
+  },
+  {
+   "key": "brenda",
+   "name": "Brenda Achola",
+   "role": "best friend",
+   "starred": true,
+   "cadence": 7,
+   "last_contacted": "2026-09-22T22:00",
+   "met": "university"
+  },
+  {
+   "key": "ian",
+   "name": "Ian Mutua",
+   "role": "friend",
+   "met": "university"
+  },
+  {
+   "key": "naomi",
+   "name": "Naomi Chebet",
+   "role": "friend",
+   "met": "Kisumu"
+  },
+  {
+   "key": "collins",
+   "name": "Collins Wekesa",
+   "role": "mechanic"
+  },
+  {
+   "key": "doreen",
+   "name": "Doreen Nyawira",
+   "role": "dentist"
+  },
+  {
+   "key": "amina",
+   "name": "Amina Yusuf",
+   "role": "friend",
+   "met": "yoga"
+  },
+  {
+   "key": "moses",
+   "name": "Moses Karanja",
+   "role": "printer",
+   "nickname": "Moses Prints"
+  },
+  {
+   "key": "gladys",
+   "name": "Gladys Mbugua",
+   "role": "accountant",
+   "cadence": 60,
+   "last_contacted": "2026-07-28T14:00"
+  },
+  {
+   "key": "old_agent",
+   "name": "Hezekiah Mutiso",
+   "role": "old letting agent",
+   "trashed": "2026-07-15T10:00"
+  },
+  {
+   "key": "old_client",
+   "name": "Rose Wanjala",
+   "role": "old client",
+   "trashed": "2026-09-14T10:00"
+  }
+ ],
+ "groups": [
+  {
+   "key": "riders",
+   "name": "Ngong Road Riders Kitty",
+   "currency": "KES",
+   "members": [
+    "kip",
+    "kevin_m",
+    "mwende",
+    "juma",
+    "nyambura"
+   ],
+   "created": "2026-02-01T08:00"
+  },
+  {
+   "key": "flat",
+   "name": "Kilimani Flat Bills",
+   "currency": "KES",
+   "members": [
+    "wambui"
+   ],
+   "created": "2026-01-05T10:00"
+  },
+  {
+   "key": "diani",
+   "name": "Diani Weekend",
+   "currency": "KES",
+   "members": [
+    "brenda",
+    "ian",
+    "naomi",
+    "amina"
+   ],
+   "created": "2026-08-02T19:00"
+  },
+  {
+   "key": "berlin",
+   "name": "Berlin Build Week",
+   "currency": "EUR",
+   "members": [
+    "lena",
+    "hanna"
+   ],
+   "created": "2026-06-01T10:00"
+  },
+  {
+   "key": "kisumu_fund",
+   "name": "Kisumu Family Fund",
+   "currency": "KES",
+   "members": [
+    "otieno",
+    "akinyi",
+    "aunt_atieno"
+   ],
+   "created": "2026-03-10T20:00"
+  }
+ ],
+ "expenses": [
+  {
+   "group": "riders",
+   "name": "Jersey order deposit",
+   "amount": 42000,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "kip",
+    "kevin_m",
+    "mwende",
+    "juma",
+    "nyambura"
+   ],
+   "date": "2026-08-10"
+  },
+  {
+   "group": "riders",
+   "name": "Race entry fees",
+   "amount": 18000,
+   "paid_by": "kip",
+   "split": [
+    "me",
+    "kip",
+    "kevin_m",
+    "mwende"
+   ],
+   "date": "2026-08-22"
+  },
+  {
+   "group": "riders",
+   "name": "Puncture repair kit",
+   "amount": 6500,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "kevin_m",
+    "juma"
+   ],
+   "date": "2026-09-05"
+  },
+  {
+   "group": "riders",
+   "name": "Post-ride chai and mandazi",
+   "amount": 3600,
+   "paid_by": "juma",
+   "split": [
+    "me",
+    "kip",
+    "kevin_m",
+    "mwende",
+    "juma",
+    "nyambura"
+   ],
+   "date": "2026-09-19"
+  },
+  {
+   "group": "flat",
+   "name": "Wifi September",
+   "amount": 3500,
+   "paid_by": "wambui",
+   "split": [
+    "me",
+    "wambui"
+   ],
+   "date": "2026-09-02"
+  },
+  {
+   "group": "flat",
+   "name": "KPLC tokens",
+   "amount": 2400,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "wambui"
+   ],
+   "date": "2026-09-08"
+  },
+  {
+   "group": "flat",
+   "name": "Water bill",
+   "amount": 1800,
+   "paid_by": "wambui",
+   "split": [
+    "me",
+    "wambui"
+   ],
+   "date": "2026-09-12"
+  },
+  {
+   "group": "diani",
+   "name": "Villa deposit",
+   "amount": 60000,
+   "paid_by": "brenda",
+   "split": [
+    "me",
+    "brenda",
+    "ian",
+    "naomi",
+    "amina"
+   ],
+   "date": "2026-08-04"
+  },
+  {
+   "group": "diani",
+   "name": "Groceries and charcoal",
+   "amount": 9200,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "brenda",
+    "ian"
+   ],
+   "date": "2026-08-28"
+  },
+  {
+   "group": "berlin",
+   "name": "Hostel for the week",
+   "amount": 420,
+   "paid_by": "lena",
+   "split": [
+    "me",
+    "lena",
+    "hanna"
+   ],
+   "date": "2026-06-14"
+  },
+  {
+   "group": "berlin",
+   "name": "Workshop dinner",
+   "amount": 96,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "lena",
+    "hanna"
+   ],
+   "date": "2026-06-16"
+  },
+  {
+   "group": "kisumu_fund",
+   "name": "Baba's hospital bill",
+   "amount": 85000,
+   "paid_by": "otieno",
+   "split": [
+    "me",
+    "otieno",
+    "akinyi"
+   ],
+   "date": "2026-07-02"
+  },
+  {
+   "group": "kisumu_fund",
+   "name": "Roof repair",
+   "amount": 120000,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "otieno",
+    "akinyi",
+    "aunt_atieno"
+   ],
+   "date": "2026-05-20"
+  }
+ ],
+ "lists": [
+  {
+   "key": "karen_list",
+   "name": "Karen Courtyard House",
+   "area": "work"
+  },
+  {
+   "key": "runda_list",
+   "name": "Runda Extension",
+   "area": "work"
+  },
+  {
+   "key": "home_list",
+   "name": "Home",
+   "area": "home"
+  },
+  {
+   "key": "club_list",
+   "name": "Ngong Road Riders",
+   "area": "social"
+  },
+  {
+   "key": "kisumu_list",
+   "name": "Kisumu",
+   "area": "family"
+  }
+ ],
+ "events": [
+  {
+   "key": "ride_0704",
+   "name": "Club ride - Karura",
+   "start": "2026-07-04T06:00",
+   "end": "2026-07-04T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_0711",
+   "name": "Club ride - Karura loop",
+   "start": "2026-07-11T06:00",
+   "end": "2026-07-11T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_0718",
+   "name": "Club ride - Karura",
+   "start": "2026-07-18T06:00",
+   "end": "2026-07-18T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_0725",
+   "name": "Club ride - Karura loop",
+   "start": "2026-07-25T06:00",
+   "end": "2026-07-25T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_0801",
+   "name": "Club ride - Karura",
+   "start": "2026-08-01T06:00",
+   "end": "2026-08-01T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_0808",
+   "name": "Club ride - Ngong Hills",
+   "start": "2026-08-08T06:00",
+   "end": "2026-08-08T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at Ngong Race Course"
+  },
+  {
+   "key": "ride_0815",
+   "name": "Club ride - Karura",
+   "start": "2026-08-15T06:00",
+   "end": "2026-08-15T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": true,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_0822",
+   "name": "Club ride - Karura loop",
+   "start": "2026-08-22T06:00",
+   "end": "2026-08-22T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_0829",
+   "name": "Club ride - Karura",
+   "start": "2026-08-29T06:00",
+   "end": "2026-08-29T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_0905",
+   "name": "Club ride - Karura loop",
+   "start": "2026-09-05T06:00",
+   "end": "2026-09-05T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_0912",
+   "name": "Club ride - Karura",
+   "start": "2026-09-12T06:00",
+   "end": "2026-09-12T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_0919",
+   "name": "Club ride - Ngong Hills",
+   "start": "2026-09-19T06:00",
+   "end": "2026-09-19T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at Ngong Race Course"
+  },
+  {
+   "key": "ride_0926",
+   "name": "Club ride - Karura",
+   "start": "2026-09-26T06:00",
+   "end": "2026-09-26T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_1003",
+   "name": "Club ride - Karura loop",
+   "start": "2026-10-03T06:00",
+   "end": "2026-10-03T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_1010",
+   "name": "Club ride - Karura",
+   "start": "2026-10-10T06:00",
+   "end": "2026-10-10T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_1017",
+   "name": "Club ride - Karura loop",
+   "start": "2026-10-17T06:00",
+   "end": "2026-10-17T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_1024",
+   "name": "Club ride - Karura",
+   "start": "2026-10-24T06:00",
+   "end": "2026-10-24T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at the Karura gate B"
+  },
+  {
+   "key": "ride_1031",
+   "name": "Club ride - Ngong Hills",
+   "start": "2026-10-31T06:00",
+   "end": "2026-10-31T09:00",
+   "attendees": [
+    "kip",
+    "kevin_m"
+   ],
+   "cancelled": false,
+   "description": "meet at Ngong Race Course"
+  },
+  {
+   "key": "karen_site_0818",
+   "name": "Site visit - Karen",
+   "start": "2026-08-18T09:00",
+   "end": "2026-08-18T12:00",
+   "attendees": [
+    "kevin_o",
+    "samuel"
+   ],
+   "cancelled": false
+  },
+  {
+   "key": "karen_site_0825",
+   "name": "Site visit - Karen",
+   "start": "2026-08-25T09:00",
+   "end": "2026-08-25T12:00",
+   "attendees": [
+    "kevin_o",
+    "samuel"
+   ],
+   "cancelled": false
+  },
+  {
+   "key": "karen_site_0901",
+   "name": "Site visit - Karen",
+   "start": "2026-09-01T09:00",
+   "end": "2026-09-01T12:00",
+   "attendees": [
+    "kevin_o",
+    "samuel"
+   ],
+   "cancelled": true
+  },
+  {
+   "key": "karen_site_0908",
+   "name": "Site visit - Karen",
+   "start": "2026-09-08T09:00",
+   "end": "2026-09-08T12:00",
+   "attendees": [
+    "kevin_o",
+    "samuel"
+   ],
+   "cancelled": false
+  },
+  {
+   "key": "karen_site_0915",
+   "name": "Site visit - Karen",
+   "start": "2026-09-15T09:00",
+   "end": "2026-09-15T12:00",
+   "attendees": [
+    "kevin_o",
+    "samuel"
+   ],
+   "cancelled": false
+  },
+  {
+   "key": "karen_site_0922",
+   "name": "Site visit - Karen",
+   "start": "2026-09-22T09:00",
+   "end": "2026-09-22T12:00",
+   "attendees": [
+    "kevin_o",
+    "samuel"
+   ],
+   "cancelled": false
+  },
+  {
+   "key": "karen_site_0929",
+   "name": "Site visit - Karen",
+   "start": "2026-09-29T09:00",
+   "end": "2026-09-29T12:00",
+   "attendees": [
+    "kevin_o",
+    "samuel"
+   ],
+   "cancelled": false
+  },
+  {
+   "key": "runda_site_0820",
+   "name": "Site visit - Runda",
+   "start": "2026-08-20T14:00",
+   "end": "2026-08-20T16:00",
+   "attendees": [
+    "dennis"
+   ]
+  },
+  {
+   "key": "runda_site_0903",
+   "name": "Site visit - Runda",
+   "start": "2026-09-03T14:00",
+   "end": "2026-09-03T16:00",
+   "attendees": [
+    "dennis"
+   ]
+  },
+  {
+   "key": "runda_site_0910",
+   "name": "Site visit - Runda",
+   "start": "2026-09-10T14:00",
+   "end": "2026-09-10T16:00",
+   "attendees": [
+    "dennis"
+   ]
+  },
+  {
+   "key": "runda_site_0917",
+   "name": "Site visit - Runda",
+   "start": "2026-09-17T14:00",
+   "end": "2026-09-17T16:00",
+   "attendees": [
+    "dennis"
+   ]
+  },
+  {
+   "key": "runda_site_0924",
+   "name": "Site visit - Runda",
+   "start": "2026-09-24T14:00",
+   "end": "2026-09-24T16:00",
+   "attendees": [
+    "dennis"
+   ]
+  },
+  {
+   "key": "runda_site_1001",
+   "name": "Site visit - Runda",
+   "start": "2026-10-01T14:00",
+   "end": "2026-10-01T16:00",
+   "attendees": [
+    "dennis"
+   ]
+  },
+  {
+   "key": "vet_vacc",
+   "name": "Vet - Simba vaccination",
+   "start": "2026-09-26T15:00",
+   "end": "2026-09-26T15:30",
+   "attendees": [
+    "wafula"
+   ]
+  },
+  {
+   "key": "vet_check",
+   "name": "Vet - Simba check-up",
+   "start": "2026-08-12T10:00",
+   "end": "2026-08-12T10:30",
+   "attendees": [
+    "wafula"
+   ]
+  },
+  {
+   "key": "vet_followup",
+   "name": "Vet follow-up - Simba ear",
+   "start": "2026-10-08T10:00",
+   "end": "2026-10-08T10:20",
+   "attendees": [
+    "wafula"
+   ]
+  },
+  {
+   "key": "groom",
+   "name": "Simba grooming",
+   "start": "2026-09-27T11:00",
+   "end": "2026-09-27T12:00",
+   "attendees": [
+    "tabitha"
+   ]
+  },
+  {
+   "key": "groom_aug",
+   "name": "Simba grooming",
+   "start": "2026-08-23T11:00",
+   "end": "2026-08-23T12:00",
+   "attendees": [
+    "tabitha"
+   ]
+  },
+  {
+   "key": "client_faith",
+   "name": "Design review - Faith",
+   "start": "2026-09-25T10:00",
+   "end": "2026-09-25T11:30",
+   "attendees": [
+    "faith"
+   ]
+  },
+  {
+   "key": "client_faith2",
+   "name": "Design review - Faith",
+   "start": "2026-09-11T10:00",
+   "end": "2026-09-11T11:30",
+   "attendees": [
+    "faith"
+   ]
+  },
+  {
+   "key": "client_dennis",
+   "name": "Concept meeting - Dennis",
+   "start": "2026-09-30T11:00",
+   "end": "2026-09-30T12:00",
+   "attendees": [
+    "dennis"
+   ]
+  },
+  {
+   "key": "structural",
+   "name": "Structural coordination call",
+   "start": "2026-09-28T09:30",
+   "end": "2026-09-28T10:30",
+   "attendees": [
+    "peter"
+   ]
+  },
+  {
+   "key": "planning",
+   "name": "County planning submission",
+   "start": "2026-10-02T09:00",
+   "end": "2026-10-02T10:00",
+   "attendees": [
+    "mwanaisha"
+   ]
+  },
+  {
+   "key": "qs_review",
+   "name": "BQ review with Samuel",
+   "start": "2026-10-06T13:00",
+   "end": "2026-10-06T14:30",
+   "attendees": [
+    "samuel"
+   ]
+  },
+  {
+   "key": "print_drawings",
+   "name": "Collect printed drawings",
+   "start": "2026-09-24T09:30",
+   "end": "2026-09-24T10:00",
+   "attendees": [
+    "moses"
+   ]
+  },
+  {
+   "key": "dinner_wambs",
+   "name": "Dinner with Wambs",
+   "start": "2026-09-25T19:30",
+   "end": "2026-09-25T21:30",
+   "attendees": [
+    "wambui"
+   ]
+  },
+  {
+   "key": "dinner_brenda",
+   "name": "Dinner with Brenda",
+   "start": "2026-09-18T19:30",
+   "end": "2026-09-18T21:30",
+   "attendees": [
+    "brenda"
+   ]
+  },
+  {
+   "key": "dinner_brenda2",
+   "name": "Dinner with Brenda",
+   "start": "2026-10-09T19:30",
+   "end": "2026-10-09T21:30",
+   "attendees": [
+    "brenda"
+   ],
+   "cancelled": true
+  },
+  {
+   "key": "coffee_kevin",
+   "name": "Coffee with Kevin",
+   "start": "2026-09-26T09:30",
+   "end": "2026-09-26T10:30",
+   "attendees": [
+    "kevin_m"
+   ]
+  },
+  {
+   "key": "yoga",
+   "name": "Yoga at Amina's",
+   "start": "2026-09-24T18:00",
+   "end": "2026-09-24T19:00",
+   "attendees": [
+    "amina"
+   ]
+  },
+  {
+   "key": "yoga_prev",
+   "name": "Yoga at Amina's",
+   "start": "2026-09-17T18:00",
+   "end": "2026-09-17T19:00",
+   "attendees": [
+    "amina"
+   ]
+  },
+  {
+   "key": "ian_bday",
+   "name": "Ian's birthday drinks",
+   "start": "2026-10-03T20:00",
+   "end": "2026-10-03T23:00",
+   "attendees": [
+    "ian",
+    "brenda",
+    "naomi"
+   ]
+  },
+  {
+   "key": "diani_trip",
+   "name": "Diani weekend",
+   "start": "2026-11-06T08:00",
+   "end": "2026-11-08T18:00",
+   "attendees": [
+    "brenda",
+    "ian",
+    "naomi",
+    "amina"
+   ],
+   "description": "SGR to Mombasa then matatu"
+  },
+  {
+   "key": "kisumu_flight",
+   "name": "Flight to Kisumu",
+   "start": "2026-10-22T07:00",
+   "end": "2026-10-22T08:10",
+   "description": "Jambojet"
+  },
+  {
+   "key": "kisumu_back",
+   "name": "Flight back from Kisumu",
+   "start": "2026-10-26T17:00",
+   "end": "2026-10-26T18:10",
+   "description": "Jambojet"
+  },
+  {
+   "key": "baba_bday",
+   "name": "Baba's birthday lunch",
+   "start": "2026-10-24T13:00",
+   "end": "2026-10-24T15:30",
+   "attendees": [
+    "baba",
+    "mama",
+    "akinyi"
+   ],
+   "description": "at home in Milimani"
+  },
+  {
+   "key": "mama_call",
+   "name": "Call with Mama",
+   "start": "2026-09-27T19:00",
+   "end": "2026-09-27T19:30",
+   "attendees": [
+    "mama"
+   ]
+  },
+  {
+   "key": "baba_call",
+   "name": "Call with Baba",
+   "start": "2026-09-20T19:00",
+   "end": "2026-09-20T19:30",
+   "attendees": [
+    "baba"
+   ]
+  },
+  {
+   "key": "otieno_visit",
+   "name": "Otieno in town",
+   "start": "2026-09-19T14:00",
+   "end": "2026-09-19T17:00",
+   "attendees": [
+    "otieno"
+   ]
+  },
+  {
+   "key": "kitty_meeting",
+   "name": "Club committee meeting",
+   "start": "2026-09-29T18:30",
+   "end": "2026-09-29T19:30",
+   "attendees": [
+    "kip",
+    "nyambura",
+    "kevin_m"
+   ],
+   "description": "agree the jersey order"
+  },
+  {
+   "key": "kitty_agm",
+   "name": "Club AGM",
+   "start": "2026-11-14T10:00",
+   "end": "2026-11-14T12:00",
+   "attendees": [
+    "kip",
+    "nyambura",
+    "juma",
+    "mwende"
+   ]
+  },
+  {
+   "key": "race",
+   "name": "Ngong Hills Cycle Challenge",
+   "start": "2026-11-01T07:00",
+   "end": "2026-11-01T13:00",
+   "attendees": [
+    "kip",
+    "kevin_m",
+    "juma"
+   ]
+  },
+  {
+   "key": "mot",
+   "name": "Car service at Collins",
+   "start": "2026-09-30T08:00",
+   "end": "2026-09-30T09:30",
+   "attendees": [
+    "collins"
+   ]
+  },
+  {
+   "key": "dentist",
+   "name": "Dentist check-up",
+   "start": "2026-10-13T08:30",
+   "end": "2026-10-13T09:15",
+   "attendees": [
+    "doreen"
+   ]
+  },
+  {
+   "key": "rent_day",
+   "name": "Meet Salma - lease renewal",
+   "start": "2026-10-05T17:30",
+   "end": "2026-10-05T18:15",
+   "attendees": [
+    "salma"
+   ]
+  },
+  {
+   "key": "tax_meeting",
+   "name": "Tax return with Gladys",
+   "start": "2026-10-14T15:00",
+   "end": "2026-10-14T16:00",
+   "attendees": [
+    "gladys"
+   ]
+  },
+  {
+   "key": "berlin_call",
+   "name": "Berlin follow-up call",
+   "start": "2026-09-29T15:00",
+   "end": "2026-09-29T15:45",
+   "attendees": [
+    "lena",
+    "hanna"
+   ]
+  },
+  {
+   "key": "wedding",
+   "name": "Naomi's wedding - Kisumu",
+   "start": "2026-12-12T11:00",
+   "end": "2026-12-12T18:00",
+   "attendees": [
+    "naomi",
+    "mama"
+   ]
+  },
+  {
+   "key": "old_ride",
+   "name": "Club ride - Karura",
+   "start": "2026-07-25T05:30",
+   "end": "2026-07-25T05:40",
+   "trashed": "2026-08-03T10:00"
+  },
+  {
+   "key": "old_meet",
+   "name": "Meeting with Rose",
+   "start": "2026-08-27T14:00",
+   "end": "2026-08-27T15:00",
+   "attendees": [
+    "old_client"
+   ],
+   "trashed": "2026-09-14T10:30"
+  }
+ ],
+ "tasks": [
+  {
+   "key": "karen",
+   "name": "Karen courtyard house",
+   "list": "karen_list",
+   "priority": 2,
+   "status": "in_progress",
+   "due": "2026-11-30"
+  },
+  {
+   "key": "karen_dwgs",
+   "name": "Issue working drawings",
+   "parent": "karen",
+   "list": "karen_list",
+   "due": "2026-10-09",
+   "priority": 2,
+   "effort": 240
+  },
+  {
+   "key": "karen_roof",
+   "name": "Resolve roof truss detail",
+   "parent": "karen",
+   "list": "karen_list",
+   "due": "2026-09-30",
+   "effort": 90
+  },
+  {
+   "key": "karen_boq",
+   "name": "Check bill of quantities",
+   "parent": "karen",
+   "list": "karen_list",
+   "due": "2026-10-06",
+   "effort": 120
+  },
+  {
+   "key": "karen_tiles",
+   "name": "Choose floor tiles with Faith",
+   "parent": "karen",
+   "list": "karen_list",
+   "due": "2026-09-25",
+   "effort": 60
+  },
+  {
+   "key": "karen_nca",
+   "name": "NCA site inspection booking",
+   "parent": "karen",
+   "list": "karen_list",
+   "completed": "2026-09-02T15:00"
+  },
+  {
+   "key": "karen_pour",
+   "name": "Confirm slab pour date",
+   "parent": "karen",
+   "list": "karen_list",
+   "completed": "2026-08-30T11:00"
+  },
+  {
+   "key": "inv_faith_sep",
+   "name": "Send invoice to Faith",
+   "parent": "karen",
+   "list": "karen_list",
+   "due": "2026-09-25",
+   "priority": 1
+  },
+  {
+   "key": "inv_faith_aug",
+   "name": "Send invoice to Faith",
+   "parent": "karen",
+   "list": "karen_list",
+   "due": "2026-08-25",
+   "completed": "2026-08-26T10:00"
+  },
+  {
+   "key": "inv_faith_c",
+   "name": "Send invoice - Faith C",
+   "list": "karen_list",
+   "due": "2026-09-28"
+  },
+  {
+   "key": "karen_mockup",
+   "name": "Print 1:50 plans for site",
+   "parent": "karen",
+   "list": "karen_list",
+   "due": "2026-09-24",
+   "effort": 20
+  },
+  {
+   "key": "runda",
+   "name": "Runda extension",
+   "list": "runda_list",
+   "priority": 2,
+   "status": "in_progress",
+   "due": "2026-12-15"
+  },
+  {
+   "key": "runda_concept",
+   "name": "Concept sketches for Dennis",
+   "parent": "runda",
+   "list": "runda_list",
+   "due": "2026-09-29",
+   "effort": 180,
+   "priority": 2
+  },
+  {
+   "key": "runda_survey",
+   "name": "Order topographic survey",
+   "parent": "runda",
+   "list": "runda_list",
+   "completed": "2026-08-14T12:00"
+  },
+  {
+   "key": "runda_neighbours",
+   "name": "Get neighbours' consent letters",
+   "parent": "runda",
+   "list": "runda_list",
+   "due": "2026-10-12"
+  },
+  {
+   "key": "runda_submit",
+   "name": "Submit planning application",
+   "parent": "runda",
+   "list": "runda_list",
+   "due": "2026-10-02",
+   "priority": 1
+  },
+  {
+   "key": "runda_inv",
+   "name": "Send invoice to Dennis",
+   "parent": "runda",
+   "list": "runda_list",
+   "due": "2026-09-30"
+  },
+  {
+   "key": "runda_inv_aug",
+   "name": "Send invoice to Dennis",
+   "parent": "runda",
+   "list": "runda_list",
+   "completed": "2026-08-31T09:00",
+   "due": "2026-08-31"
+  },
+  {
+   "key": "rent_sep",
+   "name": "Pay rent",
+   "list": "home_list",
+   "due": "2026-09-05",
+   "completed": "2026-09-04T20:00"
+  },
+  {
+   "key": "rent_aug",
+   "name": "Pay rent",
+   "list": "home_list",
+   "due": "2026-08-05",
+   "completed": "2026-08-05T08:30"
+  },
+  {
+   "key": "rent_oct",
+   "name": "Pay rent",
+   "list": "home_list",
+   "due": "2026-10-05",
+   "priority": 1
+  },
+  {
+   "key": "wifi_pay",
+   "name": "Pay wifi",
+   "list": "home_list",
+   "due": "2026-10-02"
+  },
+  {
+   "key": "kplc",
+   "name": "Buy KPLC tokens",
+   "list": "home_list",
+   "due": "2026-09-26",
+   "effort": 5
+  },
+  {
+   "key": "vacc_task",
+   "name": "Book Simba's vaccination",
+   "list": "home_list",
+   "completed": "2026-09-10T18:00"
+  },
+  {
+   "key": "vacc_cert",
+   "name": "Get Simba's vaccination certificate",
+   "list": "home_list",
+   "due": "2026-09-30"
+  },
+  {
+   "key": "dog_food",
+   "name": "Buy dog food - 20kg bag",
+   "list": "home_list",
+   "due": "2026-09-27",
+   "effort": 30
+  },
+  {
+   "key": "dog_food_old",
+   "name": "Buy dog food",
+   "list": "home_list",
+   "completed": "2026-09-01T17:00"
+  },
+  {
+   "key": "dog_tag",
+   "name": "Order new tag for Simba",
+   "list": "home_list",
+   "due": "2026-10-10"
+  },
+  {
+   "key": "flat_fix",
+   "name": "Fix kitchen tap",
+   "list": "home_list",
+   "due": "2026-09-30",
+   "effort": 45
+  },
+  {
+   "key": "gas",
+   "name": "Refill gas cylinder",
+   "list": "home_list",
+   "due": "2026-09-28",
+   "effort": 20
+  },
+  {
+   "key": "mpesa_float",
+   "name": "Top up M-Pesa float",
+   "list": "home_list",
+   "due": "2026-09-24"
+  },
+  {
+   "key": "car_serv",
+   "name": "Book car service",
+   "list": "home_list",
+   "completed": "2026-09-15T12:00"
+  },
+  {
+   "key": "insurance",
+   "name": "Renew car insurance",
+   "list": "home_list",
+   "due": "2026-10-20",
+   "effort": 30
+  },
+  {
+   "key": "tax_return",
+   "name": "File KRA tax return",
+   "list": "home_list",
+   "due": "2026-10-14",
+   "priority": 2,
+   "effort": 120
+  },
+  {
+   "key": "tax_docs",
+   "name": "Gather receipts for tax",
+   "list": "home_list",
+   "due": "2026-10-10",
+   "effort": 60
+  },
+  {
+   "key": "gym",
+   "name": "Renew gym membership",
+   "list": "home_list",
+   "due": "2026-10-01"
+  },
+  {
+   "key": "kit_order",
+   "name": "Chase jersey order",
+   "list": "club_list",
+   "due": "2026-09-26",
+   "priority": 1
+  },
+  {
+   "key": "kit_sizes",
+   "name": "Collect jersey sizes",
+   "list": "club_list",
+   "completed": "2026-08-12T20:00"
+  },
+  {
+   "key": "kitty_report",
+   "name": "Update the kitty spreadsheet",
+   "list": "club_list",
+   "due": "2026-09-27",
+   "effort": 30
+  },
+  {
+   "key": "kitty_dues",
+   "name": "Collect club dues",
+   "list": "club_list",
+   "due": "2026-09-30",
+   "priority": 2
+  },
+  {
+   "key": "kitty_dues_aug",
+   "name": "Collect club dues",
+   "list": "club_list",
+   "due": "2026-08-31",
+   "completed": "2026-09-03T18:00"
+  },
+  {
+   "key": "race_reg",
+   "name": "Register riders for the challenge",
+   "list": "club_list",
+   "due": "2026-10-10"
+  },
+  {
+   "key": "kitty_receipts",
+   "name": "Photograph kitty receipts",
+   "list": "club_list"
+  },
+  {
+   "key": "agm_agenda",
+   "name": "Draft AGM agenda",
+   "list": "club_list",
+   "due": "2026-11-01"
+  },
+  {
+   "key": "bike_service",
+   "name": "Service my bike",
+   "list": "club_list",
+   "due": "2026-09-29",
+   "effort": 90
+  },
+  {
+   "key": "baba_gift",
+   "name": "Birthday present for Baba",
+   "list": "kisumu_list",
+   "due": "2026-10-20"
+  },
+  {
+   "key": "mama_meds",
+   "name": "Send Mama money for meds",
+   "list": "kisumu_list",
+   "due": "2026-09-25"
+  },
+  {
+   "key": "book_flight",
+   "name": "Book Kisumu flights",
+   "list": "kisumu_list",
+   "completed": "2026-09-01T21:00"
+  },
+  {
+   "key": "roof_quote",
+   "name": "Get second roof quote",
+   "list": "kisumu_list",
+   "due": "2026-10-01"
+  },
+  {
+   "key": "kisumu_wifi_task",
+   "name": "Sort wifi at the Kisumu house",
+   "list": "kisumu_list",
+   "status": "cancelled"
+  },
+  {
+   "key": "berlin_reimb",
+   "name": "Reimburse Lena for hostel",
+   "due": "2026-09-30",
+   "priority": 1
+  },
+  {
+   "key": "berlin_photos",
+   "name": "Send Hanna the workshop photos",
+   "due": "2026-09-26",
+   "effort": 10
+  },
+  {
+   "key": "chai_pay",
+   "name": "Pay Juma for chai",
+   "due": "2026-09-24"
+  },
+  {
+   "key": "print_fee",
+   "name": "Pay Moses for prints",
+   "due": "2026-09-24",
+   "effort": 5
+  },
+  {
+   "key": "diani_pack",
+   "name": "Diani packing list",
+   "due": "2026-11-04"
+  },
+  {
+   "key": "naomi_gift",
+   "name": "Wedding gift for Naomi",
+   "due": "2026-11-30"
+  },
+  {
+   "key": "old_ar",
+   "name": "Chase Rose for final payment",
+   "trashed": "2026-09-14T10:15"
+  },
+  {
+   "key": "old_flat",
+   "name": "Find a bigger flat",
+   "trashed": "2026-07-20T10:00"
+  }
+ ],
+ "notebooks": [
+  {
+   "key": "site_nb",
+   "name": "Site Notes"
+  },
+  {
+   "key": "club_nb",
+   "name": "Riders Notes"
+  },
+  {
+   "key": "simba_nb",
+   "name": "Simba Health"
+  },
+  {
+   "key": "kitchen_nb",
+   "name": "Kitchen"
+  }
+ ],
+ "notes": [
+  {
+   "key": "karen_site1",
+   "name": "Karen site meeting 18 Aug",
+   "notebook": "site_nb",
+   "created": "2026-08-18T13:00",
+   "body": "foundation trench depth approved, Kevin to pour blinding Friday, Samuel flagged the steel price"
+  },
+  {
+   "key": "karen_site2",
+   "name": "Karen site meeting 8 Sep",
+   "notebook": "site_nb",
+   "created": "2026-09-08T13:00",
+   "body": "columns done to first lift, rain delayed the slab, Faith wants a deeper veranda"
+  },
+  {
+   "key": "karen_site3",
+   "name": "Karen site meeting 22 Sep",
+   "notebook": "site_nb",
+   "created": "2026-09-22T13:10",
+   "body": "roof truss clash with the chimney, Peter to revise, tiles shortlist ready"
+  },
+  {
+   "key": "runda_site1",
+   "name": "Runda site notes 10 Sep",
+   "notebook": "site_nb",
+   "created": "2026-09-10T16:30",
+   "body": "boundary wall leans 4cm, Dennis wants a rooftop deck, survey pegs missing at the north corner"
+  },
+  {
+   "key": "steel_prices",
+   "name": "Steel prices compared",
+   "notebook": "site_nb",
+   "created": "2026-08-20T10:00",
+   "body": "Devki 128 per kg, Mabati 121 per kg, local fundi 118 per kg without receipt"
+  },
+  {
+   "key": "planning_checklist",
+   "name": "Planning submission checklist",
+   "notebook": "site_nb",
+   "created": "2026-09-14T09:00",
+   "pinned": true,
+   "body": "site plan, floor plans, sections, structural letter, neighbour consents, NCA fee receipt"
+  },
+  {
+   "key": "club_rules",
+   "name": "Club rules",
+   "notebook": "club_nb",
+   "created": "2026-02-02T09:00",
+   "pinned": true,
+   "body": "helmets always, no earphones, wait at the top, dues are 1500 a month"
+  },
+  {
+   "key": "club_routes",
+   "name": "Route notes",
+   "notebook": "club_nb",
+   "created": "2026-03-14T19:00",
+   "body": "Karura is 32km with two climbs, the loop skips the river crossing, Ngong Hills is 58km"
+  },
+  {
+   "key": "club_kit",
+   "name": "Jersey design feedback",
+   "notebook": "club_nb",
+   "created": "2026-08-09T20:00",
+   "body": "green and black, Kip wants the logo on the sleeve, Mwende wants a women's cut"
+  },
+  {
+   "key": "kitty_rules",
+   "name": "Kitty rules",
+   "notebook": "club_nb",
+   "created": "2026-02-03T09:00",
+   "body": "receipts for anything over 500, two signatures for withdrawals, balance read out at the AGM"
+  },
+  {
+   "key": "simba_vacc",
+   "name": "Simba vaccinations",
+   "notebook": "simba_nb",
+   "created": "2026-01-20T10:00",
+   "body": "rabies due September, DHPP booster due March, kennel cough in June"
+  },
+  {
+   "key": "simba_food",
+   "name": "Simba food and allergies",
+   "notebook": "simba_nb",
+   "created": "2026-02-12T18:00",
+   "pinned": true,
+   "body": "no chicken, fish based kibble, small treats only, wets his bed if he eats beef"
+  },
+  {
+   "key": "simba_vet",
+   "name": "Dr Wafula's advice",
+   "notebook": "simba_nb",
+   "created": "2026-08-12T11:00",
+   "body": "ear drops twice a day for ten days, clean with saline, recheck in two months"
+  },
+  {
+   "key": "tap_notes",
+   "name": "Kitchen tap problem",
+   "notebook": "kitchen_nb",
+   "created": "2026-09-01T08:00",
+   "body": "drips at the base, washer or cartridge, ask Salma before calling a plumber"
+  },
+  {
+   "key": "pilau",
+   "name": "Mama's pilau",
+   "notebook": "kitchen_nb",
+   "created": "2026-04-05T15:00",
+   "body": "pilau masala, beef on the bone, rice last, cumin first, onions deep brown"
+  },
+  {
+   "key": "ugali_fish",
+   "name": "Tilapia and ugali",
+   "notebook": "kitchen_nb",
+   "created": "2026-05-30T18:00",
+   "body": "whole tilapia fried crisp, kachumbari, ugali with cassava flour mix"
+  },
+  {
+   "key": "chapati",
+   "name": "Chapati",
+   "notebook": "kitchen_nb",
+   "created": "2026-06-21T12:00",
+   "body": "flour, warm water, oil, rest an hour, fold three times"
+  },
+  {
+   "key": "diary_tough",
+   "name": "Diary entry - rough site day",
+   "created": "2026-09-08T21:30",
+   "body": "rain stopped the slab, Faith called twice, ate nothing till four"
+  },
+  {
+   "key": "diary_good",
+   "name": "Diary entry - good ride",
+   "created": "2026-09-19T10:30",
+   "body": "Karura at sunrise, new personal best on the climb, chai with Kevin"
+  },
+  {
+   "key": "berlin_notes",
+   "name": "Berlin Build Week takeaways",
+   "created": "2026-06-18T22:00",
+   "body": "timber hybrids, passive cooling, check CLT suppliers for Karen"
+  },
+  {
+   "key": "gift_ideas",
+   "name": "Baba birthday ideas",
+   "created": "2026-09-05T20:00",
+   "body": "reading glasses, a radio for the veranda, kikoi shirt"
+  },
+  {
+   "key": "kisumu_house",
+   "name": "Kisumu house repairs",
+   "created": "2026-05-18T19:00",
+   "body": "roof leaks over the back room, gutters, wifi router in the sitting room"
+  },
+  {
+   "key": "car_details",
+   "name": "Car reg and tyre pressures",
+   "created": "2026-01-10T12:00",
+   "body": "KDG 412F, 32 psi front, 30 psi rear, oil change every 5000 km"
+  },
+  {
+   "key": "fee_schedule",
+   "name": "My fee schedule",
+   "created": "2026-01-08T09:00",
+   "body": "concept 10 percent, working drawings 40 percent, site supervision 15 percent"
+  },
+  {
+   "key": "old_idea",
+   "name": "Old idea - container cafe",
+   "created": "2026-03-01T10:00",
+   "body": "shipping container cafe near Karura gate",
+   "trashed": "2026-07-30T10:00"
+  },
+  {
+   "key": "old_todo",
+   "name": "Scratch list",
+   "created": "2026-09-01T10:00",
+   "body": "milk, bread, sugar",
+   "trashed": "2026-09-12T10:00"
+  }
+ ],
+ "folders": [
+  {
+   "key": "contracts_f",
+   "name": "Contracts"
+  },
+  {
+   "key": "invoices_f",
+   "name": "Invoices"
+  },
+  {
+   "key": "permits_f",
+   "name": "Permits"
+  },
+  {
+   "key": "club_f",
+   "name": "Club"
+  },
+  {
+   "key": "family_f",
+   "name": "Family"
+  },
+  {
+   "key": "archive_f",
+   "name": "Archive"
+  }
+ ],
+ "documents": [
+  {
+   "key": "karen_contract",
+   "name": "Karen house design contract",
+   "folder": "contracts_f",
+   "created": "2026-05-10T10:00",
+   "starred": true
+  },
+  {
+   "key": "runda_contract",
+   "name": "Runda extension design contract",
+   "folder": "contracts_f",
+   "created": "2026-07-20T10:00"
+  },
+  {
+   "key": "lease",
+   "name": "Kilimani flat lease",
+   "folder": "contracts_f",
+   "created": "2026-01-05T11:00",
+   "starred": true
+  },
+  {
+   "key": "inv_karen_aug",
+   "name": "Invoice 2026-014 Karen August",
+   "folder": "invoices_f",
+   "created": "2026-08-26T10:00"
+  },
+  {
+   "key": "inv_karen_jul",
+   "name": "Invoice 2026-011 Karen July",
+   "folder": "invoices_f",
+   "created": "2026-07-27T10:00"
+  },
+  {
+   "key": "inv_runda_aug",
+   "name": "Invoice 2026-015 Runda August",
+   "folder": "invoices_f",
+   "created": "2026-08-31T10:00"
+  },
+  {
+   "key": "nca_cert",
+   "name": "NCA registration certificate",
+   "folder": "permits_f",
+   "created": "2026-02-14T10:00"
+  },
+  {
+   "key": "county_approval",
+   "name": "County approval - Karen",
+   "folder": "permits_f",
+   "created": "2026-04-30T10:00",
+   "starred": true
+  },
+  {
+   "key": "runda_survey_doc",
+   "name": "Runda topographic survey",
+   "folder": "permits_f",
+   "created": "2026-08-30T10:00"
+  },
+  {
+   "key": "club_constitution",
+   "name": "Club constitution",
+   "folder": "club_f",
+   "created": "2026-02-01T09:00"
+  },
+  {
+   "key": "club_budget",
+   "name": "Club budget 2026",
+   "folder": "club_f",
+   "created": "2026-02-05T09:00"
+  },
+  {
+   "key": "jersey_quote",
+   "name": "Jersey quote - Moses Prints",
+   "folder": "club_f",
+   "created": "2026-08-08T12:00"
+  },
+  {
+   "key": "land_title",
+   "name": "Kisumu land title copy",
+   "folder": "family_f",
+   "created": "2026-03-12T10:00",
+   "starred": true
+  },
+  {
+   "key": "baba_nhif",
+   "name": "Baba's insurance card scan",
+   "folder": "family_f",
+   "created": "2026-07-03T10:00"
+  },
+  {
+   "key": "passport_scan",
+   "name": "Passport scan",
+   "created": "2026-01-10T10:00"
+  },
+  {
+   "key": "kra_cert",
+   "name": "KRA PIN certificate",
+   "created": "2026-01-10T10:05"
+  },
+  {
+   "key": "simba_cert",
+   "name": "Simba vaccination certificate 2025",
+   "created": "2025-10-01T10:00",
+   "folder": "family_f"
+  },
+  {
+   "key": "old_contract",
+   "name": "Old Rose Wanjala contract",
+   "folder": "archive_f",
+   "created": "2025-11-01T10:00",
+   "trashed": "2026-09-14T10:20"
+  },
+  {
+   "key": "old_quote",
+   "name": "Old quote template",
+   "folder": "archive_f",
+   "created": "2025-10-01T10:00",
+   "trashed": "2026-07-01T10:00"
+  }
+ ],
+ "albums": [
+  {
+   "key": "simba_album",
+   "name": "Simba"
+  },
+  {
+   "key": "rides_album",
+   "name": "Club Rides"
+  },
+  {
+   "key": "site_album",
+   "name": "Karen Site Progress"
+  },
+  {
+   "key": "kisumu_album",
+   "name": "Kisumu December"
+  }
+ ],
+ "photos": [
+  {
+   "key": "p_simba_pup",
+   "name": "Simba as a puppy",
+   "taken": "2025-03-02T10:00",
+   "albums": [
+    "simba_album"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_simba_beach",
+   "name": "Simba at the Diani beach",
+   "taken": "2026-02-14T16:00",
+   "albums": [
+    "simba_album"
+   ],
+   "people": [
+    "brenda"
+   ]
+  },
+  {
+   "key": "p_simba_sofa",
+   "name": "Simba on my sofa",
+   "taken": "2026-08-09T20:00",
+   "albums": [
+    "simba_album"
+   ],
+   "people": [
+    "wambui"
+   ]
+  },
+  {
+   "key": "p_simba_vet",
+   "name": "Simba at the vet",
+   "taken": "2026-08-12T10:10",
+   "albums": [
+    "simba_album"
+   ]
+  },
+  {
+   "key": "p_simba_karura",
+   "name": "Simba in Karura",
+   "taken": "2026-09-13T07:30",
+   "albums": [
+    "simba_album"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_simba_groom",
+   "name": "Simba after grooming",
+   "taken": "2026-08-23T12:10",
+   "albums": [
+    "simba_album"
+   ]
+  },
+  {
+   "key": "p_ride_sunrise",
+   "name": "Sunrise on the Karura ride",
+   "taken": "2026-09-19T06:30",
+   "albums": [
+    "rides_album"
+   ],
+   "people": [
+    "kip",
+    "kevin_m"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_ride_group",
+   "name": "Group photo at the gate",
+   "taken": "2026-09-12T06:05",
+   "albums": [
+    "rides_album"
+   ],
+   "people": [
+    "kip",
+    "kevin_m",
+    "mwende",
+    "juma",
+    "nyambura"
+   ]
+  },
+  {
+   "key": "p_ride_ngong",
+   "name": "Ngong Hills summit",
+   "taken": "2026-08-08T08:15",
+   "albums": [
+    "rides_album"
+   ],
+   "people": [
+    "kip",
+    "juma"
+   ]
+  },
+  {
+   "key": "p_ride_flat",
+   "name": "Puncture on Karura Road",
+   "taken": "2026-09-05T07:10",
+   "albums": [
+    "rides_album"
+   ],
+   "people": [
+    "kevin_m"
+   ]
+  },
+  {
+   "key": "p_ride_chai",
+   "name": "Chai after the ride",
+   "taken": "2026-09-19T09:20",
+   "albums": [
+    "rides_album"
+   ],
+   "people": [
+    "juma",
+    "mwende"
+   ]
+  },
+  {
+   "key": "p_ride_jersey",
+   "name": "Jersey mockup",
+   "taken": "2026-08-09T19:00",
+   "albums": [
+    "rides_album"
+   ]
+  },
+  {
+   "key": "p_site_slab",
+   "name": "Karen slab shuttering",
+   "taken": "2026-09-08T10:30",
+   "albums": [
+    "site_album"
+   ],
+   "people": [
+    "kevin_o"
+   ]
+  },
+  {
+   "key": "p_site_cols",
+   "name": "Karen columns first lift",
+   "taken": "2026-09-01T10:00",
+   "albums": [
+    "site_album"
+   ]
+  },
+  {
+   "key": "p_site_trench",
+   "name": "Karen foundation trench",
+   "taken": "2026-08-18T10:00",
+   "albums": [
+    "site_album"
+   ],
+   "people": [
+    "kevin_o",
+    "samuel"
+   ]
+  },
+  {
+   "key": "p_site_rain",
+   "name": "Karen site after the rain",
+   "taken": "2026-09-08T12:00",
+   "albums": [
+    "site_album"
+   ]
+  },
+  {
+   "key": "p_site_truss",
+   "name": "Truss clash with the chimney",
+   "taken": "2026-09-22T11:20",
+   "albums": [
+    "site_album"
+   ],
+   "people": [
+    "peter"
+   ]
+  },
+  {
+   "key": "p_site_visit",
+   "name": "Faith on site",
+   "taken": "2026-09-15T11:00",
+   "albums": [
+    "site_album"
+   ],
+   "people": [
+    "faith"
+   ]
+  },
+  {
+   "key": "p_kisumu_lake",
+   "name": "Lake Victoria at sunset",
+   "taken": "2025-12-27T18:30",
+   "albums": [
+    "kisumu_album"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_kisumu_family",
+   "name": "Family at Baba's table",
+   "taken": "2025-12-25T14:00",
+   "albums": [
+    "kisumu_album"
+   ],
+   "people": [
+    "baba",
+    "mama",
+    "akinyi",
+    "otieno"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_kisumu_mama",
+   "name": "Mama cooking pilau",
+   "taken": "2025-12-25T11:00",
+   "albums": [
+    "kisumu_album"
+   ],
+   "people": [
+    "mama"
+   ]
+  },
+  {
+   "key": "p_kisumu_baba",
+   "name": "Baba on the veranda",
+   "taken": "2025-12-28T09:00",
+   "albums": [
+    "kisumu_album"
+   ],
+   "people": [
+    "baba"
+   ]
+  },
+  {
+   "key": "p_kisumu_market",
+   "name": "Kibuye market",
+   "taken": "2025-12-29T10:00",
+   "albums": [
+    "kisumu_album"
+   ]
+  },
+  {
+   "key": "p_kisumu_roof",
+   "name": "The leaking roof",
+   "taken": "2025-12-30T15:00",
+   "albums": [
+    "kisumu_album"
+   ]
+  },
+  {
+   "key": "p_berlin",
+   "name": "Berlin workshop group",
+   "taken": "2026-06-16T14:00",
+   "people": [
+    "lena",
+    "hanna"
+   ]
+  },
+  {
+   "key": "p_berlin_dinner",
+   "name": "Workshop dinner",
+   "taken": "2026-06-16T21:00",
+   "people": [
+    "lena",
+    "hanna"
+   ]
+  },
+  {
+   "key": "p_diani_villa",
+   "name": "Diani villa",
+   "taken": "2026-02-13T14:00",
+   "people": [
+    "brenda",
+    "ian"
+   ]
+  },
+  {
+   "key": "p_brenda",
+   "name": "Brenda and me",
+   "taken": "2026-07-04T19:00",
+   "people": [
+    "brenda"
+   ]
+  },
+  {
+   "key": "p_flat_view",
+   "name": "View from the Kilimani balcony",
+   "taken": "2026-05-21T06:15"
+  },
+  {
+   "key": "p_sketch",
+   "name": "Courtyard sketch",
+   "taken": "2026-04-12T21:00"
+  },
+  {
+   "key": "p_drawing_set",
+   "name": "Printed drawing set",
+   "taken": "2026-09-24T10:00"
+  },
+  {
+   "key": "p_wambs",
+   "name": "Wambs birthday",
+   "taken": "2026-03-21T21:00",
+   "people": [
+    "wambui"
+   ]
+  },
+  {
+   "key": "p_amina",
+   "name": "Yoga on the lawn",
+   "taken": "2026-07-19T08:00",
+   "people": [
+    "amina"
+   ]
+  },
+  {
+   "key": "p_blurry",
+   "name": "Blurry photo",
+   "taken": "2026-09-02T09:00",
+   "trashed": "2026-09-09T09:00"
+  },
+  {
+   "key": "p_receipt",
+   "name": "Screenshot of receipt",
+   "taken": "2026-06-02T12:00",
+   "trashed": "2026-07-03T09:00"
+  }
+ ],
+ "debts": [
+  {
+   "key": "d_juma_chai",
+   "person": "juma",
+   "direction": "owes_me",
+   "amount": 600,
+   "name": "chai and mandazi",
+   "date": "2026-09-19"
+  },
+  {
+   "key": "d_kevin_m",
+   "person": "kevin_m",
+   "direction": "owes_me",
+   "amount": 1500,
+   "name": "puncture kit share",
+   "date": "2026-09-05"
+  },
+  {
+   "key": "d_kip",
+   "person": "kip",
+   "direction": "i_owe",
+   "amount": 3000,
+   "name": "race entry",
+   "date": "2026-08-22"
+  },
+  {
+   "key": "d_wambui_wifi",
+   "person": "wambui",
+   "direction": "i_owe",
+   "amount": 1750,
+   "name": "wifi half",
+   "date": "2026-09-02"
+  },
+  {
+   "key": "d_wambui_tokens",
+   "person": "wambui",
+   "direction": "owes_me",
+   "amount": 1200,
+   "name": "KPLC tokens half",
+   "date": "2026-09-08"
+  },
+  {
+   "key": "d_brenda",
+   "person": "brenda",
+   "direction": "i_owe",
+   "amount": 12000,
+   "name": "Diani villa deposit share",
+   "date": "2026-08-04"
+  },
+  {
+   "key": "d_lena",
+   "person": "lena",
+   "direction": "i_owe",
+   "amount": 14000,
+   "name": "Berlin hostel in shillings",
+   "date": "2026-06-14"
+  },
+  {
+   "key": "d_otieno",
+   "person": "otieno",
+   "direction": "i_owe",
+   "amount": 28000,
+   "name": "Baba's hospital share",
+   "date": "2026-07-02"
+  },
+  {
+   "key": "d_moses",
+   "person": "moses",
+   "direction": "i_owe",
+   "amount": 4500,
+   "name": "drawing prints",
+   "date": "2026-09-23"
+  },
+  {
+   "key": "d_collins",
+   "person": "collins",
+   "direction": "i_owe",
+   "amount": 8500,
+   "name": "brake pads",
+   "date": "2026-07-18",
+   "settled": "2026-07-20T10:00"
+  },
+  {
+   "key": "d_ian",
+   "person": "ian",
+   "direction": "owes_me",
+   "amount": 2500,
+   "name": "cinema tickets",
+   "date": "2026-08-14",
+   "settled": "2026-08-20T10:00"
+  },
+  {
+   "key": "d_naomi",
+   "person": "naomi",
+   "direction": "owes_me",
+   "amount": 5000,
+   "name": "bus fare to Kisumu",
+   "date": "2026-07-25"
+  },
+  {
+   "key": "d_amina",
+   "person": "amina",
+   "direction": "i_owe",
+   "amount": 1000,
+   "name": "yoga mat",
+   "date": "2026-07-19",
+   "settled": "2026-07-21T10:00"
+  }
+ ],
+ "locker": [
+  {
+   "key": "equity_login",
+   "name": "Equity Bank online",
+   "type": "login",
+   "username": "achieng.odhiambo",
+   "url": "https://equitybank.co.ke",
+   "password": "Kilimani#Simba22",
+   "starred": true
+  },
+  {
+   "key": "kra_login",
+   "name": "KRA iTax",
+   "type": "login",
+   "username": "A001234567Z",
+   "url": "https://itax.kra.go.ke",
+   "password": "TaxSeason!2026"
+  },
+  {
+   "key": "archicad_login",
+   "name": "Graphisoft account",
+   "type": "login",
+   "username": "achieng@odhiambo.co.ke",
+   "url": "https://graphisoft.com",
+   "password": "ArchiCad-Karen9"
+  },
+  {
+   "key": "kcb_card",
+   "name": "KCB debit card",
+   "type": "card",
+   "card_number": "4532015112830366",
+   "cvv": "731"
+  },
+  {
+   "key": "equity_acct",
+   "name": "Equity current account",
+   "type": "bank_account",
+   "notes": "branch Kilimani, account 0120199834521",
+   "starred": true
+  },
+  {
+   "key": "flat_wifi",
+   "name": "Flat wifi",
+   "type": "wifi",
+   "password": "SimbaTheDog#1",
+   "starred": true
+  },
+  {
+   "key": "kisumu_wifi",
+   "name": "Kisumu house wifi",
+   "type": "wifi",
+   "password": "Milimani2026"
+  },
+  {
+   "key": "gate_code",
+   "name": "Flat gate code",
+   "type": "note",
+   "notes": "4417*"
+  },
+  {
+   "key": "mpesa_pin",
+   "name": "M-Pesa app",
+   "type": "password",
+   "password": "NairobiRider88"
+  },
+  {
+   "key": "national_id",
+   "name": "National ID",
+   "type": "identity"
+  },
+  {
+   "key": "passport",
+   "name": "Passport - Achieng",
+   "type": "passport",
+   "notes": "no. A1234567, expires 2031-03-02"
+  },
+  {
+   "key": "licence",
+   "name": "Driving licence",
+   "type": "driving_licence",
+   "notes": "DL 2019 884 123"
+  },
+  {
+   "key": "club_member",
+   "name": "Ngong Road Riders membership",
+   "type": "membership",
+   "notes": "member 0042, dues paid to December"
+  },
+  {
+   "key": "maps_api",
+   "name": "Maps API key",
+   "type": "api_credential",
+   "notes": "for the site tracker script"
+  },
+  {
+   "key": "nas_ssh",
+   "name": "Office NAS SSH key",
+   "type": "ssh_key",
+   "notes": "drawings server in the spare room"
+  },
+  {
+   "key": "archicad_licence",
+   "name": "Archicad licence",
+   "type": "software_licence",
+   "notes": "annual, renews 1 March",
+   "starred": true
+  },
+  {
+   "key": "btc_wallet",
+   "name": "Crypto wallet",
+   "type": "crypto_wallet",
+   "notes": "small, about 8000 shillings"
+  },
+  {
+   "key": "land_title_copy",
+   "name": "Land title - Kisumu",
+   "type": "document",
+   "notes": "original with Baba, certified copy in the family folder"
+  },
+  {
+   "key": "old_wifi",
+   "name": "Old flat wifi",
+   "type": "wifi",
+   "password": "Lavington2025",
+   "trashed": "2026-07-10T10:00"
+  },
+  {
+   "key": "old_login",
+   "name": "Old Safaricom login",
+   "type": "login",
+   "username": "achie254",
+   "password": "OldSim99",
+   "trashed": "2026-09-15T10:00"
+  }
+ ],
+ "links": [
+  {
+   "from": "karen_tiles",
+   "to": "faith"
+  },
+  {
+   "from": "inv_faith_sep",
+   "to": "faith"
+  },
+  {
+   "from": "inv_faith_aug",
+   "to": "faith"
+  },
+  {
+   "from": "inv_faith_c",
+   "to": "faith"
+  },
+  {
+   "from": "karen_roof",
+   "to": "peter"
+  },
+  {
+   "from": "karen_boq",
+   "to": "samuel"
+  },
+  {
+   "from": "runda_concept",
+   "to": "dennis"
+  },
+  {
+   "from": "runda_inv",
+   "to": "dennis"
+  },
+  {
+   "from": "runda_submit",
+   "to": "mwanaisha"
+  },
+  {
+   "from": "karen_mockup",
+   "to": "moses"
+  },
+  {
+   "from": "print_fee",
+   "to": "moses"
+  },
+  {
+   "from": "kit_order",
+   "to": "kip"
+  },
+  {
+   "from": "kitty_dues",
+   "to": "nyambura"
+  },
+  {
+   "from": "chai_pay",
+   "to": "juma"
+  },
+  {
+   "from": "baba_gift",
+   "to": "baba"
+  },
+  {
+   "from": "mama_meds",
+   "to": "mama"
+  },
+  {
+   "from": "berlin_reimb",
+   "to": "lena"
+  },
+  {
+   "from": "berlin_photos",
+   "to": "hanna"
+  },
+  {
+   "from": "vacc_task",
+   "to": "wafula"
+  },
+  {
+   "from": "vacc_cert",
+   "to": "wafula"
+  },
+  {
+   "from": "car_serv",
+   "to": "collins"
+  },
+  {
+   "from": "naomi_gift",
+   "to": "naomi"
+  },
+  {
+   "from": "simba_vet",
+   "to": "wafula"
+  },
+  {
+   "from": "karen_site2",
+   "to": "faith"
+  },
+  {
+   "from": "runda_site1",
+   "to": "dennis"
+  },
+  {
+   "from": "club_kit",
+   "to": "kip"
+  },
+  {
+   "from": "gift_ideas",
+   "to": "baba"
+  },
+  {
+   "from": "pilau",
+   "to": "mama"
+  }
+ ]
+}

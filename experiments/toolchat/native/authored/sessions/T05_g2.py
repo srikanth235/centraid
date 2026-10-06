@@ -32,17 +32,6 @@ S("T05-117", "ask event edit description cataract already-so star",
   T("star the amma biometry scan", diff(already=["amma_scan"]),
     ref=[act("star", kind="document", name="Amma biometry scan"), ans(rows="$amma_scan")]))
 
-S("T05-118", "ask document delete never_mind reopen star",
-  T("delete the scan", ask("amma_scan", "aadhaar", "pan"),
-    ref=[act("delete", kind="document", name="scan"),
-         askc("the amma biometry scan, the aadhaar scan or the pan card scan?", options="$amma_scan, $aadhaar, $pan")]),
-  T("scratch that, they're all needed", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("reopen the flowers one, i never got them because the shop was shut all day", diff(upd("flowers_2", status="open", completed=None)),
-    ref=[act("reopen", kind="task", name="flowers", where='status = "completed"')]),
-  T("star the payslip", diff(upd("payslip_dec", starred=True)),
-    ref=[act("star", kind="document", name="Payslip")]))
-
 S("T05-119", "wifi read reveal star",
   T("what's the wifi password", rows("wifi"),
     ref=[ans(kind="locker item", name="wifi")]),
@@ -72,16 +61,6 @@ S("T05-121", "balance appa nickname settle debt negative",
     ref=[ans(op="balance", rows="$appa")]),
   T("bring back the cows duplicate photo, it's got a better crop", diff(restore("dup_cows")),
     ref=[find(kind="photo", name="Cows duplicate", trashed=True), act("restore", rows="@prev")]))
-
-S("T05-122", "balance mama nickname create undo never_mind",
-  T("where do i stand with ramesh mama", val((-2000, "INR")),
-    ref=[search("ramesh mama", kind="person"), ans(op="balance", rows="$ramesh_mama")]),
-  T("remind me to pay him on friday", diff(new("task", name=has("Ramesh"), date="2026-01-23")),
-    ref=[act("create", args=lines(kind="task", name="Pay Ramesh mama", date=U("week", 0, weekday=5)))]),
-  T("don't bother, i'll do it when i see him", diff(trash("+1")),
-    ref=[act("undo")]),
-  T("how many people owe me money right now", val(5),
-    ref=[ans(op="count", kind="debt", where='direction = "owes_me" and status = "open"')]))
 
 S("T05-123", "balance arjun suresh group cricket",
   T("how much does arjun owe me", val((1500, "INR")),

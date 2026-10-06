@@ -90,12 +90,8 @@ S("T09-128", "ask cancel planning call next weekend",
     ref=[act("reschedule", kind="event", name="Cake tasting", args=lines(to=U("hour", 1, anchor="row")))]))
 
 S("T09-129", "ask complete thank-you never_mind out_of_scope",
-  T("mark the thank you cards done", ask("thanks_new", "thanks_old"),
-    ref=[act("complete", kind="task", name="thank you cards"),
-         find(kind="task", name="thank you cards"),
-         askc("the one due 30 june or the engagement party one from february?", options="$thanks_new, $thanks_old")]),
-  T("don't bother, dan's doing them", decline("never_mind"),
-    ref=[dec("never_mind")]),
+  T("mark the thank you cards done", diff(upd("thanks_new", status="completed", completed=ANY)),
+    ref=[act("complete", kind="task", name="thank you cards")]),
   T("what's the weather looking like saturday", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
 
@@ -144,7 +140,7 @@ S("T09-134", "contrast log treasurer complete restore refused",
   T("tick off circulate agm notice", diff(upd("agm_notice", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="Circulate AGM notice")]),
   T("bring bex back, i found her number in an old email", decline("not_found"),
-    ref=[bad(act("restore", kind="person", name="Bex Thornton", trashed=True)), dec("not_found")]))
+    ref=[bad(act("restore", kind="person", name="bex", trashed=True)), dec("not_found")]))
 
 S("T09-135", "contrast complete read weekday at_n out_of_scope",
   T("mark the open thank you cards task done", diff(upd("thanks_new", status="completed", completed=ANY)),

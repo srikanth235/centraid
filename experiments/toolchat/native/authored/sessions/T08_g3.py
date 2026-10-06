@@ -67,17 +67,6 @@ S("T08-135", "limit then min within prev longest event max sum practice typo",
   T("how many minutes of practice are there next week", val(180),
     ref=[ans(op="sum", field="duration", kind="event", name="Spring football practice", when=W(U("week", 1)))]))
 
-S("T08-136", "furnace filter ask never_mind notes limit min typo",
-  T("push the furnace filter thing to friday", ask(),
-    ref=[act("reschedule", kind="task", name="Change furnace filter", args=lines(to=U("week", 0, weekday=5))),
-         askc("the march one that's already done or the april one?")]),
-  T("forget it, i'll just change the furnace filter when i get home tonight, no need to move it", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("the last two notes i wrote, i alwayz forget what's in them", rows("franklin", "gift_ideas", order=True),
-    ref=[ans(kind="note", order="date desc", limit=2)]),
-  T("which is the shortest thing on my house list", rows("filter_apr"),
-    ref=[ans(kind="task", linked_to="$house_l", where=OPEN, order="effort asc", limit=1)]))
-
 S("T08-137", "locker delete everything ask on-call never_mind docs decline typo",
   T("delete evrything in my locker, i'm done with all these old passwords and codes", decline("unbounded_destruction"),
     ref=[dec("unbounded_destruction")]),
@@ -98,17 +87,6 @@ S("T08-138", "oldest debt limit delete all tasks min max typo",
     ref=[ans(op="min", field="amount", kind="debt", where=IOWE)]),
   T("and the biggest thing owed to me, to see who i should call first", val((210, "USD")),
     ref=[ans(op="max", field="amount", kind="debt", where=OWED)]))
-
-S("T08-139", "two longest tasks sum ask rent never_mind typo",
-  T("my two longest open tasks", rows("slideshow", "gutters", order=True),
-    ref=[ans(kind="task", where=OPEN, order="effort desc", limit=2)]),
-  T("how many minutes is that togather, i want to know if it fits in a weekend", val(360),
-    ref=[ans(op="sum", field="effort", within="@prev")]),
-  T("delete the rent task", ask(),
-    ref=[act("delete", kind="task", name="Pay rent"),
-         askc("the april one that's paid or the may one?")]),
-  T("nah leave both, gloria said the may rent isn't due until the first and i wnat the history", decline("never_mind"),
-    ref=[dec("never_mind")]))
 
 S("T08-140", "next dentist limit delete calendar on-call sum may max typo",
   T("next dentist appointment, whcih one is it", rows("dentist_jalen"),

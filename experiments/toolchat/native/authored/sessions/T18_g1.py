@@ -20,12 +20,8 @@ S("T18-101", "ask options star sam never mind then named",
     ref=[act("star", kind="person", name="Sam Okafor")]))
 
 S("T18-102", "ask options star agreement documents already",
-  T("star the agreement", ask("agreement", "steam_contract", "lease"),
-    ref=[act("star", kind="document", name="agreement"),
-         askc("the co-op members agreement, the steam distribution one or the lease?",
-              options="$agreement, $steam_contract, $lease")]),
-  T("steam one", diff(upd("steam_contract", starred=True)),
-    ref=[act("star", rows="$steam_contract")]),
+  T("star the agreement", diff(upd("steam_contract", starred=True)),
+    ref=[act("star", kind="document", name="agreement")]),
   T("and the lease", diff(already=["lease"]),
     ref=[act("star", rows="$lease"), ans(rows="$lease")]))
 
@@ -143,24 +139,3 @@ S("T18-113", "ask options tick off biscuit task then read list",
     ref=[ans(kind="task", linked_to="$dog_l", where='status = "open"')]),
   T("how many photos have i deleted", val(2),
     ref=[ans(op="count", kind="photo", trashed=True)]))
-
-S("T18-114", "ask options delete shower note never mind then contrast",
-  T("delete the shower note", ask("theme", "games_note", "food"),
-    ref=[act("delete", kind="note", name="shower"),
-         askc("shower theme, shower games or shower food?", options="$theme, $games_note, $food")]),
-  T("never mind, i still need them", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("delete the random ideas note then", diff(trash("misc_ideas")),
-    ref=[act("delete", kind="note", name="Random ideas")]))
-
-S("T18-115", "ask options delete dog food then count open",
-  T("delete buy dog food", ask("dog_food", "dog_food_old"),
-    ref=[act("delete", kind="task", name="Buy dog food"),
-         find(kind="task", name="Buy dog food"),
-         askc("the one due tomorrow or the one you finished on 15 feb?", options="$dog_food, $dog_food_old")]),
-  T("the old one that's done", diff(trash("dog_food_old")),
-    ref=[act("delete", rows="$dog_food_old")]),
-  T("how many biscuit tasks are open", val(4),
-    ref=[ans(op="count", kind="task", linked_to="$dog_l", where='status = "open"')]),
-  T("bring back the library books one, i still owe them", diff(restore("library")),
-    ref=[find(kind="task", trashed=True, name="library books"), act("restore", rows="@prev")]))

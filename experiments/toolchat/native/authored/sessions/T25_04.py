@@ -52,7 +52,7 @@ S("T25-079", "four turns task effort priority wrong field repair subtasks list c
   T("Mika list things that take an hour or less", rows("receipts_1", "field_trip", "flu_shot", "invites", "ski"),
     ref=[bad(ans(kind="task", linked_to="$mika_l", where="effort <= 1 hour")),
          ans(kind="task", linked_to="$mika_l", where="effort <= 60 min")]),
-  T("low priority stuff, five or lower", rows("gallery", "icons", "route", "backup"),
+  T("which tasks are low priority, five or lower", rows("gallery", "icons", "route", "backup"),
     ref=[bad(ans(kind="task", where="importance >= 5")),
          ans(kind="task", where="priority >= 5")]),
   T("show tasks that have two or more subtasks below them", rows("plan", "onboarding"),
@@ -235,10 +235,9 @@ S("T25-094", "four turns ambiguous ask cancel empty event search decline create"
     ref=[act("create", args=lines(kind="event", name="Piranesi book launch", date=D("2026-10-29", "19:00"),
                                   duration=120))]))
 
-S("T25-095", "three turns bad date repair write read empty",
+S("T25-095", "three turns date write read empty",
   T("move Return library books to next sunday", diff(upd("library", date="2026-10-18")),
-    ref=[bad(act("reschedule", rows="$library", args=lines(to={"rel": 1, "weekday": 7}))),
-         act("reschedule", rows="$library", args=lines(to=U("week", 1, weekday=7)))]),
+    ref=[act("reschedule", rows="$library", args=lines(to=U("week", 1, weekday=7)))]),
   T("mark Change smoke detector batteries done, then show what's left on Home",
     rows("radiator", "hydro_10", "plants", "gallery", also=diff(upd("smoke", status="completed", completed=ANY))),
     ref=[act("complete", rows="$smoke", more=True),

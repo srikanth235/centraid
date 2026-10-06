@@ -1,4 +1,5 @@
-"""The authoring vocabulary for eval sessions (sessions/*.py) and the compiler to sets/*.jsonl.
+"""The authoring vocabulary for sessions (eval/sessions/*.py, authored/sessions/*.py); the frozen
+sets under sets/ carry the compiled gold.
 
 Gold is an EFFECT (SPEC §10), written in world keys:
     rows("dentist", "vet")                    answer rows (exact set; order=True when order matters)
@@ -151,8 +152,8 @@ def bad(call):
     """Training data only: marks a reference call the runtime is expected to reject (a repair
     trajectory). It stays in the history the next step sees, but carries no loss, so the model
     trains only on the call that follows and fixes it, never on the mistake itself. The `<think>`
-    line before every call is derived mechanically from the call's own fields by
-    authored/build.py -- never authored as prose, so no model's reasoning is put in Qwen's mouth."""
+    trace before every call is written mechanically by authored/build.py (authored/trace.py),
+    never authored as prose."""
     return {**call, "bad": True}
 
 

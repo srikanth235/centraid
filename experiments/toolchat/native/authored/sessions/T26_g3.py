@@ -113,16 +113,6 @@ S("T26-138", "limit person last contacted unbounded debts min cadence max in pro
     ref=[comp(op="max", field="effort", kind="task", where='status = "in_progress"'),
          ans(value="@prev")]))
 
-S("T26-139", "limit ajo limit photos ask cross-kind delete never mind",
-  T("when's the next ajo meeting", rows("ajo_1129"),
-    ref=[ans(kind="event", name="Ajo meeting", when=FROM_TODAY, order="date asc", limit=1)]),
-  T("the four nweset photos", rows("p_meter", "p_socket", "p_sunset", "p_sunday"),
-    ref=[ans(kind="photo", order="date desc", limit=4)]),
-  T("delete the receipt", ask("receipt_cement", "p_receipt"),
-    ref=[askc("the cement receipt document or the diesel receipt photo?", options="$receipt_cement, $p_receipt")]),
-  T("wait no, keep both, the cement one's for the builder and i haven't sorted the diesel record yet", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
 S("T26-140", "limit offshore note unbounded people sum football max november",
   T("my ltaest note in the offshore log", rows("handover_n"),
     ref=[ans(kind="note", linked_to="$offshore_nb", order="date desc", limit=1)]),

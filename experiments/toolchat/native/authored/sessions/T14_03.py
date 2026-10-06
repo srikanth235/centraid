@@ -52,13 +52,6 @@ S("T14-055", "five turns mom span reschedule anchor",
   T("and order cake for vó lurdes, done?", rows("cake_vo"),
     ref=[ans(kind="task", name="Order cake for Vó Lurdes")]))
 
-S("T14-056", "single task date to week span",
-  T("what tasks fall between the twentieth and the end of next week",
-    rows("rating", "vinyl", "gas", "setlist12", "usb", "otavio_receipt", "tyre_pay", "phone_mount", "mae_meds",
-         "diego_call", "headphones", "mae_plan", "mei_decl", "football_fee", "dashcam", "mae_exam", "leak", "mae_split",
-         ),
-    ref=[ans(kind="task", when=W(span(D("2026-10-20"), U("week", 1))))]))
-
 S("T14-057", "task from date casa reschedule",
   T("what's on the casa list from november first on", rows("rent_nov", "shelf"),
     ref=[ans(kind="task", linked_to="$casa_l", when=W({"from": D("2026-11-01")}))]),
@@ -86,17 +79,6 @@ S("T14-059", "task to date reschedule multi",
     ref=[act("reschedule", rows="$usb, $otavio_receipt", args=lines(to=U("week", 1, weekday=1)))]),
   T("what's monday look like for tasks", rows("mae_meds", "diego_call", "phone_mount", "usb", "otavio_receipt"),
     ref=[ans(kind="task", when=W(U("week", 1, weekday=1)))]))
-
-S("T14-060", "notes week span within remove prev count",
-  T("notes i wrote between last week and this week",
-    rows("gift_ideas", "airport_tips", "vo_party", "idea_edit", "car_km", "pharm_2", "set12", "mae_bp", "helena_qs"),
-    ref=[ans(kind="note", when=W(span(U("week", -1), U("week", 0))))]),
-  T("which of those are in mom's health", rows("mae_bp", "helena_qs"),
-    ref=[ans(within="@prev", linked_to="$mae_nb")]),
-  T("pull both out of that notebook, i'll keep them loose", diff(unlink("mae_nb", "mae_bp"), unlink("mae_nb", "helena_qs")),
-    ref=[act("remove_from", rows="@prev", args=lines(from_="$mae_nb"))]),
-  T("how many remain in that notebook", val(2),
-    ref=[ans(op="count", kind="note", linked_to="$mae_nb")]))
 
 S("T14-061", "notes month to weekday",
   T("notes from this month up to wednesday",
@@ -210,11 +192,6 @@ S("T14-071", "debt weekday to month compute min settle",
     ref=[act("settle_debt", kind="debt", name="Uber to the gig")]),
   T("so how much am i on the hook for", val((865, "BRL")),
     ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))
-
-S("T14-072", "single cancel event where linked_to all",
-  T("cancel whatever i've got with thiago and wesley next thursday, pitch is closed",
-    diff(upd("fut_1029", status="cancelled")),
-    ref=[act("cancel", kind="event", linked_to="$thiago, $wesley", when=W(U("week", 1, weekday=4)))]))
 
 S("T14-073", "create event reschedule new linked",
   T("put a studio session with nath on monday at 2pm", diff(new("event", name=has("Studio"), date="2026-10-26T14:00")),

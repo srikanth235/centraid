@@ -74,12 +74,6 @@ S("T08-084", "house tasks span ambiguous filter reschedule anchor",
   T("log a call with her too, talked this morning", diff(upd("gloria", date=ANY)),
     ref=[act("log", rows="$gloria", args=lines(kind="call"))]))
 
-S("T08-085", "open priority 2 span complete",
-  T("open priority two stuff due from april thru this week", rows("dishwasher", "budget_email", "bigmama_meds"),
-    ref=[ans(kind="task", when=W(span(U("month", 0, name=4), U("week", 0))), where='status = "open" and priority = 2')]),
-  T("mark Pick up Big Mama's prescriptions done", diff(upd("bigmama_meds", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pick up Big Mama's prescriptions")]))
-
 S("T08-086", "remove_from multi refused remove",
   T("who's in fantasy league 2025", rows("trey", "kevin", "me"),
     ref=[ans(kind="person", linked_to="$fantasy")]),
@@ -179,11 +173,9 @@ S("T08-095", "recovery doc via photo add_to folder",
 
 S("T08-096", "ambiguous rent water marcus log reschedule",
   T("pay rent is done", diff(upd("rent_may", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pay rent"),
-         act("complete", rows="$rent_may")]),
+    ref=[act("complete", kind="task", name="Pay rent")]),
   T("and pay water bill", diff(upd("water_04", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pay water bill"),
-         act("complete", kind="task", name="Pay water bill", where='status = "open"')]),
+    ref=[act("complete", kind="task", name="Pay water bill")]),
   T("log a call with marcus", ask("marcus_b", "marcus_h"),
     ref=[act("log", kind="person", name="Marcus", args=lines(kind="call")),
          askc("marcus bell or marcus hill?", options="$marcus_b, $marcus_h")]),
@@ -212,24 +204,6 @@ S("T08-098", "decline fabricated",
 S("T08-099", "search nickname find-only",
   T("who's pastor moore again", rows("pastor"),
     ref=[search("Pastor Moore", kind="person"), ans(rows="@prev")]))
-
-S("T08-100", "week events cancel decline create task",
-  T("what's on this week", rows("prac_0407", "union_0408", "dentist_jalen", "prac_0409", "tax_appt", "oncall_0410",
-                              "haircut", "rcall_0412"),
-    ref=[ans(kind="event", when=W(U("week", 0)))]),
-  T("which have people coming", rows("prac_0407", "union_0408", "dentist_jalen", "prac_0409", "rcall_0412"),
-    ref=[ans(kind="event", within="@prev", where="person count != 0")]),
-  T("cancel the union chapter meeting this week, i'm on a late job", diff(upd("union_0408", status="cancelled")),
-    ref=[act("cancel", kind="event", name="Union chapter meeting", when=W(U("week", 0)))]),
-  T("tell darnell i can't make it", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("add a task to call darnell tmrw at noon about the meeting",
-    diff(new("task", name=has("Darnell"), date="2026-04-07T12:00")),
-    ref=[act("create", args=lines(kind="task", name="Call Darnell about the meeting", date=U("day", 1, time="12:00")))]),
-  T("what's my priority one stuff this week", rows("field_trip"),
-    ref=[ans(kind="task", when=W(U("week", 0)), where="priority = 1")]),
-  T("mark Sign Jada's field trip form done, signed it at breakfast", diff(upd("field_trip", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Sign Jada's field trip form")]))
 
 
 # follow-up turns appended to earlier sessions: lookups by nickname or loose word (search, then answer the result)

@@ -6,23 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T06-051", "week planning rehearsal ambiguous edit event task reschedule effort sum",
-  T("when's the next band rehearsal", rows("reh_0210"),
-    ref=[ans(kind="event", name="Band rehearsal", when=W({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("push band rehearsal back half an hour", diff(upd("reh_0210", date="2026-02-10T19:30")),
-    ref=[act("reschedule", kind="event", name="Band rehearsal", args=lines(to=U("day", 0, anchor="row", time="19:30"))),
-         act("reschedule", rows="$reh_0210", args=lines(to=U("day", 0, anchor="row", time="19:30")))]),
-  T("and put 'bring the new in-ears' in its description", diff(upd("reh_0210", description="bring the new in-ears")),
-    ref=[act("edit", rows="$reh_0210", args=lines(description="bring the new in-ears"))]),
-  T("what tasks are due that day", rows("snake", "vat"),
-    ref=[ans(kind="task", when=W(U("week", 1, weekday=2)))]),
-  T("move fix the stage snake to wednesday", diff(upd("snake", date="2026-02-11")),
-    ref=[act("reschedule", kind="task", name="Fix the stage snake", args=lines(to=U("week", 1, weekday=3)))]),
-  T("how many minutes of stuff is on wednesday", val(35),
-    ref=[ans(op="sum", field="effort", kind="task", when=W(U("week", 1, weekday=3)), where='status = "open"')]),
-  T("who's got more than one task hanging on them", rows("felix", "steffi", "tobi", "nele", "sophie", "lena"),
-    ref=[ans(kind="person", where="task count > 1")]))
-
 S("T06-052", "kitty balance settle up tasks top up",
   T("what's my balance in the WG Kasse", val((25.56, "EUR")),
     ref=[search("Lukas", kind="person"), ans(op="balance", kind="group", name="WG Kasse", linked_to="$me")]),
@@ -34,21 +17,6 @@ S("T06-052", "kitty balance settle up tasks top up",
     ref=[act("complete", kind="task", name="Top up WG Kasse", where='status = "open"')]),
   T("anything else open on the Flat list", rows("kuhn_heat", "bin_bags", "fridge", "cleaning_rota", "rent_02", "rent_03"),
     ref=[ans(kind="task", linked_to="$flatlist", where='status = "open"')]))
-
-S("T06-053", "debt create settle new knock-on list add_to new",
-  T("lena owes me 24 for the train to dresden",
-    diff(new("debt", name=has("train"), amount=24, direction="owes_me"), link("new", "lena")),
-    ref=[act("create", args=lines(kind="debt", name="Train to Dresden", amount="24", direction="owes_me", person="$lena"))]),
-  T("add a task to chase lena for the train money, on the Band list",
-    diff(new("task", name=has("lena")), link("bandlist", "new")),
-    ref=[act("create", more=True, args=lines(kind="task", name="Chase Lena for the train money")),
-         act("add_to", rows="$new", args=lines(to="$bandlist"))]),
-  T("she paid, settle the train one", diff(upd("+1", status="settled")),
-    ref=[act("settle_debt", rows="$c1")]),
-  T("and what's she owe me", val((1000, "CZK"), (-55, "EUR")),
-    ref=[ans(op="balance", rows="$lena")]),
-  T("which debts do i have with an amount over 30 open", rows("d_paul_session", "d_olli_mic", "d_lena_cables", "d_ines_prints"),
-    ref=[ans(kind="debt", where='amount is set and amount > 30 and status = "open"')]))
 
 S("T06-054", "photos album star multi restore trashed",
   T("show me the photos in Gear for sale", rows("p_mixer_sale", "p_di_sale", "p_stands_sale"),

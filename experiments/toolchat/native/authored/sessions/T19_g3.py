@@ -28,9 +28,9 @@ S("T19-131", "recovery limit find repeat answer then min owed then sum typo then
     ref=[ans(op="max", field="amount", kind="debt", where=OWED)]))
 
 NEXT3 = find(kind="event", when=NOW, order="date asc", limit=3)
-S("T19-132", "recovery twice limit events then sum effort week then max duration then min",
+S("T19-132", "limit events then sum effort week then max duration then min",
   T("what's next in the diary, the next three", rows("run_0414", "berrada_meet", "lina_vacc", order=True),
-    ref=[NEXT3, bad(NEXT3), bad(NEXT3), ans(within="@prev")]),
+    ref=[ans(kind="event", when=NOW, order="date asc", limit=3)]),
   T("how many mintues of tasks are due this week, everything on every list added up", val(370),
     ref=[ans(op="sum", field="effort", kind="task", when=THIS_WEEK, where='status = "open"')]),
   T("longest thing on the calendar in april, the night duties don't count they're always twelve hours",
@@ -75,21 +75,6 @@ S("T19-135", "sum baba list max kids list typo min home open next swim limit typ
   T("next 2 swimming lesons", rows("swim_0415", "swim_0422", order=True),
     ref=[ans(kind="event", name="Adam's swimming lesson", when=NOW, order="date asc", limit=2)]))
 
-S("T19-136", "ask dentist reschedule never mind hard then top three owed total then max then min",
-  T("move the dentist to friday at 6", ask("dentist_adam", "dentist_me"),
-    ref=[act("reschedule", kind="event", name="Dentist", args=lines(to=U("week", 0, weekday=5, time="18:00"))),
-         askc("adam's on the 24th or yours on the 7th of may?", options="$dentist_adam, $dentist_me")]),
-  T("hold on, never mind, i just remembered both slots were booked by dr bennis's office so i shouldn't touch them, ill decide on mondya",
-    decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("what do my three biggest debts to me add up to", val((2400, "MAD")),
-    ref=[find(kind="debt", where=OWED, order="amount desc", limit=3),
-         ans(op="sum", field="amount", within="@prev")]),
-  T("and the biggest of those", rows("d_omar"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]),
-  T("smallest of the three", rows("d_hamza"),
-    ref=[ans(within="@2", order="amount asc", limit=1)]))
-
 S("T19-137", "unbounded typo then ask log coffee samira never mind then unbounded long",
   T("remove everythig", decline("unbounded_destruction"),
     ref=[dec("unbounded_destruction")]),
@@ -113,21 +98,6 @@ S("T19-138", "oldest debt typo then unbounded debts then max owed then min durat
     ref=[ans(op="max", field="amount", kind="debt", where=IOWE)]),
   T("and the shortest event on the calendar", val(20),
     ref=[ans(op="min", field="duration", kind="event")]))
-
-S("T19-139", "three smallest owed then next night duty typo then sum pharmacy then ask cancel endo never mind",
-  T("the three smallest debts i owe", rows("d_aicha", "d_nadia", "d_samira", order=True),
-    ref=[ans(kind="debt", where=IOWE, order="amount asc", limit=3)]),
-  T("my next nigth duty", rows("garde_0418"),
-    ref=[ans(kind="event", name="Night duty at the pharmacy", when=NOW, order="date asc", limit=1)]),
-  T("how much effort is the whole pharmacy list, all of it added up", val(350),
-    ref=[ans(op="sum", field="effort", kind="task", linked_to="$pharm_l", where='status = "open"')]),
-  T("cancel the endocrinologist", ask("endo_mar", "endo_may"),
-    ref=[act("cancel", kind="event", name="Endocrinologist for Baba"),
-         find(kind="event", name="Endocrinologist for Baba"),
-         askc("the one in march or the one on the 12th of may?", options="$endo_mar, $endo_may")]),
-  T("oh wait, forget it, baba needs both of those appointments so leave them exactly as they are",
-    decline("never_mind"),
-    ref=[dec("never_mind")]))
 
 S("T19-140", "latest documents then unbounded typo then ask staff meeting never mind then sum tasks",
   T("my latest 2 documents", rows("scan_41", "fees_invoice", order=True),

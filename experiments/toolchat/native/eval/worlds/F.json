@@ -1,0 +1,3023 @@
+{
+ "me": "Horacio Sartori",
+ "today": "2026-08-24T09:40",
+ "epoch": "2026-01-05T09:00",
+ "seed": "F",
+ "currency": "ARS",
+ "people": [
+  {
+   "key": "susana",
+   "name": "Susana Moretti",
+   "role": "wife",
+   "nickname": "Susi",
+   "starred": true,
+   "cadence": 1,
+   "last_contacted": "2026-08-24T08:30",
+   "last_contacted_kind": "visit",
+   "met": "Villa Crespo"
+  },
+  {
+   "key": "gaby",
+   "name": "Gabriela Sartori",
+   "role": "daughter in Madrid",
+   "nickname": "Gaby",
+   "starred": true,
+   "cadence": 7,
+   "last_contacted": "2026-08-23T14:45",
+   "last_contacted_kind": "call"
+  },
+  {
+   "key": "javier",
+   "name": "Javier Ortega",
+   "role": "son-in-law in Madrid",
+   "cadence": 30,
+   "last_contacted": "2026-08-02T14:40",
+   "last_contacted_kind": "call",
+   "met": "Madrid"
+  },
+  {
+   "key": "valentina",
+   "name": "Valentina Ortega",
+   "role": "granddaughter in Madrid",
+   "cadence": 14,
+   "last_contacted": "2026-08-23T14:50",
+   "last_contacted_kind": "call"
+  },
+  {
+   "key": "tomas",
+   "name": "Tomás Ortega",
+   "role": "grandson in Madrid"
+  },
+  {
+   "key": "seba",
+   "name": "Sebastián Sartori",
+   "role": "son in Córdoba",
+   "nickname": "Seba",
+   "starred": true,
+   "cadence": 10,
+   "last_contacted": "2026-08-20T21:00",
+   "last_contacted_kind": "call"
+  },
+  {
+   "key": "caro",
+   "name": "Carolina Vidal",
+   "role": "daughter-in-law in Córdoba",
+   "nickname": "Caro"
+  },
+  {
+   "key": "benicio",
+   "name": "Benicio Sartori",
+   "role": "grandson in Córdoba"
+  },
+  {
+   "key": "juli",
+   "name": "Julieta Sartori",
+   "role": "daughter in Mendoza",
+   "nickname": "Juli",
+   "starred": true,
+   "cadence": 10,
+   "last_contacted": "2026-08-22T18:20",
+   "last_contacted_kind": "message"
+  },
+  {
+   "key": "nico",
+   "name": "Nicolás Paz",
+   "role": "Juli's partner in Mendoza",
+   "nickname": "Nico"
+  },
+  {
+   "key": "beto",
+   "name": "Alberto Sartori",
+   "role": "brother in Mar del Plata",
+   "nickname": "Beto",
+   "cadence": 21,
+   "last_contacted": "2026-08-09T12:00",
+   "last_contacted_kind": "call",
+   "met": "Mar del Plata"
+  },
+  {
+   "key": "tia_marta",
+   "name": "Marta Moretti",
+   "role": "Susana's sister",
+   "nickname": "Tía Marta",
+   "cadence": 21,
+   "last_contacted": "2026-08-16T17:00"
+  },
+  {
+   "key": "laura",
+   "name": "Laura Echeverría",
+   "role": "choir director",
+   "nickname": "Maestra Laura",
+   "starred": true,
+   "met": "Coro Vecinal Caballito"
+  },
+  {
+   "key": "hugo",
+   "name": "Hugo Pereyra",
+   "role": "choir bass",
+   "cadence": 14,
+   "last_contacted": "2026-08-19T21:10",
+   "met": "Coro Vecinal Caballito"
+  },
+  {
+   "key": "nelly",
+   "name": "Nelly Ferreira",
+   "role": "choir alto",
+   "met": "Coro Vecinal Caballito"
+  },
+  {
+   "key": "marta_p",
+   "name": "Marta Pérez",
+   "role": "choir treasurer",
+   "met": "Coro Vecinal Caballito"
+  },
+  {
+   "key": "raul_z",
+   "name": "Raúl Zavala",
+   "role": "choir tenor",
+   "met": "Coro Vecinal Caballito"
+  },
+  {
+   "key": "cacho",
+   "name": "Casimiro Ledesma",
+   "role": "truco partner",
+   "nickname": "Cacho",
+   "cadence": 7,
+   "last_contacted": "2026-08-20T19:40",
+   "last_contacted_kind": "visit",
+   "met": "Club Social"
+  },
+  {
+   "key": "pancho",
+   "name": "Francisco Rinaldi",
+   "role": "truco partner",
+   "nickname": "Pancho",
+   "met": "Club Social"
+  },
+  {
+   "key": "carlos_a",
+   "name": "Carlos Acuña",
+   "role": "truco partner",
+   "met": "Club Social"
+  },
+  {
+   "key": "gallego",
+   "name": "Manuel Souto",
+   "role": "truco partner",
+   "nickname": "El Gallego",
+   "met": "Club Social"
+  },
+  {
+   "key": "navarro",
+   "name": "Alejandro Navarro",
+   "role": "cardiologist",
+   "nickname": "Dr Navarro"
+  },
+  {
+   "key": "pinto",
+   "name": "Mónica Pinto",
+   "role": "GP at the PAMI clinic",
+   "nickname": "Dra Pinto"
+  },
+  {
+   "key": "kinesio",
+   "name": "Lucas Arce",
+   "role": "physio (kinesiólogo)",
+   "last_contacted": "2026-08-21T11:45",
+   "last_contacted_kind": "visit"
+  },
+  {
+   "key": "dentist",
+   "name": "Silvana Ferreyra",
+   "role": "dentist",
+   "nickname": "Dra Ferreyra"
+  },
+  {
+   "key": "salvatierra",
+   "name": "Gustavo Salvatierra",
+   "role": "eye doctor",
+   "nickname": "Dr Salvatierra"
+  },
+  {
+   "key": "farmacia",
+   "name": "Claudia Roldán",
+   "role": "pharmacist",
+   "nickname": "Claudia de la farmacia",
+   "last_contacted": "2026-07-27T11:50",
+   "last_contacted_kind": "visit"
+  },
+  {
+   "key": "quiroga",
+   "name": "Jorge Quiroga",
+   "role": "mechanic",
+   "nickname": "Quiroga"
+  },
+  {
+   "key": "encargado",
+   "name": "Aníbal Benavídez",
+   "role": "building super",
+   "nickname": "Aníbal",
+   "cadence": 30,
+   "last_contacted": "2026-08-22T09:00",
+   "last_contacted_kind": "visit"
+  },
+  {
+   "key": "carlos_m",
+   "name": "Carlos Mazzeo",
+   "role": "building administrator",
+   "met": "Edificio Rivadavia"
+  },
+  {
+   "key": "mirta_z",
+   "name": "Mirta Zabala",
+   "role": "neighbour 6B",
+   "met": "Edificio Rivadavia"
+  },
+  {
+   "key": "nora",
+   "name": "Nora Ibáñez",
+   "role": "Susana's friend",
+   "cadence": 21,
+   "last_contacted": "2026-08-12T16:00"
+  },
+  {
+   "key": "tito",
+   "name": "Tito Grimaldi",
+   "role": "old bank colleague",
+   "nickname": "Tito",
+   "cadence": 30,
+   "last_contacted": "2026-07-25T18:00",
+   "met": "Banco Nación"
+  },
+  {
+   "key": "old_mecanico",
+   "name": "Ramón Videla",
+   "role": "old mechanic",
+   "trashed": "2026-08-12T10:00"
+  },
+  {
+   "key": "old_plomero",
+   "name": "Rubén Ocampo",
+   "role": "old plumber",
+   "trashed": "2026-05-10T10:00"
+  }
+ ],
+ "groups": [
+  {
+   "key": "coro_kitty",
+   "name": "Coro Vecinal Kitty",
+   "currency": "ARS",
+   "members": [
+    "laura",
+    "hugo",
+    "nelly",
+    "marta_p",
+    "raul_z"
+   ],
+   "created": "2026-01-14T19:30"
+  },
+  {
+   "key": "truco_kitty",
+   "name": "Truco de los Jueves",
+   "currency": "ARS",
+   "members": [
+    "cacho",
+    "pancho",
+    "carlos_a",
+    "gallego"
+   ],
+   "created": "2026-01-15T18:00"
+  },
+  {
+   "key": "madrid",
+   "name": "Madrid con Gaby 2025",
+   "currency": "EUR",
+   "members": [
+    "gaby",
+    "javier"
+   ],
+   "created": "2025-11-20T21:00"
+  },
+  {
+   "key": "regalos",
+   "name": "Regalos de la Familia",
+   "currency": "ARS",
+   "members": [
+    "gaby",
+    "seba",
+    "juli"
+   ],
+   "created": "2026-02-10T20:00"
+  },
+  {
+   "key": "edificio",
+   "name": "Fondo del Edificio",
+   "currency": "ARS",
+   "members": [
+    "mirta_z",
+    "carlos_m"
+   ],
+   "created": "2026-03-24T21:00"
+  },
+  {
+   "key": "mdq",
+   "name": "Mar del Plata 2027",
+   "currency": "ARS",
+   "members": [
+    "beto",
+    "tia_marta"
+   ],
+   "created": "2026-08-09T12:30"
+  }
+ ],
+ "expenses": [
+  {
+   "group": "coro_kitty",
+   "name": "Sheet music photocopies",
+   "amount": 18500,
+   "paid_by": "marta_p",
+   "split": [
+    "me",
+    "laura",
+    "hugo",
+    "nelly",
+    "marta_p",
+    "raul_z"
+   ],
+   "date": "2026-08-05"
+  },
+  {
+   "group": "coro_kitty",
+   "name": "Parish hall rent August",
+   "amount": 60000,
+   "paid_by": "laura",
+   "split": [
+    "me",
+    "laura",
+    "hugo",
+    "nelly",
+    "marta_p",
+    "raul_z"
+   ],
+   "date": "2026-08-03"
+  },
+  {
+   "group": "coro_kitty",
+   "name": "Medialunas for the rehearsal break",
+   "amount": 14200,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "hugo",
+    "nelly",
+    "marta_p"
+   ],
+   "date": "2026-08-19"
+  },
+  {
+   "group": "coro_kitty",
+   "name": "Concert flyers",
+   "amount": 9800,
+   "paid_by": "raul_z",
+   "split": [
+    "me",
+    "laura",
+    "raul_z"
+   ],
+   "date": "2026-08-17"
+  },
+  {
+   "group": "truco_kitty",
+   "name": "New deck of cards",
+   "amount": 4500,
+   "paid_by": "pancho",
+   "split": [
+    "me",
+    "cacho",
+    "pancho",
+    "carlos_a",
+    "gallego"
+   ],
+   "date": "2026-07-09"
+  },
+  {
+   "group": "truco_kitty",
+   "name": "Coffee and tostados",
+   "amount": 22400,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "cacho",
+    "pancho",
+    "carlos_a"
+   ],
+   "date": "2026-08-20"
+  },
+  {
+   "group": "truco_kitty",
+   "name": "Club tournament entry",
+   "amount": 40000,
+   "paid_by": "gallego",
+   "split": [
+    "me",
+    "cacho",
+    "gallego",
+    "carlos_a"
+   ],
+   "date": "2026-08-13"
+  },
+  {
+   "group": "madrid",
+   "name": "Dinner at Casa Lucio",
+   "amount": 148.5,
+   "paid_by": "javier",
+   "split": [
+    "me",
+    "gaby",
+    "javier"
+   ],
+   "date": "2025-12-27"
+  },
+  {
+   "group": "madrid",
+   "name": "Prado tickets",
+   "amount": 56,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "gaby",
+    "javier"
+   ],
+   "date": "2025-12-23"
+  },
+  {
+   "group": "madrid",
+   "name": "Train to Toledo",
+   "amount": 72,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "gaby"
+   ],
+   "date": "2025-12-29"
+  },
+  {
+   "group": "madrid",
+   "name": "Roscón and chocolate on Three Kings",
+   "amount": 38.4,
+   "paid_by": "gaby",
+   "split": [
+    "me",
+    "gaby",
+    "javier"
+   ],
+   "date": "2026-01-04"
+  },
+  {
+   "group": "regalos",
+   "name": "Susi's birthday present",
+   "amount": 120000,
+   "paid_by": "seba",
+   "split": [
+    "me",
+    "gaby",
+    "seba",
+    "juli"
+   ],
+   "date": "2026-08-15"
+  },
+  {
+   "group": "regalos",
+   "name": "Cake for my birthday",
+   "amount": 36000,
+   "paid_by": "juli",
+   "split": [
+    "me",
+    "seba",
+    "juli"
+   ],
+   "date": "2026-07-11"
+  },
+  {
+   "group": "edificio",
+   "name": "Painting the lobby",
+   "amount": 180000,
+   "paid_by": "carlos_m",
+   "split": [
+    "me",
+    "mirta_z",
+    "carlos_m"
+   ],
+   "date": "2026-06-18"
+  },
+  {
+   "group": "edificio",
+   "name": "Doorbell repair",
+   "amount": 24000,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "mirta_z"
+   ],
+   "date": "2026-08-01"
+  }
+ ],
+ "lists": [
+  {
+   "key": "casa",
+   "name": "Casa",
+   "area": "home"
+  },
+  {
+   "key": "salud",
+   "name": "Salud",
+   "area": "health"
+  },
+  {
+   "key": "auto",
+   "name": "Auto",
+   "area": "home"
+  },
+  {
+   "key": "coro_l",
+   "name": "Coro",
+   "area": "music"
+  },
+  {
+   "key": "familia",
+   "name": "Familia",
+   "area": "family"
+  },
+  {
+   "key": "tramites",
+   "name": "Trámites",
+   "area": "paperwork"
+  }
+ ],
+ "events": [
+  {
+   "key": "choir_0729",
+   "name": "Choir rehearsal",
+   "start": "2026-07-29T19:00",
+   "end": "2026-07-29T21:00",
+   "created": "2026-07-26T17:00",
+   "attendees": [
+    "laura",
+    "hugo",
+    "nelly"
+   ],
+   "description": "parish hall, Rivadavia 5100"
+  },
+  {
+   "key": "choir_0805",
+   "name": "Choir rehearsal",
+   "start": "2026-08-05T19:00",
+   "end": "2026-08-05T21:00",
+   "created": "2026-08-02T17:00",
+   "attendees": [
+    "laura",
+    "hugo",
+    "nelly"
+   ],
+   "description": "parish hall, Rivadavia 5100"
+  },
+  {
+   "key": "choir_0812",
+   "name": "Choir rehearsal",
+   "start": "2026-08-12T19:00",
+   "end": "2026-08-12T21:00",
+   "created": "2026-08-09T17:00",
+   "attendees": [
+    "laura",
+    "hugo",
+    "nelly"
+   ],
+   "description": "parish hall, Rivadavia 5100",
+   "cancelled": true
+  },
+  {
+   "key": "choir_0819",
+   "name": "Choir rehearsal",
+   "start": "2026-08-19T19:00",
+   "end": "2026-08-19T21:00",
+   "created": "2026-08-16T17:00",
+   "attendees": [
+    "laura",
+    "hugo",
+    "nelly"
+   ],
+   "description": "parish hall, Rivadavia 5100"
+  },
+  {
+   "key": "choir_0826",
+   "name": "Choir rehearsal",
+   "start": "2026-08-26T19:00",
+   "end": "2026-08-26T21:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "laura",
+    "hugo",
+    "nelly"
+   ],
+   "description": "parish hall, Rivadavia 5100"
+  },
+  {
+   "key": "choir_0902",
+   "name": "Choir rehearsal",
+   "start": "2026-09-02T19:00",
+   "end": "2026-09-02T21:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "laura",
+    "hugo",
+    "nelly"
+   ],
+   "description": "parish hall, Rivadavia 5100"
+  },
+  {
+   "key": "choir_0909",
+   "name": "Choir rehearsal",
+   "start": "2026-09-09T19:00",
+   "end": "2026-09-09T21:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "laura",
+    "hugo",
+    "nelly"
+   ],
+   "description": "parish hall, Rivadavia 5100"
+  },
+  {
+   "key": "choir_0916",
+   "name": "Choir rehearsal",
+   "start": "2026-09-16T19:00",
+   "end": "2026-09-16T21:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "laura",
+    "hugo",
+    "nelly"
+   ],
+   "description": "parish hall, Rivadavia 5100"
+  },
+  {
+   "key": "choir_0923",
+   "name": "Choir rehearsal",
+   "start": "2026-09-23T19:00",
+   "end": "2026-09-23T21:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "laura",
+    "hugo",
+    "nelly"
+   ],
+   "description": "parish hall, Rivadavia 5100"
+  },
+  {
+   "key": "truco_0730",
+   "name": "Truco with the muchachos",
+   "start": "2026-07-30T17:00",
+   "end": "2026-07-30T20:00",
+   "created": "2026-07-27T15:00",
+   "attendees": [
+    "cacho",
+    "pancho",
+    "gallego"
+   ]
+  },
+  {
+   "key": "truco_0806",
+   "name": "Truco with the muchachos",
+   "start": "2026-08-06T17:00",
+   "end": "2026-08-06T20:00",
+   "created": "2026-08-03T15:00",
+   "attendees": [
+    "cacho",
+    "pancho",
+    "gallego"
+   ],
+   "cancelled": true
+  },
+  {
+   "key": "truco_0813",
+   "name": "Truco with the muchachos",
+   "start": "2026-08-13T17:00",
+   "end": "2026-08-13T20:00",
+   "created": "2026-08-10T15:00",
+   "attendees": [
+    "cacho",
+    "pancho",
+    "gallego"
+   ],
+   "trashed": "2026-08-14T10:00"
+  },
+  {
+   "key": "truco_0820",
+   "name": "Truco with the muchachos",
+   "start": "2026-08-20T17:00",
+   "end": "2026-08-20T20:00",
+   "created": "2026-08-17T15:00",
+   "attendees": [
+    "cacho",
+    "pancho",
+    "gallego"
+   ]
+  },
+  {
+   "key": "truco_0827",
+   "name": "Truco with the muchachos",
+   "start": "2026-08-27T17:00",
+   "end": "2026-08-27T20:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "cacho",
+    "pancho",
+    "gallego"
+   ]
+  },
+  {
+   "key": "truco_0903",
+   "name": "Truco with the muchachos",
+   "start": "2026-09-03T17:00",
+   "end": "2026-09-03T20:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "cacho",
+    "pancho",
+    "gallego"
+   ]
+  },
+  {
+   "key": "truco_0910",
+   "name": "Truco with the muchachos",
+   "start": "2026-09-10T17:00",
+   "end": "2026-09-10T20:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "cacho",
+    "pancho",
+    "gallego"
+   ]
+  },
+  {
+   "key": "truco_0917",
+   "name": "Truco with the muchachos",
+   "start": "2026-09-17T17:00",
+   "end": "2026-09-17T20:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "cacho",
+    "pancho",
+    "gallego"
+   ]
+  },
+  {
+   "key": "truco_0924",
+   "name": "Truco with the muchachos",
+   "start": "2026-09-24T17:00",
+   "end": "2026-09-24T20:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "cacho",
+    "pancho",
+    "gallego"
+   ]
+  },
+  {
+   "key": "callgaby_0809",
+   "name": "Call Gaby",
+   "start": "2026-08-09T14:00",
+   "end": "2026-08-09T14:45",
+   "created": "2026-08-06T12:00",
+   "attendees": [
+    "gaby"
+   ],
+   "description": "it is 19:00 in Madrid"
+  },
+  {
+   "key": "callgaby_0816",
+   "name": "Call Gaby",
+   "start": "2026-08-16T14:00",
+   "end": "2026-08-16T14:45",
+   "created": "2026-08-13T12:00",
+   "attendees": [
+    "gaby"
+   ],
+   "description": "it is 19:00 in Madrid"
+  },
+  {
+   "key": "callgaby_0823",
+   "name": "Call Gaby",
+   "start": "2026-08-23T14:00",
+   "end": "2026-08-23T14:45",
+   "created": "2026-08-20T12:00",
+   "attendees": [
+    "gaby"
+   ],
+   "description": "it is 19:00 in Madrid"
+  },
+  {
+   "key": "callgaby_0830",
+   "name": "Call Gaby",
+   "start": "2026-08-30T14:00",
+   "end": "2026-08-30T14:45",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "gaby"
+   ],
+   "description": "it is 19:00 in Madrid"
+  },
+  {
+   "key": "callgaby_0906",
+   "name": "Call Gaby",
+   "start": "2026-09-06T14:00",
+   "end": "2026-09-06T14:45",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "gaby"
+   ],
+   "description": "it is 19:00 in Madrid"
+  },
+  {
+   "key": "callgaby_0913",
+   "name": "Call Gaby",
+   "start": "2026-09-13T14:00",
+   "end": "2026-09-13T14:45",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "gaby"
+   ],
+   "description": "it is 19:00 in Madrid"
+  },
+  {
+   "key": "callgaby_0920",
+   "name": "Call Gaby",
+   "start": "2026-09-20T14:00",
+   "end": "2026-09-20T14:45",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "gaby"
+   ],
+   "description": "it is 19:00 in Madrid"
+  },
+  {
+   "key": "callgaby_0927",
+   "name": "Call Gaby",
+   "start": "2026-09-27T14:00",
+   "end": "2026-09-27T14:45",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "gaby"
+   ],
+   "description": "it is 19:00 in Madrid"
+  },
+  {
+   "key": "physio_0818",
+   "name": "Physio - Lucas",
+   "start": "2026-08-18T11:00",
+   "end": "2026-08-18T11:45",
+   "created": "2026-08-15T09:00",
+   "attendees": [
+    "kinesio"
+   ]
+  },
+  {
+   "key": "physio_0821",
+   "name": "Physio - Lucas",
+   "start": "2026-08-21T11:00",
+   "end": "2026-08-21T11:45",
+   "created": "2026-08-18T09:00",
+   "attendees": [
+    "kinesio"
+   ]
+  },
+  {
+   "key": "physio_0825",
+   "name": "Physio - Lucas",
+   "start": "2026-08-25T11:00",
+   "end": "2026-08-25T11:45",
+   "created": "2026-08-22T09:00",
+   "attendees": [
+    "kinesio"
+   ]
+  },
+  {
+   "key": "physio_0828",
+   "name": "Physio - Lucas",
+   "start": "2026-08-28T11:00",
+   "end": "2026-08-28T11:45",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "kinesio"
+   ]
+  },
+  {
+   "key": "physio_0901",
+   "name": "Physio - Lucas",
+   "start": "2026-09-01T11:00",
+   "end": "2026-09-01T11:45",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "kinesio"
+   ]
+  },
+  {
+   "key": "physio_0904",
+   "name": "Physio - Lucas",
+   "start": "2026-09-04T11:00",
+   "end": "2026-09-04T11:45",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "kinesio"
+   ]
+  },
+  {
+   "key": "pharm_0629",
+   "name": "Pharmacy pickup",
+   "start": "2026-06-29T11:30",
+   "end": "2026-06-29T11:50",
+   "created": "2026-06-26T09:30",
+   "attendees": [
+    "farmacia"
+   ]
+  },
+  {
+   "key": "pharm_0727",
+   "name": "Pharmacy pickup",
+   "start": "2026-07-27T11:30",
+   "end": "2026-07-27T11:50",
+   "created": "2026-07-24T09:30",
+   "attendees": [
+    "farmacia"
+   ]
+  },
+  {
+   "key": "pharm_0824",
+   "name": "Pharmacy pickup",
+   "start": "2026-08-24T11:30",
+   "end": "2026-08-24T11:50",
+   "created": "2026-08-21T09:30",
+   "attendees": [
+    "farmacia"
+   ]
+  },
+  {
+   "key": "pharm_0921",
+   "name": "Pharmacy pickup",
+   "start": "2026-09-21T11:30",
+   "end": "2026-09-21T11:50",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "farmacia"
+   ]
+  },
+  {
+   "key": "cardio_mar",
+   "name": "Cardiologist - Dr Navarro",
+   "start": "2026-03-03T10:30",
+   "end": "2026-03-03T11:15",
+   "created": "2026-02-28T08:30",
+   "attendees": [
+    "navarro"
+   ]
+  },
+  {
+   "key": "cardio_sep",
+   "name": "Cardiologist - Dr Navarro",
+   "start": "2026-09-02T10:30",
+   "end": "2026-09-02T11:15",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "navarro"
+   ],
+   "description": "bring the blood test and the pressure log"
+  },
+  {
+   "key": "bloods",
+   "name": "Blood test",
+   "start": "2026-08-31T08:00",
+   "end": "2026-08-31T08:30",
+   "created": "2026-08-23T09:40",
+   "description": "fasting, the lab on Rivadavia"
+  },
+  {
+   "key": "gp_may",
+   "name": "GP check-up - Dra Pinto",
+   "start": "2026-05-28T16:00",
+   "end": "2026-05-28T16:40",
+   "created": "2026-05-25T14:00",
+   "attendees": [
+    "pinto"
+   ]
+  },
+  {
+   "key": "gp_aug",
+   "name": "GP check-up - Dra Pinto",
+   "start": "2026-08-27T16:00",
+   "end": "2026-08-27T16:40",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "pinto"
+   ]
+  },
+  {
+   "key": "fe_de_vida",
+   "name": "Bank - fe de vida at Banco Nación",
+   "start": "2026-08-27T10:00",
+   "end": "2026-08-27T10:45",
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "dentist_sep",
+   "name": "Dentist - Dra Ferreyra",
+   "start": "2026-09-09T15:00",
+   "end": "2026-09-09T15:45",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "dentist"
+   ]
+  },
+  {
+   "key": "eye_surgery",
+   "name": "Cataract surgery - Dr Salvatierra",
+   "start": "2026-05-12T08:00",
+   "end": "2026-05-12T10:00",
+   "created": "2026-05-09T06:00",
+   "attendees": [
+    "salvatierra"
+   ]
+  },
+  {
+   "key": "eye_check",
+   "name": "Eye check - Dr Salvatierra",
+   "start": "2026-09-11T09:30",
+   "end": "2026-09-11T10:15",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "salvatierra"
+   ]
+  },
+  {
+   "key": "car_service",
+   "name": "Car service - Quiroga",
+   "start": "2026-08-29T09:00",
+   "end": "2026-08-29T11:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "quiroga"
+   ],
+   "description": "oil, filters and the GNC regulator"
+  },
+  {
+   "key": "gnc",
+   "name": "GNC inspection for the oblea",
+   "start": "2026-09-15T10:00",
+   "end": "2026-09-15T11:00",
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "vtv",
+   "name": "VTV appointment",
+   "start": "2026-09-16T08:30",
+   "end": "2026-09-16T09:15",
+   "created": "2026-08-23T09:40",
+   "description": "bring the cédula verde and the policy"
+  },
+  {
+   "key": "susi_bday",
+   "name": "Susi's birthday dinner",
+   "start": "2026-08-29T21:00",
+   "end": "2026-08-29T23:30",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "susana",
+    "nora",
+    "tia_marta"
+   ],
+   "description": "the parrilla near Plaza Primera Junta"
+  },
+  {
+   "key": "assembly_mar",
+   "name": "Asamblea de consorcio",
+   "start": "2026-03-24T19:00",
+   "end": "2026-03-24T20:30",
+   "created": "2026-03-21T17:00",
+   "attendees": [
+    "carlos_m",
+    "mirta_z"
+   ]
+  },
+  {
+   "key": "assembly_sep",
+   "name": "Asamblea de consorcio",
+   "start": "2026-09-22T19:00",
+   "end": "2026-09-22T20:30",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "carlos_m",
+    "mirta_z"
+   ],
+   "description": "the lift and the water tank on the agenda"
+  },
+  {
+   "key": "extra_rehearsal",
+   "name": "Choir rehearsal - spring concert",
+   "start": "2026-09-12T16:00",
+   "end": "2026-09-12T18:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "laura",
+    "hugo",
+    "nelly",
+    "raul_z"
+   ]
+  },
+  {
+   "key": "extra_rehearsal2",
+   "name": "Choir rehearsal - spring concert",
+   "start": "2026-09-19T16:00",
+   "end": "2026-09-19T18:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "laura",
+    "hugo",
+    "nelly",
+    "raul_z"
+   ]
+  },
+  {
+   "key": "dress",
+   "name": "Dress rehearsal - spring concert",
+   "start": "2026-09-25T19:00",
+   "end": "2026-09-25T21:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "laura",
+    "hugo"
+   ]
+  },
+  {
+   "key": "concert",
+   "name": "Concierto de primavera",
+   "start": "2026-09-26T20:00",
+   "end": "2026-09-26T22:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "laura",
+    "hugo",
+    "nelly",
+    "marta_p",
+    "raul_z",
+    "susana",
+    "nora",
+    "tito"
+   ],
+   "description": "Parroquia San José, call time 19:00, black jacket"
+  },
+  {
+   "key": "valentina_call",
+   "name": "Valentina's 10th birthday video call",
+   "start": "2026-09-12T14:00",
+   "end": "2026-09-12T14:30",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "gaby",
+    "valentina",
+    "javier"
+   ]
+  },
+  {
+   "key": "lunch_beto",
+   "name": "Lunch with Beto in Mar del Plata",
+   "start": "2026-09-05T13:00",
+   "end": "2026-09-05T16:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "beto",
+    "tia_marta"
+   ],
+   "cancelled": true,
+   "description": "storm warning, postponed"
+  },
+  {
+   "key": "fly_cba",
+   "name": "Flight to Córdoba",
+   "start": "2026-10-09T07:30",
+   "end": "2026-10-09T08:45",
+   "created": "2026-08-23T09:40",
+   "description": "Aerolíneas, Aeroparque"
+  },
+  {
+   "key": "benicio_bday",
+   "name": "Benicio's 5th birthday",
+   "start": "2026-10-10T16:00",
+   "end": "2026-10-10T19:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "seba",
+    "caro",
+    "benicio"
+   ],
+   "description": "at Seba's, they live in Nueva Córdoba"
+  },
+  {
+   "key": "fly_back",
+   "name": "Flight back from Córdoba",
+   "start": "2026-10-11T18:00",
+   "end": "2026-10-11T19:15",
+   "created": "2026-08-23T09:40",
+   "description": "Aerolíneas"
+  },
+  {
+   "key": "truco_tournament",
+   "name": "Truco tournament at the club",
+   "start": "2026-10-03T15:00",
+   "end": "2026-10-03T19:00",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "cacho",
+    "pancho",
+    "gallego",
+    "carlos_a"
+   ]
+  },
+  {
+   "key": "bday_asado",
+   "name": "Horacio's 68th birthday asado",
+   "start": "2026-07-11T13:00",
+   "end": "2026-07-11T17:00",
+   "created": "2026-07-08T11:00",
+   "attendees": [
+    "susana",
+    "juli",
+    "nico",
+    "tia_marta",
+    "cacho"
+   ],
+   "description": "on the terrace"
+  },
+  {
+   "key": "fathers_day",
+   "name": "Father's Day lunch",
+   "start": "2026-06-21T13:00",
+   "end": "2026-06-21T16:00",
+   "created": "2026-06-18T11:00",
+   "attendees": [
+    "susana",
+    "tia_marta"
+   ]
+  },
+  {
+   "key": "madrid_trip",
+   "name": "Madrid trip",
+   "start": "2025-12-19T21:00",
+   "end": "2026-01-04T10:00",
+   "created": "2026-01-05T09:00",
+   "attendees": [
+    "gaby",
+    "javier"
+   ],
+   "description": "Aerolíneas from Ezeiza, two weeks with the grandchildren"
+  },
+  {
+   "key": "coffee_tito",
+   "name": "Coffee with Tito",
+   "start": "2026-09-18T17:00",
+   "end": "2026-09-18T18:30",
+   "created": "2026-08-23T09:40",
+   "attendees": [
+    "tito"
+   ]
+  },
+  {
+   "key": "old_truco",
+   "name": "Truco with the muchachos",
+   "start": "2026-04-16T17:00",
+   "end": "2026-04-16T20:00",
+   "created": "2026-04-13T15:00",
+   "attendees": [
+    "cacho"
+   ],
+   "trashed": "2026-05-20T10:00"
+  },
+  {
+   "key": "old_choir",
+   "name": "Choir rehearsal",
+   "start": "2026-04-15T19:00",
+   "end": "2026-04-15T21:00",
+   "created": "2026-04-12T17:00",
+   "attendees": [
+    "laura"
+   ],
+   "trashed": "2026-05-20T10:05"
+  }
+ ],
+ "tasks": [
+  {
+   "key": "cba",
+   "name": "Trip to Córdoba for Benicio's birthday",
+   "due": "2026-10-09",
+   "list": "familia",
+   "priority": 2,
+   "status": "in_progress",
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "cba_flights",
+   "name": "Book the flights to Córdoba",
+   "due": "2026-08-18",
+   "list": "familia",
+   "parent": "cba",
+   "completed": "2026-08-17T20:30",
+   "created": "2026-08-12T10:00"
+  },
+  {
+   "key": "cba_gift",
+   "name": "Buy Benicio's birthday present",
+   "due": "2026-09-30",
+   "list": "familia",
+   "parent": "cba",
+   "effort": 60,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "cba_beds",
+   "name": "Ask Seba about the sleeping arrangements",
+   "due": "2026-09-10",
+   "list": "familia",
+   "parent": "cba",
+   "effort": 10,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "cba_passes",
+   "name": "Print the boarding passes",
+   "due": "2026-10-08",
+   "list": "familia",
+   "parent": "cba",
+   "effort": 10,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "cba_plants",
+   "name": "Ask Aníbal to water the plants",
+   "due": "2026-10-08",
+   "list": "familia",
+   "parent": "cba",
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "autop",
+   "name": "Car papers: VTV and oblea",
+   "due": "2026-09-16",
+   "list": "auto",
+   "priority": 1,
+   "status": "in_progress",
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "autop_oblea",
+   "name": "Renew the GNC oblea",
+   "due": "2026-09-15",
+   "list": "auto",
+   "parent": "autop",
+   "effort": 60,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "autop_vtv",
+   "name": "Book the VTV appointment",
+   "due": "2026-08-10",
+   "list": "auto",
+   "parent": "autop",
+   "completed": "2026-08-09T11:00",
+   "created": "2026-08-04T13:00"
+  },
+  {
+   "key": "autop_patente",
+   "name": "Pay the patente before the VTV",
+   "due": "2026-09-10",
+   "list": "auto",
+   "parent": "autop",
+   "priority": 1,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "autop_ins",
+   "name": "Renew the car insurance",
+   "due": "2026-09-12",
+   "list": "auto",
+   "parent": "autop",
+   "effort": 30,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "autop_copy",
+   "name": "Photocopy the cédula verde",
+   "due": "2026-09-14",
+   "list": "auto",
+   "parent": "autop",
+   "effort": 10,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "concierto_t",
+   "name": "Concierto de primavera",
+   "due": "2026-09-26",
+   "list": "coro_l",
+   "status": "in_progress",
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "conc_bass",
+   "name": "Learn the bass line of the Fauré Requiem",
+   "due": "2026-09-20",
+   "list": "coro_l",
+   "parent": "concierto_t",
+   "effort": 420,
+   "priority": 2,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "conc_jacket",
+   "name": "Buy a black jacket",
+   "due": "2026-09-18",
+   "list": "coro_l",
+   "parent": "concierto_t",
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "conc_print",
+   "name": "Print the programme with Marta",
+   "due": "2026-09-22",
+   "list": "coro_l",
+   "parent": "concierto_t",
+   "effort": 30,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "conc_invite",
+   "name": "Invite Nora and Tito",
+   "due": "2026-09-12",
+   "list": "coro_l",
+   "parent": "concierto_t",
+   "effort": 10,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "conc_copies",
+   "name": "Photocopy the scores",
+   "due": "2026-08-05",
+   "list": "coro_l",
+   "parent": "concierto_t",
+   "completed": "2026-08-04T17:45",
+   "created": "2026-07-30T10:00"
+  },
+  {
+   "key": "susi_t",
+   "name": "Susi's birthday",
+   "due": "2026-08-29",
+   "list": "familia",
+   "priority": 2,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "susi_parrilla",
+   "name": "Book the parrilla",
+   "due": "2026-08-12",
+   "list": "familia",
+   "parent": "susi_t",
+   "completed": "2026-08-11T12:20",
+   "created": "2026-08-06T12:00"
+  },
+  {
+   "key": "susi_cake",
+   "name": "Order the cake",
+   "due": "2026-08-27",
+   "list": "familia",
+   "parent": "susi_t",
+   "effort": 20,
+   "created": "2026-08-21T13:00"
+  },
+  {
+   "key": "susi_scarf",
+   "name": "Buy her the silk scarf",
+   "due": "2026-08-21",
+   "list": "familia",
+   "parent": "susi_t",
+   "completed": "2026-08-20T16:10",
+   "created": "2026-08-15T09:00"
+  },
+  {
+   "key": "expensas_apr",
+   "name": "Pay expensas",
+   "due": "2026-04-10",
+   "list": "casa",
+   "completed": "2026-04-09T10:00",
+   "created": "2026-04-04T11:00"
+  },
+  {
+   "key": "expensas_may",
+   "name": "Pay expensas",
+   "due": "2026-05-10",
+   "list": "casa",
+   "completed": "2026-05-08T11:30",
+   "created": "2026-05-04T11:00"
+  },
+  {
+   "key": "expensas_jun",
+   "name": "Pay expensas",
+   "due": "2026-06-10",
+   "list": "casa",
+   "completed": "2026-06-10T09:15",
+   "created": "2026-06-04T11:00"
+  },
+  {
+   "key": "expensas_jul",
+   "name": "Pay expensas",
+   "due": "2026-07-10",
+   "list": "casa",
+   "completed": "2026-07-09T10:45",
+   "created": "2026-07-04T11:00"
+  },
+  {
+   "key": "expensas_aug",
+   "name": "Pay expensas",
+   "due": "2026-08-10",
+   "list": "casa",
+   "completed": "2026-08-10T09:40",
+   "created": "2026-08-04T11:00"
+  },
+  {
+   "key": "expensas_sep",
+   "name": "Pay expensas",
+   "due": "2026-09-10",
+   "list": "casa",
+   "priority": 1,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "edesur_jun",
+   "name": "Pay Edesur",
+   "due": "2026-06-20",
+   "list": "casa",
+   "completed": "2026-06-19T10:00",
+   "created": "2026-06-14T09:00"
+  },
+  {
+   "key": "edesur_aug",
+   "name": "Pay Edesur",
+   "due": "2026-08-20",
+   "list": "casa",
+   "completed": "2026-08-19T18:20",
+   "created": "2026-08-14T09:00"
+  },
+  {
+   "key": "edesur_oct",
+   "name": "Pay Edesur",
+   "due": "2026-10-20",
+   "list": "casa",
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "metrogas_jun",
+   "name": "Pay Metrogas",
+   "due": "2026-06-25",
+   "list": "casa",
+   "completed": "2026-06-24T10:30",
+   "created": "2026-06-19T11:00"
+  },
+  {
+   "key": "metrogas_aug",
+   "name": "Pay Metrogas",
+   "due": "2026-08-25",
+   "list": "casa",
+   "created": "2026-08-19T11:00"
+  },
+  {
+   "key": "metrogas_oct",
+   "name": "Pay Metrogas",
+   "due": "2026-10-25",
+   "list": "casa",
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "abl_jun",
+   "name": "Pay ABL",
+   "due": "2026-06-12",
+   "list": "casa",
+   "completed": "2026-06-11T12:00",
+   "created": "2026-06-06T11:00"
+  },
+  {
+   "key": "abl_jul",
+   "name": "Pay ABL",
+   "due": "2026-07-12",
+   "list": "casa",
+   "completed": "2026-07-10T09:30",
+   "created": "2026-07-06T11:00"
+  },
+  {
+   "key": "abl_aug",
+   "name": "Pay ABL",
+   "due": "2026-08-12",
+   "list": "casa",
+   "completed": "2026-08-12T10:20",
+   "created": "2026-08-06T11:00"
+  },
+  {
+   "key": "abl_sep",
+   "name": "Pay ABL",
+   "due": "2026-09-12",
+   "list": "casa",
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "tele_jun",
+   "name": "Pay Telecentro",
+   "due": "2026-06-05",
+   "list": "casa",
+   "completed": "2026-06-04T20:00",
+   "created": "2026-05-30T12:00"
+  },
+  {
+   "key": "tele_jul",
+   "name": "Pay Telecentro",
+   "due": "2026-07-05",
+   "list": "casa",
+   "completed": "2026-07-05T11:00",
+   "created": "2026-06-29T12:00"
+  },
+  {
+   "key": "tele_aug",
+   "name": "Pay Telecentro",
+   "due": "2026-08-05",
+   "list": "casa",
+   "completed": "2026-08-04T19:45",
+   "created": "2026-07-30T12:00"
+  },
+  {
+   "key": "meds_jun",
+   "name": "Pick up the medication at the pharmacy",
+   "due": "2026-06-29",
+   "list": "salud",
+   "completed": "2026-06-29T11:40",
+   "created": "2026-06-23T12:00"
+  },
+  {
+   "key": "meds_jul",
+   "name": "Pick up the medication at the pharmacy",
+   "due": "2026-07-27",
+   "list": "salud",
+   "completed": "2026-07-27T11:50",
+   "created": "2026-07-21T12:00"
+  },
+  {
+   "key": "meds_aug",
+   "name": "Pick up the medication at the pharmacy",
+   "due": "2026-08-24",
+   "list": "salud",
+   "effort": 20,
+   "created": "2026-08-18T12:00"
+  },
+  {
+   "key": "meds_sep",
+   "name": "Pick up the medication at the pharmacy",
+   "due": "2026-09-21",
+   "list": "salud",
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "rx_jun",
+   "name": "Get the repeat prescription from Dra Pinto",
+   "due": "2026-06-22",
+   "list": "salud",
+   "completed": "2026-06-22T10:10",
+   "created": "2026-06-16T10:00"
+  },
+  {
+   "key": "rx_jul",
+   "name": "Get the repeat prescription from Dra Pinto",
+   "due": "2026-07-20",
+   "list": "salud",
+   "completed": "2026-07-20T10:05",
+   "created": "2026-07-14T10:00"
+  },
+  {
+   "key": "rx_aug",
+   "name": "Get the repeat prescription from Dra Pinto",
+   "due": "2026-08-17",
+   "list": "salud",
+   "completed": "2026-08-17T09:50",
+   "created": "2026-08-11T10:00"
+  },
+  {
+   "key": "rx_sep",
+   "name": "Get the repeat prescription from Dra Pinto",
+   "due": "2026-09-14",
+   "list": "salud",
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "patente_jun",
+   "name": "Pay the patente",
+   "due": "2026-06-10",
+   "list": "auto",
+   "completed": "2026-06-09T12:00",
+   "created": "2026-06-04T10:00"
+  },
+  {
+   "key": "patente_aug",
+   "name": "Pay the patente",
+   "due": "2026-08-10",
+   "list": "auto",
+   "completed": "2026-08-07T12:00",
+   "created": "2026-08-04T10:00"
+  },
+  {
+   "key": "patente_oct",
+   "name": "Pay the patente",
+   "due": "2026-10-10",
+   "list": "auto",
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "fe_vida",
+   "name": "Do the fe de vida at the bank",
+   "due": "2026-08-27",
+   "list": "tramites",
+   "priority": 1,
+   "created": "2026-08-21T11:00"
+  },
+  {
+   "key": "pami_card",
+   "name": "Renew the PAMI credential",
+   "due": "2026-09-30",
+   "list": "tramites",
+   "effort": 45,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "tap",
+   "name": "Fix the leaking tap in the bathroom",
+   "due": "2026-08-26",
+   "list": "casa",
+   "effort": 45,
+   "priority": 2,
+   "created": "2026-08-20T12:00"
+  },
+  {
+   "key": "balcony",
+   "name": "Clean the balcony",
+   "due": "2026-08-30",
+   "list": "casa",
+   "effort": 60,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "call_beto",
+   "name": "Call Beto about Mar del Plata",
+   "due": "2026-08-28",
+   "list": "familia",
+   "effort": 15,
+   "created": "2026-08-22T13:00"
+  },
+  {
+   "key": "valentina_gift",
+   "name": "Send Valentina's birthday present by courier",
+   "due": "2026-08-26",
+   "list": "familia",
+   "priority": 1,
+   "effort": 45,
+   "created": "2026-08-20T13:00"
+  },
+  {
+   "key": "tito_back",
+   "name": "Pay Tito back for the battery",
+   "due": "2026-08-30",
+   "list": "auto",
+   "priority": 1,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "laura_folder",
+   "name": "Return the choir folder to Laura",
+   "due": "2026-08-19",
+   "list": "coro_l",
+   "effort": 10,
+   "created": "2026-08-13T11:00"
+  },
+  {
+   "key": "gaby_recipe",
+   "name": "Send Gaby the milanesas recipe",
+   "due": "2026-08-21",
+   "list": "familia",
+   "effort": 15,
+   "created": "2026-08-15T10:00"
+  },
+  {
+   "key": "susi_flowers",
+   "name": "Buy flowers for Susi",
+   "due": "2026-08-29",
+   "list": "familia",
+   "effort": 15,
+   "created": "2026-08-23T09:40"
+  },
+  {
+   "key": "susi_glasses",
+   "name": "Pick up Susi's glasses",
+   "due": "2026-08-26",
+   "list": "salud",
+   "effort": 20,
+   "created": "2026-08-20T11:00"
+  },
+  {
+   "key": "fridge",
+   "name": "Look at new fridges",
+   "due": "2026-08-12",
+   "list": "casa",
+   "status": "cancelled",
+   "created": "2026-08-06T10:00"
+  },
+  {
+   "key": "bloods_book",
+   "name": "Book the blood test",
+   "due": "2026-08-20",
+   "list": "salud",
+   "completed": "2026-08-19T10:30",
+   "created": "2026-08-14T10:00"
+  },
+  {
+   "key": "old_wax",
+   "name": "Wax the car",
+   "due": "2026-08-30",
+   "list": "auto",
+   "created": "2026-08-10T10:00",
+   "trashed": "2026-08-20T10:00"
+  },
+  {
+   "key": "old_curtains",
+   "name": "Order new curtains",
+   "due": "2026-05-15",
+   "list": "casa",
+   "trashed": "2026-06-01T10:00",
+   "created": "2026-05-09T11:00"
+  }
+ ],
+ "notebooks": [
+  {
+   "key": "salud_nb",
+   "name": "Salud Notes"
+  },
+  {
+   "key": "coro_nb",
+   "name": "Coro Notes"
+  },
+  {
+   "key": "auto_nb",
+   "name": "Auto Notes"
+  },
+  {
+   "key": "recetas_nb",
+   "name": "Recetas"
+  },
+  {
+   "key": "viajes_nb",
+   "name": "Viajes"
+  },
+  {
+   "key": "cartas_nb",
+   "name": "Cartas"
+  }
+ ],
+ "notes": [
+  {
+   "key": "meds",
+   "name": "Medication list",
+   "created": "2026-01-08T10:00",
+   "body": "enalapril in the morning, atorvastatin at night, aspirin 100 after lunch, Susi takes levothyroxine fasting",
+   "notebook": "salud_nb",
+   "pinned": true
+  },
+  {
+   "key": "pressure",
+   "name": "Blood pressure log August",
+   "created": "2026-08-23T09:00",
+   "body": "130 over 80 on the 3rd, 125 over 78 on the 10th, 140 over 85 on the 17th after the stairs, 128 over 80 today",
+   "notebook": "salud_nb"
+  },
+  {
+   "key": "navarro_mar",
+   "name": "Dr Navarro advice March",
+   "created": "2026-03-03T12:00",
+   "body": "less salt, walk thirty minutes a day, bring the log next time, stress test in September if the pressure stays up",
+   "notebook": "salud_nb"
+  },
+  {
+   "key": "bloodwork",
+   "name": "Bloodwork results June",
+   "created": "2026-06-04T18:00",
+   "body": "cholesterol 190, sugar 98, creatinine fine, Dra Pinto says same dose of atorvastatin",
+   "notebook": "salud_nb"
+  },
+  {
+   "key": "knee",
+   "name": "Knee exercises from Lucas",
+   "created": "2026-08-11T12:30",
+   "body": "leg raises twenty times, wall sits for a minute, the bike ten minutes, no stairs when it clicks",
+   "notebook": "salud_nb"
+  },
+  {
+   "key": "repertoire",
+   "name": "Repertorio del concierto de primavera",
+   "created": "2026-08-05T21:30",
+   "body": "Fauré Requiem Introit and Kyrie, Ave Verum Corpus, two Argentine folk songs arranged by Maestra Laura",
+   "notebook": "coro_nb",
+   "pinned": true
+  },
+  {
+   "key": "faure_bass",
+   "name": "Fauré Requiem bass notes",
+   "created": "2026-08-12T22:00",
+   "body": "watch the entry at the Sanctus, breathe before the long phrase in the Libera me, ask Hugo for the page numbers",
+   "notebook": "coro_nb"
+  },
+  {
+   "key": "rehearsal_19",
+   "name": "Rehearsal notes 19 Aug",
+   "created": "2026-08-19T21:30",
+   "body": "tenors rushed the Kyrie, basses need the low D, Laura wants everyone in black, extra rehearsals in September",
+   "notebook": "coro_nb"
+  },
+  {
+   "key": "coro_rules",
+   "name": "Coro dues and rules",
+   "created": "2026-01-14T19:45",
+   "body": "dues 8000 a month to Marta, folders back on the shelf, no phones in the pews, coffee fund voluntary",
+   "notebook": "coro_nb"
+  },
+  {
+   "key": "car_details",
+   "name": "Car details",
+   "created": "2026-01-09T11:00",
+   "body": "Fiat Siena 2009, GNC fourth generation, 32 psi front and rear, spare tyre under the boot floor",
+   "notebook": "auto_nb",
+   "pinned": true
+  },
+  {
+   "key": "car_services",
+   "name": "Car services",
+   "created": "2026-02-20T12:00",
+   "body": "last full service with Quiroga in February, brake pads in June, timing belt due at 110000 kilometres",
+   "notebook": "auto_nb"
+  },
+  {
+   "key": "vtv_dates",
+   "name": "VTV and oblea dates",
+   "created": "2026-07-02T10:30",
+   "body": "VTV expires 30 September, the GNC oblea expires 20 September, patente cuota every two months",
+   "notebook": "auto_nb"
+  },
+  {
+   "key": "milanesas",
+   "name": "Milanesas de Susi",
+   "created": "2026-02-03T20:00",
+   "body": "thin beef round, egg and garlic and parsley, breadcrumbs twice, shallow fry, lemon at the table",
+   "notebook": "recetas_nb"
+  },
+  {
+   "key": "locro",
+   "name": "Locro del 25 de mayo",
+   "created": "2026-05-24T19:00",
+   "body": "white corn soaked overnight, beans, pumpkin, chorizo colorado, panceta, cook five hours, sauce on the side",
+   "notebook": "recetas_nb"
+  },
+  {
+   "key": "empanadas",
+   "name": "Empanadas tucumanas",
+   "created": "2026-04-18T18:30",
+   "body": "hand-cut beef, spring onion, cumin, hard-boiled egg, bake hot, repulgue with the double fold",
+   "notebook": "recetas_nb"
+  },
+  {
+   "key": "noquis",
+   "name": "Ñoquis del 29",
+   "created": "2026-07-29T12:30",
+   "body": "potatoes baked not boiled, flour little by little, a coin under the plate for luck",
+   "notebook": "recetas_nb"
+  },
+  {
+   "key": "madrid_notes",
+   "name": "Madrid 2025 - what to bring",
+   "created": "2025-11-22T20:00",
+   "body": "dulce de leche, yerba mate, alfajores for the kids, a warm coat, euros from Tito's cousin",
+   "notebook": "viajes_nb"
+  },
+  {
+   "key": "cba_plan",
+   "name": "Córdoba trip plan",
+   "created": "2026-08-18T21:00",
+   "body": "fly Friday morning, stay at Seba's, cake on Saturday, back Sunday evening, bring Benicio the wooden train",
+   "notebook": "viajes_nb"
+  },
+  {
+   "key": "diary_hard",
+   "name": "Diary entry - difficult week",
+   "created": "2026-08-14T22:30",
+   "body": "Susi's knee, three phone calls with PAMI, the lift was out twice, nobody picked up at the clinic"
+  },
+  {
+   "key": "diary_sunday",
+   "name": "Diary entry - lovely Sunday",
+   "created": "2026-08-23T21:00",
+   "body": "long call with Gaby and the kids, Valentina showed me her drawings, milanesas for lunch, early to bed"
+  },
+  {
+   "key": "valentina_ideas",
+   "name": "Gift ideas for Valentina",
+   "created": "2026-08-10T20:00",
+   "body": "a book of Argentine tales, a mate set for kids, a scarf of Boca for her brother"
+  },
+  {
+   "key": "susi_menu",
+   "name": "Susi's birthday menu",
+   "created": "2026-08-21T19:30",
+   "body": "provoleta, empanadas, bife de chorizo, flan with dulce de leche, a bottle of Malbec from Juli"
+  },
+  {
+   "key": "truco_rules",
+   "name": "Truco rules we argue about",
+   "created": "2026-07-16T20:00",
+   "body": "flor counts or not, envido with the three, who says mazo, the tournament rules are stricter"
+  },
+  {
+   "key": "building_numbers",
+   "name": "Building phone numbers",
+   "created": "2026-03-25T09:30",
+   "body": "Carlos the administrator, Aníbal the super, the lift company, the water tank cleaners, the locksmith"
+  },
+  {
+   "key": "old_list",
+   "name": "Old shopping list",
+   "created": "2026-08-10T10:00",
+   "body": "yerba, milk, bread, lemons",
+   "trashed": "2026-08-16T10:00"
+  },
+  {
+   "key": "old_scratch",
+   "name": "Scratch note",
+   "created": "2026-04-02T10:00",
+   "body": "call the bank about the card",
+   "trashed": "2026-05-05T10:00"
+  }
+ ],
+ "folders": [
+  {
+   "key": "jubilacion_f",
+   "name": "Jubilación"
+  },
+  {
+   "key": "salud_f",
+   "name": "Salud"
+  },
+  {
+   "key": "auto_f",
+   "name": "Auto"
+  },
+  {
+   "key": "casa_f",
+   "name": "Casa"
+  },
+  {
+   "key": "familia_f",
+   "name": "Familia"
+  },
+  {
+   "key": "coro_f",
+   "name": "Coro"
+  },
+  {
+   "key": "clasificar_f",
+   "name": "Por clasificar"
+  }
+ ],
+ "documents": [
+  {
+   "key": "recibo_jul",
+   "name": "Recibo de jubilación Julio 2026",
+   "folder": "jubilacion_f",
+   "created": "2026-07-31T10:00"
+  },
+  {
+   "key": "recibo_jun",
+   "name": "Recibo de jubilación Junio 2026",
+   "folder": "jubilacion_f",
+   "created": "2026-06-30T10:00"
+  },
+  {
+   "key": "supervivencia",
+   "name": "Certificado de supervivencia 2026",
+   "folder": "jubilacion_f",
+   "created": "2026-02-12T11:00"
+  },
+  {
+   "key": "pami_doc",
+   "name": "PAMI credencial 2026",
+   "folder": "salud_f",
+   "created": "2026-01-10T10:00",
+   "starred": true
+  },
+  {
+   "key": "cardio_doc",
+   "name": "Estudios cardiológicos 2026",
+   "folder": "salud_f",
+   "created": "2026-03-03T13:00"
+  },
+  {
+   "key": "receta_ago",
+   "name": "Receta electrónica Enalapril Agosto 2026",
+   "folder": "salud_f",
+   "created": "2026-08-17T10:00"
+  },
+  {
+   "key": "cataratas",
+   "name": "Informe cirugía de cataratas 2026",
+   "folder": "salud_f",
+   "created": "2026-05-12T12:00"
+  },
+  {
+   "key": "seguro_auto",
+   "name": "Seguro del auto 2026",
+   "folder": "auto_f",
+   "created": "2026-01-12T10:00",
+   "starred": true
+  },
+  {
+   "key": "vtv_2025",
+   "name": "VTV certificado 2025",
+   "folder": "auto_f",
+   "created": "2025-09-18T11:00"
+  },
+  {
+   "key": "cedula",
+   "name": "Cédula verde Fiat Siena",
+   "folder": "auto_f",
+   "created": "2024-03-04T10:00"
+  },
+  {
+   "key": "patente_doc_jun",
+   "name": "Patente comprobante Junio 2026",
+   "folder": "auto_f",
+   "created": "2026-06-09T12:30"
+  },
+  {
+   "key": "expensas_doc_jul",
+   "name": "Expensas liquidación Julio 2026",
+   "folder": "casa_f",
+   "created": "2026-07-09T11:00"
+  },
+  {
+   "key": "escritura",
+   "name": "Escritura del departamento",
+   "folder": "casa_f",
+   "created": "2026-01-11T10:00",
+   "starred": true
+  },
+  {
+   "key": "pasaporte",
+   "name": "Pasaporte Horacio scan",
+   "folder": "familia_f",
+   "created": "2026-01-10T11:00"
+  },
+  {
+   "key": "dni_susana",
+   "name": "DNI Susana scan",
+   "folder": "familia_f",
+   "created": "2026-01-10T11:05"
+  },
+  {
+   "key": "faure_score",
+   "name": "Partitura Fauré Requiem 2026",
+   "folder": "coro_f",
+   "created": "2026-08-04T18:00"
+  },
+  {
+   "key": "programa",
+   "name": "Programa concierto de primavera 2026",
+   "folder": "coro_f",
+   "created": "2026-08-20T20:00"
+  },
+  {
+   "key": "resumen_bna",
+   "name": "Resumen de cuenta Banco Nación Julio 2026",
+   "created": "2026-08-02T09:00"
+  },
+  {
+   "key": "old_abl",
+   "name": "Boleta vieja ABL 2025",
+   "folder": "casa_f",
+   "created": "2025-12-01T10:00",
+   "trashed": "2026-05-08T10:00"
+  },
+  {
+   "key": "dup_cedula",
+   "name": "Foto de cédula duplicada",
+   "folder": "auto_f",
+   "created": "2026-08-01T10:00",
+   "trashed": "2026-08-17T10:00"
+  }
+ ],
+ "albums": [
+  {
+   "key": "madrid_al",
+   "name": "Madrid 2025"
+  },
+  {
+   "key": "nietos_al",
+   "name": "Nietos"
+  },
+  {
+   "key": "coro_al",
+   "name": "Coro Vecinal"
+  },
+  {
+   "key": "cba_al",
+   "name": "Córdoba"
+  },
+  {
+   "key": "familia_al",
+   "name": "Familia Sartori"
+  },
+  {
+   "key": "viejas_al",
+   "name": "Escaneos viejos"
+  }
+ ],
+ "photos": [
+  {
+   "key": "p_mad_prado",
+   "name": "Prado steps with the kids",
+   "taken": "2025-12-23T11:30",
+   "albums": [
+    "madrid_al"
+   ],
+   "people": [
+    "gaby",
+    "valentina",
+    "tomas"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_mad_lucio",
+   "name": "Dinner at Casa Lucio",
+   "taken": "2025-12-27T21:40",
+   "albums": [
+    "madrid_al"
+   ],
+   "people": [
+    "javier",
+    "gaby"
+   ]
+  },
+  {
+   "key": "p_mad_toledo",
+   "name": "Toledo from the bridge",
+   "taken": "2025-12-29T13:10",
+   "albums": [
+    "madrid_al"
+   ],
+   "people": [
+    "gaby"
+   ]
+  },
+  {
+   "key": "p_mad_roscon",
+   "name": "Roscón on Three Kings",
+   "taken": "2026-01-04T09:20",
+   "albums": [
+    "madrid_al"
+   ],
+   "people": [
+    "valentina",
+    "tomas"
+   ]
+  },
+  {
+   "key": "p_mad_retiro",
+   "name": "Rowing at the Retiro",
+   "taken": "2025-12-26T12:00",
+   "albums": [
+    "madrid_al"
+   ],
+   "people": [
+    "susana",
+    "tomas"
+   ]
+  },
+  {
+   "key": "p_mad_airport",
+   "name": "Goodbye at Barajas",
+   "taken": "2026-01-04T12:15",
+   "albums": [
+    "madrid_al"
+   ],
+   "people": [
+    "gaby",
+    "javier",
+    "valentina",
+    "tomas"
+   ]
+  },
+  {
+   "key": "p_ni_val_draw",
+   "name": "Valentina's drawing of the flat",
+   "taken": "2026-08-23T14:55",
+   "albums": [
+    "nietos_al"
+   ],
+   "people": [
+    "valentina"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_ni_tomas",
+   "name": "Tomás missing a tooth",
+   "taken": "2026-06-14T19:00",
+   "albums": [
+    "nietos_al"
+   ],
+   "people": [
+    "tomas"
+   ]
+  },
+  {
+   "key": "p_ni_beni",
+   "name": "Benicio on the wooden train",
+   "taken": "2026-05-17T11:20",
+   "albums": [
+    "nietos_al"
+   ],
+   "people": [
+    "benicio"
+   ]
+  },
+  {
+   "key": "p_ni_beni2",
+   "name": "Benicio blowing out four candles",
+   "taken": "2025-10-11T17:30",
+   "albums": [
+    "nietos_al",
+    "cba_al"
+   ],
+   "people": [
+    "benicio",
+    "seba",
+    "caro"
+   ]
+  },
+  {
+   "key": "p_ni_call",
+   "name": "Video call with the three kids",
+   "taken": "2026-07-26T14:30",
+   "albums": [
+    "nietos_al"
+   ],
+   "people": [
+    "valentina",
+    "tomas",
+    "benicio"
+   ]
+  },
+  {
+   "key": "p_co_stage",
+   "name": "Choir on the parish steps",
+   "taken": "2026-06-27T21:30",
+   "albums": [
+    "coro_al"
+   ],
+   "people": [
+    "laura",
+    "hugo",
+    "nelly",
+    "marta_p"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_co_laura",
+   "name": "Maestra Laura conducting",
+   "taken": "2026-08-19T20:15",
+   "albums": [
+    "coro_al"
+   ],
+   "people": [
+    "laura"
+   ]
+  },
+  {
+   "key": "p_co_basses",
+   "name": "The basses before the concert",
+   "taken": "2026-06-27T19:50",
+   "albums": [
+    "coro_al"
+   ],
+   "people": [
+    "hugo",
+    "raul_z"
+   ]
+  },
+  {
+   "key": "p_co_score",
+   "name": "Fauré score with my pencil marks",
+   "taken": "2026-08-12T22:10",
+   "albums": [
+    "coro_al"
+   ]
+  },
+  {
+   "key": "p_co_coffee",
+   "name": "Coffee break at rehearsal",
+   "taken": "2026-08-19T20:45",
+   "albums": [
+    "coro_al"
+   ],
+   "people": [
+    "nelly",
+    "marta_p"
+   ]
+  },
+  {
+   "key": "p_cb_house",
+   "name": "Seba's house in Nueva Córdoba",
+   "taken": "2025-10-11T12:00",
+   "albums": [
+    "cba_al"
+   ],
+   "people": [
+    "seba"
+   ]
+  },
+  {
+   "key": "p_cb_sierras",
+   "name": "Sierras de Córdoba from the car",
+   "taken": "2025-10-12T10:30",
+   "albums": [
+    "cba_al"
+   ]
+  },
+  {
+   "key": "p_cb_asado",
+   "name": "Asado at Seba's",
+   "taken": "2025-10-11T14:20",
+   "albums": [
+    "cba_al"
+   ],
+   "people": [
+    "seba",
+    "caro",
+    "susana"
+   ]
+  },
+  {
+   "key": "p_cb_cake",
+   "name": "Benicio's cake",
+   "taken": "2025-10-11T17:10",
+   "albums": [
+    "cba_al"
+   ],
+   "people": [
+    "benicio"
+   ]
+  },
+  {
+   "key": "p_fa_asado",
+   "name": "My 68th birthday asado",
+   "taken": "2026-07-11T14:30",
+   "albums": [
+    "familia_al"
+   ],
+   "people": [
+    "susana",
+    "juli",
+    "nico",
+    "tia_marta"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_fa_juli",
+   "name": "Juli and Nico at the terrace",
+   "taken": "2026-07-11T16:00",
+   "albums": [
+    "familia_al"
+   ],
+   "people": [
+    "juli",
+    "nico"
+   ]
+  },
+  {
+   "key": "p_fa_susi",
+   "name": "Susi with her sister",
+   "taken": "2026-05-24T13:00",
+   "albums": [
+    "familia_al"
+   ],
+   "people": [
+    "susana",
+    "tia_marta"
+   ]
+  },
+  {
+   "key": "p_fa_beto",
+   "name": "Beto in Mar del Plata",
+   "taken": "2026-02-08T11:00",
+   "albums": [
+    "familia_al"
+   ],
+   "people": [
+    "beto"
+   ]
+  },
+  {
+   "key": "p_fa_wedding",
+   "name": "Juli and Nico's civil wedding",
+   "taken": "2024-11-16T12:30",
+   "albums": [
+    "familia_al"
+   ],
+   "people": [
+    "juli",
+    "nico",
+    "susana"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_truco",
+   "name": "Truco table at the club",
+   "taken": "2026-08-20T18:30",
+   "people": [
+    "cacho",
+    "pancho",
+    "gallego"
+   ]
+  },
+  {
+   "key": "p_siena",
+   "name": "The Siena after the wash",
+   "taken": "2026-07-04T10:10"
+  },
+  {
+   "key": "p_balcony",
+   "name": "Geraniums on the balcony",
+   "taken": "2026-08-16T09:15",
+   "people": [
+    "susana"
+   ]
+  },
+  {
+   "key": "p_lobby",
+   "name": "The lobby freshly painted",
+   "taken": "2026-06-20T11:00",
+   "people": [
+    "encargado"
+   ]
+  },
+  {
+   "key": "p_receipt",
+   "name": "Photo of the pharmacy receipt",
+   "taken": "2026-07-27T11:55"
+  },
+  {
+   "key": "p_lift",
+   "name": "Out of order sign on the lift",
+   "taken": "2026-08-13T08:10"
+  },
+  {
+   "key": "p_sunset",
+   "name": "Sunset over Caballito",
+   "taken": "2026-03-14T18:40",
+   "starred": true
+  },
+  {
+   "key": "p_blurry",
+   "name": "Blurry photo of the cat next door",
+   "taken": "2026-08-01T10:00",
+   "trashed": "2026-08-12T09:00"
+  },
+  {
+   "key": "p_screen",
+   "name": "Screenshot of the bus map",
+   "taken": "2026-03-02T12:00",
+   "trashed": "2026-04-02T09:00"
+  }
+ ],
+ "debts": [
+  {
+   "key": "d_cacho_cafe",
+   "person": "cacho",
+   "direction": "owes_me",
+   "amount": 8000,
+   "name": "coffee and tostados at the club",
+   "date": "2026-08-20"
+  },
+  {
+   "key": "d_pancho_deck",
+   "person": "pancho",
+   "direction": "owes_me",
+   "amount": 4500,
+   "name": "his half of the deck",
+   "date": "2026-07-09",
+   "settled": "2026-07-16T19:30"
+  },
+  {
+   "key": "d_tito_battery",
+   "person": "tito",
+   "direction": "i_owe",
+   "amount": 85000,
+   "name": "car battery he bought",
+   "date": "2026-08-08"
+  },
+  {
+   "key": "d_mirta_plumber",
+   "person": "mirta_z",
+   "direction": "owes_me",
+   "amount": 22000,
+   "name": "shared plumber visit",
+   "date": "2026-08-01"
+  },
+  {
+   "key": "d_beto_tickets",
+   "person": "beto",
+   "direction": "owes_me",
+   "amount": 60000,
+   "name": "bus tickets to Mar del Plata",
+   "date": "2026-02-06",
+   "settled": "2026-02-20T12:00"
+  },
+  {
+   "key": "d_gaby_toy",
+   "person": "gaby",
+   "direction": "i_owe",
+   "amount": 48000,
+   "name": "toy she sent to Benicio for me",
+   "date": "2026-08-15"
+  },
+  {
+   "key": "d_seba_flights",
+   "person": "seba",
+   "direction": "owes_me",
+   "amount": 150000,
+   "name": "his share of the family flights",
+   "date": "2026-08-17"
+  },
+  {
+   "key": "d_martap_copies",
+   "person": "marta_p",
+   "direction": "owes_me",
+   "amount": 6300,
+   "name": "choir photocopies",
+   "date": "2026-08-05"
+  },
+  {
+   "key": "d_quiroga_pads",
+   "person": "quiroga",
+   "direction": "i_owe",
+   "amount": 42000,
+   "name": "brake pads",
+   "date": "2026-06-20",
+   "settled": "2026-06-27T11:00"
+  },
+  {
+   "key": "d_farmacia_cuenta",
+   "person": "farmacia",
+   "direction": "i_owe",
+   "amount": 15500,
+   "name": "medication on the account",
+   "date": "2026-07-27"
+  },
+  {
+   "key": "d_carlosm_extra",
+   "person": "carlos_m",
+   "direction": "i_owe",
+   "amount": 12000,
+   "name": "extra expensas for the water tank",
+   "date": "2026-08-10"
+  },
+  {
+   "key": "d_nora_tickets",
+   "person": "nora",
+   "direction": "owes_me",
+   "amount": 36000,
+   "name": "concert tickets for her and Susi",
+   "date": "2026-05-30",
+   "settled": "2026-06-06T17:00"
+  }
+ ],
+ "locker": [
+  {
+   "key": "bna_login",
+   "name": "Banco Nación home banking",
+   "type": "login",
+   "username": "hsartori58",
+   "url": "https://bna.com.ar",
+   "password": "Caballito#1958",
+   "code": "KRSXG5CTMVRXEZLU",
+   "starred": true
+  },
+  {
+   "key": "anses_login",
+   "name": "Mi ANSES",
+   "type": "login",
+   "username": "20-12345678-9",
+   "url": "https://anses.gob.ar",
+   "password": "Jubilado2023!"
+  },
+  {
+   "key": "pami_login",
+   "name": "PAMI app",
+   "type": "login",
+   "username": "hsartori",
+   "url": "https://pami.org.ar",
+   "password": "Pami_Susi66"
+  },
+  {
+   "key": "visa_card",
+   "name": "Visa Banco Nación",
+   "type": "card",
+   "card_number": "4509123498765432",
+   "cvv": "318"
+  },
+  {
+   "key": "door_note",
+   "name": "Building front door code",
+   "type": "note",
+   "notes": "1958A then enter",
+   "starred": true
+  },
+  {
+   "key": "dni",
+   "name": "DNI Horacio",
+   "type": "identity"
+  },
+  {
+   "key": "home_wifi",
+   "name": "Home wifi",
+   "type": "wifi",
+   "password": "SusiYHoracio1958",
+   "starred": true
+  },
+  {
+   "key": "club_wifi",
+   "name": "Club wifi",
+   "type": "wifi",
+   "password": "TrucoJueves26"
+  },
+  {
+   "key": "telecentro_pw",
+   "name": "Telecentro account",
+   "type": "password",
+   "password": "Cable#Caballito"
+  },
+  {
+   "key": "nas_ssh",
+   "name": "Family photo server SSH key",
+   "type": "ssh_key",
+   "notes": "Seba set it up on an old PC, ed25519"
+  },
+  {
+   "key": "telegram_bot",
+   "name": "Building Telegram bot token",
+   "type": "api_credential",
+   "notes": "for the building group announcements"
+  },
+  {
+   "key": "passport",
+   "name": "Passport - Horacio",
+   "type": "passport",
+   "notes": "AAB123456, expires 2031-03-11"
+  },
+  {
+   "key": "cbu",
+   "name": "Banco Nación caja de ahorro",
+   "type": "bank_account",
+   "notes": "CBU in the red folder, branch Caballito",
+   "starred": true
+  },
+  {
+   "key": "licencia",
+   "name": "Licencia de conducir",
+   "type": "driving_licence",
+   "notes": "renew every three years after 65, expires March 2028"
+  },
+  {
+   "key": "eset",
+   "name": "ESET antivirus licence",
+   "type": "software_licence",
+   "notes": "two PCs, renews in September",
+   "starred": true
+  },
+  {
+   "key": "usdt",
+   "name": "USDT wallet",
+   "type": "crypto_wallet",
+   "notes": "Seba's idea, about 300 dollars"
+  },
+  {
+   "key": "club_member",
+   "name": "Club Social y Deportivo membership",
+   "type": "membership",
+   "notes": "socio 1184, fees paid to September"
+  },
+  {
+   "key": "escritura_doc",
+   "name": "Escritura original",
+   "type": "document",
+   "notes": "original with the escribano, copy in the Casa folder"
+  },
+  {
+   "key": "old_wifi",
+   "name": "Old Telecentro wifi",
+   "type": "wifi",
+   "password": "Telecentro2023",
+   "trashed": "2026-08-10T10:00"
+  },
+  {
+   "key": "old_yahoo",
+   "name": "Old Yahoo mail",
+   "type": "login",
+   "username": "hsartori58",
+   "password": "Yahoo1999",
+   "trashed": "2026-04-02T10:00"
+  }
+ ],
+ "links": [
+  {
+   "from": "cba_beds",
+   "to": "seba"
+  },
+  {
+   "from": "cba_gift",
+   "to": "benicio"
+  },
+  {
+   "from": "cba_plants",
+   "to": "encargado"
+  },
+  {
+   "from": "autop_oblea",
+   "to": "quiroga"
+  },
+  {
+   "from": "tito_back",
+   "to": "tito"
+  },
+  {
+   "from": "conc_print",
+   "to": "marta_p"
+  },
+  {
+   "from": "conc_invite",
+   "to": "nora"
+  },
+  {
+   "from": "conc_invite",
+   "to": "tito"
+  },
+  {
+   "from": "laura_folder",
+   "to": "laura"
+  },
+  {
+   "from": "susi_cake",
+   "to": "susana"
+  },
+  {
+   "from": "susi_flowers",
+   "to": "susana"
+  },
+  {
+   "from": "susi_glasses",
+   "to": "susana"
+  },
+  {
+   "from": "gaby_recipe",
+   "to": "gaby"
+  },
+  {
+   "from": "valentina_gift",
+   "to": "valentina"
+  },
+  {
+   "from": "call_beto",
+   "to": "beto"
+  },
+  {
+   "from": "rx_jun",
+   "to": "pinto"
+  },
+  {
+   "from": "rx_jul",
+   "to": "pinto"
+  },
+  {
+   "from": "rx_aug",
+   "to": "pinto"
+  },
+  {
+   "from": "rx_sep",
+   "to": "pinto"
+  },
+  {
+   "from": "meds_jun",
+   "to": "farmacia"
+  },
+  {
+   "from": "meds_jul",
+   "to": "farmacia"
+  },
+  {
+   "from": "meds_aug",
+   "to": "farmacia"
+  },
+  {
+   "from": "meds_sep",
+   "to": "farmacia"
+  },
+  {
+   "from": "bloods_book",
+   "to": "pinto"
+  },
+  {
+   "from": "tap",
+   "to": "encargado"
+  },
+  {
+   "from": "expensas_sep",
+   "to": "carlos_m"
+  },
+  {
+   "from": "expensas_aug",
+   "to": "carlos_m"
+  },
+  {
+   "from": "navarro_mar",
+   "to": "navarro"
+  },
+  {
+   "from": "bloodwork",
+   "to": "pinto"
+  },
+  {
+   "from": "knee",
+   "to": "kinesio"
+  },
+  {
+   "from": "faure_bass",
+   "to": "hugo"
+  },
+  {
+   "from": "rehearsal_19",
+   "to": "laura"
+  },
+  {
+   "from": "coro_rules",
+   "to": "marta_p"
+  },
+  {
+   "from": "car_services",
+   "to": "quiroga"
+  },
+  {
+   "from": "milanesas",
+   "to": "susana"
+  },
+  {
+   "from": "valentina_ideas",
+   "to": "valentina"
+  },
+  {
+   "from": "susi_menu",
+   "to": "juli"
+  },
+  {
+   "from": "building_numbers",
+   "to": "carlos_m"
+  },
+  {
+   "from": "building_numbers",
+   "to": "encargado"
+  },
+  {
+   "from": "cba_plan",
+   "to": "seba"
+  },
+  {
+   "from": "diary_sunday",
+   "to": "gaby"
+  }
+ ]
+}

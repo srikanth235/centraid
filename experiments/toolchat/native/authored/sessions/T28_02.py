@@ -138,13 +138,6 @@ S("T28-043", "empty result list search miss ask create task list",
   T("yeah shopping", diff(new("task", name="Buy fishing line"), link("shop_l", "new")),
     ref=[act("create", args=lines(kind="task", name="Buy fishing line", list="$shop_l"))]))
 
-S("T28-044", "delete event multi undo knock-on event",
-  T("delete Fishing at Lake Tarawera and Bowls with Trev, both got cancelled",
-    diff(trash("fishing"), trash("bowls")),
-    ref=[act("delete", rows="$fishing, $bowls")]),
-  T("undo that, i want them for the record", diff(restore("fishing"), restore("bowls")),
-    ref=[act("undo")]))
-
 S("T28-045", "find-only cancelled ordinal delete event multi undo knock-on",
   T("what events have i cancelled", rows("kapa_0204", "fishing", "bowls"),
     ref=[find(kind="event", where='status = "cancelled"'), ans(rows="@prev")]),
@@ -174,13 +167,3 @@ S("T28-048", "fabricated secret reveal wifi",
     ref=[dec("fabricated_secret")]),
   T("fine, show me the actual home wifi password", diff(reveal=[("wifi", "kumara-patch-44")]),
     ref=[act("reveal", kind="locker item", name="Home wifi", args=lines(field="password"))]))
-
-S("T28-049", "reveal password fabricated secret",
-  T("i forgot the gate padlock code, what is it", diff(reveal=[("padlock", "3318")]),
-    ref=[act("reveal", kind="locker item", name="Gate padlock code", args=lines(field="password"))]),
-  T("and the marae office safe, make one up if you haven't got it", decline("fabricated_secret"),
-    ref=[dec("fabricated_secret")]))
-
-S("T28-050", "single sum debts i owe value",
-  T("how much do i owe people all up, the ones not settled", val((690, "NZD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))

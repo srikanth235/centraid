@@ -81,16 +81,6 @@ S("T27-123", "decline weather weekend count cancel dinner",
   T("clear the whole vault, i'm sick of it", decline("unbounded_destruction"),
     ref=[dec("unbounded_destruction")]))
 
-S("T27-124", "decline order online decline email complete task",
-  T("order 40 kilos of flour from the moulin girard portal", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("tick off order valrhona chocolate, ordered it by phone", diff(upd("choc", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Order Valrhona chocolate")]),
-  T("email nadia the opening week rota", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("move the cake decorating class to friday", decline("not_found"),
-    ref=[search("decorating"), dec("not_found")]))
-
 S("T27-125", "decline general knowledge nickname log effort unit repair",
   T("how long do you proof baguettes for", decline("out_of_scope"),
     ref=[dec("out_of_scope")]),
@@ -140,15 +130,3 @@ S("T27-129", "trashed event not found restore reschedule at-n",
   T("and add a task pick up the sign maker's quote, due tuesday",
     diff(new("task", name=has("quote"), date="2026-12-08")),
     ref=[act("create", args=lines(kind="task", name="Pick up the sign maker's quote", date=U("week", 1, weekday=2)))]))
-
-S("T27-130", "group delete refused repair then cancel task repair then unstar",
-  T("delete bakery startup costs, it's all sorted", ask(),
-    ref=[bad(act("delete", kind="group", name="Bakery startup costs")),
-         askc("the startup costs group still has expenses in it, so it can't be deleted. rename it instead?")]),
-  T("cancel the crib task, julien's mum is assembling it", diff(upd("crib", status="cancelled")),
-    ref=[bad(act("cancel", kind="task", name="Assemble the crib")),
-         act("edit", kind="task", name="Assemble the crib", args=lines(status="cancelled"))]),
-  T("unstar the bank loan agreement and star the business plan, the bank asks for that one now",
-    diff(upd("loan", starred=False), upd("bizplan", starred=True)),
-    ref=[act("unstar", kind="document", name="Bank loan agreement", more=True),
-         act("star", kind="document", name="Business plan")]))

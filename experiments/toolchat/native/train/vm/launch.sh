@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # launch.sh: start (or restart) the training job on ONE GCP Spot GPU VM, cycling zones and shapes until one has capacity.
 #
-#   JOB=fit1 BUCKET=centraid-train STAGE_DIR=$KGL_STAGE/fit1 ./launch.sh [--recreate] [--dry-run]
+#   JOB=fit1 BUCKET=centraid-train STAGE_DIR=$BUNDLE_STAGE/fit1 ./launch.sh [--recreate] [--score-mark best|MARK] [--dry-run]
 #
 # Preference order (SHAPES): H100 80GB a3-highgpu-1g, A100 80GB a2-ultragpu-1g, A100 40GB a2-highgpu-1g. For each shape every zone
 # of ZONES (discovered, else hardcoded) is tried with --provisioning-model=SPOT --instance-termination-action=STOP. On a
@@ -12,25 +12,41 @@
 #   --recreate   restore into a NEW VM, possibly in another zone: deletes this job's stopped VM and boot disk first (the disk is
 #                zonal, so it cannot follow the job to another zone) and lets run_job.sh pull the newest resume checkpoint
 #                from gs://$BUCKET/$JOB/out/. Refused while the bucket has no resume checkpoint (FORCE_RECREATE=1 overrides).
+#   --score-mark M  the checkpoint the job scores after training (env SCORE_MARK): `best`, the mark out/best.json names (train.py: the lowest
+#                val decision loss at its marks, ties to the later one), or a mark's name (ckpt-050); `final` clears an earlier choice. Default:
+#                FINAL, i.e. ckpt-100. The owner decides here; `best` is never assumed. The choice is written to gs://$BUCKET/$JOB/score_mark, which
+#                run_job.sh reads when scoring begins, so it holds across preemptions, restarts and --recreate (and can be given on any later run).
 #   --dry-run    print what would happen (image, zones per shape, VM check) and create nothing.
 # Exit: 0 VM up (or already up) / job already done, 1 refused or error, 2 max-wait reached.
 . "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 RECREATE=0
 DRY=0
-for a in "$@"; do
-  case $a in
+SCORE_MARK=${SCORE_MARK:-}
+while [ $# -gt 0 ]; do
+  case $1 in
     --recreate) RECREATE=1 ;;
     --dry-run) DRY=1 ;;
-    -h | --help) sed -n '2,19p' "${BASH_SOURCE[0]}"; exit 0 ;;
-    *) die "unknown argument $a" ;;
+    --score-mark) SCORE_MARK=${2:?--score-mark needs a value (best, or a mark name such as ckpt-050)}; shift ;;
+    -h | --help) sed -n '2,/^[^#]/{/^#/p}' "${BASH_SOURCE[0]}"; exit 0 ;;
+    *) die "unknown argument $1" ;;
   esac
+  shift
 done
+case $SCORE_MARK in */* | .*) die "--score-mark $SCORE_MARK: a mark is a folder name in the run's out/ (ckpt-050), or best" ;; esac
 need_common
 
 if [ "$DRY" = 0 ]; then
   ensure_bucket
   upload_job
+fi
+
+# --score-mark: the choice is an object of the job; run_job.sh reads it when scoring begins (a VM that is running or restarted sees it too)
+if [ -n "$SCORE_MARK" ]; then
+  if [ "$DRY" = 1 ]; then log "--dry-run: would write $GS/score_mark = $SCORE_MARK"; else
+    printf '%s\n' "$SCORE_MARK" | gcloud storage cp - "$GS/score_mark" --project "$PROJECT" >/dev/null || die "could not write $GS/score_mark"
+    log "score_mark=$SCORE_MARK written to $GS/score_mark: after training, scoring takes $([ "$SCORE_MARK" = best ] && echo "the mark out/best.json names" || echo "$SCORE_MARK")"
+  fi
 fi
 
 if bucket_has "$GS/DONE" && [ -z "${FORCE:-}" ]; then
@@ -90,6 +106,7 @@ launch_cycle "$VM_NAME" "$SHAPES" "" || exit $?
 cat <<MSG
 
 VM $VM_NAME is up ($(shape_label "$CREATED_SHAPE"), $CREATED_ZONE). It installs dependencies and starts training by itself (first boot ~10 min).
+  scoring:  after training the job scores $([ -n "$SCORE_MARK" ] && echo "mark $SCORE_MARK" || echo "the mark in gs://$BUCKET/$JOB/score_mark if there is one, else FINAL (ckpt-100); --score-mark best scores the mark with the lowest val decision loss")
   watch:    JOB=$JOB BUCKET=$BUCKET ./watch.sh
   alive?    gcloud compute instances describe $VM_NAME --zone $CREATED_ZONE --project $PROJECT --format='value(status)'
   console:  gcloud compute instances get-serial-port-output $VM_NAME --zone $CREATED_ZONE --project $PROJECT | tail -50

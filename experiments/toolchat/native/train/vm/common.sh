@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# common.sh: settings and gcloud helpers shared by launch.sh, watch.sh and probe.sh (sourced, not run).
+# common.sh: settings and gcloud helpers shared by the other scripts in this directory (sourced, not run).
 # Every setting below can be overridden from the environment. Nothing here stores a credential: gcloud
 # uses whatever `gcloud auth login` (or application-default / a service account) the caller already has.
 
@@ -8,9 +8,11 @@ VM_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # ---- what to run, where --------------------------------------------------------------------------------
 PROJECT=${PROJECT:-centraid}
 REGION=${REGION:-us-central1}
-JOB=${JOB:-}                               # the staged job name (required): kaggle.py build <JOB> ...
+JOB=${JOB:-}                               # the staged job name (required): bundle.py build <JOB> ...
 BUCKET=${BUCKET:-${PROJECT}-train}         # gs://$BUCKET/$JOB/ holds job/, out/, logs/, results/, DONE
-STAGE_DIR=${STAGE_DIR:-}                   # kaggle.py's $KGL_STAGE/<job>; uploaded to gs://$BUCKET/$JOB/job/ if not there yet
+STAGE_DIR=${STAGE_DIR:-}                   # bundle.py's $BUNDLE_STAGE/<job>; uploaded to gs://$BUCKET/$JOB/job/ if not there yet
+BUNDLE_STAGE=${BUNDLE_STAGE:-${TMPDIR:-/tmp}/centraid-bundles}   # bundle.py's staging root (the same default there)
+BUNDLES_DIR=${BUNDLES_DIR:-$BUNDLE_STAGE/bundles}                # bundles.sh writes <set>/{bundle.dat,job.json,kernel.py} here; score_ckpt.sh reads them
 SERVICE_ACCOUNT=${SERVICE_ACCOUNT:-}       # optional: VM service account e-mail (default: the project's default compute SA)
 
 # ---- shapes: preference order, machine types (the GPU is part of the machine type) ---------------------
@@ -120,8 +122,39 @@ shape_price() {
 # ---- bucket ----------------------------------------------------------------------------------------------
 bucket_has() { gcloud storage ls "$1" >/dev/null 2>&1; }   # object or prefix
 
+# ---- live VM logs ------------------------------------------------------------------------------------------------
+# run_job.sh mirrors the trainer and kernel logs to the VM's serial console as "[tag] line" (console_follow), next to its own
+# supervisor lines. serial_pump reads that console with --start (only new bytes), drops the OS noise (systemd, dbus, snap, the syslog
+# copy of every startup-script line) and prints the rest. Needs only compute.instances.getSerialPortOutput (instanceAdmin has it);
+# no ssh, no key on disk. SERIAL_START is the byte offset to resume from; reset it to 0 when the VM boots again (a new console).
+SERIAL_START=${SERIAL_START:-0}
+SERIAL_POLL=${SERIAL_POLL:-4}
+serial_filter() {
+  grep -a -v -E '^[A-Z][a-z]{2} +[0-9]+ [0-9:]{8} |systemd\[|dbus-daemon|PackageKit|snap\.google|gce_workload|^\s*$' |
+    sed -u -E 's/^\[ *[0-9.]+\] google_metadata_script_runner\[[0-9]+\]: (startup|shutdown)-script: /[vm] /'
+}
+# serial_pump VM ZONE [SECONDS] [STOP_CMD]: print new console lines every SERIAL_POLL s for SECONDS (default: until STOP_CMD succeeds,
+# checked each round; a final read follows the stop so the last lines are shown). STOP_CMD is evaluated, e.g. 'bucket_has gs://b/DONE'.
+serial_pump() {
+  local vm=$1 zone=$2 secs=${3:-0} stop=${4:-} end errf out n stopped=0
+  [ "$secs" -gt 0 ] && end=$(($(date +%s) + secs)) || end=0
+  errf=$(mktemp)
+  while :; do
+    out=$(gcloud compute instances get-serial-port-output "$vm" --zone "$zone" --start "$SERIAL_START" --project "$PROJECT" 2>"$errf")
+    n=$(sed -n 's/.*--start=\([0-9][0-9]*\).*/\1/p' "$errf" | tail -1)
+    [ -n "$n" ] && SERIAL_START=$n
+    [ -n "$out" ] && printf '%s\n' "$out" | serial_filter
+    [ "$stopped" = 1 ] && break
+    if [ -n "$stop" ] && eval "$stop"; then stopped=1; continue; fi
+    [ "$end" -gt 0 ] && [ "$(date +%s)" -ge "$end" ] && break
+    sleep "$SERIAL_POLL"
+  done
+  rm -f "$errf"
+}
+
 ensure_bucket() {
-  if gcloud storage buckets describe "gs://$BUCKET" --project "$PROJECT" >/dev/null 2>&1; then
+  if gcloud storage buckets describe "gs://$BUCKET" --project "$PROJECT" >/dev/null 2>&1 \
+     || gcloud storage ls "gs://$BUCKET" --project "$PROJECT" >/dev/null 2>&1; then   # an object-only role cannot describe the bucket
     return 0
   fi
   log "creating bucket gs://$BUCKET in $REGION"
@@ -129,18 +162,15 @@ ensure_bucket() {
     --uniform-bucket-level-access || die "could not create gs://$BUCKET (name taken? set BUCKET=...)"
 }
 
-# Upload the staged job (kaggle.py's <stage>/<job>/{data,kernel}) unless the bucket has it already (FORCE_UPLOAD=1 redoes it).
+# Upload the staged job (bundle.py's <stage>/<job>/{data,kernel}) unless the bucket has it already (FORCE_UPLOAD=1 redoes it).
 upload_job() {
   if [ -z "${FORCE_UPLOAD:-}" ] && bucket_has "$GS/job/job.json"; then
     log "job already in $GS/job/ (FORCE_UPLOAD=1 to replace)"
     return 0
   fi
-  [ -n "$STAGE_DIR" ] || die "$GS/job/job.json is not in the bucket and STAGE_DIR is unset: python kaggle.py build $JOB ... then STAGE_DIR=<stage>/$JOB"
+  [ -n "$STAGE_DIR" ] || die "$GS/job/job.json is not in the bucket and STAGE_DIR is unset: python train/bundle.py build $JOB ... then STAGE_DIR=$BUNDLE_STAGE/$JOB"
   [ -f "$STAGE_DIR/data/job.json" ] && [ -f "$STAGE_DIR/kernel/kernel.py" ] || die "$STAGE_DIR is not a staged job (need data/job.json and kernel/kernel.py)"
-  local f files=()
-  for f in "$STAGE_DIR"/data/*; do
-    case ${f##*/} in dataset-metadata.json) ;; *) files+=("$f") ;; esac
-  done
+  local files=("$STAGE_DIR"/data/*)
   log "uploading ${files[*]##*/} kernel.py to $GS/job/"
   gcloud storage cp "${files[@]}" "$STAGE_DIR/kernel/kernel.py" "$GS/job/" --project "$PROJECT" || die "upload failed"
 }

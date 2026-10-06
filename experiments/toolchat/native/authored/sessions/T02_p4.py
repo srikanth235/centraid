@@ -21,17 +21,6 @@ S("T02-201", "both all-three followup reschedule unstar",
                             upd("itinerary", starred=False)),
     ref=[act("unstar", rows="@prev")]))
 
-S("T02-202", "ordinal second last weekend complete",
-  T("what's on this weekend", rows("farmers", "gallery", "dimsum_jun"),
-    ref=[ans(kind="event", when=W(span(U("week", 0, weekday=6), U("week", 0, weekday=7))))]),
-  T("second one's off, too wrecked", diff(upd("gallery", status="cancelled")),
-    ref=[act("cancel", rows="$gallery")]),
-  T("what's due this week", rows("tomo_logo", "soap_1", "gl_colour", "tap", "clay_tools", "rachel_followup", "gl_sketches",
-                                 "gl_send", "thankyou"),
-    ref=[ans(kind="task", when=W(U("week", 0)))]),
-  T("last one's done, sent it last night", diff(upd("thankyou", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$thankyou")]))
-
 S("T02-203", "owe direction balance settle_debt sum",
   T("what do i owe diego", val((-11.5, "CAD")),
     ref=[ans(op="balance", kind="person", name="Diego Ramirez")]),

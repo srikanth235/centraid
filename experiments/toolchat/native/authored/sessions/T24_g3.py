@@ -97,17 +97,6 @@ S("T24-136", "ask options event reschedule never mind limit sum min",
     ref=[comp(op="min", field="amount", kind="debt", where='direction = "i_owe" and status = "open"'),
          ans(value="@prev")]))
 
-S("T24-137", "unbounded locker ask options never mind unbounded calendar",
-  T("wipe out all my locker items, i'm sick of remembering passwrods for everything", decline("unbounded_destruction"),
-    ref=[dec("unbounded_destruction")]),
-  T("delete the invoice, it's paid", ask("inv_whit", "inv_soto"),
-    ref=[act("delete", kind="document", name="Invoice"),
-         askc("invoice whitfield september or invoice soto august?", options="$inv_whit, $inv_soto")]),
-  T("on second thought leave the invoices alone, i still need them for taxes at the end of the yaer", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("clear out the whole calendar and start over for fall, all of it", decline("unbounded_destruction"),
-    ref=[dec("unbounded_destruction")]))
-
 S("T24-138", "limit person last contacted unbounded tasks min cadence max effort in progress",
   T("who were the last thre people i talked to", rows("elena", "sofia", "ray"),
     ref=[ans(kind="person", order="date desc", limit=3)]),
@@ -117,26 +106,4 @@ S("T24-138", "limit person last contacted unbounded tasks min cadence max effort
     ref=[ans(op="min", field="cadence", kind="person")]),
   T("what's the biggest effort task that's already in progress, i need to know if i can finish it before the weekend", val(180),
     ref=[comp(op="max", field="effort", kind="task", where='status = "in_progress"'),
-         ans(value="@prev")]))
-
-S("T24-139", "limit dentist limit photos ask never mind",
-  T("my next dentist appointment", rows("dentist_mateo"),
-    ref=[ans(kind="event", name="Dentist", when=FROM_TODAY, order="date asc", limit=1)]),
-  T("the five newset photos", rows("p_team_huddle", "p_andre", "p_jersey", "p_union", "p_whiteboard"),
-    ref=[ans(kind="photo", order="date desc", limit=5)]),
-  T("delete the soto estimate", ask("estimate", "soto_note"),
-    ref=[askc("the estimate at the soto house on the 20th or the soto estimate note?", options="$estimate, $soto_note")]),
-  T("nah forget it, i'll wait to see what javier says on sunday before i delete anything", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
-S("T24-140", "limit task next week unbounded debts sum saturday max weekend typo",
-  T("the biggest task due next week", val(90),
-    ref=[ans(op="max", field="effort", kind="task", when=U("week", 1), where='status = "open"')]),
-  T("delete all my dets they're bugging me, wipe every single one", decline("unbounded_destruction"),
-    ref=[dec("unbounded_destruction")]),
-  T("add up my saterday, minutes", val(330),
-    ref=[comp(op="sum", field="duration", kind="event", when=U("week", 0, weekday=6)),
-         ans(value="@prev")]),
-  T("and the longest thing this weekend", val(240),
-    ref=[comp(op="max", field="duration", kind="event", when=W(WEEKEND)),
          ans(value="@prev")]))

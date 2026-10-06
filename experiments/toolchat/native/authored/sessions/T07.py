@@ -47,22 +47,6 @@ S("T07-005", "single wifi reveal where",
   T("show me the wifi password, the plumber wants it", diff(reveal=[("wifi", "chacra-huasao-58")]),
     ref=[act("reveal", kind="locker item", where='type = "wifi"', args=lines(field="password"))]))
 
-S("T07-006", "people cadence met where",
-  T("who am i supposed to check in with more than every two weeks", rows("julio", "valeria", "juana", "teodoro", "efrain",
-                                                                        "rosa_c", "lucia"),
-    ref=[ans(kind="person", where="cadence < 14 days")]),
-  T("and who did i meet at the pisac market", rows("nilda", "fortunata"),
-    ref=[ans(kind="person", where='met = "Pisac market"')]),
-  T("anyone i've not spoken to since before february", rows("fortunata", "ana", "raul"),
-    ref=[ans(kind="person", when=W({"to": U("month", -2)}))]))
-
-S("T07-007", "debt settle multi undo ledger",
-  T("jaime and carmen both paid me back at rehearsal", diff(upd("d_jaime", status="settled"), upd("d_carmen", status="settled")),
-    ref=[find(kind="debt", where='direction = "owes_me" and status = "open"'),
-         act("settle_debt", rows="$d_jaime, $d_carmen")]),
-  T("who still owes me", rows("d_rosa", "d_luis", "d_teodoro"),
-    ref=[ans(kind="debt", where='direction = "owes_me" and status = "open"')]))
-
 S("T07-008", "choir remove_from where soprano balance",
   T("carmen's leaving the choir group, take her out", diff(unlink("choir_g", "carmen")),
     ref=[act("remove_from", kind="person", name="carmen", linked_to="$choir_g", args=lines(from_="$choir_g"))]),

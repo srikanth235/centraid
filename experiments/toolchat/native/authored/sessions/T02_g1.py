@@ -47,38 +47,6 @@ S("T02-105", "contrast pottery named day repair edit multi write",
     ref=[act("complete", kind="task", name="Call Ben about the leaky tap", more=True),
          act("reschedule", kind="task", name="Pick up clay tools", args=lines(to=U("week", 0, weekday=5)))]))
 
-S("T02-106", "ask options climbing cancel pick then star person",
-  T("cancel the climbing thing", ask("climb_0614", "squamish_jun"),
-    ref=[act("cancel", kind="event", name="climbing", when=W({"from": U("day", 0)})),
-         askc("the hive night on the 14th or squamish on the 19th?", options="$climb_0614, $squamish_jun")]),
-  T("squamish, forecast is awful", diff(upd("squamish_jun", status="cancelled")),
-    ref=[act("cancel", rows="$squamish_jun")]),
-  T("star nadia petrov, she keeps me safe on the rope", diff(upd("nadia", starred=True)),
-    ref=[act("star", kind="person", name="Nadia Petrov")]),
-  T("how many hive nights have i got left", val(1),
-    ref=[ans(op="count", kind="event", name="Climbing at The Hive", when=W({"from": U("day", 0)}))]))
-
-S("T02-107", "ask options invoice push a week then complete tidewater",
-  T("push the invoice a week", ask("inv_gl_final", "inv_mf", "inv_tide_cover"),
-    ref=[act("reschedule", kind="task", name="Invoice", where='status = "open"',
-             args=lines(to=U("week", 1, anchor="row"))),
-         askc("greenleaf final, maple & fern or tidewater cover?", options="$inv_gl_final, $inv_mf, $inv_tide_cover")]),
-  T("maple and fern", diff(upd("inv_mf", date="2027-06-21")),
-    ref=[act("reschedule", rows="$inv_mf", args=lines(to=U("week", 1, anchor="row")))]),
-  T("and tick off the tidewater cover invoice, sent it an hour ago",
-    diff(upd("inv_tide_cover", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$inv_tide_cover")]))
-
-S("T02-108", "contrast invoice named push weekday and week",
-  T("greenleaf final invoice, push it to next friday", diff(upd("inv_gl_final", date="2027-06-18")),
-    ref=[act("reschedule", kind="task", name="Invoice Greenleaf final", args=lines(to=U("week", 1, weekday=5)))]),
-  T("the maple & fern one a week later too", diff(upd("inv_mf", date="2027-06-21")),
-    ref=[act("reschedule", kind="task", name="Invoice Maple & Fern 0412", args=lines(to=U("week", 1, anchor="row")))]),
-  T("when's my teeth cleaning again", rows("dentist"),
-    ref=[ans(kind="event", name="Teeth cleaning"),
-         search("teeth cleaning", kind="event"),
-         ans(rows="$dentist")]))
-
 S("T02-109", "ask options tidewater complete then contrast invoice",
   T("mark the tidewater cover one done", ask("inv_tide_cover", "tide_final"),
     ref=[act("complete", kind="task", name="Tidewater cover"),

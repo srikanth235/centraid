@@ -22,17 +22,6 @@ S("T20-201", "both add_to folder scans both star lorenzos",
   T("star both", diff(upd("lorenzo_r", starred=True), upd("lorenzo_g", starred=True)),
     ref=[act("star", rows="@prev")]))
 
-S("T20-202", "ordinal third complete relist fourth reschedule move list",
-  T("what's left on the move list",
-    rows("boxes", "utilities", "pack_wine", "cleaners", "address", "deposit_back"),
-    ref=[ans(kind="task", linked_to="$move_l", where=LEFT)]),
-  T("the third one's done, packed the wine last night", diff(upd("pack_wine", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$pack_wine")]),
-  T("and what's left now", rows("boxes", "utilities", "cleaners", "address", "deposit_back"),
-    ref=[ans(kind="task", linked_to="$move_l", where=LEFT)]),
-  T("do the fourth one monday", diff(upd("address", date="2026-06-01")),
-    ref=[act("reschedule", rows="$address", args=lines(to=U("week", 1, weekday=1)))]))
-
 S("T20-203", "owe direction positive balance negative balance settle mine sum",
   T("what does stefano owe me", val((100, "EUR")),
     ref=[ans(op="balance", rows="$stefano")]),
@@ -64,16 +53,3 @@ S("T20-205", "bare weekday at n reschedule create relative range",
     ref=[act("create", args=lines(kind="event", name="Dinner with Giulia", date=U("week", 0, weekday=6, time="20:00")))]),
   T("check my calendar monday to wednesday of next week", rows("bike_service", "keys_pickup", "brief_0602", "fede_visit", "electrician_visit"),
     ref=[ans(kind="event", when=W(span(U("week", 1, weekday=1), U("week", 1, weekday=3))))]))
-
-S("T20-206", "two writes settle debt complete task both directions",
-  T("paid fede for the chianti and ticked off the dry cleaning",
-    diff(upd("d_fede", status="settled"), upd("dry_clean", status="completed", completed=ANY)),
-    ref=[find(kind="debt", name="chianti"),
-         act("settle_debt", kind="debt", name="Six bottles of Chianti", more=True),
-         act("complete", kind="task", name="Pick up dry cleaning")]),
-  T("davide sent the taxi money and i paid the car tax",
-    diff(upd("d_davide", status="settled"), upd("car_tax", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="Taxi after the staff dinner", more=True),
-         act("complete", kind="task", name="Pay the car tax")]),
-  T("what do i owe now", rows("d_andrea", "d_chiara", "d_gianni"),
-    ref=[ans(kind="debt", where=IOWE)]))

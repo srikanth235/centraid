@@ -70,11 +70,6 @@ S("T09-008", "reschedule event where",
   T("who's that with", rows("margaret"),
     ref=[ans(kind="person", linked_to="$checkin_0514")]))
 
-S("T09-009", "edit task multi",
-  T("set the smoke detector battery and dan's library books to five min each, they're nothing",
-    diff(upd("smoke", effort=5), upd("library", effort=5)),
-    ref=[act("edit", rows="$smoke, $library", args=lines(effort=5))]))
-
 S("T09-010", "create task reschedule new",
   T("remind me to renew the condo insurance by june first", diff(new("task", name=has("insurance"), date="2026-06-01")),
     ref=[act("create", args=lines(kind="task", name="Renew condo insurance", date=D("2026-06-01")))]),
@@ -87,12 +82,6 @@ S("T09-011", "add_to task where search",
          act("add_to", kind="task", linked_to="$nana", when=W(U("week", 0)), args=lines(to="$home_list"))]),
   T("what's open on home this month", rows("smoke", "library", "call_nana"),
     ref=[ans(kind="task", linked_to="$home_list", when=W(U("month", 0)), where='status = "open"')]))
-
-S("T09-012", "remove_from task where count",
-  T("take the cancelled thing off the condo list", diff(unlink("condo_list", "bike_room")),
-    ref=[act("remove_from", kind="task", linked_to="$condo_list", where='status = "cancelled"', args=lines(from_="$condo_list"))]),
-  T("tell me the count of what's left on the list", val(4),
-    ref=[ans(op="count", kind="task", linked_to="$condo_list")]))
 
 S("T09-013", "notebook count add_to note prev already",
   T("which notes aren't in any notebook", rows("lisbon_ideas", "gift_nana", "budget", "books", "run_log"),
@@ -172,11 +161,8 @@ S("T09-023", "find miss linked reschedule edit",
     ref=[act("edit", rows="$dentist", args=lines(description="bring night guard"))]))
 
 S("T09-024", "ambiguous photo ask pick",
-  T("star the dress fitting pic", ask("fitting_ada", "fitting_mirror"),
-    ref=[act("star", kind="photo", name="dress fitting"),
-         askc("the one of ada or the mirror selfie?", options="$fitting_ada, $fitting_mirror")]),
-  T("the one with ada", diff(upd("fitting_ada", starred=True)),
-    ref=[act("star", rows="$fitting_ada")]))
+  T("star the dress fitting pic", diff(upd("fitting_ada", starred=True)),
+    ref=[act("star", kind="photo", name="dress fitting")]))
 
 S("T09-025", "linked_to all photo album star",
   T("pics with both dan and ada in them", rows("eng_party", "xmas"),

@@ -61,16 +61,3 @@ S("T19-205", "bare weekday at n reschedule create relative range",
     ref=[act("create", args=lines(kind="event", name="Coffee with Nadia", date=U("week", 0, weekday=7, time="16:00")))]),
   T("what's on monday to wednesday this week", rows("plumber_pharm", "run_0414", "berrada_meet", "lina_vacc", "swim_0415"),
     ref=[ans(kind="event", when=W(span(U("week", 0, weekday=1), U("week", 0, weekday=3))))]))
-
-S("T19-206", "two writes settle debt complete task both directions",
-  T("paid aicha for the bread and milk and signed adam's homework book",
-    diff(upd("d_aicha", status="settled"), upd("homework", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="Bread and milk for Baba", more=True),
-         act("complete", kind="task", name="Sign Adam's homework book")]),
-  T("omar sent the glucometer money and i ordered the strips",
-    diff(upd("d_omar", status="settled"), upd("strips", status="completed", completed=ANY)),
-    ref=[find(kind="debt", name="glucometer"),
-         act("settle_debt", kind="debt", name="Baba's new glucometer", more=True),
-         act("complete", kind="task", name="Order glucose test strips")]),
-  T("what do i owe now", rows("d_nadia", "d_samira", "d_youssef", "d_khalid"),
-    ref=[ans(kind="debt", where=IOWE)]))

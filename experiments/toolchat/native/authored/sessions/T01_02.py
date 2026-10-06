@@ -54,16 +54,6 @@ S("T01-029", "create event edit repair field-kind-lacks",
     ref=[bad(act("edit", rows="$c1", args="location: Manchester Aquatics Centre")),
          act("edit", rows="$c1", args="description: Manchester Aquatics Centre")]))
 
-S("T01-030", "dead-end trashed read restore already-so",
-  T("what's happening with the center parcs task", rows("center_parcs"),
-    ref=[ans(kind="task", name="Center Parcs"), ans(rows="$center_parcs")]),
-  T("bring it back, might go in may", diff(restore("center_parcs")),
-    ref=[act("restore", rows="$center_parcs")]),
-  T("oh and tick off book mot", diff(already=["book_mot"]),
-    ref=[act("complete", kind="task", name="Book MOT"), ans(rows="$book_mot")]),
-  T("anything else sat in the task trash", rows("bike_fix"),
-    ref=[ans(kind="task", trashed=True)]))
-
 S("T01-031", "not-found decline order limit",
   T("when's tobi's karate class", decline("not_found"),
     ref=[search("karate"), dec("not_found")]),

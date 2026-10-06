@@ -66,15 +66,3 @@ S("T22-205", "bare weekday today counts at n reschedule create friday night rela
   T("what events fall between next monday and next wednesday",
     rows("inventory", "swim_2", "padel_0721", "forklift_training", "leads_0722"),
     ref=[ans(kind="event", when=W(span(U("week", 1, weekday=1), U("week", 1, weekday=3))))]))
-
-S("T22-206", "two writes settle debt complete task both directions",
-  T("paid karin the ferry money and ticked off the smoke alarm batteries",
-    diff(upd("d_karin", status="settled"), upd("smoke_alarm", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="Ferry tickets", more=True),
-         act("complete", kind="task", name="Change smoke alarm batteries")]),
-  T("tobias sent the ball money and i bought the balls",
-    diff(upd("d_tobias", status="settled"), upd("balls", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="Padel balls", more=True),
-         act("complete", kind="task", name="Buy new padel balls")]),
-  T("what do i owe now", rows("d_david", "d_gunnar", "d_fatima", "d_mats"),
-    ref=[ans(kind="debt", where=IOWE)]))

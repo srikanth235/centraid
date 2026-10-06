@@ -21,16 +21,6 @@ S("T28-101", "ask options hui reschedule balance positive",
   T("how much does kiri owe me", val((140, "NZD")),
     ref=[ans(op="balance", rows="$kiri")]))
 
-S("T28-102", "next hui then push back star person balance negative",
-  T("when's the next reunion hui", rows("hui_mar"),
-    ref=[ans(kind="event", name="Reunion planning hui", when=W({"from": U("day", 0)}))]),
-  T("push the reunion hui back a week", diff(upd("hui_mar", date="2026-03-15T14:00")),
-    ref=[act("reschedule", rows="$hui_mar", args=lines(to=U("week", 1, anchor="row")))]),
-  T("star sarah lim, she's the gp", diff(upd("sarah", starred=True)),
-    ref=[act("star", kind="person", name="Sarah Lim")]),
-  T("and what do i owe trev", val((-25, "NZD")),
-    ref=[search("trev", kind="person"), ans(op="balance", rows="$trev")]))
-
 S("T28-103", "ask options gp reschedule balance negative",
   T("move the gp to friday at 10", ask("gp_feb", "gp_mar"),
     ref=[act("reschedule", kind="event", name="gp",

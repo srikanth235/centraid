@@ -10,14 +10,6 @@ def W(expr):
 
 
 # 201 "both" after a two-row result, found through a nickname
-S("T09-201", "both debts nickname search settle prev owes me collect",
-  T("what's ada got outstanding with me", rows("d_ada", "d_ada2"),
-    ref=[search("Ada", kind="person"), ans(kind="debt", linked_to="$ada")]),
-  T("she sent it, settle those two", diff(upd("d_ada", status="settled"), upd("d_ada2", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]),
-  T("who else owes me", rows("d_kemi", "d_priya_r", "d_aiden", "d_jordan_l", "d_mom"),
-    ref=[ans(kind="debt", where='direction = "owes_me" and status = "open"')]))
-
 # 202 ordinals after a listing, and a number picked from an ask
 S("T09-202", "ordinal second condo list complete ask pick bar prep at 7",
   T("condo list, what's there", rows("agm_notice", "repaint", "reserve", "bike_room", "minutes_apr"),
@@ -42,16 +34,6 @@ S("T09-203", "debts owe direction balance flip create i_owe settle mine",
     ref=[act("settle_debt", kind="debt", linked_to="$ethan", where='direction = "i_owe"')]))
 
 # 204 everything but two
-S("T09-204", "except exclude two tasks bar prep reschedule week shift",
-  T("what's still open on the bar prep list", rows("index_fatou", "boardroom", "mark_essays", "ethics_hypo", "mock_exam"),
-    ref=[ans(kind="task", linked_to="$bar_list")]),
-  T("push them all a week except the index and the mock exam",
-    diff(upd("boardroom", date="2026-05-22"), upd("mark_essays", date="2026-05-25"), upd("ethics_hypo", date="2026-05-26")),
-    ref=[find(kind="task", within="@prev", exclude="$index_fatou, $mock_exam"),
-         act("reschedule", rows="@prev", args=lines(to=U("week", 1, anchor="row")))]),
-  T("left this week?", rows("index_fatou"),
-    ref=[ans(kind="task", linked_to="$bar_list", when=W(U("week", 0)))]))
-
 # 205 bare weekdays, "at N", a relative range
 S("T09-205", "bare weekday at N cake florist range create call today",
   T("move the cake tasting to sunday at 2", diff(upd("cake", date="2026-05-17T14:00")),

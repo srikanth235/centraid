@@ -13,19 +13,6 @@ S("T01-051", "find-only group linked-prev delete prev",
          unlink("night_out", "priya_s"), unlink("night_out", "zainab"), unlink("night_out", "siobhan")),
     ref=[act("delete", rows="@1")]))
 
-S("T01-052", "order limit exclude log this-week",
-  T("out of the people i try to keep up with, which three haven't i spoken to longest",
-    rows("ifeoma", "kunle", "maureen"),
-    ref=[ans(kind="person", where="cadence is set", order="date asc", limit=3)]),
-  T("and after them", rows("bisi", "kwame", "chioma"),
-    ref=[ans(kind="person", where="cadence is set", exclude="$ifeoma, $kunle, $maureen", order="date asc", limit=3)]),
-  T("had a brew with callum's mum today actually", diff(upd("maureen", date=ANY)),
-    ref=[act("log", rows="$maureen", args="kind: coffee")]),
-  T("so who've i been in touch with this week", rows("chioma", "priya_n", "mum", "callum", "maureen"),
-    ref=[ans(kind="person", when=J(U("week", 0)))]),
-  T("how many of my contacts aren't starred", val(26),
-    ref=[ans(op="count", kind="person", where="starred != yes")]))
-
 S("T01-053", "ambiguous-act ask pick cancel",
   T("cancel one of my nights, kwame's covering",
     ask("night_0319", "night_0320", "night_0416", "night_0417"),
@@ -76,10 +63,6 @@ S("T01-057", "delete albums multi",
     diff(gone("chi_album"), unlink("chi_album", "p_engagement"), unlink("chi_album", "p_ring"),
          unlink("chi_album", "p_girls"), gone("lisbon_album")),
     ref=[act("delete", rows="$chi_album, $lisbon_album")]))
-
-S("T01-058", "photo find miss search miss not-found",
-  T("pics from the pantomime?", decline("not_found"),
-    ref=[find(kind="photo", name="pantomime"), search("pantomime"), dec("not_found")]))
 
 S("T01-059", "album count edit album where",
   T("which albums have at least five photos", rows("xmas_album", "kids_album"),
@@ -211,11 +194,6 @@ S("T01-073", "edit photo multi star multi",
     ref=[act("edit", rows="$p_tiles, $p_teal", args="name: Kitchen ideas")]),
   T("and star them", diff(upd("p_tiles", starred=True), upd("p_teal", starred=True)),
     ref=[act("star", rows="$p_tiles, $p_teal")]))
-
-S("T01-074", "repair rows-and-selector reschedule",
-  T("plumber quote visit - he can only do 5 tomorrow, move it", diff(upd("plumber_visit", date="2026-03-13T17:00")),
-    ref=[bad(act("reschedule", rows="$plumber_visit", name="Plumber quote visit", args=lines(to=U("day", 1, time="17:00")))),
-         act("reschedule", rows="$plumber_visit", args=lines(to=U("day", 1, time="17:00")))]))
 
 S("T01-075", "repair date-via-edit reschedule",
   T("kids dentist is 4:30 now not quarter to 4", diff(upd("dentist", date="2026-03-26T16:30")),

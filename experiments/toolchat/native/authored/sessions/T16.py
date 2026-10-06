@@ -79,16 +79,6 @@ S("T16-009", "create event day read cancel new",
   T("call off the committee one, sohel can't come", diff(upd("+1", status="cancelled")),
     ref=[act("cancel", rows="$c1")]))
 
-S("T16-010", "single complete where today",
-  T("done the task that was due today", diff(upd("phone", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", when=W(U("day", 0)))]))
-
-S("T16-011", "complete where description contains list read",
-  T("the whiteboard one is done, mark it", diff(upd("target_chart", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", where='description contains "whiteboard"')]),
-  T("what else is open on the factory list", rows("audit_prep", "needle_log", "overtime", "ppe"),
-    ref=[ans(kind="task", linked_to="$factory_l", where='status = "open"')]))
-
 S("T16-012", "reopen named reschedule prev",
   T("reopen help mim with science fair project, teacher wants changes",
     diff(upd("science_fair", status="open", completed=None)),

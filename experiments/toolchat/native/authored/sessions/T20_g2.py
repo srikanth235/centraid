@@ -91,16 +91,6 @@ S("T20-125", "out of scope knowledge and web order then create task",
   T("ok add a task to reorder chianti from fede, due monday", diff(new("task", name=has("chianti", "fede"), date="2026-06-01")),
     ref=[act("create", args=lines(kind="task", name="Reorder Chianti from Fede", date=U("week", 1, weekday=1)))]))
 
-S("T20-126", "reopen then reschedule then delete and cancel that undo",
-  T("reopen the movers booking, the date fell through", diff(upd("movers_book", status="open", completed=None)),
-    ref=[act("reopen", kind="task", name="Book the movers")]),
-  T("and push it to friday", diff(upd("movers_book", date="2026-05-29")),
-    ref=[act("reschedule", rows="$movers_book", args=lines(to=U("week", 0, weekday=5)))]),
-  T("delete the pack the wine collection task", diff(trash("pack_wine")),
-    ref=[act("delete", kind="task", name="Pack the wine collection")]),
-  T("cancel that, i'm not done with the wine yet", diff(restore("pack_wine")),
-    ref=[act("undo")]))
-
 S("T20-127", "group balances stefano bea lorenzo gallo",
   T("where's stefano at in the club fund", val((-90, "EUR")),
     ref=[ans(op="balance", kind="group", name="Ciclisti del Mugnone", linked_to="$stefano")]),
@@ -108,23 +98,6 @@ S("T20-127", "group balances stefano bea lorenzo gallo",
     ref=[ans(op="balance", kind="group", name="Ciclisti del Mugnone", linked_to="$bea")]),
   T("lorenzo gallo in the staff dinner fund", val((-50, "EUR")),
     ref=[ans(op="balance", kind="group", name="Staff dinner fund", linked_to="$lorenzo_g")]))
-
-S("T20-128", "balance sofia then sums of debts",
-  T("how's sofia at with me overall", val((112, "EUR")),
-    ref=[ans(op="balance", rows="$sofia")]),
-  T("how much do people owe me on the books right now", val((230, "EUR")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("and what do i owe", val((495, "EUR")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("sofia paid me cash for the textbook, settle it", diff(upd("d_sofia", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="AIS textbook")]))
-
-S("T20-129", "effort unit count bad then edit priority",
-  T("how many tasks take more than an hour", val(8),
-    ref=[bad(ans(op="count", kind="task", where="effort > 1 hour")),
-         ans(op="count", kind="task", where="effort > 60 minutes")]),
-  T("bump the guest list to priority 2", diff(upd("guest_list", priority=2)),
-    ref=[act("edit", kind="task", name="Finalise guest list", args=lines(priority="2"))]))
 
 S("T20-130", "recovery star search not found trashed restore",
   T("star the electricity bill", diff(upd("enel_bill", starred=True)),

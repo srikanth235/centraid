@@ -66,12 +66,3 @@ S("T07-205", "bare weekday at N dentist range create",
     ref=[act("create", args=lines(kind="event", name="Call with Carla", date=U("week", 0, weekday=5, time="17:00")))]))
 
 # 206 two writes in one message
-S("T07-206", "two writes settle complete log visit complete",
-  T("paid sonia the 350 and ticked off the seed payment", diff(upd("d_sonia", status="settled"), upd("seed_pay", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", linked_to="$sonia", more=True),
-         act("complete", kind="task", name="Pay Sonia for the seed potatoes")]),
-  T("log a visit with juana and tick off the pills", diff(upd("juana", date=ANY), upd("mama_pills", status="completed", completed=ANY)),
-    ref=[act("log", rows="$juana", args=lines(kind="visit"), more=True),
-         act("complete", kind="task", name="pills")]),
-  T("how much do i still owe all told", val((295, "PEN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))

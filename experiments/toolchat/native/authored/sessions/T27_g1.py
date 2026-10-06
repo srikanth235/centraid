@@ -9,19 +9,12 @@ def W(expr):
 
 
 S("T27-101", "ask person star two camilles",
-  T("star camille", ask("camille_r", "camille_p"),
-    ref=[act("star", kind="person", name="Camille"),
-         askc("camille roux or camille petit?", options="$camille_r, $camille_p")]),
-  T("petit, from the prenatal class", diff(upd("camille_p", starred=True)),
-    ref=[act("star", rows="$camille_p")]))
+  T("star camille", diff(upd("camille_p", starred=True)),
+    ref=[act("star", kind="person", name="Camille")]))
 
 S("T27-102", "ask task complete order flour",
-  T("tick off order flour", ask("flour_a", "flour_b"),
-    ref=[act("complete", kind="task", name="Order flour"),
-         find(kind="task", name="Order flour"),
-         askc("the one from the 1st or the one for the 8th?", options="$flour_a, $flour_b")]),
-  T("the 8th, thomas confirmed it by phone", diff(upd("flour_b", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$flour_b")]),
+  T("tick off order flour", diff(upd("flour_b", status="completed", completed=ANY)),
+    ref=[act("complete", kind="task", name="Order flour")]),
   T("and tick off the vitamins too", diff(upd("vitamins", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="Buy prenatal vitamins")]))
 
@@ -48,12 +41,8 @@ S("T27-104", "ask task reschedule insurer bare weekday",
     ref=[act("reschedule", kind="task", name="Order paper bags and boxes", args=lines(to=U("week", 0, weekday=6)))]))
 
 S("T27-105", "ask task complete shop rent",
-  T("mark the shop rent as paid", ask("rent_09", "rent_10", "rent_11", "rent_12"),
-    ref=[act("complete", kind="task", name="shop rent"),
-         find(kind="task", name="shop rent"),
-         askc("which month's?", options="$rent_09, $rent_10, $rent_11, $rent_12")]),
-  T("december's, paid it this morning", diff(upd("rent_12", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$rent_12")]),
+  T("mark the shop rent as paid", diff(upd("rent_12", status="completed", completed=ANY)),
+    ref=[act("complete", kind="task", name="shop rent")]),
   T("and star the business insurance policy, just signed it", diff(upd("insurance", starred=True)),
     ref=[act("star", kind="document", name="Business insurance policy")]))
 
@@ -85,11 +74,8 @@ S("T27-108", "ask locker reveal wifi then star",
     ref=[act("star", rows="$wifi_shop", kind="locker item")]))
 
 S("T27-109", "ask locker star business then contrast star",
-  T("star the business one in my locker", ask("biz_visa", "biz_account"),
-    ref=[act("star", kind="locker item", name="business"),
-         askc("the business visa or the bakery account?", options="$biz_visa, $biz_account")]),
-  T("the account", diff(upd("biz_account", starred=True)),
-    ref=[act("star", rows="$biz_account")]),
+  T("star the business one in my locker", diff(upd("biz_account", starred=True)),
+    ref=[act("star", kind="locker item", name="business")]),
   T("star the personal mastercard too", diff(upd("perso_mc", starred=True)),
     ref=[act("star", kind="locker item", name="Personal Mastercard")]),
   T("and take the star off the metro card, camille has her own now", diff(upd("metro_card", starred=False)),

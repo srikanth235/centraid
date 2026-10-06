@@ -20,7 +20,7 @@ S("T07-026", "coop assembly agenda note complete list",
     ref=[act("complete", kind="task", name="Draft the assembly agenda")]),
   T("what's not done on the coop list this month",
     rows("seed_pay", "agro_docs", "scale", "expo_samples", "expo_banner", "truck_book", "member_list", "dues_03"),
-    ref=[ans(kind="task", linked_to="$coop_l", when=W(U("month", 0)), where='status != "completed"')]))
+    ref=[ans(kind="task", linked_to="$coop_l", when=W(U("month", 0)), where='status = "open"')]))
 
 S("T07-027", "person edit multi cadence",
   T("set wilber and nilda to a weekly check-in, harvest is coming", diff(upd("wilber", cadence=7), upd("nilda", cadence=7)),
@@ -176,15 +176,6 @@ S("T07-044", "photo date spans count star",
   T("and before twentieth jan at noon?", val(14),
     ref=[ans(op="count", kind="photo", when=W({"to": D("2026-01-20", "12:00")}))]))
 
-S("T07-045", "task date spans count",
-  T("how many things are due from next monday on", val(25),
-    ref=[ans(op="count", kind="task", when=W({"from": U("week", 1, weekday=1)}))]),
-  T("and from april through the fifteenth at 6pm", rows("storehouse", "ferti", "sacks"),
-    ref=[ans(kind="task", when=W(span(U("month", 0, name=4), D("2026-04-15", "18:00"))))]),
-  T("delete the pay coop dues task", ask(),
-    ref=[act("delete", kind="task", name="Pay coop dues"),
-         askc("there's one per month, which one? this month's open one?")]))
-
 S("T07-046", "task reschedule anchor edit undo field",
   T("push the irrigation check back two days", diff(upd("irrigation", date="2026-03-16")),
     ref=[act("reschedule", kind="task", name="irrigation", args=lines(to=U("day", 2, anchor="row")))]),
@@ -195,8 +186,7 @@ S("T07-046", "task reschedule anchor edit undo field",
 
 S("T07-047", "valeria rent ambiguous narrow list call balance",
   T("vale's rent is paid, tick it", diff(upd("rent_mar", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pay Valeria's rent"),
-         act("complete", kind="task", name="Pay Valeria's rent", where='status = "open"')]),
+    ref=[act("complete", kind="task", name="Pay Valeria's rent")]),
   T("what else is on her list", rows("vale_box", "vale_fees", "vale_laptop"),
     ref=[ans(kind="task", linked_to="$vale_l", where='status = "open"')]),
   T("the box one, move it to saturday", diff(upd("vale_box", date="2026-03-14")),
@@ -217,14 +207,3 @@ S("T07-049", "compute group count max min",
     ref=[comp(op="max", field="amount", kind="debt", where='status = "open"', group="direction"), ans(value="@prev")]),
   T("smallest one someone owes me?", val((15, "PEN")),
     ref=[ans(op="min", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]))
-
-S("T07-050", "folder delete refused ask then bulk",
-  T("delete the valeria folder, she keeps her own copies", ask(),
-    ref=[bad(act("delete", rows="$vale_f")),
-         askc("the valeria folder still holds her enrolment certificate, lease and grades. move them somewhere first?")]),
-  T("yeah put them in house and then get rid of it",
-    diff(unlink("vale_f", "enrol"), unlink("vale_f", "lease"), unlink("vale_f", "grades"),
-         link("house_f", "enrol"), link("house_f", "lease"), link("house_f", "grades"), gone("vale_f")),
-    ref=[find(kind="document", linked_to="$vale_f"),
-         act("add_to", rows="@prev", args=lines(to="$house_f"), more=True),
-         act("delete", rows="$vale_f")]))

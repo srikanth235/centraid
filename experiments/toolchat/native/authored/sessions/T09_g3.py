@@ -99,17 +99,6 @@ S("T09-143", "oldest debt limit delete all tasks min max typo",
   T("and the biggest thing i owe, to see how much to move to chequing first", val((2000, "CAD")),
     ref=[ans(op="max", field="amount", kind="debt", where=IOWE)]))
 
-S("T09-144", "three longest tasks sum ask thank-you never_mind typo",
-  T("my three longest open tasks", rows("cpd", "vows", "disc_outline"),
-    ref=[ans(kind="task", where=OPEN, order="effort desc", limit=3)]),
-  T("how many minutes is that in total, i need to know if it fits before the wedding", val(780),
-    ref=[ans(op="sum", field="effort", within="@prev")]),
-  T("delete the thank-you cards task", ask(),
-    ref=[act("delete", kind="task", name="Order thank-you cards"),
-         askc("the open one due in june or the one that's already done?")]),
-  T("no wait keep them both, the old one has the card designs in the desciption", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
 S("T09-145", "next dentist limit erase calendar honeymoon sum june max typo",
   T("when is my next dentist cleaning appointment, i need to know imediately", rows("dentist"),
     ref=[ans(kind="event", name="Dentist cleaning", when=FROM_NOW, order="date asc", limit=1)]),

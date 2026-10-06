@@ -16,12 +16,6 @@ S("T24-001", "starred read unstar person where star named",
   T("and star Linda Chavez, she's handling the physicals", diff(upd("linda", starred=True)),
     ref=[act("star", rows="$linda")]))
 
-S("T24-002", "unstar person prev multi team parent",
-  T("which team parents have a star on them", rows("patty", "yvonne"),
-    ref=[ans(kind="person", where='starred = yes and role = "team parent"')]),
-  T("unstar both, season hasn't even started", diff(upd("patty", starred=False), upd("yvonne", starred=False)),
-    ref=[act("unstar", rows="@prev")]))
-
 S("T24-003", "single unstar person where",
   T("unstar whoever's the history dept chair", diff(upd("jessica", starred=False)),
     ref=[act("unstar", kind="person", where='role = "history dept chair"')]))
@@ -116,35 +110,12 @@ S("T24-014", "single count open gym from today",
   T("how many open gyms are left", val(8),
     ref=[ans(op="count", kind="event", name="Open gym", when={"from": U("day", 0)})]))
 
-S("T24-015", "task completed list reopen task multi",
-  T("what's done on the history class list", rows("packets", "syllabus"),
-    ref=[ans(kind="task", linked_to="$school_l", where='status = "completed"')]),
-  T("reopen Copy primary source packets and Book the bus, copier jammed and the bus company flaked",
-    diff(upd("packets", status="open", completed=None), upd("bus", status="open", completed=None)),
-    ref=[act("reopen", rows="$packets, $bus")]))
-
 S("T24-016", "reopen task multi subtasks read",
   T("reopen Get quote from Sun City Sports and Send party invites",
     diff(upd("quote", status="open", completed=None), upd("invites", status="open", completed=None)),
     ref=[act("reopen", rows="$quote, $invites")]),
   T("what's under the jerseys task", rows("sizes", "quote", "jersey_money"),
     ref=[ans(kind="task", linked_to="$jerseys")]))
-
-S("T24-017", "create task list edit new delete task new",
-  T("add a task pick up trophies from sun city, next wednesday, basketball list",
-    diff(new("task", name=has("trophies"), date="2026-09-23"), link("team_l", "new")),
-    ref=[act("create", args=lines(kind="task", name="Pick up trophies from Sun City", date=U("week", 1, weekday=3),
-                                  list="$team_l"))]),
-  T("make it priority two", diff(upd("+1", priority=2)),
-    ref=[act("edit", rows="$c1", args=lines(priority=2))]),
-  T("scrap it, patty's getting them", diff(trash("+1")),
-    ref=[act("delete", rows="$c1")]))
-
-S("T24-018", "create task delete task new",
-  T("remind me to call the bus company monday", diff(new("task", name=has("bus company"), date="2026-09-21")),
-    ref=[act("create", args=lines(kind="task", name="Call the bus company", date=U("week", 1, weekday=1)))]),
-  T("delete it, jessica already called them", diff(trash("+1")),
-    ref=[act("delete", rows="$c1")]))
 
 S("T24-019", "effort literal within complete prev",
   T("quick stuff open, fifteen min or less",

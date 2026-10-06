@@ -19,11 +19,8 @@ S("T20-101", "star ask options payslip documents then two writes",
          act("unstar", kind="document", name="Employment contract")]))
 
 S("T20-102", "star ask options intesa locker then contrast strava",
-  T("star the intesa one", ask("intesa", "visa"),
-    ref=[act("star", kind="locker item", name="Intesa"),
-         askc("the home banking login or the visa card?", options="$intesa, $visa")]),
-  T("home banking", diff(upd("intesa", starred=True)),
-    ref=[act("star", rows="$intesa")]),
+  T("star the intesa one", diff(upd("intesa", starred=True)),
+    ref=[act("star", kind="locker item", name="Intesa")]),
   T("and my strava login", diff(upd("strava", starred=True)),
     ref=[act("star", kind="locker item", name="Strava")]))
 
@@ -51,15 +48,14 @@ S("T20-105", "ask options dentist description then star dentist role",
   T("and star the dentist herself, she fits me in a lot", diff(upd("valentina", starred=True)),
     ref=[act("star", kind="person", where='role contains "dentist"')]))
 
-S("T20-106", "ask options francesca tasting cancel then reschedule menu tasting bad date",
+S("T20-106", "ask options francesca tasting cancel then reschedule menu tasting date",
   T("cancel the tasting with francesca", ask("tasting_fra_1", "tasting_fra_2"),
     ref=[act("cancel", kind="event", name="tasting Francesca"),
          askc("the barolo one on 6 may or the barbaresco one on 10 june?", options="$tasting_fra_1, $tasting_fra_2")]),
   T("barbaresco", diff(upd("tasting_fra_2", status="cancelled")),
     ref=[act("cancel", rows="$tasting_fra_2")]),
   T("and move the wedding menu tasting to next friday at 5", diff(upd("menu_tasting", date="2026-06-05T17:00")),
-    ref=[bad(act("reschedule", kind="event", name="Wedding menu tasting", args=lines(to=U("week", 1, time="17:00")))),
-         act("reschedule", kind="event", name="Wedding menu tasting", args=lines(to=U("week", 1, weekday=5, time="17:00")))]))
+    ref=[act("reschedule", kind="event", name="Wedding menu tasting", args=lines(to=U("week", 1, weekday=5, time="17:00")))]))
 
 S("T20-107", "ask options chianti order reschedule bare weekday then glasses",
   T("push the chianti order to monday", ask("chianti_1", "chianti_2"),
@@ -116,15 +112,6 @@ S("T20-112", "ask options note add_to tasting notes then pin",
     ref=[act("add_to", kind="note", name="Montalcino supplier", args=lines(to="$tasting_nb"))]),
   T("and pin it", diff(upd("supplier_n", pinned=True)),
     ref=[act("edit", kind="note", name="Montalcino supplier", args=lines(pinned="yes"))]))
-
-S("T20-113", "ask options delete scan never mind",
-  T("delete the scan", ask("scan_1", "scan_2", "id_scan"),
-    ref=[act("delete", kind="document", name="scan"),
-         askc("scan 0041, scan 0042 or the id card scan?", options="$scan_1, $scan_2, $id_scan")]),
-  T("never mind, i still need them for the lease", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("ok just delete the movers quote note, we picked gianni", diff(trash("movers_quote_n")),
-    ref=[act("delete", kind="note", name="Movers quote")]))
 
 S("T20-114", "balance negative andrea fede chiara positive giulia",
   T("what do i owe andrea", val((-240, "EUR")),

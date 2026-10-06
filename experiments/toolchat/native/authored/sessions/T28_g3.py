@@ -115,17 +115,6 @@ S("T28-138", "limit person last contacted unbounded locker min cadence max in pr
     ref=[comp(op="max", field="effort", kind="task", where='status = "in_progress"'),
          ans(value="@prev")]))
 
-S("T28-139", "limit touch limit photos ask cross-kind delete never mind",
-  T("when's the next touch session", rows("touch_0223"),
-    ref=[ans(kind="event", name="Touch", when=FROM_TODAY, order="date asc", limit=1)]),
-  T("the four latest photos", rows("p_aroha", "p_waka", "p_lunch", "p_ria"),
-    ref=[ans(kind="photo", order="date desc", limit=4)]),
-  T("delete the roof one", ask("roof_quotes", "roof_note", "roof_quote", "p_roof"),
-    ref=[askc("the roof quotes task, the wharekai roof note, the roof quote document or the leaky roof photo?",
-              options="$roof_quotes, $roof_note, $roof_quote, $p_roof")]),
-  T("nvm, leave all of it, the roofer comes on monday and i still need every bit of it for the committee", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
 S("T28-140", "limit marae note unbounded everything sum touch max february",
   T("my lateset note in the marae committee notebook", rows("roof_note"),
     ref=[ans(kind="note", linked_to="$marae_nb", order="date desc", limit=1)]),

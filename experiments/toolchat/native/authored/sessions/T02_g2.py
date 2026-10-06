@@ -19,11 +19,8 @@ S("T02-118", "ask options login password never_mind then contrast fastmail revea
     ref=[act("reveal", kind="locker item", name="Fastmail login", args=lines(field="password"))]))
 
 S("T02-119", "ask options contract star pick then nda",
-  T("star the contract", ask("gl_contract", "mf_contract"),
-    ref=[act("star", kind="document", name="contract"),
-         askc("the greenleaf mural contract or maple & fern?", options="$gl_contract, $mf_contract")]),
-  T("maple and fern", diff(upd("mf_contract", starred=True)),
-    ref=[act("star", rows="$mf_contract")]),
+  T("star the contract", diff(upd("mf_contract", starred=True)),
+    ref=[act("star", kind="document", name="contract")]),
   T("and the tomo coffee nda", diff(upd("tomo_nda", starred=True)),
     ref=[act("star", kind="document", name="Tomo Coffee NDA")]),
   T("star the tidewater contract too", diff(upd("tide_contract", starred=True)),
@@ -64,17 +61,6 @@ S("T02-122", "ask options sophie debt settle then contrast tom balance",
     ref=[act("settle_debt", kind="debt", name="Tomo logo kill fee")]),
   T("so what does tom owe me now", val((0, "CAD")),
     ref=[ans(op="balance", kind="person", name="Tom Nguyen")]))
-
-S("T02-123", "decline out_of_scope email then reschedule weekday then balance kai",
-  T("email dana that the cover art's going to be late", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("actually she wants it early, bring tidewater cover final art forward to monday",
-    diff(upd("tide_final", date="2027-06-14T12:00")),
-    ref=[act("reschedule", kind="task", name="Tidewater cover final art", args=lines(to=U("week", 1, weekday=1)))]),
-  T("btw how much does kai chau owe me now", val((217.5, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Kai Chau")]),
-  T("and star dana kowalski, she's my best editor", diff(upd("dana", starred=True)),
-    ref=[act("star", kind="person", name="Dana Kowalski")]))
 
 S("T02-124", "decline out_of_scope booking then task create then priority",
   T("book me a table at kirin for sunday", decline("out_of_scope"),

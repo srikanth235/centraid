@@ -45,10 +45,6 @@ S("T27-030", "create album add_to photo count album",
   T("which albums have three photos or fewer", rows("lyon_al", "opening_al", "+1"),
     ref=[ans(kind="album", where="photo count <= 3")]))
 
-S("T27-031", "single create album",
-  T("new album called Opening week", diff(new("album", name="Opening week")),
-    ref=[act("create", args=lines(kind="album", name="Opening week"))]))
-
 S("T27-032", "delete album prev find-only photo count",
   T("do i have any empty albums", rows("opening_al"),
     ref=[find(kind="album", where="photo count <= 0"), ans(rows="@prev")]),

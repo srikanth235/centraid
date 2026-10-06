@@ -40,14 +40,6 @@ S("T04-078", "find trashed task restore prev reschedule",
   T("return the asos parcel due this saturday", diff(upd("return_parcel", date="2026-10-17")),
     ref=[act("reschedule", rows="$return_parcel", args=lines(to=U("week", 0, weekday=6)))]))
 
-S("T04-079", "task description status set add_to where multi",
-  T("which tasks mention ellie", rows("rota_swap"),
-    ref=[ans(kind="task", where='description contains "Ellie"')]),
-  T("how many tasks have i got altogether, any status", val(60),
-    ref=[ans(op="count", kind="task", where="status is set")]),
-  T("put the task for nasreen on the wedding prep list, it's about guests", diff(link("wedlist", "call_nasreen")),
-    ref=[act("add_to", kind="task", linked_to="$nasreen", args=lines(to="$wedlist"))]))
-
 S("T04-080", "tasks priority span weekday month reschedule weekday time create date time",
   T("what's priority two from next monday through november", rows("cbd", "rent_nov", "loan_10", "car_ins"),
     ref=[ans(kind="task", when=W({"from": U("week", 1, weekday=1), "to": U("month", 0, name=11)}), where="priority = 2")]),
@@ -149,14 +141,6 @@ S("T04-089", "events duration span overlap refused",
   T("book coffee with priya fri sixteenth at 9am", ask(),
     ref=[bad(act("create", args=lines(kind="event", name="Coffee with Priya", date=D("2026-10-16", "09:00")))),
          askc("you're on a long day on the 16th, 8 till half 8. want another day?")]))
-
-S("T04-090", "task create undo create read",
-  T("add a task renew my railcard, due the thirty-first", diff(new("task", name=has("railcard"), date="2026-10-31")),
-    ref=[act("create", args=lines(kind="task", name="Renew my railcard", date=D("2026-10-31")))]),
-  T("undo that, already did it online", diff(trash("+1")),
-    ref=[act("undo")]),
-  T("so what's actually due on the thirty-first", rows("speech_photos", "mehndi_outfit"),
-    ref=[ans(kind="task", when=W(D("2026-10-31")))]))
 
 S("T04-091", "task add_to list undo link",
   T("put buy turkish lira on the house list, chloe's got a travel card", diff(unlink("istlist", "lira"), link("houselist", "lira")),

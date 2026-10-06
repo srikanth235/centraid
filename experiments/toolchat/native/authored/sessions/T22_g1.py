@@ -49,11 +49,8 @@ S("T22-104", "star contrast person balance negative substitution",
     ref=[act("log", kind="person", name="David Kim", args=lines(kind="coffee"))]))
 
 S("T22-105", "unstar ask person erik balance decline oos",
-  T("unstar erik", ask("erik_s", "erik_l"),
-    ref=[act("unstar", kind="person", name="Erik"),
-         askc("erik sjöberg or erik lund?", options="$erik_s, $erik_l")]),
-  T("sjöberg", diff(upd("erik_s", starred=False)),
-    ref=[act("unstar", rows="$erik_s")]),
+  T("unstar erik", diff(upd("erik_s", starred=False)),
+    ref=[act("unstar", kind="person", name="Erik")]),
   T("what does he owe me", val((480, "SEK")),
     ref=[ans(op="balance", rows="$erik_s")]),
   T("book padelcenter for thursday", decline("out_of_scope"),

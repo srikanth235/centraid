@@ -27,16 +27,6 @@ S("T15-202", "ordinal tomorrow events reschedule cancel",
   T("and cancel the first one, ingvild's ill", diff(upd("lunch_ingvild", status="cancelled")),
     ref=[act("cancel", rows="$lunch_ingvild")]))
 
-S("T15-203", "owe direction nickname balance settle sum mine",
-  T("what do i owe mamma", val((-2000, "NOK")),
-    ref=[search("Mamma", kind="person"), ans(op="balance", rows="$mum")]),
-  T("anders owe me?", val((1200, "NOK")),
-    ref=[ans(op="balance", kind="person", name="Anders Solberg")]),
-  T("settle mine with her, sent it this morning", diff(upd("d_mum", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$mum")]),
-  T("so what's my side now, everything i owe", val((1455, "NOK")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=OWE)]))
-
 S("T15-204", "except bouldering cancel rest read",
   T("bouldering nights left", rows("boulder_1110", "boulder_1117", "boulder_1215"),
     ref=[ans(kind="event", name="Bouldering night", when=W({"from": U("day", 0)}))]),
@@ -54,12 +44,3 @@ S("T15-205", "bare weekday at n range create",
     ref=[act("reschedule", kind="task", name="Fix the bathroom tap", args=lines(to=U("week", 0, weekday=6)))]),
   T("dinner with silje thursday at 7", diff(new("event", name=has("Silje"), date="2026-11-12T19:00")),
     ref=[act("create", args=lines(kind="event", name="Dinner with Silje", date=U("week", 0, weekday=4, time="19:00")))]))
-
-S("T15-206", "two writes settle complete then search nickname complete settle",
-  T("paid torstein for the ferry and ordered the formalin", diff(upd("d_torstein", status="settled"), upd("formalin", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", linked_to="$torstein", more=True), act("complete", rows="$formalin")]),
-  T("gave halle his book back and paid him for the coffee beans",
-    diff(upd("halle_book", status="completed", completed=ANY), upd("d_hallvard", status="settled")),
-    ref=[search("Halle", kind="person"),
-         act("complete", kind="task", name="Give Hallvard his book back", more=True),
-         act("settle_debt", kind="debt", linked_to="$hallvard")]))

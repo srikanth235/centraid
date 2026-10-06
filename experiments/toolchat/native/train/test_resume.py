@@ -25,7 +25,7 @@ from unittest import mock
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import fmt  # noqa: E402
-from test_decision import V1, V2, session  # noqa: E402
+from test_decision import FULL, THINK, session  # noqa: E402
 
 STEPS, BS = 6, 2  # 12 examples
 BASE = ["--bs", str(BS), "--lr", "1e-3", "--warmup", "0.2", "--log-every", "2", "--val-n", "4",
@@ -56,7 +56,7 @@ class ResumeTest(unittest.TestCase):
         cls.data = os.path.join(cls.tmp, "train.jsonl")
         with open(cls.data, "w") as f:
             for i in range(STEPS * BS):
-                ex = session(V1 if i % 2 else V2, V2 if i % 3 else V1)
+                ex = session(FULL if i % 2 else THINK, THINK if i % 3 else FULL)
                 ex["messages"][1]["content"] = "move the dentist %d hours and the %d th gym class" % (i, i * 7)
                 ex["messages"][2]["args"] = dict(ex["messages"][2]["args"], rows="#%d" % (i % 5 + 1))
                 f.write(json.dumps(ex) + "\n")

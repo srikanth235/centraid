@@ -3,10 +3,19 @@
     b = HFBackend(ckpt, lark="export/call.lark", decoding="hard")   # hard | soft | free
     raw = b.next_message(records)   # render.py records -> raw text for the runtime's `call_text`
     raw = b.complete(prompt)        # or from a prompt the caller rendered with render.py
+    raw = b.complete(prompt, compile=lambda slots: rt.req({"op": "compile", "slots": slots}))   # the call from the runtime
+
+`compile` (CONTRACT_V3.md section 7): a callable that sends the slots of the think to the session's `compile` op and returns the
+reply. With it the call after `</think>` is the call the runtime compiles from the think's slots (`call`: after the grounding and
+the conventions), not the one `fmt.call_of_think` renders. When the runtime refuses (`{"refused": {"slot", "why"}}`) the step is
+generated once more with the think starting `retry: <slot>`; when that is refused too the message of the first draw stands, its
+call rendered by `fmt.call_of_think` (the fallback). Without `compile` nothing changes. `last_info["compile"]` says what happened:
+`compiled`, `retry` (compiled after one retry), `fallback`, or `none` (no trace to compile).
 
 Prompts come from the shared renderer (../render.py, thinking kept in history), exactly as in
 training. The returned text is the whole assistant message, `<think>\n…</think>\n\n<tool_call>…
-</tool_call>`. Per-step diagnostics (`think_cut`, `override`, token counts, seconds) are in
+</tool_call>`: the think is the slot lines of the trace (CONTRACT_V3.md) and the call is the one the think
+states (decode.py). Per-step diagnostics (`think_cut`, `override`, token counts, seconds) are in
 `last_info`, running totals in `stats`. `from_env` is what eval/run.py's `--model hf` uses.
 """
 from __future__ import annotations
@@ -42,18 +51,33 @@ class HFBackend:
         self.lock = threading.Lock()
         self.last_info: dict = {}
         self.stats = {"steps": 0, "think_cut": 0, "override": 0, "grammar_error": 0, "unstopped": 0,
-                      "new_tokens": 0, "seconds": 0.0}
+                      "new_tokens": 0, "seconds": 0.0, "compiled": 0, "retried": 0, "retry_ok": 0, "fallback": 0}
 
-    def next_message(self, messages: list[dict]) -> str:
+    def next_message(self, messages: list[dict], compile=None) -> str:
         """render.py records (system record with its tools) -> the next assistant message."""
         with self.lock:
             self.stats["steps"] += 1
-            text, info = self.dec.step(messages, mode=self.decoding, sample=self.sample,
-                                       seed=self.seed + self.stats["steps"])
-            return self._record(text, info)
+            seed = self.seed + self.stats["steps"]
+            text, info = self.dec.step(messages, mode=self.decoding, sample=self.sample, seed=seed)
+            text = self._record(text, info)
+            if compile is not None:
+                text = self._compiled(text, compile, lambda prefix: self.dec.step(messages, mode=self.decoding, sample=self.sample,
+                                                                                  seed=seed, prefix=prefix)[0])
+            return text
+
+    def _compiled(self, text: str, compile, again) -> str:
+        """`text` with its call replaced by the runtime's compiled call (see the module docstring); `again(prefix)` draws the step
+        once more with the think starting `prefix`."""
+        text, how = compiled_message(text, compile, again)
+        self.last_info["compile"] = how
+        self.stats["compiled"] += how in ("compiled", "retry")
+        self.stats["retried"] += how in ("retry", "retry-fallback")
+        self.stats["retry_ok"] += how == "retry"
+        self.stats["fallback"] += how in ("fallback", "retry-fallback")
+        return text
 
     def complete(self, prompt: str, sample: bool | None = None, exclude: list[str] | None = None,
-                 tries: int = 4) -> str:
+                 tries: int = 4, compile=None) -> str:
         """Same, from a prompt the caller rendered (e.g. eval's `Transcript.render_qwen()`).
 
         Optional (defaults leave the call exactly as before): `sample` overrides the backend's
@@ -70,6 +94,9 @@ class HFBackend:
                 self._record(text, info)
                 if not banned or _call_key(text) not in banned:
                     break
+            if compile is not None:
+                text = self._compiled(text, compile, lambda prefix: self.dec.complete(prompt, mode=self.decoding, sample=do_sample,
+                                                                                      seed=self.seed + self.stats["steps"], prefix=prefix)[0])
             return text
 
     def _record(self, text, info) -> str:
@@ -87,6 +114,44 @@ class HFBackend:
         return text
 
     __call__ = next_message
+
+
+RETRY_SLOT = re.compile(r"^[a-z_]+(?:\[\d{1,2}\])?$")
+
+
+def compiled_message(text: str, compile, again=None) -> tuple[str, str]:
+    """(the message with the runtime's compiled call, how). `compile(slots) -> reply` is the session's `compile` op. A think that
+    cannot be read as a trace leaves the message as it is (`none`). A refusal draws the step once more through `again(prefix)` with
+    `retry: <slot>` leading the think; a second refusal keeps the first draw (`fallback`: its call is the one `fmt.call_of_think`
+    rendered, or the grammar wrote), `retry-fallback` when a retry was made."""
+    T = decode.fmt.trace3()
+    rec = assistant_record(text)
+    if rec is None:
+        return text, "none"
+
+    def ask(think: str) -> dict | None:
+        try:
+            slots = T.slots_json(T.parse_any(think))
+        except (ValueError, T.CompileError) as e:
+            return {"refused": {"slot": "think", "why": str(e)}}
+        return compile(slots)
+
+    reply = ask(rec["think"])
+    how, drawn = "compiled", text
+    if "refused" in reply and again is not None:
+        slot = reply["refused"]["slot"]
+        retry = again("retry: %s\n" % (slot if RETRY_SLOT.match(slot) else "rejected"))
+        second = assistant_record(retry)
+        again_reply = ask(second["think"]) if second else None
+        if again_reply and "call" in again_reply:
+            drawn, reply, how = retry, again_reply, "retry"
+        else:
+            how = "retry-fallback"
+    if "call" not in reply:
+        return text, how if how == "retry-fallback" else "fallback"
+    call = T.runtime_call(reply)
+    head = drawn[:drawn.index("</think>")]
+    return head + "</think>\n\n" + decode.fmt.render.call_text(call["tool"], call["args"]), how
 
 
 def _call_key(text: str) -> str:

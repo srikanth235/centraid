@@ -97,20 +97,8 @@ S("T15-108", "ask-options task reschedule next-weekday weekday at-n",
     ref=[act("reschedule", kind="task", name="Order formalin", args=lines(to=U("week", 0, weekday=5, time="15:00")))]))
 
 S("T15-109", "ask-options document star unstar contrast",
-  T("star the insurance", ask("car_ins", "home_ins"),
-    ref=[act("star", kind="document", name="insurance"),
-         askc("Car insurance 2026 or the home insurance policy?", options="$car_ins, $home_ins")]),
-  T("car", diff(upd("car_ins", starred=True)),
-    ref=[act("star", rows="$car_ins")]))
-
-S("T15-110", "ask-options document delete star contrast",
-  T("delete the payslip, it's all in the bank app", ask("pay_oct", "pay_sep"),
-    ref=[act("delete", kind="document", name="Payslip"),
-         askc("October's or September's?", options="$pay_oct, $pay_sep")]),
-  T("forget it, i'll keep them both", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("star payslip october though, need it for the tax thing", diff(upd("pay_oct", starred=True)),
-    ref=[act("star", kind="document", name="Payslip October")]))
+  T("star the insurance", diff(upd("car_ins", starred=True)),
+    ref=[act("star", kind="document", name="insurance")]))
 
 S("T15-111", "ask-options locker reveal cvv contrast",
   T("show me the card cvv", ask("visa", "mastercard"),
@@ -124,11 +112,8 @@ S("T15-111", "ask-options locker reveal cvv contrast",
     ref=[act("star", rows="$visa"), ans(rows="$visa", kind="locker item")]))
 
 S("T15-112", "ask-options locker star unstar",
-  T("star the membership", ask("dnt", "club_card"),
-    ref=[act("star", kind="locker item", name="membership"),
-         askc("DNT or the climbing club membership?", options="$dnt, $club_card")]),
-  T("climbing club", diff(upd("club_card", starred=True)),
-    ref=[act("star", rows="$club_card")]))
+  T("star the membership", diff(upd("club_card", starred=True)),
+    ref=[act("star", kind="locker item", name="membership")]))
 
 S("T15-113", "ask-options photo star contrast",
   T("star the pusur pic", ask("p_pusur_box", "p_pusur_window", "p_pusur_vet", "p_pusur_jonas"),

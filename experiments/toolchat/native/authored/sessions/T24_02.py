@@ -123,14 +123,6 @@ S("T24-040", "find notebook linked_to edit notebook prev",
   T("rename that notebook Rudy's crew", diff(upd("land_nb", name="Rudy's crew")),
     ref=[act("edit", rows="@prev", args=lines(name="Rudy's crew"))]))
 
-S("T24-041", "locker type enum delete locker where undo delete",
-  T("what crypto stuff have i got in the locker", rows("coinbase"),
-    ref=[ans(kind="locker item", where='type = "crypto_wallet"')]),
-  T("delete it, it's worth like 4 bucks", diff(trash("coinbase")),
-    ref=[act("delete", kind="locker item", where='type = "crypto_wallet"')]),
-  T("undo that, elena says keep it", diff(restore("coinbase")),
-    ref=[act("undo")]))
-
 S("T24-042", "delete locker where star locker named",
   T("delete my ssh key entry, the old server is gone", diff(trash("server_key")),
     ref=[act("delete", kind="locker item", where='type = "ssh_key"')]),

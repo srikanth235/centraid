@@ -3,7 +3,7 @@
 # trainer (train.py, your staged job.json: bs 16, max_len 8192, bf16 checkpoints, gradient checkpointing, full fine-tune) for
 # PROBE_STEPS steps via --max-steps, then prints peak memory, tokens/s, projected hours and cost, and whether it fits.
 #
-#   JOB=fit1 BUCKET=centraid-train STAGE_DIR=$KGL_STAGE/fit1 ./probe.sh
+#   JOB=fit1 BUCKET=centraid-train STAGE_DIR=$BUNDLE_STAGE/fit1 ./probe.sh
 #
 # The probe VM is a normal GPU VM (same image, same run_job.sh in `mode=probe`), so it needs the one GPU slot: it refuses while another
 # GPU VM exists. It is DELETED at the end (PROBE_KEEP=1 keeps it). On an OOM it walks the memory fallbacks the trainer supports:

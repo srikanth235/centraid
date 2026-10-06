@@ -130,18 +130,6 @@ S("T05-111", "event next reschedule count cancelled out_of_scope",
   T("who won the ranji match yesterday", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
 
-S("T05-112", "ask task delete duplicate names",
-  T("delete the pay eb bill task", ask("eb_jan", "eb_dec"),
-    ref=[act("delete", kind="task", name="Pay EB bill"),
-         find(kind="task", name="Pay EB bill"),
-         askc("the open one due 25 jan or the december one you already paid?", options="$eb_jan, $eb_dec")]),
-  T("the december one", diff(trash("eb_dec")),
-    ref=[act("delete", rows="$eb_dec")]),
-  T("and delete the buy flowers one that's done", diff(trash("flowers_2")),
-    ref=[act("delete", kind="task", name="Buy flowers for pooja", where='status = "completed"')]),
-  T("how many open tasks are left on the home list", val(7),
-    ref=[ans(op="count", kind="task", linked_to="$homelist", where='status = "open"')]))
-
 S("T05-113", "ask task volunteers reschedule weekday",
   T("push the volunteers task to friday", ask("volunteers", "vol_call", "vol_print"),
     ref=[search("volunteer", kind="task"),
@@ -154,17 +142,6 @@ S("T05-113", "ask task volunteers reschedule weekday",
              args=lines(to=U("week", 0, weekday=4, time="09:00")))]),
   T("star the volunteer rota doc", diff(upd("volunteer_doc", starred=True)),
     ref=[act("star", kind="document", name="Volunteer rota Thai Poosam")]))
-
-S("T05-114", "ask task renew reschedule next monday",
-  T("move the renewal to friday", ask("passport", "bls_cert", "tnnmc"),
-    ref=[search("renew", kind="task"),
-         askc("the passport, the bls certificate or the tnnmc registration?", options="$passport, $bls_cert, $tnnmc")]),
-  T("the bls one, this friday", diff(upd("bls_cert", date="2026-01-23")),
-    ref=[act("reschedule", rows="$bls_cert", args=lines(to=U("week", 0, weekday=5)))]),
-  T("and the passport one to next monday", diff(upd("passport", date="2026-01-26")),
-    ref=[act("reschedule", kind="task", name="Renew passport", args=lines(to=U("week", 1, weekday=1)))]),
-  T("total effort on my open priority one tasks", val(105),
-    ref=[ans(op="sum", field="effort", kind="task", where='priority = 1 and status = "open"')]))
 
 S("T05-115", "ask locker reveal login",
   T("show me the login password", ask("his", "tnnmc_login"),

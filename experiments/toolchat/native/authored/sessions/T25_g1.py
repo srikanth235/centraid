@@ -87,11 +87,8 @@ S("T25-109", "ask therapy at-n pick anchor decided by date hour later",
              args=lines(to=U("hour", 1, anchor="row")))]))
 
 S("T25-110", "ask orford photos star pick already-so star",
-  T("star the orford one", ask("orford_ridge", "orford_group"),
-    ref=[act("star", kind="photo", name="Orford"),
-         askc("orford ridge or the orford group shot?", options="$orford_ridge, $orford_group")]),
-  T("ridge", diff(upd("orford_ridge", starred=True)),
-    ref=[act("star", rows="$orford_ridge")]),
+  T("star the orford one", diff(upd("orford_ridge", starred=True)),
+    ref=[act("star", kind="photo", name="Orford")]),
   T("and the group shot", diff(already=["orford_group"]),
     ref=[act("star", rows="$orford_group"), ans(rows="$orford_group")]))
 

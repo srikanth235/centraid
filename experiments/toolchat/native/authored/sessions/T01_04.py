@@ -3,39 +3,11 @@ from gold import *
 def J(d):
     return json.dumps(d, separators=(",", ":"))
 
-S("T01-076", "narrow effort order write+read effort-unit span",
-  T("what's still outstanding on my plate this week",
-    rows("reply_chi", "nowtv", "permission", "reading_book", "charger", "plumber_quote", "prescription", "tesco",
-         "boots", "card_mum", "ctax_mar", "deposits"),
-    ref=[ans(kind="task", when=J(U("week", 0)), where="status = open")]),
-  T("which is the longest job", rows("boots"),
-    ref=[ans(within="@prev", order="effort desc", limit=1)]),
-  T("tesco orders in, tick it and what's left for tomorrow",
-    rows("permission", "reading_book", "charger", "plumber_quote", "prescription",
-         also=diff(upd("tesco", status="completed", completed=ANY))),
-    ref=[act("complete", rows="$tesco", more=True),
-         ans(kind="task", when=J(U("day", 1)), where="status = open")]),
-  T("anything big open, an hour or more",
-    rows("boots", "cupboards", "temp_kitchen", "fire_safety", "revalidation"),
-    ref=[ans(kind="task", where="effort >= 60 minutes and status = open")]),
-  T("what's due between monday and 7 on tuesday night",
-    rows("dinner_money", "tiles", "swap_night", "study_parking", "bins_0317"),
-    ref=[ans(kind="task", when=J(span(U("week", 1, weekday=1), U("week", 1, weekday=2, time="19:00"))))]))
-
 S("T01-077", "folder count delete folder where",
   T("which folders actually have something in", rows("school_f", "house_f", "work_f", "travel_f", "money_f", "old_flat_f"),
     ref=[ans(kind="folder", where="document count != 0")]),
   T("delete the one that doesn't", diff(gone("car_f")),
     ref=[act("delete", kind="folder", where="document count = 0")]))
-
-S("T01-078", "find order limit settle",
-  T("pay back the biggest thing i owe and tell me what that leaves",
-    val((46.5, "GBP"), also=diff(upd("d_mum_uniform", status="settled"))),
-    ref=[find(kind="debt", where="direction = i_owe and status = open", order="amount desc", limit=1),
-         act("settle_debt", rows="$d_mum_uniform", more=True),
-         ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]),
-  T("who was that one to", rows("mum"),
-    ref=[ans(kind="person", linked_to="$d_mum_uniform")]))
 
 S("T01-079", "where duration cmp person count",
   T("what's on next week that's longer than two hours",
@@ -59,7 +31,7 @@ S("T01-080", "where effort cmp narrow complete status-ne",
          ans(kind="task", when=J(U("day", 1)), where="status = open")]),
   T("what's on the kids list that isn't done yet",
     rows("dinner_money", "boots", "tobi_passport", "reading_book", "childcare", "swim_kit"),
-    ref=[ans(kind="task", linked_to="$kids_list", where="status != completed")]))
+    ref=[ans(kind="task", linked_to="$kids_list", where="status = open")]))
 
 S("T01-081", "note contains pinned unpin person-count span",
   T("which recipes mention mum", rows("egusi"),
@@ -183,13 +155,6 @@ S("T01-092", "repair reveal-wrong-field",
   T("and the long number", diff(reveal=[("barclays_card", "4929123456781234")]),
     ref=[act("reveal", rows="$barclays_card", args="field: card_number")]))
 
-S("T01-093", "repair log-wrong-kind cadence",
-  T("met ifeoma for lunch today", diff(upd("ifeoma", date=ANY)),
-    ref=[bad(act("log", rows="$ifeoma", args="kind: lunch")),
-         act("log", rows="$ifeoma", args="kind: visit")]),
-  T("she's every three weeks", diff(upd("ifeoma", cadence=21)),
-    ref=[act("edit", rows="$ifeoma", args="cadence: 21")]))
-
 S("T01-094", "repair where-field-kind-lacks",
   T("which events are in liverpool", rows("hen_class"),
     ref=[bad(ans(kind="event", where='location contains "Liverpool"')),
@@ -197,15 +162,14 @@ S("T01-094", "repair where-field-kind-lacks",
   T("and who's going", rows("chioma", "laura", "jess_w", "jess_o", "zainab", "priya_n"),
     ref=[ans(kind="person", linked_to="$hen_class")]))
 
-S("T01-095", "repair multi-kind-where linked",
+S("T01-095", "repair multi-kind-where linked focus reschedule",
   T("what's open for tobi", rows("tobi_passport", "boots"),
     ref=[bad(ans(kind="task,event", linked_to="$tobi", where="status = open")),
          ans(kind="task", linked_to="$tobi", where="status = open")]),
   T("and his stuff this week", rows("training_0311", "match_0315"),
     ref=[ans(kind="event", linked_to="$tobi", when=J(U("week", 0)))]),
-  T("move his match to 11", ask("match_0315", "match_0322"),
-    ref=[find(kind="event", name="Tobi football match", when=J({"from": U("day", 0)})),
-         askc("This Sunday's match or the 22nd?", options="@prev")]))
+  T("move his match to 11", diff(upd("match_0315", date="2026-03-15T11:00")),
+    ref=[act("reschedule", rows="$match_0315", args=lines(to=U("day", 0, anchor="row", time="11:00")))]))
 
 S("T01-096", "person spans anchor-time log undo-ledger relog",
   T("who have i spoken to monday to wednesday this week", rows("chioma", "priya_n", "mum"),
@@ -304,18 +268,6 @@ X("T01-054",
 X("T01-011",
   T("which of the shifts are Ward 7 night ones", rows("night_0305", "night_0306", "night_0307", "night_0319", "night_0320", "night_0416", "night_0417"),
     ref=[ans(kind="event", where='description = "Ward 7 night"')]))
-
-X("T01-018",
-  T("which of the kids list ones are done", rows(),
-    ref=[ans(kind="task", linked_to="$kids_list", where="completed is set")]))
-
-X("T01-078",
-  T("any debts with nobody on them", rows(),
-    ref=[ans(kind="debt", where="person count <= 0")]))
-
-X("T01-093",
-  T("who else have i been in touch with this week", rows("callum", "chioma", "mum", "priya_n"),
-    ref=[ans(kind="person", when=J(U("week", 0)), exclude="$ifeoma")]))
 
 X("T01-098",
   T("who did i talk to between last monday and last friday", rows(),

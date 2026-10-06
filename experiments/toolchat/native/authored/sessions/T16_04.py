@@ -28,11 +28,8 @@ S("T16-076", "seven turns rahim ambiguous ask log reschedule complete write read
     ref=[ans(kind="person", where='cadence != 7 and role contains "line supervisor"')]))
 
 S("T16-077", "six turns karim ambiguous ask star subtasks spans",
-  T("star karim", ask("abba", "karim_h"),
-    ref=[act("star", kind="person", name="Karim"),
-         askc("abba (abdul karim chowdhury) or karim hossain from HR?", options="$abba, $karim_h")]),
-  T("karim hossain, HR", diff(upd("karim_h", starred=True)),
-    ref=[act("star", rows="$karim_h")]),
+  T("star karim", diff(upd("karim_h", starred=True)),
+    ref=[act("star", kind="person", name="Karim")]),
   T("what's under Eid bonus sheet for Line 3", rows("attendance", "hr_check", "bonus_sign"),
     ref=[ans(kind="task", linked_to="$bonus_sheet")]),
   T("which of those are due from twenty-eighth dec through january", rows("attendance", "hr_check", "bonus_sign"),
@@ -121,12 +118,6 @@ S("T16-087", "single star document anchor time",
   T("the doc i saved yesterday at 10pm, star it", diff(upd("bus_tickets", starred=True)),
     ref=[act("star", kind="document", when=W(U("day", -1, anchor="today", time="22:00")))]))
 
-S("T16-088", "note person count delete",
-  T("cricket notes with no more than one person on them", rows("kitty_rules", "uttara_scout"),
-    ref=[ans(kind="note", linked_to="$cricket_nb", where="person count <= 1")]),
-  T("delete Kitty rules, we changed them", diff(trash("kitty_rules")),
-    ref=[act("delete", rows="$kitty_rules")]))
-
 S("T16-089", "locker notes in url reveal code",
   T("work or personal locker stuff that isn't on https://www.bkash.com", rows("erp", "sms_api"),
     ref=[ans(kind="locker item", where='notes in ("work", "personal") and url != "https://www.bkash.com"')]),
@@ -194,8 +185,7 @@ S("T16-093", "six turns production meeting ambiguous ask reschedule cancel",
 
 S("T16-094", "seven turns coaching fee ambiguous kids tasks create add_to",
   T("pay tanvir's coaching fee - done", diff(upd("tanvir_fee_jan", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pay Tanvir's coaching fee"),
-         act("complete", kind="task", name="Pay Tanvir's coaching fee", where='status = "open"')]),
+    ref=[act("complete", kind="task", name="Pay Tanvir's coaching fee")]),
   T("what else is open on kids school", rows("mim_books", "admission"),
     ref=[ans(kind="task", linked_to="$kids_l", where='status = "open"')]),
   T("Tanvir's college admission form, who's it on", rows("tanvir"),

@@ -52,12 +52,6 @@ S("T13-006", "find role log prev linked",
   T("and what tasks have i got with him", rows("xrd_book", "xrd_book_lukas"),
     ref=[ans(kind="task", linked_to="$raj")]))
 
-S("T13-007", "log multi next event order",
-  T("coffee with wei and tom bennett", diff(upd("wei", date=ANY), upd("tom_b", date=ANY)),
-    ref=[act("log", rows="$wei, $tom_b", args=lines(kind="coffee"))]),
-  T("when's my next xrd session", rows("xrd_0908"),
-    ref=[ans(kind="event", name="XRD session", when=W({"from": U("day", 0)}), order="date asc", limit=1)]))
-
 S("T13-008", "group members balance settle_up undo ledger five turns",
   T("who's in the house bills kitty", rows("kasia", "tom_h", "priya", "me"),
     ref=[ans(kind="person", linked_to="$house")]),

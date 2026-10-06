@@ -98,11 +98,6 @@ S("T18-035", "linked_to all photos bex marcus star read",
   T("what's starred in d&d minis", rows("m_dragon", "m_tpk", "m_party"),
     ref=[ans(kind="photo", linked_to="$minis_al", where="starred = yes")]))
 
-S("T18-036", "single photo rel span",
-  T("show me pics from last week and this week",
-    rows("m_party", "receipt_p", "b_class", "b_couch", "v4", "zoe_rumi", "screenshot", "m_map", "whiteboard", "b_creek"),
-    ref=[ans(kind="photo", when=W(span(U("week", -1), U("week", 0))))]))
-
 S("T18-037", "photo person count zero month delete named",
   T("feb photos with nobody tagged in them",
     rows("b_couch", "b_class", "b_creek", "m_dragon", "s_cake", "s_arch", "yarra", "whiteboard", "receipt_p", "screenshot"),

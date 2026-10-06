@@ -17,22 +17,6 @@ S("T06-001", "event tomorrow edit linked people",
   T("who's in it again", rows("mira", "jonas_k"),
     ref=[ans(kind="person", linked_to="$wg_feb")]))
 
-S("T06-002", "ambiguous task kitty ask resolve",
-  T("tick off Top up WG Kasse", ask("kitty_02"),
-    ref=[act("complete", kind="task", name="Top up WG Kasse"),
-         find(kind="task", name="Top up WG Kasse"),
-         askc("the february one that's still open, or an older one?", options="$kitty_02, $kitty_01")]),
-  T("feb obviously", diff(upd("kitty_02", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$kitty_02")]),
-  T("how many of those have i done since september", val(6),
-    ref=[ans(op="count", kind="task", name="Top up WG Kasse", where='status = "completed"')]))
-
-S("T06-003", "linked_to all task",
-  T("what have i got on with both tobi and emre", rows("pa_quotes"),
-    ref=[ans(kind="task", linked_to="$tobi, $emre")]),
-  T("push it to friday week", diff(upd("pa_quotes", date="2026-02-20")),
-    ref=[act("reschedule", rows="$pa_quotes", args=lines(to=U("week", 2, weekday=5)))]))
-
 S("T06-004", "search miss then fix, reveal named",
   T("what's the netflix password", decline("not_found"),
     ref=[search("netflix", kind="locker item"), dec("not_found")]),

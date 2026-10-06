@@ -124,12 +124,6 @@ S("T06-040", "photo anchor time",
   T("which pics are in more than one album", rows("p_desk", "p_stands_sale"),
     ref=[ans(kind="photo", where="album count > 1")]))
 
-S("T06-041", "photo span date to rel",
-  T("how many photos did i take from the harz trip on the twenty-fourth up to last week", val(12),
-    ref=[ans(op="count", kind="photo", when=W({"from": D("2026-01-24"), "to": U("week", -1)}))]),
-  T("and from the start of january til last week", val(26),
-    ref=[ans(op="count", kind="photo", when=W({"from": U("month", 0, name=1), "to": U("week", -1)}))]))
-
 S("T06-042", "photo open end date album",
   T("any pics from before this year", rows("p_mama"),
     ref=[ans(kind="photo", when=W({"to": U("year", -1)}))]),

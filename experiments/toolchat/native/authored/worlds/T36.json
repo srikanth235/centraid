@@ -1,0 +1,2654 @@
+{
+ "me": "Dev Mehra",
+ "today": "2026-12-09T21:15",
+ "epoch": "2026-01-05T09:00",
+ "seed": "T36",
+ "currency": "INR",
+ "people": [
+  {
+   "key": "anjali",
+   "name": "Anjali Mehra",
+   "role": "wife",
+   "nickname": "Anju",
+   "starred": true,
+   "cadence": 1,
+   "last_contacted": "2026-12-09T20:30",
+   "created": "2026-01-05T09:00"
+  },
+  {
+   "key": "papa",
+   "name": "Rajesh Mehra",
+   "role": "dad",
+   "nickname": "Papa",
+   "starred": true,
+   "cadence": 7,
+   "last_contacted": "2026-12-06T11:10",
+   "last_contacted_kind": "call",
+   "met": "Chandigarh"
+  },
+  {
+   "key": "mummy",
+   "name": "Sunita Mehra",
+   "role": "mum",
+   "nickname": "Mummy",
+   "starred": true,
+   "cadence": 3,
+   "last_contacted": "2026-12-08T19:00",
+   "last_contacted_kind": "call",
+   "met": "Chandigarh"
+  },
+  {
+   "key": "baba",
+   "name": "Prakash Joshi",
+   "role": "father-in-law",
+   "nickname": "Baba",
+   "cadence": 10,
+   "last_contacted": "2026-12-04T18:00",
+   "met": "Kothrud"
+  },
+  {
+   "key": "aai",
+   "name": "Meena Joshi",
+   "role": "mother-in-law",
+   "nickname": "Aai",
+   "starred": true,
+   "cadence": 5,
+   "last_contacted": "2026-12-07T20:00",
+   "last_contacted_kind": "call",
+   "met": "Kothrud"
+  },
+  {
+   "key": "sneha",
+   "name": "Sneha Joshi",
+   "role": "sister-in-law",
+   "cadence": 14,
+   "last_contacted": "2026-12-01T21:00",
+   "last_contacted_kind": "message",
+   "met": "Kothrud"
+  },
+  {
+   "key": "rohan_m",
+   "name": "Rohan Mehra",
+   "role": "cousin",
+   "nickname": "Bunty",
+   "met": "Delhi",
+   "cadence": 21,
+   "last_contacted": "2026-11-24T22:00"
+  },
+  {
+   "key": "rohan_k",
+   "name": "Rohan Kulkarni",
+   "role": "college friend",
+   "met": "COEP",
+   "cadence": 14,
+   "last_contacted": "2026-12-05T10:00",
+   "last_contacted_kind": "coffee",
+   "starred": true
+  },
+  {
+   "key": "priya_d",
+   "name": "Priya Deshpande",
+   "role": "colleague",
+   "met": "office",
+   "cadence": 7,
+   "last_contacted": "2026-12-09T17:00"
+  },
+  {
+   "key": "priya_s",
+   "name": "Priya Sharma",
+   "role": "Anjali's cousin",
+   "met": "Nashik"
+  },
+  {
+   "key": "vikram",
+   "name": "Vikram Mehra",
+   "role": "uncle",
+   "nickname": "Vikram Chacha",
+   "met": "Delhi",
+   "cadence": 30,
+   "last_contacted": "2026-11-28T12:00"
+  },
+  {
+   "key": "kunal",
+   "name": "Kunal Bhatia",
+   "role": "friend",
+   "met": "COEP",
+   "cadence": 30,
+   "last_contacted": "2026-11-23T23:00"
+  },
+  {
+   "key": "shreya",
+   "name": "Shreya Apte",
+   "role": "Anjali's best friend",
+   "met": "design college"
+  },
+  {
+   "key": "vaishnavi",
+   "name": "Vaishnavi Ghaisas",
+   "role": "colleague",
+   "met": "office"
+  },
+  {
+   "key": "chinmay",
+   "name": "Chinmay Phadnis",
+   "role": "team lead",
+   "met": "office",
+   "cadence": 14,
+   "last_contacted": "2026-12-08T11:30"
+  },
+  {
+   "key": "siddharth",
+   "name": "Siddharth Rao",
+   "role": "badminton partner",
+   "met": "society courts",
+   "cadence": 7,
+   "last_contacted": "2026-12-05T08:10"
+  },
+  {
+   "key": "landlord",
+   "name": "Mr Naik",
+   "role": "landlord",
+   "nickname": "Naik uncle",
+   "met": "Baner"
+  },
+  {
+   "key": "ganesh",
+   "name": "Ganesh Pawar",
+   "role": "scooter mechanic",
+   "met": "Baner"
+  },
+  {
+   "key": "dr_kelkar",
+   "name": "Sunil Kelkar",
+   "role": "family doctor",
+   "nickname": "Dr Kelkar"
+  },
+  {
+   "key": "dentist",
+   "name": "Meghna Joshi",
+   "role": "dentist"
+  },
+  {
+   "key": "caterer",
+   "name": "Hemant Wagh",
+   "role": "wedding caterer",
+   "met": "Pune"
+  },
+  {
+   "key": "decorator",
+   "name": "Tanvi Raut",
+   "role": "wedding decorator",
+   "met": "Pune"
+  },
+  {
+   "key": "photog",
+   "name": "Aditya Sathe",
+   "role": "wedding photographer",
+   "met": "Pune"
+  },
+  {
+   "key": "priest",
+   "name": "Pandit Joshi",
+   "role": "priest",
+   "met": "Kothrud"
+  },
+  {
+   "key": "maid",
+   "name": "Lata Shinde",
+   "role": "house help",
+   "nickname": "Lata tai"
+  },
+  {
+   "key": "ca",
+   "name": "Narendra Gupte",
+   "role": "CA",
+   "cadence": 90,
+   "last_contacted": "2026-09-10T11:00"
+  },
+  {
+   "key": "arjun",
+   "name": "Arjun Menon",
+   "role": "Dubai trip friend",
+   "met": "Dubai"
+  },
+  {
+   "key": "tarun",
+   "name": "Tarun Saxena",
+   "role": "Dubai trip friend",
+   "met": "Dubai"
+  },
+  {
+   "key": "neha",
+   "name": "Neha Iyer",
+   "role": "friend",
+   "met": "yoga"
+  },
+  {
+   "key": "old_agent",
+   "name": "Prasad Limaye",
+   "role": "old flat broker",
+   "trashed": "2026-09-12T10:00"
+  },
+  {
+   "key": "old_vendor",
+   "name": "Rutuja Bhide",
+   "role": "old wedding vendor",
+   "trashed": "2026-11-27T10:00"
+  }
+ ],
+ "groups": [
+  {
+   "key": "wedding",
+   "name": "Wedding Settle-Up",
+   "currency": "INR",
+   "members": [
+    "vikram",
+    "rohan_m",
+    "sneha",
+    "kunal",
+    "baba"
+   ],
+   "created": "2026-10-05T20:00"
+  },
+  {
+   "key": "flat",
+   "name": "Baner Flat Bills",
+   "currency": "INR",
+   "members": [
+    "anjali"
+   ],
+   "created": "2026-08-01T10:00"
+  },
+  {
+   "key": "mehra_fund",
+   "name": "Mehra Parents Fund",
+   "currency": "INR",
+   "members": [
+    "papa",
+    "mummy",
+    "rohan_m"
+   ],
+   "created": "2026-03-10T20:00"
+  },
+  {
+   "key": "joshi_fund",
+   "name": "Joshi Parents Fund",
+   "currency": "INR",
+   "members": [
+    "baba",
+    "aai",
+    "sneha"
+   ],
+   "created": "2026-11-10T20:00"
+  },
+  {
+   "key": "dubai",
+   "name": "Dubai Trip",
+   "currency": "AED",
+   "members": [
+    "arjun",
+    "tarun",
+    "rohan_k"
+   ],
+   "created": "2026-09-20T20:00"
+  },
+  {
+   "key": "honeymoon",
+   "name": "Honeymoon Fund",
+   "currency": "INR",
+   "members": [
+    "anjali",
+    "shreya"
+   ],
+   "created": "2026-12-02T20:00"
+  }
+ ],
+ "expenses": [
+  {
+   "group": "wedding",
+   "name": "Venue advance",
+   "amount": 150000,
+   "paid_by": "baba",
+   "split": [
+    "me",
+    "baba",
+    "vikram",
+    "sneha"
+   ],
+   "date": "2026-10-10"
+  },
+  {
+   "group": "wedding",
+   "name": "Caterer advance",
+   "amount": 120000,
+   "paid_by": "vikram",
+   "split": [
+    "me",
+    "baba",
+    "vikram",
+    "rohan_m"
+   ],
+   "date": "2026-10-18"
+  },
+  {
+   "group": "wedding",
+   "name": "Decorator balance",
+   "amount": 64000,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "baba",
+    "vikram",
+    "sneha",
+    "rohan_m"
+   ],
+   "date": "2026-11-20"
+  },
+  {
+   "group": "wedding",
+   "name": "Photographer package",
+   "amount": 90000,
+   "paid_by": "rohan_m",
+   "split": [
+    "me",
+    "baba",
+    "rohan_m"
+   ],
+   "date": "2026-11-12"
+  },
+  {
+   "group": "wedding",
+   "name": "Sangeet DJ and sound",
+   "amount": 36000,
+   "paid_by": "kunal",
+   "split": [
+    "me",
+    "kunal",
+    "rohan_m",
+    "sneha"
+   ],
+   "date": "2026-11-21"
+  },
+  {
+   "group": "wedding",
+   "name": "Return gifts",
+   "amount": 18000,
+   "paid_by": "sneha",
+   "split": [
+    "me",
+    "sneha",
+    "vikram"
+   ],
+   "date": "2026-11-18"
+  },
+  {
+   "group": "flat",
+   "name": "Wifi December",
+   "amount": 1180,
+   "paid_by": "anjali",
+   "split": [
+    "me",
+    "anjali"
+   ],
+   "date": "2026-12-02"
+  },
+  {
+   "group": "flat",
+   "name": "Cooking gas",
+   "amount": 1100,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "anjali"
+   ],
+   "date": "2026-11-30"
+  },
+  {
+   "group": "mehra_fund",
+   "name": "Papa's cataract surgery",
+   "amount": 60000,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "papa",
+    "rohan_m"
+   ],
+   "date": "2026-07-14"
+  },
+  {
+   "group": "mehra_fund",
+   "name": "Mummy's physio",
+   "amount": 8400,
+   "paid_by": "papa",
+   "split": [
+    "me",
+    "papa"
+   ],
+   "date": "2026-10-02"
+  },
+  {
+   "group": "joshi_fund",
+   "name": "Aai's fridge",
+   "amount": 32000,
+   "paid_by": "baba",
+   "split": [
+    "me",
+    "baba",
+    "sneha"
+   ],
+   "date": "2026-11-28"
+  },
+  {
+   "group": "dubai",
+   "name": "Desert safari",
+   "amount": 840,
+   "paid_by": "arjun",
+   "split": [
+    "me",
+    "arjun",
+    "tarun",
+    "rohan_k"
+   ],
+   "date": "2026-10-09"
+  },
+  {
+   "group": "dubai",
+   "name": "Hotel two nights",
+   "amount": 1560,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "arjun",
+    "tarun",
+    "rohan_k"
+   ],
+   "date": "2026-10-08"
+  }
+ ],
+ "lists": [
+  {
+   "key": "wedding_list",
+   "name": "Wedding wrap-up",
+   "area": "social"
+  },
+  {
+   "key": "home_list",
+   "name": "Flat",
+   "area": "home"
+  },
+  {
+   "key": "work_list",
+   "name": "Work",
+   "area": "work"
+  },
+  {
+   "key": "scooter_list",
+   "name": "Scooter",
+   "area": "home"
+  },
+  {
+   "key": "parents_list",
+   "name": "Parents",
+   "area": "family"
+  }
+ ],
+ "events": [
+  {
+   "key": "callm_0913",
+   "name": "Call Mummy",
+   "start": "2026-09-13T11:00",
+   "end": "2026-09-13T11:30",
+   "attendees": [
+    "mummy"
+   ]
+  },
+  {
+   "key": "callm_0920",
+   "name": "Call Mummy",
+   "start": "2026-09-20T11:00",
+   "end": "2026-09-20T11:30",
+   "attendees": [
+    "mummy"
+   ]
+  },
+  {
+   "key": "callm_0927",
+   "name": "Call Mummy",
+   "start": "2026-09-27T11:00",
+   "end": "2026-09-27T11:30",
+   "attendees": [
+    "mummy"
+   ]
+  },
+  {
+   "key": "callm_1004",
+   "name": "Call Mummy",
+   "start": "2026-10-04T11:00",
+   "end": "2026-10-04T11:30",
+   "attendees": [
+    "mummy"
+   ]
+  },
+  {
+   "key": "callm_1018",
+   "name": "Call Mummy",
+   "start": "2026-10-18T11:00",
+   "end": "2026-10-18T11:30",
+   "cancelled": true,
+   "attendees": [
+    "mummy"
+   ]
+  },
+  {
+   "key": "callm_1025",
+   "name": "Call Mummy",
+   "start": "2026-10-25T11:00",
+   "end": "2026-10-25T11:30",
+   "attendees": [
+    "mummy"
+   ]
+  },
+  {
+   "key": "callm_1101",
+   "name": "Call Mummy",
+   "start": "2026-11-01T11:00",
+   "end": "2026-11-01T11:30",
+   "attendees": [
+    "mummy"
+   ]
+  },
+  {
+   "key": "callm_1108",
+   "name": "Call Mummy",
+   "start": "2026-11-08T11:00",
+   "end": "2026-11-08T11:30",
+   "attendees": [
+    "mummy"
+   ]
+  },
+  {
+   "key": "callm_1115",
+   "name": "Call Mummy",
+   "start": "2026-11-15T11:00",
+   "end": "2026-11-15T11:30",
+   "attendees": [
+    "mummy"
+   ]
+  },
+  {
+   "key": "callm_1206",
+   "name": "Call Mummy",
+   "start": "2026-12-06T11:00",
+   "end": "2026-12-06T11:30",
+   "attendees": [
+    "mummy"
+   ]
+  },
+  {
+   "key": "callm_1213",
+   "name": "Call Mummy",
+   "start": "2026-12-13T11:00",
+   "end": "2026-12-13T11:30",
+   "attendees": [
+    "mummy"
+   ]
+  },
+  {
+   "key": "callm_1220",
+   "name": "Call Mummy",
+   "start": "2026-12-20T11:00",
+   "end": "2026-12-20T11:30",
+   "attendees": [
+    "mummy"
+   ]
+  },
+  {
+   "key": "callm_1227",
+   "name": "Call Mummy",
+   "start": "2026-12-27T11:00",
+   "end": "2026-12-27T11:30",
+   "attendees": [
+    "mummy"
+   ]
+  },
+  {
+   "key": "badm_0912",
+   "name": "Badminton at the society courts",
+   "start": "2026-09-12T07:00",
+   "end": "2026-09-12T08:00",
+   "attendees": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "badm_0919",
+   "name": "Badminton at the society courts",
+   "start": "2026-09-19T07:00",
+   "end": "2026-09-19T08:00",
+   "attendees": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "badm_0926",
+   "name": "Badminton at the society courts",
+   "start": "2026-09-26T07:00",
+   "end": "2026-09-26T08:00",
+   "attendees": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "badm_1003",
+   "name": "Badminton at the society courts",
+   "start": "2026-10-03T07:00",
+   "end": "2026-10-03T08:00",
+   "attendees": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "badm_1017",
+   "name": "Badminton at the society courts",
+   "start": "2026-10-17T07:00",
+   "end": "2026-10-17T08:00",
+   "attendees": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "badm_1024",
+   "name": "Badminton at the society courts",
+   "start": "2026-10-24T07:00",
+   "end": "2026-10-24T08:00",
+   "cancelled": true,
+   "attendees": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "badm_1031",
+   "name": "Badminton at the society courts",
+   "start": "2026-10-31T07:00",
+   "end": "2026-10-31T08:00",
+   "attendees": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "badm_1107",
+   "name": "Badminton at the society courts",
+   "start": "2026-11-07T07:00",
+   "end": "2026-11-07T08:00",
+   "attendees": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "badm_1114",
+   "name": "Badminton at the society courts",
+   "start": "2026-11-14T07:00",
+   "end": "2026-11-14T08:00",
+   "attendees": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "badm_1205",
+   "name": "Badminton at the society courts",
+   "start": "2026-12-05T07:00",
+   "end": "2026-12-05T08:00",
+   "attendees": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "badm_1212",
+   "name": "Badminton at the society courts",
+   "start": "2026-12-12T07:00",
+   "end": "2026-12-12T08:00",
+   "attendees": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "badm_1219",
+   "name": "Badminton at the society courts",
+   "start": "2026-12-19T07:00",
+   "end": "2026-12-19T08:00",
+   "attendees": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "badm_1226",
+   "name": "Badminton at the society courts",
+   "start": "2026-12-26T07:00",
+   "end": "2026-12-26T08:00",
+   "attendees": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "sprint_0903",
+   "name": "Sprint review",
+   "start": "2026-09-03T16:00",
+   "end": "2026-09-03T17:00",
+   "attendees": [
+    "chinmay",
+    "priya_d"
+   ]
+  },
+  {
+   "key": "sprint_0917",
+   "name": "Sprint review",
+   "start": "2026-09-17T16:00",
+   "end": "2026-09-17T17:00",
+   "attendees": [
+    "chinmay",
+    "priya_d"
+   ]
+  },
+  {
+   "key": "sprint_1001",
+   "name": "Sprint review",
+   "start": "2026-10-01T16:00",
+   "end": "2026-10-01T17:00",
+   "attendees": [
+    "chinmay",
+    "priya_d"
+   ]
+  },
+  {
+   "key": "sprint_1015",
+   "name": "Sprint review",
+   "start": "2026-10-15T16:00",
+   "end": "2026-10-15T17:00",
+   "attendees": [
+    "chinmay",
+    "priya_d"
+   ]
+  },
+  {
+   "key": "sprint_1029",
+   "name": "Sprint review",
+   "start": "2026-10-29T16:00",
+   "end": "2026-10-29T17:00",
+   "cancelled": true,
+   "attendees": [
+    "chinmay",
+    "priya_d"
+   ]
+  },
+  {
+   "key": "sprint_1112",
+   "name": "Sprint review",
+   "start": "2026-11-12T16:00",
+   "end": "2026-11-12T17:00",
+   "attendees": [
+    "chinmay",
+    "priya_d"
+   ]
+  },
+  {
+   "key": "sprint_1126",
+   "name": "Sprint review",
+   "start": "2026-11-26T16:00",
+   "end": "2026-11-26T17:00",
+   "attendees": [
+    "chinmay",
+    "priya_d"
+   ]
+  },
+  {
+   "key": "sprint_1210",
+   "name": "Sprint review",
+   "start": "2026-12-10T16:00",
+   "end": "2026-12-10T17:00",
+   "attendees": [
+    "chinmay",
+    "priya_d"
+   ]
+  },
+  {
+   "key": "aai_dinner_1004",
+   "name": "Dinner at Aai's",
+   "start": "2026-10-04T19:30",
+   "end": "2026-10-04T21:30",
+   "attendees": [
+    "aai",
+    "baba"
+   ]
+  },
+  {
+   "key": "aai_dinner_1025",
+   "name": "Dinner at Aai's",
+   "start": "2026-10-25T19:30",
+   "end": "2026-10-25T21:30",
+   "attendees": [
+    "aai",
+    "baba"
+   ]
+  },
+  {
+   "key": "aai_dinner_1115",
+   "name": "Dinner at Aai's",
+   "start": "2026-11-15T19:30",
+   "end": "2026-11-15T21:30",
+   "attendees": [
+    "aai",
+    "baba"
+   ]
+  },
+  {
+   "key": "aai_dinner_1206",
+   "name": "Dinner at Aai's",
+   "start": "2026-12-06T19:30",
+   "end": "2026-12-06T21:30",
+   "attendees": [
+    "aai",
+    "baba"
+   ]
+  },
+  {
+   "key": "mehendi",
+   "name": "Mehendi",
+   "start": "2026-11-20T15:00",
+   "end": "2026-11-20T19:00",
+   "attendees": [
+    "anjali",
+    "shreya",
+    "sneha"
+   ]
+  },
+  {
+   "key": "sangeet",
+   "name": "Sangeet night",
+   "start": "2026-11-21T18:00",
+   "end": "2026-11-21T23:30",
+   "attendees": [
+    "kunal",
+    "rohan_m",
+    "sneha"
+   ]
+  },
+  {
+   "key": "wedding_day",
+   "name": "Wedding - Pune",
+   "start": "2026-11-22T09:00",
+   "end": "2026-11-22T16:00",
+   "attendees": [
+    "anjali",
+    "papa",
+    "mummy",
+    "baba",
+    "aai"
+   ]
+  },
+  {
+   "key": "reception",
+   "name": "Wedding reception",
+   "start": "2026-11-23T19:00",
+   "end": "2026-11-23T22:30",
+   "attendees": [
+    "vikram",
+    "rohan_k"
+   ]
+  },
+  {
+   "key": "griha",
+   "name": "Griha pravesh puja",
+   "start": "2026-11-26T08:30",
+   "end": "2026-11-26T10:30",
+   "attendees": [
+    "priest",
+    "landlord",
+    "aai"
+   ]
+  },
+  {
+   "key": "goa",
+   "name": "Honeymoon in Goa",
+   "start": "2026-11-28T09:00",
+   "end": "2026-12-03T20:00",
+   "attendees": [
+    "anjali"
+   ]
+  },
+  {
+   "key": "office_party",
+   "name": "Office reception party",
+   "start": "2026-12-12T19:00",
+   "end": "2026-12-12T22:00",
+   "attendees": [
+    "priya_d",
+    "chinmay",
+    "vaishnavi"
+   ]
+  },
+  {
+   "key": "dinner_mummy",
+   "name": "Dinner at Mummy's",
+   "start": "2026-12-26T20:00",
+   "end": "2026-12-26T22:00",
+   "attendees": [
+    "mummy",
+    "papa"
+   ]
+  },
+  {
+   "key": "dinner_mummy_old",
+   "name": "Dinner at Mummy's",
+   "start": "2026-08-15T20:00",
+   "end": "2026-08-15T22:00",
+   "attendees": [
+    "mummy",
+    "papa"
+   ]
+  },
+  {
+   "key": "doc_papa",
+   "name": "Doctor - Papa",
+   "start": "2026-12-28T10:00",
+   "end": "2026-12-28T10:45",
+   "attendees": [
+    "papa",
+    "dr_kelkar"
+   ]
+  },
+  {
+   "key": "doc_baba",
+   "name": "Doctor - Baba",
+   "start": "2026-12-16T11:00",
+   "end": "2026-12-16T11:45",
+   "attendees": [
+    "baba",
+    "dr_kelkar"
+   ]
+  },
+  {
+   "key": "scooter_service",
+   "name": "Scooter service",
+   "start": "2026-12-14T09:00",
+   "end": "2026-12-14T10:30",
+   "attendees": [
+    "ganesh"
+   ]
+  },
+  {
+   "key": "scooter_puc",
+   "name": "Scooter PUC check",
+   "start": "2026-12-18T08:30",
+   "end": "2026-12-18T09:00",
+   "attendees": [
+    "ganesh"
+   ]
+  },
+  {
+   "key": "scooter_service_old",
+   "name": "Scooter service",
+   "start": "2026-09-07T09:00",
+   "end": "2026-09-07T10:30",
+   "attendees": [
+    "ganesh"
+   ]
+  },
+  {
+   "key": "dentist_ev",
+   "name": "Dentist check-up",
+   "start": "2026-12-21T09:00",
+   "end": "2026-12-21T09:45",
+   "attendees": [
+    "dentist"
+   ]
+  },
+  {
+   "key": "lunch_rohan_k",
+   "name": "Lunch with Rohan K",
+   "start": "2026-12-11T13:00",
+   "end": "2026-12-11T14:00",
+   "attendees": [
+    "rohan_k"
+   ]
+  },
+  {
+   "key": "catchup_bunty",
+   "name": "Call with Bunty",
+   "start": "2026-12-13T21:00",
+   "end": "2026-12-13T21:30",
+   "attendees": [
+    "rohan_m"
+   ]
+  },
+  {
+   "key": "coffee_priya",
+   "name": "Coffee with Priya",
+   "start": "2026-12-15T17:30",
+   "end": "2026-12-15T18:30",
+   "attendees": [
+    "priya_d"
+   ]
+  },
+  {
+   "key": "shreya_bday",
+   "name": "Shreya's birthday dinner",
+   "start": "2026-12-19T20:00",
+   "end": "2026-12-19T23:00",
+   "attendees": [
+    "shreya",
+    "anjali"
+   ]
+  },
+  {
+   "key": "ca_meeting",
+   "name": "Tax planning with the CA",
+   "start": "2026-12-17T12:30",
+   "end": "2026-12-17T13:30",
+   "attendees": [
+    "ca"
+   ]
+  },
+  {
+   "key": "naik_rent",
+   "name": "Meet Naik uncle about the agreement",
+   "start": "2026-12-22T18:30",
+   "end": "2026-12-22T19:15",
+   "attendees": [
+    "landlord"
+   ]
+  },
+  {
+   "key": "fly_chd",
+   "name": "Flight to Chandigarh",
+   "start": "2026-12-24T06:30",
+   "end": "2026-12-24T09:15"
+  },
+  {
+   "key": "lohri",
+   "name": "Lohri at Papa's",
+   "start": "2027-01-13T18:00",
+   "end": "2027-01-13T22:00",
+   "attendees": [
+    "papa",
+    "mummy",
+    "rohan_m"
+   ]
+  },
+  {
+   "key": "fly_back",
+   "name": "Flight back to Pune",
+   "start": "2026-12-30T17:00",
+   "end": "2026-12-30T19:45"
+  },
+  {
+   "key": "ny_party",
+   "name": "New Year party at Kunal's",
+   "start": "2026-12-31T21:00",
+   "end": "2027-01-01T01:30",
+   "attendees": [
+    "kunal",
+    "rohan_k"
+   ]
+  },
+  {
+   "key": "registration",
+   "name": "Marriage registration at the office",
+   "start": "2026-12-08T10:00",
+   "end": "2026-12-08T11:30",
+   "attendees": [
+    "anjali"
+   ]
+  },
+  {
+   "key": "dubai_trip",
+   "name": "Dubai trip",
+   "start": "2026-10-08T06:00",
+   "end": "2026-10-11T23:00",
+   "attendees": [
+    "arjun",
+    "tarun",
+    "rohan_k"
+   ]
+  },
+  {
+   "key": "engagement",
+   "name": "Rohan Mehra's engagement",
+   "start": "2027-02-06T17:00",
+   "end": "2027-02-06T21:00",
+   "attendees": [
+    "rohan_m",
+    "vikram"
+   ]
+  },
+  {
+   "key": "old_meet",
+   "name": "Meeting with Prasad",
+   "start": "2026-08-05T18:00",
+   "end": "2026-08-05T19:00",
+   "attendees": [
+    "old_agent"
+   ],
+   "trashed": "2026-09-12T10:30"
+  },
+  {
+   "key": "old_tasting",
+   "name": "Menu tasting with Rutuja",
+   "start": "2026-10-02T12:00",
+   "end": "2026-10-02T13:00",
+   "attendees": [
+    "old_vendor"
+   ],
+   "trashed": "2026-11-27T10:30"
+  }
+ ],
+ "tasks": [
+  {
+   "key": "rent_aug",
+   "name": "Pay flat rent",
+   "list": "home_list",
+   "due": "2026-08-05",
+   "completed": "2026-08-04T21:00"
+  },
+  {
+   "key": "rent_sep",
+   "name": "Pay flat rent",
+   "list": "home_list",
+   "due": "2026-09-05",
+   "completed": "2026-09-05T08:30"
+  },
+  {
+   "key": "rent_oct",
+   "name": "Pay flat rent",
+   "list": "home_list",
+   "due": "2026-10-05",
+   "completed": "2026-10-03T19:45"
+  },
+  {
+   "key": "rent_nov",
+   "name": "Pay flat rent",
+   "list": "home_list",
+   "due": "2026-11-05",
+   "completed": "2026-11-05T10:00"
+  },
+  {
+   "key": "rent_dec",
+   "name": "Pay flat rent",
+   "list": "home_list",
+   "due": "2026-12-05",
+   "completed": "2026-12-04T22:10"
+  },
+  {
+   "key": "rent_jan",
+   "name": "Pay flat rent",
+   "list": "home_list",
+   "due": "2027-01-05",
+   "priority": 1
+  },
+  {
+   "key": "maint_sep",
+   "name": "Pay society maintenance",
+   "list": "home_list",
+   "due": "2026-09-10",
+   "completed": "2026-09-09T20:00"
+  },
+  {
+   "key": "maint_oct",
+   "name": "Pay society maintenance",
+   "list": "home_list",
+   "due": "2026-10-10",
+   "completed": "2026-10-10T09:00"
+  },
+  {
+   "key": "maint_nov",
+   "name": "Pay society maintenance",
+   "list": "home_list",
+   "due": "2026-11-10",
+   "completed": "2026-11-11T09:30"
+  },
+  {
+   "key": "maint_dec",
+   "name": "Pay society maintenance",
+   "list": "home_list",
+   "due": "2026-12-10",
+   "priority": 1
+  },
+  {
+   "key": "maint_jan",
+   "name": "Pay society maintenance",
+   "list": "home_list",
+   "due": "2027-01-10"
+  },
+  {
+   "key": "emi_jul",
+   "name": "Pay scooter EMI",
+   "list": "scooter_list",
+   "due": "2026-07-03",
+   "completed": "2026-07-02T21:00"
+  },
+  {
+   "key": "emi_aug",
+   "name": "Pay scooter EMI",
+   "list": "scooter_list",
+   "due": "2026-08-03",
+   "completed": "2026-08-03T08:00"
+  },
+  {
+   "key": "emi_sep",
+   "name": "Pay scooter EMI",
+   "list": "scooter_list",
+   "due": "2026-09-03",
+   "completed": "2026-09-03T08:15"
+  },
+  {
+   "key": "emi_oct",
+   "name": "Pay scooter EMI",
+   "list": "scooter_list",
+   "due": "2026-10-03",
+   "completed": "2026-10-02T22:00"
+  },
+  {
+   "key": "emi_nov",
+   "name": "Pay scooter EMI",
+   "list": "scooter_list",
+   "due": "2026-11-03",
+   "completed": "2026-11-02T20:00"
+  },
+  {
+   "key": "emi_dec",
+   "name": "Pay scooter EMI",
+   "list": "scooter_list",
+   "due": "2026-12-03",
+   "completed": "2026-12-03T09:00"
+  },
+  {
+   "key": "emi_jan",
+   "name": "Pay scooter EMI",
+   "list": "scooter_list",
+   "due": "2027-01-03"
+  },
+  {
+   "key": "wrap",
+   "name": "Wedding wrap-up",
+   "list": "wedding_list",
+   "due": "2026-12-31",
+   "priority": 2,
+   "status": "in_progress"
+  },
+  {
+   "key": "wrap_settle",
+   "name": "Settle up with the relatives",
+   "list": "wedding_list",
+   "due": "2026-12-20",
+   "parent": "wrap",
+   "priority": 2
+  },
+  {
+   "key": "wrap_thanks_cards",
+   "name": "Send thank-you cards",
+   "list": "wedding_list",
+   "due": "2026-12-15",
+   "parent": "wrap",
+   "effort": 90
+  },
+  {
+   "key": "wrap_album",
+   "name": "Choose photos for the album",
+   "list": "wedding_list",
+   "due": "2026-12-22",
+   "parent": "wrap",
+   "effort": 120
+  },
+  {
+   "key": "wrap_video",
+   "name": "Collect the wedding video",
+   "list": "wedding_list",
+   "due": "2026-12-12",
+   "parent": "wrap",
+   "effort": 20
+  },
+  {
+   "key": "wrap_gifts_list",
+   "name": "Note down who gave which gift",
+   "list": "wedding_list",
+   "due": "2026-11-29",
+   "completed": "2026-11-30T21:00",
+   "parent": "wrap"
+  },
+  {
+   "key": "wrap_return_decor",
+   "name": "Return the rented decor props",
+   "list": "wedding_list",
+   "due": "2026-11-25",
+   "completed": "2026-11-25T17:00",
+   "parent": "wrap"
+  },
+  {
+   "key": "wrap_pay_caterer",
+   "name": "Pay the caterer balance",
+   "list": "wedding_list",
+   "due": "2026-11-24",
+   "completed": "2026-11-24T12:00",
+   "parent": "wrap"
+  },
+  {
+   "key": "thanks_msgs",
+   "name": "Send thank-you messages",
+   "list": "wedding_list",
+   "due": "2026-12-10",
+   "effort": 60
+  },
+  {
+   "key": "thanks_cards_old",
+   "name": "Send thank-you cards",
+   "list": "wedding_list",
+   "due": "2026-11-28",
+   "completed": "2026-11-28T20:00"
+  },
+  {
+   "key": "name_change",
+   "name": "Anjali's name change paperwork",
+   "list": "home_list",
+   "due": "2027-01-31",
+   "status": "in_progress",
+   "priority": 2
+  },
+  {
+   "key": "nc_marriage_cert",
+   "name": "Get the marriage certificate",
+   "list": "home_list",
+   "due": "2026-12-08",
+   "completed": "2026-12-08T12:30",
+   "parent": "name_change"
+  },
+  {
+   "key": "nc_aadhaar",
+   "name": "Update address on Aadhaar",
+   "list": "home_list",
+   "due": "2026-12-18",
+   "parent": "name_change",
+   "effort": 30
+  },
+  {
+   "key": "nc_pan",
+   "name": "Update address on PAN",
+   "list": "home_list",
+   "due": "2026-12-20",
+   "parent": "name_change",
+   "effort": 30
+  },
+  {
+   "key": "nc_bank",
+   "name": "Change Anjali's surname at the bank",
+   "list": "home_list",
+   "due": "2027-01-10",
+   "parent": "name_change",
+   "effort": 60
+  },
+  {
+   "key": "nc_passport",
+   "name": "Apply for the passport name change",
+   "list": "home_list",
+   "due": "2027-01-20",
+   "parent": "name_change",
+   "effort": 90,
+   "priority": 2
+  },
+  {
+   "key": "exam_pending",
+   "name": "Submit the work-from-home form",
+   "list": "work_list",
+   "due": "2026-12-11",
+   "effort": 15
+  },
+  {
+   "key": "leave_apply",
+   "name": "Apply for leave for Chandigarh",
+   "list": "work_list",
+   "due": "2026-12-14",
+   "priority": 1
+  },
+  {
+   "key": "leave_old",
+   "name": "Apply for wedding leave",
+   "list": "work_list",
+   "due": "2026-10-15",
+   "completed": "2026-10-14T18:00"
+  },
+  {
+   "key": "tax_proofs",
+   "name": "Upload tax proofs to payroll",
+   "list": "work_list",
+   "due": "2026-12-28",
+   "effort": 40
+  },
+  {
+   "key": "perf_review",
+   "name": "Write the self review",
+   "list": "work_list",
+   "due": "2026-12-18",
+   "effort": 120,
+   "priority": 2
+  },
+  {
+   "key": "release_notes",
+   "name": "Draft release notes for 4.2",
+   "list": "work_list",
+   "due": "2026-12-10",
+   "effort": 60
+  },
+  {
+   "key": "pr_review",
+   "name": "Review Vaishnavi's pull request",
+   "list": "work_list",
+   "due": "2026-12-10",
+   "effort": 45
+  },
+  {
+   "key": "onsite_form",
+   "name": "Fill the onsite visa form",
+   "list": "work_list",
+   "due": "2027-01-15",
+   "status": "cancelled"
+  },
+  {
+   "key": "scooter_ins",
+   "name": "Renew scooter insurance",
+   "list": "scooter_list",
+   "due": "2026-12-30",
+   "priority": 1,
+   "effort": 20
+  },
+  {
+   "key": "scooter_ins_old",
+   "name": "Renew scooter insurance",
+   "list": "scooter_list",
+   "due": "2025-12-28",
+   "completed": "2025-12-27T18:00"
+  },
+  {
+   "key": "scooter_puc_t",
+   "name": "Get the PUC certificate",
+   "list": "scooter_list",
+   "due": "2026-12-18",
+   "effort": 20
+  },
+  {
+   "key": "scooter_tyre",
+   "name": "Check the rear tyre",
+   "list": "scooter_list",
+   "due": "2026-12-14",
+   "effort": 15
+  },
+  {
+   "key": "scooter_helmet",
+   "name": "Buy a helmet for Anjali",
+   "list": "scooter_list",
+   "due": "2026-12-20",
+   "effort": 45
+  },
+  {
+   "key": "scooter_challan",
+   "name": "Pay the traffic challan",
+   "list": "scooter_list",
+   "due": "2026-09-30",
+   "completed": "2026-09-29T19:00"
+  },
+  {
+   "key": "mummy_gift",
+   "name": "Buy a shawl for Mummy",
+   "list": "parents_list",
+   "due": "2026-12-22",
+   "effort": 60
+  },
+  {
+   "key": "papa_report",
+   "name": "Collect Papa's eye reports",
+   "list": "parents_list",
+   "due": "2026-12-14"
+  },
+  {
+   "key": "aai_fridge",
+   "name": "Arrange delivery of Aai's fridge",
+   "list": "parents_list",
+   "due": "2026-11-30",
+   "completed": "2026-11-29T15:00"
+  },
+  {
+   "key": "baba_meds",
+   "name": "Order Baba's medicines",
+   "list": "parents_list",
+   "due": "2026-12-12",
+   "effort": 15
+  },
+  {
+   "key": "pack_chd",
+   "name": "Pack for Chandigarh",
+   "list": "parents_list",
+   "due": "2026-12-23"
+  },
+  {
+   "key": "book_fly",
+   "name": "Book the Chandigarh flights",
+   "list": "parents_list",
+   "due": "2026-11-15",
+   "completed": "2026-11-14T22:00"
+  },
+  {
+   "key": "pay_vikram",
+   "name": "Pay Vikram uncle for the caterer",
+   "due": "2026-12-20",
+   "priority": 1
+  },
+  {
+   "key": "pay_rohan",
+   "name": "Pay Rohan for the photographer",
+   "due": "2026-12-20"
+  },
+  {
+   "key": "pay_kunal",
+   "name": "Pay Kunal for the DJ",
+   "due": "2026-12-18",
+   "effort": 5
+  },
+  {
+   "key": "buy_geyser",
+   "name": "Buy a geyser for the bathroom",
+   "list": "home_list",
+   "due": "2026-12-24",
+   "effort": 90
+  },
+  {
+   "key": "curtains",
+   "name": "Order curtains for the bedroom",
+   "list": "home_list",
+   "due": "2026-12-17",
+   "effort": 60
+  },
+  {
+   "key": "old_sofa",
+   "name": "Sell the old sofa",
+   "trashed": "2026-09-12T10:15"
+  },
+  {
+   "key": "old_decor",
+   "name": "Compare decor quotes",
+   "list": "wedding_list",
+   "trashed": "2026-11-27T10:15"
+  }
+ ],
+ "notebooks": [
+  {
+   "key": "wedding_nb",
+   "name": "Wedding Planning"
+  },
+  {
+   "key": "home_nb",
+   "name": "Flat Notes"
+  },
+  {
+   "key": "work_nb",
+   "name": "Work Journal"
+  },
+  {
+   "key": "kitchen_nb",
+   "name": "Kitchen"
+  }
+ ],
+ "notes": [
+  {
+   "key": "w_budget",
+   "name": "Wedding budget",
+   "notebook": "wedding_nb",
+   "created": "2026-08-20T21:00",
+   "pinned": true,
+   "body": "venue and food are the big two, decor and photographer next, keep ten percent aside for surprises"
+  },
+  {
+   "key": "w_guests",
+   "name": "Guest list split",
+   "notebook": "wedding_nb",
+   "created": "2026-09-02T21:30",
+   "body": "two hundred and forty in total, a hundred and ten from our side, Aai wants the Nashik cousins invited"
+  },
+  {
+   "key": "w_rituals",
+   "name": "Ritual timeline",
+   "notebook": "wedding_nb",
+   "created": "2026-10-12T20:00",
+   "body": "haldi in the morning, sangeet in the evening, muhurat at 11.40 on Sunday, reception on Monday"
+  },
+  {
+   "key": "w_vendors",
+   "name": "Vendor contacts",
+   "notebook": "wedding_nb",
+   "created": "2026-09-10T19:00",
+   "body": "Hemant caterer, Tanvi decorator, Aditya photographer, Pandit Joshi for the ceremony"
+  },
+  {
+   "key": "w_vows",
+   "name": "Speech draft",
+   "notebook": "wedding_nb",
+   "created": "2026-11-15T22:30",
+   "body": "thank both families, mention the COEP canteen, keep it under three minutes"
+  },
+  {
+   "key": "w_settle",
+   "name": "Who paid what",
+   "notebook": "wedding_nb",
+   "created": "2026-11-27T21:00",
+   "body": "Baba paid the venue, Vikram chacha paid the caterer advance, Bunty paid the photographer, rest is mine"
+  },
+  {
+   "key": "w_after",
+   "name": "After the wedding",
+   "notebook": "wedding_nb",
+   "created": "2026-11-30T20:00",
+   "body": "settle the group first, then cards, then the album, name change paperwork in January"
+  },
+  {
+   "key": "flat_move",
+   "name": "Moving checklist",
+   "notebook": "home_nb",
+   "created": "2026-08-01T20:00",
+   "body": "gas connection, wifi, curtains, the society welcome form, lease signed with Naik uncle"
+  },
+  {
+   "key": "flat_rules",
+   "name": "Society rules",
+   "notebook": "home_nb",
+   "created": "2026-08-03T10:00",
+   "body": "maintenance by the tenth, no loud music after ten, scooter parking in slot B14"
+  },
+  {
+   "key": "flat_wifi",
+   "name": "Router setup",
+   "notebook": "home_nb",
+   "created": "2026-08-05T19:00",
+   "body": "fibre plan 600 mbps, router in the hall, reset button behind the pinhole"
+  },
+  {
+   "key": "flat_shop",
+   "name": "Things to buy for the flat",
+   "notebook": "home_nb",
+   "created": "2026-11-29T18:00",
+   "body": "geyser, curtains, an ironing board, a second pressure cooker"
+  },
+  {
+   "key": "flat_help",
+   "name": "Lata tai schedule",
+   "notebook": "home_nb",
+   "created": "2026-08-10T09:00",
+   "body": "comes at seven, Sundays off, 3500 a month paid on the first"
+  },
+  {
+   "key": "work_sprint",
+   "name": "Sprint 41 retro",
+   "notebook": "work_nb",
+   "created": "2026-10-15T17:30",
+   "body": "deploys too slow, flaky tests in payments, Chinmay wants a freeze before the holidays"
+  },
+  {
+   "key": "work_goals",
+   "name": "Goals for the half",
+   "notebook": "work_nb",
+   "created": "2026-07-06T10:00",
+   "body": "own the notifications service, mentor Vaishnavi, cut p95 latency by a third"
+  },
+  {
+   "key": "work_1on1",
+   "name": "One-on-one with Chinmay",
+   "notebook": "work_nb",
+   "created": "2026-11-18T15:00",
+   "body": "promotion case in March, take the onsite in January if the visa works out"
+  },
+  {
+   "key": "work_oncall",
+   "name": "On-call runbook notes",
+   "notebook": "work_nb",
+   "created": "2026-09-22T11:00",
+   "body": "restart the consumer first, check the dead-letter queue, page Priya if it repeats"
+  },
+  {
+   "key": "kit_poha",
+   "name": "Kanda poha",
+   "notebook": "kitchen_nb",
+   "created": "2026-08-14T09:00",
+   "body": "thick poha, onions, peanuts, curry leaves, lemon at the end, Aai's trick is a pinch of sugar"
+  },
+  {
+   "key": "kit_rajma",
+   "name": "Mummy's rajma",
+   "notebook": "kitchen_nb",
+   "created": "2026-09-27T13:00",
+   "body": "soak overnight, pressure cook six whistles, onion tomato masala, simmer an hour"
+  },
+  {
+   "key": "kit_puranpoli",
+   "name": "Puran poli",
+   "notebook": "kitchen_nb",
+   "created": "2026-10-20T17:00",
+   "body": "chana dal and jaggery filling, rest the dough, ghee on the tawa"
+  },
+  {
+   "key": "diary_wedding",
+   "name": "Diary entry - wedding night",
+   "created": "2026-11-23T01:30",
+   "body": "dance floor full, Papa and Baba finally hugged, ate two bites in the whole day"
+  },
+  {
+   "key": "diary_goa",
+   "name": "Diary entry - Goa",
+   "created": "2026-11-30T22:00",
+   "body": "Palolem sunsets, scooter rental, Anju beat me at carrom, back to work soon"
+  },
+  {
+   "key": "dubai_notes",
+   "name": "Dubai trip notes",
+   "created": "2026-10-12T20:00",
+   "body": "desert safari was the highlight, metro is cheap, Tarun lost his card at the mall"
+  },
+  {
+   "key": "gifts_note",
+   "name": "Gift ideas for the parents",
+   "created": "2026-12-03T21:00",
+   "body": "shawl for Mummy, a reading lamp for Baba, Aai wants a pressure cooker, Papa a new radio"
+  },
+  {
+   "key": "scooter_notes",
+   "name": "Scooter details",
+   "created": "2026-08-12T12:00",
+   "body": "Honda Activa, MH12 AB 4521, service every 3000 km, insurance due end of December"
+  },
+  {
+   "key": "old_idea",
+   "name": "Old idea - Goa wedding",
+   "created": "2026-05-02T10:00",
+   "body": "destination wedding in Goa, too expensive",
+   "trashed": "2026-08-20T10:00"
+  },
+  {
+   "key": "old_scratch",
+   "name": "Scratch list",
+   "created": "2026-12-01T10:00",
+   "body": "milk, eggs, atta",
+   "trashed": "2026-12-05T10:00"
+  }
+ ],
+ "folders": [
+  {
+   "key": "wedding_f",
+   "name": "Wedding"
+  },
+  {
+   "key": "flat_f",
+   "name": "Flat"
+  },
+  {
+   "key": "id_f",
+   "name": "IDs"
+  },
+  {
+   "key": "scooter_f",
+   "name": "Scooter"
+  },
+  {
+   "key": "work_f",
+   "name": "Work"
+  },
+  {
+   "key": "empty_f",
+   "name": "To file"
+  }
+ ],
+ "documents": [
+  {
+   "key": "marriage_cert_d",
+   "name": "Marriage certificate",
+   "folder": "wedding_f",
+   "created": "2026-12-08T13:00",
+   "starred": true
+  },
+  {
+   "key": "caterer_inv",
+   "name": "Caterer invoice",
+   "folder": "wedding_f",
+   "created": "2026-11-24T12:30"
+  },
+  {
+   "key": "decor_inv",
+   "name": "Decorator invoice",
+   "folder": "wedding_f",
+   "created": "2026-11-20T18:00"
+  },
+  {
+   "key": "photog_contract",
+   "name": "Photographer contract",
+   "folder": "wedding_f",
+   "created": "2026-09-30T10:00"
+  },
+  {
+   "key": "venue_receipt",
+   "name": "Venue advance receipt",
+   "folder": "wedding_f",
+   "created": "2026-10-10T11:00"
+  },
+  {
+   "key": "lease",
+   "name": "Baner flat lease",
+   "folder": "flat_f",
+   "created": "2026-08-01T11:00",
+   "starred": true
+  },
+  {
+   "key": "police_verif",
+   "name": "Police verification form",
+   "folder": "flat_f",
+   "created": "2026-08-03T12:00"
+  },
+  {
+   "key": "society_noc",
+   "name": "Society NOC",
+   "folder": "flat_f",
+   "created": "2026-08-02T12:00"
+  },
+  {
+   "key": "aadhaar_dev",
+   "name": "Aadhaar scan - Dev",
+   "folder": "id_f",
+   "created": "2026-01-10T10:00"
+  },
+  {
+   "key": "aadhaar_anjali",
+   "name": "Aadhaar scan - Anjali",
+   "folder": "id_f",
+   "created": "2026-12-02T10:00"
+  },
+  {
+   "key": "pan_dev",
+   "name": "PAN card scan",
+   "folder": "id_f",
+   "created": "2026-01-10T10:05"
+  },
+  {
+   "key": "passport_scan",
+   "name": "Passport scan",
+   "folder": "id_f",
+   "created": "2026-01-10T10:10"
+  },
+  {
+   "key": "scooter_rc",
+   "name": "Scooter RC book",
+   "folder": "scooter_f",
+   "created": "2025-12-28T10:00"
+  },
+  {
+   "key": "scooter_ins_d",
+   "name": "Scooter insurance 2025",
+   "folder": "scooter_f",
+   "created": "2025-12-28T10:30"
+  },
+  {
+   "key": "offer_letter",
+   "name": "Offer letter",
+   "folder": "work_f",
+   "created": "2024-06-10T10:00"
+  },
+  {
+   "key": "form16",
+   "name": "Form 16 2025",
+   "folder": "work_f",
+   "created": "2026-06-05T10:00"
+  },
+  {
+   "key": "payslip_nov",
+   "name": "Payslip November",
+   "created": "2026-12-01T10:00"
+  },
+  {
+   "key": "dubai_visa",
+   "name": "Dubai visa copy",
+   "created": "2026-09-25T10:00"
+  },
+  {
+   "key": "old_quote",
+   "name": "Old caterer quote",
+   "folder": "wedding_f",
+   "created": "2026-09-01T10:00",
+   "trashed": "2026-11-27T10:20"
+  },
+  {
+   "key": "old_lease",
+   "name": "Old Kothrud lease draft",
+   "folder": "flat_f",
+   "created": "2026-05-20T10:00",
+   "trashed": "2026-09-12T10:00"
+  }
+ ],
+ "albums": [
+  {
+   "key": "wedding_album",
+   "name": "Wedding Day"
+  },
+  {
+   "key": "goa_album",
+   "name": "Goa Honeymoon"
+  },
+  {
+   "key": "flat_album",
+   "name": "Our Flat"
+  },
+  {
+   "key": "rides_album",
+   "name": "Scooter Rides"
+  }
+ ],
+ "photos": [
+  {
+   "key": "p_haldi",
+   "name": "Haldi in the morning",
+   "taken": "2026-11-21T10:00",
+   "albums": [
+    "wedding_album"
+   ],
+   "people": [
+    "anjali",
+    "sneha"
+   ]
+  },
+  {
+   "key": "p_mehendi",
+   "name": "Anju's mehendi",
+   "taken": "2026-11-20T16:30",
+   "albums": [
+    "wedding_album"
+   ],
+   "people": [
+    "anjali",
+    "shreya"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_sangeet",
+   "name": "Sangeet dance floor",
+   "taken": "2026-11-21T21:15",
+   "albums": [
+    "wedding_album"
+   ],
+   "people": [
+    "kunal",
+    "rohan_m"
+   ]
+  },
+  {
+   "key": "p_phere",
+   "name": "The saat phere",
+   "taken": "2026-11-22T11:50",
+   "albums": [
+    "wedding_album"
+   ],
+   "people": [
+    "anjali",
+    "priest"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_family",
+   "name": "Both families on stage",
+   "taken": "2026-11-22T14:00",
+   "albums": [
+    "wedding_album"
+   ],
+   "people": [
+    "papa",
+    "mummy",
+    "baba",
+    "aai",
+    "sneha"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_varmala",
+   "name": "Varmala exchange",
+   "taken": "2026-11-22T10:30",
+   "albums": [
+    "wedding_album"
+   ],
+   "people": [
+    "anjali"
+   ]
+  },
+  {
+   "key": "p_reception",
+   "name": "Reception cake",
+   "taken": "2026-11-23T20:30",
+   "albums": [
+    "wedding_album"
+   ],
+   "people": [
+    "vikram"
+   ]
+  },
+  {
+   "key": "p_friends",
+   "name": "College gang at the reception",
+   "taken": "2026-11-23T21:10",
+   "albums": [
+    "wedding_album"
+   ],
+   "people": [
+    "rohan_k",
+    "kunal"
+   ]
+  },
+  {
+   "key": "p_decor",
+   "name": "Mandap decor",
+   "taken": "2026-11-22T07:30",
+   "albums": [
+    "wedding_album"
+   ],
+   "people": [
+    "decorator"
+   ]
+  },
+  {
+   "key": "p_goa_beach",
+   "name": "Palolem beach",
+   "taken": "2026-11-29T17:45",
+   "albums": [
+    "goa_album"
+   ],
+   "people": [
+    "anjali"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_goa_scooter",
+   "name": "Rented scooter in Goa",
+   "taken": "2026-11-30T11:00",
+   "albums": [
+    "goa_album"
+   ]
+  },
+  {
+   "key": "p_goa_dinner",
+   "name": "Dinner at the shack",
+   "taken": "2026-12-01T20:15",
+   "albums": [
+    "goa_album"
+   ],
+   "people": [
+    "anjali"
+   ]
+  },
+  {
+   "key": "p_goa_fort",
+   "name": "Fort Aguada",
+   "taken": "2026-12-02T10:30",
+   "albums": [
+    "goa_album"
+   ]
+  },
+  {
+   "key": "p_goa_sunset",
+   "name": "Sunset from the cliff",
+   "taken": "2026-12-02T18:20",
+   "albums": [
+    "goa_album"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_flat_keys",
+   "name": "Getting the keys",
+   "taken": "2026-08-01T12:00",
+   "albums": [
+    "flat_album"
+   ],
+   "people": [
+    "landlord"
+   ]
+  },
+  {
+   "key": "p_flat_empty",
+   "name": "The empty living room",
+   "taken": "2026-08-01T12:30",
+   "albums": [
+    "flat_album"
+   ]
+  },
+  {
+   "key": "p_flat_puja",
+   "name": "Griha pravesh puja",
+   "taken": "2026-11-26T09:15",
+   "albums": [
+    "flat_album"
+   ],
+   "people": [
+    "priest",
+    "aai"
+   ]
+  },
+  {
+   "key": "p_flat_balcony",
+   "name": "Balcony view of Baner hills",
+   "taken": "2026-08-15T06:30",
+   "albums": [
+    "flat_album"
+   ]
+  },
+  {
+   "key": "p_flat_kitchen",
+   "name": "First dinner cooked at home",
+   "taken": "2026-08-09T21:00",
+   "albums": [
+    "flat_album"
+   ],
+   "people": [
+    "anjali"
+   ]
+  },
+  {
+   "key": "p_ride_sinhagad",
+   "name": "Sinhagad on the Activa",
+   "taken": "2026-10-04T07:30",
+   "albums": [
+    "rides_album"
+   ],
+   "people": [
+    "anjali"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_ride_mulshi",
+   "name": "Mulshi lake stop",
+   "taken": "2026-09-20T09:00",
+   "albums": [
+    "rides_album"
+   ]
+  },
+  {
+   "key": "p_ride_fc",
+   "name": "Chai on FC Road",
+   "taken": "2026-09-27T18:30",
+   "albums": [
+    "rides_album"
+   ],
+   "people": [
+    "rohan_k"
+   ]
+  },
+  {
+   "key": "p_ride_puncture",
+   "name": "Puncture near Pashan",
+   "taken": "2026-10-18T08:40",
+   "albums": [
+    "rides_album"
+   ]
+  },
+  {
+   "key": "p_dubai_dune",
+   "name": "Dune bashing",
+   "taken": "2026-10-09T16:00",
+   "people": [
+    "arjun",
+    "tarun",
+    "rohan_k"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_dubai_burj",
+   "name": "Burj Khalifa at night",
+   "taken": "2026-10-09T21:30",
+   "people": [
+    "rohan_k"
+   ]
+  },
+  {
+   "key": "p_dubai_mall",
+   "name": "The mall fountain",
+   "taken": "2026-10-10T19:00",
+   "people": [
+    "tarun"
+   ]
+  },
+  {
+   "key": "p_office",
+   "name": "Office team lunch",
+   "taken": "2026-11-12T13:30",
+   "people": [
+    "priya_d",
+    "chinmay",
+    "vaishnavi"
+   ]
+  },
+  {
+   "key": "p_cousin",
+   "name": "Cousins at Aai's",
+   "taken": "2026-10-25T18:00",
+   "people": [
+    "priya_s",
+    "sneha"
+   ]
+  },
+  {
+   "key": "p_bunty",
+   "name": "Bunty at the sangeet",
+   "taken": "2026-11-21T22:00",
+   "people": [
+    "rohan_m"
+   ]
+  },
+  {
+   "key": "p_diwali",
+   "name": "Diwali diyas at Aai's",
+   "taken": "2026-11-08T19:00",
+   "people": [
+    "aai",
+    "baba"
+   ]
+  },
+  {
+   "key": "p_ca_docs",
+   "name": "Tax documents spread out",
+   "taken": "2026-12-03T20:00"
+  },
+  {
+   "key": "p_coep",
+   "name": "COEP reunion",
+   "taken": "2026-09-05T20:00",
+   "people": [
+    "rohan_k",
+    "kunal"
+   ]
+  },
+  {
+   "key": "p_badminton",
+   "name": "Badminton after the match",
+   "taken": "2026-10-31T08:20",
+   "people": [
+    "siddharth"
+   ]
+  },
+  {
+   "key": "p_blurry",
+   "name": "Blurry photo",
+   "taken": "2026-11-30T09:00",
+   "trashed": "2026-12-03T09:00"
+  },
+  {
+   "key": "p_receipt",
+   "name": "Screenshot of the DJ receipt",
+   "taken": "2026-10-12T12:00",
+   "trashed": "2026-10-20T09:00"
+  }
+ ],
+ "debts": [
+  {
+   "key": "d_vikram",
+   "person": "vikram",
+   "direction": "i_owe",
+   "amount": 30000,
+   "name": "caterer advance share",
+   "date": "2026-10-18"
+  },
+  {
+   "key": "d_baba",
+   "person": "baba",
+   "direction": "i_owe",
+   "amount": 37500,
+   "name": "venue advance share",
+   "date": "2026-10-10"
+  },
+  {
+   "key": "d_rohan_m",
+   "person": "rohan_m",
+   "direction": "i_owe",
+   "amount": 30000,
+   "name": "photographer share",
+   "date": "2026-11-12"
+  },
+  {
+   "key": "d_kunal",
+   "person": "kunal",
+   "direction": "i_owe",
+   "amount": 9000,
+   "name": "sangeet DJ share",
+   "date": "2026-11-21"
+  },
+  {
+   "key": "d_sneha",
+   "person": "sneha",
+   "direction": "owes_me",
+   "amount": 6000,
+   "name": "return gifts share",
+   "date": "2026-11-18"
+  },
+  {
+   "key": "d_papa",
+   "person": "papa",
+   "direction": "owes_me",
+   "amount": 20000,
+   "name": "cataract surgery share",
+   "date": "2026-07-14"
+  },
+  {
+   "key": "d_anjali",
+   "person": "anjali",
+   "direction": "i_owe",
+   "amount": 590,
+   "name": "wifi half",
+   "date": "2026-12-02"
+  },
+  {
+   "key": "d_rohan_k",
+   "person": "rohan_k",
+   "direction": "owes_me",
+   "amount": 12000,
+   "name": "Dubai hotel in rupees",
+   "date": "2026-10-08"
+  },
+  {
+   "key": "d_priya_d",
+   "person": "priya_d",
+   "direction": "owes_me",
+   "amount": 850,
+   "name": "team lunch",
+   "date": "2026-11-12"
+  },
+  {
+   "key": "d_siddharth",
+   "person": "siddharth",
+   "direction": "i_owe",
+   "amount": 400,
+   "name": "shuttlecocks",
+   "date": "2026-11-28"
+  },
+  {
+   "key": "d_ganesh",
+   "person": "ganesh",
+   "direction": "i_owe",
+   "amount": 2350,
+   "name": "scooter chain and tyre",
+   "date": "2026-09-07",
+   "settled": "2026-09-09T10:00"
+  },
+  {
+   "key": "d_neha",
+   "person": "neha",
+   "direction": "owes_me",
+   "amount": 1500,
+   "name": "yoga workshop",
+   "date": "2026-08-22",
+   "settled": "2026-09-01T10:00"
+  },
+  {
+   "key": "d_arjun",
+   "person": "arjun",
+   "direction": "owes_me",
+   "amount": 3200,
+   "name": "airport cab",
+   "date": "2026-10-08",
+   "settled": "2026-10-20T10:00"
+  }
+ ],
+ "locker": [
+  {
+   "key": "hdfc_login",
+   "name": "HDFC NetBanking",
+   "type": "login",
+   "username": "devmehra33",
+   "url": "https://hdfcbank.com",
+   "password": "Baner#Activa14",
+   "starred": true
+  },
+  {
+   "key": "sbi_login",
+   "name": "SBI YONO",
+   "type": "login",
+   "username": "dev.mehra",
+   "url": "https://sbi.co.in",
+   "password": "Chandigarh-Mummy9"
+  },
+  {
+   "key": "it_login",
+   "name": "Income tax portal",
+   "type": "login",
+   "username": "ABCPM1234D",
+   "url": "https://incometax.gov.in",
+   "password": "TaxSeason!2026"
+  },
+  {
+   "key": "hdfc_card",
+   "name": "HDFC credit card",
+   "type": "card",
+   "card_number": "4386280012345678",
+   "cvv": "442"
+  },
+  {
+   "key": "joint_acct",
+   "name": "Joint account with Anjali",
+   "type": "bank_account",
+   "notes": "HDFC Baner branch, account 50100123456789, IFSC HDFC0000612",
+   "starred": true
+  },
+  {
+   "key": "home_wifi",
+   "name": "Flat wifi",
+   "type": "wifi",
+   "password": "Anju&Dev2026",
+   "starred": true
+  },
+  {
+   "key": "aai_wifi",
+   "name": "Aai's wifi",
+   "type": "wifi",
+   "password": "KothrudJoshi58"
+  },
+  {
+   "key": "gate_code",
+   "name": "Society gate code",
+   "type": "note",
+   "notes": "2468 then the green button"
+  },
+  {
+   "key": "upi_pin",
+   "name": "PhonePe app",
+   "type": "password",
+   "password": "PuneUpi#77"
+  },
+  {
+   "key": "aadhaar_id",
+   "name": "Aadhaar card",
+   "type": "identity"
+  },
+  {
+   "key": "passport",
+   "name": "Passport - Dev",
+   "type": "passport",
+   "notes": "no. Z1234567, expires 2033-04-18"
+  },
+  {
+   "key": "licence",
+   "name": "Driving licence",
+   "type": "driving_licence",
+   "notes": "MH12 20190012345"
+  },
+  {
+   "key": "gym_member",
+   "name": "Cult gym membership",
+   "type": "membership",
+   "notes": "annual, renews in March",
+   "starred": true
+  },
+  {
+   "key": "cloud_api",
+   "name": "Cloud console API key",
+   "type": "api_credential",
+   "notes": "for the side project"
+  },
+  {
+   "key": "work_ssh",
+   "name": "Work laptop SSH key",
+   "type": "ssh_key",
+   "notes": "office GitLab, rotates in June"
+  },
+  {
+   "key": "figma",
+   "name": "JetBrains licence",
+   "type": "software_licence",
+   "notes": "personal, renews 20 February"
+  },
+  {
+   "key": "btc",
+   "name": "Crypto wallet",
+   "type": "crypto_wallet",
+   "notes": "small, about 15000 rupees"
+  },
+  {
+   "key": "rent_agreement",
+   "name": "Rent agreement",
+   "type": "document",
+   "notes": "original with Naik uncle, scan in the Flat folder"
+  },
+  {
+   "key": "old_wifi",
+   "name": "Old Kothrud wifi",
+   "type": "wifi",
+   "password": "Joshi2024Pune",
+   "trashed": "2026-09-15T10:00"
+  },
+  {
+   "key": "old_login",
+   "name": "Old Airtel login",
+   "type": "login",
+   "username": "dev.mehra.33",
+   "password": "OldAirtel7",
+   "trashed": "2026-11-30T10:00"
+  }
+ ],
+ "links": [
+  {
+   "from": "wrap_settle",
+   "to": "vikram"
+  },
+  {
+   "from": "wrap_thanks_cards",
+   "to": "aai"
+  },
+  {
+   "from": "pay_vikram",
+   "to": "vikram"
+  },
+  {
+   "from": "pay_rohan",
+   "to": "rohan_m"
+  },
+  {
+   "from": "pay_kunal",
+   "to": "kunal"
+  },
+  {
+   "from": "wrap_pay_caterer",
+   "to": "caterer"
+  },
+  {
+   "from": "wrap_video",
+   "to": "photog"
+  },
+  {
+   "from": "wrap_return_decor",
+   "to": "decorator"
+  },
+  {
+   "from": "scooter_tyre",
+   "to": "ganesh"
+  },
+  {
+   "from": "scooter_puc_t",
+   "to": "ganesh"
+  },
+  {
+   "from": "scooter_helmet",
+   "to": "anjali"
+  },
+  {
+   "from": "mummy_gift",
+   "to": "mummy"
+  },
+  {
+   "from": "papa_report",
+   "to": "papa"
+  },
+  {
+   "from": "baba_meds",
+   "to": "baba"
+  },
+  {
+   "from": "aai_fridge",
+   "to": "aai"
+  },
+  {
+   "from": "maint_dec",
+   "to": "landlord"
+  },
+  {
+   "from": "rent_dec",
+   "to": "landlord"
+  },
+  {
+   "from": "pr_review",
+   "to": "vaishnavi"
+  },
+  {
+   "from": "perf_review",
+   "to": "chinmay"
+  },
+  {
+   "from": "nc_bank",
+   "to": "anjali"
+  },
+  {
+   "from": "w_vendors",
+   "to": "caterer"
+  },
+  {
+   "from": "w_settle",
+   "to": "vikram"
+  },
+  {
+   "from": "w_rituals",
+   "to": "priest"
+  },
+  {
+   "from": "work_1on1",
+   "to": "chinmay"
+  },
+  {
+   "from": "flat_help",
+   "to": "maid"
+  },
+  {
+   "from": "kit_puranpoli",
+   "to": "aai"
+  },
+  {
+   "from": "kit_rajma",
+   "to": "mummy"
+  },
+  {
+   "from": "dubai_notes",
+   "to": "tarun"
+  },
+  {
+   "from": "gifts_note",
+   "to": "sneha"
+  }
+ ]
+}

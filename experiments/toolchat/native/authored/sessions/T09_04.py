@@ -22,7 +22,7 @@ S("T09-076", "week ahead within priority effort complete subtasks",
          act("complete", kind="task", name="Return Dan's library books", more=True),
          ans(kind="task", when=W(U("week", 0)), where='status = "open"')]),
   T("tasks that still have subtasks and aren't done", rows("guest_list", "factum"),
-    ref=[ans(kind="task", where='task count != 0 and status != "completed"')]),
+    ref=[ans(kind="task", where='task count != 0 and status = "open"')]),
   T("finalize guest list, how many of its subtasks are done", val(1),
     ref=[ans(op="count", kind="task", linked_to="$guest_list", where='status = "completed"')]),
   T("and which open one under it is due first", rows("gl_plus"),
@@ -69,10 +69,6 @@ S("T09-080", "dead end nickname balance debt count",
          ans(op="balance", rows="$nana")]),
   T("who's got two or more ious with me", rows("ada"),
     ref=[ans(kind="person", where="debt count > 1")]))
-
-S("T09-081", "note count condo",
-  T("which mercer condo people have i written notes about", rows("gord"),
-    ref=[ans(kind="person", where='met contains "Mercer" and note count != 0')]))
 
 S("T09-082", "event count bridesmaids",
   T("bridesmaids i actually have plans with", rows("priya_r", "kemi", "siobhan"),
@@ -309,27 +305,6 @@ S("T09-099", "ambiguous photo delete undo write+read",
     ref=[act("star", rows="$arbor1", more=True), ans(kind="photo", linked_to="$venue_album", where="starred = yes")]),
   T("who's in the evergreen brick works pic", rows("dan", "colette"),
     ref=[ans(kind="person", linked_to="$evergreen")]))
-
-S("T09-100", "write+read reopen trashed-only decline",
-  T("mark the smoke detector battery done and tell me what's left on home",
-    rows("library", "dryer", "passport_name", "fees_06", also=diff(upd("smoke", status="completed", completed=ANY))),
-    ref=[act("complete", kind="task", name="Replace smoke detector battery", more=True),
-         ans(kind="task", linked_to="$home_list", where='status = "open"')]),
-  T("replace smoke detector battery back to open, only did the hallway one",
-    diff(upd("smoke", status="open", completed=None)),
-    ref=[act("reopen", kind="task", name="Replace smoke detector battery")]),
-  T("what's the earliest thing due on home", rows("library"),
-    ref=[ans(kind="task", linked_to="$home_list", where='status = "open"', order="date asc", limit=1)]),
-  T("delete the rogers task", decline("not_found"),
-    ref=[find(kind="task", name="Rogers"), dec("not_found")]),
-  T("what's in the task trash", rows("pottery_signup", "rogers"),
-    ref=[ans(kind="task", trashed=True)]))
-
-S("T09-101", "single person task count filter",
-  T("who's actually got wedding jobs on their plate", rows("ada", "aiden", "colette", "dad", "dan", "fatou", "kemi",
-                                                          "linh", "margaret", "mateo", "nana", "naomi", "priya_r",
-                                                          "priya_s", "rachel", "ravi", "tariq"),
-    ref=[ans(kind="person", where="task count != 0")]))
 
 S("T09-102", "single debt person count",
   T("of all my debts, how many are linked to somebody", val(14),

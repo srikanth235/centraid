@@ -30,12 +30,8 @@ S("T14-102", "haircut next then reschedule star person",
     ref=[act("star", kind="person", name="Wesley")]))
 
 S("T14-103", "ask options ipva complete balance negative",
-  T("tick pay ipva", ask("ipva_26", "ipva_25"),
-    ref=[act("complete", kind="task", name="Pay IPVA"),
-         find(kind="task", name="Pay IPVA"),
-         askc("this year's, due nov 16, or the 2025 one?", options="$ipva_26, $ipva_25")]),
-  T("this year's", diff(upd("ipva_26", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$ipva_26")]),
+  T("tick pay ipva", diff(upd("ipva_26", status="completed", completed=ANY)),
+    ref=[act("complete", kind="task", name="Pay IPVA")]),
   T("and what do i owe juninho", val((-640, "BRL")),
     ref=[search("juninho", kind="person"), ans(op="balance", rows="$junior")]))
 

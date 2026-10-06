@@ -11,14 +11,6 @@ def W(expr):
 
 NOW = W({"from": U("day", 0)})
 
-S("T04-117", "decline unbounded then oos then bounded delete cancelled",
-  T("wipe all my tasks, fresh start after the wedding", decline("unbounded_destruction"),
-    ref=[dec("unbounded_destruction")]),
-  T("will it rain saturday for the food bank shift", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("ok just the cancelled tasks then", diff(trash("council_tax"), trash("eid_cards")),
-    ref=[find(kind="task", where='status = "cancelled"'), act("delete", rows="@prev")]))
-
 S("T04-118", "decline oos email fabricated pin then log",
   T("email dr hughes and ask if the arcp can move", decline("out_of_scope"),
     ref=[dec("out_of_scope")]),
@@ -124,19 +116,6 @@ S("T04-128", "repair group delete refused then never mind",
     ref=[dec("never_mind")]),
   T("delete the hp5 film task, they were out", diff(trash("hp5")),
     ref=[act("delete", kind="task", name="Buy HP5 film")]))
-
-S("T04-129", "repair star wrong kind then ask rent complete count",
-  T("star the car insurance", diff(upd("ins_cert", starred=True)),
-    ref=[bad(act("star", kind="task", name="Car insurance")),
-         act("star", kind="document", name="Car insurance certificate")]),
-  T("tick off pay rent", ask("rent_oct", "rent_nov"),
-    ref=[act("complete", kind="task", name="Pay rent"),
-         find(kind="task", name="Pay rent"),
-         askc("the october one or november's?", options="$rent_oct, $rent_nov")]),
-  T("november's, i'm paying early", diff(upd("rent_nov", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$rent_nov")]),
-  T("how many rent tasks are still open", val(0),
-    ref=[ans(op="count", kind="task", name="Pay rent", where='status = "open"')]))
 
 S("T04-130", "ask options cancel flight then never mind then contrast hammam",
   T("cancel the flight", ask("flight_out", "flight_back"),

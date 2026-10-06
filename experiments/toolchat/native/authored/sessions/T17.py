@@ -171,12 +171,6 @@ S("T17-023", "delete document named unfiled",
   T("what's not in any folder", rows("brahms_score", "warranty", "scan_72"),
     ref=[ans(kind="document", where="folder count = 0")]))
 
-S("T17-024", "delete document named undo",
-  T("delete the flat floor plan, mitko sent a newer one", diff(trash("floor_plan")),
-    ref=[act("delete", kind="document", name="Flat floor plan")]),
-  T("oh no undo that, i need it for the kitchen", diff(restore("floor_plan")),
-    ref=[act("undo")]))
-
 S("T17-025", "find-only unfiled docs add_to where",
   T("which docs aren't filed anywhere", rows("brahms_score", "warranty", "scan_71", "scan_72"),
     ref=[find(kind="document", where="folder count = 0"), ans(rows="@prev")]),

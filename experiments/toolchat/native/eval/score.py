@@ -8,7 +8,10 @@ A run file has one JSON object per session:
          "think_cut": false}, ...]}, ...]}
 
 Gold (see gold.py) gives each turn a list of acceptable effects; a turn passes when its effect
-matches any of them. Session strict pass = every turn passes.
+matches any of them. Session strict pass = every turn passes. Clean turn pass = passing clean turns
+over clean turns, where a turn is downstream (not clean) when an earlier turn of its session already
+failed: the first failure of a session is clean, every later turn is not. Clean turn pass is the
+number to steer by; session pass is the reported outcome.
 """
 
 from __future__ import annotations
@@ -290,6 +293,13 @@ def pct(k: int, n: int) -> str:
     return f"{k}/{n} = {100 * k / n:.1f}%" if n else f"{k}/0"
 
 
+def clean_turns(turns: list[dict]) -> list[dict]:
+    """One session's clean turns: those up to and including its first failed turn. A turn is downstream
+    when an earlier turn of its session already failed (slices.py flags the same turns `downstream`)."""
+    first = next((i for i, t in enumerate(turns) if not t["pass"]), len(turns))
+    return turns[: first + 1]
+
+
 def score(run: list[dict], gold: list[dict]) -> dict:
     gold_by_id = {g["id"]: g for g in gold}
     run_by_id = {r["id"]: r for r in run}
@@ -321,10 +331,13 @@ def report(scored: dict, title: str) -> tuple[str, dict]:
     n_s, k_s = len(sessions), sum(s["pass"] for s in sessions)
     lo, hi = wilson(k_s, n_s)
     n_t, k_t = len(turns), sum(t["pass"] for t in turns)
+    clean_t = [t for s in sessions for t in clean_turns(s["turns"])]
+    n_c, k_c = len(clean_t), sum(t["pass"] for t in clean_t)
+    lo_c, hi_c = wilson(k_c, n_c)
     n_b = sum(1 for s in sessions if s.get("blocked"))
     k_nb = sum(1 for s in sessions if s["pass"] and not s.get("blocked"))
     ww = sum(t["wrong_write"] for t in turns)
-    # §14 conventions the prompt never states (tagged by build_sets/conventions.py): the pass rate
+    # §14 conventions the prompt never states (tagged `convention` through conventions.py): the pass rate
     # without them is what a zero-shot model can be held to
     conv = lambda t: "convention" in t["tags"]  # noqa: E731
     free_turns = [t for t in turns if not conv(t)]
@@ -362,7 +375,9 @@ def report(scored: dict, title: str) -> tuple[str, dict]:
     kinds = Counter(t["effect"]["kind"] for t in turns)
     lines = [f"# {title}", "",
              f"**Session strict pass: {pct(k_s, n_s)}** (95% Wilson CI {100 * lo:.1f}–{100 * hi:.1f}%)", "",
-             f"Turn pass: {pct(k_t, n_t)}", "",
+             f"**Clean turn pass: {pct(k_c, n_c)}** (95% Wilson CI {100 * lo_c:.1f}–{100 * hi_c:.1f}%; "
+             f"turns after a session's first failure left out)", "",
+             f"Turn pass (all turns): {pct(k_t, n_t)}", "",
              f"Excluding {n_b} sessions blocked by a logged runtime issue: {pct(k_nb, n_s - n_b)}", "",
              f"Without §14-convention turns ({n_t - len(free_turns)} turns tagged `convention`): "
              f"session pass {pct(k_free, len(free_sessions))} (convention turns ignored), "
@@ -388,8 +403,9 @@ def report(scored: dict, title: str) -> tuple[str, dict]:
     lines += [f"## Failed turns ({len(fails)})", ""]
     for sid, i, t in fails:
         lines.append(f"- {sid} t{i + 1} [{t['gold_type']} / got {t['effect']['kind']}]: {'; '.join(t['problems'])[:300]}")
-    summary = {"sessions": n_s, "session_pass": k_s, "ci95": [lo, hi], "turns": n_t, "turn_pass": k_t,
-               "wrong_write": ww,
+    summary = {"sessions": n_s, "session_pass": k_s, "ci95": [lo, hi],
+               "turns_clean": n_c, "turn_pass_clean": k_c, "ci95_clean": [lo_c, hi_c],
+               "turns": n_t, "turn_pass": k_t, "wrong_write": ww,
                "without_convention": {"session_pass": [k_free, len(free_sessions)],
                                       "turn_pass": [sum(t["pass"] for t in free_turns), len(free_turns)],
                                       "clean_sessions": [sum(s["pass"] for s in clean), len(clean)]},

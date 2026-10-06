@@ -99,13 +99,6 @@ S("T18-012", "delete event named undo delete",
     ref=[act("cancel", kind="event", name="Biscuit's vet check-up"),
          act("cancel", kind="event", name="Biscuit's vet check-up", when=W({"from": U("day", 0)}))]))
 
-S("T18-013", "create task list complete new",
-  T("add task buy nappy cake to the baby shower list",
-    diff(new("task", name=has("nappy cake")), link("shower_l", "new")),
-    ref=[act("create", args=lines(kind="task", name="Buy nappy cake", list="$shower_l"))]),
-  T("grabbed one at lunch, tick it off", diff(upd("+1", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$c1")]))
-
 S("T18-014", "create task day complete new read",
   T("remind me to email rhys the build link tomorrow",
     diff(new("task", name=has("Rhys"), date="2026-03-02")),

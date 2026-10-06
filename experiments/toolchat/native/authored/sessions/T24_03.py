@@ -39,8 +39,7 @@ S("T24-054", "ambiguous garza star ask",
 
 S("T24-055", "four turns ambiguous complete narrow effort literal complete named",
   T("mark Mow Mrs. Whitfield's lawn done", diff(upd("mow_2", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Mow Mrs. Whitfield's lawn"),
-         act("complete", kind="task", name="Mow Mrs. Whitfield's lawn", where='status = "open"')]),
+    ref=[act("complete", kind="task", name="Mow Mrs. Whitfield's lawn")]),
   T("what's left on the landscaping list", rows("mulch", "invoice_soto", "trimmer", "castillo_quote"),
     ref=[ans(kind="task", linked_to="$land_l", where='status = "open"')]),
   T("which of those are twenty min or less", rows("invoice_soto", "trimmer"),
@@ -132,16 +131,6 @@ S("T24-066", "debt count note count balance",
   T("where do i stand with hector", val((-30, "USD")),
     ref=[ans(op="balance", rows="$hector")]))
 
-S("T24-067", "event person count month span date span",
-  T("anything in my diary with nobody attached", rows("oil_change"),
-    ref=[ans(kind="event", where="person count < 1")]),
-  T("what did i have from july to august", rows("summer_final", "coach_clinic", "union_08", "yard_0829"),
-    ref=[ans(kind="event", when=span(U("month", 0, name=7), U("month", 0, name=8)))]),
-  T("and between the twenty-first and the twenty-fifth",
-    rows("cond_0921", "film_session", "gym_0922", "dentist_mateo", "cond_0923", "gym_0924", "vb_0924", "checkup",
-         "fb_0925"),
-    ref=[ans(kind="event", when=span(D("2026-09-21"), D("2026-09-25")))]))
-
 S("T24-068", "four turns event person count status open span duration count",
   T("next week, which events have fewer than two people on them",
     rows("cond_0921", "film_session", "gym_0922", "cond_0923", "gym_0924", "vb_0924", "fb_0925", "ref_clinic"),
@@ -189,15 +178,6 @@ S("T24-072", "photo datetime add_to named",
     ref=[ans(kind="photo", when=D("2026-09-12", "07:10"))]),
   T("add it to rudy's yards", diff(link("yards_al", "p_whit_before")),
     ref=[act("add_to", rows="$p_whit_before", args=lines(to="$yards_al"))]))
-
-S("T24-073", "photo open span count weekday span album count delete photo",
-  T("how many photos since last week", val(16),
-    ref=[ans(op="count", kind="photo", when={"from": U("week", -1)})]),
-  T("from last sunday through this week, ones not in any album",
-    rows("p_chamizal", "p_receipt", "p_sunset", "p_union", "p_whiteboard", "p_jersey"),
-    ref=[ans(kind="photo", when=span(U("week", -1, weekday=7), U("week", 0)), where="album count = 0")]),
-  T("delete the receipt one", diff(trash("p_receipt")),
-    ref=[act("delete", rows="$p_receipt")]))
 
 S("T24-074", "document datetime span open span star named",
   T("docs saved from 6pm on the fourteenth until today", rows("tourney", "slip_doc", "jersey_quote"),

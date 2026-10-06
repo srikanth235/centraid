@@ -61,12 +61,6 @@ S("T10-033", "event count create event weekday",
   T("put a call with dana sunday at 5", diff(new("event", name=has("Dana"), date="2026-06-21T17:00")),
     ref=[act("create", args=lines(kind="event", name="Call with Dana", date=U("week", 0, weekday=7, time="17:00")))]))
 
-S("T10-034", "note count debt count within",
-  T("which chess people have i got no notes on", rows("sami_k", "walid", "faris"),
-    ref=[ans(kind="person", where='note count < 1 and role contains "chess"')]),
-  T("any of them i've got money stuff with", rows("walid"),
-    ref=[ans(within="@prev", where="debt count >= 1")]))
-
 S("T10-035", "notebook read remove_from multi loose notes",
   T("what's in chess openings", rows("italian", "caro", "rook_end", "tourney_notes"),
     ref=[ans(kind="note", linked_to="$chess_nb")]),
@@ -95,12 +89,6 @@ S("T10-038", "duration unit linked people",
     ref=[ans(kind="event", when=W({"from": U("day", 0)}), where="duration > 180 minutes")]),
   T("who's coming on the drive to aqaba", rows("nabil", "jamal", "abu_fadi"),
     ref=[ans(kind="person", linked_to="$aqaba_drive")]))
-
-S("T10-039", "person count lte cancel",
-  T("what have i got next week on my own", rows("physio_0622", "lecture", "blood_test"),
-    ref=[find(kind="event", when=W(U("week", 1)), where="person count <= 0"), ans(rows="@prev")]),
-  T("cancel the lecture, my knee", diff(upd("lecture", status="cancelled")),
-    ref=[act("cancel", rows="$lecture")]))
 
 S("T10-040", "find-only delete person prev complete",
   T("find me the plumber", rows("hani"),
@@ -172,7 +160,7 @@ S("T10-049", "debt amount literal within open",
 S("T10-050", "event read reschedule prev date",
   T("when's the chess simul at shoman library", rows("simul"),
     ref=[ans(kind="event", name="Chess simul at Shoman library")]),
-  T("tariq says it moved to the twenty-fifth, same time", diff(upd("simul", date="2026-07-25T16:00")),
-    ref=[act("reschedule", rows="@prev", args=lines(to=D("2026-07-25", "16:00")))]),
-  T("anything else that saturday", rows(),
-    ref=[ans(kind="event", when=W(D("2026-07-25")), exclude="$simul")]))
+  T("tariq says it moved to the twenty-fifth, same time", diff(upd("simul", date="2026-06-25T16:00")),
+    ref=[act("reschedule", rows="@prev", args=lines(to=D("2026-06-25", "16:00")))]),
+  T("anything else that thursday", rows("abu_fadi_coffee"),
+    ref=[ans(kind="event", when=W(D("2026-06-25")), exclude="$simul")]))

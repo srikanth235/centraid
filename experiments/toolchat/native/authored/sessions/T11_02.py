@@ -108,16 +108,6 @@ S("T11-036", "unstar locker named starred read",
   T("what's the long number on that card, need it for the co-op", diff(reveal=[("debit", "4921 5566 0034 7781")]),
     ref=[act("reveal", rows="$debit", args=lines(field="card_number"))]))
 
-S("T11-037", "trashed task restore window ask create",
-  T("is the slurry spreader task in the trash", rows("spreader"),
-    ref=[ans(kind="task", name="slurry spreader", trashed=True)]),
-  T("restore it, a lad from Scariff might want it", ask(),
-    ref=[bad(act("restore", rows="$spreader")),
-         askc("it's been in the bin since may, past the 30 days, so it can't come back. make a new task?")]),
-  T("yeah, due end of august, farm list",
-    diff(new("task", name=has("spreader"), date="2026-08-31"), link("farm_l", "new")),
-    ref=[act("create", args=lines(kind="task", name="Sell the old slurry spreader", date=D("2026-08-31"), list="$farm_l"))]))
-
 S("T11-038", "note dead end trashed restore window ask create add_to",
   T("where's my grazing plan from last year", rows("old_grazing"),
     ref=[ans(kind="note", name="Grazing plan"),
@@ -224,11 +214,3 @@ S("T11-049", "group members balance settle_up",
     ref=[act("settle_up", rows="$noreen", args=lines(group="$chelt"))]),
   T("and declan kelly's?", val((360, "GBP")),
     ref=[ans(op="balance", kind="group", name="Cheltenham 2026", linked_to="$declan")]))
-
-S("T11-050", "task linked reschedule where edit",
-  T("what's martin down for", rows("fence"),
-    ref=[ans(kind="task", linked_to="$martin")]),
-  T("he can't do tuesday, push that job to thursday", diff(upd("fence", date="2026-07-30")),
-    ref=[act("reschedule", kind="task", linked_to="$martin", args=lines(to=U("week", 1, weekday=4)))]),
-  T("put a note on it that he's bringing the post driver", diff(upd("fence", description=has("post driver"))),
-    ref=[act("edit", rows="$fence", args=lines(description="Martin bringing the post driver"))]))

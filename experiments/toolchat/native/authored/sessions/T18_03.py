@@ -6,20 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T18-051", "six turns cadence within log event order reschedule anchor read",
-  T("who am i meant to check in with more often than fortnightly", rows("tess", "mum", "priya", "bex"),
-    ref=[ans(kind="person", where="cadence < 14")]),
-  T("out of those who did i actually reach this week", rows("tess", "priya", "bex"),
-    ref=[ans(within="@prev", kind="person", when=W(U("week", 0)))]),
-  T("so mum's slipping. log a call with her, rang her", diff(upd("mum", date=ANY)),
-    ref=[search("mum", kind="person"), act("log", rows="$mum", args=lines(kind="call"))]),
-  T("what's the next thing i've got with her", rows("mum_lunch"),
-    ref=[ans(kind="event", linked_to="$mum", when=W({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("push it an hour later", diff(upd("mum_lunch", date="2026-03-08T13:30")),
-    ref=[act("reschedule", rows="$mum_lunch", args=lines(to=U("hour", 1, anchor="row")))]),
-  T("who else is on Lunch with Mum", rows("mum"),
-    ref=[ans(kind="person", linked_to="$mum_lunch")]))
-
 S("T18-052", "group count photo count already star",
   T("who's in two of my groups", rows("priya", "mei"),
     ref=[ans(kind="person", where="group count = 2")]),
@@ -32,10 +18,6 @@ S("T18-052", "group count photo count already star",
     ref=[ans(kind="person", when=W(span(U("week", -1), U("month", 0, name=2))), where="cadence is set")]),
   T("star the dm", diff(already=["bex"]),
     ref=[act("star", rows="$bex"), ans(rows="$bex")]))
-
-S("T18-053", "single task count starred",
-  T("which of my starred people have at most one task on them", rows("mum", "bex"),
-    ref=[ans(kind="person", where="task count <= 1 and starred = yes")]))
 
 S("T18-054", "group person count delete group knock-on refused group ask settle",
   T("which groups have exactly three people in them", rows("gdc", "ski"),
@@ -221,15 +203,6 @@ S("T18-072", "ambiguous debt narrowed anchor direction in compute max",
     ref=[ans(kind="debt", where='direction in ("owes_me", "i_owe") and amount > 50 and status = "open"')]),
   T("biggest one?", val((150, "AUD")),
     ref=[ans(op="max", field="amount", within="@prev")]))
-
-S("T18-073", "debt spans weekday named month person count",
-  T("debts from monday to wednesday this week", rows("d_tess_cake", "d_chloe"),
-    ref=[find(kind="debt", when=W(span(U("week", 0, weekday=1), U("week", 0, weekday=3)))), ans(rows="@prev")]),
-  T("and from january through this week", rows("d_sam_dice", "d_tess_cake", "d_chloe", "d_nadia", "d_priya", "d_ollie", "d_dad",
-                                               "d_brooke", "d_alex", "d_bex", "d_marcus_pizza", "d_jules_pizza"),
-    ref=[ans(kind="debt", when=W(span(U("month", 0, name=1), U("week", 0))))]),
-  T("which of those are me owing someone", rows("d_chloe", "d_nadia", "d_priya", "d_dad", "d_alex", "d_jules_pizza"),
-    ref=[ans(within="@prev", kind="debt", where='direction = "i_owe" and person count != 0')]))
 
 S("T18-074", "debt span last monday weekday direction in",
   T("list the debts running last monday up through this wednesday", rows("d_nadia", "d_marcus_pizza", "d_tess_cake", "d_chloe"),

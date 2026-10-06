@@ -59,12 +59,6 @@ S("T19-055", "photos album spans person count",
   T("in the kids album which ones aren't one person", rows("eid_kids", "drawing"),
     ref=[ans(kind="photo", linked_to="$a_kids", where="person count != 1")]))
 
-S("T19-056", "album linked_to all photos find",
-  T("which albums have both the sandcastle and the corniche photos", rows("a_beach", "a_kids"),
-    ref=[ans(kind="album", linked_to="$sandcastle, $corniche")]),
-  T("and which album has all the eid photos", rows("a_eid"),
-    ref=[find(kind="photo", name="Eid"), ans(kind="album", linked_to="@prev")]))
-
 S("T19-057", "album linked_to all photos read",
   T("albums with baba's walk in the park and the anniversary dinner photo", rows("a_family"),
     ref=[find(kind="album", linked_to="$baba_walk, $anniv_p"), ans(rows="@prev")]),
@@ -187,11 +181,6 @@ S("T19-067", "refused delete group ask settle_up balance",
   T("so where am i with her", val((700, "MAD")),
     ref=[ans(op="balance", rows="$salma")]))
 
-S("T19-068", "single delete empty group knock-on",
-  T("delete the eid sheep group, omar's sorting the sheep on his own",
-    diff(gone("eid_sheep"), unlink("eid_sheep", "omar"), unlink("eid_sheep", "simo"), unlink("eid_sheep", "me")),
-    ref=[act("delete", rows="$eid_sheep")]))
-
 S("T19-069", "restore window note ask create note",
   T("can you get back the old school rota 2025 note", ask(),
     ref=[bad(act("restore", kind="note", name="Old school rota 2025", trashed=True)),
@@ -247,8 +236,7 @@ S("T19-074", "five turns pharmacy tomorrow ambiguous person log note edit",
   T("strips went up to 170 a box, fix it", diff(upd("prices", body=has("170"))),
     ref=[act("edit", rows="$prices", args=lines(body="strips 170 a box, lancets 40, pen needles 90"))]),
   T("and tick the weekly wholesaler order, sent it at lunch", diff(upd("order_0416", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Weekly wholesaler order"),
-         act("complete", kind="task", name="Weekly wholesaler order", where='status = "open"')]))
+    ref=[act("complete", kind="task", name="Weekly wholesaler order")]))
 
 S("T19-075", "single decline out_of_scope dosage",
   T("what's the max metformin dose for a 70 year old", decline("out_of_scope"),

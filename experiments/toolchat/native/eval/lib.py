@@ -325,6 +325,9 @@ def turn_effect(steps: list[dict]) -> dict:
     """Summarise one turn from its runtime responses.
 
     kind: rows | value | act | ask | decline | none | cap | loop | error
+
+    A turn the runtime ended itself (a retraction: `run.py` records a step with no model message, the
+    runtime's own `decline never_mind`) reads as any decline does.
     """
     diffs, already, revealed, settles, verbs = [], [], [], [], []
     final: dict = {}
@@ -354,7 +357,8 @@ def turn_effect(steps: list[dict]) -> dict:
         out["kind"] = "loop"
     elif eff.get("cap"):
         out["kind"] = "cap"
-    elif tool == "answer" and "answer" in eff:
+    elif tool in ("answer", "act") and "answer" in eff:
+        # an `act log` that ends the turn also answers the row it logged (rows + diff)
         out["kind"] = "rows"
         out["rows"] = [r["id"] for r in eff["answer"].get("rows") or []]
         out["ordered"] = bool(eff["answer"].get("ordered"))

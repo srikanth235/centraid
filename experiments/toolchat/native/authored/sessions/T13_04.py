@@ -70,17 +70,6 @@ S("T13-081", "refused folder delete ask trashed doc restore add_to",
   T("and put it in the tenancy folder", diff(link("tenancy_f", "tenancy25")),
     ref=[act("add_to", rows="$tenancy25", args=lines(to="$tenancy_f"))]))
 
-S("T13-082", "refused unit effort date span subtasks completed count",
-  T("what's due between tomorrow and wednesday 5pm that'll take more than an hour", rows("xrd_analyse", "jc_slides"),
-    ref=[bad(ans(kind="task", when=W(span(U("day", 1), U("week", 1, weekday=3, time="17:00"))), where="effort > 1 hour")),
-         ans(kind="task", when=W(span(U("day", 1), U("week", 1, weekday=3, time="17:00"))), where="effort > 60")]),
-  T("any of those split into subtasks", rows(),
-    ref=[ans(within="@prev", where="task count >= 1")]),
-  T("which tasks due this week have i already done", rows("rent_09"),
-    ref=[ans(kind="task", when=W(U("week", 0)), where="completed is set")]),
-  T("how many have i ticked off", val(13),
-    ref=[ans(op="count", kind="task", where="completed is set")]))
-
 S("T13-083", "five turns task counts date spans named months before datetime complete",
   T("how many things are due from the twentieth through october", val(11),
     ref=[ans(op="count", kind="task", when=W(span(D("2026-09-20"), U("month", 0, name=10))))]),
@@ -228,8 +217,7 @@ S("T13-094", "six turns lisbon ask create event write read star",
 
 S("T13-095", "five turns ambiguous rent narrowed write list undo field",
   T("pay rent - done", diff(upd("rent_10", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pay rent"),
-         act("complete", kind="task", name="Pay rent", where='status = "open"')]),
+    ref=[act("complete", kind="task", name="Pay rent")]),
   T("what's left on the house list", rows("loo_roll", "broadband", "bins", "rota"),
     ref=[ans(kind="task", linked_to="$house_l", where='status = "open"')]),
   T("put the bins out and write the new cleaning rota are done too",

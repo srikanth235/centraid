@@ -2,7 +2,7 @@
 
     python3 -m unittest test_loop          (needs target/debug/nativetools and the seeded vaults)
 
-Runtime side (hint, nudge, cut) is covered by crates/nativetools/tests/tools.rs; this checks the
+Runtime side (hint, nudge, cut) is covered by crates/nativetools/tests/tools.rs and reanchor.rs; this checks the
 driver's rung: resample once, between the hint and the nudge, and only on a backend that can.
 """
 
@@ -58,9 +58,11 @@ class LoopBreaker(unittest.TestCase):
         texts = [s["response"]["text"] for s in steps]
         self.assertTrue(texts[1].startswith(HINT_HEAD), texts[1])
         self.assertTrue(texts[2].startswith("error: repeated call again."), texts[2])
-        self.assertEqual(texts[3], "error: repeated call")
+        self.assertTrue(texts[3].startswith("error: repeated call\nasked: "), texts[3])
         self.assertEqual([s["response"]["ends_turn"] for s in steps], [False, False, False, True])
-        self.assertTrue(steps[3]["response"]["effect"]["loop"])
+        # the cut is a typed ask (fail-soft), not a `loop` effect
+        self.assertEqual(steps[3]["response"]["effect"]["failsoft"], "loop")
+        self.assertEqual(steps[3]["response"]["effect"]["tool"], "ask")
         self.assertEqual(backend.resampled, [])
         self.assertFalse(any("resampled_from" in s for s in steps))
 
@@ -83,7 +85,7 @@ class LoopBreaker(unittest.TestCase):
         texts = [s["response"]["text"] for s in steps]
         self.assertEqual(len(steps), 4)
         self.assertTrue(texts[2].startswith("error: repeated call again."))
-        self.assertEqual(texts[3], "error: repeated call")
+        self.assertTrue(texts[3].startswith("error: repeated call"), texts[3])
         self.assertEqual(len(backend.resampled), 1, "resampled once per turn")
 
     def test_changing_the_call_after_the_hint_carries_on(self):

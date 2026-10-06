@@ -27,11 +27,8 @@ S("T11-102", "ask mary star pick balance negative",
     ref=[ans(op="balance", rows="$mary_c")]))
 
 S("T11-103", "ask june statement star pick already-so star",
-  T("star the june statement", ask("bank_stmt", "milk_june"),
-    ref=[act("star", kind="document", name="statement"),
-         askc("the bank statement june or the milk statement june?", options="$bank_stmt, $milk_june")]),
-  T("bank one", diff(upd("bank_stmt", starred=True)),
-    ref=[act("star", rows="$bank_stmt")]),
+  T("star the june statement", diff(upd("bank_stmt", starred=True)),
+    ref=[act("star", kind="document", name="statement")]),
   T("and the house insurance policy", diff(already=["house_policy"]),
     ref=[act("star", kind="document", name="House insurance policy"), ans(rows="$house_policy")]))
 
@@ -120,11 +117,8 @@ S("T11-113", "ask login username reveal pick",
     ref=[act("reveal", rows="$icbf", args=lines(field="password"))]))
 
 S("T11-114", "ask milk docs star never_mind",
-  T("star the milk one", ask("milk_june", "supply_agree"),
-    ref=[act("star", kind="document", name="milk"),
-         askc("the milk statement june or the milk supply agreement draft?", options="$milk_june, $supply_agree")]),
-  T("scratch that", decline("never_mind"),
-    ref=[dec("never_mind")]))
+  T("star the milk one", diff(upd("supply_agree", starred=True)),
+    ref=[act("star", kind="document", name="milk")]))
 
 S("T11-115", "wifi code read reveal star locker",
   T("what's our wifi code", rows("wifi"),

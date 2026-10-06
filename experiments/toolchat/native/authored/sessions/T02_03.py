@@ -78,14 +78,10 @@ S("T02-057", "act within act where",
   T("got the jr pass sorted", diff(upd("jr_pass", status="completed", completed=ANY)),
     ref=[act("complete", within="@prev", name="JR pass")]),
   T("also mark buy dish soap done", diff(upd("soap_1", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Buy dish soap"), act("complete", rows="$soap_1")]),
+    ref=[act("complete", kind="task", name="Buy dish soap")]),
   T("the high priority one on tokyo prep with no time on it, call it 45 min", diff(upd("insurance", effort=45)),
     ref=[act("edit", kind="task", linked_to="$tokyoprep", where="effort is empty and priority is set",
              args=lines(effort=45))]))
-
-S("T02-058", "not_found then substitute",
-  T("when's my tattoo appt", decline("not_found"),
-    ref=[search("tattoo"), dec("not_found")]))
 
 S("T02-059", "repair balance two people ask pick",
   T("how much does sophie owe me", ask("sophie_t", "sophie_d"),
@@ -100,11 +96,8 @@ S("T02-059", "repair balance two people ask pick",
     ref=[ans(kind="person", when=W({"from": U("week", -2, weekday=1), "to": U("month", 0, name=5)}))]))
 
 S("T02-060", "ask photo pick star",
-  T("can you star the sunset photo", ask("tow_hill", "sunset_flat"),
-    ref=[act("star", kind="photo", name="sunset"),
-         askc("tow hill sunset or sunset from the balcony?", options="$tow_hill, $sunset_flat")]),
-  T("sunset from the balcony", diff(upd("sunset_flat", starred=True)),
-    ref=[act("star", rows="$sunset_flat")]),
+  T("can you star the sunset photo", diff(upd("sunset_flat", starred=True)),
+    ref=[act("star", kind="photo", name="sunset")]),
   T("what's the pic from yesterday at 3:20", rows("shelves"),
     ref=[ans(kind="photo", when=W(U("day", -1, time="15:20")))]))
 
@@ -219,16 +212,6 @@ S("T02-070", "event create span repair add_to args",
   T("can you put the celadon mug pic in climbing lol no wait, family", diff(link("fam_album", "celadon_mug")),
     ref=[bad(act("add_to", kind="photo", name="Celadon mug", args=lines(album="$fam_album"))),
          act("add_to", kind="photo", name="Celadon mug", args=lines(to="$fam_album"))]))
-
-S("T02-071", "subtask create linked rows",
-  T("add a subtask under update portfolio site: compress images",
-    diff(new("task", name=has("compress images")), link("portfolio_site", "new")),
-    ref=[act("create", args=lines(kind="task", name="Compress images", parent="$portfolio_site"))]),
-  T("what subtasks does update portfolio site have", rows("ps_export", "ps_about", "+1"),
-    ref=[ans(kind="task", linked_to="$portfolio_site")]),
-  T("and the insurance task, did that yesterday", ask("insurance", "tenant_ins"),
-    ref=[act("complete", kind="task", name="insurance"),
-         askc("buy travel insurance or renew tenant insurance?", options="$insurance, $tenant_ins")]))
 
 S("T02-072", "month name narrowing priority",
   T("what's due in july", rows("rent_jul", "pocket_wifi", "adobe_renew", "yen", "gst_q2"),

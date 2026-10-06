@@ -1,15 +1,22 @@
-"""Kaggle kernel: train, then score dev with the eval driver, in one run (SPEC §11.8, PLAN run 1).
+"""The job runner of a GCP Spot VM: train (when the job has a train file), then score with the eval driver.
 
-Pushed by `kaggle.py push` with a dataset holding `bundle.tar.gz` (code, exported grammar,
-nativetools binary + the loader and libs it was linked against, eval worlds and sets, data) and
-`job.json`. Everything it writes lands in /kaggle/working:
+On the VM, train/vm/run_job.sh trains by itself (resumable across preemptions) and runs this script as the scoring
+stage: `train` null, the checkpoint presented as `ckpt_prefix` + `ckpt_files`. score_ckpt.sh runs it the same way on a
+checkpoint it pulled. Run directly, a job with a train file trains first.
+
+Input, in KERNEL_INPUT (default /opt/centraid/score-input): `bundle.dat` (built by bundle.py: code, exported grammar,
+nativetools binary + the loader and libs it was linked against, eval worlds and sets, data) and `job.json`. Everything
+it writes lands in KERNEL_WORK (default /opt/centraid/score), as run_job.sh lays them out under CENTRAID_BASE:
 
     run.log                  this script's own log (every command, exit code, seconds)
     train.log                the trainer's log (mask assertion, loss, val, tok/s, TRUNCATED)
-    ckpt/ckpt-025|050|100/   bf16 checkpoints (ckpt/FINAL names the last one); ckpt/train_meta.json
+    ckpt/ckpt-025|050|075|100/   bf16 checkpoints (ckpt/FINAL names the last one; marks.json, best.json); ckpt/train_meta.json
     eval/<arm>/...           the eval driver's outputs per decoding arm; eval/<arm>.log (batched: one
                              eval/<arm>-gpu<g>.log per GPU process, run-<g>.jsonl written as sessions finish)
     summary.json             job, timings, final checkpoint, arms run and their exit codes
+
+`kernel_hours` of job.json is the job's own wall-clock budget for the run: eval processes still running at the deadline
+are killed and the sessions they finished are scored.
 """
 import glob
 import json
@@ -21,12 +28,14 @@ import tarfile
 import time
 
 T0 = time.time()
-W = os.environ.get("KERNEL_WORK", "/kaggle/working")  # overridable for a local rehearsal
-D = os.path.dirname(glob.glob(os.environ.get("KERNEL_INPUT", "/kaggle/input") + "/**/job.json", recursive=True)[0])
+BASE = os.environ.get("CENTRAID_BASE", "/opt/centraid")  # the VM's boot disk, as in run_job.sh
+W = os.environ.get("KERNEL_WORK", os.path.join(BASE, "score"))  # run_job.sh sets both for every launch
+D = os.environ.get("KERNEL_INPUT", os.path.join(BASE, "score-input"))
 JOB = json.load(open(os.path.join(D, "job.json")))
 C = os.path.join(W, "code")
+os.makedirs(W, exist_ok=True)
 LOG = open(os.path.join(W, "run.log"), "a")
-DEADLINE = T0 + JOB.get("kernel_hours", 11.5) * 3600  # Kaggle kills GPU sessions at 12 h
+DEADLINE = T0 + JOB.get("kernel_hours", 11.5) * 3600  # the job's own wall-clock budget, in hours
 SUMMARY = {"job": JOB, "started": time.strftime("%Y-%m-%d %H:%M:%S"), "stages": {}}
 
 
@@ -75,20 +84,14 @@ def pip(*args, timeout=900):
 
 # ---- 1. code and environment
 os.makedirs(C, exist_ok=True)
-# Kaggle unpacks .tar.gz uploads server-side, so the builder ships `bundle.dat`; accept the
-# archive under either name, or a tree Kaggle already unpacked (located by its binary).
-_arch = [p for p in (os.path.join(D, n) for n in ("bundle.dat", "bundle.tar.gz")) if os.path.isfile(p)]
-if _arch:
-    with tarfile.open(_arch[0], "r:gz") as tf:
-        tf.extractall(C)
-else:
-    _bin = glob.glob(os.path.dirname(D) + "/**/bin/nativetools.bin", recursive=True)
-    if not _bin:
-        raise SystemExit("bundle not found under %s: %s" % (D, sorted(os.listdir(D))))
-    shutil.copytree(os.path.dirname(os.path.dirname(_bin[0])), C, dirs_exist_ok=True)
+_arch = [p for p in (os.path.join(D, n) for n in ("bundle.dat", "bundle.tar.gz")) if os.path.isfile(p)]  # a gzip tar under either name
+if not _arch:
+    raise SystemExit("bundle not found under %s: %s" % (D, sorted(os.listdir(D))))
+with tarfile.open(_arch[0], "r:gz") as tf:
+    tf.extractall(C)
 sh("pip", [sys.executable, "-m", "pip", "install", "-q", "transformers==%s" % JOB["transformers"],
            "llguidance==%s" % JOB["llguidance"]] + (["peft"] if "--lora" in JOB.get("train_args", []) else []))
-# nativetools was linked against the builder's glibc; Kaggle's image is older, so run it
+# nativetools is linked against the builder's glibc, which can be newer than the VM image's (Ubuntu 22.04): run it
 # through the loader and libs shipped next to it.
 wrapper = os.path.join(C, "bin", "nativetools")
 with open(wrapper, "w") as fh:
@@ -146,14 +149,14 @@ if JOB.get("fast_kernels") and NGPU:
 CK = os.path.join(W, "ckpt")
 if not JOB.get("train"):
     final = JOB["model"]
-    if JOB.get("ckpt_prefix"):  # a checkpoint staged in the (flat) dataset as ckpt.<name>: relink it as a folder
+    if JOB.get("ckpt_prefix"):  # a checkpoint given as flat ckpt.<name> files beside job.json: link them into a folder
         final = os.path.join(W, "ckpt-in")
         os.makedirs(final, exist_ok=True)
         for f in JOB["ckpt_files"]:
             dst = os.path.join(final, f)
             if not os.path.lexists(dst):
                 os.symlink(os.path.join(D, JOB["ckpt_prefix"] + f), dst)
-    SUMMARY["final_ckpt"] = ("(dataset) " if JOB.get("ckpt_prefix") else "(base) ") + final
+    SUMMARY["final_ckpt"] = ("(input) " if JOB.get("ckpt_prefix") else "(base) ") + final
     say("no training: evaluating", final)
     dump()
 
@@ -202,9 +205,9 @@ if LL:
                           "-p", "512", "-n", "128"], out=os.path.join(W, "bench-%s.log" % q), check=False)
     say("cpu", os.cpu_count(), "threads", LL["threads"])
 
-# ---- 4. score dev with the eval driver: one decoding arm per GPU, in parallel. Each arm drives
-# the set in chunks (the driver writes its run file only at the end, so a chunk cut by the
-# deadline loses only itself); the chunks are merged and scored here.
+# ---- 4. score the set with the eval driver: one decoding arm per GPU, in parallel. Each arm drives
+# the set in chunks; the run files are merged and scored here, a deadline cut leaving only the
+# sessions that finished to score.
 EVAL_SET = JOB.get("eval_set", "eval/sets/val.jsonl")
 
 
@@ -234,7 +237,7 @@ def arm_script(arm, chunks):
 
 
 def arm_env(arm, gpu=None):
-    decoding, _, tools = arm.partition("@")  # "hard@engineered": decoding arm + prompt mode
+    decoding, _, tools = arm.partition("@")  # "hard@sig": decoding arm + tools-block spelling
     env = dict(ENV, **JOB.get("eval_env", {}), NATIVE_DECODING=decoding,
                NATIVE_LARK=os.path.join(C, "export", "call.lark"), EVAL_TMP=os.path.join(W, "tmp-" + arm))
     if gpu is not None:

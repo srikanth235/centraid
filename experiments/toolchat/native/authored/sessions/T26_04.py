@@ -54,23 +54,6 @@ S("T26-078", "six turns kunle ambiguous ask log ajo rota month event group balan
   T("what's kunle's position in the cousins ajo", val((400000, "NGN")),
     ref=[ans(op="balance", kind="group", name="Cousins ajo", linked_to="$kunle_b")]))
 
-S("T26-079", "six turns house build linked complete write read effort subtasks reschedule multi undo",
-  T("who's on Order roofing sheets", rows("olumide"),
-    ref=[ans(kind="person", linked_to="$roofing")]),
-  T("mark it done and show me what's left in house build",
-    rows("instalment", "tiles", also=diff(upd("roofing", status="completed", completed=ANY))),
-    ref=[act("complete", rows="$roofing", more=True),
-         ans(kind="task", linked_to="$house_l", where='status = "open"')]),
-  T("anything there over two hours of effort", rows("drawings", "wiring", "bq"),
-    ref=[ans(kind="task", linked_to="$house_l", where="effort > 120")]),
-  T("the wiring one, what are its subtasks", rows("cables", "db_board", "sockets"),
-    ref=[ans(kind="task", linked_to="$wiring")]),
-  T("move Buy cables and Buy distribution board to saturday",
-    diff(upd("cables", date="2026-11-28"), upd("db_board", date="2026-11-28")),
-    ref=[act("reschedule", rows="$cables, $db_board", args=lines(to=U("week", 0, weekday=6)))]),
-  T("undo that, i'll do them next week", diff(upd("cables", date="2026-12-02"), upd("db_board", date="2026-12-02")),
-    ref=[act("undo")]))
-
 S("T26-080", "six turns refused group delete ask rename edit group album multi event count star",
   T("delete the Bello family group, we use whatsapp", ask(),
     ref=[bad(act("delete", rows="$family_g")),
@@ -219,8 +202,7 @@ S("T26-090", "person note count read linked delete within ask without options",
 
 S("T26-091", "ajo task ambiguous pick complete list count",
   T("tick off Pay ajo contribution, sent it last night", diff(upd("ajo_pay_11", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pay ajo contribution"),
-         act("complete", kind="task", name="Pay ajo contribution", where='status = "open"')]),
+    ref=[act("complete", kind="task", name="Pay ajo contribution")]),
   T("what's next in the ajo list", rows("payout"),
     ref=[ans(kind="task", linked_to="$ajo_l", where='status = "open"')]),
   T("how many contributions have i paid so far", val(4),
@@ -235,16 +217,6 @@ S("T26-092", "debt person count amount sum ask options",
     ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]),
   T("and the total owed to me", val((415000, "NGN")),
     ref=[ans(op="sum", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]))
-
-S("T26-093", "notebook note count note person count pin prev",
-  T("notebooks with more than two notes", rows("offshore_nb", "house_nb", "kids_nb", "ajo_nb"),
-    ref=[ans(kind="notebook", where="note count > 2")]),
-  T("in house build, notes with no people on them", rows("socket_plan"),
-    ref=[ans(kind="note", linked_to="$house_nb", where="person count < 1")]),
-  T("pin it and show me everything pinned", rows("turbine", "block_count", "ajo_rota", "socket_plan",
-                                                 also=diff(upd("socket_plan", pinned=True))),
-    ref=[act("edit", rows="@prev", args=lines(pinned="yes"), more=True),
-         ans(kind="note", where="pinned = yes")]))
 
 S("T26-094", "task miss search reschedule ask without options create event",
   T("find the WAEC registration task", rows("waec"),

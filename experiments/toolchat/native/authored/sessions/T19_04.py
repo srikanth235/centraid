@@ -149,21 +149,6 @@ S("T19-087", "four turns find notebook delete prev find list edit prev",
   T("delete the ramadan 2025 notebook as well", diff(gone("nb_ramadan")),
     ref=[act("delete", rows="$nb_ramadan")]))
 
-S("T19-088", "six turns create task complete reopen new effort is set empty result",
-  T("add a task Buy sugar-free biscuits for Baba, 10 minutes, on baba's list",
-    diff(new("task", name="Buy sugar-free biscuits for Baba", effort=10), link("baba_l", "new")),
-    ref=[act("create", args=lines(kind="task", name="Buy sugar-free biscuits for Baba", effort=10, list="$baba_l"))]),
-  T("done, got them at marjane", diff(upd("+1", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$c1")]),
-  T("oh wait wrong ones, they have sugar. reopen it", diff(upd("+1", status="open", completed=None)),
-    ref=[act("reopen", rows="$c1")]),
-  T("open stuff on baba's list with a time estimate", rows("insulin", "strips", "shoes", "reimburse", "+1"),
-    ref=[ans(kind="task", linked_to="$baba_l", where='effort is set and status = "open"')]),
-  T("and the diabetic socks task, when's that due", rows("shoes"),
-    ref=[find(kind="task", name="socks"), search("diabetic", kind="task"), ans(rows="$shoes")]),
-  T("push buy diabetic shoes for baba to ninth may", diff(upd("shoes", date="2026-05-09")),
-    ref=[act("reschedule", rows="$shoes", args=lines(to=D("2026-05-09")))]))
-
 S("T19-089", "task person count person task count complete named",
   T("which tasks have three or more people on them", rows("rota", "rota_mail"),
     ref=[find(kind="task", where="person count > 2"), ans(rows="@prev")]),

@@ -9,14 +9,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T05-001", "shifts week attendees edit description",
-  T("what shifts have i got this week", rows("day_0120", "day_0121", "night_0123", "night_0124"),
-    ref=[ans(kind="event", name="ICU", when=W(U("week", 0)))]),
-  T("who's on the friday night with me", rows("divya_s", "jaya"),
-    ref=[ans(kind="person", linked_to="$night_0123")]),
-  T("put bring the BLS form in that one's description", diff(upd("night_0123", description="bring the BLS form")),
-    ref=[act("edit", rows="$night_0123", args=lines(description="bring the BLS form"))]))
-
 S("T05-002", "event find edit prev",
   T("when's amma's eye consultation", rows("cataract_1"),
     ref=[ans(kind="event", name="Amma cataract consultation")]),
@@ -131,13 +123,6 @@ S("T05-016", "task edit named priority",
     ref=[act("edit", kind="task", name="Renew passport", args=lines(priority=1))]),
   T("what else is priority one and open", rows("reports", "leave", "selvi_pay", "bls_cert", "insurance_claim"),
     ref=[ans(kind="task", where='priority = 1 and status = "open"', exclude="$passport")]))
-
-S("T05-017", "task edit multi",
-  T("set effort on get fridge serviced and replace inverter battery to 45 mins",
-    diff(upd("fridge", effort=45), upd("inverter", effort=45)),
-    ref=[act("edit", rows="$fridge, $inverter", args=lines(effort=45))]),
-  T("which tasks are exactly 45", rows("fridge", "inverter", "handover_sheet"),
-    ref=[ans(kind="task", where="effort = 45")]))
 
 S("T05-018", "note restore multi",
   T("what's in the notes trash", rows("adai", "old_roster", "old_shopping", "hindi_words"),

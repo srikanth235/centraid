@@ -23,16 +23,6 @@ S("T11-002", "single complete task named",
     diff(upd("herd_reg", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="Send herd register to Fergal")]))
 
-S("T11-003", "search nickname log named last contacted",
-  T("log calls with mam and declan, and when's the next thing i have with mam",
-    rows("mass", also=diff(upd("mam", date=ANY), upd("declan", date=ANY))),
-    ref=[search("mam", kind="person"),
-         act("log", rows="$mam", more=True, args=lines(kind="call")),
-         act("log", rows="$declan", more=True, args=lines(kind="call")),
-         ans(kind="event", linked_to="$mam", when=W({"from": U("day", 0)}))]),
-  T("noreen, last time we spoke?", rows("noreen"),
-    ref=[ans(kind="person", name="Noreen")]))
-
 S("T11-004", "kid events linked reschedule anchor log named",
   T("what's aoife got coming up", rows("ortho", "show", "uniforms", "kilkee"),
     ref=[ans(kind="event", linked_to="$aoife", when=W({"from": U("day", 0)}))]),
@@ -58,12 +48,6 @@ S("T11-006", "trashed task empty recovery restore reschedule",
   T("put it back and make it due friday week", diff(restore("yard_light")),
     ref=[act("restore", rows="$yard_light", more=True),
          act("reschedule", rows="$yard_light", args=lines(to=U("week", 2, weekday=5)))]))
-
-S("T11-007", "cadence unit person span within",
-  T("who am i meant to ring less than once a month", rows("brendan", "gerry", "deirdre", "orla"),
-    ref=[ans(kind="person", where="cadence > 30 days")]),
-  T("any of them i talked to between the first of july and tuesday", rows("deirdre"),
-    ref=[ans(within="@prev", when=W(span(D("2026-07-01"), U("week", 0, weekday=2))))]))
 
 S("T11-008", "role find log prev balance",
   T("who's the relief milker", rows("ger"),
@@ -95,14 +79,6 @@ S("T11-011", "create debt balance",
                                   direction="owes_me"))]),
   T("what's his balance now", val((40, "EUR")),
     ref=[ans(op="balance", rows="$gerry")]))
-
-S("T11-012", "role contains delete person multi",
-  T("who have i got down from the parents group", rows("mary_l", "clodagh"),
-    ref=[find(kind="person", where='role contains "parents group"'),
-         ans(rows="@prev")]),
-  T("clodagh moved to galway and niamh daly retired, delete the both of them",
-    diff(trash("clodagh"), trash("niamh")),
-    ref=[act("delete", rows="$clodagh, $niamh")]))
 
 S("T11-013", "ambiguous debt ask settle open debts",
   T("mark the silage bales paid", ask("d_sean_silage", "d_mick_silage"),
@@ -139,14 +115,6 @@ S("T11-017", "note body literal body != linked",
     ref=[ans(kind="note", where='body = "tbc"')]),
   T("and the gaa minutes ones that actually have something in them", rows("min_jun", "min_jul"),
     ref=[ans(kind="note", linked_to="$gaa_nb", where='body != "tbc"')]))
-
-S("T11-018", "create task add_to new count",
-  T("new task ring pat about the heifers feet, due friday, farm list",
-    diff(new("task", name=has("Pat"), date="2026-07-31"), link("farm_l", "new")),
-    ref=[act("create", more=True, args=lines(kind="task", name="Ring Pat about the heifers' feet", date=U("week", 1, weekday=5))),
-         act("add_to", rows="$new", args=lines(to="$farm_l"))]),
-  T("how many open jobs on the farm list", val(12),
-    ref=[ans(op="count", kind="task", linked_to="$farm_l", where='status = "open"')]))
 
 S("T11-019", "event named ambiguous person act resolve by context",
   T("when's the second cut silage", rows("silage2"),

@@ -1,0 +1,261 @@
+from gold import *
+import json
+
+world("T36", "2026-12-09T21:15", "Dev Mehra", "train")
+
+
+def J(d):
+    return json.dumps(d, separators=(",", ":"))
+
+
+S("T36-045", "decline email unbounded",
+  T("email the ca my tax proofs", decline("out_of_scope"),
+    ref=[dec("out_of_scope")]),
+  T("honestly just delete all my tasks", decline("unbounded_destruction"),
+    ref=[dec("unbounded_destruction")]))
+
+S("T36-046", "photos starred all rest goa count",
+  T("which of my photos are starred",
+    rows("p_mehendi", "p_phere", "p_family", "p_goa_beach", "p_goa_sunset", "p_ride_sinhagad", "p_dubai_dune"),
+    ref=[ans(kind="photo", where="starred = yes")]),
+  T("star all the other goa ones", diff(upd("p_goa_scooter", starred=True), upd("p_goa_dinner", starred=True),
+                                        upd("p_goa_fort", starred=True)),
+    ref=[act("star", kind="photo", linked_to="$goa_album")]),
+  T("how many starred ones are in the goa album now", val(5),
+    ref=[ans(op="count", kind="photo", linked_to="$goa_album", where="starred = yes")]))
+
+S("T36-047", "documents star plural ask both unstar",
+  T("star the aadhaar scans", ask("aadhaar_dev", "aadhaar_anjali"),
+    ref=[act("star", kind="document", name="aadhaar scan")]),
+  T("both of them", diff(upd("aadhaar_dev", starred=True), upd("aadhaar_anjali", starred=True)),
+    ref=[act("star", rows="$aadhaar_dev, $aadhaar_anjali")]),
+  T("and unstar the lease", diff(upd("lease", starred=False)),
+    ref=[act("unstar", rows="$lease")]),
+  T("star the passport and pan scans too and tell me which ids docs are starred",
+    rows("aadhaar_dev", "aadhaar_anjali", "passport_scan", "pan_dev",
+         also=diff(upd("passport_scan", starred=True), upd("pan_dev", starred=True))),
+    ref=[act("star", rows="$passport_scan, $pan_dev", more=True),
+         ans(kind="document", linked_to="$id_f", where="starred = yes")]))
+
+S("T36-048", "locker star find prev two writes where type count",
+  T("star the logins i havent starred yet", diff(upd("sbi_login", starred=True), upd("it_login", starred=True)),
+    ref=[find(kind="locker item", where="type = login and starred = no"), act("star", rows="@prev")]),
+  T("which of my logins have mehra in the username", rows("hdfc_login", "sbi_login"),
+    ref=[ans(kind="locker item", where='type = login and username contains "mehra"')]),
+  T("unstar sbi, never use it, and star the jetbrains licence",
+    diff(upd("sbi_login", starred=False), upd("figma", starred=True)),
+    ref=[act("unstar", rows="$sbi_login", more=True),
+         act("star", kind="locker item", name="jetbrains", where="type = software_licence")]),
+  T("count the locker entries i have starred", val(6),
+    ref=[ans(op="count", kind="locker item", where="starred = yes")]))
+
+S("T36-049", "event edit duration description date where cancel write read exclude person",
+  T("make the dentist check-up on the 21st an hour and add a note to ask about the braces",
+    diff(upd("dentist_ev", duration=60, description=has("braces"))),
+    ref=[bad(act("edit", kind="event", name="dentist check-up", when=J(D("2026-12-21")),
+                 args="duration: an hour\ndescription: ask about the braces")),
+         act("edit", kind="event", name="dentist check-up", when=J(D("2026-12-21")),
+             args="duration: 60\ndescription: ask about the braces")]),
+  T("which events in december have a note on them", rows("dentist_ev"),
+    ref=[ans(kind="event", where="description is set", when=J(U("month", 0, name=12)))]),
+  T("cancel it and tell me what else is on that day", rows(also=diff(upd("dentist_ev", status="cancelled"))),
+    ref=[act("cancel", rows="$dentist_ev", more=True),
+         ans(kind="event", when=J(D("2026-12-21")), exclude="$dentist_ev")]),
+  T("what do i still have this week with priya from work", rows("sprint_1210", "office_party"),
+    ref=[ans(kind="event", linked_to="$priya_d", where="status != cancelled",
+             when=J({"from": U("day", 0), "to": U("week", 0)}))]))
+
+S("T36-050", "trashed document read restore folder rename find delete prev",
+  T("is the old caterer quote still in the wedding folder", rows("old_quote"),
+    ref=[find(kind="document", name="old caterer quote", linked_to="$wedding_f", trashed=True),
+         ans(rows="@prev")]),
+  T("restore the quote from the wedding folder", diff(restore("old_quote")),
+    ref=[act("restore", kind="document", name="quote", linked_to="$wedding_f", trashed=True)]),
+  T("rename the decorator invoice in there to decor invoice final", diff(upd("decor_inv", name="Decor invoice final")),
+    ref=[act("edit", kind="document", name="decorator invoice", linked_to="$wedding_f", args="name: Decor invoice final")]),
+  T("delete everything in the wedding folder that isnt starred",
+    diff(trash("caterer_inv"), trash("decor_inv"), trash("photog_contract"), trash("venue_receipt"), trash("old_quote")),
+    ref=[find(kind="document", linked_to="$wedding_f", where="starred = no"), act("delete", rows="@prev")]))
+
+S("T36-051", "create task list read due before move date to date count open",
+  T("new task, buy an ironing board, due this saturday, on the flat list",
+    diff(new("task", name=has("ironing"), date="2026-12-12"), link("home_list", "new")),
+    ref=[bad(act("create", kind="task", args="name: Buy an ironing board\ndate: saturday\nlist: $home_list")),
+         act("create", kind="task", args=lines(name="Buy an ironing board", date=U("week", 0, weekday=6), list="$home_list"))]),
+  T("which flat tasks are open and due before the 15th", rows("maint_dec", "+1"),
+    ref=[ans(kind="task", linked_to="$home_list", where="status = open", when=J({"to": D("2026-12-14")}))]),
+  T("push the society maintenance due on the 10th to the 20th", diff(upd("maint_dec", date="2026-12-20")),
+    ref=[act("reschedule", kind="task", name="society maintenance", when=J(D("2026-12-10")), args=lines(to=D("2026-12-20")))]),
+  T("how many open tasks are left on the flat list now", val(11),
+    ref=[comp(op="count", kind="task", linked_to="$home_list", where="status = open"), ans(value="@prev")]),
+  T("tick off society maintenance pls", ask("maint_dec", "maint_jan"),
+    ref=[act("complete", kind="task", name="society maintenance")]))
+
+S("T36-052", "trashed task restore list read due before",
+  T("bring back the decor quotes task from the wedding list", diff(restore("old_decor")),
+    ref=[act("restore", kind="task", name="decor quotes", linked_to="$wedding_list", trashed=True)]),
+  T("what's open on the wedding list and due before the 20th", rows("thanks_msgs", "wrap_video", "wrap_thanks_cards"),
+    ref=[ans(kind="task", linked_to="$wedding_list", where="status = open", when=J({"to": D("2026-12-19")}))]),
+  T("is the old sofa task in the trash", rows("old_sofa"),
+    ref=[find(kind="task", name="old sofa", trashed=True), ans(rows="@prev")]))
+
+S("T36-053", "note add_to linked undo restore where body add_to count",
+  T("move the rajma recipe from kitchen to flat notes",
+    diff(link("home_nb", "kit_rajma"), unlink("kitchen_nb", "kit_rajma")),
+    ref=[act("add_to", kind="note", name="rajma", linked_to="$kitchen_nb", args="to: $home_nb")]),
+  T("no, undo that", diff(link("kitchen_nb", "kit_rajma"), unlink("home_nb", "kit_rajma")),
+    ref=[act("undo")]),
+  T("restore the scratch note, the one with milk and eggs, and put it in kitchen",
+    diff(restore("old_scratch"), link("kitchen_nb", "old_scratch")),
+    ref=[act("restore", kind="note", name="scratch list", where='body contains "milk"', trashed=True, more=True),
+         act("add_to", rows="$old_scratch", args="to: $kitchen_nb")]),
+  T("which notes in the kitchen notebook mention onions", rows("kit_poha", "kit_rajma"),
+    ref=[ans(kind="note", linked_to="$kitchen_nb", where='body contains "onion"')]))
+
+S("T36-054", "note create work journal pin linked read chinmay",
+  T("new note in the work journal, deploy freeze from the 21st, chinmay's call",
+    diff(new("note", name=has("freeze")), link("work_nb", "new")),
+    ref=[act("create", kind="note", args="name: Deploy freeze\nbody: freeze from the 21st, Chinmay's call\nnotebook: $work_nb")]),
+  T("pin the deploy freeze note in the work journal", diff(upd("+1", pinned=True)),
+    ref=[act("edit", kind="note", name="deploy freeze", linked_to="$work_nb", args="pinned: yes")]),
+  T("which of my work notes mention chinmay", rows("work_sprint", "+1"),
+    ref=[ans(kind="note", linked_to="$work_nb", where='body contains "chinmay"')]))
+
+S("T36-055", "ask missing content note create",
+  T("add a note", ask(),
+    ref=[askc("What should the note say?")]),
+  T("router reset steps, hold the pinhole button for ten seconds, in flat notes",
+    diff(new("note", name=has("router"), body=has("pinhole")), link("home_nb", "new")),
+    ref=[act("create", kind="note", args="name: Router reset\nbody: hold the pinhole button for ten seconds\nnotebook: $home_nb")]))
+
+S("T36-056", "trashed event restore window delete find prev undo",
+  T("bring back the meeting with prasad", decline("not_found"),
+    ref=[act("restore", kind="event", name="meeting prasad", trashed=True)]),
+  T("ok the menu tasting from october then", diff(restore("old_tasting")),
+    ref=[act("restore", kind="event", name="menu tasting", when=J(U("month", 0, name=10)), trashed=True)]),
+  T("delete the tentative events from the 31st", diff(trash("ny_party"), trash("lohri"), trash("engagement")),
+    ref=[find(kind="event", where="status = tentative", when=J({"from": D("2026-12-31")})),
+         act("delete", rows="@prev")]),
+  T("undo that", diff(restore("ny_party"), restore("lohri"), restore("engagement")),
+    ref=[act("undo")]))
+
+S("T36-057", "work week due by two writes where status within write read count",
+  T("what's open on work due by friday that takes more than 10 minutes", rows("exam_pending", "release_notes", "pr_review"),
+    ref=[ans(kind="task", linked_to="$work_list", where="status = open and effort > 10",
+             when=J({"to": U("week", 0, weekday=5)}))]),
+  T("tick off the pr review, push tomorrow's release notes to monday",
+    diff(upd("pr_review", status="completed", completed=ANY), upd("release_notes", date="2026-12-14")),
+    ref=[act("complete", rows="$pr_review", more=True),
+         act("reschedule", kind="task", name="release notes", when=J(U("day", 1)),
+             args=lines(to=U("week", 1, weekday=1)))]),
+  T("whats left on work this week", rows("exam_pending"),
+    ref=[ans(kind="task", linked_to="$work_list", where="status = open", when=J(U("week", 0)))]),
+  T("and next week", rows("leave_apply", "release_notes", "perf_review"),
+    ref=[ans(kind="task", linked_to="$work_list", where="status = open", when=J(U("week", 1)))]),
+  T("pick out the priority 1 ones from those", rows("leave_apply"),
+    ref=[bad(ans(within="@prev", where="priority == 1")), ans(within="@prev", where="priority = 1")]),
+  T("mark it done, how many are left on work",
+    val(4, also=diff(upd("leave_apply", status="completed", completed=ANY))),
+    ref=[act("complete", rows="$leave_apply", more=True),
+         ans(op="count", kind="task", linked_to="$work_list", where="status = open")]),
+  T("push everything due next week on work to the 21st",
+    diff(upd("release_notes", date="2026-12-21"), upd("perf_review", date="2026-12-21")),
+    ref=[find(kind="task", linked_to="$work_list", where="status = open", when=J(U("week", 1))),
+         act("reschedule", rows="@prev", args=lines(to=D("2026-12-21")))]),
+  T("when did i last talk to my tailor", rows(),
+    ref=[search("tailor", kind="person"), ans(kind="person", name="tailor")]),
+  T("is the old kothrud lease draft still in the flat folder", rows("old_lease"),
+    ref=[find(kind="document", name="kothrud lease draft", linked_to="$flat_f", trashed=True), ans(rows="@prev")]),
+  T("set the self review to priority 1", diff(upd("perf_review", priority=1)),
+    ref=[act("edit", kind="task", name="self review", linked_to="$work_list", args="priority: 1")]))
+
+S("T36-058", "weekly review counts substitution debts exclude grouped priority",
+  T("how many badminton games did we actually play in november", val(2),
+    ref=[ans(op="count", kind="event", name="badminton", where="status != cancelled", when=J(U("month", -1)))]),
+  T("and cancelled ones in october", val(1),
+    ref=[ans(op="count", kind="event", name="badminton", where="status = cancelled", when=J(U("month", 0, name=10)))]),
+  T("debts i owe from november over 5000", rows("d_rohan_m", "d_kunal"),
+    ref=[ans(kind="debt", where="direction = i_owe and status = open and amount > 5000", when=J(U("month", 0, name=11)))]),
+  T("besides kunal's", rows("d_rohan_m"),
+    ref=[ans(kind="debt", where="direction = i_owe and status = open and amount > 5000", when=J(U("month", 0, name=11)),
+             exclude="$d_kunal")]),
+  T("how many open tasks per priority on the work list", vgroups({"1": 1, "2": 1, "none": 4}),
+    ref=[comp(op="count", kind="task", linked_to="$work_list", where="status = open", group="priority"),
+         ans(value="@prev")]),
+  T("wheres the home loan paperwork", rows(),
+    ref=[search("loan", kind="document"), ans(kind="document", name="loan")]))
+
+S("T36-059", "wedding settle-up group balance settle_up remove ask find complete sum",
+  T("where do i stand in the wedding settle-up", val((-61300, "INR")),
+    ref=[ans(op="balance", kind="group", name="Wedding Settle-Up", linked_to="$me")]),
+  T("and kunal in there", val((27000, "INR")),
+    ref=[ans(op="balance", kind="group", name="Wedding Settle-Up", linked_to="$kunal")]),
+  T("settle up with him then", diff(upd("kunal", balance=ANY), settle=[("Kunal", "9000.00")]),
+    ref=[act("settle_up", rows="$kunal", args="group: $wedding")]),
+  T("take him off the group", ask("kunal", "wedding"),
+    ref=[act("remove_from", rows="$kunal", args="from: $wedding")]),
+  T("forget that, tick off everything under the wedding wrap-up that's due by the 20th",
+    diff(upd("wrap_video", status="completed", completed=ANY), upd("wrap_thanks_cards", status="completed", completed=ANY),
+         upd("wrap_settle", status="completed", completed=ANY)),
+    ref=[find(kind="task", linked_to="$wrap", where="status = open", when=J({"to": D("2026-12-20")})),
+         act("complete", rows="@prev")]),
+  T("total of what i owe in debts over 20000", val((97500, "INR")),
+    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open and amount > 20000")]),
+  T("and what's the smallest thing i owe", val((400, "INR")),
+    ref=[comp(op="min", field="amount", kind="debt", where="direction = i_owe and status = open"),
+         ans(value="@prev")]),
+  T("any tickets saved for the new year party", rows(),
+    ref=[search("tickets", kind="document"), ans(kind="document", name="tickets")]),
+  T("rename the settle up with the relatives task to settle with relatives",
+    diff(upd("wrap_settle", name="Settle with relatives")),
+    ref=[act("edit", kind="task", name="settle up relatives", linked_to="$wrap", args="name: Settle with relatives")]))
+
+S("T36-060", "trip week span within person reschedule date to date tasks about count text",
+  T("what's on between the 24th and 30th",
+    rows("fly_chd", "badm_1226", "dinner_mummy", "callm_1227", "doc_papa", "fly_back"),
+    ref=[ans(kind="event", when=J(span(D("2026-12-24"), D("2026-12-30"))))]),
+  T("which of those are with papa", rows("dinner_mummy", "doc_papa"),
+    ref=[ans(within="@prev", linked_to="$papa")]),
+  T("move the doctor visit on the 28th to the day after the dinner", diff(upd("doc_papa", date="2026-12-27T10:00")),
+    ref=[act("reschedule", kind="event", name="doctor papa", when=J(D("2026-12-28")), args=lines(to=D("2026-12-27")))]),
+  T("tasks i still have about papa", rows("papa_report"),
+    ref=[ans(kind="task", linked_to="$papa", where="status = open")]),
+  T("tick off his eye reports", diff(upd("papa_report", status="completed", completed=ANY)),
+    ref=[act("complete", kind="task", name="eye reports", linked_to="$papa")]),
+  T("how many are left on the parents list before we fly", val(3),
+    ref=[ans(op="count", kind="task", linked_to="$parents_list", where="status = open", when=J({"to": D("2026-12-24")}))]),
+  T("text mummy that we land at 9", decline("out_of_scope"),
+    ref=[dec("out_of_scope")]),
+  T("get the old caterer quote back from the wedding folder", diff(restore("old_quote")),
+    ref=[act("restore", kind="document", name="caterer quote", linked_to="$wedding_f", trashed=True)]),
+  T("make the papa doctor visit an hour long", diff(upd("doc_papa", duration=60)),
+    ref=[act("edit", kind="event", name="doctor papa", when=J(D("2026-12-27")), args="duration: 60")]),
+  T("put the shawl on the... hmm actually just add a task to buy dry fruits for mummy",
+    diff(new("task", name=has("dry fruits"))),
+    ref=[act("create", kind="task", args="name: Buy dry fruits for Mummy")]))
+
+S("T36-061", "find only trashed photo",
+  T("is that blurry photo in the trash", rows("p_blurry"),
+    ref=[find(kind="photo", name="blurry", trashed=True), ans(rows="@prev")]))
+
+S("T36-062", "ambiguous reschedule doctor ask",
+  T("move the doctor to thursday", ask("doc_baba", "doc_papa"),
+    ref=[act("reschedule", kind="event", name="doctor", args=lines(to=U("week", 0, weekday=4)))]))
+
+S("T36-063", "empty search electrician log not_found",
+  T("rang the electrician about the geyser wiring", decline("not_found"),
+    ref=[search("electrician", kind="person"), act("log", kind="person", name="electrician", args="kind: call")]),
+  T("ok just add a task to call an electrician tomorrow", diff(new("task", name=has("electrician"), date="2026-12-10")),
+    ref=[act("create", kind="task", args=lines(name="Call an electrician about the geyser wiring", date=U("day", 1)))]))
+
+S("T36-064", "photos person album year starred count date",
+  T("how many starred photos of anju from the 22nd are in the wedding album", val(1),
+    ref=[ans(op="count", kind="photo", linked_to="$anjali, $wedding_album", where="starred = yes",
+             when=J(D("2026-11-22")))]))
+
+S("T36-065", "empty search recovery mechanic log next event",
+  T("rang the mechanic at the garage", diff(upd("ganesh", date=ANY)),
+    ref=[search("garage", kind="person"), search("mechanic", kind="person"),
+         act("log", rows="$ganesh", args="kind: call")]),
+  T("when's the scooter service then", rows("scooter_service"),
+    ref=[ans(kind="event", name="scooter service", when=J({"from": U("day", 0)}))]))

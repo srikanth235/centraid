@@ -63,10 +63,6 @@ S("T28-054", "event span date named month within duration reschedule people",
   T("how many coming again", val(5),
     ref=[ans(op="count", kind="person", linked_to="$aroha_bday")]))
 
-S("T28-055", "single event duration set tomorrow",
-  T("what's on tomorrow that has a proper length set", rows("hemi_visit", "rawiri_call"),
-    ref=[ans(kind="event", when=W(U("day", 1)), where="duration is set")]))
-
 S("T28-056", "single event status set weekend",
   T("anything this weekend with a status on it", rows("cricket_0221", "hemi_visit", "rawiri_call"),
     ref=[ans(kind="event", when=W(span(U("week", 0, weekday=6), U("week", 0, weekday=7))), where="status is set")]))
@@ -120,12 +116,6 @@ S("T28-062", "debt span date named month compute max person count empty",
   T("any debts not tied to a person", rows(),
     ref=[ans(kind="debt", where="person count < 1")]))
 
-S("T28-063", "debt span datetime week sum within",
-  T("debts from sunday evening on, this week", rows("d_kiri", "d_rawiri", "d_ngaire", "d_ria", "d_sam"),
-    ref=[ans(kind="debt", when=W(span(U("week", -1, weekday=7, time="18:00"), U("week", 0))))]),
-  T("total owed to me out of those", val((560, "NZD")),
-    ref=[ans(op="sum", field="amount", within="@prev", where='direction = "owes_me"')]))
-
 S("T28-064", "single debt open to datetime",
   T("any debts from before the end of january", rows("d_kevin", "d_hemi", "d_dave", "d_huia"),
     ref=[ans(kind="debt", when=W({"to": D("2026-01-31", "23:00")}))]))
@@ -171,12 +161,6 @@ S("T28-069", "note span named months span dates open",
     ref=[ans(kind="note", when=W(span(D("2026-02-01"), D("2026-02-09"))))]),
   T("the budget one, what's it say", rows("budget"),
     ref=[ans(rows="$budget")]))
-
-S("T28-070", "note span date datetime body not equal notebook",
-  T("what notes did i write from wednesday to thursday morning", rows("regionals_note", "hangi_plan", "doc_qs"),
-    ref=[ans(kind="note", when=W(span(U("week", 0, weekday=3), U("week", 0, weekday=4, time="12:00"))))]),
-  T("which whakapapa notes have actual writing in them, not tbc", rows("whakapapa", "ngata_line", "ria_qs"),
-    ref=[ans(kind="note", linked_to="$whak_nb", where='body != "tbc"')]))
 
 S("T28-071", "document from datetime within folder count edit document",
   T("docs saved since thursday 8pm", rows("tshirt_design", "blood_results", "scan"),

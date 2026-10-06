@@ -72,10 +72,6 @@ S("T24-080", "locker restore window ask never_mind restore named",
   T("restore Old Yahoo mail", diff(restore("old_yahoo")),
     ref=[act("restore", kind="locker item", name="Old Yahoo mail", trashed=True)]))
 
-S("T24-081", "single decline out_of_scope",
-  T("text patty the practice schedule for next week", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]))
-
 S("T24-082", "four turns debt sums ambiguous herrera ask log",
   T("total open debts each way", vgroups({"owes_me": (575, "USD"), "i_owe": (298, "USD")}),
     ref=[comp(op="sum", field="amount", kind="debt", where='status = "open"', group="direction"), ans(value="@prev")]),
@@ -110,8 +106,7 @@ S("T24-084", "task count status subtasks list count priority",
 
 S("T24-085", "ambiguous water bill complete narrow effort literal read",
   T("Pay water bill, done", diff(upd("water_09", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pay water bill"),
-         act("complete", kind="task", name="Pay water bill", where='status = "open"')]),
+    ref=[act("complete", kind="task", name="Pay water bill")]),
   T("open stuff on the home list that takes twenty min or less", rows("ac_filter", "car_reg"),
     ref=[ans(kind="task", linked_to="$home_l", where='effort <= 20 and status = "open"')]),
   T("what's the priority on Renew car registration", rows("car_reg"),
@@ -132,10 +127,9 @@ S("T24-086", "six turns nickname empty recovery search log debt max find order m
   T("and what's the smallest amount i owe", val((18, "USD")),
     ref=[ans(op="min", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))
 
-S("T24-087", "five turns nickname empty recovery search four calls events notes cadence log",
+S("T24-087", "five turns nickname block events notes cadence log",
   T("what's coming up with amá", rows("lucia_bday", "reunion"),
-    ref=[ans(kind="person", name="Amá"), search("Amá", kind="person"),
-         find(kind="event", linked_to="$rosa", when={"from": U("day", 0)}), ans(rows="@prev")]),
+    ref=[ans(kind="event", linked_to="$rosa", when={"from": U("day", 0)})]),
   T("how long is the reunion", rows("reunion"),
     ref=[ans(rows="$reunion")]),
   T("any notes about her", rows("caldo"),
@@ -150,8 +144,8 @@ S("T24-088", "event empty recovery search miss decline named week",
     ref=[search("tamale party"), dec("not_found")]),
   T("ok what about Mateo's science fair", rows("science_fair"),
     ref=[ans(kind="event", name="Mateo's science fair")]),
-  T("what's the rest of the week look like", rows("gym_1013", "booster_1013", "gym_1015", "reunion"),
-    ref=[ans(kind="event", when=U("week", 4), exclude="$science_fair")]))
+  T("what's the rest of the week look like", rows("yard_0919", "vb_0919", "beto_call", "estimate"),
+    ref=[ans(kind="event", when=span(D("2026-09-19"), D("2026-09-20")))]))
 
 S("T24-089", "folder count add_to refused folder delete ask never_mind",
   T("which docs have no folder", rows("scan", "vax", "receipt"),
@@ -225,10 +219,6 @@ S("T24-094", "single write read complete groceries",
     rows("gatorade", "cake", also=diff(upd("ink", status="completed", completed=ANY))),
     ref=[act("complete", rows="$ink", more=True),
          ans(kind="task", linked_to="$shop_l", where='status = "open"')]))
-
-S("T24-095", "single ask without options",
-  T("move my thing to later", ask(),
-    ref=[askc("which one, and to when?")]))
 
 S("T24-096", "single count event open span cancelled",
   T("how many events got cancelled up to last week", val(3),

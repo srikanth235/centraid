@@ -180,12 +180,8 @@ S("T16-042", "photo album count ambiguous star album count delete",
     ref=[act("delete", kind="album", where="photo count = 0")]))
 
 S("T16-043", "ambiguous photo ask unstar album count",
-  T("unstar team photo", ask("team_2025", "team_2026"),
-    ref=[act("unstar", kind="photo", name="Team photo"),
-         find(kind="photo", name="Team photo"),
-         askc("last year's team photo or the one from the dhanmondi match?", options="$team_2025, $team_2026")]),
-  T("last year's", diff(upd("team_2025", starred=False)),
-    ref=[act("unstar", rows="$team_2025")]),
+  T("unstar team photo", diff(upd("team_2025", starred=False)),
+    ref=[act("unstar", kind="photo", name="Team photo")]),
   T("which pics are in more than one album", rows("tanvir_bat", "wedding_group", "team_2026", "victory_lunch_p"),
     ref=[ans(kind="photo", where="album count > 1")]))
 

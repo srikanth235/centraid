@@ -31,16 +31,6 @@ S("T10-202", "ordinal second mosque list complete ask pick physio at 11",
     ref=[act("reschedule", rows="$physio_0706", args=lines(to=U("day", 0, anchor="row", time="11:00")))]))
 
 # 203 which way the money goes
-S("T10-203", "debts owe direction balance negative sum settle mine create owes_me",
-  T("what do i owe tariq", val((-39, "JOD")),
-    ref=[ans(op="balance", kind="person", name="Tariq Jaber")]),
-  T("and the total they owe me", val((253, "JOD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("settle mine with hani, gave him cash at the door", diff(upd("d_hani", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$hani", where='direction = "i_owe"')]),
-  T("lent walid 15 for the coffee", diff(new("debt", name=has("coffee"), amount=15, direction="owes_me"), link("new", "walid")),
-    ref=[act("create", args=lines(kind="debt", name="Coffee", person="$walid", amount="15", direction="owes_me"))]))
-
 # 204 everything but the last one
 S("T10-204", "except exclude last one chess nights cancel status",
   T("chess club nights in july", rows("chess_0707", "chess_0714", "chess_0721", "chess_0728"),
@@ -63,12 +53,3 @@ S("T10-205", "bare weekday at N dentist ac range create saturday",
     ref=[act("create", args=lines(kind="event", name="Call with Huda", date=U("week", 0, weekday=6, time="17:00")))]))
 
 # 206 two writes in one message
-S("T10-206", "two writes settle debt complete star locker item",
-  T("paid hani for the leak and i ordered the gas cylinder", diff(upd("d_hani", status="settled"), upd("gas", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="Leak repair", more=True),
-         act("complete", kind="task", name="Order gas cylinder")]),
-  T("bought the fertilizer and star the national id", diff(upd("fertilizer", status="completed", completed=ANY), upd("national_id", starred=True)),
-    ref=[act("complete", kind="task", name="Buy fertilizer", more=True),
-         act("star", kind="locker item", name="National ID")]),
-  T("what's the grand total of debts i still have open", val((125, "JOD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))

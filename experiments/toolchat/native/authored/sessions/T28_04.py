@@ -122,30 +122,6 @@ S("T28-083", "five turns person photo count locker type set starred not equal st
   T("what's the username for it", rows("airnz"),
     ref=[ans(rows="$airnz")]))
 
-S("T28-084", "five turns debt amount unit status person count empty compute balance settle debt write read",
-  T("debts of 50 dollars or less open", rows("d_kevin", "d_trev", "d_moana", "d_ria", "d_sam"),
-    ref=[ans(kind="debt", where='amount <= 50 NZD and status = "open"')]),
-  T("and any with no person on them", rows(),
-    ref=[ans(kind="debt", where="person count < 1")]),
-  T("how do i stand with pita", val((-275, "NZD")),
-    ref=[comp(op="balance", rows="$pita"), ans(value="@prev")]),
-  T("settle the Tangi petrol, log a visit with him too, and tell me where we're at",
-    val((-195, "NZD"), also=diff(upd("d_pita", status="settled"), upd("pita", date=ANY))),
-    ref=[act("settle_debt", rows="$d_pita", more=True),
-         act("log", rows="$pita", args=lines(kind="visit"), more=True),
-         ans(op="balance", rows="$pita")]),
-  T("what's left that i owe", rows("d_trev", "d_hemi", "d_ngaire", "d_ria", "d_sam"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]))
-
-S("T28-085", "single event open to week cancelled",
-  T("what got cancelled before this week", rows("kapa_0204", "fishing"),
-    ref=[ans(kind="event", when=W({"to": U("week", -1)}), where='status = "cancelled"')]))
-
-S("T28-086", "single event open to week linked pita",
-  T("everything i did with Pita Ngata up to last week",
-    rows("marae_0104", "marae_0201", "waitangi", "tangi_hui", "tangi", "working_bee"),
-    ref=[ans(kind="event", linked_to="$pita", when=W({"to": U("week", -1)}))]))
-
 S("T28-087", "single event span datetime week",
   T("from tuesday midday to the end of next week, what's on",
     rows("wof", "kapa_0225", "aroha_bday", "depot_lunch", "waka_0227", "cricket_0228", "netball", "marae_0301"),
@@ -310,17 +286,3 @@ S("T28-099", "six turns find-only today four calls write read person datetime ba
          askc("aroha your wife or ro?", options="$aroha, $aroha_w")]),
   T("the wife", diff(upd("aroha", date=ANY)),
     ref=[act("log", rows="$aroha", args=lines(kind="call"))]))
-
-S("T28-100", "five turns find-only kapa practice substitution create task field repair list delete task new",
-  T("when's kapa haka practice this week", rows("kapa_0218"),
-    ref=[find(kind="event", name="Kapa haka practice", when=W(U("week", 0))), ans(rows="@prev")]),
-  T("and next week?", rows("kapa_0225"),
-    ref=[ans(kind="event", name="Kapa haka practice", when=W(U("week", 1)))]),
-  T("add a task Iron the kapa haka shirts, due seventeenth march, kapa haka list",
-    diff(new("task", name="Iron the kapa haka shirts", date="2026-03-17"), link("kapa_l", "new")),
-    ref=[bad(act("create", args=lines(kind="task", name="Iron the kapa haka shirts", due=D("2026-03-17"), list="$kapa_l"))),
-         act("create", args=lines(kind="task", name="Iron the kapa haka shirts", date=D("2026-03-17"), list="$kapa_l"))]),
-  T("what's on the Kapa haka list", rows("piupiu", "waiata", "van", "uniforms", "+1"),
-    ref=[ans(kind="task", linked_to="$kapa_l")]),
-  T("delete the ironing one, aroha's doing it", diff(trash("+1")),
-    ref=[act("delete", rows="$c1")]))

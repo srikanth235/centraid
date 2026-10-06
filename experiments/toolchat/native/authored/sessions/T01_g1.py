@@ -114,11 +114,8 @@ S("T01-110", "ask-options document star contrast",
     ref=[act("star", kind="document", name="P60")]))
 
 S("T01-111", "ask-options locker star already-so unstar",
-  T("star the wifi", ask("home_wifi", "mum_wifi"),
-    ref=[act("star", kind="locker item", name="wifi"),
-         askc("Home wifi or Mum's wifi?", options="$home_wifi, $mum_wifi")]),
-  T("mum's", diff(upd("mum_wifi", starred=True)),
-    ref=[act("star", rows="$mum_wifi")]))
+  T("star the wifi", diff(upd("mum_wifi", starred=True)),
+    ref=[act("star", kind="locker item", name="wifi")]))
 
 S("T01-112", "wifi bare read reveal verb-like star",
   T("wifi pw", rows("home_wifi", "mum_wifi"),

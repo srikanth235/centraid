@@ -46,11 +46,9 @@ S("T02-003", "group members group balance",
   T("which ones are in yen", rows("tokyo"),
     ref=[ans(kind="group", where='currency = "JPY"')]))
 
-S("T02-004", "repair date reschedule linked people",
+S("T02-004", "date reschedule linked people",
   T("move the tidewater review to next tue at 2", diff(upd("tide_review", date="2027-06-15T14:00")),
-    ref=[bad(act("reschedule", kind="event", name="Tidewater cover review",
-                 args=lines(to=U("week", 1, time="14:00")))),
-         act("reschedule", kind="event", name="Tidewater cover review",
+    ref=[act("reschedule", kind="event", name="Tidewater cover review",
              args=lines(to=U("week", 1, weekday=2, time="14:00")))]),
   T("who's in that one", rows("dana"),
     ref=[ans(kind="person", linked_to="$tide_review")]),
@@ -222,16 +220,6 @@ S("T02-020", "folder create document add_to",
   T("is there an album for the fox book yet", ask(),
     ref=[ans(kind="album", name="Fox"),
          askc("no fox album yet, just the folder and the dummy. want me to make one?")]))
-
-S("T02-021", "event create date time follow-up",
-  T("when's my portfolio review w rachel", rows("portfolio_review"),
-    ref=[ans(kind="event", name="Portfolio review with Rachel")]),
-  T("book coffee with her the next day same time",
-    diff(new("event", name=has("coffee", "rachel"), date="2027-06-12T15:00")),
-    ref=[act("create", args=lines(kind="event", name="Coffee with Rachel", date=U("week", 0, weekday=6, time="15:00")))]),
-  T("cancel dim sum too, way too much going on", ask("dimsum_jun", "dimsum_grace"),
-    ref=[act("cancel", kind="event", name="Dim sum", when=W({"from": U("day", 0)})),
-         askc("the one with your parents sunday or with grace on the 20th?", options="$dimsum_jun, $dimsum_grace")]))
 
 S("T02-022", "repair field when to status in",
   T("what do i need to do by friday",

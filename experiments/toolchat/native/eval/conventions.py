@@ -1,6 +1,7 @@
 """Which gold turns depend on a SPEC §14 convention the model is never told in the prompt.
 
-`build_sets.py` tags each such turn with `convention` and `convention:<which>`, so the report can
+`authored/build.py` tags each such turn with `convention` and `convention:<which>` (the frozen sets
+carry the tags), so the report can
 show a pass rate with those turns left out (a zero-shot model like Sonnet cannot know them). The
 detection is a phrase match on the turn's own request, checked by hand; `OVERRIDES` records every
 hand decision the match gets wrong.

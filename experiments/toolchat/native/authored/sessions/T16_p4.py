@@ -12,14 +12,6 @@ OWED = 'direction = "owes_me" and status = "open"'
 OWE = 'direction = "i_owe" and status = "open"'
 LIVE = 'status = "open"'
 
-S("T16-201", "both kitty debts settle prev sum",
-  T("who hasn't paid kitty", rows("d_babu", "d_jewel"),
-    ref=[find(kind="debt", name="Kitty", where='status = "open"'), ans(rows="@prev")]),
-  T("they both gave me cash today", diff(upd("d_babu", status="settled"), upd("d_jewel", status="settled")),
-    ref=[act("settle_debt", rows="@1")]),
-  T("how much do people still owe me", val((7800, "BDT")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=OWED)]))
-
 S("T16-202", "ordinal weekend events reschedule cancel",
   T("what's on this weekend", rows("machine_service", "ptm_mim", "prod_1220", "electrician", "tea_topu", "masud_call", order=True),
     ref=[find(kind="event", when=W(span(U("week", 0, weekday=6), U("week", 0, weekday=7))), order="date asc"), ans(rows="@prev")]),
@@ -27,16 +19,6 @@ S("T16-202", "ordinal weekend events reschedule cancel",
     ref=[act("reschedule", rows="$electrician", args=lines(to=U("week", 1, weekday=1, time="11:00")))]),
   T("cancel the last one, masud is travelling", diff(upd("masud_call", status="cancelled")),
     ref=[act("cancel", rows="$masud_call")]))
-
-S("T16-203", "owe direction balance settle sum mine",
-  T("do i owe selim", val((-350, "BDT")),
-    ref=[ans(op="balance", kind="person", name="Selim Reza")]),
-  T("and what does rahim uddin owe me", val((2100, "BDT")),
-    ref=[ans(op="balance", kind="person", name="Rahim Uddin")]),
-  T("settle mine with selim, gave him cash", diff(upd("d_selim", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$selim")]),
-  T("and everything i owe now, all in", val((5200, "BDT")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=OWE)]))
 
 S("T16-204", "except friday tasks reschedule rest",
   T("what's due friday", rows("water_pump", "abba_meds", "salma_leave", "kitty_collect"),

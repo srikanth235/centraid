@@ -2,8 +2,8 @@
 # run_job.sh: the training VM's startup-script AND shutdown-script (launch.sh passes this one file for both). Idempotent: it
 # runs on EVERY boot and does only what is not finished yet. All state is in gs://$BUCKET/$JOB/ and on the boot disk (/opt/centraid).
 #
-#   gs://$BUCKET/$JOB/job/      the staged job: bundle.dat (or bundle.tar.gz), job.json, kernel.py  (kaggle.py's data/ + kernel/)
-#   gs://$BUCKET/$JOB/out/      mirror of train.py --out: ckpt-025/050/100, FINAL, train_meta.json, the newest resume-step-NNNNNN/,
+#   gs://$BUCKET/$JOB/job/      the staged job: bundle.dat (or bundle.tar.gz), job.json, kernel.py  (bundle.py's data/ + kernel/)
+#   gs://$BUCKET/$JOB/out/      mirror of train.py --out: ckpt-025/050/075/100, FINAL, marks.json, best.json, train_meta.json, the newest resume-step-NNNNNN/,
 #                               and train.py's own DONE (training finished)
 #   gs://$BUCKET/$JOB/logs/     supervisor, trainer and scoring logs (one file per boot), pip-freeze.txt
 #   gs://$BUCKET/$JOB/results/  the kernel's scoring outputs: eval/<arm>/report.md|json, summary.json, run.log
@@ -19,7 +19,8 @@
 # and does one quick best-effort sync (the ~30 s notice is far too short to upload a multi-GB resume checkpoint: the periodic sync is
 # what protects the run if the disk is lost).
 #
-# Metadata (set by launch.sh): job, bucket, save_every, sync_interval, epochs, train_hours, max_restarts, [python], [fla_spec], [mode=probe|score, manifest=gs://... (score)].
+# Metadata (set by launch.sh): job, bucket, save_every, sync_interval, epochs, train_hours, max_restarts, [python], [fla_spec], [mode=probe|score, manifest=gs://... (score)],
+# [score_mark=best|<mark>: overrides gs://$BUCKET/$JOB/score_mark, which picks the checkpoint the job scores after training (see score_mark() below)].
 set -uo pipefail
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1 DEBIAN_FRONTEND=noninteractive
 
@@ -57,6 +58,28 @@ TRAINLOG=$LOGDIR/train-$STAMP.log
 
 say() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$SUPLOG"; }
 retry() { local n=$1 i; shift; for i in $(seq 1 "$n"); do "$@" && return 0; sleep $((i * 5)); done; return 1; }
+
+# Live stream: GCE keeps serial port 1 (the startup-script output already lands there) and `follow.sh` / `watch.sh` / `score_ckpt.sh --watch`
+# read it every few seconds, so trainer and kernel logs reach the operator while they are written, not at the next bucket sync.
+# console_follow FILE TAG mirrors FILE line by line to the console as "[TAG] line" (progress bars' \r become newlines, lines cut at 300
+# chars); idempotent per file, dies with this script. console_unfollow FILE lets the last lines out first, then stops the mirror.
+# A slow console only delays the mirror (it is a pipe from tail), never the job. CONSOLE=/dev/null (or unwritable) turns it off.
+CONSOLE=${CONSOLE:-/dev/ttyS0}
+declare -A FOLLOW=()
+console_follow() {
+  [ -w "$CONSOLE" ] || return 0
+  if [ -n "${FOLLOW[$1]:-}" ] && kill -0 "${FOLLOW[$1]}" 2>/dev/null; then return 0; fi
+  setsid bash -c 'tail -n0 --pid="$1" -F "$2" 2>/dev/null | stdbuf -oL tr "\r" "\n" | stdbuf -oL cut -c1-300 | sed -u "s/^/[$3] /" >"$4"' \
+    _ $$ "$1" "$2" "$CONSOLE" 9>&- &
+  FOLLOW[$1]=$!
+}
+console_unfollow() {
+  local p=${FOLLOW[$1]:-}
+  [ -n "$p" ] || return 0
+  sleep 3
+  kill -- -"$p" 2>/dev/null
+  unset 'FOLLOW[$1]'
+}
 
 # gcloud storage, bounded by QUICK_END (epoch seconds) when set by a quick sync
 gcs() {
@@ -292,13 +315,28 @@ pull_out() {
   touch "$STATE/out.pulled"
 }
 
+# A job whose job.json names `init` (a gs:// checkpoint directory, bundle.py --init-ckpt) starts from those weights instead of
+# job["model"]: a continuation run (#1044, iteration 1: more low-lr epochs on top of p7-r3). Pulled once per disk.
+INIT_DIR=$BASE/init
+pull_init() {
+  local init
+  init=$("$VENV/bin/python" -c 'import json,sys; print(json.load(open(sys.argv[1])).get("init") or "")' "$JOBDIR/job.json") || return 1
+  [ -z "$init" ] && return 0
+  [ -f "$STATE/init.pulled" ] && return 0
+  say "init: pulling the starting weights from $init"
+  mkdir -p "$INIT_DIR"
+  retry 3 gcs cp -r "$init/*" "$INIT_DIR/" >>"$SUPLOG" 2>&1 || return 1
+  [ -f "$INIT_DIR/model.safetensors" ] || return 1
+  touch "$STATE/init.pulled"
+}
+
 # the kernel's train command (kernel.py step 3), plus this script's resume flags. $1 = train | probe. One argument per line.
 build_train_args() {
-  "$VENV/bin/python" - "$JOBDIR/job.json" "$1" "$OUT" "$TRAIN_HOURS" "$SAVE_EVERY" "$EPOCHS" "${PROBE_STEPS:-24}" <<'PY'
+  "$VENV/bin/python" - "$JOBDIR/job.json" "$1" "$OUT" "$TRAIN_HOURS" "$SAVE_EVERY" "$EPOCHS" "${PROBE_STEPS:-24}" "$INIT_DIR" <<'PY'
 import json, sys
 job = json.load(open(sys.argv[1]))
-mode, out, hours, save_every, epochs, probe_steps = sys.argv[2:8]
-a = ["--model", job["model"], "--train", job["train"], "--tools", "export/tools-sig.json", "--out", out, "--hours", hours]
+mode, out, hours, save_every, epochs, probe_steps, init_dir = sys.argv[2:9]
+a = ["--model", init_dir if job.get("init") else job["model"], "--train", job["train"], "--tools", "export/tools-sig.json", "--out", out, "--hours", hours]
 if job.get("val"):
     a += ["--val", job["val"]]
 if job.get("test"):
@@ -328,6 +366,7 @@ PY
 start_trainer() { # $1 = log file, $2 = extra env (NAME=value), rest = args
   local log=$1 extra=$2
   shift 2
+  console_follow "$log" train
   (
     cd "$CODE" || exit 1
     exec nohup env NATIVETOOLS="$CODE/bin/nativetools" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false HF_HOME="$HF_HOME" ${extra:+"$extra"} \
@@ -382,15 +421,42 @@ run_training() {
   done
 }
 
+# The checkpoint the job scores after training. Default: the one out/FINAL names (ckpt-100, or ckpt-final when the budget cut the run).
+# The job's object gs://$BUCKET/$JOB/score_mark (launch.sh --score-mark writes it; instance metadata `score_mark` or env SCORE_MARK override
+# it) overrides it: `best` is the mark out/best.json names (train.py writes it at every mark: the lowest val decision loss, ties to the later
+# mark), anything else is a mark's own name (ckpt-050). A `best` with no usable best.json (a run without --val, no mark reached) falls back
+# to FINAL with a WARN line. The owner decides at launch, or any time before scoring starts (it is read when scoring begins, so it holds
+# across preemptions, restarts and --recreate); ckpt-100 stays the default.
+requested_mark() {
+  local v=${SCORE_MARK:-$(attr score_mark)}
+  [ -n "$v" ] || v=$(gcs cat "$GS/score_mark" 2>/dev/null | tr -d '[:space:]')
+  echo "${v:-final}"
+}
+final_mark() { tr -d '[:space:]' <"$OUT/FINAL" 2>/dev/null; }
+best_mark() {  # the mark best.json names, when that checkpoint is on this disk
+  local m
+  m=$("$VENV/bin/python" -c 'import json, sys; print(json.load(open(sys.argv[1]))["mark"])' "$OUT/best.json" 2>/dev/null) || return 1
+  [ -n "$m" ] && [ -f "$OUT/$m/config.json" ] && echo "$m"
+}
+score_mark() {  # prints the checkpoint dir name (in $OUT) that scoring takes
+  local m want
+  want=$(requested_mark)
+  case $want in
+    final) final_mark ;;
+    best) if m=$(best_mark); then echo "$m"; else say "WARN: score_mark=best, but $OUT/best.json names no checkpoint on this disk: scoring $(final_mark) instead" >&2; final_mark; fi ;;
+    *) echo "$want" ;;
+  esac
+}
+
 # Scoring = kernel.py's eval stage. kernel.py is used as shipped: a copy of job.json with `train` null and the final checkpoint
 # presented the way it already accepts an eval-only checkpoint (ckpt_prefix + ckpt_files, symlinked into the input dir).
 run_scoring() {
   [ -f "$STATE/score.done" ] && { say "scoring already finished"; return 0; }
   local final ckdir b="" f rc
-  final=$(tr -d '[:space:]' <"$OUT/FINAL" 2>/dev/null)
+  final=$(score_mark)
   ckdir=$OUT/$final
-  [ -n "$final" ] && [ -d "$ckdir" ] || fail_job "training is DONE but the final checkpoint '$final' is missing in $OUT"
-  [ -f "$JOBDIR/kernel.py" ] || fail_job "$GS/job/kernel.py is missing (upload kaggle.py's kernel/kernel.py)"
+  [ -n "$final" ] && [ -d "$ckdir" ] || fail_job "training is DONE but the checkpoint to score '$final' (score_mark $(requested_mark)) is missing in $OUT"
+  [ -f "$JOBDIR/kernel.py" ] || fail_job "$GS/job/kernel.py is missing (upload bundle.py's kernel/kernel.py)"
   for f in bundle.dat bundle.tar.gz; do [ -f "$JOBDIR/$f" ] && b=$f && break; done
   rm -rf "$SD" "$SCORE_W"
   mkdir -p "$SD" "$SCORE_W"
@@ -405,12 +471,15 @@ for f in files:
 j.update(train=None, val=None, fast_kernels=False, ckpt_prefix="ckpt.", ckpt_files=files)
 json.dump(j, open(os.path.join(sd, "job.json"), "w"), indent=1)
 PY
+  console_follow "$LOGDIR/score-$STAMP.log" score
   say "scoring $final with kernel.py (arms: $("$VENV/bin/python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["arms"])' "$JOBDIR/job.json"))"
   (cd "$SD" && env KERNEL_WORK="$SCORE_W" KERNEL_INPUT="$SD" HF_HOME="$HF_HOME" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false \
     "$VENV/bin/python" "$JOBDIR/kernel.py") >"$LOGDIR/score-$STAMP.log" 2>&1
   rc=$?
+  console_unfollow "$LOGDIR/score-$STAMP.log"
   say "kernel.py exit $rc"
   echo "$rc" >"$STATE/score.rc"
+  printf '{"mark": "%s", "requested": "%s"}\n' "$final" "$(requested_mark)" >"$SCORE_W/scored_mark.json"   # which mark these results are of
   rm -rf "$SCORE_W/ckpt-in" "$SCORE_W/code" "$SCORE_W/vaults"   # symlinks to the weights would be followed by the upload
   sync_logs
   retry 3 gcs rsync -r "$SCORE_W" "$GS/results" >>"$SUPLOG" 2>&1 || say "WARN: results upload failed; they stay in $SCORE_W on the disk"
@@ -418,14 +487,14 @@ PY
 }
 
 # ---- extra eval sets (scoring only, no training) ----------------------------------------------------------------
-# gs://$BUCKET/$JOB/extra/<name>/{bundle.dat,job.json[,kernel.py]} (an eval-only bundle from kaggle.py, see README "Scoring more
-# eval sets") is scored on the FINAL checkpoint, plus every checkpoint named in metadata `extra_ckpts` / env EXTRA_CKPTS (space or
-# comma list, e.g. "ckpt-050"). One set at a time; a finished (set, checkpoint) has $STATE/score-<name>[-<ckpt>].done and is skipped
+# gs://$BUCKET/$JOB/extra/<name>/{bundle.dat,job.json[,kernel.py]} (a scoring bundle from bundles.sh, see README "Scoring more
+# eval sets") is scored on the job's checkpoint (FINAL, or the `score_mark` one), plus every checkpoint named in metadata `extra_ckpts` / env
+# EXTRA_CKPTS (space or comma list, e.g. "ckpt-050 best"). One set at a time; a finished (set, checkpoint) has $STATE/score-<name>[-<ckpt>].done and is skipped
 # on later boots, an unfinished one is rerun. Results: $GS/results-<name>[-<ckpt>]/. A failed set never fails the job.
 EXTRA_CKPTS=${EXTRA_CKPTS:-$(attr extra_ckpts)}
 
 extra_names() { gcs ls "$GS/extra/" 2>/dev/null | sed -n 's#.*/extra/\([^/]\+\)/*$#\1#p' | sort; }
-extra_ckpts() { echo final $(echo "$EXTRA_CKPTS" | tr ',' ' '); }   # "final" = the checkpoint named by $OUT/FINAL
+extra_ckpts() { echo final $(echo "$EXTRA_CKPTS" | tr ',' ' '); }   # "final" = the checkpoint the job scores: out/FINAL, or score_mark
 extra_tag() { [ "$2" = final ] && echo "$1" || echo "$1-$2"; }        # score-<tag>.done, results-<tag>
 
 extra_pending() {  # one "name ckpt" line per (set, checkpoint) not finished yet
@@ -440,7 +509,7 @@ score_extra() {
   local name=$1 ck=$2 tag x w sd ckdir rc b=""
   tag=$(extra_tag "$name" "$ck")
   [ -f "$STATE/score-$tag.done" ] && { say "extra set $tag already scored"; return 0; }
-  [ "$ck" = final ] && ck=$(tr -d '[:space:]' <"$OUT/FINAL" 2>/dev/null)
+  case $ck in final) ck=$(score_mark) ;; best) ck=$(best_mark || final_mark) ;; esac   # "final" = the mark the job scores (score_mark)
   ckdir=$OUT/$ck
   if [ ! -d "$ckdir" ] && [ -n "$ck" ]; then retry 3 gcs rsync -r "$GS/out/$ck" "$ckdir" >>"$SUPLOG" 2>&1; fi   # fresh disk: just that checkpoint
   [ -n "$ck" ] && [ -f "$ckdir/config.json" ] || { say "WARN: extra set $tag: checkpoint '$ck' missing in $OUT and $GS/out"; return 1; }
@@ -464,12 +533,15 @@ for f in files:
 j.update(train=None, val=None, fast_kernels=False, ckpt_prefix="ckpt.", ckpt_files=files)
 json.dump(j, open(os.path.join(sd, "job.json"), "w"), indent=1)
 PY
+  console_follow "$LOGDIR/score-$tag-$STAMP.log" "score:$tag"
   say "scoring extra set $tag ($ck) with kernel.py"
   (cd "$sd" && env KERNEL_WORK="$w" KERNEL_INPUT="$sd" HF_HOME="$HF_HOME" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false \
     "$VENV/bin/python" "$x/kernel.py") >"$LOGDIR/score-$tag-$STAMP.log" 2>&1
   rc=$?
+  console_unfollow "$LOGDIR/score-$tag-$STAMP.log"
   say "kernel.py ($tag) exit $rc"
   echo "$rc" >"$STATE/score-$tag.rc"
+  printf '{"mark": "%s", "set": "%s"}\n' "$ck" "$name" >"$w/scored_mark.json"   # which mark these results are of
   rm -rf "$w/ckpt-in" "$w/code" "$w/vaults"   # symlinks to the weights would be followed by the upload
   sync_logs
   retry 3 gcs rsync -r "$w" "$GS/results-$tag" >>"$SUPLOG" 2>&1 || { say "WARN: results upload for $tag failed; they stay in $w"; return 1; }
@@ -561,7 +633,7 @@ finish_idle() {
 # ---- MODE=score: score one checkpoint on several eval sets (score_ckpt.sh) ------------------------------------------------
 # Several sets are scored by ONE kernel.py launch over their union (score_combined); `score_separate=1` metadata / SCORE_SEPARATE=1 env
 # restores one launch per set (score_one). Metadata `manifest` = gs://$BUCKET/score/<NAME>/manifest.json: {"name", "checkpoint" (gs:// dir), "sets" [..], "bundles" (gs:// prefix
-# holding <set>/{bundle.dat,job.json,kernel.py}: eval-only bundles from kaggle.py), "created"}. Flow: checkpoint pulled once to the
+# holding <set>/{bundle.dat,job.json,kernel.py}: scoring bundles from bundles.sh), "created"}. Flow: checkpoint pulled once to the
 # disk, deps once, then each set with kernel.py's eval stage (private KERNEL_WORK per set, state marker $STATE/sc-<NAME>-<set>.done
 # so a reboot resumes), results to gs://$BUCKET/score/<NAME>/<set>/, then summary.json + DONE, power off in 15 min.
 score_sync_logs() { gcs rsync -r "$LOGDIR" "$SGS/logs" >>"$SUPLOG" 2>&1 || say "WARN: log sync failed"; }
@@ -598,11 +670,13 @@ for f in files:
 j.update(train=None, val=None, fast_kernels=False, ckpt_prefix="ckpt.", ckpt_files=files)
 json.dump(j, open(os.path.join(sd, "job.json"), "w"), indent=1)
 PY
+  console_follow "$LOGDIR/score-$set-$STAMP.log" "score:$set"
   say "scoring set $set of checkpoint $SNAME with kernel.py"
   t0=$(date +%s)
   (cd "$sd" && env KERNEL_WORK="$w" KERNEL_INPUT="$sd" HF_HOME="$HF_HOME" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false \
     "$VENV/bin/python" "$x/kernel.py") >"$LOGDIR/score-$set-$STAMP.log" 2>&1
   rc=$?
+  console_unfollow "$LOGDIR/score-$set-$STAMP.log"
   secs=$(($(date +%s) - t0))
   say "kernel.py ($set) exit $rc after ${secs}s"
   rm -rf "$w/ckpt-in" "$w/code" "$w/vaults"   # symlinks to the weights would be followed by the upload
@@ -625,15 +699,21 @@ write_score_summary() {  # combined summary.json from the per-set markers and re
 import json, os, sys, time
 name, ck, st, sets = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:]
 out = {"name": name, "checkpoint": ck, "finished": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "sets": {}}
+def rate(k, n):
+    return round(k / n, 4) if k is not None and n else None
 for s in sets:
     e = {"done": False}
     try:
         d = json.load(open(os.path.join(st, "sc-%s-%s.done" % (name, s))))
         r = json.load(open(os.path.join(st, "sc-%s-%s.report.json" % (name, s))))
+        # the three numbers of a scoring run: session pass, clean turn pass (the steering metric), turn pass; a report from an
+        # older scorer has no clean-turn keys (None)
         e = {"done": True, "sessions": r.get("sessions"), "session_pass": r.get("session_pass"),
-             "session_pass_rate": round(r["session_pass"] / r["sessions"], 4) if r.get("sessions") else None,
+             "session_pass_rate": rate(r.get("session_pass"), r.get("sessions")),
+             "turns_clean": r.get("turns_clean"), "turn_pass_clean": r.get("turn_pass_clean"),
+             "turn_pass_clean_rate": rate(r.get("turn_pass_clean"), r.get("turns_clean")),
              "turns": r.get("turns"), "turn_pass": r.get("turn_pass"),
-             "turn_pass_rate": round(r["turn_pass"] / r["turns"], 4) if r.get("turns") else None, "seconds": d.get("seconds")}
+             "turn_pass_rate": rate(r.get("turn_pass"), r.get("turns")), "seconds": d.get("seconds")}
     except Exception:
         pass
     out["sets"][s] = e
@@ -909,11 +989,13 @@ score_combined() {
     say "every session of the combined run is finished: no kernel launch"
   else
     rm -f "$STATE/sc-$SNAME.launch.done"
+    console_follow "$LOGDIR/score-combined-$STAMP.log" score
     say "scoring sets [$sets] of checkpoint $SNAME with ONE kernel.py launch"
     t0=$(date +%s)
     (cd "$sd" && env KERNEL_WORK="$cw" KERNEL_INPUT="$sd" HF_HOME="$HF_HOME" PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false \
       "$VENV/bin/python" "$kern") >"$LOGDIR/score-combined-$STAMP.log" 2>&1
     rc=$?
+    console_unfollow "$LOGDIR/score-combined-$STAMP.log"
     secs=$(($(date +%s) - t0))
     say "kernel.py (combined) exit $rc after ${secs}s"
     prev=$(cat "$STATE/sc-$SNAME.launch.secs" 2>/dev/null || echo 0)
@@ -1043,10 +1125,11 @@ gcs_has "$GS/FAILED" && gcs rm "$GS/FAILED" >>"$SUPLOG" 2>&1   # a restart is a 
 
 wait_gpu || fail_job "no NVIDIA driver/GPU on this VM"
 pull_job || fail_job "cannot pull $GS/job/ (did launch.sh upload the staged job?)"
-job_trains || fail_job "job.json has no train file (an eval-only job, e.g. kaggle.py build --ckpt-dir/--base): this tooling trains"
+job_trains || fail_job "job.json has no train file (an eval-only job, e.g. bundle.py build --base/--ckpt-dir): this tooling trains"
 ensure_deps || fail_job "dependency install failed (see logs/supervisor-*.log)"
 extract_code || fail_job "cannot unpack the job bundle"
 pull_out || fail_job "cannot restore $GS/out/"
+pull_init || fail_job "cannot pull the init checkpoint named in job.json"
 run_training
 sync_up final
 run_scoring

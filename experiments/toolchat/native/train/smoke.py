@@ -5,7 +5,9 @@ score when gold exists. Checkpoints go to the scratch dir and are deleted at the
     python smoke.py --work <scratch dir> [--data <sessions.jsonl.gz> [--tools tools.json]] [--keep]
 
 Without --data it renders 20 sessions with `smoke_data.py` (the fixture world, driven through
-the runtime). --ckpt reuses a trained output dir to rerun only the later stages.
+the runtime, thinks written by authored/trace.py). --ckpt reuses a trained output dir to rerun only the later
+stages. The two training steps are a full fp32 fine-tune of the 0.8B model: about 16 GB of RAM on CPU, and a smaller
+box is OOM-killed in the first optimizer step.
 """
 from __future__ import annotations
 
@@ -54,7 +56,7 @@ def take(src, dst, n):
     return k
 
 
-# three dev-like sessions on eval world C (used when eval/sets/dev.jsonl does not exist yet)
+# three dev-like sessions on eval world C (used when eval/sets/val.jsonl does not exist yet)
 SESSIONS = [
     {"id": "smoke-1", "world": "C", "today": "2026-03-15", "me": "Hana Sato",
      "turns": [{"user": "what's on my calendar this week?"}]},
@@ -81,7 +83,7 @@ def main():
     exp = w / "export"
     run([NT, "export", exp])
 
-    # 1. data: the given examples (e.g. the Data agent's), else 20 sessions from the fixture world
+    # 1. data: the given examples (e.g. the train file), else 20 sessions from the fixture world
     src = a.data
     if src:
         origin = "given: %s" % src
@@ -128,7 +130,7 @@ def main():
 
     # 6. reload the checkpoint; dev-like sessions through the runtime via eval/run.py, per decoding
     vaults = w / "vaults"
-    dev = NATIVE / "eval" / "sets" / "dev.jsonl"
+    dev = NATIVE / "eval" / "sets" / "val.jsonl"
     sess = w / "sessions.jsonl"
     if dev.exists():
         rows = [json.loads(l) for l in dev.read_text().splitlines() if l.strip()]
@@ -169,7 +171,7 @@ def main():
                      "--json", w / ("score-%s.json" % mode)], env=eenv, log=w / ("score-%s.log" % mode))
             stage("score-" + mode, r.returncode == 0, r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr[-300:])
     if not gold:
-        stage("score", True, "skipped: eval/sets/dev.jsonl not present yet")
+        stage("score", True, "skipped: eval/sets/val.jsonl not present yet")
     finish(w, a.keep)
 
 
@@ -177,7 +179,7 @@ def parity(exp, env):
     """Train/infer parity over one real runtime conversation (2 turns, 3 steps, compaction,
     vault blocks): (a) the runtime's system block == render.py's; (b) the prompt eval/run.py's
     hf backend builds from its Transcript == render.py's generation prompt over the records the
-    generator would write (thinking kept, user turns as data/gen.py writes them: block first)."""
+    data builder would write (thinking kept, user turns as authored/build.py writes them: block first)."""
     import fmt
     import lib
     from hf_backend import prompt_from_transcript
@@ -201,21 +203,27 @@ def parity(exp, env):
             problems.append("(a) runtime `rendered` system block != render.py's")
         tr = lib.Transcript(pr["rendered"])
         recs = [sysrec]
-        script = [("what have I got with Benedikt?", [("intent: read rows", "find", {"kind": "task,event", "name": "Benedikt"}),
-                                                      ("plan: answer @1", "answer", {"rows": "@1"})]),
-                  ("and next week?", [("follow: same with date", "find",
-                                       {"kind": "task", "when": '{"unit":"week","rel":1}'})])]
+        script = [("what have I got with Benedikt?",
+                   [('intent: read "what have I"\nvia: find\nkind: task,event\nname: Benedikt', "find", {"kind": "task,event", "name": "Benedikt"}),
+                    ('intent: read "what have I"\nrows: @1', "answer", {"rows": "@1"})]),
+                  ("and next week?",
+                   [('intent: read "and next week"\nvia: find\nrefer: none\nkind: task\nwhen: "next week" = week+1', "find",
+                     {"kind": "task", "when": '{"unit":"week","rel":1}'})])]
+        for _, steps in script:  # the thinks are traces: each one states its call
+            for think, tool, args in steps:
+                if fmt.call_of_think(think, None, "v3.1") != render.call_text(tool, args):
+                    problems.append("(c) the think %r does not state its call" % think)
         for text, steps in script:
             u = req({"op": "user", "text": text})
             tr.compact(u.get("compacted") or [])
-            tr.user(text, u.get("preground"))
+            tr.user(text, u.get("block"))
             by_obs = {c["obs"]: c["text"] for c in u.get("compacted") or []}
             for r in recs:
                 if r.get("obs") in by_obs:
                     r["content"] = by_obs[r["obs"]]
-            pre = u.get("preground")
+            pre = u.get("block")
             blocks += bool(pre)
-            recs.append({"role": "user", "content": (pre + "\n\n" + text) if pre else text})  # data/gen.py
+            recs.append({"role": "user", "content": (pre + "\n\n" + text) if pre else text})  # render.user_content
             for think, tool, args in steps:
                 ours = render.render_prompt_for_generation([{k: v for k, v in r.items() if k != "obs"} for r in recs])
                 theirs = prompt_from_transcript(tr)

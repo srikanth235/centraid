@@ -67,14 +67,6 @@ S("T05-079", "tasks spans effort ambiguous pick description in",
     ref=[ans(kind="task", when=W({"from": U("week", 1, weekday=1)}),
              where='description in ("cash", "at the corporation office")')]))
 
-S("T05-080", "tasks priority no list edit count",
-  T("tasks with a priority that aren't on any list", rows("inverter", "passport", "dubai_visa", "lic_02"),
-    ref=[ans(kind="task", where="priority != 0 and list count != 1")]),
-  T("make replace inverter battery priority one, the power cuts are killing us", diff(upd("inverter", priority=1)),
-    ref=[act("edit", kind="task", name="Replace inverter battery", args=lines(priority=1))]),
-  T("how many open tasks sit on no list at all", val(9),
-    ref=[ans(op="count", kind="task", where='list count != 1 and status = "open"')]))
-
 S("T05-081", "notes since pinned span add_to multi",
   T("notes i've written since new year", rows("goals", "handover", "sedation", "poosam_plan", "donors", "tc_minutes",
                                               "vathal", "pongal_r", "fantasy_n", "match_bets", "night_journal",
@@ -176,10 +168,6 @@ S("T05-090", "decline out of scope",
   T("email the donor spreadsheet to gopal", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
 
-S("T05-091", "decline sealed egress",
-  T("text my upi pin to karthi, he needs to pay the plumber", decline("sealed_egress"),
-    ref=[dec("sealed_egress")]))
-
 S("T05-092", "event recovery name",
   T("date of amma's eye surgery?", rows("cataract_2"),
     ref=[ans(kind="event", name="Amma eye surgery"), ans(kind="event", name="Amma cataract surgery")]))
@@ -195,15 +183,11 @@ S("T05-093", "undo field trashed document notebook miss",
     ref=[find(kind="notebook", name="Knitting"), dec("not_found")]))
 
 S("T05-094", "ambiguous eb bill write read flowers undo",
-  T("mark pay EB bill done, paid on the app", ask("eb_jan", "eb_dec"),
-    ref=[act("complete", kind="task", name="Pay EB bill"),
-         find(kind="task", name="Pay EB bill"),
-         askc("this month's one due on the 25th, or december's?", options="$eb_jan, $eb_dec")]),
-  T("january's obviously. and what's left on home after that",
-    rows("gas", "water_can", "fridge", "flowers_1", "selvi_pay", "tax",
-         also=diff(upd("eb_jan", status="completed", completed=ANY))),
-    ref=[act("complete", rows="$eb_jan", more=True),
-         ans(kind="task", linked_to="$homelist", where='status = "open"')]),
+  T("mark pay EB bill done, paid on the app", diff(upd("eb_jan", status="completed", completed=ANY)),
+    ref=[act("complete", kind="task", name="Pay EB bill")]),
+  T("and what's left on home after that",
+    rows("gas", "water_can", "fridge", "flowers_1", "selvi_pay", "tax"),
+    ref=[ans(kind="task", linked_to="$homelist", where='status = "open"')]),
   T("delete the flowers one", diff(trash("flowers_1")),
     ref=[act("delete", kind="task", name="Buy flowers for pooja"),
          act("delete", rows="$flowers_1")]),

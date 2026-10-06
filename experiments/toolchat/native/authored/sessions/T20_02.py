@@ -19,14 +19,6 @@ S("T20-026", "five turns notes weekday name edit pin notebook count add_to",
   T("move sofia's progress into tasting notes", diff(link("tasting_nb", "sofia_n")),
     ref=[act("add_to", rows="$sofia_n", args=lines(to="$tasting_nb"))]))
 
-S("T20-027", "note date time edit where body",
-  T("the note i wrote tuesday night at 11:15", rows("brunello"),
-    ref=[ans(kind="note", when=W(U("week", 0, weekday=2, time="23:15")))]),
-  T("in the note that says decant, make it three hours not two",
-    diff(upd("brunello", body=has("three hours"))),
-    ref=[act("edit", kind="note", where='body contains "decant"',
-             args=lines(body="Biondi-Santi tight, Il Poggione open, decant three hours"))]))
-
 S("T20-028", "edit note where delete note where restore undo restore",
   T("pin the note that mentions sicily", diff(upd("honeymoon_n", pinned=True)),
     ref=[act("edit", kind="note", where='body contains "Sicily"', args=lines(pinned="yes"))]),
@@ -52,12 +44,6 @@ S("T20-030", "note span weekday rel within linked",
     ref=[ans(kind="note", when=W(span(U("week", -1, weekday=5), U("day", 0))))]),
   T("which of those are in the ride log", rows("gf_plan", "fiesole_ride"),
     ref=[ans(kind="note", within="@prev", linked_to="$rides_nb")]))
-
-S("T20-031", "note span weekday weekday name",
-  T("what did i write monday to wednesday last week", rows("new_flat", "nonna_gift_n", "guest_n"),
-    ref=[ans(kind="note", when=W(span(U("week", -1, weekday=1), U("week", -1, weekday=3))))]),
-  T("guest numbers — who's it linked to", rows("giulia"),
-    ref=[ans(kind="person", linked_to="$guest_n")]))
 
 S("T20-032", "documents span date weekday starred",
   T("docs added from twentieth may to last friday", rows("enel_bill", "gf_ticket"),
@@ -126,13 +112,6 @@ S("T20-040", "photo add_to where weekday album count",
   T("which albums have four or more photos", rows("rides_album", "us_album", "cantina_album"),
     ref=[ans(kind="album", where="photo count >= 4")]))
 
-S("T20-041", "photo span rel date time",
-  T("photos from last week up to sunday noon",
-    rows("staff_p", "cake_idea", "tommy_p", "broken_bottle", "group_ride", "fiesole_top"),
-    ref=[ans(kind="photo", when=W(span(U("week", -1), U("week", -1, weekday=7, time="12:00"))))]),
-  T("any of them with nobody in", rows("cake_idea", "broken_bottle"),
-    ref=[ans(kind="photo", within="@prev", where="person count < 1")]))
-
 S("T20-042", "photo span rel month album",
   T("new flat album pics from last month through may", rows("flat_living", "flat_kitchen", "flat_balcony"),
     ref=[ans(kind="photo", linked_to="$flat_album", when=W(span(U("month", -1), U("month", 0, name=5))))]),
@@ -180,21 +159,3 @@ S("T20-048", "locker edit prev find",
 S("T20-049", "single decline unbounded",
   T("wipe every contact i have, starting over after the move", decline("unbounded_destruction"),
     ref=[dec("unbounded_destruction")]))
-
-S("T20-050", "seven turns move planning list events tasks",
-  T("what's on the move list", rows("pack", "pack_wine", "boxes", "utilities", "address", "deposit_back",
-                                   "movers_book", "sell_sofa", "cleaners", "curtains"),
-    ref=[ans(kind="task", linked_to="$move_l")]),
-  T("which still open", rows("pack_wine", "boxes", "utilities", "address", "deposit_back", "cleaners"),
-    ref=[ans(kind="task", within="@prev", where='status = "open"')]),
-  T("buy moving boxes is done, got them from gianni", diff(upd("boxes", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Buy moving boxes")]),
-  T("when's moving day again", rows("move_day"),
-    ref=[ans(kind="event", name="Moving day")]),
-  T("what's the week of the 15th looking like", rows("brief_0616", "menu_change", "club_meeting", "move_day", "ride_0621"),
-    ref=[ans(kind="event", when=W(span(D("2026-06-15"), D("2026-06-21"))))]),
-  T("cancel the club annual meeting, no way i make it", diff(upd("club_meeting", status="cancelled")),
-    ref=[act("cancel", kind="event", name="Club annual meeting")]),
-  T("and add a task Tell Marco I'm skipping the meeting, due tomorrow",
-    diff(new("task", name="Tell Marco I'm skipping the meeting", date="2026-05-29")),
-    ref=[act("create", args=lines(kind="task", name="Tell Marco I'm skipping the meeting", date=U("day", 1)))]))

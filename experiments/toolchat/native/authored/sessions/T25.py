@@ -58,12 +58,6 @@ S("T25-007", "four turns create group usd edit new add_to members",
   T("who's in it now", rows("me", "nadia", "jess"),
     ref=[ans(kind="person", linked_to="$c1")]))
 
-S("T25-008", "single delete group named knock-on",
-  T("delete the Lumen lunch club group, nobody uses it",
-    diff(gone("lunch_club"), unlink("lunch_club", "olivier"), unlink("lunch_club", "priya"),
-         unlink("lunch_club", "jess"), unlink("lunch_club", "me")),
-    ref=[act("delete", kind="group", name="Lumen lunch club")]))
-
 S("T25-009", "refused delete group ask delete group named",
   T("delete the vermont weekend group", ask(),
     ref=[bad(act("delete", kind="group", name="Vermont weekend")),
@@ -71,11 +65,6 @@ S("T25-009", "refused delete group ask delete group named",
   T("nah leave it. get rid of the halloween party fund",
     diff(gone("halloween"), unlink("halloween", "me")),
     ref=[act("delete", kind="group", name="Halloween party fund")]))
-
-S("T25-010", "delete event multi named",
-  T("delete the halloween party and the bike tune-up, not doing either",
-    diff(trash("halloween_ev"), trash("bike_tune")),
-    ref=[act("delete", rows="$halloween_ev, $bike_tune")]))
 
 S("T25-011", "event person count next week delete multi",
   T("next week, what's on with one person or fewer",
@@ -100,10 +89,6 @@ S("T25-013", "trashed event find restore prev restore window",
          askc("pottery class went to the bin on aug 20, past the 30 days, so it can't come back. want me to add it again as a new event?")]),
   T("no. the drinks with kevin one", diff(restore("drinks_kevin")),
     ref=[act("restore", kind="event", name="Drinks with Kevin", trashed=True)]))
-
-S("T25-014", "single delete task named",
-  T("delete Plan November hike route, marc is doing it", diff(trash("route")),
-    ref=[act("delete", kind="task", name="Plan November hike route")]))
 
 S("T25-015", "list tasks delete task multi",
   T("what's on my errands list", rows("dry_clean", "groceries", "library", "pharmacy"),

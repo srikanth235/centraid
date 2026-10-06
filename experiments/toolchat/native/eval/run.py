@@ -5,8 +5,9 @@
     python3 run.py --set sets/val.jsonl --model replay --replay runs/x.jsonl --out runs/y.jsonl
     python3 run.py --set sets/val.jsonl --model hf --checkpoint PATH --out ...       # trainer fills in
 
-Per turn: send the user text, then loop model -> `call_text` -> runtime response until the
-runtime ends the turn (the runtime enforces STEP_CAP; the driver stops at STEP_CAP + 2 as a
+Per turn: send the user text (a retraction ends the turn right there, `user["ended"]`: one synthetic step
+with `model: ""` and `runtime: "never_mind"`, no model step), then loop model -> `call_text` -> runtime
+response until the runtime ends the turn (the runtime enforces STEP_CAP; the driver stops at STEP_CAP + 2 as a
 guard). A call identical to the previous one is not cut at once: the runtime answers it with a
 hint, then a nudge, and ends the turn on the third; the driver resamples once in between
 (`break_loop`). Each session runs on a private copy of its world's vault, deleted afterwards.
@@ -17,7 +18,9 @@ Backends
   sonnet  `claude -p --model sonnet`, given the rendered system prompt, a policy digest and the
           transcript; asked for exactly one Qwen `<tool_call>` per step. Every output is cached
           on disk keyed by the hash of its full input, so reruns are free.
-  hf      interface for the trained Qwen model (the trainer step implements `HFBackend.step`).
+  hf      the trained Qwen model (train/hf_backend.py). The call it executes is the one the session's `compile` op
+          builds from the think's slots; each step records `compile` (compiled | retry | fallback | retry-fallback |
+          none) and the run's counts go to <out>.stats.json.
   llama   the same step on a local llama-server (GGUF of the base or a trained checkpoint): the
           CPU loop for prompt iteration; `--jobs` = the server's slots.
 Each backend fixes the session's `--tools` spelling of the tools block: sonnet `full` (untrained,
@@ -39,7 +42,6 @@ import tempfile
 import time
 from pathlib import Path
 
-from engineered import engineer
 from lib import (STEP_CAP, NameIndex, Runtime, Transcript, effect_rows, first_call, format_call, load_keys,
                  load_world, read_jsonl)
 
@@ -49,7 +51,24 @@ TMP = os.environ.get("EVAL_TMP")  # where per-session vault copies live (default
 
 
 class StepOut(dict):
-    """{"text": raw model message, "think_cut": bool}"""
+    """{"text": raw model message, "think_cut": bool}; the hf backend adds `compile` (what the runtime's compile op did:
+    compiled | retry | fallback | retry-fallback | none)."""
+
+
+def compile_key(info: dict) -> dict:
+    """{"compile": how} when the draw went through the compile op, else {}."""
+    return {"compile": info["compile"]} if info.get("compile") else {}
+
+
+def compile_counts(records) -> dict:
+    """{how: steps} over the `compile` keys of run records (empty when no step went through the compile op)."""
+    counts: dict[str, int] = {}
+    for rec in records:
+        for turn in rec.get("turns", []):
+            for step in turn.get("steps", []):
+                if "compile" in step:
+                    counts[step["compile"]] = counts.get(step["compile"], 0) + 1
+    return dict(sorted(counts.items()))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -60,6 +79,8 @@ class StepOut(dict):
 class Backend:
     name = "base"
     tools_mode = "sig"  # the session's `--tools` spelling of the tools block (sig | compact | full)
+    runtime_flags: list[str] = []  # extra `nativetools session` flags this backend's runtime starts with
+    compile = None  # set by run_session: slots -> the session's `compile` op reply (backends that write a trace use it)
 
     def start_session(self, session: dict) -> None:  # noqa: D401
         """Called before the first turn."""
@@ -79,6 +100,9 @@ class RefBackend(Backend):
     session; `@prev` the last result handle."""
 
     name = "ref"
+    # a reference states the call the author meant (some are "bad, then the right call", the runtime expected to
+    # refuse the bad one): the best-effort repairs of malformed calls (normalize.rs) stay off, so the gold is the intent
+    runtime_flags = ["--no-normalize"]
 
     def start_session(self, session: dict) -> None:
         self.keys = load_keys(session["world"])
@@ -237,27 +261,27 @@ class HFBackend(Backend):
     def step(self, transcript: Transcript, ctx: dict) -> StepOut:
         from hf_backend import prompt_from_transcript
 
-        text = self.impl.complete(prompt_from_transcript(transcript))
+        text = self.impl.complete(prompt_from_transcript(transcript), compile=self.compile)
         info = self.impl.last_info
         return StepOut(text=text, think_cut=bool(info.get("think_cut")), override=bool(info.get("override")),
-                       decoding=info.get("mode"))
+                       decoding=info.get("mode"), **compile_key(info))
 
     def resample(self, transcript: Transcript, ctx: dict, exclude: str) -> StepOut | None:
         from hf_backend import prompt_from_transcript
 
-        text = self.impl.complete(prompt_from_transcript(transcript), sample=True, exclude=[exclude])
+        text = self.impl.complete(prompt_from_transcript(transcript), sample=True, exclude=[exclude], compile=self.compile)
         info = self.impl.last_info
         return StepOut(text=text, think_cut=bool(info.get("think_cut")), override=bool(info.get("override")),
-                       decoding=f"{info.get('mode')}+resample")
+                       decoding=f"{info.get('mode')}+resample", **compile_key(info))
 
 
 class LlamaBackend(Backend):
     """The same step as `hf`, served by a local llama-server (../train/llama_backend.py): the
     fast CPU loop for prompt work. The GGUF on the server is the checkpoint; `--tools` picks the
-    prompt (default `engineered`, the untuned-model guide)."""
+    tools-block spelling (default `sig`, what the fine-tuned model saw)."""
 
     name = "llama"
-    tools_mode = "engineered"
+    tools_mode = "sig"
 
     def __init__(self):
         sys.path.insert(0, str(HERE.parent / "train"))
@@ -311,10 +335,6 @@ def slim(response: dict) -> dict:
     return response
 
 
-# harness-only tools modes -> the runtime `--tools` spelling they build on
-RUNTIME_TOOLS = {"engineered": "full"}
-
-
 def break_loop(rt: Runtime, backend: Backend, transcript: Transcript, ctx: dict, out: StepOut) -> StepOut:
     """The loop breaker's second rung (the runtime owns the first and third; session.rs `repeat_outcome`).
 
@@ -339,22 +359,25 @@ def run_session(session: dict, backend: Backend) -> dict:
     backend.start_session(session)
     record = {"id": session["id"], "model": backend.name, "tools_mode": backend.tools_mode, "turns": []}
     with Runtime(session["world"], session["today"], session["me"], tmp_root=TMP,
-                 flags=["--tools", RUNTIME_TOOLS.get(backend.tools_mode, backend.tools_mode)]) as rt:
+                 flags=["--tools", backend.tools_mode, *backend.runtime_flags]) as rt:
+        backend.compile = lambda slots: rt.req({"op": "compile", "slots": slots})
         prompt = rt.req({"op": "prompt"})
-        rendered = prompt["rendered"]
-        if backend.tools_mode == "engineered":  # `full` + the untuned-model guide (engineered.py)
-            rendered = engineer(rendered)
-        transcript = Transcript(rendered)
+        transcript = Transcript(prompt["rendered"])
         ctx: dict = {"n_of": {}, "last_created": None, "last_result": None, "created": []}
         names = NameIndex(load_world(session["world"]), load_keys(session["world"]))
         names.scan(prompt.get("system", ""), ctx["n_of"], directory=True)
         for ti, turn in enumerate(session["turns"]):
             user = rt.req({"op": "user", "text": turn["user"]})
             transcript.compact(user.get("compacted") or [])
-            transcript.user(turn["user"], user.get("preground"))
-            names.scan(user.get("preground") or "", ctx["n_of"])
+            transcript.user(turn["user"], user.get("block"))
+            names.scan(user.get("block") or "", ctx["n_of"])
             steps = []
-            for si in range(STEP_CAP + 2):
+            # A RETRACTION ENDS THE TURN IN THE RUNTIME (`decline never_mind`, before any call): the step has
+            # no model message and no model step is sent; the turn's ending is the runtime's own
+            ended = user.get("ended")
+            if ended:
+                steps.append({"model": "", "response": slim(ended), "runtime": "never_mind"})
+            for si in range(0 if ended else STEP_CAP + 2):
                 ctx.update(turn=ti, step=si)
                 out = backend.step(transcript, ctx)
                 sent = first_call(out["text"])
@@ -374,10 +397,10 @@ def run_session(session: dict, backend: Backend) -> dict:
                 transcript.assistant(sent)
                 transcript.tool(resp.get("obs"), resp.get("text", ""))
                 steps.append({"model": out["text"], "response": slim(resp), "think_cut": out.get("think_cut", False),
-                              **{k: out[k] for k in ("override", "decoding", "resampled_from") if k in out}})
+                              **{k: out[k] for k in ("override", "decoding", "resampled_from", "compile") if k in out}})
                 if resp.get("ends_turn"):
                     break
-            record["turns"].append({"user": turn["user"], "preground": user.get("preground"), "steps": steps})
+            record["turns"].append({"user": turn["user"], "preground": user.get("block"), "steps": steps})
     return record
 
 
@@ -395,7 +418,7 @@ def make_backend(args) -> Backend:
     else:
         raise SystemExit(f"unknown model {args.model}")
     tools = args.tools or (os.environ.get("NATIVE_TOOLS") if args.model == "hf" else None)
-    if tools:  # NATIVE_TOOLS: the Kaggle kernel's per-arm prompt mode (arm "hard@engineered")
+    if tools:  # NATIVE_TOOLS: kernel.py's per-arm tools-block spelling (arm "hard@sig")
         backend.tools_mode = tools
     return backend
 
@@ -410,9 +433,8 @@ def main() -> None:
     parser.add_argument("--claude-model", default="sonnet")
     parser.add_argument("--checkpoint")
     parser.add_argument("--replay")
-    parser.add_argument("--tools", choices=["sig", "compact", "full", "engineered"],
-                        help="override the backend's tools-block spelling (sonnet: full, hf: sig; "
-                             "engineered = full + the untuned-model guide of engineered.py)")
+    parser.add_argument("--tools", choices=["sig", "compact", "full"],
+                        help="override the backend's tools-block spelling (sonnet: full, hf: sig)")
     args = parser.parse_args()
     sessions = read_jsonl(args.set)
     if args.only:
@@ -439,7 +461,10 @@ def main() -> None:
     with open(args.out, "w", encoding="utf-8") as handle:
         for session in sessions:
             handle.write(json.dumps(results[session["id"]], ensure_ascii=False) + "\n")
-    print(f"wrote {len(results)} sessions to {args.out}")
+    counts = compile_counts(results.values())
+    if counts:
+        Path(args.out + ".stats.json").write_text(json.dumps({"sessions": len(results), "compile": counts}, indent=1))
+    print(f"wrote {len(results)} sessions to {args.out}" + (f"; compile {json.dumps(counts)}" if counts else ""))
 
 
 if __name__ == "__main__":

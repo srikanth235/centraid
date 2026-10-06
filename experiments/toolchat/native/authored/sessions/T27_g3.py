@@ -116,16 +116,6 @@ S("T27-138", "limit person last contacted unbounded albums min cadence max in pr
     ref=[comp(op="max", field="effort", kind="task", where='status = "in_progress"'),
          ans(value="@prev")]))
 
-S("T27-139", "limit partners limit photos ask cross-kind delete never mind",
-  T("when's the next partners meeting", rows("partners_1204"),
-    ref=[ans(kind="event", name="Partners meeting", when=FROM_TODAY, order="date asc", limit=1)]),
-  T("the four latesst photos", rows("p_menu", "p_case", "p_team", "p_praline"),
-    ref=[ans(kind="photo", order="date desc", limit=4)]),
-  T("delete the sign", ask("sign", "sign_words", "p_sign"),
-    ref=[askc("the pick up the shop sign task, the sign wording note or the sign mock-up photo?", options="$sign, $sign_words, $p_sign")]),
-  T("nvm, leave all three, the sign is getting picked up on wednesday and i still need the wording for the site", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
 S("T27-140", "limit pregnancy note unbounded everything sum test bakes max november",
   T("my latset note in the pregnancy notebook", rows("kicks"),
     ref=[ans(kind="note", linked_to="$preg_nb", order="date desc", limit=1)]),

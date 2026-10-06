@@ -23,13 +23,6 @@ S("T13-026", "six turns next week span reschedule create task reschedule new",
   T("what's due tuesday now", rows("+1"),
     ref=[ans(kind="task", when=W(U("week", 1, weekday=2)))]))
 
-S("T13-027", "create task reschedule new",
-  T("remind me to email raj about the detector tomorrow",
-    diff(new("task", name=has("Raj", "detector"), date="2026-09-04")),
-    ref=[act("create", args=lines(kind="task", name="Email Raj about the detector", date=U("day", 1)))]),
-  T("no wait, friday next week", diff(upd("+1", date="2026-09-11")),
-    ref=[act("reschedule", rows="$c1", args=lines(to=U("week", 1, weekday=5)))]))
-
 S("T13-028", "notebook notes remove_from where person count",
   T("notes in lab notebook 2025", rows("first_films", "solgel_note"),
     ref=[ans(kind="note", linked_to="$lab25")]),
@@ -159,13 +152,6 @@ S("T13-042", "cadence unit contacted before weekday log",
   T("log a call with dad, spoke earlier", diff(upd("dad", date=ANY)),
     ref=[act("log", rows="$dad", args=lines(kind="call"))]))
 
-S("T13-043", "met is set refused unit repair",
-  T("who have i got a 'met' note for",
-    rows("mum", "dad", "nkechi", "tom_h", "priya", "kasia", "helen", "lukas", "seun", "daniel", "hassan"),
-    ref=[ans(kind="person", where="met is set")]),
-  T("which of those am i meant to talk to more often than every two weeks", rows("mum"),
-    ref=[bad(ans(within="@prev", where="cadence < 2 weeks")), ans(within="@prev", where="cadence < 14 days")]))
-
 S("T13-044", "contacted since date role not log named",
   T("who've i talked to since first sept", rows("chiamaka", "tom_h", "priya", "wei", "tom_b", "fatima", "emeka"),
     ref=[ans(kind="person", when=W({"from": D("2026-09-01")}))]),
@@ -185,14 +171,6 @@ S("T13-045", "contacted since datetime",
   T("bennett, about the kettle money", diff(upd("tom_b", date=ANY)),
     ref=[act("log", rows="$tom_b", args=lines(kind="call"))]))
 
-S("T13-046", "tasks subtasks effort completed",
-  T("which tasks are broken into subtasks", rows("litrev", "methods", "flyer"),
-    ref=[ans(kind="task", where="task count >= 1")]),
-  T("anything open that's over two hours of work", rows("summarise", "figures", "solgel"),
-    ref=[ans(kind="task", where='effort > 120 and status = "open"')]),
-  T("what's due this month that's already done", rows("rent_09"),
-    ref=[ans(kind="task", when=W(U("month", 0)), where="completed is set")]))
-
 S("T13-047", "tasks date to datetime within list",
   T("what's due between saturday and sunday 8pm",
     rows("abstract", "send_mum", "garri", "rota", "bins", "xrd_analyse"),
@@ -205,14 +183,6 @@ S("T13-048", "tasks date to named month priority substitution",
     ref=[ans(kind="task", when=W(span(D("2026-09-15"), U("month", 0, name=10))), where="priority <= 2")]),
   T("and from november on?", rows("methods", "brp"),
     ref=[ans(kind="task", when=W({"from": U("month", 0, name=11)}), where="priority <= 2")]))
-
-S("T13-049", "tasks open before datetime complete multi",
-  T("anything due before sunday 8pm i haven't done",
-    rows("ts_aug", "xrd_book", "loo_roll", "reply_aunty", "abstract", "send_mum", "garri", "rota", "bins"),
-    ref=[ans(kind="task", when=W({"to": U("week", 0, weekday=7, time="20:00")}), where='status = "open"')]),
-  T("mark toilet roll and garri done, got both at aldi",
-    diff(upd("loo_roll", status="completed", completed=ANY), upd("garri", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$loo_roll, $garri")]))
 
 S("T13-050", "notes week to datetime pinned edit multi",
   T("notes i wrote from last week up to yesterday noon",

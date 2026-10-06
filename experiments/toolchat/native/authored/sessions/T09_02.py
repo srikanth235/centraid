@@ -88,12 +88,6 @@ S("T09-033", "task date span effort complete",
   T("tick off the essays one, did them last night", diff(upd("mark_essays", status="completed", completed=ANY)),
     ref=[act("complete", rows="$mark_essays")]))
 
-S("T09-034", "task month to datetime",
-  T("everything due from the start of may up to friday 5pm that i haven't finished",
-    rows("nda", "index_fatou", "gl_plus", "f_facts", "blazer", "library", "boardroom", "call_nana", "f_cite"),
-    ref=[ans(kind="task", when=W(span(U("month", 0, name=5), U("week", 0, weekday=5, time="17:00"))),
-             where='status = "open"')]))
-
 S("T09-035", "task month to weekday reschedule",
   T("work admin stuff due from may first to this sunday", rows("nda", "factum"),
     ref=[ans(kind="task", linked_to="$work_list", when=W(span(U("month", 0, name=5), U("week", 0, weekday=7))))]),
@@ -172,12 +166,6 @@ S("T09-043", "debt spans amount direction settle sum",
   T("and the biggest thing i owe anyone", val((2000, "CAD")),
     ref=[ans(op="max", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))
 
-S("T09-044", "debt from week direction in",
-  T("any ious from this week", rows("d_ethan"),
-    ref=[ans(kind="debt", when=W({"from": U("week", 0)}))]),
-  T("what do i owe people", val((2106.5, "CAD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction in ("i_owe") and status = "open"')]))
-
 S("T09-045", "locker username url star multi",
   T("which logins use hokafor", rows("firm_login", "lso_portal"),
     ref=[ans(kind="locker item", where='username = "hokafor"')]),
@@ -216,12 +204,6 @@ S("T09-048", "list area in open",
     ref=[ans(kind="person", where='role contains "wedding" and event count != 0')]),
   T("who have i written notes about", rows("dan", "hugo", "nana", "kemi", "margaret", "ravi", "dad", "gord"),
     ref=[ans(kind="person", where="note count != 0")]))
-
-S("T09-049", "debt count balance",
-  T("anyone with more than one iou", rows("ada"),
-    ref=[ans(kind="person", where="debt count > 1")]),
-  T("where am i at with her overall, with the group stuff", val((-50, "CAD")),
-    ref=[ans(op="balance", rows="$ada")]))
 
 S("T09-050", "effort under task count",
   T("quick jobs under fifteen min i haven't done", rows("index_fatou", "boardroom", "florist_dep", "smoke", "stamps"),

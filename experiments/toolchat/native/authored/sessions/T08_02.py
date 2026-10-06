@@ -32,17 +32,6 @@ S("T08-028", "remove_from person prev debt count",
   T("who in the practice carpool do i not have any debts with", rows("tasha", "brandon", "me"),
     ref=[ans(kind="person", linked_to="$carpool", where="debt count <= 0")]))
 
-S("T08-029", "task create edit new add_to remove_from named",
-  T("add a task to buy a new shop vac, thirty min", diff(new("task", name=has("shop vac"), effort=30)),
-    ref=[act("create", args=lines(kind="task", name="Buy a new shop vac", effort=30))]),
-  T("make it priority two and put in the notes: wet/dry, 12 gallon",
-    diff(upd("+1", priority=2, description="wet/dry, 12 gallon")),
-    ref=[act("edit", rows="$c1", args=lines(priority=2, description="wet/dry, 12 gallon"))]),
-  T("put the truck tire rotation on the house list", diff(link("house_l", "tires")),
-    ref=[act("add_to", kind="task", name="tires rotated", args=lines(to="$house_l"))]),
-  T("and take clean gutters off it, landlord's handling that", diff(unlink("house_l", "gutters")),
-    ref=[act("remove_from", kind="task", name="Clean gutters", args=lines(from_="$house_l"))]))
-
 S("T08-030", "task priority subtasks",
   T("what's lower than priority two on my plate", rows("dues", "nate", "cleats", "registration", "garage", "manifold", "proposal"),
     ref=[ans(kind="task", where="priority > 2")]),
@@ -132,13 +121,6 @@ S("T08-042", "debts month span sum",
   T("sum the amounts i owe in that batch", val((135, "USD")),
     ref=[ans(op="sum", field="amount", kind="debt", within="@prev", where='direction = "i_owe" and status = "open"')]))
 
-S("T08-043", "people last contacted spans",
-  T("who'd i talk to between march first and march thirty-first", rows("bigmama", "reggie", "dre", "keisha", "marcus_h", "quanisha",
-                                                         "darnell", "kevin", "trey"),
-    ref=[ans(kind="person", when=W(span(D("2026-03-01"), D("2026-03-31"))))]),
-  T("and from april first at noon till today", rows("mama", "tanya", "monique", "marcus_b", "coach_t", "luis", "pastor", "tasha"),
-    ref=[ans(kind="person", when=W(span(D("2026-04-01", "12:00"), U("day", 0))))]))
-
 S("T08-044", "people month span event count",
   T("who did i last hear from back in jan or feb", rows("bev", "vic"),
     ref=[ans(kind="person", when=W(span(U("month", 0, name=1), U("month", 0, name=2))))]),
@@ -155,12 +137,6 @@ S("T08-046", "events span person count",
                                                                        "prac_0409", "rcall_0412", "boost_0413", "ptc",
                                                                        "prac_0414"),
     ref=[ans(kind="event", when=W(span(U("day", 0), D("2026-04-14"))), where="person count != 0")]))
-
-S("T08-047", "practice count span last",
-  T("how many spring football practice days left from next week through may", val(10),
-    ref=[ans(op="count", kind="event", name="Spring football practice", when=W(span(U("week", 1), U("month", 0, name=5))))]),
-  T("when's the last one", rows("prac_0514"),
-    ref=[ans(kind="event", name="Spring football practice", order="date desc", limit=1)]))
 
 S("T08-048", "folder then linked_to prev",
   T("find my work certs folder", rows("certs_f"),

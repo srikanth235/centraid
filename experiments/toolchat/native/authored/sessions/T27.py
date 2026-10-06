@@ -110,12 +110,6 @@ S("T27-013", "delete task prev cancelled multi",
     ref=[bad(act("restore", rows="$paris_gym")),
          askc("that one was binned on 10 october, past the 30-day window, so it can't be restored. add it as a new task?")]))
 
-S("T27-014", "delete task prev find-only shopping",
-  T("the cot sheets task, when's it due", rows("cot_sheets"),
-    ref=[find(kind="task", name="cot sheets"), ans(rows="@prev")]),
-  T("scrap it, claire is giving us some", diff(trash("cot_sheets")),
-    ref=[act("delete", rows="@prev")]))
-
 S("T27-015", "restore task where list trashed",
   T("bring back everything i deleted from the home list", diff(restore("old_mixer")),
     ref=[act("restore", kind="task", trashed=True, linked_to="$home_l")]),

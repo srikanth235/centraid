@@ -10,11 +10,8 @@ def W(expr):
 
 
 S("T08-103", "star ask document insurance card unstar locker contrast",
-  T("star the insurance card", ask("ins_card", "dental_card"),
-    ref=[act("star", kind="document", name="insurance card"),
-         askc("the truck insurance card or the dental one?", options="$ins_card, $dental_card")]),
-  T("dental", diff(upd("dental_card", starred=True)),
-    ref=[act("star", rows="$dental_card")]),
+  T("star the insurance card", diff(upd("dental_card", starred=True)),
+    ref=[act("star", kind="document", name="insurance card")]),
   T("and unstar my union card", diff(upd("union_card", starred=False)),
     ref=[act("unstar", kind="locker item", name="union card")]))
 

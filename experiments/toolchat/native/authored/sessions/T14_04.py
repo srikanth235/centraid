@@ -151,9 +151,9 @@ S("T14-088", "photo count album count album photo count delete",
 
 S("T14-089", "six turns task cells ambiguous invoice",
   T("what's due from monday through the end of next week that isn't done",
-    rows("phone_mount", "mae_meds", "diego_call", "headphones", "mae_plan", "mei_decl", "football_fee", "dashcam",
+    rows("mae_meds", "diego_call", "headphones", "mae_plan", "mei_decl", "football_fee", "dashcam",
          "mae_exam", "leak", "mae_split"),
-    ref=[ans(kind="task", when=W(span(U("week", 1, weekday=1), U("week", 1))), where='status != "completed"')]),
+    ref=[ans(kind="task", when=W(span(U("week", 1, weekday=1), U("week", 1))), where='status = "open"')]),
   T("which of those take over 60 minutes", rows("dashcam", "leak"),
     ref=[ans(within="@prev", where="effort > 60 minutes")]),
   T("which task has 'gig thirtieth Oct' as the description", rows("inv_kleber_nov"),
@@ -350,12 +350,6 @@ X("T14-023",
     ref=[act("add_to", rows="$sunset_marg", args=lines(to="$gigs_album"), more=True),
          ans(kind="photo", linked_to="$gigs_album")]))
 
-X("T14-024",
-  T("settle the football shirt one too and tell me what's owed to me",
-    rows("d_rafa_s", "d_diego", "d_kleber", "d_bianca", also=diff(upd("d_thiago", status="settled"))),
-    ref=[act("settle_debt", kind="debt", name="Football shirt", more=True),
-         ans(kind="debt", where='direction = "owes_me" and status = "open"')]))
-
 X("T14-030",
   T("anything in the locker with notes, other than the smart fit one",
     rows("rekordbox", "gate", "ssh", "spotify_api", "passport_l", "itau", "cnh_l", "btc", "rider_l"),
@@ -380,17 +374,9 @@ X("T14-040",
   T("who did i see between friday 11am and today", rows("wesley", "guga", "junior", "larissa"),
     ref=[ans(kind="person", when=W(span(U("week", 0, weekday=5, time="11:00"), U("day", 0))))]))
 
-X("T14-044",
-  T("when's the pay das bill due", rows("das"),
-    ref=[ans(kind="task", name="Pay DAS bill"),
-         search("pay das", kind="task"),
-         ans(rows="$das")]))
-
 X("T14-047",
   T("where do i stand with juninho", val((-640, "BRL")),
-    ref=[ans(kind="person", name="Juninho"),
-         search("juninho", kind="person"),
-         ans(op="balance", rows="$junior")]))
+    ref=[ans(op="balance", rows="$junior")]))
 
 X("T14-049",
   T("which list has both pay das mei and renew passport", rows("admin_l"),

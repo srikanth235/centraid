@@ -34,14 +34,6 @@ S("T22-052", "find-only payslips linked_to all folder restore trashed count",
   T("how many payslips now", val(3),
     ref=[ans(op="count", kind="document", name="Payslip")]))
 
-S("T22-053", "document datetime span delete multi undo",
-  T("what did i scan in last night after 9", rows("scan_1", "scan_2"),
-    ref=[ans(kind="document", when=W(span(U("day", -1, time="21:00"), U("day", 0))))]),
-  T("delete them both, they came out blurry", diff(trash("scan_1"), trash("scan_2")),
-    ref=[act("delete", rows="$scan_1, $scan_2")]),
-  T("undo, i'll keep them after all", diff(restore("scan_1"), restore("scan_2")),
-    ref=[act("undo")]))
-
 S("T22-054", "document open to year within starred",
   T("which docs are from before this year", rows("lease", "contract", "forklift_cert", "adoption_decision", "birth_cert",
                                                  "deed", "co_owner", "car_reg"),
@@ -197,16 +189,6 @@ S("T22-070", "compute balance settle up balance",
     ref=[act("settle_up", rows="$karin", args=lines(group="$sommarhus"))]),
   T("and now?", val((-1200, "SEK")),
     ref=[ans(op="balance", rows="$karin")]))
-
-S("T22-071", "debt amount unit within settle debt status not equal",
-  T("which debts are exactly 250 kr", rows("d_tobias", "d_hanna", "d_mats"),
-    ref=[ans(kind="debt", where="amount = 250 SEK")]),
-  T("which of them are people owing me", rows("d_tobias", "d_hanna"),
-    ref=[ans(within="@prev", where='direction = "owes_me"')]),
-  T("tobbe paid, settle his", diff(upd("d_tobias", status="settled")),
-    ref=[act("settle_debt", rows="$d_tobias")]),
-  T("who owes me then, not settled", rows("d_erik", "d_hanna", "d_micke", "d_samira"),
-    ref=[ans(kind="debt", where='direction = "owes_me" and status != "settled"')]))
 
 S("T22-072", "debt anchor span date week sum within",
   T("debts from two days ago", rows("d_tobias", "d_hanna"),

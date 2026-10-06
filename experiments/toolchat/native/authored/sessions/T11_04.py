@@ -121,11 +121,9 @@ S("T11-085", "single decline out of scope",
   T("will it rain in ennis tomorrow", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
 
-S("T11-086", "single dead end search miss decline",
+S("T11-086", "single empty answer name miss",
   T("any note on the drainage grant", decline("not_found"),
-    ref=[ans(kind="note", name="drainage grant"),
-         search("drainage"),
-         dec("not_found")]))
+    ref=[ans(kind="note", name="drainage grant")]))
 
 S("T11-087", "folder count trashed doc restore refused folder delete ask",
   T("folders with more than two docs", rows("herd_f", "dept_f"),

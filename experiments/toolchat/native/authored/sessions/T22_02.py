@@ -52,14 +52,6 @@ S("T22-031", "event anchor tomorrow within duration",
   T("which of those are half an hour or less", rows("samira_call"),
     ref=[ans(within="@prev", where="duration <= 30 minutes")]))
 
-S("T22-032", "event duration unit person count reschedule",
-  T("short stuff this week, thirty min or under", rows("samira_call", "micke_coffee", "linnea_1on1", "camp_pickup"),
-    ref=[ans(kind="event", when=W(U("week", 0)), where="duration <= 30 minutes")]),
-  T("anything in the diary with nobody else on it", rows("drive_osterlen", "car_service"),
-    ref=[ans(kind="event", where="person count = 0")]),
-  T("move Car service at Bilia to 8", diff(upd("car_service", date="2026-07-20T08:00")),
-    ref=[act("reschedule", rows="$car_service", args=lines(to=U("day", 0, anchor="row", time="08:00")))]))
-
 S("T22-033", "event person count week anchor tomorrow",
   T("anything next week with nobody else coming", rows("car_service", "drive_osterlen"),
     ref=[ans(kind="event", when=W(U("week", 1)), where="person count = 0")]),
@@ -140,26 +132,6 @@ S("T22-042", "task list count add_to task count empty",
     ref=[act("add_to", rows="$scanners", args=lines(to="$work_l"))]),
   T("does Shift schedule for August have less than 3 subtasks", rows(),
     ref=[ans(kind="task", name="Shift schedule for August", where="task count < 3")]))
-
-S("T22-043", "task span datetime month min within",
-  T("what's due from next monday 8am to the end of july that has a priority",
-    rows("aug_schedule", "inv_prep", "mamma_gift", "roof_tile", "party", "sh_share", "car_insurance"),
-    ref=[ans(kind="task", when=W(span(U("week", 1, weekday=1, time="08:00"), U("month", 0, name=7))), where="priority is set")]),
-  T("lowest effort of those?", rows("sh_share"),
-    ref=[ans(within="@prev", order="effort asc", limit=1)]))
-
-S("T22-044", "task span rel datetime complete reschedule",
-  T("what's due between tomorrow and wednesday noon",
-    rows("sick_report", "balls", "photos_nour", "smoke_alarm", "holiday_req", "agency"),
-    ref=[ans(kind="task", when=W(span(U("day", 1), U("week", 0, weekday=3, time="12:00"))))]),
-  T("Send photos to Nour and Change smoke alarm batteries are done, push the agency call to friday. what's open tomorrow",
-    rows("sick_report", "balls", also=diff(upd("photos_nour", status="completed", completed=ANY),
-                                           upd("smoke_alarm", status="completed", completed=ANY),
-                                           upd("agency", date="2026-07-17"))),
-    ref=[act("complete", rows="$photos_nour", more=True),
-         act("complete", rows="$smoke_alarm", more=True),
-         act("reschedule", rows="$agency", args=lines(to=U("week", 0, weekday=5)), more=True),
-         ans(kind="task", when=W(U("day", 1)), where='status = "open"')]))
 
 S("T22-045", "note notebook count notebook note count",
   T("pinned notes that live in a notebook", rows("late_rota", "lineup", "elias_story"),

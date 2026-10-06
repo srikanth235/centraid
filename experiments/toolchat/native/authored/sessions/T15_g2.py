@@ -106,15 +106,6 @@ S("T15-126", "decline unbounded then delete undo never-mind",
   T("scratch that, jonas likes it", diff(restore("p_fjord")),
     ref=[act("undo")]))
 
-S("T15-127", "ask-options document delete never-mind star already-so",
-  T("get rid of the cruise report", ask("report_09", "report_10"),
-    ref=[act("delete", kind="document", name="Cruise report"),
-         askc("HV-2609 or the HV-2610 draft?", options="$report_09, $report_10")]),
-  T("don't bother, hallvard wants to see both", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("star the cabin agreement though", diff(already=["cabin_agreement"]),
-    ref=[act("star", kind="document", name="Cabin share agreement"), ans(rows="$cabin_agreement")]))
-
 S("T15-128", "star already-so new multi-write count",
   T("star hallvard", diff(already=["hallvard"]),
     ref=[act("star", kind="person", name="Hallvard"), ans(rows="$hallvard")]),
@@ -133,9 +124,8 @@ S("T15-129", "ask-options person star unstar",
   T("kaja, she got me up that ice line", diff(upd("kaja", starred=True)),
     ref=[act("star", rows="$kaja")]))
 
-S("T15-130", "repair reschedule weekday-without-unit cancel",
+S("T15-130", "reschedule weekday-without-unit cancel",
   T("move the dentist to tuesday", diff(upd("dentist", date="2026-11-10T11:00")),
-    ref=[bad(act("reschedule", kind="event", name="dentist", args='to: {"weekday":2}')),
-         act("reschedule", kind="event", name="dentist", args=lines(to=U("week", 0, weekday=2)))]),
+    ref=[act("reschedule", kind="event", name="dentist", args=lines(to=U("week", 0, weekday=2)))]),
   T("rang mats and he can't fit me in on tuesday anymore, can you cancel it instead", diff(upd("dentist", status="cancelled")),
     ref=[act("cancel", rows="$dentist")]))

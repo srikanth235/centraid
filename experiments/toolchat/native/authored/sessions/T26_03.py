@@ -99,27 +99,6 @@ S("T26-057", "task span weeks priority list count person count complete",
   T("paid Tobi's school fees yesterday, tick it", diff(upd("fees_tobi", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="Pay Tobi's school fees")]))
 
-S("T26-058", "task span weeks person count list count complete within",
-  T("open stuff due this week or next that nobody's linked to",
-    rows("power_11", "diesel_2", "ajo_pay_11", "canopy", "cables", "db_board", "aso_ebi", "c_of_o", "inverter"),
-    ref=[ans(kind="task", where='person count = 0 and status = "open"', when=span(U("week", 0), U("week", 1)))]),
-  T("which of those sit in a list", rows("power_11", "diesel_2", "ajo_pay_11", "inverter"),
-    ref=[ans(kind="task", within="@prev", where="list count >= 1")]),
-  T("tick the electricity one, paid it last night", diff(upd("power_11", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", within="@prev", name="Pay electricity bill")]),
-  T("how many tasks have i got in each status", vgroups({"open": 32, "in_progress": 3, "completed": 16, "cancelled": 2}),
-    ref=[comp(op="count", kind="task", group="status"), ans(value="@prev")]))
-
-S("T26-059", "events duration person count status in delete named",
-  T("events next week that are two hours or longer", rows("medical", "parents_day", "site_1205", "mama70"),
-    ref=[ans(kind="event", where="duration >= 120 minutes", when=U("week", 1))]),
-  T("now only the ones with more than 3 people", rows("mama70"),
-    ref=[ans(kind="event", within="@prev", where="person count > 3")]),
-  T("cancelled stuff last week or this week", rows("chidi_dinner", "beach"),
-    ref=[ans(kind="event", where='status in ("cancelled")', when=span(U("week", -1), U("week", 0)))]),
-  T("take Beach trip to Bonny off the diary", diff(trash("beach")),
-    ref=[act("delete", kind="event", name="Beach trip to Bonny")]))
-
 S("T26-060", "events person count status in duration within",
   T("events this week with more than three people, cancelled ones too", rows("ajo_1129"),
     ref=[ans(kind="event", where='person count > 3 and status in ("tentative", "cancelled")', when=U("week", 0))]),
@@ -150,12 +129,6 @@ S("T26-063", "note span month to week notebook edit body",
   T("update the handover one, MCC fan got replaced, spare breakers in store 3",
     diff(upd("handover_n", body=has("replaced"))),
     ref=[act("edit", rows="$handover_n", args=lines(body="MCC fan replaced, spare breakers in store 3"))]))
-
-S("T26-064", "note span month to weekday and to week notebooks",
-  T("house build notes from september until last friday", rows("archi_n", "site_n"),
-    ref=[ans(kind="note", linked_to="$house_nb", when=span(U("month", 0, name=9), U("week", -1, weekday=5)))]),
-  T("and ajo ones from september up to last week", rows("ajo_rota", "ajo_oct"),
-    ref=[ans(kind="note", linked_to="$ajo_nb", when=span(U("month", 0, name=9), U("week", -1)))]))
 
 S("T26-065", "note span dates kids span month weekday",
   T("notes between 1 and fifteenth november", rows("turbine", "rotation_n", "handover_n", "car_n", "site_n"),
@@ -233,15 +206,6 @@ S("T26-073", "person span weekday date log named other kunle",
   T("log a call with emeka too", ask("emeka_n", "emeka_o"),
     ref=[act("log", kind="person", name="Emeka", args=lines(kind="call")),
          askc("emeka nwosu or emeka obi?", options="$emeka_n, $emeka_o")]))
-
-S("T26-074", "person span weekday date rel time open span cadence",
-  T("who have i been in touch with from last tuesday up to yesterday",
-    rows("kunle_b", "chidi", "segun", "olumide", "aisha", "mama", "ngozi"),
-    ref=[ans(kind="person", when=span(U("week", -1, weekday=2), U("day", -1)))]),
-  T("who did i call on sunday at 8pm", rows("aisha"),
-    ref=[ans(kind="person", when=U("day", -2, time="20:00"))]),
-  T("and since last wednesday, only people with a cadence", rows("chidi", "segun", "olumide", "aisha", "mama"),
-    ref=[ans(kind="person", where="cadence is set", when={"from": U("week", -1, weekday=3)})]))
 
 S("T26-075", "single role in",
   T("who's the rig medic and the hse officer again", rows("victor", "kunle_a"),

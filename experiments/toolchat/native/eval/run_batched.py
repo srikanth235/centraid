@@ -6,9 +6,12 @@
 `run.py` runs one session at a time with one unbatched `generate` per step. Here `--threads`
 sessions run concurrently, each thread being `run.run_session` (the per-session entry, untouched)
 over a backend whose `step` calls `train/batching.py`'s proxy: all threads' steps are queued and
-run as one padded batched `generate`. Decoding, prompt and options are `--model hf`'s
+run as one padded batched `generate`. Each step carries the session's `compile` op (run_session sets it), so the executed call is
+the one the runtime compiles from the think; `compile` counts of the run (compiled, retry, fallback, ...) are in the stats. Decoding, prompt and options are `--model hf`'s
 (NATIVE_DECODING hard|soft|free, NATIVE_LARK, NATIVE_THINK_LIMIT, NATIVE_DTYPE, NATIVE_MAX_NEW,
 NATIVE_HANDLES, NATIVE_TOOLS); the run file has the same records, so score.py reads it as is.
+One greedy draw per step (NATIVE_SAMPLE=0, the default); the only sampled draw is the loop breaker's
+single resample of a repeated call (run.py `break_loop`).
 
 Records are appended to --out as sessions finish (a killed run keeps what it finished). Two
 processes on two GPUs share the work through `--claim DIR`: a session is taken by whoever creates
@@ -51,16 +54,17 @@ class BatchedHF(run.Backend):
     def step(self, transcript, ctx):
         from hf_backend import prompt_from_transcript
 
-        text, info = self.impl.complete_info(prompt_from_transcript(transcript))
+        text, info = self.impl.complete_info(prompt_from_transcript(transcript), compile=self.compile)
         return run.StepOut(text=text, think_cut=bool(info.get("think_cut")), override=bool(info.get("override")),
-                           decoding=info.get("mode"))
+                           decoding=info.get("mode"), **run.compile_key(info))
 
     def resample(self, transcript, ctx, exclude):
         from hf_backend import prompt_from_transcript
 
-        text, info = self.impl.complete_info(prompt_from_transcript(transcript), sample=True, exclude=[exclude])
+        text, info = self.impl.complete_info(prompt_from_transcript(transcript), sample=True, exclude=[exclude],
+                                             compile=self.compile)
         return run.StepOut(text=text, think_cut=bool(info.get("think_cut")), override=bool(info.get("override")),
-                           decoding=f"{info.get('mode')}+resample")
+                           decoding=f"{info.get('mode')}+resample", **run.compile_key(info))
 
 
 def select(sessions: list[dict], only: str | None, sample: int) -> list[dict]:
@@ -144,7 +148,7 @@ def main() -> None:
     ap.add_argument("--wait", type=float, default=0.1, help="max seconds a batch waits to fill")
     ap.add_argument("--max-tokens", type=int, default=None, help="padded (prompt + max new) tokens per batch")
     ap.add_argument("--claim", help="directory shared by processes on other GPUs: each session runs once")
-    ap.add_argument("--tools", choices=["sig", "compact", "full", "engineered"],
+    ap.add_argument("--tools", choices=["sig", "compact", "full"],
                     help="tools-block spelling (default: NATIVE_TOOLS, else sig)")
     args = ap.parse_args()
 
@@ -180,7 +184,8 @@ def main() -> None:
     sizes = proxy.batcher.sizes
     stats = {"sessions": len(results), "errors": sum(1 for r in results.values() if r.get("error")),
              "seconds": round(secs, 1), "batches": len(sizes), "mean_batch": round(sum(sizes) / max(1, len(sizes)), 2),
-             "max_batch": max(sizes, default=0), "oom_splits": proxy.oom, **hf.stats}
+             "max_batch": max(sizes, default=0), "oom_splits": proxy.oom, **hf.stats,
+             "compile": run.compile_counts(results.values())}
     Path(args.out + ".stats.json").write_text(json.dumps(stats, indent=1))
     print("wrote %d sessions to %s in %.0fs; %s" % (len(results), args.out, secs, json.dumps(stats)))
     proxy.close()

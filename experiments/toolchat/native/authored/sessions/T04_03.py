@@ -29,33 +29,6 @@ S("T04-052", "min max debts find person",
   T("anyone with a nickname i check in with fortnightly", rows("dad"),
     ref=[ans(kind="person", where="nickname is set and cadence = 14")]))
 
-S("T04-053", "find linked_to reschedule week span act when anchor hour",
-  T("move my next darkroom night with owen to wednesday next week", diff(upd("dark_1015", date="2026-10-21T18:30")),
-    ref=[search("owen", kind="person"),
-         find(kind="event", linked_to="$owen", when=W({"from": U("day", 0)}), order="date asc", limit=1),
-         act("reschedule", rows="$dark_1015", args=lines(to=U("week", 1, weekday=3)))]),
-  T("what's the rest of this week look like",
-    rows("leah_dinner", "rota_meet", "ld_1016", "fitting_1", "fb_1017", "lunch_1018"),
-    ref=[ans(kind="event", when=W({"from": U("day", 0), "to": U("week", 0, weekday=7)}))]),
-  T("push sunday lunch back an hour", diff(upd("lunch_1018", date="2026-10-18T14:00")),
-    ref=[act("reschedule", kind="event", name="Sunday lunch", args=lines(to=U("hour", 1, anchor="row"))),
-         act("reschedule", kind="event", name="Sunday lunch", when=W(U("week", 0, weekday=7)),
-             args=lines(to=U("hour", 1, anchor="row")))]),
-  T("anything an hour or less from friday to end of next week", rows("grand_round", "car_service", "wcall_1022", "aoife_coffee", "yoga_1024"),
-    ref=[ans(kind="event", when=W({"from": U("week", 0, weekday=5), "to": U("week", 1)}), where="duration <= 60")]))
-
-S("T04-054", "weekend within exclude cancel",
-  T("what have i got this weekend", rows("fitting_1", "fb_1017", "lunch_1018"),
-    ref=[ans(kind="event", when=W({"from": U("week", 0, weekday=6), "to": U("week", 0, weekday=7)}))]),
-  T("cancel all that except lunch at mum's, i'm wrecked",
-    diff(upd("fitting_1", status="cancelled"), upd("fb_1017", status="cancelled")),
-    ref=[find(within="@prev", exclude="$lunch_1018"), act("cancel", rows="$fb_1017, $fitting_1")]),
-  T("anything cancelled before this week", rows("supervisor", "fb_1003", "pub_quiz", "yoga_1010"),
-    ref=[ans(kind="event", when=W({"to": U("week", -1)}), where='status = "cancelled"')]),
-  T("and from monday to the thirtieth, anything at the photo co-op", rows("dark_1029"),
-    ref=[ans(kind="event", when=W({"from": U("week", 1, weekday=1), "to": D("2026-10-30")}),
-             where='description contains "Co-op"')]))
-
 S("T04-055", "trashed photos album count",
   T("what photos have i deleted", rows("screenshot", "blurry"),
     ref=[ans(kind="photo", trashed=True)]),
@@ -89,16 +62,6 @@ S("T04-058", "not_found then substitute",
     ref=[act("log", rows="$sharma", args=lines(kind="call"))]),
   T("how many long days have i got down before december", val(11),
     ref=[ans(op="count", kind="event", name="Long day AMU", when=W({"to": U("month", 0, name=11)}))]))
-
-S("T04-059", "person delete trashed restore both",
-  T("delete bilal akhtar, he's blocked me", diff(trash("bilal")),
-    ref=[act("delete", kind="person", name="Bilal Akhtar")]),
-  T("who's in the people trash", rows("craig", "bilal"),
-    ref=[ans(kind="person", trashed=True)]),
-  T("ugh restore them both, mum says be nice", diff(restore("craig"), restore("bilal")),
-    ref=[act("restore", rows="$craig, $bilal")]),
-  T("who's my dentist again", rows("sharma"),
-    ref=[ans(kind="person", where='role = "dentist"')]))
 
 S("T04-060", "photo ask star unstar",
   T("star the harbour pic", ask("harbour", "gulls"),
@@ -204,17 +167,6 @@ S("T04-070", "event create span note read repair add_to",
     ref=[act("reschedule", kind="event", name="ALS course", args=lines(to=U("month", 1))),
          askc("day 1 or day 2? or both?", options="$als_1, $als_2")]))
 
-S("T04-071", "subtask create linked ask rent",
-  T("add a subtask under the speech: time it, under five mins",
-    diff(new("task", name=has("time it")), link("speech", "new")),
-    ref=[act("create", args=lines(kind="task", name="Time it, under 5 mins", parent="$speech"))]),
-  T("what subtasks has it got", rows("speech_draft", "speech_photos", "speech_practise", "+1"),
-    ref=[ans(kind="task", linked_to="$speech")]),
-  T("and paid the rent, mark it", ask("rent_oct", "rent_nov"),
-    ref=[act("complete", kind="task", name="Pay rent"),
-         find(kind="task", name="Pay rent"),
-         askc("october's (already done) or november's?", options="$rent_oct, $rent_nov")]))
-
 S("T04-072", "month name narrowing priority",
   T("what's due in november",
     rows("caterer_nums", "lira", "airport_parking", "reflections", "cbd", "als_prep", "gmc_fee", "rent_nov", "hampers",
@@ -242,12 +194,3 @@ S("T04-073", "count last month repair kind",
 S("T04-074", "hour unit create minute anchor",
   T("remind me in two hrs to text kev about the brakes", diff(new("task", name=has("kev"), date="2026-10-14T21:40")),
     ref=[act("create", args=lines(kind="task", name="Text Kev about the brakes", date=U("hour", 2)))]))
-
-S("T04-075", "since january count from month",
-  T("how many loan payments have i made since jan", val(9),
-    ref=[ans(op="count", kind="task", name="Car loan payment", where='status = "completed"',
-             when=W({"from": U("month", 0, name=1)}))]),
-  T("when does the following one fall due", rows("loan_10"),
-    ref=[ans(kind="task", name="Car loan payment", where='status = "open"')]),
-  T("make it priority one, i always forget", diff(upd("loan_10", priority=1)),
-    ref=[act("edit", rows="$loan_10", args=lines(priority=1))]))

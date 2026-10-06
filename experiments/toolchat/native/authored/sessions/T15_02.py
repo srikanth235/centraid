@@ -109,12 +109,6 @@ S("T15-035", "task span effort reschedule",
   T("is the ctd calibration in progress", rows("ctd"),
     ref=[ans(kind="task", name="Calibrate CTD sensors")]))
 
-S("T15-036", "people contacted spans",
-  T("who did i talk to between friday noon and sunday evening", rows("marianne", "torstein"),
-    ref=[ans(kind="person", when=W(span(U("week", -1, weekday=5, time="12:00"), U("week", -1, weekday=7, time="18:00"))))]),
-  T("and from the start of last week to wednesday noon", rows("linnea", "sofie", "erik_j", "kaja", "erik_n", "hallvard"),
-    ref=[ans(kind="person", when=W(span(U("week", -1), U("week", -1, weekday=3, time="12:00"))))]))
-
 S("T15-037", "photos album count add_to albums photo count",
   T("photos with no album assigned",
     rows("p_sauna", "p_abisko", "p_seminar", "p_receipt", "p_ctd", "p_kiel", "p_mum", "p_tyres", "p_marte", "p_fjord"),
@@ -130,8 +124,8 @@ S("T15-038", "ambiguous document star ask folder",
          askc("hv-2609 or the hv-2610 draft?", options="$report_09, $report_10")]),
   T("the 2610 draft", diff(upd("report_10", starred=True)),
     ref=[act("star", rows="$report_10")]),
-  T("what's else in cruise reports", rows("report_09", "report_10"),
-    ref=[ans(kind="document", linked_to="$reports_f")]))
+  T("what's else in cruise reports", rows("report_09"),
+    ref=[ans(kind="document", linked_to="$reports_f", exclude="$report_10")]))
 
 S("T15-039", "ambiguous list edit multi",
   T("set the area on the cruise list to at sea", ask("prep_l", "gear_l"),
@@ -258,11 +252,6 @@ X("T15-031",
     ref=[act("create", args=lines(kind="task", name="Pick up the survival suit from Bjørn"))]),
   T("undo that, he's dropping it off", diff(trash("+1")),
     ref=[act("undo")]))
-
-X("T15-036",
-  T("when do i next see halle", rows("plan_1111"),
-    ref=[search("Halle", kind="person"),
-         ans(kind="event", linked_to="$hallvard", when=W({"from": U("day", 0)}), order="date asc", limit=1)]))
 
 X("T15-042",
   T("what's on the list for the svalbard trip", decline("not_found"),

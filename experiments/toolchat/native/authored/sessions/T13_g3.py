@@ -101,7 +101,7 @@ S("T13-138", "latest photos limit then unbounded then task min",
   T("clear out all my debts, they're all sorted anyway and i don't want the list hanging over me", decline("unbounded_destruction"),
     ref=[dec("unbounded_destruction")]),
   T("what's the quickest thing on the house list that isn't done, i've got five minutes before i leave", val(5),
-    ref=[ans(op="min", field="effort", kind="task", linked_to="$house_l", where='status != "completed"')]),
+    ref=[ans(op="min", field="effort", kind="task", linked_to="$house_l", where='status = "open"')]),
   T("and what's the longest job on the thesis list, the review chapter i assume", val(300),
     ref=[ans(op="max", field="effort", kind="task", linked_to="$thesis_l", where=LIVE)]))
 

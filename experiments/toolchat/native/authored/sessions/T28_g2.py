@@ -28,21 +28,6 @@ S("T28-117", "ring by name reschedule star person balance positive",
   T("what does mere owe me", val((215, "NZD")),
     ref=[ans(op="balance", rows="$mere")]))
 
-S("T28-118", "ask options order tasks never mind",
-  T("tick the order task", ask("tshirts", "meat"),
-    ref=[act("complete", kind="task", name="Order"),
-         askc("order reunion t-shirts or order meat for the hāngī?", options="$tshirts, $meat")]),
-  T("never mind, haven't ordered either", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
-S("T28-119", "order by name reschedule balance negative",
-  T("tick order reunion t-shirts, mere did it", diff(upd("tshirts", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Order reunion t-shirts")]),
-  T("push the meat order for the hāngī to march 20", diff(upd("meat", date="2026-03-20")),
-    ref=[act("reschedule", kind="task", name="Order meat for the hāngī", args=lines(to=D("2026-03-20")))]),
-  T("do i still owe sam next door", val((-15, "NZD")),
-    ref=[ans(op="balance", rows="$sam")]))
-
 S("T28-120", "ask options ngata log group balance positive",
   T("log a visit with ngata, dropped off the koha", ask("pita", "tui"),
     ref=[act("log", kind="person", name="Ngata", args=lines(kind="visit")),

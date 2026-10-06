@@ -44,11 +44,8 @@ S("T13-104", "ask document star stipend near duplicates",
     ref=[act("star", rows="$stipend_jul")]))
 
 S("T13-105", "ask locker star monzo unstar",
-  T("star monzo", ask("monzo", "monzo_acct"),
-    ref=[act("star", kind="locker item", name="Monzo"),
-         askc("the monzo card or the current account?", options="$monzo, $monzo_acct")]),
-  T("the account", diff(upd("monzo_acct", starred=True)),
-    ref=[act("star", rows="$monzo_acct")]),
+  T("star monzo", diff(upd("monzo_acct", starred=True)),
+    ref=[act("star", kind="locker item", name="Monzo")]),
   T("take the star off the card, i never use it", diff(upd("monzo", starred=False)),
     ref=[act("unstar", rows="$monzo")]),
   T("and star the gtbank card", diff(upd("gtbank", starred=True)),
@@ -63,16 +60,6 @@ S("T13-106", "ask event cancel supervisor meeting then log",
     ref=[act("cancel", rows="$helen_0909")]),
   T("log a message to helen, told her it's off", diff(upd("helen", date=ANY)),
     ref=[act("log", kind="person", name="Helen", args=lines(kind="message"))]))
-
-S("T13-107", "ask task delete timesheet then undo",
-  T("delete the timesheet task", ask("ts_aug", "ts_sep", "ts_jul"),
-    ref=[act("delete", kind="task", name="timesheet"),
-         find(kind="task", name="timesheet"),
-         askc("august, september or the july one?", options="$ts_aug, $ts_sep, $ts_jul")]),
-  T("august, i did it on paper", diff(trash("ts_aug")),
-    ref=[act("delete", rows="$ts_aug")]),
-  T("actually undo, i still have to submit it", diff(restore("ts_aug")),
-    ref=[act("undo")]))
 
 S("T13-108", "balance person emeka priya chinedu",
   T("what do i owe emeka", val((-20, "GBP")),

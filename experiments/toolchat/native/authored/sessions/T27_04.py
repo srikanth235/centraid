@@ -70,8 +70,7 @@ S("T27-080", "pregnancy notes person count body edit",
   T("add: and around 11pm", diff(upd("kicks", body=has("11pm"))),
     ref=[act("edit", rows="$kicks", args=lines(body="most active after coffee, and around 11pm"))]),
   T("pay the electricity bill is done btw", diff(upd("elec_12", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pay the electricity bill"),
-         act("complete", kind="task", name="Pay the electricity bill", where='status = "open"')]))
+    ref=[act("complete", kind="task", name="Pay the electricity bill")]))
 
 S("T27-081", "note month to month body literal person log",
   T("notes i wrote in september or october", rows("layout", "flour_notes", "sign_words", "lease_points"),

@@ -109,11 +109,8 @@ S("T24-109", "ask options locker star unstar",
     ref=[act("unstar", kind="locker item", name="Venmo")]))
 
 S("T24-110", "ask options locker star wifi read",
-  T("star the credit union one", ask("debit", "savings"),
-    ref=[act("star", kind="locker item", name="credit union"),
-         askc("the debit card or the savings account?", options="$debit, $savings")]),
-  T("savings", diff(upd("savings", starred=True)),
-    ref=[act("star", rows="$savings")]),
+  T("star the credit union one", diff(upd("savings", starred=True)),
+    ref=[act("star", kind="locker item", name="credit union")]),
   T("wifi password", rows("wifi", "wifi_rudy"),
     ref=[ans(kind="locker item", where='type = "wifi"')]),
   T("and star the district id, i need it every monday", diff(upd("district_id", starred=True)),

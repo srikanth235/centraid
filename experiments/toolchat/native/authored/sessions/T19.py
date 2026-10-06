@@ -36,13 +36,6 @@ S("T19-004", "single delete event where weekday time",
   T("delete whatever i had at 7pm this thursday, not happening", diff(trash("yoga")),
     ref=[act("delete", kind="event", when=W(U("week", 0, weekday=4, time="19:00")))]))
 
-S("T19-005", "complete task multi list read",
-  T("buy adam's swimming goggles and sign adam's homework book, both done",
-    diff(upd("goggles", status="completed", completed=ANY), upd("homework", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$goggles, $homework")]),
-  T("what's open on the kids list", rows("fees", "lina_forms", "rota_mail"),
-    ref=[ans(kind="task", linked_to="$kids_l", where='status = "open"')]))
-
 S("T19-006", "create task complete reopen new",
   T("remind me to call Rkia about next week's visits, tomorrow",
     diff(new("task", name=has("Rkia"), date="2026-04-15")),
@@ -60,12 +53,6 @@ S("T19-007", "edit note named read",
              args=lines(body="fasting 1.32, 1.28, 1.45 after couscous on Friday, 1.52 after dinner tonight"))]),
   T("is that one pinned?", rows("readings"),
     ref=[ans(rows="$readings")]))
-
-S("T19-008", "delete note named undo delete",
-  T("delete the car service notes, the garage has it all", diff(trash("car_note")),
-    ref=[act("delete", kind="note", name="Car service notes")]),
-  T("no wait undo, i need the tyre bit", diff(restore("car_note")),
-    ref=[act("undo")]))
 
 S("T19-009", "edit document where today add_to",
   T("the scan i made today is baba's new prescription, call it Baba's prescription April",
@@ -139,25 +126,6 @@ S("T19-018", "list task count find edit prev",
     ref=[find(kind="list", where="task count = 0"), ans(rows="@prev")]),
   T("rename it Agadir in July", diff(upd("summer_l", name="Agadir in July")),
     ref=[act("edit", rows="@prev", args=lines(name="Agadir in July"))]))
-
-S("T19-019", "create person add_to group settle_up new already",
-  T("add Loubna Rami, the new cashier, and put her in the coffee fund",
-    diff(new("person", name="Loubna Rami", role=ANY), link("coffee", "new")),
-    ref=[act("create", args=lines(kind="person", name="Loubna Rami", role="cashier"), more=True),
-         act("add_to", rows="$new", args=lines(to="$coffee"))]),
-  T("settle her up in the fund so she starts clean", diff(already=["+1"]),
-    ref=[act("settle_up", rows="$c1", kind="person", args=lines(group="$coffee")), ans(rows="$c1")]))
-
-S("T19-020", "single decline out_of_scope",
-  T("can you place tomorrow's order on the wholesaler site for me", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]))
-
-S("T19-021", "compute sum group status pharmacy list",
-  T("how much work is left on the pharmacy list, total minutes by status",
-    vgroups({"open": 350, "completed": 80, "in_progress": 0, "cancelled": 0}),
-    ref=[comp(op="sum", field="effort", group="status", kind="task", linked_to="$pharm_l"), ans(value="@prev")]),
-  T("which open ones are the long ones, over an hour", rows("count_sheets"),
-    ref=[ans(kind="task", linked_to="$pharm_l", where='status = "open" and effort > 60')]))
 
 S("T19-022", "ambiguous locker reveal pick",
   T("what's the wifi password", rows("wifi_home", "wifi_pharm"),

@@ -1,0 +1,2793 @@
+{
+ "me": "Tomasz Wisniewski",
+ "today": "2026-11-05T20:40",
+ "epoch": "2025-02-01T09:00",
+ "seed": "T31",
+ "currency": "PLN",
+ "people": [
+  {
+   "key": "kuba",
+   "name": "Kuba Nowak",
+   "role": "flatmate",
+   "nickname": "Kubus",
+   "starred": true,
+   "cadence": 1,
+   "last_contacted": "2026-11-05T07:10",
+   "created": "2025-02-01T09:00"
+  },
+  {
+   "key": "ola",
+   "name": "Ola Mazur",
+   "role": "flatmate",
+   "starred": true,
+   "cadence": 1,
+   "last_contacted": "2026-11-04T22:30",
+   "created": "2025-02-01T09:05"
+  },
+  {
+   "key": "kasia",
+   "name": "Kasia Wisniewska",
+   "role": "sister",
+   "starred": true,
+   "cadence": 7,
+   "last_contacted": "2026-11-01T19:30",
+   "last_contacted_kind": "call",
+   "met": "London"
+  },
+  {
+   "key": "james",
+   "name": "James Whitfield",
+   "role": "sister's partner",
+   "met": "London",
+   "cadence": 45,
+   "last_contacted": "2026-09-20T18:00",
+   "last_contacted_kind": "message"
+  },
+  {
+   "key": "mama",
+   "name": "Halina Wisniewska",
+   "role": "mum",
+   "nickname": "Mama",
+   "starred": true,
+   "cadence": 3,
+   "last_contacted": "2026-11-01T18:40",
+   "last_contacted_kind": "call",
+   "met": "Nowy Sacz"
+  },
+  {
+   "key": "tata",
+   "name": "Andrzej Wisniewski",
+   "role": "dad",
+   "nickname": "Tata",
+   "cadence": 10,
+   "last_contacted": "2026-10-25T18:40",
+   "last_contacted_kind": "call",
+   "met": "Nowy Sacz"
+  },
+  {
+   "key": "babcia",
+   "name": "Zofia Wisniewska",
+   "role": "grandmother",
+   "nickname": "Babcia",
+   "cadence": 14,
+   "last_contacted": "2026-10-18T15:00",
+   "last_contacted_kind": "visit",
+   "met": "Nowy Sacz"
+  },
+  {
+   "key": "marcin_l",
+   "name": "Marcin Lis",
+   "role": "five-a-side captain",
+   "met": "Tuesday football",
+   "starred": true,
+   "cadence": 7,
+   "last_contacted": "2026-11-03T21:15"
+  },
+  {
+   "key": "marcin_b",
+   "name": "Marcin Baran",
+   "role": "nurse, ward 4B",
+   "met": "University Hospital",
+   "cadence": 14,
+   "last_contacted": "2026-11-05T14:30"
+  },
+  {
+   "key": "tomek_m",
+   "name": "Tomek Maj",
+   "role": "five-a-side goalkeeper",
+   "met": "Tuesday football"
+  },
+  {
+   "key": "piotr",
+   "name": "Piotr Zawada",
+   "role": "five-a-side",
+   "met": "Tuesday football"
+  },
+  {
+   "key": "darek",
+   "name": "Darek Pawlak",
+   "role": "five-a-side",
+   "met": "Tuesday football"
+  },
+  {
+   "key": "bartek",
+   "name": "Bartek Sowa",
+   "role": "five-a-side",
+   "met": "Tuesday football"
+  },
+  {
+   "key": "michal",
+   "name": "Michał Kruk",
+   "role": "five-a-side",
+   "met": "Tuesday football"
+  },
+  {
+   "key": "anna_w",
+   "name": "Anna Wrobel",
+   "role": "head nurse",
+   "nickname": "Oddzialowa",
+   "met": "University Hospital",
+   "cadence": 30,
+   "last_contacted": "2026-10-30T09:00"
+  },
+  {
+   "key": "ewa",
+   "name": "Ewa Jablonska",
+   "role": "nurse, ward 4B",
+   "met": "University Hospital",
+   "cadence": 21,
+   "last_contacted": "2026-11-02T13:00",
+   "last_contacted_kind": "message"
+  },
+  {
+   "key": "magda",
+   "name": "Magda Pietrzak",
+   "role": "nurse, night team",
+   "met": "University Hospital"
+  },
+  {
+   "key": "przemek",
+   "name": "Przemyslaw Szczepanski",
+   "role": "doctor, ward 4B",
+   "nickname": "Przemek",
+   "met": "University Hospital"
+  },
+  {
+   "key": "anna_wl",
+   "name": "Anna Wroblewska",
+   "role": "friend",
+   "met": "nursing school",
+   "cadence": 30,
+   "last_contacted": "2026-10-11T20:00"
+  },
+  {
+   "key": "adrian",
+   "name": "Adrian Kubiak",
+   "role": "friend",
+   "nickname": "Adi",
+   "met": "nursing school",
+   "starred": true,
+   "cadence": 14,
+   "last_contacted": "2026-10-29T21:00"
+  },
+  {
+   "key": "natalia",
+   "name": "Natalia Gajewska",
+   "role": "friend",
+   "met": "nursing school"
+  },
+  {
+   "key": "agnieszka",
+   "name": "Agnieszka Dabrowska",
+   "role": "friend",
+   "met": "Zakopane"
+  },
+  {
+   "key": "agnieszka_n",
+   "name": "Agnieszka Dabrowska-Nowak",
+   "role": "friend of Ola",
+   "met": "Krakowska flat"
+  },
+  {
+   "key": "basia",
+   "name": "Basia Kwiatkowska",
+   "role": "friend",
+   "met": "Zakopane"
+  },
+  {
+   "key": "landlord",
+   "name": "Stanislaw Gora",
+   "role": "landlord",
+   "nickname": "Pan Stanislaw",
+   "met": "Krakowska flat"
+  },
+  {
+   "key": "hania",
+   "name": "Hanna Wojcik",
+   "role": "neighbour",
+   "nickname": "Pani Hania",
+   "met": "Krakowska flat"
+  },
+  {
+   "key": "dentist",
+   "name": "Łukasz Sikora",
+   "role": "dentist",
+   "nickname": "Dr Sikora"
+  },
+  {
+   "key": "physio",
+   "name": "Weronika Czarnecka",
+   "role": "physiotherapist",
+   "nickname": "Weronika Physio"
+  },
+  {
+   "key": "barber",
+   "name": "Wojciech Szymanski",
+   "role": "barber",
+   "nickname": "Wojtek"
+  },
+  {
+   "key": "old_flat",
+   "name": "Mateusz Rutkowski",
+   "role": "old flatmate",
+   "met": "Podgorze flat",
+   "trashed": "2026-08-20T10:00"
+  },
+  {
+   "key": "old_coll",
+   "name": "Iga Walczak",
+   "role": "old colleague",
+   "met": "Ward 2A",
+   "trashed": "2026-10-25T10:00"
+  }
+ ],
+ "groups": [
+  {
+   "key": "flat_bills",
+   "name": "Flat Bills",
+   "currency": "PLN",
+   "members": [
+    "kuba",
+    "ola"
+   ],
+   "created": "2025-02-01T10:00"
+  },
+  {
+   "key": "fiveaside",
+   "name": "Tuesday Football Fund",
+   "currency": "PLN",
+   "members": [
+    "marcin_l",
+    "tomek_m",
+    "piotr",
+    "darek",
+    "bartek",
+    "michal"
+   ],
+   "created": "2025-09-02T20:00"
+  },
+  {
+   "key": "london",
+   "name": "London Christmas",
+   "currency": "GBP",
+   "members": [
+    "kasia",
+    "james"
+   ],
+   "created": "2026-10-01T19:00"
+  },
+  {
+   "key": "ward_gifts",
+   "name": "Ward 4B Gifts",
+   "currency": "PLN",
+   "members": [
+    "marcin_b",
+    "ewa",
+    "magda",
+    "przemek",
+    "anna_w"
+   ],
+   "created": "2025-06-10T08:30"
+  },
+  {
+   "key": "zakopane",
+   "name": "Zakopane Weekend",
+   "currency": "PLN",
+   "members": [
+    "adrian",
+    "natalia",
+    "agnieszka",
+    "basia",
+    "anna_wl"
+   ],
+   "created": "2026-09-14T19:00"
+  },
+  {
+   "key": "stag",
+   "name": "Adi's Stag Do 2027",
+   "currency": "PLN",
+   "members": [
+    "adrian",
+    "marcin_l"
+   ],
+   "created": "2026-10-28T21:00"
+  }
+ ],
+ "expenses": [
+  {
+   "group": "flat_bills",
+   "name": "Internet October",
+   "amount": 60,
+   "paid_by": "kuba",
+   "split": [
+    "me",
+    "kuba",
+    "ola"
+   ],
+   "date": "2026-10-03"
+  },
+  {
+   "group": "flat_bills",
+   "name": "Electricity bill",
+   "amount": 270,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "kuba",
+    "ola"
+   ],
+   "date": "2026-10-12"
+  },
+  {
+   "group": "flat_bills",
+   "name": "Cleaning supplies",
+   "amount": 84,
+   "paid_by": "ola",
+   "split": [
+    "me",
+    "kuba",
+    "ola"
+   ],
+   "date": "2026-10-20"
+  },
+  {
+   "group": "flat_bills",
+   "name": "Gas bill",
+   "amount": 150,
+   "paid_by": "kuba",
+   "split": [
+    "me",
+    "kuba",
+    "ola"
+   ],
+   "date": "2026-11-02"
+  },
+  {
+   "group": "fiveaside",
+   "name": "Hall rental November",
+   "amount": 480,
+   "paid_by": "marcin_l",
+   "split": [
+    "me",
+    "marcin_l",
+    "tomek_m",
+    "piotr",
+    "darek",
+    "bartek"
+   ],
+   "date": "2026-11-01"
+  },
+  {
+   "group": "fiveaside",
+   "name": "New match balls",
+   "amount": 180,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "marcin_l",
+    "piotr",
+    "michal"
+   ],
+   "date": "2026-10-06"
+  },
+  {
+   "group": "fiveaside",
+   "name": "Post-game pizza",
+   "amount": 135,
+   "paid_by": "darek",
+   "split": [
+    "me",
+    "darek",
+    "bartek",
+    "michal"
+   ],
+   "date": "2026-10-27"
+  },
+  {
+   "group": "london",
+   "name": "Christmas market tickets",
+   "amount": 48,
+   "paid_by": "kasia",
+   "split": [
+    "me",
+    "kasia",
+    "james"
+   ],
+   "date": "2026-10-18"
+  },
+  {
+   "group": "london",
+   "name": "Airport transfer",
+   "amount": 36,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "kasia"
+   ],
+   "date": "2026-10-19"
+  },
+  {
+   "group": "ward_gifts",
+   "name": "Flowers for Oddzialowa",
+   "amount": 120,
+   "paid_by": "ewa",
+   "split": [
+    "me",
+    "ewa",
+    "marcin_b",
+    "magda",
+    "anna_w"
+   ],
+   "date": "2026-09-25"
+  },
+  {
+   "group": "ward_gifts",
+   "name": "Leaving card and chocolates",
+   "amount": 90,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "ewa",
+    "magda"
+   ],
+   "date": "2026-10-16"
+  },
+  {
+   "group": "zakopane",
+   "name": "Pension deposit",
+   "amount": 900,
+   "paid_by": "natalia",
+   "split": [
+    "me",
+    "adrian",
+    "natalia",
+    "agnieszka",
+    "basia"
+   ],
+   "date": "2026-09-20"
+  },
+  {
+   "group": "zakopane",
+   "name": "Ski passes",
+   "amount": 640,
+   "paid_by": "me",
+   "split": [
+    "me",
+    "adrian",
+    "natalia",
+    "basia"
+   ],
+   "date": "2026-10-22"
+  }
+ ],
+ "lists": [
+  {
+   "key": "flat_l",
+   "name": "Flat",
+   "area": "home"
+  },
+  {
+   "key": "ward_l",
+   "name": "Ward",
+   "area": "work"
+  },
+  {
+   "key": "football_l",
+   "name": "Football",
+   "area": "social"
+  },
+  {
+   "key": "family_l",
+   "name": "Family",
+   "area": "family"
+  },
+  {
+   "key": "admin_l",
+   "name": "Admin",
+   "area": "home"
+  }
+ ],
+ "events": [
+  {
+   "key": "fas_0908",
+   "name": "Five-a-side - Orlik",
+   "start": "2026-09-08T20:00",
+   "end": "2026-09-08T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "Orlik behind the school on Zabiniec"
+  },
+  {
+   "key": "fas_0915",
+   "name": "Five-a-side - Orlik",
+   "start": "2026-09-15T20:00",
+   "end": "2026-09-15T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "Orlik behind the school on Zabiniec"
+  },
+  {
+   "key": "fas_0922",
+   "name": "Five-a-side - Orlik",
+   "start": "2026-09-22T20:00",
+   "end": "2026-09-22T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "Orlik behind the school on Zabiniec"
+  },
+  {
+   "key": "fas_0929",
+   "name": "Five-a-side - Orlik",
+   "start": "2026-09-29T20:00",
+   "end": "2026-09-29T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "Orlik behind the school on Zabiniec"
+  },
+  {
+   "key": "fas_1006",
+   "name": "Five-a-side - Orlik",
+   "start": "2026-10-06T20:00",
+   "end": "2026-10-06T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "Orlik behind the school on Zabiniec"
+  },
+  {
+   "key": "fas_1013",
+   "name": "Five-a-side - Orlik",
+   "start": "2026-10-13T20:00",
+   "end": "2026-10-13T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": true,
+   "description": "Orlik behind the school on Zabiniec"
+  },
+  {
+   "key": "fas_1020",
+   "name": "Five-a-side - Orlik",
+   "start": "2026-10-20T20:00",
+   "end": "2026-10-20T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "Orlik behind the school on Zabiniec"
+  },
+  {
+   "key": "fas_1027",
+   "name": "Five-a-side - Orlik",
+   "start": "2026-10-27T20:00",
+   "end": "2026-10-27T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "Orlik behind the school on Zabiniec"
+  },
+  {
+   "key": "fas_1103",
+   "name": "Five-a-side - hall",
+   "start": "2026-11-03T20:00",
+   "end": "2026-11-03T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "bring indoor shoes"
+  },
+  {
+   "key": "fas_1110",
+   "name": "Five-a-side - hall",
+   "start": "2026-11-10T20:00",
+   "end": "2026-11-10T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "bring indoor shoes"
+  },
+  {
+   "key": "fas_1117",
+   "name": "Five-a-side - hall",
+   "start": "2026-11-17T20:00",
+   "end": "2026-11-17T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "bring indoor shoes"
+  },
+  {
+   "key": "fas_1124",
+   "name": "Five-a-side - hall",
+   "start": "2026-11-24T20:00",
+   "end": "2026-11-24T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "bring indoor shoes"
+  },
+  {
+   "key": "fas_1201",
+   "name": "Five-a-side - hall",
+   "start": "2026-12-01T20:00",
+   "end": "2026-12-01T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "bring indoor shoes"
+  },
+  {
+   "key": "fas_1208",
+   "name": "Five-a-side - hall",
+   "start": "2026-12-08T20:00",
+   "end": "2026-12-08T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "bring indoor shoes"
+  },
+  {
+   "key": "fas_1215",
+   "name": "Five-a-side - hall",
+   "start": "2026-12-15T20:00",
+   "end": "2026-12-15T21:30",
+   "attendees": [
+    "marcin_l",
+    "tomek_m",
+    "piotr"
+   ],
+   "cancelled": false,
+   "description": "bring indoor shoes"
+  },
+  {
+   "key": "league_0920",
+   "name": "League match",
+   "start": "2026-09-20T11:00",
+   "end": "2026-09-20T12:30",
+   "attendees": [
+    "marcin_l",
+    "darek",
+    "bartek"
+   ],
+   "cancelled": false
+  },
+  {
+   "key": "league_1004",
+   "name": "League match",
+   "start": "2026-10-04T11:00",
+   "end": "2026-10-04T12:30",
+   "attendees": [
+    "marcin_l",
+    "darek",
+    "bartek"
+   ],
+   "cancelled": false
+  },
+  {
+   "key": "league_1018",
+   "name": "League match",
+   "start": "2026-10-18T11:00",
+   "end": "2026-10-18T12:30",
+   "attendees": [
+    "marcin_l",
+    "darek",
+    "bartek"
+   ],
+   "cancelled": true
+  },
+  {
+   "key": "league_1108",
+   "name": "League match",
+   "start": "2026-11-08T11:00",
+   "end": "2026-11-08T12:30",
+   "attendees": [
+    "marcin_l",
+    "darek",
+    "bartek"
+   ],
+   "cancelled": false
+  },
+  {
+   "key": "league_1122",
+   "name": "League match",
+   "start": "2026-11-22T11:00",
+   "end": "2026-11-22T12:30",
+   "attendees": [
+    "marcin_l",
+    "darek",
+    "bartek"
+   ],
+   "cancelled": false
+  },
+  {
+   "key": "league_1206",
+   "name": "League match",
+   "start": "2026-12-06T11:00",
+   "end": "2026-12-06T12:30",
+   "attendees": [
+    "marcin_l",
+    "darek",
+    "bartek"
+   ],
+   "cancelled": false
+  },
+  {
+   "key": "mama_1004",
+   "name": "Call Mama",
+   "start": "2026-10-04T18:30",
+   "end": "2026-10-04T19:00",
+   "attendees": [
+    "mama"
+   ],
+   "description": "Babcia will be there too"
+  },
+  {
+   "key": "mama_1011",
+   "name": "Call Mama",
+   "start": "2026-10-11T18:30",
+   "end": "2026-10-11T19:00",
+   "attendees": [
+    "mama"
+   ]
+  },
+  {
+   "key": "mama_1018",
+   "name": "Call Mama",
+   "start": "2026-10-18T18:30",
+   "end": "2026-10-18T19:00",
+   "attendees": [
+    "mama"
+   ],
+   "description": "Babcia will be there too"
+  },
+  {
+   "key": "mama_1025",
+   "name": "Call Mama",
+   "start": "2026-10-25T18:30",
+   "end": "2026-10-25T19:00",
+   "attendees": [
+    "mama"
+   ]
+  },
+  {
+   "key": "mama_1101",
+   "name": "Call Mama",
+   "start": "2026-11-01T18:30",
+   "end": "2026-11-01T19:00",
+   "attendees": [
+    "mama"
+   ]
+  },
+  {
+   "key": "mama_1108",
+   "name": "Call Mama",
+   "start": "2026-11-08T18:30",
+   "end": "2026-11-08T19:00",
+   "attendees": [
+    "mama"
+   ],
+   "description": "Babcia will be there too"
+  },
+  {
+   "key": "mama_1115",
+   "name": "Call Mama",
+   "start": "2026-11-15T18:30",
+   "end": "2026-11-15T19:00",
+   "attendees": [
+    "mama"
+   ]
+  },
+  {
+   "key": "mama_1122",
+   "name": "Call Mama",
+   "start": "2026-11-22T18:30",
+   "end": "2026-11-22T19:00",
+   "attendees": [
+    "mama"
+   ],
+   "description": "Babcia will be there too"
+  },
+  {
+   "key": "mama_1129",
+   "name": "Call Mama",
+   "start": "2026-11-29T18:30",
+   "end": "2026-11-29T19:00",
+   "attendees": [
+    "mama"
+   ]
+  },
+  {
+   "key": "mama_1206",
+   "name": "Call Mama",
+   "start": "2026-12-06T18:30",
+   "end": "2026-12-06T19:00",
+   "attendees": [
+    "mama"
+   ],
+   "description": "Babcia will be there too"
+  },
+  {
+   "key": "shift_1026",
+   "name": "Day shift",
+   "start": "2026-10-26T07:00",
+   "end": "2026-10-26T15:30",
+   "attendees": [
+    "marcin_b",
+    "ewa"
+   ]
+  },
+  {
+   "key": "shift_1027",
+   "name": "Day shift",
+   "start": "2026-10-27T07:00",
+   "end": "2026-10-27T15:30",
+   "attendees": [
+    "marcin_b",
+    "ewa"
+   ]
+  },
+  {
+   "key": "shift_1029",
+   "name": "Night shift",
+   "start": "2026-10-29T20:00",
+   "end": "2026-10-30T06:00",
+   "attendees": [
+    "magda",
+    "przemek"
+   ]
+  },
+  {
+   "key": "shift_1030",
+   "name": "Night shift",
+   "start": "2026-10-30T20:00",
+   "end": "2026-10-31T06:00",
+   "attendees": [
+    "magda",
+    "przemek"
+   ]
+  },
+  {
+   "key": "shift_1102",
+   "name": "Day shift",
+   "start": "2026-11-02T07:00",
+   "end": "2026-11-02T15:30",
+   "attendees": [
+    "marcin_b",
+    "ewa"
+   ]
+  },
+  {
+   "key": "shift_1104",
+   "name": "Day shift",
+   "start": "2026-11-04T07:00",
+   "end": "2026-11-04T15:30",
+   "attendees": [
+    "marcin_b",
+    "ewa"
+   ]
+  },
+  {
+   "key": "shift_1105",
+   "name": "Day shift",
+   "start": "2026-11-05T07:00",
+   "end": "2026-11-05T15:30",
+   "attendees": [
+    "marcin_b",
+    "ewa"
+   ]
+  },
+  {
+   "key": "shift_1109",
+   "name": "Night shift",
+   "start": "2026-11-09T20:00",
+   "end": "2026-11-10T06:00",
+   "attendees": [
+    "magda",
+    "przemek"
+   ]
+  },
+  {
+   "key": "shift_1111",
+   "name": "Night shift",
+   "start": "2026-11-11T20:00",
+   "end": "2026-11-12T06:00",
+   "attendees": [
+    "magda",
+    "przemek"
+   ]
+  },
+  {
+   "key": "shift_1116",
+   "name": "Day shift",
+   "start": "2026-11-16T07:00",
+   "end": "2026-11-16T15:30",
+   "attendees": [
+    "marcin_b",
+    "ewa"
+   ]
+  },
+  {
+   "key": "shift_1118",
+   "name": "Day shift",
+   "start": "2026-11-18T07:00",
+   "end": "2026-11-18T15:30",
+   "attendees": [
+    "marcin_b",
+    "ewa"
+   ]
+  },
+  {
+   "key": "shift_1123",
+   "name": "Night shift",
+   "start": "2026-11-23T20:00",
+   "end": "2026-11-24T06:00",
+   "attendees": [
+    "magda",
+    "przemek"
+   ]
+  },
+  {
+   "key": "night_swap",
+   "name": "Night shift - swap with Marcin",
+   "start": "2026-11-13T20:00",
+   "end": "2026-11-14T06:00",
+   "attendees": [
+    "marcin_b"
+   ]
+  },
+  {
+   "key": "night_swap_old",
+   "name": "Night shift - swap with Marcin",
+   "start": "2026-10-09T20:00",
+   "end": "2026-10-10T06:00",
+   "attendees": [
+    "marcin_b"
+   ]
+  },
+  {
+   "key": "flat_dinner",
+   "name": "Flat dinner",
+   "start": "2026-11-07T19:30",
+   "end": "2026-11-07T22:00",
+   "attendees": [
+    "kuba",
+    "ola"
+   ]
+  },
+  {
+   "key": "flat_dinner2",
+   "name": "Flat dinner",
+   "start": "2026-10-24T19:30",
+   "end": "2026-10-24T22:00",
+   "attendees": [
+    "kuba",
+    "ola"
+   ]
+  },
+  {
+   "key": "landlord_visit",
+   "name": "Landlord checks the boiler",
+   "start": "2026-11-09T17:00",
+   "end": "2026-11-09T18:00",
+   "attendees": [
+    "landlord"
+   ]
+  },
+  {
+   "key": "dentist_ev",
+   "name": "Dentist check-up",
+   "start": "2026-11-19T15:45",
+   "end": "2026-11-19T16:30",
+   "attendees": [
+    "dentist"
+   ]
+  },
+  {
+   "key": "dentist_ev2",
+   "name": "Dentist check-up",
+   "start": "2026-05-14T15:45",
+   "end": "2026-05-14T16:30",
+   "attendees": [
+    "dentist"
+   ]
+  },
+  {
+   "key": "physio_a",
+   "name": "Physio - shoulder",
+   "start": "2026-11-12T16:30",
+   "end": "2026-11-12T17:15",
+   "attendees": [
+    "physio"
+   ]
+  },
+  {
+   "key": "physio_b",
+   "name": "Physio - shoulder",
+   "start": "2026-11-26T16:30",
+   "end": "2026-11-26T17:15",
+   "attendees": [
+    "physio"
+   ]
+  },
+  {
+   "key": "physio_c",
+   "name": "Physio - knee",
+   "start": "2026-10-22T16:30",
+   "end": "2026-10-22T17:15",
+   "attendees": [
+    "physio"
+   ]
+  },
+  {
+   "key": "barber_ev",
+   "name": "Haircut with Wojtek",
+   "start": "2026-11-14T10:00",
+   "end": "2026-11-14T10:40",
+   "attendees": [
+    "barber"
+   ]
+  },
+  {
+   "key": "brunch_adi",
+   "name": "Brunch with Adi",
+   "start": "2026-11-08T13:30",
+   "end": "2026-11-08T15:00",
+   "attendees": [
+    "adrian"
+   ]
+  },
+  {
+   "key": "coffee_ola",
+   "name": "Coffee with Ola",
+   "start": "2026-11-06T17:30",
+   "end": "2026-11-06T18:30",
+   "attendees": [
+    "ola"
+   ]
+  },
+  {
+   "key": "hospital_party",
+   "name": "Ward 4B Christmas party",
+   "start": "2026-12-11T19:00",
+   "end": "2026-12-11T23:30",
+   "attendees": [
+    "anna_w",
+    "ewa",
+    "marcin_b",
+    "magda",
+    "przemek"
+   ]
+  },
+  {
+   "key": "cpr_course",
+   "name": "CPR recertification course",
+   "start": "2026-11-20T09:00",
+   "end": "2026-11-20T13:00",
+   "attendees": [
+    "przemek"
+   ]
+  },
+  {
+   "key": "kasia_call",
+   "name": "Call Kasia",
+   "start": "2026-11-08T20:00",
+   "end": "2026-11-08T20:40",
+   "attendees": [
+    "kasia"
+   ]
+  },
+  {
+   "key": "kasia_call2",
+   "name": "Call Kasia",
+   "start": "2026-11-22T20:00",
+   "end": "2026-11-22T20:40",
+   "attendees": [
+    "kasia"
+   ]
+  },
+  {
+   "key": "london_flight",
+   "name": "Flight to London",
+   "start": "2026-12-19T06:40",
+   "end": "2026-12-19T09:10",
+   "description": "Ryanair from Balice"
+  },
+  {
+   "key": "london_back",
+   "name": "Flight back from London",
+   "start": "2026-12-27T18:20",
+   "end": "2026-12-27T21:50",
+   "description": "Ryanair to Balice"
+  },
+  {
+   "key": "zakopane_trip",
+   "name": "Zakopane weekend",
+   "start": "2026-12-04T17:00",
+   "end": "2026-12-04T23:00",
+   "attendees": [
+    "adrian",
+    "natalia",
+    "agnieszka",
+    "basia"
+   ],
+   "description": "train from Glowny, ski on Saturday"
+  },
+  {
+   "key": "stag_planning",
+   "name": "Stag do planning dinner",
+   "start": "2026-11-28T19:00",
+   "end": "2026-11-28T21:30",
+   "attendees": [
+    "adrian",
+    "marcin_l"
+   ]
+  },
+  {
+   "key": "babcia_name_day",
+   "name": "Babcia's name day lunch",
+   "start": "2026-11-15T13:00",
+   "end": "2026-11-15T16:00",
+   "attendees": [
+    "babcia",
+    "mama",
+    "tata"
+   ],
+   "description": "Nowy Sacz, train at 9:15"
+  },
+  {
+   "key": "wedding_adi",
+   "name": "Marek and Zosia's wedding",
+   "start": "2026-11-21T14:00",
+   "end": "2026-11-21T23:59",
+   "attendees": [
+    "adrian",
+    "natalia"
+   ]
+  },
+  {
+   "key": "pit_deadline",
+   "name": "Accountant call about PIT",
+   "start": "2026-11-03T17:30",
+   "end": "2026-11-03T18:00"
+  },
+  {
+   "key": "old_match",
+   "name": "Charity match",
+   "start": "2026-09-27T15:00",
+   "end": "2026-09-27T17:00",
+   "trashed": "2026-10-02T10:00",
+   "attendees": [
+    "marcin_l",
+    "piotr"
+   ]
+  },
+  {
+   "key": "old_gig",
+   "name": "Concert at Alchemia",
+   "start": "2026-10-10T21:00",
+   "end": "2026-10-10T23:00",
+   "trashed": "2026-10-21T11:00",
+   "attendees": [
+    "adrian"
+   ]
+  },
+  {
+   "key": "old_dinner",
+   "name": "Dinner with Iga",
+   "start": "2026-08-07T19:00",
+   "end": "2026-08-07T21:00",
+   "trashed": "2026-09-01T10:00",
+   "attendees": [
+    "old_coll"
+   ]
+  }
+ ],
+ "tasks": [
+  {
+   "key": "london_trip",
+   "name": "Plan the London Christmas trip",
+   "list": "family_l",
+   "priority": 2,
+   "status": "in_progress",
+   "due": "2026-12-15"
+  },
+  {
+   "key": "london_flights",
+   "name": "Book flights to London",
+   "parent": "london_trip",
+   "list": "family_l",
+   "completed": "2026-10-05T21:00"
+  },
+  {
+   "key": "london_gifts",
+   "name": "Buy presents for Kasia and James",
+   "parent": "london_trip",
+   "list": "family_l",
+   "due": "2026-12-12",
+   "effort": 120
+  },
+  {
+   "key": "london_pounds",
+   "name": "Exchange some pounds",
+   "parent": "london_trip",
+   "list": "family_l",
+   "due": "2026-12-14",
+   "effort": 20
+  },
+  {
+   "key": "london_leave",
+   "name": "Get leave approved from Oddzialowa",
+   "parent": "london_trip",
+   "list": "ward_l",
+   "completed": "2026-09-29T14:00"
+  },
+  {
+   "key": "london_pack",
+   "name": "Pack the suitcase",
+   "parent": "london_trip",
+   "list": "family_l",
+   "due": "2026-12-18",
+   "effort": 45
+  },
+  {
+   "key": "rent_oct",
+   "name": "Pay rent",
+   "list": "flat_l",
+   "due": "2026-10-05",
+   "completed": "2026-10-04T19:00",
+   "priority": 1
+  },
+  {
+   "key": "rent_nov",
+   "name": "Pay rent",
+   "list": "flat_l",
+   "due": "2026-11-05",
+   "priority": 1
+  },
+  {
+   "key": "rent_sep",
+   "name": "Pay rent",
+   "list": "flat_l",
+   "due": "2026-09-05",
+   "completed": "2026-09-05T08:10"
+  },
+  {
+   "key": "gas_pay",
+   "name": "Pay the gas bill",
+   "list": "flat_l",
+   "due": "2026-11-12"
+  },
+  {
+   "key": "net_pay",
+   "name": "Pay internet",
+   "list": "flat_l",
+   "due": "2026-11-03",
+   "completed": "2026-11-03T07:50"
+  },
+  {
+   "key": "elec_pay",
+   "name": "Pay the electricity bill",
+   "list": "flat_l",
+   "due": "2026-10-15",
+   "completed": "2026-10-12T20:00"
+  },
+  {
+   "key": "bin_rota",
+   "name": "Take out the bins",
+   "list": "flat_l",
+   "due": "2026-11-06",
+   "effort": 5
+  },
+  {
+   "key": "bin_rota_prev",
+   "name": "Take out the bins",
+   "list": "flat_l",
+   "due": "2026-10-30",
+   "effort": 5,
+   "completed": "2026-10-30T07:00"
+  },
+  {
+   "key": "fix_shower",
+   "name": "Fix the shower head",
+   "list": "flat_l",
+   "due": "2026-11-14",
+   "effort": 30
+  },
+  {
+   "key": "descale",
+   "name": "Descale the kettle",
+   "list": "flat_l",
+   "effort": 10
+  },
+  {
+   "key": "sofa_ad",
+   "name": "Sell the old sofa",
+   "list": "flat_l",
+   "due": "2026-11-30",
+   "status": "cancelled"
+  },
+  {
+   "key": "shopping",
+   "name": "Buy milk, eggs and coffee",
+   "list": "flat_l",
+   "due": "2026-11-06",
+   "effort": 20
+  },
+  {
+   "key": "shopping_prev",
+   "name": "Buy milk, eggs and coffee",
+   "list": "flat_l",
+   "due": "2026-10-29",
+   "completed": "2026-10-29T18:40"
+  },
+  {
+   "key": "cpr_prep",
+   "name": "Do the CPR e-learning module",
+   "list": "ward_l",
+   "due": "2026-11-18",
+   "effort": 90,
+   "priority": 2
+  },
+  {
+   "key": "licence_renew",
+   "name": "Renew nursing licence paperwork",
+   "list": "ward_l",
+   "due": "2026-12-01",
+   "priority": 2,
+   "effort": 60
+  },
+  {
+   "key": "swap_shift",
+   "name": "Swap the 23 November night with Marcin",
+   "list": "ward_l",
+   "due": "2026-11-10"
+  },
+  {
+   "key": "handover",
+   "name": "Update the handover sheet",
+   "list": "ward_l",
+   "due": "2026-11-06",
+   "effort": 15
+  },
+  {
+   "key": "uniforms",
+   "name": "Collect clean scrubs",
+   "list": "ward_l",
+   "due": "2026-11-09",
+   "effort": 10
+  },
+  {
+   "key": "gift_card",
+   "name": "Sign the card for Oddzialowa",
+   "list": "ward_l",
+   "due": "2026-11-13"
+  },
+  {
+   "key": "timesheet",
+   "name": "Submit the overtime timesheet",
+   "list": "ward_l",
+   "due": "2026-10-31",
+   "completed": "2026-10-31T06:20"
+  },
+  {
+   "key": "pay_hall",
+   "name": "Pay Marcin for the hall",
+   "list": "football_l",
+   "due": "2026-11-10",
+   "priority": 1
+  },
+  {
+   "key": "pay_pizza",
+   "name": "Pay Darek for the pizza",
+   "list": "football_l",
+   "due": "2026-11-07",
+   "effort": 5
+  },
+  {
+   "key": "boots",
+   "name": "Buy indoor football shoes",
+   "list": "football_l",
+   "due": "2026-11-08",
+   "effort": 60
+  },
+  {
+   "key": "kit_wash",
+   "name": "Wash the kit",
+   "list": "football_l",
+   "due": "2026-11-06",
+   "effort": 15
+  },
+  {
+   "key": "kit_wash_prev",
+   "name": "Wash the kit",
+   "list": "football_l",
+   "due": "2026-10-30",
+   "completed": "2026-10-30T22:00"
+  },
+  {
+   "key": "league_fee",
+   "name": "Pay league registration",
+   "list": "football_l",
+   "due": "2026-10-10",
+   "completed": "2026-10-09T20:30"
+  },
+  {
+   "key": "match_balls",
+   "name": "Pump up the match balls",
+   "list": "football_l",
+   "due": "2026-11-10",
+   "effort": 5
+  },
+  {
+   "key": "call_kasia",
+   "name": "Call Kasia",
+   "list": "family_l",
+   "due": "2026-11-08",
+   "priority": 1
+  },
+  {
+   "key": "call_kasia_prev",
+   "name": "Call Kasia",
+   "list": "family_l",
+   "due": "2026-11-01",
+   "completed": "2026-11-01T19:30"
+  },
+  {
+   "key": "babcia_gift",
+   "name": "Buy a present for Babcia",
+   "list": "family_l",
+   "due": "2026-11-14",
+   "effort": 40
+  },
+  {
+   "key": "tata_birthday",
+   "name": "Order flowers for Mama's birthday",
+   "list": "family_l",
+   "due": "2026-11-27",
+   "effort": 15
+  },
+  {
+   "key": "train_ticket",
+   "name": "Buy train tickets to Nowy Sacz",
+   "list": "family_l",
+   "due": "2026-11-12",
+   "effort": 10
+  },
+  {
+   "key": "photo_album",
+   "name": "Print photos for Mama",
+   "list": "family_l",
+   "due": "2026-11-13",
+   "effort": 30
+  },
+  {
+   "key": "pit",
+   "name": "File PIT-37",
+   "list": "admin_l",
+   "due": "2026-11-20",
+   "priority": 2,
+   "effort": 60
+  },
+  {
+   "key": "pit_docs",
+   "name": "Gather PIT documents",
+   "list": "admin_l",
+   "due": "2026-11-10",
+   "effort": 45
+  },
+  {
+   "key": "nfz",
+   "name": "Update the NFZ details",
+   "list": "admin_l",
+   "due": "2026-11-25",
+   "effort": 20
+  },
+  {
+   "key": "physio_book",
+   "name": "Book physio",
+   "list": "admin_l",
+   "due": "2026-11-09",
+   "effort": 5
+  },
+  {
+   "key": "physio_book_old",
+   "name": "Book physio",
+   "list": "admin_l",
+   "due": "2026-10-15",
+   "completed": "2026-10-14T13:00"
+  },
+  {
+   "key": "dentist_book",
+   "name": "Book the dentist",
+   "list": "admin_l",
+   "completed": "2026-10-20T12:00"
+  },
+  {
+   "key": "flu_shot",
+   "name": "Get the flu shot",
+   "list": "admin_l",
+   "due": "2026-11-13",
+   "effort": 20
+  },
+  {
+   "key": "bike_fix",
+   "name": "Fix the bike brakes",
+   "list": "admin_l",
+   "due": "2026-11-16",
+   "effort": 45
+  },
+  {
+   "key": "gym_pass",
+   "name": "Renew the gym pass",
+   "list": "admin_l",
+   "due": "2026-11-30",
+   "effort": 10
+  },
+  {
+   "key": "phone_plan",
+   "name": "Compare phone plans",
+   "list": "admin_l",
+   "due": "2026-12-05",
+   "effort": 30
+  },
+  {
+   "key": "renew_id",
+   "name": "Renew my ID card",
+   "list": "admin_l",
+   "due": "2027-01-15",
+   "effort": 60
+  },
+  {
+   "key": "pay_ola",
+   "name": "Pay Ola for cleaning supplies",
+   "due": "2026-11-06",
+   "effort": 5
+  },
+  {
+   "key": "pay_kuba",
+   "name": "Pay Kuba for the gas",
+   "due": "2026-11-09",
+   "effort": 5
+  },
+  {
+   "key": "adi_gift",
+   "name": "Stag do gift idea for Adi",
+   "due": "2026-11-27"
+  },
+  {
+   "key": "adi_wedding",
+   "name": "Buy a gift for the wedding",
+   "due": "2026-11-19",
+   "effort": 60
+  },
+  {
+   "key": "zak_pack",
+   "name": "Zakopane packing list",
+   "due": "2026-12-02",
+   "effort": 20
+  },
+  {
+   "key": "pay_natalia",
+   "name": "Pay Natalia for the pension deposit",
+   "due": "2026-11-11",
+   "priority": 1
+  },
+  {
+   "key": "pay_marta",
+   "name": "Reply to Basia about the ski passes",
+   "due": "2026-11-07",
+   "effort": 5
+  },
+  {
+   "key": "ward_secret",
+   "name": "Pick a secret santa gift",
+   "due": "2026-12-08",
+   "effort": 30
+  },
+  {
+   "key": "old_chase",
+   "name": "Chase old landlord for the deposit",
+   "list": "admin_l",
+   "trashed": "2026-08-20T10:30"
+  },
+  {
+   "key": "old_split",
+   "name": "Split the Mateusz bills",
+   "list": "flat_l",
+   "trashed": "2026-10-28T09:00"
+  },
+  {
+   "key": "old_book",
+   "name": "Return the library books",
+   "list": "family_l",
+   "trashed": "2026-10-03T09:00"
+  }
+ ],
+ "notebooks": [
+  {
+   "key": "ward_nb",
+   "name": "Ward Notes"
+  },
+  {
+   "key": "recipes_nb",
+   "name": "Kitchen"
+  },
+  {
+   "key": "football_nb",
+   "name": "Football Notes"
+  },
+  {
+   "key": "ideas_nb",
+   "name": "Ideas"
+  }
+ ],
+ "notes": [
+  {
+   "key": "n_handover",
+   "name": "Handover checklist",
+   "notebook": "ward_nb",
+   "created": "2026-03-02T07:30",
+   "pinned": true,
+   "body": "vitals, drips, allergies, pending labs, family calls, falls risk, who needs a walk"
+  },
+  {
+   "key": "n_dosage",
+   "name": "Common dosage reminders",
+   "notebook": "ward_nb",
+   "created": "2026-04-11T20:00",
+   "body": "paracetamol every six hours max four grams, check the renal flag before enoxaparin"
+  },
+  {
+   "key": "n_night",
+   "name": "Night shift survival",
+   "notebook": "ward_nb",
+   "created": "2026-01-14T06:30",
+   "body": "eat at two, caffeine stops at four, blackout curtains, magnesium before sleep"
+  },
+  {
+   "key": "n_cpr",
+   "name": "CPR course notes 2025",
+   "notebook": "ward_nb",
+   "created": "2025-11-20T14:00",
+   "body": "thirty compressions then two breaths, hundred to hundred twenty a minute, switch every two minutes"
+  },
+  {
+   "key": "n_ward_meet",
+   "name": "Ward meeting 28 October",
+   "notebook": "ward_nb",
+   "created": "2026-10-28T15:30",
+   "body": "new pump training in December, holiday rota published Friday, Oddzialowa wants volunteers"
+  },
+  {
+   "key": "n_bigos",
+   "name": "Mama's bigos",
+   "notebook": "recipes_nb",
+   "created": "2026-01-06T16:00",
+   "body": "sauerkraut, three kinds of meat, prunes, cook for three days, better on the second"
+  },
+  {
+   "key": "n_pierogi",
+   "name": "Pierogi ruskie",
+   "notebook": "recipes_nb",
+   "created": "2026-02-14T13:00",
+   "body": "potato and white cheese filling, fried onion on top, dough rests thirty minutes"
+  },
+  {
+   "key": "n_zurek",
+   "name": "Zurek",
+   "notebook": "recipes_nb",
+   "created": "2026-04-04T11:00",
+   "body": "sourdough starter, smoked sausage, marjoram, boiled egg in the bowl"
+  },
+  {
+   "key": "n_shakshuka",
+   "name": "Shakshuka for flat dinner",
+   "notebook": "recipes_nb",
+   "created": "2026-09-18T19:00",
+   "body": "tinned tomatoes, peppers, cumin, six eggs, feta, bread"
+  },
+  {
+   "key": "n_tactics",
+   "name": "Five-a-side tactics",
+   "notebook": "football_nb",
+   "created": "2025-09-30T21:30",
+   "body": "diamond not square, Tomek Maj stays in goal, Marcin presses high, no long balls on the Orlik"
+  },
+  {
+   "key": "n_league",
+   "name": "League table notes",
+   "notebook": "football_nb",
+   "created": "2026-10-19T09:00",
+   "body": "fourth place, two points behind Wisla Old Boys, next match is the derby"
+  },
+  {
+   "key": "n_kit",
+   "name": "Kit colours",
+   "notebook": "football_nb",
+   "created": "2025-09-05T18:00",
+   "body": "blue shirts, white shorts, Piotr has the bibs, Darek washes them in December"
+  },
+  {
+   "key": "n_diary_shift",
+   "name": "Diary entry - hard shift",
+   "created": "2026-10-30T07:30",
+   "body": "lost a patient at four am, Magda made tea, cried in the stairwell and then did the rounds"
+  },
+  {
+   "key": "n_diary_good",
+   "name": "Diary entry - good Tuesday",
+   "created": "2026-10-27T22:45",
+   "body": "won four three, scored twice, pizza with Darek and Bartek, walked home along the Vistula"
+  },
+  {
+   "key": "n_london_ideas",
+   "name": "London ideas",
+   "created": "2026-10-06T21:00",
+   "body": "Christmas market at Hyde Park, Kasia wants fondue, the Tate Modern, a pub with James"
+  },
+  {
+   "key": "n_gifts",
+   "name": "Gift ideas for Kasia and James",
+   "created": "2026-10-20T20:30",
+   "body": "a Polish pottery mug set for Kasia, craft vodka for James, smoked oscypek"
+  },
+  {
+   "key": "n_flat_rules",
+   "name": "Flat rules",
+   "created": "2025-02-02T20:00",
+   "pinned": true,
+   "body": "dishes the same day, quiet after eleven, bins on Fridays, cleaning rota on the fridge"
+  },
+  {
+   "key": "n_boiler",
+   "name": "Boiler instructions",
+   "created": "2025-03-15T18:00",
+   "body": "pressure should sit at one and a half bar, reset button on the left, call Pan Stanislaw if it clicks"
+  },
+  {
+   "key": "n_budget",
+   "name": "Monthly budget",
+   "created": "2026-01-03T20:00",
+   "body": "rent 1800 split three ways, food 1200, transport 150, football 120, save 1500"
+  },
+  {
+   "key": "n_gym",
+   "name": "Gym plan",
+   "created": "2026-06-02T19:00",
+   "body": "monday chest and back, thursday legs, shoulder rehab stretches every morning"
+  },
+  {
+   "key": "n_physio",
+   "name": "Physio advice",
+   "created": "2026-10-22T17:30",
+   "body": "band pull-aparts three sets of fifteen, no overhead work for two weeks, ice after shifts"
+  },
+  {
+   "key": "n_stag",
+   "name": "Stag do ideas",
+   "created": "2026-10-28T21:30",
+   "body": "go-karting, a day in the mountains, Marcin books the pub, budget 600 each"
+  },
+  {
+   "key": "n_trip_zak",
+   "name": "Zakopane plan",
+   "created": "2026-09-14T20:00",
+   "body": "pension near Krupowki, ski rental in the village, dinner at the bacówka on Saturday"
+  },
+  {
+   "key": "old_note",
+   "name": "Old shopping list",
+   "created": "2026-08-30T10:00",
+   "body": "bread, tea, tomatoes",
+   "trashed": "2026-10-20T10:00"
+  },
+  {
+   "key": "old_draft",
+   "name": "Draft message to the landlord",
+   "created": "2026-05-12T10:00",
+   "body": "the radiator in the small room still does not work",
+   "trashed": "2026-07-12T10:00"
+  }
+ ],
+ "folders": [
+  {
+   "key": "work_f",
+   "name": "Work"
+  },
+  {
+   "key": "flat_f",
+   "name": "Flat"
+  },
+  {
+   "key": "health_f",
+   "name": "Health"
+  },
+  {
+   "key": "taxes_f",
+   "name": "Taxes"
+  },
+  {
+   "key": "empty_f",
+   "name": "To file"
+  }
+ ],
+ "documents": [
+  {
+   "key": "d_contract",
+   "name": "Employment contract 2025",
+   "folder": "work_f",
+   "created": "2025-03-01T10:00",
+   "starred": true
+  },
+  {
+   "key": "d_rota",
+   "name": "Ward rota November 2026",
+   "folder": "work_f",
+   "created": "2026-10-30T10:00"
+  },
+  {
+   "key": "d_cpr",
+   "name": "CPR certificate 2024",
+   "folder": "work_f",
+   "created": "2024-11-22T10:00"
+  },
+  {
+   "key": "d_licence",
+   "name": "Nursing licence copy",
+   "folder": "work_f",
+   "created": "2024-07-01T10:00",
+   "starred": true
+  },
+  {
+   "key": "d_lease25",
+   "name": "Rental agreement 2025",
+   "folder": "flat_f",
+   "created": "2025-02-01T11:00"
+  },
+  {
+   "key": "d_lease26",
+   "name": "Rental agreement 2026",
+   "folder": "flat_f",
+   "created": "2026-02-01T11:00",
+   "starred": true
+  },
+  {
+   "key": "d_inventory",
+   "name": "Flat inventory list",
+   "folder": "flat_f",
+   "created": "2025-02-01T12:00"
+  },
+  {
+   "key": "d_boiler",
+   "name": "Boiler service report",
+   "folder": "flat_f",
+   "created": "2026-03-20T10:00"
+  },
+  {
+   "key": "d_nfz",
+   "name": "NFZ insurance confirmation",
+   "folder": "health_f",
+   "created": "2026-01-10T10:00"
+  },
+  {
+   "key": "d_vacc",
+   "name": "Vaccination card scan",
+   "folder": "health_f",
+   "created": "2025-10-05T10:00"
+  },
+  {
+   "key": "d_physio_plan",
+   "name": "Physio exercise plan",
+   "folder": "health_f",
+   "created": "2026-10-22T17:40"
+  },
+  {
+   "key": "d_pit25",
+   "name": "PIT-37 2025",
+   "folder": "taxes_f",
+   "created": "2026-04-18T10:00"
+  },
+  {
+   "key": "d_pit24",
+   "name": "PIT-37 2024",
+   "folder": "taxes_f",
+   "created": "2025-04-20T10:00"
+  },
+  {
+   "key": "d_zus",
+   "name": "ZUS annual statement 2025",
+   "folder": "taxes_f",
+   "created": "2026-03-05T10:00"
+  },
+  {
+   "key": "d_passport",
+   "name": "Passport scan",
+   "created": "2025-01-12T10:00"
+  },
+  {
+   "key": "d_dowod",
+   "name": "ID card scan",
+   "created": "2025-01-12T10:05"
+  },
+  {
+   "key": "d_flights",
+   "name": "London flight confirmation",
+   "created": "2026-10-05T21:10"
+  },
+  {
+   "key": "d_old_lease",
+   "name": "Rental agreement 2024 - Podgorze",
+   "folder": "flat_f",
+   "created": "2024-02-01T10:00",
+   "trashed": "2026-10-22T10:00"
+  },
+  {
+   "key": "d_old_inv",
+   "name": "Old gym contract",
+   "folder": "work_f",
+   "created": "2024-01-10T10:00",
+   "trashed": "2026-08-01T10:00"
+  }
+ ],
+ "albums": [
+  {
+   "key": "football_a",
+   "name": "Football"
+  },
+  {
+   "key": "family_a",
+   "name": "Nowy Sacz"
+  },
+  {
+   "key": "trips_a",
+   "name": "Trips 2026"
+  },
+  {
+   "key": "flat_a",
+   "name": "Krakowska Flat"
+  }
+ ],
+ "photos": [
+  {
+   "key": "p_fb_team",
+   "name": "Team photo at the Orlik",
+   "taken": "2026-09-08T21:35",
+   "albums": [
+    "football_a"
+   ],
+   "people": [
+    "marcin_l",
+    "tomek_m",
+    "piotr",
+    "darek",
+    "bartek"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_fb_goal",
+   "name": "My goal against the Old Boys",
+   "taken": "2026-10-04T11:50",
+   "albums": [
+    "football_a"
+   ],
+   "people": [
+    "marcin_l"
+   ]
+  },
+  {
+   "key": "p_fb_pizza",
+   "name": "Pizza after the game",
+   "taken": "2026-10-27T21:50",
+   "albums": [
+    "football_a"
+   ],
+   "people": [
+    "darek",
+    "bartek",
+    "michal"
+   ]
+  },
+  {
+   "key": "p_fb_hall",
+   "name": "The new hall",
+   "taken": "2026-11-03T19:50",
+   "albums": [
+    "football_a"
+   ]
+  },
+  {
+   "key": "p_fb_keeper",
+   "name": "Tomek Maj saves a penalty",
+   "taken": "2026-09-20T12:00",
+   "albums": [
+    "football_a"
+   ],
+   "people": [
+    "tomek_m"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_fb_cup",
+   "name": "Little trophy",
+   "taken": "2026-06-14T17:00",
+   "albums": [
+    "football_a"
+   ],
+   "people": [
+    "marcin_l",
+    "piotr"
+   ]
+  },
+  {
+   "key": "p_fb_boots",
+   "name": "Muddy boots",
+   "taken": "2026-10-13T21:40",
+   "albums": [
+    "football_a"
+   ]
+  },
+  {
+   "key": "p_ns_table",
+   "name": "Babcia's table at Easter",
+   "taken": "2026-04-05T14:00",
+   "albums": [
+    "family_a"
+   ],
+   "people": [
+    "babcia",
+    "mama",
+    "tata"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_ns_mama",
+   "name": "Mama in the garden",
+   "taken": "2026-06-21T16:00",
+   "albums": [
+    "family_a"
+   ],
+   "people": [
+    "mama"
+   ]
+  },
+  {
+   "key": "p_ns_tata",
+   "name": "Tata with the grill",
+   "taken": "2026-07-18T18:00",
+   "albums": [
+    "family_a"
+   ],
+   "people": [
+    "tata"
+   ]
+  },
+  {
+   "key": "p_ns_babcia",
+   "name": "Babcia and her roses",
+   "taken": "2026-08-15T11:00",
+   "albums": [
+    "family_a"
+   ],
+   "people": [
+    "babcia"
+   ]
+  },
+  {
+   "key": "p_ns_walk",
+   "name": "Walk to the church",
+   "taken": "2026-10-18T14:30",
+   "albums": [
+    "family_a"
+   ],
+   "people": [
+    "babcia",
+    "mama"
+   ]
+  },
+  {
+   "key": "p_ns_all",
+   "name": "Everyone at lunch",
+   "taken": "2026-10-18T13:30",
+   "albums": [
+    "family_a"
+   ],
+   "people": [
+    "babcia",
+    "mama",
+    "tata"
+   ]
+  },
+  {
+   "key": "p_tr_london",
+   "name": "London Eye at night",
+   "taken": "2026-03-07T20:10",
+   "albums": [
+    "trips_a"
+   ],
+   "people": [
+    "kasia",
+    "james"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_tr_pub",
+   "name": "Pub with James",
+   "taken": "2026-03-08T19:00",
+   "albums": [
+    "trips_a"
+   ],
+   "people": [
+    "james"
+   ]
+  },
+  {
+   "key": "p_tr_kasia",
+   "name": "Kasia at Borough Market",
+   "taken": "2026-03-08T12:30",
+   "albums": [
+    "trips_a"
+   ],
+   "people": [
+    "kasia"
+   ]
+  },
+  {
+   "key": "p_tr_zak1",
+   "name": "Giewont from the cable car",
+   "taken": "2026-02-14T10:30",
+   "albums": [
+    "trips_a"
+   ],
+   "people": [
+    "adrian"
+   ]
+  },
+  {
+   "key": "p_tr_zak2",
+   "name": "Snowboard fail",
+   "taken": "2026-02-14T14:10",
+   "albums": [
+    "trips_a"
+   ],
+   "people": [
+    "natalia",
+    "basia"
+   ]
+  },
+  {
+   "key": "p_tr_zak3",
+   "name": "Hot wine at Krupowki",
+   "taken": "2026-02-14T19:20",
+   "albums": [
+    "trips_a"
+   ],
+   "people": [
+    "agnieszka",
+    "anna_wl"
+   ]
+  },
+  {
+   "key": "p_tr_mazury",
+   "name": "Mazury sunset",
+   "taken": "2026-07-26T20:45",
+   "albums": [
+    "trips_a"
+   ]
+  },
+  {
+   "key": "p_tr_gdansk",
+   "name": "Gdansk old town",
+   "taken": "2026-08-08T12:00",
+   "albums": [
+    "trips_a"
+   ],
+   "people": [
+    "adrian"
+   ]
+  },
+  {
+   "key": "p_fl_dinner",
+   "name": "Shakshuka flat dinner",
+   "taken": "2026-09-19T21:00",
+   "albums": [
+    "flat_a"
+   ],
+   "people": [
+    "kuba",
+    "ola"
+   ]
+  },
+  {
+   "key": "p_fl_move",
+   "name": "Moving day boxes",
+   "taken": "2025-02-01T15:00",
+   "albums": [
+    "flat_a"
+   ],
+   "people": [
+    "kuba"
+   ]
+  },
+  {
+   "key": "p_fl_kuba",
+   "name": "Kubus asleep on the sofa",
+   "taken": "2026-05-24T16:00",
+   "albums": [
+    "flat_a"
+   ],
+   "people": [
+    "kuba"
+   ],
+   "starred": true
+  },
+  {
+   "key": "p_fl_ola",
+   "name": "Ola's birthday cake",
+   "taken": "2026-03-30T20:00",
+   "albums": [
+    "flat_a"
+   ],
+   "people": [
+    "ola",
+    "kuba"
+   ]
+  },
+  {
+   "key": "p_fl_view",
+   "name": "View from the balcony",
+   "taken": "2026-06-05T07:20",
+   "albums": [
+    "flat_a"
+   ]
+  },
+  {
+   "key": "p_ward_cake",
+   "name": "Ward 4B cake day",
+   "taken": "2026-09-25T10:30",
+   "people": [
+    "ewa",
+    "marcin_b",
+    "magda"
+   ]
+  },
+  {
+   "key": "p_ward_night",
+   "name": "Night shift coffee",
+   "taken": "2026-10-30T03:10",
+   "people": [
+    "magda"
+   ]
+  },
+  {
+   "key": "p_ward_party",
+   "name": "Ward summer picnic",
+   "taken": "2026-06-27T15:00",
+   "people": [
+    "anna_w",
+    "ewa",
+    "przemek"
+   ]
+  },
+  {
+   "key": "p_adi_stag",
+   "name": "Adi and me at the Rynek",
+   "taken": "2026-10-10T17:00",
+   "people": [
+    "adrian"
+   ]
+  },
+  {
+   "key": "p_physio_ex",
+   "name": "Shoulder exercise sheet",
+   "taken": "2026-10-22T17:35"
+  },
+  {
+   "key": "p_fridge",
+   "name": "Cleaning rota on the fridge",
+   "taken": "2026-09-01T09:00"
+  },
+  {
+   "key": "p_rent_slip",
+   "name": "Rent transfer slip",
+   "taken": "2026-10-04T19:05"
+  },
+  {
+   "key": "p_bike",
+   "name": "Bike with a flat tyre",
+   "taken": "2026-10-09T08:30"
+  },
+  {
+   "key": "p_blurry",
+   "name": "Blurry photo",
+   "taken": "2026-10-26T11:00",
+   "trashed": "2026-10-28T09:00"
+  },
+  {
+   "key": "p_screen",
+   "name": "Screenshot of the rota",
+   "taken": "2026-07-02T12:00",
+   "trashed": "2026-08-04T09:00"
+  }
+ ],
+ "debts": [
+  {
+   "key": "d_kuba_gas",
+   "person": "kuba",
+   "direction": "i_owe",
+   "amount": 50,
+   "name": "my share of the gas",
+   "date": "2026-11-02"
+  },
+  {
+   "key": "d_ola_clean",
+   "person": "ola",
+   "direction": "i_owe",
+   "amount": 28,
+   "name": "cleaning supplies",
+   "date": "2026-10-20"
+  },
+  {
+   "key": "d_kuba_net",
+   "person": "kuba",
+   "direction": "owes_me",
+   "amount": 20,
+   "name": "internet top-up",
+   "date": "2026-10-03"
+  },
+  {
+   "key": "d_darek_pizza",
+   "person": "darek",
+   "direction": "i_owe",
+   "amount": 34,
+   "name": "pizza after the game",
+   "date": "2026-10-27"
+  },
+  {
+   "key": "d_marcin_hall",
+   "person": "marcin_l",
+   "direction": "i_owe",
+   "amount": 80,
+   "name": "the hall for November",
+   "date": "2026-11-01"
+  },
+  {
+   "key": "d_piotr_balls",
+   "person": "piotr",
+   "direction": "owes_me",
+   "amount": 45,
+   "name": "match balls",
+   "date": "2026-10-06"
+  },
+  {
+   "key": "d_michal_balls",
+   "person": "michal",
+   "direction": "owes_me",
+   "amount": 45,
+   "name": "match balls",
+   "date": "2026-10-06"
+  },
+  {
+   "key": "d_adi_tickets",
+   "person": "adrian",
+   "direction": "owes_me",
+   "amount": 90,
+   "name": "concert tickets",
+   "date": "2026-10-10"
+  },
+  {
+   "key": "d_natalia",
+   "person": "natalia",
+   "direction": "i_owe",
+   "amount": 180,
+   "name": "Zakopane pension deposit",
+   "date": "2026-09-20"
+  },
+  {
+   "key": "d_ewa",
+   "person": "ewa",
+   "direction": "i_owe",
+   "amount": 24,
+   "name": "flowers for Oddzialowa",
+   "date": "2026-09-25"
+  },
+  {
+   "key": "d_marcin_b",
+   "person": "marcin_b",
+   "direction": "owes_me",
+   "amount": 60,
+   "name": "night shift taxi",
+   "date": "2026-09-12",
+   "settled": "2026-09-19T10:00"
+  },
+  {
+   "key": "d_basia",
+   "person": "basia",
+   "direction": "owes_me",
+   "amount": 75,
+   "name": "ski helmet rental",
+   "date": "2026-02-14",
+   "settled": "2026-02-20T10:00"
+  },
+  {
+   "key": "d_kasia",
+   "person": "kasia",
+   "direction": "i_owe",
+   "amount": 150,
+   "name": "flights deposit",
+   "date": "2026-10-05"
+  },
+  {
+   "key": "d_hania",
+   "person": "hania",
+   "direction": "owes_me",
+   "amount": 15,
+   "name": "pharmacy run",
+   "date": "2026-10-14",
+   "settled": "2026-10-15T09:00"
+  }
+ ],
+ "locker": [
+  {
+   "key": "pko_login",
+   "name": "PKO Bank Polski",
+   "type": "login",
+   "username": "tomasz.wisniewski",
+   "url": "https://ipko.pl",
+   "password": "Krakowska#Vistula29",
+   "starred": true
+  },
+  {
+   "key": "uh_portal",
+   "name": "Hospital staff portal",
+   "type": "login",
+   "username": "twisniewski",
+   "url": "https://uh-staff.example",
+   "password": "Nurse4B!Nov26"
+  },
+  {
+   "key": "netflix_login",
+   "name": "Netflix",
+   "type": "login",
+   "username": "tomek.wisniewski@gmail.example",
+   "url": "https://netflix.com",
+   "password": "Shakshuka-Kuba88"
+  },
+  {
+   "key": "pko_card",
+   "name": "PKO debit card",
+   "type": "card",
+   "card_number": "5375411234567890",
+   "cvv": "442"
+  },
+  {
+   "key": "revolut_card",
+   "name": "Revolut card",
+   "type": "card",
+   "card_number": "4165982233445566",
+   "cvv": "718"
+  },
+  {
+   "key": "pko_acct",
+   "name": "PKO current account",
+   "type": "bank_account",
+   "notes": "branch Rynek Glowny, account PL 61 1020 1068 0000 1234 5678 9012",
+   "starred": true
+  },
+  {
+   "key": "flat_wifi",
+   "name": "Flat wifi",
+   "type": "wifi",
+   "password": "Krakowska3Pokoje",
+   "starred": true
+  },
+  {
+   "key": "nowysacz_wifi",
+   "name": "Parents' wifi",
+   "type": "wifi",
+   "password": "HalinaAndrzej1958"
+  },
+  {
+   "key": "door_code",
+   "name": "Building door code",
+   "type": "note",
+   "notes": "1946B and then the green button"
+  },
+  {
+   "key": "spotify_pw",
+   "name": "Spotify",
+   "type": "password",
+   "password": "Orlik-Tuesday7"
+  },
+  {
+   "key": "pesel",
+   "name": "PESEL",
+   "type": "identity"
+  },
+  {
+   "key": "passport",
+   "name": "Passport - Tomasz",
+   "type": "passport",
+   "notes": "no. EA1234567, expires 2032-04-09"
+  },
+  {
+   "key": "licence",
+   "name": "Driving licence",
+   "type": "driving_licence",
+   "notes": "category B, issued 2016"
+  },
+  {
+   "key": "gym_member",
+   "name": "Fitness club membership",
+   "type": "membership",
+   "notes": "member 22871, paid to the end of November"
+  },
+  {
+   "key": "gh_api",
+   "name": "GitHub API token",
+   "type": "api_credential",
+   "notes": "for the shift swap script"
+  },
+  {
+   "key": "nas_ssh",
+   "name": "Raspberry Pi SSH key",
+   "type": "ssh_key",
+   "notes": "media server under the TV"
+  },
+  {
+   "key": "jetbrains",
+   "name": "JetBrains licence",
+   "type": "software_licence",
+   "notes": "renews every March",
+   "starred": true
+  },
+  {
+   "key": "btc",
+   "name": "Crypto wallet",
+   "type": "crypto_wallet",
+   "notes": "small, about 1500 zloty"
+  },
+  {
+   "key": "nursing_cert",
+   "name": "Nursing licence - original",
+   "type": "document",
+   "notes": "original in the folder at Mama's, scan in the vault"
+  },
+  {
+   "key": "old_wifi",
+   "name": "Old Podgorze flat wifi",
+   "type": "wifi",
+   "password": "Podgorze2024",
+   "trashed": "2026-09-14T10:00"
+  },
+  {
+   "key": "old_login",
+   "name": "Old Allegro login",
+   "type": "login",
+   "username": "tomek_nurse",
+   "password": "OldAllegro12",
+   "trashed": "2026-10-22T10:00"
+  }
+ ],
+ "links": [
+  {
+   "from": "call_kasia",
+   "to": "kasia"
+  },
+  {
+   "from": "call_kasia_prev",
+   "to": "kasia"
+  },
+  {
+   "from": "london_gifts",
+   "to": "kasia"
+  },
+  {
+   "from": "london_flights",
+   "to": "james"
+  },
+  {
+   "from": "babcia_gift",
+   "to": "babcia"
+  },
+  {
+   "from": "tata_birthday",
+   "to": "mama"
+  },
+  {
+   "from": "photo_album",
+   "to": "mama"
+  },
+  {
+   "from": "train_ticket",
+   "to": "tata"
+  },
+  {
+   "from": "pay_ola",
+   "to": "ola"
+  },
+  {
+   "from": "pay_kuba",
+   "to": "kuba"
+  },
+  {
+   "from": "pay_hall",
+   "to": "marcin_l"
+  },
+  {
+   "from": "pay_pizza",
+   "to": "darek"
+  },
+  {
+   "from": "adi_gift",
+   "to": "adrian"
+  },
+  {
+   "from": "adi_wedding",
+   "to": "adrian"
+  },
+  {
+   "from": "pay_natalia",
+   "to": "natalia"
+  },
+  {
+   "from": "pay_marta",
+   "to": "basia"
+  },
+  {
+   "from": "swap_shift",
+   "to": "marcin_b"
+  },
+  {
+   "from": "gift_card",
+   "to": "anna_w"
+  },
+  {
+   "from": "london_leave",
+   "to": "anna_w"
+  },
+  {
+   "from": "physio_book",
+   "to": "physio"
+  },
+  {
+   "from": "physio_book_old",
+   "to": "physio"
+  },
+  {
+   "from": "dentist_book",
+   "to": "dentist"
+  },
+  {
+   "from": "fix_shower",
+   "to": "landlord"
+  },
+  {
+   "from": "rent_nov",
+   "to": "landlord"
+  },
+  {
+   "from": "rent_oct",
+   "to": "landlord"
+  },
+  {
+   "from": "cpr_prep",
+   "to": "przemek"
+  },
+  {
+   "from": "n_ward_meet",
+   "to": "anna_w"
+  },
+  {
+   "from": "n_tactics",
+   "to": "marcin_l"
+  },
+  {
+   "from": "n_bigos",
+   "to": "mama"
+  },
+  {
+   "from": "n_gifts",
+   "to": "kasia"
+  },
+  {
+   "from": "n_london_ideas",
+   "to": "james"
+  },
+  {
+   "from": "n_stag",
+   "to": "adrian"
+  },
+  {
+   "from": "n_physio",
+   "to": "physio"
+  },
+  {
+   "from": "n_boiler",
+   "to": "landlord"
+  },
+  {
+   "from": "n_diary_shift",
+   "to": "magda"
+  },
+  {
+   "from": "d_boiler",
+   "to": "landlord"
+  },
+  {
+   "from": "d_lease26",
+   "to": "landlord"
+  },
+  {
+   "from": "d_physio_plan",
+   "to": "physio"
+  }
+ ]
+}

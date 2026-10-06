@@ -72,12 +72,6 @@ S("T17-084", "event overlap refused ask create undo create",
   T("undo, his mum cancelled", diff(trash("+1")),
     ref=[act("undo")]))
 
-S("T17-085", "notes weekday span date delete",
-  T("notes between monday last week and the twenty-first", rows("kalina_notes", "rach_notes"),
-    ref=[ans(kind="note", when=W(span(U("week", -1, weekday=1), D("2026-01-21"))))]),
-  T("delete the rachmaninov one, it's pencilled into the score", diff(trash("rach_notes")),
-    ref=[act("delete", rows="$rach_notes")]))
-
 S("T17-086", "act ambiguous koleva ask options log debt span",
   T("log a lesson with koleva", ask("maria_k", "desi"),
     ref=[act("log", kind="person", name="Koleva", args=lines(kind="visit")),

@@ -1,6 +1,7 @@
-"""Show what the model sees: replay authored sessions and print each transcript -- pre-grounding,
-every call with its derived `<think>` line, and every runtime observation (`#n`, `@n`, errors) --
-with the score's verdict per turn. For drafting and debugging sessions before build.py.
+"""Show what the model sees: replay authored sessions and print each transcript (pre-grounding, every
+call behind an empty `<think>` block, and every runtime observation: `#n`, `@n`, errors) with the
+score's verdict per turn. The slot trace of the finished record is written afterwards by build.py
+(authored/trace.py) and is not shown here. For drafting and debugging sessions before build.py.
 
     python3 authored/show.py T01 T01-017[,T01-018]      # the world must be seeded (build.py does it)
     python3 authored/show.py T01 T01-017 --seed         # seed it first

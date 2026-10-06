@@ -38,13 +38,6 @@ S("T14-028", "restore window person ask create",
   T("yeah do that, old roommate", diff(new("person", name="Caio Martins", role=ANY)),
     ref=[act("create", args=lines(kind="person", name="Caio Martins", role="old roommate"))]))
 
-S("T14-029", "restore window locker decline",
-  T("can you get my ifood courier login back from the trash", ask(),
-    ref=[bad(act("restore", kind="locker item", name="iFood courier login", trashed=True)),
-         askc("that one's past the 30-day restore window, it can't come back. want a fresh entry instead?")]),
-  T("nah forget it, not doing deliveries anymore", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
 S("T14-030", "locker create star unstar new",
   T("new locker entry Serato login, username djtomasf, and star it",
     diff(new("locker item", name="Serato login", username="djtomasf", starred=True)),
@@ -136,8 +129,8 @@ S("T14-041", "status set duration set next week",
 S("T14-042", "task status ne effort unit",
   T("open jobs over an hour, anything not done", rows("cnh", "dashcam", "setlist12", "mix", "bsas_setlist", "mae_rail",
                                                     "leak", "shelf", "passport"),
-    ref=[bad(ans(kind="task", where='effort > 1 hour and status != "completed"')),
-         ans(kind="task", where='effort > 60 minutes and status != "completed"')]),
+    ref=[bad(ans(kind="task", where='effort > 1 hour and status = "open"')),
+         ans(kind="task", where='effort > 60 minutes and status = "open"')]),
   T("and of those, anything due by end of october", rows("dashcam", "setlist12", "leak"),
     ref=[ans(within="@prev", when=W({"to": D("2026-10-31")}))]))
 
@@ -148,12 +141,6 @@ S("T14-043", "task description literal",
     ref=[ans(kind="person", linked_to="$tyre_pay")]),
   T("done, sent it this afternoon", diff(upd("tyre_pay", status="completed", completed=ANY)),
     ref=[act("complete", rows="$tyre_pay")]))
-
-S("T14-044", "task person count",
-  T("any tasks tied to two people", rows("mae_exam", "mae_split"),
-    ref=[find(kind="task", where="person count = 2"), ans(rows="@prev")]),
-  T("and none at all, on the mãe list", rows("mae_plan", "mae_bag", "plan_07", "plan_08", "plan_09", "plan_10", "plan_11"),
-    ref=[ans(kind="task", linked_to="$mae_l", where="person count = 0")]))
 
 S("T14-045", "note body empty person count ne",
   T("any notes with nothing in the body", rows(),

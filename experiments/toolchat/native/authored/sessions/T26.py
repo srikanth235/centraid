@@ -15,13 +15,6 @@ S("T26-002", "person rel time log prev event named",
   T("when's her birthday thing", rows("mama70"),
     ref=[ans(kind="event", name="Mama's 70th birthday")]))
 
-S("T26-003", "refused unit cadence repair met contains cadence empty",
-  T("people i'm meant to check on more often than every two weeks", rows("mama", "chidi", "olumide"),
-    ref=[bad(ans(kind="person", where="cadence < 2 weeks")),
-         ans(kind="person", where="cadence < 14")]),
-  T("and the bonga guys with no cadence at all", rows("emeka_n", "emeka_o", "victor", "kunle_a"),
-    ref=[ans(kind="person", where='met contains "Bonga" and cadence is empty')]))
-
 S("T26-004", "refused unit cadence cousins cadence empty log debt linked",
   T("which cousins have a cadence longer than two weeks", rows("kunle_b", "ibrahim"),
     ref=[bad(ans(kind="person", where='role contains "cousin" and cadence > 2 weeks')),
@@ -70,13 +63,6 @@ S("T26-009", "single edit group notebook folder multi named",
     diff(upd("house_f", name="Rumuokoro house"), upd("house_nb", name="Rumuokoro house"),
          upd("house_g", name="Rumuokoro house")),
     ref=[act("edit", rows="$house_f, $house_nb, $house_g", args=lines(name="Rumuokoro house"))]))
-
-S("T26-010", "delete group where currency knock-on",
-  T("any group in pounds?", rows("fivea_g"),
-    ref=[ans(kind="group", where='currency = "GBP"')]),
-  T("delete it, that five-a-side never took off",
-    diff(gone("fivea_g"), unlink("fivea_g", "tunde"), unlink("fivea_g", "ifeanyi"), unlink("fivea_g", "me")),
-    ref=[act("delete", kind="group", where='currency = "GBP"')]))
 
 S("T26-011", "single delete group where person count",
   T("delete whichever group has me in it", diff(gone("xmas_g"), unlink("xmas_g", "me")),
@@ -146,16 +132,8 @@ S("T26-019", "restore task named restore window gym ask",
   T("put Sell old generator back from the trash", diff(restore("old_gen")),
     ref=[act("restore", kind="task", name="Sell old generator", trashed=True)]),
   T("and the gym membership one", decline("not_found"),
-    ref=[bad(act("restore", kind="task", name="Renew gym membership", trashed=True)),
+    ref=[bad(act("restore", kind="task", name="gym membership", trashed=True)),
          dec("not_found")]))
-
-S("T26-020", "note find delete prev undo",
-  T("find my note on the crane limit switch", rows("crane_n"),
-    ref=[ans(kind="note", name="Crane limit switch")]),
-  T("emeka fixed it, delete that", diff(trash("crane_n")),
-    ref=[act("delete", rows="@prev")]),
-  T("undo, i want the history", diff(restore("crane_n")),
-    ref=[act("undo")]))
 
 S("T26-021", "note span delete prev",
   T("notes i made from 20 to twenty-second november", rows("guest_list", "anniv_n", "roof_quotes", "socket_plan", "tobi_waec",

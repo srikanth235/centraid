@@ -76,19 +76,6 @@ S("T21-034", "note span weekdays notebook count",
   T("any of those not in a notebook", rows("plot_notes"),
     ref=[ans(kind="note", within="@prev", where="notebook count <= 0")]))
 
-S("T21-035", "note span weekday month count pinned",
-  T("how many notes have i written since last monday", val(13),
-    ref=[ans(op="count", kind="note", when=span(U("week", -1, weekday=1), U("month", 0, name=6)))]),
-  T("and how many pinned ones in that stretch", val(1),
-    ref=[ans(op="count", kind="note", when=span(U("week", -1, weekday=1), U("month", 0, name=6)),
-             where="pinned = yes")]),
-  T("delete Clinic review", ask("clinic_may", "clinic_june"),
-    ref=[act("delete", kind="event", name="Clinic review"),
-         find(kind="event", name="Clinic review"),
-         askc("the one on 12 may or the one on 9 june?", options="$clinic_may, $clinic_june")]),
-  T("the may one, it's past", diff(trash("clinic_may")),
-    ref=[act("delete", rows="$clinic_may")]))
-
 S("T21-036", "document span date month starred",
   T("docs from new year through march", rows("school_budget", "audit_letter", "fee_structure", "shiru_receipt",
                                             "chama_ledger"),
@@ -127,16 +114,6 @@ S("T21-040", "photo span rel count starred",
          askc("there are two in the bin, 2 june and 14 april. which one?", options="$salon, $salon_old")]),
   T("the june one", diff(restore("salon")),
     ref=[act("restore", rows="$salon")]))
-
-S("T21-041", "photo open span person count delete multi",
-  T("photos since last week", rows("gown_fitting", "new_tank", "survey_p", "flowers", "gutter_p", "sunset",
-                                  "avocado", "receipt_p", "whiteboard"),
-    ref=[ans(kind="photo", when={"from": U("week", -1)})]),
-  T("which ones have nobody in them", rows("new_tank", "flowers", "gutter_p", "sunset", "avocado", "receipt_p",
-                                           "whiteboard"),
-    ref=[ans(kind="photo", within="@prev", where="person count <= 0")]),
-  T("delete the receipt and the whiteboard ones", diff(trash("receipt_p"), trash("whiteboard")),
-    ref=[act("delete", rows="$receipt_p, $whiteboard")]))
 
 S("T21-042", "debt named month amount",
   T("debts from may", rows("d_mary_a", "d_rose", "d_kevin", "d_peter_o", "d_susan"),

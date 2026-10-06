@@ -270,10 +270,6 @@ S("T04-048", "notebook notes create delete restore new",
   T("ugh he changed his mind, restore it", diff(restore("+1")),
     ref=[act("restore", rows="$c1")]))
 
-S("T04-049", "notes before date time single",
-  T("anything i wrote before 3am on twenty-second aug", rows("portra", "cameras", "sepsis", "guest_list"),
-    ref=[ans(kind="note", when=W({"to": D("2026-08-22", "03:00")}))]))
-
 S("T04-050", "notes august span notebook note count",
   T("which notes did i write from first aug to the end of august", rows("sepsis", "dka", "guest_list"),
     ref=[ans(kind="note", when=W({"from": D("2026-08-01"), "to": U("month", 0, name=8)}))]),

@@ -2,7 +2,7 @@
 # watch.sh: babysit the Spot training VM. Polls every POLL (60) s; when the VM is TERMINATED/STOPPED (preempted) it starts it again;
 # it stops when gs://$BUCKET/$JOB/DONE exists (or FAILED), and prints a cost ESTIMATE at the end.
 #
-#   JOB=fit1 BUCKET=centraid-train ./watch.sh
+#   JOB=fit1 BUCKET=centraid-train ./watch.sh      (live trainer/supervisor lines are streamed while the VM runs; STREAM=0 for the quiet poll)
 #
 # Restart policy. A preempted Spot VM keeps its boot disk, so `gcloud compute instances start` in the SAME zone is the cheap path
 # (local checkpoint, nothing to download). If that zone has no capacity it is retried every poll for START_PATIENCE_S (600) s. A
@@ -115,6 +115,7 @@ while :; do
         fail_since=0
         start_fatal=0
         seed_pending=1
+        SERIAL_START=0   # a new boot has a new console
       else
         cls=$(classify_error "$out")
         [ "$fail_since" = 0 ] && fail_since=$now
@@ -125,6 +126,7 @@ while :; do
             if bash "$VM_DIR/launch.sh" --recreate; then
               fail_since=0
               seed_pending=1
+              SERIAL_START=0
             else
               log "launch.sh --recreate did not produce a VM (exit $?); will try again"
             fi
@@ -138,5 +140,9 @@ while :; do
       fi ;;
     *) log "$VM_NAME status $status in $zone" ;;
   esac
-  sleep "$POLL"
+  if [ "$status" = RUNNING ] && [ "${STREAM:-1}" = 1 ]; then
+    serial_pump "$VM_NAME" "$zone" "$POLL"      # live [train]/[score]/[vm] lines instead of a silent sleep
+  else
+    sleep "$POLL"
+  fi
 done

@@ -35,14 +35,6 @@ S("T10-004", "single cancelled this month",
   T("what got cancelled this month", rows("reunion", "walid_coffee"),
     ref=[find(kind="event", when=W(U("month", 0)), where='status = "cancelled"'), ans(rows="@prev")]))
 
-S("T10-005", "delete person prev complete",
-  T("who's the satellite guy", rows("adel"),
-    ref=[find(kind="person", where='role contains "satellite"'), ans(rows="@prev")]),
-  T("dish is up, delete him from my contacts", diff(trash("adel")),
-    ref=[act("delete", rows="@prev")]),
-  T("and tick off paying him", diff(upd("sat_task", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pay Adel for the dish")]))
-
 S("T10-006", "trashed event empty recovery restore date",
   T("didn't i have lunch with jamal in the diary", rows("jamal_lunch"),
     ref=[ans(kind="event", name="Lunch with Jamal"),

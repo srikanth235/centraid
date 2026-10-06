@@ -33,11 +33,6 @@ S("T20-004", "person span rel date count",
   T("how many is that", val(10),
     ref=[ans(op="count", rows="@prev")]))
 
-S("T20-005", "single person span weekday date",
-  T("everyone i've been in touch with since last friday up to yesterday",
-    rows("sofia", "mamma", "papa", "marco_e", "marco_l", "stefano", "andrea", "carla", "lorenzo_g", "mauro", "gianni"),
-    ref=[ans(kind="person", when=W(span(U("week", -1, weekday=5), U("day", -1))))]))
-
 S("T20-006", "group count person count edit group named",
   T("anyone i try to keep up with that isn't in any group", rows("mamma", "papa", "nonna", "francesca"),
     ref=[ans(kind="person", where="cadence is set and group count < 1")]),
@@ -45,12 +40,6 @@ S("T20-006", "group count person count edit group named",
     ref=[ans(kind="group", where="person count < 3")]),
   T("rename nonna's birthday gift to Nonna's 90th", diff(upd("gift_pool", name="Nonna's 90th")),
     ref=[act("edit", rows="$gift_pool", args=lines(name="Nonna's 90th"))]))
-
-S("T20-007", "person task count task person count",
-  T("who's got two or more tasks on them", rows("giulia", "federico", "carla", "lorenzo_g", "rosa"),
-    ref=[ans(kind="person", where="task count >= 2")]),
-  T("and which tasks have at least two people", rows("wine_list", "guest_list", "wine_pairing", "nonna_gift"),
-    ref=[ans(kind="task", where="person count >= 2")]))
 
 S("T20-008", "debt count linked_to all settle_debt",
   T("anyone with two debts on the books", rows("stefano"),
@@ -141,13 +130,6 @@ S("T20-019", "reopen task named reschedule",
     ref=[act("reopen", kind="task", name="Measure windows for curtains")]),
   T("due saturday", diff(upd("curtains", date="2026-05-30")),
     ref=[act("reschedule", rows="$curtains", args=lines(to=U("week", 0, weekday=6)))]))
-
-S("T20-020", "reopen task multi wedding list",
-  T("what have i finished on the wedding list", rows("invites_print", "rings_task"),
-    ref=[ans(kind="task", linked_to="$wedding_l", where='status = "completed"')]),
-  T("reopen both, the printer messed up the invites and the engraving has a typo",
-    diff(upd("invites_print", status="open", completed=None), upd("rings_task", status="open", completed=None)),
-    ref=[act("reopen", rows="$invites_print, $rings_task")]))
 
 S("T20-021", "ambiguous task reopen narrowed count",
   T("reopen order chianti classico, fede shorted us two cases", diff(upd("chianti_2", status="open", completed=None)),

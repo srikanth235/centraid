@@ -1,24 +1,6 @@
 from gold import *
 
 
-S("T25-051", "seven turns mika week ambiguous reschedule create complete prev list",
-  T("what does mika have next week", rows("thanksgiving", "pediatrician", "piano_1014"),
-    ref=[ans(kind="event", linked_to="$mika", when=U("week", 1))]),
-  T("and push the dentist to 4pm, hers not mine", diff(upd("dentist_mika", date="2026-10-21T16:00")),
-    ref=[act("reschedule", kind="event", name="Dentist", args=lines(to=D("2026-10-21", "16:00"))),
-         act("reschedule", rows="$dentist_mika", args=lines(to=D("2026-10-21", "16:00")))]),
-  T("put her field trip on thursday 8, 180 min", diff(new("event", name=has("field trip"), date="2026-10-15T08:00")),
-    ref=[act("create", args=lines(kind="event", name="Mika's field trip", date=U("week", 1, weekday=4, time="08:00"),
-                                  duration=180))]),
-  T("did i do Sign Mika's field trip form yet", rows("field_trip"),
-    ref=[ans(kind="task", name="Sign Mika's field trip form")]),
-  T("mark it done, signed it at breakfast", diff(upd("field_trip", status="completed", completed=ANY)),
-    ref=[act("complete", rows="@prev")]),
-  T("what else is open on the Mika list", rows("receipts_1", "flu_shot", "invites", "ski", "costume"),
-    ref=[ans(kind="task", linked_to="$mika_l", where='status = "open"')]),
-  T("how much time did i budget for Sew Mika's fox costume", val(180),
-    ref=[ans(op="sum", field="effort", rows="$costume")]))
-
 S("T25-052", "five turns group balance settle_up amount undo ledger settle_debt",
   T("where's Daniel Roy at in Mika expenses", val((-199.5, "CAD")),
     ref=[ans(op="balance", kind="group", name="Mika expenses", linked_to="$daniel")]),
@@ -124,12 +106,6 @@ S("T25-060", "four turns create notebook edit new note month add_to",
   T("put Tremblant packing list in the new notebook", diff(unlink("hike_nb", "tremblant_pack"), link("+1", "tremblant_pack")),
     ref=[act("add_to", rows="$tremblant_pack", args=lines(to="$c1"))]))
 
-S("T25-061", "person span weekday month work",
-  T("work people i've talked to from last monday to the end of october", rows("sarah_n", "priya", "jess"),
-    ref=[ans(kind="person", where='met = "work"', when=span(U("week", -1, weekday=1), U("month", 0, name=10)))]),
-  T("which of them on thursday", rows("jess", "priya"),
-    ref=[ans(kind="person", where='met = "work"', when=U("week", 0, weekday=4))]))
-
 S("T25-062", "event month open end count",
   T("anything on from december on", rows("book_12"),
     ref=[ans(kind="event", when={"from": U("month", 0, name=12)})]),
@@ -205,13 +181,6 @@ S("T25-071", "photo date within album remove_from prev",
     ref=[ans(kind="photo", within="@prev", linked_to="$mika_album")]),
   T("take it out of there", diff(unlink("mika_album", "tooth")),
     ref=[act("remove_from", rows="@prev", args=lines(from_="$mika_album"))]))
-
-S("T25-072", "delete album named knock-on count",
-  T("delete the Book club album", diff(gone("book_album"), unlink("book_album", "book_sept"),
-                                       unlink("book_album", "s11_cover")),
-    ref=[act("delete", kind="album", name="Book club")]),
-  T("how many albums do i have left", val(5),
-    ref=[ans(op="count", kind="album")]))
 
 S("T25-073", "empty result locker search delete prev",
   T("gym card in my locker?", rows("climbing"),

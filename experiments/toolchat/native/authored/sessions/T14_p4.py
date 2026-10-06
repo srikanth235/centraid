@@ -27,16 +27,6 @@ S("T14-202", "ordinal dj list complete reschedule",
   T("and tick the first one, it's backed up", diff(upd("usb", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", within="@2", order="date asc", limit=1)]))
 
-S("T14-203", "owe direction balance settle debt sum both signs",
-  T("what do i owe patricia", val((-230, "BRL")),
-    ref=[ans(op="balance", kind="person", name="Patrícia Ferreira")]),
-  T("diego owe me?", val((260, "BRL")),
-    ref=[ans(op="balance", kind="person", name="Diego Ferreira")]),
-  T("settle mine with patricia, sent the pix", diff(upd("d_patricia", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$patricia")]),
-  T("tally what they owe me altogether", val((1145, "BRL")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=OWED)]))
-
 S("T14-204", "except debts settle rest value",
   T("who owes me money", rows("d_rafa_s", "d_guga", "d_diego", "d_thiago", "d_kleber", "d_bianca"),
     ref=[find(kind="debt", where=OWED), ans(rows="@prev")]),

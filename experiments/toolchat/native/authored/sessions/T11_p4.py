@@ -63,12 +63,3 @@ S("T11-205", "bare weekday at N gp dentist range next week create friday night",
     ref=[act("create", args=lines(kind="event", name="Date night with Declan", date=U("week", 1, weekday=5, time="19:00")))]))
 
 # 206 two writes in one message
-S("T11-206", "two writes settle debt complete star locker item",
-  T("paid ger for the relief milking and i ordered the mineral buckets", diff(upd("d_ger", status="settled"), upd("minerals", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="Relief milking", more=True),
-         act("complete", kind="task", name="Order mineral buckets")]),
-  T("heifers are penned and star the gate codes", diff(upd("tb_pen", status="completed", completed=ANY), upd("gates", starred=True)),
-    ref=[act("complete", kind="task", name="Pen the heifers", more=True),
-         act("star", kind="locker item", name="Gate codes")]),
-  T("what do i owe all told now", val((1267, "EUR")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))

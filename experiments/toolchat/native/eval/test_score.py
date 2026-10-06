@@ -1,4 +1,5 @@
-"""Hand-built pass/fail pairs for score.py, one pair per outcome type (and a few edge cases).
+"""Hand-built pass/fail pairs for score.py, one pair per outcome type (and a few edge cases), and the
+clean turn metric on small synthetic runs.
 
     python3 -m unittest test_score -v      # from experiments/toolchat/native/eval
 
@@ -9,8 +10,9 @@ from __future__ import annotations
 
 import unittest
 
+import slices
 from lib import load_keys
-from score import Ids, judge_turn, report, score, wilson
+from score import Ids, clean_turns, judge_turn, report, score, wilson
 
 KEYS = load_keys("A")
 
@@ -162,6 +164,38 @@ class OutcomeTypes(unittest.TestCase):
         steps = [step({"tool": "decline", "decline": {"reason": "out_of_scope"}})]
         self.assertFalse(judge_turn(g, steps, self.ids)["pass"])
 
+    def test_retraction_step_scores_as_a_never_mind_decline(self):
+        """A turn the runtime ends itself (run.py: no model message, `runtime: never_mind`) is judged like
+        any decline."""
+        ended = {"model": "", "runtime": "never_mind", "response": {
+            "text": "declined: never_mind", "ends_turn": True,
+            "effect": {"tool": "decline", "decline": {"reason": "never_mind"}}}}
+        g = gold({"type": "decline", "reasons": ["never_mind"]})
+        res = judge_turn(g, [ended], self.ids)
+        self.assertTrue(res["pass"], res["problems"])
+        self.assertEqual((res["effect"]["kind"], res["effect"]["reason"], res["effect"]["steps"]), ("decline", "never_mind", 1))
+        self.assertFalse(judge_turn(gold({"type": "rows", "rows": ["dentist"]}), [ended], self.ids)["pass"])
+
+    # a log that ends the turn also answers the row -------------------------------------------
+    def test_log_that_answers_the_row_is_rows_plus_diff(self):
+        changed = updated("meera_s", date=(None, "2026-10-14T08:40:00"))
+        logged = [act([changed], verb="log", answer={"rows": [row("meera_s")], "ordered": False, "result": "@3"})]
+        g = gold({"type": "rows", "rows": ["meera_s"],
+                  "diff": {"rows": [{"key": "meera_s", "change": "updated", "fields": {"date": {"any": True}}}],
+                           "links": []}})
+        res = judge_turn(g, logged, self.ids)
+        self.assertTrue(res["pass"], res["problems"])
+        self.assertEqual((res["effect"]["kind"], res["effect"]["rows"]), ("rows", [vid("meera_s")]))
+        # the older gold of a log turn (a write) still holds; the other row does not
+        old = gold({"type": "diff", "diff": {"rows": [{"key": "meera_s", "change": "updated",
+                                                       "fields": {"date": {"any": True}}}], "links": []}})
+        self.assertTrue(judge_turn(old, logged, self.ids)["pass"])
+        wrong = gold({"type": "rows", "rows": ["meera_i"], "diff": g["gold"][0]["diff"]})
+        self.assertFalse(judge_turn(wrong, logged, self.ids)["pass"])
+        # `more: true` answers nothing: the turn ends however the model ends it
+        paged = [act([changed], verb="log", ends=False)]
+        self.assertEqual(judge_turn(old, paged, self.ids)["effect"]["kind"], "cap")
+
     # any-of readings and loops ---------------------------------------------------------------
     def test_any_acceptable_reading(self):
         g = gold({"type": "rows", "rows": ["oneonone10"]}, {"type": "rows", "rows": ["oneonone10", "pottery"]})
@@ -205,6 +239,66 @@ class Report(unittest.TestCase):
         self.assertEqual(summary["without_convention"]["session_pass"], [1, 1])
         self.assertEqual(summary["without_convention"]["turn_pass"], [1, 1])
         self.assertEqual(summary["without_convention"]["clean_sessions"], [0, 0])
+
+
+class CleanTurns(unittest.TestCase):
+    """Clean turn pass: a turn is downstream when an earlier turn of its session already failed; the
+    first failure of a session is still a clean turn."""
+
+    @staticmethod
+    def session(sid: str, outcomes: tuple[bool, ...]) -> tuple[dict, dict]:
+        """(gold, run) of a world-A session whose turn i is answered right (True) or wrong (False)."""
+        gold_session = {"id": sid, "world": "A", "tags": [], "turns": [
+            {"user": "q", "tags": [], "gold": [{"type": "rows", "rows": ["dentist"]}]} for _ in outcomes]}
+        run = {"id": sid, "turns": [{"steps": answer_rows("dentist" if ok else "vet")} for ok in outcomes]}
+        return gold_session, run
+
+    def scored(self, **sessions: tuple[bool, ...]) -> tuple[list[dict], dict, str]:
+        pairs = [self.session(sid, outcomes) for sid, outcomes in sessions.items()]
+        gold_sets = [g for g, _ in pairs]
+        text, summary = report(score([r for _, r in pairs], gold_sets), "t")
+        return gold_sets, summary, text
+
+    def test_clean_turns_of_one_session(self):
+        turns = [{"pass": p} for p in (True, False, True, False)]
+        self.assertEqual(clean_turns(turns), turns[:2])  # up to and including the first failure
+        self.assertEqual(clean_turns(turns[:1]), turns[:1])  # nothing failed: every turn is clean
+        self.assertEqual(clean_turns([{"pass": False}] * 3), [{"pass": False}])
+        self.assertEqual(clean_turns([]), [])
+
+    def test_fail_then_pass_is_two_clean_turns_and_one_clean_pass(self):
+        _, summary, _ = self.scored(s1=(True, False, True))  # t1 passes, t2 fails, t3 is downstream
+        self.assertEqual((summary["turns_clean"], summary["turn_pass_clean"]), (2, 1))
+        self.assertEqual((summary["turns"], summary["turn_pass"]), (3, 2))
+        self.assertEqual((summary["sessions"], summary["session_pass"]), (1, 0))
+
+    def test_summary_and_headline_over_several_sessions(self):
+        _, summary, text = self.scored(s1=(True, False, True), s2=(True, True), s3=(False, False, False))
+        self.assertEqual((summary["turns_clean"], summary["turn_pass_clean"]), (2 + 2 + 1, 1 + 2 + 0))
+        self.assertEqual((summary["turns"], summary["turn_pass"]), (8, 4))
+        self.assertEqual((summary["sessions"], summary["session_pass"]), (3, 1))
+        self.assertEqual(summary["ci95_clean"], list(wilson(3, 5)))
+        self.assertEqual(summary["ci95"], list(wilson(1, 3)))  # the existing keys stay
+        order = [text.index(x) for x in ("Session strict pass: 1/3", "Clean turn pass: 3/5 = 60.0%",
+                                         "Turn pass (all turns): 4/8 = 50.0%")]
+        self.assertEqual(order, sorted(order), "headline order: sessions, clean turns, all turns")
+
+    def test_no_sessions(self):
+        _, summary, _ = self.scored()
+        self.assertEqual((summary["turns_clean"], summary["turn_pass_clean"]), (0, 0))
+        self.assertEqual(summary["ci95_clean"], [0.0, 0.0])
+
+    def test_agrees_with_the_downstream_flag_of_slices(self):
+        gold_sets, summary, _ = self.scored(s1=(True, False, True, False), s2=(False, True), s3=(True, True, False))
+        recs = slices.slice_failed(summary["failed"], gold_sets)
+        self.assertEqual([(r["id"], r["turn"]) for r in recs],
+                         [("s1", 2), ("s1", 4), ("s2", 1), ("s3", 3)])  # the failed turns
+        self.assertEqual([(r["id"], r["turn"]) for r in recs if r["downstream"]], [("s1", 4)])
+        # a failed clean turn is the first failure of its session: the failed clean turns are the others
+        failed_clean = summary["turns_clean"] - summary["turn_pass_clean"]
+        self.assertEqual(failed_clean, 3)
+        self.assertEqual(sum(r["first_failure_in_session"] for r in recs), failed_clean)
+        self.assertEqual(sum(r["downstream"] for r in recs), len(recs) - failed_clean)
 
 
 if __name__ == "__main__":

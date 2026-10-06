@@ -7,6 +7,7 @@ CPU, the real tokenizer and the runtime's exported grammar; skipped when those a
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -18,6 +19,12 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import batching  # noqa: E402
 from batching import Batcher, stratified_sample  # noqa: E402
+
+
+def stable(value):
+    """An info value to compare across runs: a grammar error carries llguidance's parser dump, whose
+    `compute_time_us` is the parser's own timing and differs from one run to the next."""
+    return re.sub(r'"compute_time_us": \d+', '"compute_time_us": 0', value) if isinstance(value, str) else value
 
 
 def fan(b, items, gap=0.0):
@@ -213,6 +220,65 @@ PROMPTS = [
 ]
 
 
+class DateIndexWeightTest(unittest.TestCase):
+    """train.py: the index of a `dates[i]` in a trained think is a hard-tier decision token (it carries the hard weight)."""
+
+    THINK = ('intent: read "what is on friday"\nkind: event\nwhen: "friday" = dates[1] upcoming\n'
+             'set: to = dates[0]\npick: #2 ok')
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        try:
+            import torch  # noqa: F401
+            from transformers import AutoTokenizer
+            import fmt
+            import train
+            cls.tok = AutoTokenizer.from_pretrained("Qwen/Qwen3.5-0.8B")
+        except Exception as e:  # noqa: BLE001
+            raise unittest.SkipTest("no tokenizer / torch: %r" % (e,))
+        cls.fmt, cls.train = fmt, train
+
+    def encode(self, cfg=None):
+        tools = [{"type": "function", "function": {"name": "act", "description": "d",
+                                                    "parameters": {"type": "object", "properties": {}}}}]
+        ex = {"messages": [{"role": "system", "content": "today: x", "tools": tools},
+                           {"role": "user", "content": "dates: friday = 2026-03-13 \u00b7 monday = 2026-03-16\n\nwhat is on friday"},
+                           {"role": "assistant", "think": self.THINK, "tool": "act", "args": {"verb": "read", "when": "{}"}}]}
+        cfg = cfg or self.fmt.DecisionConfig()
+        return self.train.mark_date_indexes(self.fmt.encode(self.tok, ex, None, cfg), cfg), cfg
+
+    def hard_text(self, enc):
+        return [enc["text"][a:b] for (a, b), d, y in zip(enc["offsets"], enc["decision"], enc["labels"])
+                if d & self.fmt.PART_HARD and y != self.fmt.IGNORE]
+
+    def test_the_index_digits_are_hard_tokens(self):
+        enc, cfg = self.encode()
+        hard = self.hard_text(enc)
+        self.assertEqual([t for t in hard if t in ("0", "1")], ["1", "0"], hard)
+        self.fmt.check_decisions(enc, cfg)
+
+    def test_the_digits_carry_the_hard_weight(self):
+        import torch
+        enc, _ = self.encode()
+        idx = [i for i, (a, b) in enumerate(enc["offsets"])
+               if enc["text"][a:b] in ("0", "1") and enc["text"][max(0, a - 6):a] == "dates["]
+        self.assertEqual(len(idx), 2)
+        pos = torch.tensor([i - 1 for i in idx])  # label positions (the loss drops the first token)
+        w, _ = self.train.token_weights(enc["decision"], pos, 3.0, "cpu")
+        self.assertEqual([float(x) for x in w], [3.0, 3.0])
+        self.assertTrue(all(enc["decision"][i] & self.fmt.PART_HARD for i in idx))
+
+    def test_untrained_text_and_no_hard_tier_are_left_alone(self):
+        enc, _ = self.encode()
+        self.assertTrue(all(d == 0 for d, y in zip(enc["decision"], enc["labels"]) if y == self.fmt.IGNORE))
+        plain, cfg = self.encode(self.fmt.DecisionConfig(hard=None))
+        self.assertFalse(any(d & self.fmt.PART_HARD for d in plain["decision"]))
+        before = list(enc["decision"])
+        self.train.mark_date_indexes(enc, self.fmt.DecisionConfig())
+        self.assertEqual(enc["decision"], before, "idempotent")
+
+
 class HFEqualityTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -265,7 +331,7 @@ class HFEqualityTest(unittest.TestCase):
         for i, ((st, si), (bt, bi)) in enumerate(zip(serial, res)):
             self.assertEqual(bt, st, "prompt %d (%s) text" % (i, decoding))
             for k in ("think_cut", "override", "grammar_error", "prompt_tokens", "new_tokens", "think_tokens", "stopped"):
-                self.assertEqual(bi[k], si[k], "prompt %d (%s) info %s" % (i, decoding, k))
+                self.assertEqual(stable(bi[k]), stable(si[k]), "prompt %d (%s) info %s" % (i, decoding, k))
         widths = {bi["padded"] for _, bi in res}
         self.assertEqual(len(widths), 1)
         self.assertGreater(max(bi["prompt_tokens"] for _, bi in res), min(bi["prompt_tokens"] for _, bi in res))
@@ -313,6 +379,45 @@ class HFEqualityTest(unittest.TestCase):
     def test_hard_greedy(self):
         s = self.check("hard", [40, 40, 40, 40])
         self.assertTrue(any(i["think_cut"] for _, i in s), "the think guard fires in this case")
+
+    def test_dates_line_reaches_the_grammar_and_the_step(self):
+        """A prompt with a dates line: the batched draw is the serial one (n_dates for the grammar, the line for the call's reading)."""
+        prompt = ("<|im_start|>system\nVault. rows #1 #2<|im_end|>\n<|im_start|>user\ndates: friday = 2026-03-13 \u00b7 "
+                  "monday = 2026-03-16\n\nmove it to friday<|im_end|>\n<|im_start|>assistant\n<think>\n")
+        hf = self.backend("hard")
+        serial = hf.complete(prompt)
+        self.assertEqual(self.hf_backend.decode.fmt.dates_line_in_prompt(prompt).count(" = "), 2)
+        bb = batching.BatchedBackend(hf, max_batch=2, max_wait=0.01, max_tokens=10**9)
+        try:
+            text, info = bb.complete_info(prompt)
+        finally:
+            bb.close()
+        self.assertEqual(text, serial)
+        self.assertEqual(info["rendered_call"], hf.last_info["rendered_call"])
+
+    def test_retry_prefix_draw_and_compile_stats(self):
+        """`compile=` on the batched path: the retry is a second draw whose think starts with `retry: <slot>`, equal to the serial
+        draw with that prefix; `info["compile"]` and the stats say what the op did."""
+        hf = self.backend("hard")
+        prefix = "retry: where\n"
+        want, _ = hf.dec.complete(PROMPTS[0], mode="hard", prefix=prefix)
+        self.assertTrue(want.startswith("<think>\n" + prefix))
+        seen = {}
+
+        def fake(text, compile, again=None):
+            seen["compile"] = compile
+            return again(prefix), "retry"
+        real = self.hf_backend.compiled_message
+        self.hf_backend.compiled_message = fake
+        bb = batching.BatchedBackend(hf, max_batch=2, max_wait=0.01, max_tokens=10**9)
+        try:
+            text, info = bb.complete_info(PROMPTS[0], compile=lambda slots: {"refused": {"slot": "where", "why": "x"}})
+        finally:
+            self.hf_backend.compiled_message = real
+            bb.close()
+        self.assertEqual(text, want)
+        self.assertEqual(info["compile"], "retry")
+        self.assertEqual((bb.stats["compiled"], bb.stats["retried"], bb.stats["retry_ok"], bb.stats["fallback"]), (1, 1, 1, 0))
 
     def test_free_greedy_with_per_request_limits(self):
         s = self.check("free", [7, 40, 13, 40])

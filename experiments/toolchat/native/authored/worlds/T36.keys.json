@@ -1,0 +1,1202 @@
+{
+  "aadhaar_anjali": {
+    "id": "98bacc75-4bb3-7dc7-8e1f-6fbea4d67918",
+    "kind": "document"
+  },
+  "aadhaar_dev": {
+    "id": "6354f1d5-f256-7046-8941-b3e991a99c75",
+    "kind": "document"
+  },
+  "aadhaar_id": {
+    "id": "c63b61bb-1d2c-7c38-8763-d5d0e1643f74",
+    "kind": "locker item"
+  },
+  "aai": {
+    "id": "f4526454-ef67-7e89-8666-434397cd3a67",
+    "kind": "person"
+  },
+  "aai_dinner_1004": {
+    "id": "ece2f0ec-94c8-71dc-8c2f-949c0fd33822",
+    "kind": "event"
+  },
+  "aai_dinner_1025": {
+    "id": "a47472c6-6c16-7b9d-8ac6-e6dc057f28e1",
+    "kind": "event"
+  },
+  "aai_dinner_1115": {
+    "id": "f795468a-24ac-7d1b-8e10-f23dccb065a1",
+    "kind": "event"
+  },
+  "aai_dinner_1206": {
+    "id": "05b5d417-ff91-7841-850f-dd7d39e3bbd6",
+    "kind": "event"
+  },
+  "aai_fridge": {
+    "id": "19c99b7c-dcbf-7dbe-88f1-204e5e683ae5",
+    "kind": "task"
+  },
+  "aai_wifi": {
+    "id": "12cb6e75-ce44-7489-81f0-46b4e323d239",
+    "kind": "locker item"
+  },
+  "anjali": {
+    "id": "5286ce5c-1820-7d23-895a-118a7787bd7b",
+    "kind": "person"
+  },
+  "arjun": {
+    "id": "8a545ae8-d322-7413-88d7-8903aebdf8ad",
+    "kind": "person"
+  },
+  "baba": {
+    "id": "916ea510-787e-78c5-84f3-f6b9157d227d",
+    "kind": "person"
+  },
+  "baba_meds": {
+    "id": "462b5192-ad2e-77c4-8b05-847fbbb92393",
+    "kind": "task"
+  },
+  "badm_0912": {
+    "id": "edc5935b-9972-7ac8-8787-13907d3894a6",
+    "kind": "event"
+  },
+  "badm_0919": {
+    "id": "33da590f-c4a7-7b93-8732-d552ead9a365",
+    "kind": "event"
+  },
+  "badm_0926": {
+    "id": "de2ecaae-8564-7ff3-8138-d0acc4a89409",
+    "kind": "event"
+  },
+  "badm_1003": {
+    "id": "28549311-4704-79f2-8e65-93358d12c5c1",
+    "kind": "event"
+  },
+  "badm_1017": {
+    "id": "950fe8d5-51ba-7a43-8ad1-782f307a47eb",
+    "kind": "event"
+  },
+  "badm_1024": {
+    "id": "c3d6cb4e-0290-79e9-8998-91fd8273c7f0",
+    "kind": "event"
+  },
+  "badm_1031": {
+    "id": "f3f8aefc-f6fd-75a2-8a64-1e530ed328b7",
+    "kind": "event"
+  },
+  "badm_1107": {
+    "id": "e093702d-1e8d-7038-8ccf-d392acdc5945",
+    "kind": "event"
+  },
+  "badm_1114": {
+    "id": "014efa76-560b-76b1-87d8-d8e518284706",
+    "kind": "event"
+  },
+  "badm_1205": {
+    "id": "bd398c97-0adf-73da-82c9-835df54b9612",
+    "kind": "event"
+  },
+  "badm_1212": {
+    "id": "4601c13a-6eec-7265-8387-66653de9f783",
+    "kind": "event"
+  },
+  "badm_1219": {
+    "id": "cba2b8fb-a95f-75c0-80cf-a609decbc61c",
+    "kind": "event"
+  },
+  "badm_1226": {
+    "id": "5188e7b3-5164-7b83-8dce-972e47ab5340",
+    "kind": "event"
+  },
+  "book_fly": {
+    "id": "a42eb266-658c-7be0-8af1-343aad9fc88a",
+    "kind": "task"
+  },
+  "btc": {
+    "id": "a969cff3-61d4-7582-8791-4c19939cc612",
+    "kind": "locker item"
+  },
+  "buy_geyser": {
+    "id": "dc6457fc-6aa1-7651-807d-54843e2f922c",
+    "kind": "task"
+  },
+  "ca": {
+    "id": "56f794f8-8392-7633-8c2e-122fcf484640",
+    "kind": "person"
+  },
+  "ca_meeting": {
+    "id": "de6ed3f5-6e97-7298-8f12-91dc3191ea07",
+    "kind": "event"
+  },
+  "callm_0913": {
+    "id": "a73fc907-f91a-7d43-8133-219556770a48",
+    "kind": "event"
+  },
+  "callm_0920": {
+    "id": "0a41e9f3-352a-75ee-8b77-5ee0e3f79047",
+    "kind": "event"
+  },
+  "callm_0927": {
+    "id": "a134e8e2-1b3e-76c2-8e9f-733246a1a199",
+    "kind": "event"
+  },
+  "callm_1004": {
+    "id": "9cfa5dd4-64a7-79ec-8d1e-2f4f0976ce3e",
+    "kind": "event"
+  },
+  "callm_1018": {
+    "id": "79432091-c512-709a-81b2-e6912055b290",
+    "kind": "event"
+  },
+  "callm_1025": {
+    "id": "134597f1-eed2-7aaa-8fb3-dd9272fbc670",
+    "kind": "event"
+  },
+  "callm_1101": {
+    "id": "a2580ece-9184-729c-8617-292969143842",
+    "kind": "event"
+  },
+  "callm_1108": {
+    "id": "deea8105-12c0-7cf8-8bd2-744e4670659a",
+    "kind": "event"
+  },
+  "callm_1115": {
+    "id": "94f6caa4-2908-7ad6-8ed1-12ab62b21296",
+    "kind": "event"
+  },
+  "callm_1206": {
+    "id": "044a4317-9b08-7606-80d2-b017da91d274",
+    "kind": "event"
+  },
+  "callm_1213": {
+    "id": "0f748dd5-4d56-7bba-8d71-e94d32181602",
+    "kind": "event"
+  },
+  "callm_1220": {
+    "id": "d4a0e6ac-cdda-7e7f-8972-fa27ebb84f06",
+    "kind": "event"
+  },
+  "callm_1227": {
+    "id": "4325cdcf-f1fb-7c36-8a09-c5c93eba4b55",
+    "kind": "event"
+  },
+  "catchup_bunty": {
+    "id": "51cb51ce-51a0-78c9-879c-860380163aa1",
+    "kind": "event"
+  },
+  "caterer": {
+    "id": "7ff56b88-05d2-7326-8cd9-baf8d1726aa1",
+    "kind": "person"
+  },
+  "caterer_inv": {
+    "id": "ea81d852-1702-7be6-8ff9-5285d37ad882",
+    "kind": "document"
+  },
+  "chinmay": {
+    "id": "ab62857c-f95d-73b1-8306-b22790d542ba",
+    "kind": "person"
+  },
+  "cloud_api": {
+    "id": "b13bddeb-453e-7cf5-823b-e9598f8f46db",
+    "kind": "locker item"
+  },
+  "coffee_priya": {
+    "id": "b5e5e05b-5907-722a-8686-0a042053105d",
+    "kind": "event"
+  },
+  "curtains": {
+    "id": "ebc1e723-06ad-7667-893e-2d552887d6a8",
+    "kind": "task"
+  },
+  "d_anjali": {
+    "id": "aa6b57ee-4cde-7919-853b-e996df7ab5d1",
+    "kind": "debt"
+  },
+  "d_arjun": {
+    "id": "60c9868c-05eb-7ebf-8fc5-b4c7ac2d56c6",
+    "kind": "debt"
+  },
+  "d_baba": {
+    "id": "10e77ffb-0805-76b4-8c40-5198fc2fe925",
+    "kind": "debt"
+  },
+  "d_ganesh": {
+    "id": "cfab650d-48f7-78fd-88d7-48f49ae3823a",
+    "kind": "debt"
+  },
+  "d_kunal": {
+    "id": "d1b7201a-d767-7aa2-8cf8-1fc3cdca6277",
+    "kind": "debt"
+  },
+  "d_neha": {
+    "id": "42361b94-c541-74fe-86a8-69610a650089",
+    "kind": "debt"
+  },
+  "d_papa": {
+    "id": "08bab8bb-6851-7c64-80a9-4696ca44b6cd",
+    "kind": "debt"
+  },
+  "d_priya_d": {
+    "id": "8226dacc-6e21-786d-83e8-43d541e7a9df",
+    "kind": "debt"
+  },
+  "d_rohan_k": {
+    "id": "ea1bc580-6c56-7123-82d5-72b3bc8ce9dd",
+    "kind": "debt"
+  },
+  "d_rohan_m": {
+    "id": "32e5edd4-5068-7392-80e8-0be7033868b8",
+    "kind": "debt"
+  },
+  "d_siddharth": {
+    "id": "c1063468-21c8-7e19-846e-b3d7d0746887",
+    "kind": "debt"
+  },
+  "d_sneha": {
+    "id": "2eadcc83-8245-7fd9-88d1-574ada93b354",
+    "kind": "debt"
+  },
+  "d_vikram": {
+    "id": "3829077f-5b7e-754d-8394-8c5402847e10",
+    "kind": "debt"
+  },
+  "decor_inv": {
+    "id": "33f5199c-81be-7bd1-85e0-2b7043b1af96",
+    "kind": "document"
+  },
+  "decorator": {
+    "id": "045e275c-e559-757d-8b51-db647373f9b3",
+    "kind": "person"
+  },
+  "dentist": {
+    "id": "660f88d5-5449-7480-89aa-f4cfbb6d6c35",
+    "kind": "person"
+  },
+  "dentist_ev": {
+    "id": "75b32d42-3e57-7d6f-80b9-acde027a7180",
+    "kind": "event"
+  },
+  "diary_goa": {
+    "id": "9e00fa71-98b9-783b-8d91-14a2c18938d3",
+    "kind": "note"
+  },
+  "diary_wedding": {
+    "id": "783fd73f-7fb8-7122-887b-7b58c9b45b3e",
+    "kind": "note"
+  },
+  "dinner_mummy": {
+    "id": "935f71c2-c54a-7ccc-83a9-1abe324bb373",
+    "kind": "event"
+  },
+  "dinner_mummy_old": {
+    "id": "0116f154-2cf9-79e0-8488-2f8f4daf7fed",
+    "kind": "event"
+  },
+  "doc_baba": {
+    "id": "7acb6861-b77e-7ead-82a5-cea00b61d0f7",
+    "kind": "event"
+  },
+  "doc_papa": {
+    "id": "b3900d61-4790-72fd-858c-fbf1c5ebeed0",
+    "kind": "event"
+  },
+  "dr_kelkar": {
+    "id": "a4867173-f040-71a8-82fc-deb6e8999309",
+    "kind": "person"
+  },
+  "dubai": {
+    "id": "b56a86d0-9aa9-7d07-81b8-1727558b32e6",
+    "kind": "group"
+  },
+  "dubai_notes": {
+    "id": "92bb0486-08fd-7323-8fd0-ebe55db109ac",
+    "kind": "note"
+  },
+  "dubai_trip": {
+    "id": "3d952522-3fee-7893-8498-3d80f6e2182e",
+    "kind": "event"
+  },
+  "dubai_visa": {
+    "id": "d88bb14f-fe5a-795d-8287-a57feb4fd475",
+    "kind": "document"
+  },
+  "emi_aug": {
+    "id": "07441e03-5ce5-7be3-8461-8a7404a2d385",
+    "kind": "task"
+  },
+  "emi_dec": {
+    "id": "1dd895ed-7b4d-7510-825f-183eb17d2cb4",
+    "kind": "task"
+  },
+  "emi_jan": {
+    "id": "6ff0f2a8-9957-7257-8ff8-afeebae2053e",
+    "kind": "task"
+  },
+  "emi_jul": {
+    "id": "7087ed36-17bc-75e7-8b93-42a194100fc2",
+    "kind": "task"
+  },
+  "emi_nov": {
+    "id": "86cd5d90-f1f9-73cc-8b7e-a9f2f7a316d4",
+    "kind": "task"
+  },
+  "emi_oct": {
+    "id": "637b5606-1ed8-7b7b-8b35-57643586e0fe",
+    "kind": "task"
+  },
+  "emi_sep": {
+    "id": "37e061e3-645b-7e59-8612-454c1798c8af",
+    "kind": "task"
+  },
+  "empty_f": {
+    "id": "ea6c3e4d-c754-7b17-8aab-554689c04455",
+    "kind": "folder"
+  },
+  "engagement": {
+    "id": "38264c05-3f19-7384-8191-13b89de73c85",
+    "kind": "event"
+  },
+  "exam_pending": {
+    "id": "0c39dd65-b652-729a-8510-53f2d28cea24",
+    "kind": "task"
+  },
+  "figma": {
+    "id": "1a96e677-3918-7b57-8bce-bbe8fada9a03",
+    "kind": "locker item"
+  },
+  "flat": {
+    "id": "087ea2fc-61b7-731d-8ae3-73f137c53ce9",
+    "kind": "group"
+  },
+  "flat_album": {
+    "id": "33e7b5b5-d64f-7bd4-8e28-98780f16f4cd",
+    "kind": "album"
+  },
+  "flat_f": {
+    "id": "3335bff4-af5d-7328-8239-0f4f26be5743",
+    "kind": "folder"
+  },
+  "flat_help": {
+    "id": "67c8393d-2559-73a2-8828-951970d3d885",
+    "kind": "note"
+  },
+  "flat_move": {
+    "id": "bdcd1e12-2f75-739d-8f1c-982d9f2b9284",
+    "kind": "note"
+  },
+  "flat_rules": {
+    "id": "0b9fda46-5f7b-74af-8f7c-5b9dd65bc838",
+    "kind": "note"
+  },
+  "flat_shop": {
+    "id": "ec9c75dd-3929-77ca-8e01-e771944011d6",
+    "kind": "note"
+  },
+  "flat_wifi": {
+    "id": "3667b5b9-a6b9-71a5-8388-d2d20d8c1bdf",
+    "kind": "note"
+  },
+  "fly_back": {
+    "id": "11ddca35-8db6-73d0-8bd9-9228d5bcad29",
+    "kind": "event"
+  },
+  "fly_chd": {
+    "id": "d82ac0db-fc5f-7058-877a-0aec65b4fdf3",
+    "kind": "event"
+  },
+  "form16": {
+    "id": "55d26fb3-dfc1-7956-89ba-f1fe7b92229b",
+    "kind": "document"
+  },
+  "ganesh": {
+    "id": "3c121fbf-b2a9-79ac-869e-aa855d96351e",
+    "kind": "person"
+  },
+  "gate_code": {
+    "id": "2fc324ad-0410-739b-8b67-a0c5ae5f267e",
+    "kind": "locker item"
+  },
+  "gifts_note": {
+    "id": "5cc865df-9bcf-7d9b-8226-29c7683fffe7",
+    "kind": "note"
+  },
+  "goa": {
+    "id": "4ddde77b-22d5-7006-8a69-1f901c389f8f",
+    "kind": "event"
+  },
+  "goa_album": {
+    "id": "2033eca2-2b7e-7b11-8e99-572268e6b4f1",
+    "kind": "album"
+  },
+  "griha": {
+    "id": "1ef7c7f1-cb5b-7118-8577-68d7a1c150c9",
+    "kind": "event"
+  },
+  "gym_member": {
+    "id": "d3d395ef-33dc-75bb-8113-7f06a289b3fa",
+    "kind": "locker item"
+  },
+  "hdfc_card": {
+    "id": "132e4022-ae2a-73cf-8800-e3fbe6101d65",
+    "kind": "locker item"
+  },
+  "hdfc_login": {
+    "id": "88d10b58-736e-7b15-84dc-c52ad545c0b9",
+    "kind": "locker item"
+  },
+  "home_list": {
+    "id": "bee1a94d-8299-7fe1-8cce-66307d383766",
+    "kind": "list"
+  },
+  "home_nb": {
+    "id": "0754059d-f11c-7a93-822f-9e281efff425",
+    "kind": "notebook"
+  },
+  "home_wifi": {
+    "id": "e608c631-5337-73be-8f39-ff1cc967a4c8",
+    "kind": "locker item"
+  },
+  "honeymoon": {
+    "id": "5110a6e3-7a25-7fb6-8d6c-e87333282af9",
+    "kind": "group"
+  },
+  "id_f": {
+    "id": "1d2d1152-ad16-723b-8803-d13b83655e7f",
+    "kind": "folder"
+  },
+  "it_login": {
+    "id": "91816e06-5d74-76b3-819c-45a1f67c7aa4",
+    "kind": "locker item"
+  },
+  "joint_acct": {
+    "id": "7b064c16-ce87-70ce-8aef-2c96cfe4c352",
+    "kind": "locker item"
+  },
+  "joshi_fund": {
+    "id": "a32f0178-1446-77be-8614-719242a41d88",
+    "kind": "group"
+  },
+  "kit_poha": {
+    "id": "1f34e3f2-3197-77bd-8c7d-44967b0cfd85",
+    "kind": "note"
+  },
+  "kit_puranpoli": {
+    "id": "74c99d1b-1caf-7ede-84c1-e866a66120ef",
+    "kind": "note"
+  },
+  "kit_rajma": {
+    "id": "ec012d40-e332-76ea-817c-c15c0fdd6716",
+    "kind": "note"
+  },
+  "kitchen_nb": {
+    "id": "7dac7e59-6131-75c3-8d10-04240513f041",
+    "kind": "notebook"
+  },
+  "kunal": {
+    "id": "b5e9dbc0-ef4e-72cb-8c1f-e9f4aee13a92",
+    "kind": "person"
+  },
+  "landlord": {
+    "id": "a77442b2-a270-7d5e-8e5d-33b257337ea7",
+    "kind": "person"
+  },
+  "lease": {
+    "id": "d52c7c83-8ceb-767f-88a2-771e74b57056",
+    "kind": "document"
+  },
+  "leave_apply": {
+    "id": "6fc90ea6-8b79-7188-844c-69d059c5d6cd",
+    "kind": "task"
+  },
+  "leave_old": {
+    "id": "67929acd-0a7d-7819-8d9f-b33eb41f9da6",
+    "kind": "task"
+  },
+  "licence": {
+    "id": "4c5a7c09-871b-70e7-8815-0516cd83bace",
+    "kind": "locker item"
+  },
+  "lohri": {
+    "id": "393c3aca-7563-7aad-87bf-a046e76f320b",
+    "kind": "event"
+  },
+  "lunch_rohan_k": {
+    "id": "d5bc24cb-7161-76d1-8431-87251afd98c8",
+    "kind": "event"
+  },
+  "maid": {
+    "id": "22da3b2d-c139-7c0e-8e1f-92049496cf7d",
+    "kind": "person"
+  },
+  "maint_dec": {
+    "id": "a85bdb88-e2c9-74e7-8dbe-bc6c607f717f",
+    "kind": "task"
+  },
+  "maint_jan": {
+    "id": "a8f1b0d0-5fa3-731d-8e6c-80fccf29bfbe",
+    "kind": "task"
+  },
+  "maint_nov": {
+    "id": "5f94113b-4182-7445-8eca-1c896e54ce5a",
+    "kind": "task"
+  },
+  "maint_oct": {
+    "id": "6a8919b8-491b-7512-8b99-75b5f69abc69",
+    "kind": "task"
+  },
+  "maint_sep": {
+    "id": "9f3be2db-f0d8-7380-8491-0a8b84dedd48",
+    "kind": "task"
+  },
+  "marriage_cert_d": {
+    "id": "74ec756d-b3f5-7141-8b96-3c719af7a737",
+    "kind": "document"
+  },
+  "me": {
+    "id": "76ffdcdb-dac9-7b02-8385-73d937201089",
+    "kind": "person"
+  },
+  "mehendi": {
+    "id": "b783122a-77ed-7b24-89ff-9f23f3f0ad5d",
+    "kind": "event"
+  },
+  "mehra_fund": {
+    "id": "60ce1244-d226-7d55-844c-985b96f430ef",
+    "kind": "group"
+  },
+  "mummy": {
+    "id": "754d146b-543f-73f4-86a3-086c611a6b9c",
+    "kind": "person"
+  },
+  "mummy_gift": {
+    "id": "2311fa17-4de6-79c7-8ed7-3b93a8e56f4f",
+    "kind": "task"
+  },
+  "naik_rent": {
+    "id": "fc183fb8-e47e-79aa-83cb-649bba5fa364",
+    "kind": "event"
+  },
+  "name_change": {
+    "id": "0a6a9b33-2810-7f1b-8702-8063e9e3b394",
+    "kind": "task"
+  },
+  "nc_aadhaar": {
+    "id": "f721b597-147c-7d71-84c9-ba17e2911a96",
+    "kind": "task"
+  },
+  "nc_bank": {
+    "id": "fdcf7230-6a7a-7a5e-815d-fb4b48c28c9c",
+    "kind": "task"
+  },
+  "nc_marriage_cert": {
+    "id": "3c90d427-3f39-7411-88ea-946bea5b72b2",
+    "kind": "task"
+  },
+  "nc_pan": {
+    "id": "bfa0e0a6-cdac-7b39-8119-80c8110c0128",
+    "kind": "task"
+  },
+  "nc_passport": {
+    "id": "7e0f380f-d7b9-78dc-8323-dbc3cf975a78",
+    "kind": "task"
+  },
+  "neha": {
+    "id": "5a2b1f7d-c214-74d2-85cd-c08f5e139d6a",
+    "kind": "person"
+  },
+  "ny_party": {
+    "id": "d2a3bce6-edcb-79bc-8575-34c1a916d742",
+    "kind": "event"
+  },
+  "offer_letter": {
+    "id": "6aeec52e-8b73-7ef7-8de6-20d355225df8",
+    "kind": "document"
+  },
+  "office_party": {
+    "id": "b3203bdc-f6ea-708e-827b-17c2eb7342d7",
+    "kind": "event"
+  },
+  "old_agent": {
+    "id": "8e1f7ba5-6dad-7bb2-8ae8-4d52ed659937",
+    "kind": "person"
+  },
+  "old_decor": {
+    "id": "059e86bb-7fa5-78fd-8cb8-4247be07d7fc",
+    "kind": "task"
+  },
+  "old_idea": {
+    "id": "ca139cc7-bb95-7048-87aa-0031e5e0cf9e",
+    "kind": "note"
+  },
+  "old_lease": {
+    "id": "86d5d590-2a4f-7183-88c4-03eaedb9654a",
+    "kind": "document"
+  },
+  "old_login": {
+    "id": "6b01c983-1fe5-764b-8a61-ec5cbdc9580c",
+    "kind": "locker item"
+  },
+  "old_meet": {
+    "id": "94cb591a-7e88-7f87-8eea-174f480460a0",
+    "kind": "event"
+  },
+  "old_quote": {
+    "id": "bb74e483-5e51-7069-86a9-21d3393f41ea",
+    "kind": "document"
+  },
+  "old_scratch": {
+    "id": "2b9bb22c-929a-7f19-8a16-29e7abd72b99",
+    "kind": "note"
+  },
+  "old_sofa": {
+    "id": "8c201aba-88fc-74b1-8807-c37c5369cf49",
+    "kind": "task"
+  },
+  "old_tasting": {
+    "id": "c729b063-5b5b-773d-8f7a-0acd05d9d87c",
+    "kind": "event"
+  },
+  "old_vendor": {
+    "id": "352a4683-a930-7a0b-85a9-dee0a0b30ed0",
+    "kind": "person"
+  },
+  "old_wifi": {
+    "id": "789564cf-8da9-716a-8ea6-5797180d5f28",
+    "kind": "locker item"
+  },
+  "onsite_form": {
+    "id": "f1ab46b3-3f44-755b-838e-2be5e4040af2",
+    "kind": "task"
+  },
+  "p_badminton": {
+    "id": "875a067d-45e4-7877-87a0-1c1674b1beb7",
+    "kind": "photo"
+  },
+  "p_blurry": {
+    "id": "51b8b2c5-35e7-7fa6-875e-c0814b6b3f5a",
+    "kind": "photo"
+  },
+  "p_bunty": {
+    "id": "f62f838b-fe0c-79b0-8e11-a94b5d8e9530",
+    "kind": "photo"
+  },
+  "p_ca_docs": {
+    "id": "72301486-f81c-7192-8cbf-1c841ebedd55",
+    "kind": "photo"
+  },
+  "p_coep": {
+    "id": "9873e7a2-bc55-7590-83d1-588825231a58",
+    "kind": "photo"
+  },
+  "p_cousin": {
+    "id": "9aa542d2-2fca-7321-813d-5d91197870b6",
+    "kind": "photo"
+  },
+  "p_decor": {
+    "id": "8b78d9d9-1e1c-7451-818c-7fada2898760",
+    "kind": "photo"
+  },
+  "p_diwali": {
+    "id": "11bfb648-678c-7e28-83fb-58c38a73dd73",
+    "kind": "photo"
+  },
+  "p_dubai_burj": {
+    "id": "4f12e1e3-a1cf-7011-8c8c-30cc2cb60a67",
+    "kind": "photo"
+  },
+  "p_dubai_dune": {
+    "id": "550a371f-48f1-7e7b-88a6-fd74ee27f122",
+    "kind": "photo"
+  },
+  "p_dubai_mall": {
+    "id": "6d095979-33ee-7fd1-860c-db2b8fcd24fb",
+    "kind": "photo"
+  },
+  "p_family": {
+    "id": "47327cba-1140-7b9a-8757-ca080ddef102",
+    "kind": "photo"
+  },
+  "p_flat_balcony": {
+    "id": "5aeff3f7-28ea-7abe-8e39-4cbc3a2a2e96",
+    "kind": "photo"
+  },
+  "p_flat_empty": {
+    "id": "80678ae1-d2c9-7efb-84e4-a7a1f3e78543",
+    "kind": "photo"
+  },
+  "p_flat_keys": {
+    "id": "9a06799d-8c45-7ea6-8a20-a65e00184804",
+    "kind": "photo"
+  },
+  "p_flat_kitchen": {
+    "id": "00f78b7b-1188-7c43-8366-43b37d8be385",
+    "kind": "photo"
+  },
+  "p_flat_puja": {
+    "id": "702cdd05-0ac2-740d-87c7-784dfb76351f",
+    "kind": "photo"
+  },
+  "p_friends": {
+    "id": "955f9ffb-c1ab-752e-8375-fe8b5d71ba13",
+    "kind": "photo"
+  },
+  "p_goa_beach": {
+    "id": "0c501719-8bd2-73a4-8395-4c4a8bda8a2f",
+    "kind": "photo"
+  },
+  "p_goa_dinner": {
+    "id": "cc9c6752-f334-705a-8c96-26dd6422393a",
+    "kind": "photo"
+  },
+  "p_goa_fort": {
+    "id": "c4a0ebf7-1392-71d1-866d-9bcc8a94edbf",
+    "kind": "photo"
+  },
+  "p_goa_scooter": {
+    "id": "3bf2bdc8-2c19-726b-8d4e-0ffa09679587",
+    "kind": "photo"
+  },
+  "p_goa_sunset": {
+    "id": "9032387b-77a0-71a9-886e-e297dec68c12",
+    "kind": "photo"
+  },
+  "p_haldi": {
+    "id": "c6507499-f413-7872-8693-afb652ec9e98",
+    "kind": "photo"
+  },
+  "p_mehendi": {
+    "id": "4c91da61-dc55-70c6-8d75-5b8f218b5c7d",
+    "kind": "photo"
+  },
+  "p_office": {
+    "id": "c9f2b2bd-96d8-75b6-8f75-589b5c1dc8b3",
+    "kind": "photo"
+  },
+  "p_phere": {
+    "id": "405f8708-2564-7594-8773-675d4a2779c7",
+    "kind": "photo"
+  },
+  "p_receipt": {
+    "id": "8deeaedd-32fc-70f6-8af9-72338817c19f",
+    "kind": "photo"
+  },
+  "p_reception": {
+    "id": "7e1139cf-9a14-7af7-8955-0e2bfc6e04b7",
+    "kind": "photo"
+  },
+  "p_ride_fc": {
+    "id": "15aa11e0-3f2a-7e5f-87b3-b51769f0e6f6",
+    "kind": "photo"
+  },
+  "p_ride_mulshi": {
+    "id": "59eaa0a3-7025-795a-8d7f-c37ca5b7f542",
+    "kind": "photo"
+  },
+  "p_ride_puncture": {
+    "id": "762b5b7e-6aa4-72a6-8b58-34245d127edd",
+    "kind": "photo"
+  },
+  "p_ride_sinhagad": {
+    "id": "7ff16a92-6ac7-74f6-89cd-78d077527397",
+    "kind": "photo"
+  },
+  "p_sangeet": {
+    "id": "2af1e0d9-be17-7ad2-8cfc-d66fef2ab92c",
+    "kind": "photo"
+  },
+  "p_varmala": {
+    "id": "5d251761-ed35-7d53-8097-cc24a484a1f2",
+    "kind": "photo"
+  },
+  "pack_chd": {
+    "id": "cef2df71-fbff-766c-8f06-bd8996edd96a",
+    "kind": "task"
+  },
+  "pan_dev": {
+    "id": "19b6bd55-d810-7d9a-8154-8ceb0fecdde1",
+    "kind": "document"
+  },
+  "papa": {
+    "id": "57794bea-1c2f-7571-8a75-eca57d6b1606",
+    "kind": "person"
+  },
+  "papa_report": {
+    "id": "380617ec-66b4-777e-8e1c-25cd0e3dabdf",
+    "kind": "task"
+  },
+  "parents_list": {
+    "id": "bdc77533-72ca-7028-8d87-d10f63f27695",
+    "kind": "list"
+  },
+  "passport": {
+    "id": "eea23806-8997-715d-8efc-af09fb8be091",
+    "kind": "locker item"
+  },
+  "passport_scan": {
+    "id": "13f7a2e0-87f9-7247-8011-8b2e261f012e",
+    "kind": "document"
+  },
+  "pay_kunal": {
+    "id": "327f4b74-cb9f-74b4-84b8-5c5eb48e0941",
+    "kind": "task"
+  },
+  "pay_rohan": {
+    "id": "8d66ad62-0d75-7d5e-841b-edf5a1ae45b5",
+    "kind": "task"
+  },
+  "pay_vikram": {
+    "id": "f00cc448-3229-74b9-8cd0-5dc44cb2e4c6",
+    "kind": "task"
+  },
+  "payslip_nov": {
+    "id": "7b2eff09-8778-7441-84a6-0e131e9d2434",
+    "kind": "document"
+  },
+  "perf_review": {
+    "id": "00f85fb8-42cc-704c-8989-688d69869b91",
+    "kind": "task"
+  },
+  "photog": {
+    "id": "e4b86286-7595-7e8f-89b6-60ffca8e4f0e",
+    "kind": "person"
+  },
+  "photog_contract": {
+    "id": "6a4096d2-27cb-71e0-8c2b-2dfbb79e4246",
+    "kind": "document"
+  },
+  "police_verif": {
+    "id": "9c2503da-bddb-7fb9-8770-1c529efaf5ce",
+    "kind": "document"
+  },
+  "pr_review": {
+    "id": "b30fb184-aa97-7761-8c3a-3f35088083c7",
+    "kind": "task"
+  },
+  "priest": {
+    "id": "09c60ac8-db10-708a-8c9b-17bff9771388",
+    "kind": "person"
+  },
+  "priya_d": {
+    "id": "7f436ab7-9262-7ab7-85b8-38a155f2bebb",
+    "kind": "person"
+  },
+  "priya_s": {
+    "id": "0eb1a79e-97ab-7a49-8c7d-936bc9cad9ae",
+    "kind": "person"
+  },
+  "reception": {
+    "id": "6019c16d-4faf-71e5-848d-4c877f635182",
+    "kind": "event"
+  },
+  "registration": {
+    "id": "df0c78f5-4b0c-7b95-8c69-8b0ed9feac75",
+    "kind": "event"
+  },
+  "release_notes": {
+    "id": "bffed76c-966f-7f85-835c-45cec63a682f",
+    "kind": "task"
+  },
+  "rent_agreement": {
+    "id": "dc6855dc-a15d-7389-8d50-5545197f4505",
+    "kind": "locker item"
+  },
+  "rent_aug": {
+    "id": "0757ba24-408f-72e3-8a64-ccccf9422925",
+    "kind": "task"
+  },
+  "rent_dec": {
+    "id": "2acfab70-7c57-7b58-82af-50b7a896c56b",
+    "kind": "task"
+  },
+  "rent_jan": {
+    "id": "a8b08141-4373-7abe-866f-07d931ec9bf3",
+    "kind": "task"
+  },
+  "rent_nov": {
+    "id": "140007b4-7b0f-7b85-8cb6-f8f05dc649e6",
+    "kind": "task"
+  },
+  "rent_oct": {
+    "id": "336d1fc9-bec0-70e9-8695-5af930039ce4",
+    "kind": "task"
+  },
+  "rent_sep": {
+    "id": "5709aec7-a148-7796-8f0a-6625421af4a2",
+    "kind": "task"
+  },
+  "rides_album": {
+    "id": "458ba67d-576b-7416-87f9-c853bd658c83",
+    "kind": "album"
+  },
+  "rohan_k": {
+    "id": "3529274e-07bd-73a1-8ad0-6f38a872614d",
+    "kind": "person"
+  },
+  "rohan_m": {
+    "id": "6f532afe-508e-75ed-87b7-e447ff42dd4d",
+    "kind": "person"
+  },
+  "sangeet": {
+    "id": "87db15f4-702f-7343-8049-3f1b9da6449f",
+    "kind": "event"
+  },
+  "sbi_login": {
+    "id": "dd340477-af81-7bd8-8b76-b3da0013a013",
+    "kind": "locker item"
+  },
+  "scooter_challan": {
+    "id": "8556096b-3180-7033-8518-c4343fead003",
+    "kind": "task"
+  },
+  "scooter_f": {
+    "id": "5396a397-e72c-70e4-8f85-55413eb3fdd7",
+    "kind": "folder"
+  },
+  "scooter_helmet": {
+    "id": "6f824c52-33a8-7ceb-817a-696882ae5109",
+    "kind": "task"
+  },
+  "scooter_ins": {
+    "id": "ebb75a1a-2844-77df-82dd-2a1a06334301",
+    "kind": "task"
+  },
+  "scooter_ins_d": {
+    "id": "fe6c796d-9d21-7340-8445-29dc9cecef15",
+    "kind": "document"
+  },
+  "scooter_ins_old": {
+    "id": "f8bc0b51-6437-708b-8a60-7ff195a8fb8f",
+    "kind": "task"
+  },
+  "scooter_list": {
+    "id": "b0972e53-85c2-7ca4-87f0-a3e79d8f658f",
+    "kind": "list"
+  },
+  "scooter_notes": {
+    "id": "02723702-c5de-7c3f-828b-c841f20df377",
+    "kind": "note"
+  },
+  "scooter_puc": {
+    "id": "3d659a79-400c-7497-8b68-e934fd8fd43e",
+    "kind": "event"
+  },
+  "scooter_puc_t": {
+    "id": "1b8de9e9-c5ee-70ca-8b2b-21753bd962e3",
+    "kind": "task"
+  },
+  "scooter_rc": {
+    "id": "d7bddcfa-ffa0-7315-8803-e274e57c2901",
+    "kind": "document"
+  },
+  "scooter_service": {
+    "id": "054c55f3-9148-7e89-8590-9fdef614cba4",
+    "kind": "event"
+  },
+  "scooter_service_old": {
+    "id": "9a36293d-d979-7632-890b-40dda99a0fe4",
+    "kind": "event"
+  },
+  "scooter_tyre": {
+    "id": "8bc3c1e8-1511-76c8-8d16-dd9002e68650",
+    "kind": "task"
+  },
+  "shreya": {
+    "id": "23162ade-2fc8-7b4d-8834-d580aff4533f",
+    "kind": "person"
+  },
+  "shreya_bday": {
+    "id": "bd7594de-3f2b-7b2d-8572-edd84946e2cb",
+    "kind": "event"
+  },
+  "siddharth": {
+    "id": "a7915bb3-8d5d-7bab-8ff4-f516ca26c0f1",
+    "kind": "person"
+  },
+  "sneha": {
+    "id": "8223a991-f1d2-7c90-8efd-3437a85f324a",
+    "kind": "person"
+  },
+  "society_noc": {
+    "id": "a931bb2c-693f-7c96-8778-f3406c290522",
+    "kind": "document"
+  },
+  "sprint_0903": {
+    "id": "a90ea577-fadb-7310-8372-fef0d508b00a",
+    "kind": "event"
+  },
+  "sprint_0917": {
+    "id": "226cfbd8-310c-722c-8047-c6f34362b72f",
+    "kind": "event"
+  },
+  "sprint_1001": {
+    "id": "16b0ced6-6f25-71d0-8a50-158e842cafef",
+    "kind": "event"
+  },
+  "sprint_1015": {
+    "id": "fa462b17-9601-730b-8962-66111a2f6a35",
+    "kind": "event"
+  },
+  "sprint_1029": {
+    "id": "012f7e8e-7c4a-7a69-8c1b-67ef6deacd2b",
+    "kind": "event"
+  },
+  "sprint_1112": {
+    "id": "0d6cd15c-21ed-70db-8dad-730fb47ee9af",
+    "kind": "event"
+  },
+  "sprint_1126": {
+    "id": "e35e4584-fb62-7eb9-854b-e43bf94d2366",
+    "kind": "event"
+  },
+  "sprint_1210": {
+    "id": "1b82280f-b2c7-73d4-859f-0a83d139b006",
+    "kind": "event"
+  },
+  "tarun": {
+    "id": "0f084464-faf8-7b22-8764-46058198c007",
+    "kind": "person"
+  },
+  "tax_proofs": {
+    "id": "a370f99d-28b3-7740-8e14-a4abec68a8cf",
+    "kind": "task"
+  },
+  "thanks_cards_old": {
+    "id": "d1fca0dd-177d-7e72-8db7-77834dba78bb",
+    "kind": "task"
+  },
+  "thanks_msgs": {
+    "id": "c70929bc-52f8-7e55-8128-4212b5ede735",
+    "kind": "task"
+  },
+  "upi_pin": {
+    "id": "b81cb4a8-0fc2-7bb5-8358-77a24f7cbb08",
+    "kind": "locker item"
+  },
+  "vaishnavi": {
+    "id": "aa4127ba-fc38-743a-87c5-f5fac8a0b205",
+    "kind": "person"
+  },
+  "venue_receipt": {
+    "id": "54d358a9-b2c0-7e96-81b0-31b088918f7c",
+    "kind": "document"
+  },
+  "vikram": {
+    "id": "c7e54805-76c4-72a1-8c1f-2f47ec3e3d1b",
+    "kind": "person"
+  },
+  "w_after": {
+    "id": "274891d7-7a45-76d2-8b81-95006b24bcac",
+    "kind": "note"
+  },
+  "w_budget": {
+    "id": "67b852e8-21ed-7ca3-8249-28faa72ec3ed",
+    "kind": "note"
+  },
+  "w_guests": {
+    "id": "500bec17-b997-7e90-8787-32d26f39de50",
+    "kind": "note"
+  },
+  "w_rituals": {
+    "id": "165375ca-5eaf-7b3f-8b67-d15ddbf35e6f",
+    "kind": "note"
+  },
+  "w_settle": {
+    "id": "aa39de44-4e09-75f7-85e3-9c17f6187d33",
+    "kind": "note"
+  },
+  "w_vendors": {
+    "id": "e2331fb4-980d-7817-8b3f-a6038fa3244a",
+    "kind": "note"
+  },
+  "w_vows": {
+    "id": "203edbf2-0bd6-7325-8e49-7deb1d298e29",
+    "kind": "note"
+  },
+  "wedding": {
+    "id": "ceeb7278-5566-762e-8f16-a0f5223d2b77",
+    "kind": "group"
+  },
+  "wedding_album": {
+    "id": "226097f3-ee1c-711b-8c27-47bbf98faeef",
+    "kind": "album"
+  },
+  "wedding_day": {
+    "id": "f101acc7-92f6-7030-8de5-61815909183c",
+    "kind": "event"
+  },
+  "wedding_f": {
+    "id": "dfd85c02-7f75-7d0e-8847-a472cfdfb8bf",
+    "kind": "folder"
+  },
+  "wedding_list": {
+    "id": "8e1be1de-6f88-7262-8f1a-7d1c25eb2c93",
+    "kind": "list"
+  },
+  "wedding_nb": {
+    "id": "824ebef7-0fa0-76f3-8960-d670dbc8d6f5",
+    "kind": "notebook"
+  },
+  "work_1on1": {
+    "id": "9bea05b6-01d3-7c6c-8569-9c2b426e1916",
+    "kind": "note"
+  },
+  "work_f": {
+    "id": "41615bb7-6c71-78df-8308-a6f7c43a78c8",
+    "kind": "folder"
+  },
+  "work_goals": {
+    "id": "b5aea73e-50a3-7f80-8093-7e51f275cd5f",
+    "kind": "note"
+  },
+  "work_list": {
+    "id": "4f907204-92ca-7b9f-8300-7b1560a6d27c",
+    "kind": "list"
+  },
+  "work_nb": {
+    "id": "7a0e5f2d-2a7c-7d83-89f2-dbcdfb53db75",
+    "kind": "notebook"
+  },
+  "work_oncall": {
+    "id": "dcc56b35-4db0-7ab1-833f-744632f85e2d",
+    "kind": "note"
+  },
+  "work_sprint": {
+    "id": "dffef1db-9e6b-7090-867a-d4b35a18a37d",
+    "kind": "note"
+  },
+  "work_ssh": {
+    "id": "1970456c-144f-7b24-8c9d-b0638d0e6bfe",
+    "kind": "locker item"
+  },
+  "wrap": {
+    "id": "aa0c6ebe-3c4c-7178-85da-7400ac8eb2aa",
+    "kind": "task"
+  },
+  "wrap_album": {
+    "id": "60b9986b-1b28-754b-8a2c-b1e26272921f",
+    "kind": "task"
+  },
+  "wrap_gifts_list": {
+    "id": "b8010c49-9dd7-7de6-8de0-038d801cd528",
+    "kind": "task"
+  },
+  "wrap_pay_caterer": {
+    "id": "eee679e2-54a5-79e1-8883-dbfa794b2abd",
+    "kind": "task"
+  },
+  "wrap_return_decor": {
+    "id": "6d5e1261-ce04-7717-899f-fe4fd56ea842",
+    "kind": "task"
+  },
+  "wrap_settle": {
+    "id": "88c86b31-13d7-7860-8fc1-88a19864d429",
+    "kind": "task"
+  },
+  "wrap_thanks_cards": {
+    "id": "ad79aeb1-dfa1-78ee-8c9d-a07707deea17",
+    "kind": "task"
+  },
+  "wrap_video": {
+    "id": "fad02158-c6fc-70d7-8708-e45766938a67",
+    "kind": "task"
+  }
+}

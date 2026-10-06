@@ -9,10 +9,14 @@ re-implements it. Its records:
   {"role": "assistant", "think": str, "tool": str, "args": {...}}
   {"role": "tool", "content": str}                        # compacted as the harness shows it
 
+Trace version: v4 by default (`NATIVE_TRACE=v3.1` keeps v3.1) renders the thinks of the records as v4 (CONTRACT_V3.md section 8: fewer slots, one-row pick, the
+compile step infers the rest); the records on disk stay v3.1 until the data is regenerated, and `records()` converts each think
+as it is read (`trace_mode`, `v4_records`). The decoder's grammar, the refer rule and `call_of_think` follow the same switch.
+
 The loss mask comes from render()'s char spans and is checked against an independent reading
 of the text: every `<|im_start|>assistant\\n<think>\\n` header opens one trained region that runs
 to its `<|im_end|>` (inclusive), and nothing else is trained — no system, user or tool token.
-When the example carries the Data agent's `loss_tokens`, they must equal the mask exactly.
+When the example carries `loss_tokens`, they must equal the mask exactly.
 
 Decision tokens (for the decision-weighted loss, train.py --decision-weight): the few label
 tokens that decide whether a session passes. They are a subset of the trained tokens, found
@@ -23,8 +27,8 @@ label list, not new code (see `DecisionConfig`, `decision_char_spans`):
          after ` · ` (SLOT_SEP), and its value runs to the start of the next slot or the end of the
          think. The value (not `label: `, not the separator) is a decision when `label` is in
          `DecisionConfig.labels`. Regex: `(?:^|\n| · )([a-z_][a-z0-9_]*): ?`. For the labels in
-         `ref_labels` (`saw`, `last`: evidence copied out of the context, mostly row names) only the
-         row refs in the value are decisions: `[#@][0-9]+`.
+         `ref_labels` (none by default: a slot whose value is evidence copied out of the context, mostly row
+         names) only the row refs in the value are decisions: `[#@][0-9]+`.
   call   `<parameter=NAME>\nVALUE\n</parameter>` blocks. VALUE is a decision (every parameter, or
          only `DecisionConfig.params`; never `skip_params`, the free text of `ask`). A VALUE that parses as a JSON object or array (the `when`
          date expression) contributes its scalar leaves (string content without quotes, numbers,
@@ -40,7 +44,7 @@ Hard tier (`HardConfig`, `DecisionConfig.hard`): a NARROW subset of the decision
 where a failed session usually went wrong: which rows, which date, which verb, direction or op, and the
 closed words of the think slots that state them. In the think only CLOSED words count, never the quoted
 phrase copied from the message: the first word of `intent` / `scope` / `refer` (the verb word is counted in the call's `verb`), `when` only if
-it is `now` or `earlier`, the row numbers of `refer` (`-> @1` counts `1`) and `last`, the row numbers and
+it is `now` or `earlier`, the row numbers of `refer` (`-> @1` counts `1`), the row numbers and
 `ok` / `no` of `pick` (not its parenthesised reasons); `target` is a quote and counts nothing. In the call:
 `rows`, `row`, `where`, `within`, `exclude`, `linked_to`, `limit`, `order`, the date expression (`when`, its
 leaves; its keys only with `json_keys`), `verb`, `direction`, `op`, and of `args` only the row refs and date
@@ -50,6 +54,20 @@ is a decision token that also overlaps a hard character span, so the tier is alw
 set. `encode()["decision"][i]` carries it as the bit `PART_HARD` on top of PART_THINK / PART_CALL (the
 value is still truthy exactly for decision tokens, so every `> 0` reading of it is unchanged); it is
 weighted by the same W as any decision token, the tier exists to be measured, not to get its own weight.
+
+Copy tier (`CopyConfig`, `DecisionConfig.copy`, `copy_char_spans`): the model can read the user's message, so a think value that is a
+verbatim copy of it carries no rule, only an instance, and its gradient teaches the instance. In the think, the quoted phrase of
+`intent: ... "<phrase>"`, the value of every entry of `set:` (`key = value`; a `~date` is not a copy), and the whole value of `text:`
+(a search) and `question:` (an ask) are copies when the value appears in the user's message of that turn: the person's own words, not the
+block of `vault:` / `focus:` / `dates:` lines in front of them (`user_message`), compared case-insensitively with whitespace folded and
+on whole words (`open` is not a copy of `reopen`). A value that does not appear keeps its loss. `encode()["decision"][i]` carries the bit
+`PART_COPY` ALONE on a trained token wholly inside a copy span (blanks at the ends of the token aside: ` Dentist` is the word): never
+beside PART_THINK / PART_CALL / PART_HARD, so a decision or hard token is never a copy token (a token that straddles the edge of a copy
+span, or that overlaps a hard span, keeps its decision mark). Copy spans lie inside the decision spans of `intent`, `set` and `text`,
+so a copy token is a decision token carved out: train.py gives it `--copy-weight` (default 0: no loss) instead of the decision weight and
+reports it apart ("copy"), outside the decision and hard counts; it stays a label token for the all-token numbers. Every choice is a
+named constant (COPY_*) or a CopyConfig field; `CopyConfig(labels=())` marks nothing. Only the think is marked: a call's values keep
+their weights.
 """
 from __future__ import annotations
 
@@ -59,7 +77,8 @@ import bisect
 import json
 import re
 import sys
-from dataclasses import dataclass, replace
+import threading
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -91,8 +110,28 @@ def read_examples(path: str | Path, partial_ok: bool = False):
 
 
 def tools_hash(tools) -> str:
-    """The Data agent's id for a tool list (data/gen.py): sha256 of the sorted-key JSON, 12 hex."""
+    """The id of a tool list: sha256 of the sorted-key JSON, 12 hex."""
     return hashlib.sha256(json.dumps(tools, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def trace_mode() -> str:
+    """The trace version of the think: `v4`, or `v3.1` when NATIVE_TRACE says so (CONTRACT_V3.md sections 7 and 8)."""
+    return trace3().default_mode()
+
+
+def v4_records(msgs: list[dict]) -> list[dict]:
+    """The records with every think rewritten as v4 (`trace.v4_think`, which checks that it compiles to the same call). A
+    step v4 cannot say (a lookup, `via: find`) keeps its v3.1 think: both versions are readable (`trace.parse_any`)."""
+    t = trace3()
+    out = []
+    for i, m in enumerate(msgs):
+        if m["role"] == "assistant" and m.get("think"):
+            try:
+                m = dict(m, think=t.v4_think(m["think"], msgs[:i]))
+            except t.V4Skip:
+                pass
+        out.append(m)
+    return out
 
 
 def records(ex: dict, default_tools=None) -> list[dict]:
@@ -111,7 +150,7 @@ def records(ex: dict, default_tools=None) -> list[dict]:
     msgs[0]["tools"] = tools
     for m in msgs:
         m.pop("obs", None)
-    return msgs
+    return v4_records(msgs) if trace_mode() == "v4" else msgs
 
 
 def assistant_ranges(text: str) -> list[tuple[int, int]]:
@@ -126,38 +165,38 @@ def assistant_ranges(text: str) -> list[tuple[int, int]]:
 
 # ---- decision spans (which label tokens decide pass or fail)
 
-THINK_LABELS_V1 = ("intent", "kind", "cond", "plan", "saw", "last", "rule", "today")  # authored/build.py derive_think
-THINK_LABELS_V2 = ("intent", "verb", "scope", "refer", "target", "when", "pick")      # CONTRACT_V2.md section 2
-DEFAULT_LABELS = tuple(dict.fromkeys(THINK_LABELS_V1 + THINK_LABELS_V2))
+THINK_LABELS = ("intent", "verb", "scope", "refer", "target", "when", "pick",             # CONTRACT_V3.md: the base slots,
+                "via", "kind", "op", "field", "group", "trashed", "name", "text", "where", "linked_to", "within", "exclude",
+                "order", "limit", "more", "set", "time", "rows", "row", "value", "options", "reason")  # one slot per call argument
+DEFAULT_LABELS = THINK_LABELS
 SLOT_SEP = r"(?:^|\n| · )"  # what may precede a slot label in a think
 SLOT = re.compile(SLOT_SEP + r"([a-z_][a-z0-9_]*): ?")
 PARAM = re.compile(r"<parameter=([^>\n]+)>\n(.*?)\n</parameter>", re.S)
 JSON_ATOM = re.compile(r'"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null')
 PART_THINK, PART_CALL = 1, 2  # values of `encode()["decision"]`: 0 = not a decision token
 PART_HARD = 4                 # bit added to PART_THINK / PART_CALL on a hard-tier decision token
+PART_COPY = 8                 # a token inside a verbatim copy of the user's message: carried ALONE, never beside the bits above
 PART_MASK = PART_THINK | PART_CALL
 
 # ---- the hard tier: the ONE place its defaults live. Only slot labels and call parameter names
-# matter (never the exact trace format), so the same lists serve today's think (THINK_LABELS_V1) and
-# the v2 slots (THINK_LABELS_V2). Everything is overridable from the CLI (HardConfig.parse).
+# matter (never the exact trace format). Everything is overridable from the CLI (HardConfig.parse).
 HARD_LABELS = ()
-"""Think slots whose WHOLE value is hard. Empty by default: every slot of the v2 think is a closed word
-plus a quoted phrase copied from the message, and the phrase is not the decision (the whole-value tier
-was 25% of the label tokens; the `intent` phrase alone 8 points). Kept as a knob (`--hard-labels`)."""
+"""Think slots whose WHOLE value is hard. Empty by default: the base slots are a closed word plus a quoted
+phrase copied from the message, and the phrase is not the decision (whole values would make the tier far too
+wide). Kept as a knob (`--hard-labels`)."""
 HARD_WORD_LABELS = ("intent", "scope", "refer", "when")
 """Think slots of which only the CLOSED WORD counts, the first word of the value (`read` of
 `read "what's left"`, `both` of `both "those" -> @1`, `one`, `now`). The quoted phrase after it is
 copied from the message and never counts. `verb` is deliberately NOT here by default: its word is
-counted again by the call's `verb` parameter, and with the think copy the tier is 10.15% of the label
-tokens (over the 10% gate); `--hard-word-labels` is not a CLI flag, use `HardConfig(word_labels=...)`."""
+counted again by the call's `verb` parameter; `--hard-word-labels` is not a CLI flag, use
+`HardConfig(word_labels=...)`."""
 HARD_WHEN_WORDS = ("now", "earlier")
 """`when` is a closed word only when it is one of these; a bare quoted phrase (`when: "next friday"`)
 is the message's own words and counts nothing in the slot (the date expression in the call carries it)."""
-HARD_REF_LABELS = ("last", "refer")
+HARD_REF_LABELS = ("refer",)
 """Think slots of which only the row numbers of the refs count (`#12` -> `12`, `@3` -> `3`, quoted
 phrases ignored): `refer` (the referent of `it`/`that`/`both`: `-> @1` counts the `1`; the arrow, sigil and
-the quote do not) and `last` (the rows of the previous result). `saw` is left out: it lists every row
-the model was shown (about a third of the hard tokens on the v1 data). `--hard-ref-labels saw,last`."""
+the quote do not)."""
 HARD_PICK_LABELS = ("pick",)
 """Think slots of per-row verdicts (`#37 ok · #44 no (name)`): the row numbers and the `ok` / `no` word
 count; the reason in parentheses (`(name)`, `(other)`) does not, unless `HardConfig.pick_reasons`."""
@@ -188,9 +227,9 @@ class HardConfig:
     when_words: tuple = HARD_WHEN_WORDS
     params: tuple = HARD_PARAMS
     ref_params: tuple = HARD_REF_PARAMS
-    json_keys: bool = False     # keys of a date expression (unit, rel, weekday, time, anchor) count too (off: the leaves carry the date; with keys the tier is 11.2%, over the 10% gate; the decision tier keeps its keys)
-    param_names: bool = False   # the NAME of a hard parameter that is set counts (off: ~1.3% of the label tokens, the tier stays under 10%)
-    ref_sigil: bool = False     # in a ref label (`last`, `refer`) the `#` / `@` counts too, not only the number (off: the sigil is derivable there)
+    json_keys: bool = False     # keys of a date expression (unit, rel, weekday, time, anchor) count too (off: the leaves carry the date; the decision tier keeps its keys)
+    param_names: bool = False   # the NAME of a hard parameter that is set counts (off: the tier stays under 10% of the label tokens; train.py --dry-run prints its share)
+    ref_sigil: bool = False     # in a ref label (`refer`) the `#` / `@` counts too, not only the number (off: the sigil is derivable there)
     pick_reasons: bool = False  # the `(reason)` of a `no` in a pick slot counts too (off: a label of the trace, not a decision)
     quotes: bool = False        # the quoted phrase of a word label counts too (off: copied from the message)
 
@@ -211,21 +250,52 @@ class HardConfig:
                           pick(ref_params, d.ref_params), **kw)
 
 
+# ---- the copy tier: the ONE place its defaults live (slot labels only, never the exact trace format)
+COPY_LABELS = ("intent", "set", "text", "question")
+"""Think slots whose value may be a copy of the user's message: the quoted phrase of `intent`, the value of each `set` entry, the whole value
+of `text` (a search) and of `question` (an ask). `name`, `where` and the rest are decisions about rows or fields and are never copy
+candidates by default."""
+COPY_QUOTE_LABELS = ("intent",)   # the candidate is the first "quoted phrase" of the value (the closed word before it is not)
+COPY_ENTRY_LABELS = ("set",)      # the candidates are the values of the ` · `-separated `key = value` entries (not a `~date`)
+QUOTED_PHRASE = re.compile(r'"([^"\n]*)"')
+
+
+@dataclass(frozen=True)
+class CopyConfig:
+    """Which think values may be marked as verbatim copies of the user's message (module docstring). `labels` are slot labels: how a
+    label's value is cut into candidates is the slot's grammar (COPY_QUOTE_LABELS, COPY_ENTRY_LABELS, else the whole value). No labels is
+    an empty tier."""
+    labels: tuple = COPY_LABELS
+    whole_words: bool = True     # a copy must match whole words of the message (`open` is not a copy of `reopen`)
+
+    @property
+    def empty(self) -> bool:
+        return not self.labels
+
+    @staticmethod
+    def parse(labels=None, **kw) -> "CopyConfig":
+        """From a comma list (CLI). None = the default; the empty string = none. `kw` takes `whole_words`; None is left at its default."""
+        kw = {k: bool(v) for k, v in kw.items() if v is not None}
+        return CopyConfig(COPY_LABELS if labels is None else _lst(labels), **kw)
+
+
 @dataclass(frozen=True)
 class DecisionConfig:
     labels: tuple = DEFAULT_LABELS   # think slot labels whose values are decisions
-    ref_labels: tuple = ("saw", "last")  # labels of `labels` whose value counts only by its row refs
+    ref_labels: tuple = ()           # labels of `labels` whose value counts only by its row refs
     params: tuple | None = None      # call parameter names whose values are decisions; None = all
     skip_params: tuple = ("question",)  # never decisions: the free text of `ask`, read by the person, not the runtime
     json_keys: bool = True           # keys of a JSON-valued parameter (`when`: unit, rel, to, weekday...)
     param_names: bool = True         # the parameter NAMES a call sets (which selector fields)
     hard: HardConfig | None = HardConfig()  # the narrow hard tier inside the decision tokens; None = no tier
+    copy: CopyConfig = field(default_factory=CopyConfig, repr=False)  # verbatim copies of the message, carved out of the decision tokens;
+    # not in repr(): the resume fingerprint of a run made before this tier existed stays valid (train.py fingerprints it when it matters)
 
     @staticmethod
     def parse(labels=None, ref_labels=None, params=None, skip_params=None, **kw) -> "DecisionConfig":
         """From comma lists (CLI). None = the default; for `labels` and `params` an empty string or
         `*` also means the default (all labels of DEFAULT_LABELS, all parameters); `ref_labels` and
-        `skip_params` accept the empty string for none. `hard=` takes a HardConfig."""
+        `skip_params` accept the empty string for none. `hard=` takes a HardConfig, `copy=` a CopyConfig."""
         lst = _lst
         d = DecisionConfig()
         return DecisionConfig(
@@ -408,6 +478,93 @@ def hard_char_spans(body: str, cfg: DecisionConfig) -> list[tuple[int, int]]:
     return sorted(hard_think_spans(body[:cut], hard) + [(c0 + a, c0 + b) for a, b in hard_call_spans(body[c0:], hard)])
 
 
+# ---- copy spans (think values that are verbatim copies of the user's message)
+
+def user_message(content) -> str:
+    """The person's own words in a user record: what follows the blank line of the block (`render.user_content`: the runtime's
+    `vault:` / `focus:` / `dates:` lines, a blank line, the message; the split `authored/trace.py` reads). The block is context, never the
+    user's words, so a value found only there is not a copy."""
+    if not isinstance(content, str):  # content blocks, as `addressable` reads them
+        content = " ".join(x.get("text", "") for x in (content or ()) if isinstance(x, dict))
+    return content.rpartition("\n\n")[2]
+
+
+def answered_users(msgs: list[dict]) -> list[str]:
+    """For each assistant record, the person's message of its turn (`user_message` of the latest user record before it; "" before any)."""
+    out, cur = [], ""
+    for m in msgs:
+        if m["role"] == "user":
+            cur = user_message(m.get("content"))
+        elif m["role"] == "assistant":
+            out.append(cur)
+    return out
+
+
+def fold_text(s: str) -> str:
+    """The form in which a think value meets the message: case-insensitive, runs of whitespace one space, ends trimmed."""
+    return " ".join(s.casefold().split())
+
+
+def _wordc(c: str) -> bool:
+    return c.isalnum() or c == "_"
+
+
+def appears(value: str, hay: str, whole_words: bool = True) -> bool:
+    """Is `value` verbatim in `hay`? Both are folded here (`fold_text`). With `whole_words` a match must not begin or end inside a word
+    of `hay` (a value that starts or ends with a non-word character, `#5`, has no boundary to keep on that side)."""
+    v, h = fold_text(value), fold_text(hay)
+    if not v:
+        return False
+    i = h.find(v)
+    while i >= 0:
+        j = i + len(v)
+        if not whole_words or (not (_wordc(v[0]) and i > 0 and _wordc(h[i - 1]))
+                               and not (_wordc(v[-1]) and j < len(h) and _wordc(h[j]))):
+            return True
+        i = h.find(v, i + 1)
+    return False
+
+
+def copy_candidates(label: str, value: str, copy: CopyConfig) -> list[tuple[int, int]]:
+    """Char spans (relative to `value`, one slot's value) of the parts of it that may be copies: the first quoted phrase (COPY_QUOTE_LABELS),
+    the value of each `key = value` entry that is not a `~date` (COPY_ENTRY_LABELS), else the whole value."""
+    if label in COPY_QUOTE_LABELS:
+        m = QUOTED_PHRASE.search(value)
+        return [m.span(1)] if m and m.end(1) > m.start(1) else []
+    if label in COPY_ENTRY_LABELS:
+        out, pos = [], 0
+        for part in value.split(" · "):
+            key, sep, val = part.partition(" = ")
+            if sep and key and val and not val.startswith("~"):
+                out.append((pos + len(key) + len(sep), pos + len(part)))
+            pos += len(part) + len(" · ")
+        return out
+    return [(0, len(value))] if value else []
+
+
+def copy_char_spans(body: str, user: str | None, cfg: DecisionConfig) -> list[tuple[int, int]]:
+    """Char spans (relative to `body`, one trained region in the frame of `decision_char_spans`) of the think values that are verbatim copies of
+    `user`, the person's message of the turn (`user_message`): see the module docstring. Sorted and disjoint; a value that is not in `user`
+    is not here. Slots are found as `think_spans` finds them."""
+    copy = cfg.copy
+    if copy is None or copy.empty or not user:
+        return []
+    think = body[:body.index("</think>")]
+    ms = list(SLOT.finditer(think))
+    out = []
+    for i, m in enumerate(ms):
+        if m.group(1) not in copy.labels:
+            continue
+        a = m.end()
+        b = ms[i + 1].start() if i + 1 < len(ms) else len(think)
+        while b > a and think[b - 1].isspace():
+            b -= 1
+        for x, y in copy_candidates(m.group(1), think[a:b], copy):
+            if appears(think[a + x:a + y], user, copy.whole_words):
+                out.append((a + x, a + y))
+    return sorted(out)
+
+
 def check_decisions(enc: dict, cfg: DecisionConfig | None = None) -> None:
     """Assert the decision marks against the records, independently of the span finder: every
     decision token is a trained token; each trained assistant message has a decision token in its
@@ -417,20 +574,34 @@ def check_decisions(enc: dict, cfg: DecisionConfig | None = None) -> None:
     dec, labels, offs, text = enc["decision"], enc["labels"], enc["offsets"], enc["text"]
     if any(d and y == IGNORE for d, y in zip(dec, labels)):
         raise AssertionError("a decision token is not a trained token")
-    a_msgs = [m for m in enc["records"] if m["role"] == "assistant" and m.get("loss", True)]
-    trained = [sp for sp, m in zip(enc["ranges"], [m for m in enc["records"] if m["role"] == "assistant"])
-               if m.get("loss", True)]
-    for (s, e), m in zip(trained, a_msgs):
+    a_all = [m for m in enc["records"] if m["role"] == "assistant"]
+    users = answered_users(enc["records"])
+    a_msgs = [m for m in a_all if m.get("loss", True)]
+    trained = [sp for sp, m in zip(enc["ranges"], a_all) if m.get("loss", True)]
+    t_users = [u for u, m in zip(users, a_all) if m.get("loss", True)]
+    for (s, e), m, user in zip(trained, a_msgs, t_users):
         toks = [i for i, (a, b) in enumerate(offs) if s <= a and b <= e and b > a]
         parts = {dec[i] & PART_MASK for i in toks}
         if any(dec[i] & PART_HARD and not dec[i] & PART_MASK for i in toks):
             raise AssertionError("a hard token is not a decision token")
+        if any(dec[i] & PART_COPY and dec[i] & ~PART_COPY for i in toks):
+            raise AssertionError("a copy token is also a decision or hard token")
+        run = []  # the copy tokens of this message, in runs of neighbours: each run must read as text of the user's message
+        for i in toks + [None]:
+            if i is not None and dec[i] & PART_COPY:
+                run.append(i)
+            elif run:
+                got = text[offs[run[0]][0]:offs[run[-1]][1]]
+                if fold_text(got) not in fold_text(user):
+                    raise AssertionError("copy tokens %r are not in the user's message %r" % (got, user[:120]))
+                run = []
         args = m.get("args") or {}
         body = text[s:e]
         if any(k not in cfg.skip_params for k in args) and PART_CALL not in parts:
             raise AssertionError("call with arguments has no decision token: %r" % body[-200:])
         slots = {x.group(1) for x in SLOT.finditer(body[:body.index("</think>")])} & (set(cfg.labels) - set(cfg.ref_labels))
-        if slots and PART_THINK not in parts:
+        copied = cfg.copy is not None and not cfg.copy.empty and any(dec[i] & PART_COPY for i in toks)
+        if slots and PART_THINK not in parts and not copied:  # a slot whose whole value is a copy has no decision token left
             raise AssertionError("think slots %s have no decision token: %r" % (sorted(slots), body[:200]))
         if cfg.params is None and cfg.json_keys:
             # the decision text of the values, names aside, holds every letter and digit of the
@@ -459,7 +630,8 @@ def check_decisions(enc: dict, cfg: DecisionConfig | None = None) -> None:
 def encode(tok, ex: dict, default_tools=None, cfg: DecisionConfig | None = None) -> dict:
     """Render + tokenize one session; labels are IGNORE outside the assistant think+call spans.
     `decision[i]` is 0, or PART_THINK / PART_CALL for a trained token that overlaps a decision span,
-    plus the bit PART_HARD when that token also overlaps a hard-tier span (`cfg.hard`)."""
+    plus the bit PART_HARD when that token also overlaps a hard-tier span (`cfg.hard`); or PART_COPY alone for a trained token wholly
+    inside a verbatim copy of the user's message (`cfg.copy`, `copy_char_spans`), which a hard token never is."""
     cfg = cfg or DecisionConfig()
     msgs = records(ex, default_tools)
     text, spans = render.render(msgs)
@@ -485,6 +657,9 @@ def encode(tok, ex: dict, default_tools=None, cfg: DecisionConfig | None = None)
     dstarts = [d[0] for d in dspans]
     hspans = sorted((s + a, s + b) for s, e in trained for a, b in hard_char_spans(text[s:e], cfg))
     hstarts = [h[0] for h in hspans]
+    t_users = [u for u, m in zip(answered_users(msgs), a_msgs) if m.get("loss", True)]
+    cspans = sorted((s + a, s + b) for (s, e), u in zip(trained, t_users) for a, b in copy_char_spans(text[s:e], u, cfg))
+    cstarts = [c[0] for c in cspans]
     decision = [0] * len(ids)
     for i, (a, b) in enumerate(offs):
         for s, e in spans:
@@ -501,14 +676,25 @@ def encode(tok, ex: dict, default_tools=None, cfg: DecisionConfig | None = None)
                 k = bisect.bisect_left(hstarts, b) - 1
                 if k >= 0 and hspans[k][1] > a:
                     decision[i] |= PART_HARD
+            if cspans and not decision[i] & PART_HARD:  # a hard token is never a copy token
+                ua, ub = a, b  # the token without the blanks at its ends: ` Dentist` is the word, its space the separator
+                while ua < ub and text[ua].isspace():
+                    ua += 1
+                while ub > ua and text[ub - 1].isspace():
+                    ub -= 1
+                if ua == ub:
+                    ua, ub = a, b
+                j = bisect.bisect_right(cstarts, ua) - 1
+                if j >= 0 and ub <= cspans[j][1]:  # wholly inside a copy span (the span starts at or before it)
+                    decision[i] = PART_COPY
     return {"input_ids": ids, "labels": labels, "decision": decision, "text": text, "ranges": spans,
-            "offsets": offs, "records": msgs, "dspans": dspans, "hspans": hspans}
+            "offsets": offs, "records": msgs, "dspans": dspans, "hspans": hspans, "cspans": cspans}
 
 
 def check_spans(ex: dict, enc: dict) -> None:
-    """Assert the Data agent's stored loss spans agree with the render's mask.
+    """Assert the stored loss spans of an example agree with the render's mask.
 
-    `loss_tokens` (data/gen.py) are token spans [a, b) and must equal the mask exactly;
+    `loss_tokens` are token spans [a, b) and must equal the mask exactly;
     `n_tokens`, when present, must equal our token count; a stored `text` must equal ours."""
     if ex.get("text") is not None and ex["text"] != enc["text"]:
         raise AssertionError("example text differs from render.py's")
@@ -562,3 +748,69 @@ def addressable_in_prompt(prompt: str) -> tuple[list[int], list[int]]:
         elif role == "user":
             msgs.append({"role": "tool" if "<tool_response>" in body else "user", "content": body})
     return addressable(msgs)
+
+
+# ---- the slot trace (authored/trace.py, CONTRACT_V3.md): the refer rule and the call a think states
+
+_TRACE3_LOCK = threading.RLock()
+
+
+def trace3():
+    """authored/trace.py by path (the name `trace` is also a standard-library module), loaded once. The one place the
+    trace's functions live: the data builder, the grammar and the decoder all call these."""
+    with _TRACE3_LOCK:  # batched scoring calls this from many threads: a half-executed module must never be visible
+        if "authored_trace" not in sys.modules:
+            import importlib.util
+            path = Path(__file__).resolve().parents[1] / "authored" / "trace.py"
+            spec = importlib.util.spec_from_file_location("authored_trace", path)
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules["authored_trace"] = mod  # trace.py's own dataclasses look itself up here while it executes
+            try:
+                spec.loader.exec_module(mod)
+            except BaseException:
+                sys.modules.pop("authored_trace", None)
+                raise
+        return sys.modules["authored_trace"]
+
+
+def requires_refer(msgs: list[dict]) -> bool:
+    """Must the next think carry a `refer:` line? True on the first step of a turn (the last message is the user's) when an
+    earlier turn showed a result: a function of the turn index and of the earlier results, not of the words of the message
+    (`trace.refer_required`). msgs: render.py records. Never in a v4 trace, which has no `refer:` line."""
+    return trace_mode() != "v4" and trace3().refer_required(msgs)
+
+
+def msgs_in_prompt(prompt: str) -> list[dict]:
+    """The records a rendered prompt shows (system, user, tool; assistant turns skipped), enough for `requires_refer`."""
+    msgs = []
+    for seg in prompt.split("<|im_start|>")[1:]:
+        role, _, body = seg.partition("\n")
+        body = body.split(IM_END)[0]
+        if role == "system":
+            msgs.append({"role": "system", "content": body.split("</IMPORTANT>")[-1]})
+        elif role == "user":
+            msgs.append({"role": "tool" if "<tool_response>" in body else "user", "content": body})
+    return msgs
+
+
+def requires_refer_in_prompt(prompt: str) -> bool:
+    return requires_refer(msgs_in_prompt(prompt))
+
+
+def dates_line_in_prompt(prompt: str) -> str | None:
+    """The `dates:` line of the turn's user message in a rendered prompt (what a `dates[i]` of the think is read against)."""
+    return trace3().dates_line_of(msgs_in_prompt(prompt))
+
+
+def call_of_think(think: str, dates: str | None = None, mode: str | None = None):
+    """The call a think states (render.py's call text), or None when the think does not state a whole call. The decoder
+    writes exactly this text after `</think>`; the data builder checks the same function against every authored call.
+    `dates`: the `dates:` line of the prompt, which a `dates[i]` of the think is read against (without it such a think
+    states no whole call). `mode`: `v3.1` or `v4` (default `trace_mode()`); the data builders pass `v3.1` for the v3.1 thinks they
+    write. The runtime's `compile` op is the authority; this is the render path it falls back to."""
+    t = trace3()
+    try:
+        c = t.compile_call(think.strip(), dates, mode)
+    except t.CompileError:
+        return None
+    return render.call_text(c["tool"], c["args"])

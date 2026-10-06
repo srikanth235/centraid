@@ -163,14 +163,6 @@ S("T17-043", "create locker login delete new",
   T("hm it's the same as the school pc one, delete the new entry", diff(trash("+1")),
     ref=[act("delete", rows="$c1")]))
 
-S("T17-044", "create locker membership delete new undo",
-  T("add my Pulse Fitness membership to the locker", diff(new("locker item", name=has("Pulse", "Fitness"))),
-    ref=[act("create", args=lines(kind="locker item", name="Pulse Fitness", type="membership"))]),
-  T("wait i cancelled that gym last week, remove it", diff(trash("+1")),
-    ref=[act("delete", rows="$c1")]),
-  T("undo that, it actually runs till march", diff(restore("+1")),
-    ref=[act("undo")]))
-
 S("T17-045", "single reveal locker where wifi",
   T("read me the wifi password, a parent's asking", diff(reveal=[("wifi", "steinway-b-211")]),
     ref=[act("reveal", kind="locker item", where='type = "wifi"', args=lines(field="password"))]))

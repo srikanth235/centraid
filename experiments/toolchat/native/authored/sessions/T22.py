@@ -22,10 +22,6 @@ S("T22-002", "unstar named nickname empty",
   T("which padel people don't have a nickname saved", rows("erik_s", "erik_l", "hanna", "mats"),
     ref=[ans(kind="person", where='nickname is empty and role contains "padel"')]))
 
-S("T22-003", "single cadence literal",
-  T("who do i only need to check in with less than every two weeks", rows("johan_b", "samira", "nour", "linnea", "maria"),
-    ref=[ans(kind="person", where="cadence > 14")]))
-
 S("T22-004", "group person count edit group named count",
   T("which groups have more than five people in them", rows("padel_g", "fika_g"),
     ref=[ans(kind="group", where="person count > 5")]),
@@ -56,52 +52,17 @@ S("T22-007", "delete event where empty read",
   T("anything else on sunday", rows(),
     ref=[ans(kind="event", when=W(U("week", 0, weekday=7)))]))
 
-S("T22-008", "cancelled events delete event where named",
-  T("anything get cancelled last week", rows("karin_dinner"),
-    ref=[ans(kind="event", when=W(U("week", -1)), where='status = "cancelled"')]),
-  T("delete all the cancelled stuff from last week", diff(trash("karin_dinner")),
-    ref=[act("delete", kind="event", when=W(U("week", -1)), where='status = "cancelled"')]),
-  T("and the padel match that got called off in june", diff(trash("padel_0623")),
-    ref=[act("delete", kind="event", name="Padel league match", when=W(U("month", 0, name=6)),
-             where='status = "cancelled"')]))
-
 S("T22-009", "delete event multi swimming",
   T("which swimming lessons has elias got coming up", rows("swim_1", "swim_2"),
     ref=[ans(kind="event", name="Swimming lesson")]),
   T("pool's shut for repairs, delete both", diff(trash("swim_1"), trash("swim_2")),
     ref=[act("delete", rows="$swim_1, $swim_2")]))
 
-S("T22-010", "delete event multi undo delete",
-  T("delete Dinner at Karin's and Kayaking with David, neither is happening", diff(trash("karin_dinner"), trash("kayak")),
-    ref=[act("delete", rows="$karin_dinner, $kayak")]),
-  T("wait undo that, i want them kept for the record", diff(restore("karin_dinner"), restore("kayak")),
-    ref=[act("undo")]))
-
-S("T22-011", "reopen task prev padel list",
-  T("did i book the padel court for last week", rows("court_2"),
-    ref=[ans(kind="task", name="Book padel court", where='status = "completed"')]),
-  T("reopen it, the booking fell through", diff(upd("court_2", status="open", completed=None)),
-    ref=[act("reopen", rows="@prev")]),
-  T("what's open on the padel list", rows("court_1", "court_2", "balls"),
-    ref=[ans(kind="task", linked_to="$padel_l", where='status = "open"')]))
-
-S("T22-012", "reopen task prev summer house list",
-  T("what have i ticked off on the summer house list", rows("book_plumber"),
-    ref=[ans(kind="task", linked_to="$sh_l", where='status = "completed"')]),
-  T("reopen that, kent cancelled on us", diff(upd("book_plumber", status="open", completed=None)),
-    ref=[act("reopen", rows="@prev")]))
-
 S("T22-013", "delete task where list read",
   T("delete the cancelled task on the summer house repairs list", diff(trash("sauna")),
     ref=[act("delete", kind="task", linked_to="$shr_l", where='status = "cancelled"')]),
   T("what's left on that list", rows("roof_tile", "shutters"),
     ref=[ans(kind="task", linked_to="$shr_l")]))
-
-S("T22-014", "delete task where list count priority literal",
-  T("the cancelled task that's not on any list, delete it", diff(trash("guest_room")),
-    ref=[act("delete", kind="task", where='status = "cancelled" and list count = 0')]),
-  T("what's my priority one stuff", rows("car_insurance", "sh_share", "roof_tile", "aug_schedule", "inv_prep"),
-    ref=[ans(kind="task", where="priority < 2")]))
 
 S("T22-015", "create note notebook edit note new undo field",
   T("new note in padel tactics: Hanna's lob, she always goes cross court",

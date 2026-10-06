@@ -46,12 +46,6 @@ S("T02-080", "act within order limit",
   T("cancel the last one, there's a term party instead", diff(upd("pottery_0701", status="cancelled")),
     ref=[act("cancel", within="@prev", order="date desc", limit=1)]))
 
-S("T02-081", "act exclude pick",
-  T("show me the buy dish soap tasks", rows("soap_1", "soap_2"),
-    ref=[ans(kind="task", name="Buy dish soap")]),
-  T("delete the one that isn't done, jess bought a huge bottle", diff(trash("soap_1")),
-    ref=[act("delete", within="@prev", exclude="$soap_2")]))
-
 S("T02-082", "compute within when group",
   T("what's due next week", rows("inv_mf", "glaze_order", "hydro", "photos_print", "tide_final", "arun_gift",
                                 "insurance", "portfolio_site"),
@@ -60,14 +54,6 @@ S("T02-082", "compute within when group",
     ref=[comp(op="count", group="priority", within="@prev"), ans(value="@prev")]),
   T("and the week after", vgroups({"none": 2}),
     ref=[comp(op="count", group="priority", kind="task", when=W(U("week", 2))), ans(value="@prev")]))
-
-S("T02-083", "compute order limit",
-  T("of the next five things due, how many have i actually started",
-    vgroups({"open": 5}),
-    ref=[comp(op="count", group="status", kind="task", when=W({"from": U("day", 0)}), order="date asc", limit=5),
-         ans(value="@prev")]),
-  T("so what have i started at all", rows("gl_sketches", "mf_spots", "scan_sketch"),
-    ref=[ans(kind="task", where='status = "in_progress"')]))
 
 S("T02-084", "repair cancel task edit status",
   T("cancel call ben about the leaky tap, jess already rang him", diff(upd("tap", status="cancelled")),
@@ -141,14 +127,6 @@ S("T02-093", "pinned notes unpin starred docs",
   T("what docs have i starred", rows("portfolio_pdf", "gl_contract", "itinerary"),
     ref=[ans(kind="document", where="starred = yes")]))
 
-S("T02-094", "description contains complete then read",
-  T("which task mentions the autumn issue", rows("mf_spots"),
-    ref=[ans(kind="task", where='description contains "autumn"')]),
-  T("sent them all off, mark it done. what's left for maple & fern",
-    rows("inv_mf", also=diff(upd("mf_spots", status="completed", completed=ANY))),
-    ref=[act("complete", rows="$mf_spots", more=True),
-         ans(kind="task", name="Maple & Fern", where='status = "open"')]))
-
 S("T02-095", "list task count area",
   T("which lists have more than six things on them", rows("clientwork", "flatlist", "tokyoprep"),
     ref=[ans(kind="list", where="task count > 6")]),
@@ -160,13 +138,6 @@ S("T02-096", "ask kinds pick reschedule",
     ref=[askc("the call with marcus tomorrow or the task to call ben?", options="$call_marcus, $tap")]),
   T("marcus", diff(upd("call_marcus", date="2027-06-09T15:00")),
     ref=[act("reschedule", rows="$call_marcus", args=lines(to=U("day", 0, anchor="row", time="15:00")))]))
-
-S("T02-097", "ask duplicate tasks delete",
-  T("delete the pay rent task", ask("rent_jun", "rent_jul"),
-    ref=[find(kind="task", name="Pay rent"),
-         askc("june's (done) or july's?", options="$rent_jun, $rent_jul")]),
-  T("pay rent, the old one obviously", diff(trash("rent_jun")),
-    ref=[act("delete", rows="$rent_jun")]))
 
 S("T02-098", "ask person log",
   T("log a call with sophie", ask("sophie_t", "sophie_d"),

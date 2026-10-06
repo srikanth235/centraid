@@ -6,10 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T10-051", "single debt direction empty",
-  T("any debts where i never put down who owes who", rows(),
-    ref=[ans(kind="debt", where="direction is empty")]))
-
 S("T10-052", "locker username ne read",
   T("logins that aren't under bashir.haddad52@gmail.com", rows("sanad", "lichess", "arab_bank"),
     ref=[ans(kind="locker item", where='type = "login" and username != "bashir.haddad52@gmail.com"')]),
@@ -162,21 +158,13 @@ S("T10-070", "single reschedule task named",
 
 S("T10-071", "restore window task ask create",
   T("bring back the umrah task", ask(),
-    ref=[bad(act("restore", kind="task", name="Book Umrah package", trashed=True)),
+    ref=[bad(act("restore", kind="task", name="umrah", trashed=True)),
          askc("it's been in the bin more than 30 days so it can't come back. make it again?")]),
   T("yes, due end of august, on the travel list",
     diff(new("task", name="Book Umrah package", date="2026-08-31"), link("travel_l", "new")),
     ref=[act("create", args=lines(kind="task", name="Book Umrah package", date=D("2026-08-31"), list="$travel_l"))]),
   T("what's on the travel list", rows("flight", "passport", "visa", "+1"),
     ref=[ans(kind="task", linked_to="$travel_l")]))
-
-S("T10-072", "reschedule task multi anchor week",
-  T("when's the ablution area renovation due", rows("ablution"),
-    ref=[ans(kind="task", name="Ablution area renovation")]),
-  T("what's left under it", rows("tiles", "plumber", "taps"),
-    ref=[ans(kind="task", linked_to="$ablution")]),
-  T("push choose tiles and order taps back a week each", diff(upd("tiles", date="2026-07-02"), upd("taps", date="2026-07-22")),
-    ref=[act("reschedule", rows="$tiles, $taps", args=lines(to=U("week", 1, anchor="row")))]))
 
 S("T10-073", "six turns lina visit",
   T("when's lina landing", rows("airport_lina"),

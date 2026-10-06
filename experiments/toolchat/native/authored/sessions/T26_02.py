@@ -136,10 +136,6 @@ S("T26-044", "restore document multi named count",
   T("how many payslips have i got", val(3),
     ref=[ans(op="count", kind="document", name="Payslip")]))
 
-S("T26-045", "single decline unbounded photos",
-  T("delete all my pictures, every last one of them", decline("unbounded_destruction"),
-    ref=[dec("unbounded_destruction")]))
-
 S("T26-046", "decline unbounded delete task where",
   T("delete all my tasks, i want a fresh start", decline("unbounded_destruction"),
     ref=[dec("unbounded_destruction")]),

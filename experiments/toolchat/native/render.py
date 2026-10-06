@@ -6,7 +6,7 @@ a follow-up sees how the earlier turn was read).
 
 Message records (plain dicts):
   {"role": "system", "content": str, "tools": [<tool dicts, as `nativetools session` returns them>]}
-  {"role": "user", "content": str}                       # user_content(text, preground): block first
+  {"role": "user", "content": str}                       # user_content(text, block): the runtime's block first
   {"role": "assistant", "think": str, "tool": str, "args": {name: value}}
   {"role": "tool", "content": str}                      # the runtime's text, compacted as the harness shows it
 
@@ -104,9 +104,10 @@ def render(messages: list[dict]) -> tuple[str, list[tuple[int, int]]]:
 
 
 def user_content(text: str, preground: str | None) -> str:
-    """A user turn's content as the harness writes it (SPEC §6.1): the runtime's vault block,
-    a blank line, then the message — byte for byte what data/gen.py `user_content` produces.
-    Every path that feeds a Qwen model (training data, the eval driver's hf backend) uses this."""
+    """A user turn's content as the harness writes it (SPEC §6.1): the runtime's block (its `vault:`,
+    `focus:` and `dates:` lines, the `block` of the `user` reply; the argument keeps its old name), a blank
+    line, then the message. Every path that feeds a Qwen model (training data, the eval driver's hf
+    backend) uses this."""
     return f"{preground}\n\n{text}" if preground else text
 
 

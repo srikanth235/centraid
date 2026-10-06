@@ -71,22 +71,6 @@ S("T18-135", "sum shower effort max dog list typo min home open next dnd limit t
   T("next 2 dnd sessons", rows("dnd_0305", "dnd_0312", order=True),
     ref=[ans(kind="event", name="D&D session", when=NOW, order="date asc", limit=2)]))
 
-S("T18-136", "ask tick off snacks never mind hard then top three total then max",
-  T("tick off bring snacks", ask("snacks", "snacks_old"),
-    ref=[act("complete", kind="task", name="Bring snacks for D&D"),
-         find(kind="task", name="Bring snacks for D&D"),
-         askc("the one due on the 5th or the one from the 26th of february?", options="$snacks, $snacks_old")]),
-  T("hang on, never mind, i haven't actually brought either lot of snacks yet so leave them both as they are, i'll do them fridya",
-    decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("what do my three biggest debts to me add up to", val((325, "AUD")),
-    ref=[find(kind="debt", where=OWED, order="amount desc", limit=3),
-         ans(op="sum", field="amount", within="@prev")]),
-  T("and the smallest of those three", rows("d_tess_cake"),
-    ref=[ans(within="@prev", order="amount asc", limit=1)]),
-  T("and the biggest of those three", rows("d_ollie"),
-    ref=[ans(within="@3", order="amount desc", limit=1)]))
-
 S("T18-137", "unbounded typo then ask log coffee alex never mind then unbounded long",
   T("delete eveything", decline("unbounded_destruction"),
     ref=[dec("unbounded_destruction")]),
@@ -111,21 +95,6 @@ S("T18-138", "oldest debt typo then unbounded debts then max owed then min durat
     ref=[ans(op="max", field="amount", kind="debt", where=IOWE)]),
   T("and the quickest event on the calendar", val(30),
     ref=[ans(op="min", field="duration", kind="event")]))
-
-S("T18-139", "three smallest owed then dog class typo then sum dev then ask settle pizza never mind",
-  T("the three smallst debts i owe", rows("d_jules_pizza", "d_priya", "d_chloe", order=True),
-    ref=[ans(kind="debt", where=IOWE, order="amount asc", limit=3)]),
-  T("my next dog training clas", rows("dogclass_0307"),
-    ref=[ans(kind="event", name="Dog training class", when=NOW, order="date asc", limit=1)]),
-  T("how much effort is the whole co-op dev list, all of it added up", val(675),
-    ref=[ans(op="sum", field="effort", kind="task", linked_to="$dev_l", where='status = "open"')]),
-  T("settle the pizza one", ask("d_marcus_pizza", "d_jules_pizza"),
-    ref=[act("settle_debt", kind="debt", name="Pizza"),
-         find(kind="debt", name="Pizza"),
-         askc("marcus owing you 24 or you owing jules 18?", options="$d_marcus_pizza, $d_jules_pizza")]),
-  T("oh wait, forget it, neither has actually paid up yet so leave both of them open for now",
-    decline("never_mind"),
-    ref=[dec("never_mind")]))
 
 S("T18-140", "latest photos then unbounded typo then ask cancel vet never mind then sum tasks typo",
   T("my latest 2 photos", rows("b_creek", "whiteboard", order=True),

@@ -1,16 +1,22 @@
-"""The train / val split of the authored worlds, chosen once and written to authored/split.json.
+"""The train / val split of the authored worlds, written to authored/split.json.
 
     python3 authored/split.py            # (re)write split.json, print the split
     python3 authored/split.py --check    # fail if split.json differs from what the rule picks
 
-Three names, no others: train (the worlds the model learns from), val (whole worlds held out of
-training; every fix and every decision is derived here), test (the old hand-written sessions,
-eval/sets/test.jsonl; scored only at milestones). Val is whole worlds, never a slice of a world:
-a world's people, places and rows are shared by all its sessions, so a slice would leak them.
+Two names for the authored worlds, no others:
 
-The rule (deterministic, no randomness): rank the worlds by size (rows across every kind, world
-name breaks ties); val is the world at the 90th percentile (large), the median (mid) and the 10th
-percentile (small). The picked worlds' authored sessions must total 350-470.
+- val: the three authored worlds of eval/sets/val.jsonl (with A to D, its seven worlds; every fix and every
+  decision is derived on val). test is scored at milestones and lives on E, F and G, world-disjoint from val
+  and from train (eval/FROZEN.md v8, docs/decisions.md D-1044-14). The val worlds are
+  PINNED here (`VAL`), not recomputed: the sets are frozen files (eval/FROZEN.md), so the val worlds
+  are a fact of the frozen record, and a rule over the world files would move as worlds are added.
+  They were picked once by size rank (the 90th, 50th and 10th percentile of the 28 worlds of the
+  time) and hold 391 authored sessions.
+- train: every other authored world. There is no third set: the drills' closed loop (#1044, slice M2)
+  measures per cell on val through the cell census (authored/coverage.py), not on a held-out slice of train.
+
+A held-out world is whole, never a slice of a world: a world's people, places and rows are shared by
+all its sessions, so a slice would leak them.
 
 Other code imports the helpers:
 
@@ -34,8 +40,8 @@ HERE = Path(__file__).resolve().parent
 NATIVE = HERE.parent
 SPLIT = HERE / "split.json"
 WORLD_ID = re.compile(r"T\d\d")
+VAL = ("T03", "T12", "T23")  # the authored val worlds of eval/FROZEN.md; change only with a new frozen version
 SESSIONS_OK = (350, 470)  # total authored sessions of the val worlds
-QUANTILES = {"large": 0.9, "mid": 0.5, "small": 0.1}
 
 
 def all_worlds() -> list[str]:
@@ -57,6 +63,8 @@ def load_sessions(world: str) -> list[dict]:
     gold._SESSIONS.clear()
     files = [HERE / "sessions" / f"{world}.py"] + sorted((HERE / "sessions").glob(f"{world}_*.py"))
     for f in files:
+        if not f.exists():  # a world with no sessions yet (a new world)
+            continue
         spec = importlib.util.spec_from_file_location(f"authored_{f.stem}", f)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -67,17 +75,13 @@ def load_sessions(world: str) -> list[dict]:
 
 def pick() -> dict:
     worlds = all_worlds()
-    ranked = sorted(worlds, key=lambda w: (world_size(w), w))
-    val: list[str] = []
-    for name, q in QUANTILES.items():
-        w = ranked[round(q * (len(ranked) - 1))]
-        if w in val:
-            raise SystemExit(f"split: the {name} pick {w} is already chosen; too few worlds")
-        val.append(w)
-    sessions = sum(len(load_sessions(w)) for w in val)
+    missing = [w for w in VAL if w not in worlds]
+    if missing:
+        raise SystemExit(f"split: val world(s) {missing} have no authored/worlds/<W>.json")
+    sessions = sum(len(load_sessions(w)) for w in VAL)
     if not SESSIONS_OK[0] <= sessions <= SESSIONS_OK[1]:
-        raise SystemExit(f"split: val worlds {val} hold {sessions} sessions, outside {SESSIONS_OK}")
-    return {"val": sorted(val), "train": [w for w in worlds if w not in val]}
+        raise SystemExit(f"split: val worlds {list(VAL)} hold {sessions} sessions, outside {SESSIONS_OK}")
+    return {"val": sorted(VAL), "train": [w for w in worlds if w not in set(VAL)]}
 
 
 def load() -> dict:
@@ -125,9 +129,10 @@ def main() -> None:
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args()
     split = pick()
-    text = json.dumps(split, indent=1) + "\n"
+    text = json.dumps(split, indent=2) + "\n"
     if a.check:
-        if not SPLIT.exists() or SPLIT.read_text() != text:
+        # the content is what matters: a hand-formatted split.json with the same worlds is current
+        if not SPLIT.exists() or json.loads(SPLIT.read_text()) != split:
             raise SystemExit("split.json is stale: run python3 authored/split.py")
         print("split.json is current")
     else:

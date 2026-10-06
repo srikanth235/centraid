@@ -80,14 +80,12 @@ S("T07-056", "photo bin restore undo past window",
 
 S("T07-057", "coop dues fungicide ambiguous narrow",
   T("pay coop dues is done for march", diff(upd("dues_03", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pay coop dues"),
-         act("complete", kind="task", name="Pay coop dues", when=W(U("month", 0)))]),
-  T("how many dues payments since october", val(6),
+    ref=[act("complete", kind="task", name="Pay coop dues")]),
+  T("how many dues payments since october", val(5),
     ref=[ans(op="count", kind="task", name="Pay coop dues", where='status = "completed"',
              when=W({"from": U("month", -1, name=10)}))]),
   T("buy fungicide, done this morning", diff(upd("fung_1", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Buy fungicide"),
-         act("complete", kind="task", name="Buy fungicide", where='status = "open"')]),
+    ref=[act("complete", kind="task", name="Buy fungicide")]),
   T("anything else on the farm list due this week", rows("irrigation"),
     ref=[ans(kind="task", linked_to="$farm_l", when=W(U("week", 0)), where='status = "open"')]),
   T("push that to monday", diff(upd("irrigation", date="2026-03-16")),
@@ -112,12 +110,6 @@ S("T07-059", "note ambiguous seed order pin move undo link",
     ref=[act("add_to", rows="$seed_2025", args=lines(to="$field_nb"))]),
   T("hmm no undo that last bit", diff(link("coop_nb", "seed_2025"), unlink("field_nb", "seed_2025")),
     ref=[act("undo")]))
-
-S("T07-060", "task effort not equal order",
-  T("coop list tasks that have an effort estimate", rows("agenda", "scale", "expo_samples", "expo_banner", "agro_docs"),
-    ref=[ans(kind="task", linked_to="$coop_l", where="effort != 0")]),
-  T("shortest of those", rows("expo_banner"),
-    ref=[ans(kind="task", within="@prev", order="effort asc", limit=1)]))
 
 S("T07-061", "julio birthday reschedule edit present",
   T("julio's birthday dinner, what time is it", rows("julio_bday"),
@@ -176,14 +168,6 @@ S("T07-065", "debt span within sum settle multi",
          act("settle_debt", kind="debt", linked_to="$wilber", where='status = "open"')]),
   T("how's my total left to pay", val((580, "PEN")),
     ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))
-
-S("T07-066", "event edit where duration person count",
-  T("the mechanic thing on monday, add check the brakes too", diff(upd("mechanic", description="check the brakes too")),
-    ref=[search("mechanic"), find(kind="event", linked_to="$gabriel"), act("edit", rows="$mechanic", args=lines(description="check the brakes too"))]),
-  T("how many events this month have one person on them", val(19),
-    ref=[ans(op="count", kind="event", when=W(U("month", 0)), where="person count = 1")]),
-  T("and with nobody at all", val(1),
-    ref=[ans(op="count", kind="event", when=W(U("month", 0)), where="person count = 0")]))
 
 S("T07-067", "misspelled search recover log tasks reschedule",
   T("when did i last see efrain cahuana", rows("efrain"),

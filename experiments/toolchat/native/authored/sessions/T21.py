@@ -29,8 +29,8 @@ S("T21-003", "create event day read delete new",
   T("put meeting with the KNEC officer on tuesday at 2", diff(new("event", name=has("KNEC"), date="2026-06-09T14:00")),
     ref=[act("create", args=lines(kind="event", name="Meeting with KNEC officer",
                                   date=U("week", 1, weekday=2, time="14:00")))]),
-  T("what else do i have that day", rows("clinic_june", "+1"),
-    ref=[ans(kind="event", when=D("2026-06-09"))]),
+  T("what else do i have that day", rows("clinic_june"),
+    ref=[ans(kind="event", when=D("2026-06-09"), exclude="$c1")]),
   T("he texted, not coming. delete it", diff(trash("+1")),
     ref=[act("delete", rows="$c1")]))
 

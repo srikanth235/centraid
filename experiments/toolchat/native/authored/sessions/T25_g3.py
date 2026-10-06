@@ -39,17 +39,6 @@ S("T25-132", "recovery twice find order limit event answer sum duration max min 
     ref=[comp(op="min", field="effort", kind="task", linked_to="$hike_l", where='status = open'),
          ans(value="@prev")]))
 
-S("T25-133", "limit then min within max debt i owe sum daniel",
-  T("which of the next three things on my calendar is the shortest", rows("one_on_one"),
-    ref=[find(kind="event", when=FROM_TODAY, order="date asc", limit=3),
-         ans(within="@prev", order="duration asc", limit=1)]),
-  T("bigegst amount i owe any one person", val((300, "CAD")),
-    ref=[comp(op="max", field="amount", kind="debt", where='direction = "i_owe" and status = "open"'),
-         ans(value="@prev")]),
-  T("how much has daniel run up with me in total, the camp and the boots both, so i can send him one number", val((244.5, "CAD")),
-    ref=[comp(op="sum", field="amount", kind="debt", linked_to="$daniel", where='direction = "owes_me" and status = "open"'),
-         ans(value="@prev")]))
-
 S("T25-134", "ask options task reschedule never mind max debt limit min within",
   T("the expense report has to land on friday now, shift it", ask("expense_1", "expense_2"),
     ref=[act("reschedule", kind="task", name="Submit expense report", args=lines(to=U("week", 1, weekday=5))),
@@ -94,16 +83,6 @@ S("T25-136", "ask cross-kind delete never mind limit sum min hike",
     ref=[comp(op="min", field="duration", kind="event", name="Hike", where='status != "cancelled"'),
          ans(value="@prev")]))
 
-S("T25-137", "unbounded photos ask cross-kind never mind unbounded calendar",
-  T("delete every foto i have, i'm done with the clutter and the storage warnings", decline("unbounded_destruction"),
-    ref=[dec("unbounded_destruction")]),
-  T("delete the hiking one", ask("hike_l", "hike_nb"),
-    ref=[askc("the hiking list or the hiking notebook?", options="$hike_l, $hike_nb")]),
-  T("actually leave them, i still need the trail notes and the tasks for tremblant nex weekend", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("clear the whole calendar so i can start fresh after the holidays, every single event", decline("unbounded_destruction"),
-    ref=[dec("unbounded_destruction")]))
-
 S("T25-138", "limit person last contacted unbounded tasks min cadence max in progress",
   T("the last three people i got in touch with, typing fast", rows("hiroko", "daniel", "priya"),
     ref=[ans(kind="person", order="date desc", limit=3)]),
@@ -114,16 +93,6 @@ S("T25-138", "limit person last contacted unbounded tasks min cadence max in pro
   T("biggest effort among my in progress stuff, i need to know if i can finish it before the week is over", val(240),
     ref=[comp(op="max", field="effort", kind="task", where='status = "in_progress"'),
          ans(value="@prev")]))
-
-S("T25-139", "limit book club limit photos ask cross-kind star never mind",
-  T("when's the next book club", rows("book_10"),
-    ref=[ans(kind="event", name="Book club", when=FROM_TODAY, order="date asc", limit=1)]),
-  T("the four newst photos", rows("grandma", "airport", "pumpkin", "latte"),
-    ref=[ans(kind="photo", order="date desc", limit=4)]),
-  T("star the passport", ask("passport", "passport_app"),
-    ref=[askc("your canadian passport in the locker or mika's passport application?", options="$passport, $passport_app")]),
-  T("nvm, don't star either one, i'll sort the passwrod stuff out when mika's application comes back", decline("never_mind"),
-    ref=[dec("never_mind")]))
 
 S("T25-140", "limit hiking note unbounded people sum piano max october",
   T("my latst hiking note", rows("tremblant_pack"),

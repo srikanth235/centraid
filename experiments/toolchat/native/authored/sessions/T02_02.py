@@ -18,12 +18,6 @@ S("T02-026", "person edit repair decline star",
   T("who else has a nickname saved that's not KC", rows("arun", "mom", "dad", "ivy", "tom", "diego"),
     ref=[ans(kind="person", where='nickname is set and nickname != "KC"')]))
 
-S("T02-027", "person when weekday task count",
-  T("who'd i talk to on monday", rows("jess", "arun", "diego"),
-    ref=[ans(kind="person", when=W(U("week", 0, weekday=1)))]),
-  T("and who's got exactly two tasks tied to them", rows("sophie_d", "dana"),
-    ref=[ans(kind="person", where="task count = 2")]))
-
 S("T02-028", "person delete undo restore trashed",
   T("delete emma wilson from my contacts", diff(trash("emma")),
     ref=[act("delete", kind="person", name="Emma Wilson")]),
@@ -92,13 +86,6 @@ S("T02-033", "task edit single turn",
   T("greenleaf mural sketches are gonna take like five hrs not 4", diff(upd("gl_sketches", effort=300)),
     ref=[act("edit", kind="task", name="Greenleaf mural sketches", args=lines(effort=300))]))
 
-S("T02-034", "task reschedule anchor exclude",
-  T("push tidewater cover final art back a day", diff(upd("tide_final", date="2027-06-19T12:00")),
-    ref=[act("reschedule", kind="task", name="Tidewater cover final art",
-             args=lines(to=U("day", 1, anchor="row")))]),
-  T("what other tasks have i got for tidewater", rows("inv_tide_spots", "inv_tide_cover"),
-    ref=[ans(kind="task", name="Tidewater", exclude="$tide_final")]))
-
 S("T02-035", "task reopen reschedule",
   T("reopen clean out the fridge, jess spilled soup everywhere",
     diff(upd("fridge", status="open", completed=None)),
@@ -138,19 +125,6 @@ S("T02-038", "note open edit trashed restore",
     ref=[opn("$packing"),
          act("edit", rows="$packing",
              args=lines(body="iPad, pencil tips, adapter, sketchbook, walking shoes, rain jacket, earplugs"))]))
-
-S("T02-039", "note add_to remove_from correction",
-  T("file the climbing log under sketchbook notes", diff(link("sketchbook", "grades")),
-    ref=[search("climbing log", kind="note"),
-         act("add_to", kind="note", name="Climbing log", args=lines(to="$sketchbook"))]),
-  T("no wait take it back out, wrong notebook", diff(unlink("sketchbook", "grades")),
-    ref=[act("remove_from", rows="$grades", args=lines(from_="$sketchbook"))]),
-  T("is the sketch crawl note in the trash", rows("crawl"),
-    ref=[ans(kind="note", name="Sketch crawl", trashed=True)]),
-  T("restore the one about granville island and put that in sketchbook notes",
-    diff(restore("crawl"), link("sketchbook", "crawl")),
-    ref=[act("restore", kind="note", trashed=True, where='body contains "Granville"', more=True),
-         act("add_to", rows="$crawl", args=lines(to="$sketchbook"))]))
 
 S("T02-040", "document create edit delete",
   T("save a doc in contracts called Tomo kill fee invoice",

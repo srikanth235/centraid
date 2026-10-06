@@ -1,44 +1,60 @@
-"""Forward slot trace (CONTRACT_V2 §2): the `<think>` block written before each call.
+"""The slot trace (CONTRACT_V3.md): the `<think>` block written before each call, and the compiler from it back to the call.
+
+The base slots say what the call is for and which rows it takes:
 
     intent: read|count|write|ask|decline "<deciding phrase>"
     verb:   <closed verb set>                        (writes)
     scope:  one|some|all "<qualifier>"               (a write on rows that already exist)
     refer:  it|both|that|nth "<phrase>" -> @k|#n     (the call names rows of an earlier turn)
+            | none                                   (a turn after a result, and the call names no earlier rows)
     target: "<span>" · "<span>"                      (names, attributes, new values, as said)
-    when:   "<date phrase as said>"                  (a date is involved)
+    when:   "<date phrase as said>" [= <date>]       (a date is involved)
             | earlier "<phrase>"                     (said in an earlier message, or an earlier call's own date)
             | now                                    (the unstated default, from today on)
     pick:   #n ok · #n no (<reason>)                 (a row is chosen among several shown)
 
-Fixed order. A value is a closed word or a quoted span of the user message; nothing the runtime
-can compute (no row lists, no resolved dates). A slot depends only on the message, the context
-the model can read and the slots above it. `retry: rejected` leads the block after a rejected call.
-Choices this file makes where CONTRACT_V2 §2 is silent:
+The argument slots (`via`, `kind`, `where`, `set`, `time`, `rows`, ...) state every argument of the call, so the call is
+a deterministic rendering of the trace: `compile_call(trace) -> call`.
+
+Fixed order. A value is a closed word, a quoted span of the user message, or an argument as the call carries it;
+nothing the runtime can compute (no row lists, no resolved dates). A slot depends only on the message, the context the
+model can read and the slots above it. `retry: rejected` leads the block after a rejected call.
+Choices this file makes where CONTRACT_V3.md is silent:
   - a lookup (find, search, open) carries the intent of the call it prepares, read off the turn's own
     next call; when that call is an ask or a decline (the outcome of the lookup) the message alone decides;
   - `scope` is written on an `act` that names existing rows (not on create or undo), `refer` when the call
     names rows an earlier turn showed and the message does not name them, `pick` when a `#n` is chosen
     among several rows a listing shows (a pick reason is one of kind, name, position, date, status, other);
   - `target` also carries the attribute and the new values the call uses, as said ("over fifty dollars",
-    "Dr Patel"); a number or a literal that the message does not say but the context does is sourced there;
+    "Dr Patel"), minus a span that the call's own `name`, `text`, `set` value or `where` literal already says;
+    a number or a literal that the message does not say but the context does is sourced there;
   - `when` has two closed words besides a quote (see above), for a date the message does not state.
 
-The generator works from what a record shows (`derive_trace(call, history, today, retry, ahead)`,
+The generator works from what a record shows (`derive_trace3(call, history, today, retry, ahead)`,
 history = the messages before the call, as build.py's records or the eval Transcript keep them),
 so a training think is always rebuildable from the context in front of it. `ahead` are the calls
 still to come in the turn: a lookup (`find`, `search`, `open`) carries the intent of the call it
-prepares.
+prepares. `derive_slots` writes the base slots, `derive_trace3` adds the argument slots and refuses a call whose
+compiled trace is not the call.
 
-`render`, `parse`, `check_call` and `sources` are the renderer, the parser and the two checks of
-trace_check.py: trace-call consistency (a call rebuilt from the parsed slots equals the gold call
-in every field the slots decide) and argument sources (every value the call carries traces to a
-slot, a handle or the context). The Rust guard (crates/nativetools/src/trace.rs) parses the same
+v3.1 (CONTRACT_V3.md section 7): a date the prompt's `dates:` line reads as exactly is written `dates[i]` (`date_anchor`,
+`reading_expr`, `dates_entries`), a `where` is typed segments (`where_respell`, `parse_cond`), `retry: <slot>` names the slot the
+runtime refused, and `slots_json` is what the runtime's `compile` op reads. `compile_call(trace, dates)` is the same compile in Python.
+
+v4 (CONTRACT_V3.md section 8): the model writes only what the harness cannot infer. `scope`, `refer`, `target`, `via: find`
+and the candidate list of `pick` are gone; a `pick` is one row with its reason (`pick: #31 (focus)`), and `compile_call` /
+the runtime infer the rest. `parse4`/`render4` read and write it, `parse_any` picks the version, `to_v4` rewrites a v3.1
+think as v4 and `v4_think` checks that both compile to the same call.
+
+`check_slots` and `check_call3` are the trace-call consistency checks: a call rebuilt from the parsed slots
+equals the gold call in every field the slots decide. The Rust guard (crates/nativetools/src/trace.rs) parses the
 three slots it enforces (intent, scope, refer) from the same text.
 """
 from __future__ import annotations
 
 import datetime
 import json
+import os
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -52,7 +68,7 @@ AGG_OPS = ("count", "sum", "min", "max", "balance")
 SCOPES = ("one", "some", "all")
 REFERS = ("it", "both", "that", "nth")
 REASONS = ("kind", "name", "position", "date", "status", "other")
-SLOT_ORDER = ("retry", "intent", "verb", "scope", "refer", "target", "when", "pick")
+BASE_SLOTS = ("retry", "intent", "verb", "scope", "refer", "target", "when", "pick")  # what `derive_slots` writes
 # what each intent may call; lookups serve any intent
 TOOLS_FOR = {"read": ("answer",), "count": ("answer", "compute"), "write": ("act",), "ask": ("ask",), "decline": ("decline",)}
 
@@ -308,7 +324,7 @@ def build_ctx(history: list[dict]) -> Ctx:
                     ctx.results[k] = lst
                     ctx.lists.append(lst)
             elif rows:
-                kind = "ambiguous" if content.startswith("ambiguous") else "other"
+                kind = "ambiguous" if content.startswith("ambiguous") else "error" if content.startswith("error") else "other"
                 ctx.lists.append(Listing(idx, turn, kind, None, [n for n, _, _, _ in rows]))
     return ctx
 
@@ -634,21 +650,6 @@ def pick_cluster(clusters: list[tuple[int, int, str]], exprs: list[str], intent_
     return best
 
 
-def when_sane(phrase: str, exprs: list[str]) -> bool:
-    """Informational: no cue the phrase states outright is contradicted by the expressions."""
-    cues = date_cues(phrase)
-    for e in exprs:
-        w = expr_cues(e)
-        for key in ("weekday", "day", "month"):
-            have = cues.get(key, [])
-            if have and w[key] and not (set(have) & set(w[key])):
-                return False
-        for key in ("rel_day", "rel_week"):
-            if key in cues and w[key] and cues[key] not in w[key]:
-                return False
-    return True
-
-
 # ---------------------------------------------------------------------------------------------
 # argument analysis
 # ---------------------------------------------------------------------------------------------
@@ -752,92 +753,16 @@ def num_sourced(value: float, nums: set[float]) -> bool:
 
 @dataclass
 class Trace:
-    slots: dict = field(default_factory=dict)  # slot -> value (see render)
+    slots: dict = field(default_factory=dict)  # slot -> value (see render3)
     flags: list[str] = field(default_factory=list)  # quality notes (fallback phrases, unsourced args)
     unsourced: list[tuple[str, str]] = field(default_factory=list)  # (arg, value) with no source
     sources: list[tuple[str, str, str]] = field(default_factory=list)  # (arg, value, how it is sourced)
-
-    def text(self) -> str:
-        return render(self)
+    call: dict | None = None  # the call the trace states, in the one spelling (where, dates); what the record carries
+    mentions: dict = field(default_factory=dict)  # what the call refers to, `mentions()`
 
 
 def q(text: str) -> str:
     return '"' + text.replace('"', "'") + '"'
-
-
-def render(tr: Trace | dict) -> str:
-    slots = tr.slots if isinstance(tr, Trace) else tr
-    lines = []
-    if slots.get("retry"):
-        lines.append("retry: rejected")
-    i = slots["intent"]
-    lines.append(f"intent: {i[0]}" + (f" {q(i[1])}" if i[1] else ""))
-    if slots.get("verb"):
-        lines.append(f"verb: {slots['verb']}")
-    if slots.get("scope"):
-        s = slots["scope"]
-        lines.append(f"scope: {s[0]}" + (f" {q(s[1])}" if s[1] else ""))
-    if slots.get("refer"):
-        r = slots["refer"]
-        lines.append(f"refer: {r[0]}" + (f" {q(r[1])}" if r[1] else "") + " -> " + ", ".join(r[2]))
-    if slots.get("target"):
-        lines.append("target: " + " · ".join(q(t) for t in slots["target"]))
-    if slots.get("when"):
-        w = slots["when"]
-        lines.append("when: " + (q(w[1]) if w[0] == "q" else ("earlier" + (" " + q(w[1]) if w[1] else "") if w[0] == "e" else w[1])))
-    if slots.get("pick"):
-        lines.append("pick: " + " · ".join(f"#{n} ok" if why is None else f"#{n} no ({why})" for n, why in slots["pick"]))
-    return "\n".join(lines)
-
-
-_QUOTED = r'"([^"\n]*)"'
-LINE_RX = {
-    "retry": re.compile(r"^retry: rejected$"),
-    "intent": re.compile(r"^intent: (read|count|write|ask|decline)(?: " + _QUOTED + r")?$"),
-    "verb": re.compile(r"^verb: (\w+)$"),
-    "scope": re.compile(r"^scope: (one|some|all)(?: " + _QUOTED + r")?$"),
-    "refer": re.compile(r"^refer: (it|both|that|nth)(?: " + _QUOTED + r")? -> ([#@]\d+(?:, [#@]\d+)*)$"),
-    "target": re.compile(r"^target: (" + _QUOTED + r"(?: · " + _QUOTED + r")*)$"),
-    "when": re.compile(r"^when: (?:" + _QUOTED + r"|(now)|(earlier)(?: " + _QUOTED.replace("(", "(?P<e>", 1) + r")?)$"),
-    "pick": re.compile(r"^pick: (#\d+ (?:ok|no \((?:" + "|".join(REASONS) + r")\))(?: · #\d+ (?:ok|no \((?:" + "|".join(REASONS) + r")\)))*)$"),
-}
-
-
-def parse(text: str) -> dict:
-    """The slots of a trace text, in order; ValueError if a line is not a slot or the order is broken."""
-    slots: dict = {}
-    last = -1
-    for line in text.strip().split("\n"):
-        line = line.rstrip()
-        key = line.split(":", 1)[0]
-        if key not in LINE_RX:
-            raise ValueError(f"not a slot: {line!r}")
-        m = LINE_RX[key].match(line)
-        if not m:
-            raise ValueError(f"bad {key} line: {line!r}")
-        pos = SLOT_ORDER.index(key)
-        if pos <= last:
-            raise ValueError(f"slot out of order: {line!r}")
-        last = pos
-        if key == "retry":
-            slots["retry"] = True
-        elif key == "intent":
-            slots["intent"] = (m.group(1), m.group(2) or "")
-        elif key == "verb":
-            slots["verb"] = m.group(1)
-        elif key == "scope":
-            slots["scope"] = (m.group(1), m.group(2) or "")
-        elif key == "refer":
-            slots["refer"] = (m.group(1), m.group(2) or "", m.group(3).split(", "))
-        elif key == "target":
-            slots["target"] = re.findall(_QUOTED, m.group(1))
-        elif key == "when":
-            slots["when"] = ("q", m.group(1)) if m.group(1) is not None else (("w", "now") if m.group(2) else ("e", m.group("e") or ""))
-        elif key == "pick":
-            slots["pick"] = [(int(n), None if v == "ok" else v[4:-1]) for n, v in re.findall(r"#(\d+) (ok|no \(\w+\))", m.group(1))]
-    if "intent" not in slots:
-        raise ValueError("no intent line")
-    return slots
 
 
 # ------ deciding phrases -------
@@ -968,8 +893,11 @@ def _turn_slice(ahead) -> list:
 
 
 def _visible_listing(ctx: Ctx, n: int):
+    """The latest listing that shows row `n` to the model now: a reply, or the block of this turn (an earlier turn's block is
+    replaced by this one; the runtime does not take its rows for addressable). The rows an error reply lists ("the selection
+    holds 30: #40 ...") are text, not a listing: the runtime does not number them as addressable."""
     for lst in reversed(ctx.lists):
-        if n in lst.rows:
+        if n in lst.rows and lst.kind != "error" and (lst.kind != "block" or lst.turn == ctx.turn):
             return lst
     return None
 
@@ -1007,11 +935,11 @@ def _why_not(ctx: Ctx, cand: int, picked: list[int], msg_words: list[str], nth: 
     return "date" if cd else "other"
 
 
-def derive_trace(call: dict, history: list[dict], today: str | None = None, retry: bool = False, ahead=None,
+def derive_slots(call: dict, history: list[dict], today: str | None = None, retry: bool = False, ahead=None,
                  bad: bool = False, strict: bool = True) -> Trace:
-    """The trace of `call`, from the context `history` (messages before it). Raises TraceError when
-    the call cannot be traced: a value with no source (`strict`; a call marked `bad` is a deliberate
-    mistake and may carry one) or no user message."""
+    """The base slots of `call` (intent, verb, scope, refer, target, when, pick; `BASE_SLOTS`), from the context `history`
+    (messages before it). Raises TraceError when the call cannot be traced: a value with no source (`strict`; a call
+    marked `bad` is a deliberate mistake and may carry one) or no user message."""
     tool, args = call["tool"], dict(call.get("args") or {})
     ctx = build_ctx(history)
     msg = ctx.message
@@ -1413,21 +1341,17 @@ def derive_trace(call: dict, history: list[dict], today: str | None = None, retr
     return tr
 
 
-# ------ the checks trace_check.py reports -------
+# ------ trace-call consistency -------
 
 GUARD_KEYS = ("rows", "row", "within", "linked_to")  # the parameters the runtime's refer guard compares
 
 
-def check_call(text: str, call: dict, history: list[dict], ahead=None) -> list[str]:
-    """Trace-call consistency: parse the text, rebuild what the slots decide about the call and compare
-    with the call (tool class, verb, scope against the rows named, refer against the rows, pick against
-    the rows, when present iff a date is carried, every quote a span of the conversation's own words).
+def check_slots(slots: dict, call: dict, history: list[dict]) -> list[str]:
+    """Trace-call consistency of the base slots: rebuild what they decide about the call and compare with the call
+    (tool class, verb, scope against the rows named, refer against the rows, pick against the rows, when present
+    iff a date is carried, every quote a span of the conversation's own words).
     Returns the disagreements (empty = consistent)."""
     bad = []
-    try:
-        slots = parse(text)
-    except ValueError as e:
-        return [f"unparsable: {e}"]
     tool, args = call["tool"], dict(call.get("args") or {})
     ctx = build_ctx(history)
     intent = slots["intent"][0]
@@ -1502,14 +1426,931 @@ def check_call(text: str, call: dict, history: list[dict], ahead=None) -> list[s
     return bad
 
 
-def sources(call: dict, history: list[dict], today: str | None = None, ahead=None) -> list[tuple[str, str]]:
-    """Call arguments with no source (the generator's own account, recomputed)."""
-    return derive_trace(call, history, today, False, ahead).unsourced
+# =============================================================================================
+# The argument slots (CONTRACT_V3.md): one per call argument, so the call is a deterministic rendering of the
+# trace, `compile_call(trace) -> call`, a pure function of the trace text. Nothing a call carries is left for
+# the model to remember when it writes the call.
+#
+#   retry / intent / verb / scope / refer / target     the base slots, except `refer` (a line on the first step of
+#                                                      every turn that has a previous result, `refer: none` when the call
+#                                                      names no earlier rows; no line otherwise: refer_required)
+#   via:    find|search|open|compute                   the tool, when the intent's own tool is not it
+#                                                      (read, count -> answer; write -> act; ask; decline)
+#   kind / op / field / group / trashed                call arguments, as the call carries them
+#   name / text / where                                (name and text are the exact value, unquoted)
+#   when:   <source> [= <date>]                        the source (quote | now | earlier ["<phrase>"]), then the `when` argument
+#   linked_to / within / exclude                       handles
+#   order / limit / more                               call arguments
+#   set:    key = value · key = ~<date> ...            the lines of an act's `args`, in order
+#   time:   HH:MM · HH:MM                              one value per `t` marker, in the order of
+#                                                      the markers (the `when` date first, then `set`)
+#   pick                                               a base slot
+#   rows / row / value / options / question / reason   handles and text, as the call carries them
+#
+# A rows/row slot is omitted when the trace already says it: the `ok` rows of `pick`, else the handles
+# of `refer`. A date is written compactly, key by key in the call's own order:
+#   {"unit":"week","rel":1,"weekday":5} -> week+1 wd5     {"date":"2026-03-27","time":"15:00"} -> 2026-03-27 t
+#   {"from":{...},"to":{...}} -> from ... to ...          {"unit":"day","rel":0,"anchor":"row"} -> day+0 row
+# =============================================================================================
+
+SLOT_ORDER3 = ("retry", "intent", "via", "verb", "scope", "refer", "target", "kind", "op", "field", "group", "trashed", "name",
+               "text", "where", "when", "linked_to", "within", "exclude", "order", "limit", "more", "set", "time", "pick", "rows",
+               "row", "value", "options", "question", "reason")
+RAW3 = ("kind", "op", "field", "group", "trashed", "name", "text", "where", "linked_to", "within", "exclude", "order", "limit", "more",
+        "rows", "row", "value", "options", "question", "reason")  # `label: <the argument as the call carries it>`
+# v4 (CONTRACT_V3.md section 8). The row decision comes right after the verb; `scope`, `refer` and `target` are not slots.
+SLOT_ORDER4 = ("retry", "intent", "via", "verb", "pick", "rows", "row", "kind", "op", "field", "group", "trashed", "name", "text",
+               "where", "when", "linked_to", "within", "exclude", "order", "limit", "more", "set", "time", "value", "options",
+               "question", "reason")
+V3_ONLY = ("scope", "refer", "target")  # the base slots v4 does not write
+VIA4 = ("search", "open", "compute")  # `via: find` is the compile step's job
+PICK4_REASONS = ("name", "kind", "date", "focus", "created", "asked", "nick")
+REFER4_REASONS = ("focus", "asked", "created")  # a pick for one of these is a row an earlier turn showed (an inferred `refer`)
+# the one kind a verb applies to: an act that names a row by `name` and no `kind` takes it (crates/nativetools meta.rs
+# `Verb::kinds`; the test `v4_kind_table_is_the_runtimes` keeps the two together)
+VERB_KIND = {"complete": "task", "reopen": "task", "cancel": "event", "log": "person", "settle_up": "person",
+             "settle_debt": "debt", "reveal": "locker item"}
+SINGLE_ROW_VERBS = ("edit", "reschedule", "log", "reveal", "settle_up", "settle_debt")  # a selector under one of these is one row
+# the order the arguments are written in a call (the majority order of the authored calls); `args` is the `set` slot
+CALL_ORDER = ("verb", "op", "field", "rows", "row", "kind", "group", "name", "text", "trashed", "linked_to", "within", "when", "where",
+              "exclude", "order", "limit", "more", "value", "args", "options", "question", "reason")
+DEFAULT_TOOL = {"read": "answer", "count": "answer", "write": "act", "ask": "ask", "decline": "decline"}
+VIA = ("find", "search", "open", "compute")
+HANDLE_SLOTS = ("rows", "row", "within", "value", "linked_to", "exclude", "options")
+UNITS = ("minute", "hour", "day", "week", "month", "year")
+BODY_DATE_KEYS = ("to", "date", "due", "from", "start", "end")
 
 
-def trace_messages(msgs: list[dict], today: str | None = None, strict: bool = True) -> dict[int, "Trace"]:
-    """The trace of every assistant message of a record (index -> Trace). A message marked `loss: False`
-    is a deliberate rejected call; `retry` is set on the call that follows it in the same turn."""
+class CompileError(Exception):
+    """A trace that does not compile to a call (a slot missing, a malformed date)."""
+
+
+# ------ dates, compact ------
+
+_UNIT_RX = re.compile(r"^(" + "|".join(UNITS) + r")([+-]\d+)?$")
+_DATE_RX = re.compile(r"^\d{4}(?:-\d\d(?:-\d\d)?)?$")
+
+
+def date_to_compact(value) -> tuple[str, list[str]]:
+    """A date expression (a JSON object, or its text) as compact tokens, and the `time` values its `t` markers stand for.
+    ValueError when the expression is outside the compact form (unknown key, a value of another type)."""
+    obj = json.loads(value) if isinstance(value, str) else value
+    times: list[str] = []
+
+    def point(o) -> list[str]:
+        if not isinstance(o, dict) or not o:
+            raise ValueError("not a date object")
+        out, keys = [], list(o)
+        i = 0
+        while i < len(keys):
+            k, v = keys[i], o[keys[i]]
+            if k == "unit" and v in UNITS:
+                if i + 1 < len(keys) and keys[i + 1] == "rel" and isinstance(o["rel"], int) and not isinstance(o["rel"], bool):
+                    out.append(f"{v}{o['rel']:+d}")
+                    i += 1
+                else:
+                    out.append(v)
+            elif k == "rel" and isinstance(v, int) and not isinstance(v, bool):
+                out.append(f"{v:+d}")
+            elif k == "weekday" and isinstance(v, int) and not isinstance(v, bool):
+                out.append(f"wd{v}")
+            elif k == "name" and isinstance(v, int) and not isinstance(v, bool):
+                out.append(f"m{v}")
+            elif k == "anchor" and v in ("row", "today"):
+                out.append(v)
+            elif k == "time" and isinstance(v, str) and v and " " not in v and "\n" not in v:
+                out.append("t")
+                times.append(v)
+            elif k == "date" and isinstance(v, str) and _DATE_RX.match(v):
+                out.append(v)
+            else:
+                raise ValueError(f"date key {k}={v!r} has no compact form")
+            i += 1
+        return out
+
+    if isinstance(obj, dict) and set(obj) & {"from", "to"}:
+        if set(obj) - {"from", "to"} or list(obj) != [k for k in ("from", "to") if k in obj]:
+            raise ValueError("a range holds only from and to, in that order")
+        toks_: list[str] = []
+        for k in obj:
+            toks_ += [k] + point(obj[k])
+        return " ".join(toks_), times
+    return " ".join(point(obj)), times
+
+
+def date_from_compact(text: str, times: list[str]):
+    """The inverse of `date_to_compact`; `times` is consumed from the front, one per `t`. Returns the object."""
+    words = text.split()
+    if not words:
+        raise CompileError("empty date")
+
+    def point(ws: list[str]) -> dict:
+        o: dict = {}
+        for w in ws:
+            m = _UNIT_RX.match(w)
+            if m:
+                o["unit"] = m.group(1)
+                if m.group(2):
+                    o["rel"] = int(m.group(2))
+            elif re.fullmatch(r"[+-]\d+", w):
+                o["rel"] = int(w)
+            elif re.fullmatch(r"wd\d+", w):
+                o["weekday"] = int(w[2:])
+            elif re.fullmatch(r"m\d+", w):
+                o["name"] = int(w[1:])
+            elif w in ("row", "today"):
+                o["anchor"] = w
+            elif w == "t":
+                if not times:
+                    raise CompileError("a `t` marker with no time value")
+                o["time"] = times.pop(0)
+            elif _DATE_RX.match(w):
+                o["date"] = w
+            else:
+                raise CompileError(f"date token {w!r}")
+        if not o:
+            raise CompileError("empty date point")
+        return o
+
+    if words[0] in ("from", "to"):
+        out: dict = {}
+        cur, buf = None, []
+        for w in words + ["\0"]:
+            if w in ("from", "to", "\0"):
+                if cur is not None:
+                    out[cur] = point(buf)
+                cur, buf = w, []
+            else:
+                buf.append(w)
+        return out
+    return point(words)
+
+
+def _dumps(obj) -> str:
+    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+
+
+# ------ v3.1: the dates line, typed `where`, and the slots the runtime's `compile` op reads ------
+#
+# The prompt shows the model the dates of its message (`dates: next week = 2026-03-16..2026-03-22 · at 8pm = 20:00`), and
+# the rows (`#n` in the block, the `focus:` line). A trace names them: `when: "friday" = dates[0] past`, `set: due = ~dates[1]`,
+# `linked_to: #8`. `where` is a list of typed conditions, one segment each (`where: status = open · effort > 60`).
+# `compile_call(trace, dates)` resolves a `dates[i]` against the dates line it is given; the runtime's `compile` op
+# (`slots_json`) resolves it against the session, and is the authority.
+
+DATES_REF = re.compile(r"^dates\[(\d+)\](?: (past|upcoming))?$")
+DATE_KEY_ORDER = ("from", "to", "date", "unit", "rel", "name", "weekday", "time", "anchor")  # crates/nativetools/src/compile.rs
+READINGS = ("past", "upcoming")
+
+
+def dates_line_of(history: list[dict]) -> str | None:
+    """The `dates:` line of the block of the turn's user message (the last one of `history`), or None."""
+    for m in reversed(history):
+        if m["role"] != "user":
+            continue
+        block = m["preground"] if "text" in m and "preground" in m else (m.get("content") or "").rpartition("\n\n")[0]
+        for line in (block or "").split("\n"):
+            if line.startswith("dates: "):
+                return line
+        return None
+    return None
+
+
+def dates_entries(line: str | None) -> list[tuple[str, str]]:
+    """The entries of a `dates:` line as (phrase, resolution), in the order the runtime indexes them."""
+    if not line:
+        return []
+    out = []
+    for part in line[len("dates: "):].split(" · "):
+        phrase, sep, res = part.partition(" = ")
+        if sep:
+            out.append((phrase.strip(), res.strip()))
+    return out
+
+
+def _day_expr(text: str) -> dict:
+    day, _, clock = text.strip().partition(" ")
+    if not re.fullmatch(r"\d{4}-\d\d-\d\d", day):
+        raise ValueError(f"{text!r} is a clock, not a date")
+    if not clock:
+        return {"date": day}
+    if not re.fullmatch(r"\d\d:\d\d", clock.strip()):
+        raise ValueError(f"cannot read {clock!r}")
+    return {"date": day, "time": clock.strip()}
+
+
+def reading_expr(resolution: str, which: str | None = None) -> dict:
+    """A `dates:` resolution as a date expression (mirror of compile.rs `reading_expr`): a day, a day with a clock, or a
+    range (an open end is left out). ValueError for a clock alone, or for two readings with none chosen."""
+    resolution = resolution.strip()
+    if " / " in resolution:
+        first, second = resolution.split(" / ", 1)
+        past = first.strip()[:-len("(past)")].strip() if first.strip().endswith("(past)") else None
+        up = second.strip()[:-len("(upcoming)")].strip() if second.strip().endswith("(upcoming)") else None
+        if which == "past" and past:
+            return reading_expr(past)
+        if which == "upcoming" and up:
+            return reading_expr(up)
+        if which is None and past and up:
+            raise ValueError("two readings; say past or upcoming")
+        raise ValueError("a clock reads am or pm; write the time in the call")
+    if ".." in resolution:
+        a, b = resolution.split("..", 1)
+        out = {}
+        if a.strip():
+            out["from"] = _day_expr(a)
+        if b.strip():
+            out["to"] = _day_expr(b)
+        if not out:
+            raise ValueError("an empty range")
+        return out
+    return _day_expr(resolution)
+
+
+def date_text(expr) -> str:
+    """A date expression as call text: compact JSON, keys in the order a call writes them (compile.rs `date_text`)."""
+    if isinstance(expr, dict):
+        keys = [k for k in DATE_KEY_ORDER if k in expr] + [k for k in expr if k not in DATE_KEY_ORDER]
+        return "{" + ",".join(f'"{k}":{date_text(expr[k])}' for k in keys) + "}"
+    return json.dumps(expr, ensure_ascii=False)
+
+
+def dates_resolver(line: str | None):
+    """`resolve(i, reading) -> date expression` over a dates line; ValueError when the entry cannot be read."""
+    entries = dates_entries(line)
+
+    def resolve(i: int, reading: str | None):
+        if i >= len(entries):
+            raise ValueError(f"the dates line holds {len(entries)} entries, not {i + 1}")
+        return reading_expr(entries[i][1], reading)
+    return resolve
+
+
+def dates_ref(i: int, reading: str | None) -> str:
+    return f"dates[{i}]" + (f" {reading}" if reading else "")
+
+
+def date_anchor(value, line: str | None) -> str | None:
+    """`dates[i]` (with the reading when the entry gives two) when an entry of the dates line reads as exactly this date
+    expression (a JSON object or its text); None when none does."""
+    obj = json.loads(value) if isinstance(value, str) else value
+    for i, (_phrase, res) in enumerate(dates_entries(line)):
+        for reading in (None, *READINGS):
+            try:
+                if reading_expr(res, reading) == obj:
+                    return dates_ref(i, reading)
+            except ValueError:
+                continue
+    return None
+
+
+# --- typed where
+
+_CMP = ("=", "!=", "<=", ">=", "<", ">")
+_NUM_RX = re.compile(r"^-?\d+$")
+_UNIT_NUM_RX = re.compile(r"^-?\d+(?:\.\d+)?(?: [A-Za-z]+)?$")  # `60`, `35 BRL`, `1 hour`, `2.5`: a Number or Money field's value
+
+
+def split_segments(text: str, seps=(" · ", " and ")) -> list[str]:
+    """`text` cut at the separators that are outside double quotes, trimmed, empty parts dropped."""
+    parts, cur, inq, i = [], "", False, 0
+    while i < len(text):
+        ch = text[i]
+        if ch == '"':
+            inq = not inq
+        if not inq:
+            sep = next((s for s in seps if text.startswith(s, i)), None)
+            if sep:
+                parts.append(cur)
+                cur, i = "", i + len(sep)
+                continue
+        cur += ch
+        i += 1
+    parts.append(cur)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def parse_cond(part: str) -> dict:
+    """One typed condition from a segment (ValueError when it is not one): `{"field","op","value"}`, `{"field","op"}` for
+    `is empty` / `is set`, `{"link","op","value"}` for a linked count (`debt count >= 2`). A bare number is a number, a bare
+    `yes`/`no` a bool, a bare number with a unit (`35 BRL`, `1 hour`) a string with `bare: True` (it renders unquoted), any
+    other bare word a string, a quoted value a string."""
+    part = part.strip()
+    m = re.fullmatch(r"(\w+) count (=|!=|<=|>=|<|>) (-?\d+)", part)
+    if m:
+        return {"link": m.group(1), "op": m.group(2), "value": int(m.group(3))}
+    m = re.fullmatch(r"(\w+) (is empty|is set)", part)
+    if m:
+        return {"field": m.group(1), "op": m.group(2)}
+    m = re.fullmatch(r"(\w+) in \((.*)\)", part)
+    if m:
+        items = re.findall(r'"([^"]*)"', m.group(2))
+        if not items or ", ".join(f'"{i}"' for i in items) != m.group(2):
+            raise ValueError(f"a list of quoted values, not {m.group(2)!r}")
+        return {"field": m.group(1), "op": "in", "value": items}
+    m = re.fullmatch(r'(\w+) contains "([^"]*)"', part)
+    if m:
+        return {"field": m.group(1), "op": "contains", "value": m.group(2)}
+    m = re.fullmatch(r"(\w+) (=|!=|<=|>=|<|>) (.+)", part)
+    if not m:
+        raise ValueError(f"not a typed condition: {part!r}")
+    field_, op, v = m.groups()
+    if v.startswith('"'):
+        if not re.fullmatch(r'"[^"]*"', v):
+            raise ValueError(f"unbalanced quotes in {part!r}")
+        return {"field": field_, "op": op, "value": v[1:-1]}
+    if _NUM_RX.match(v):
+        return {"field": field_, "op": op, "value": int(v)}
+    if v in ("yes", "no"):
+        return {"field": field_, "op": op, "value": v == "yes"}
+    if _UNIT_NUM_RX.match(v):
+        return {"field": field_, "op": op, "value": v, "bare": True}
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", v):
+        return {"field": field_, "op": op, "value": v}
+    raise ValueError(f"cannot type the value of {part!r}")
+
+
+def cond_text(cond: dict) -> str:
+    """The trace spelling of a condition: a closed word bare (`status = open`), any other text quoted."""
+    if "link" in cond:
+        return f"{cond['link']} count {cond['op']} {cond['value']}"
+    if cond["op"] in ("is empty", "is set"):
+        return f"{cond['field']} {cond['op']}"
+    v = cond["value"]
+    if cond["op"] == "in":
+        return f"{cond['field']} in ({', '.join(chr(34) + i + chr(34) for i in v)})"
+    if cond["op"] == "contains":
+        return f'{cond["field"]} contains "{v}"'
+    if isinstance(v, bool):
+        s = "yes" if v else "no"
+    elif isinstance(v, int):
+        s = str(v)
+    elif cond.get("bare") or (v in ENUM_WORDS and v not in ("yes", "no")):
+        s = v
+    else:
+        s = f'"{v}"'
+    return f"{cond['field']} {cond['op']} {s}"
+
+
+def cond_render(cond: dict) -> str:
+    """The one spelling the runtime reads (compile.rs `render_cond`): strings quoted (`'` for an inner `"`), numbers and
+    yes/no bare, a unit number (`35 BRL`) bare."""
+    t = cond_text(cond)
+    v = cond.get("value")
+    if "link" in cond or cond["op"] in ("is empty", "is set", "in", "contains") or isinstance(v, (bool, int)) or cond.get("bare"):
+        return t
+    return f"{cond['field']} {cond['op']} \"{v.replace(chr(34), chr(39))}\""
+
+
+def where_slot(conds: list[dict]) -> str:
+    return " · ".join(cond_text(c) for c in conds)
+
+
+def where_conds(text: str) -> list[dict]:
+    """The conditions of a `where` slot (segments ` · `) or of a call's `where` (joined by ` and `). ValueError when a
+    segment is not a typed condition."""
+    conds = [parse_cond(p) for p in split_segments(text)]
+    if not conds:
+        raise ValueError("no condition")
+    return conds
+
+
+def where_call(conds: list[dict]) -> str:
+    """The `where` argument the runtime renders from typed conditions."""
+    return " and ".join(cond_render(c) for c in conds)
+
+
+def where_respell(text: str) -> tuple[str, str] | None:
+    """(the call's `where` in the runtime's spelling, the `where` slot) for a call's `where`, or None when it is not a list
+    of typed conditions or when its spelling differs by more than quotes."""
+    try:
+        conds = where_conds(text)
+    except ValueError:
+        return None
+    # the slot is read back, so what the model writes is what compiles
+    conds = [parse_cond(c) for c in split_segments(where_slot(conds), (" · ",))]
+    call = where_call(conds)
+    if call.replace('"', "") != text.replace('"', "").replace(" · ", " and "):
+        return None
+    return call, where_slot(conds)
+
+
+def cond_json(cond: dict) -> dict:
+    return {k: v for k, v in cond.items() if k != "bare"}
+
+
+def _pure_handles(text: str) -> list[str] | None:
+    """The handles of a handle slot (`#4, #5`, `@2`), or None when it holds anything else."""
+    toks = [t.strip() for t in text.split(",")]
+    return toks if toks and all(re.fullmatch(r"[#@]\d+", t) for t in toks) else None
+
+
+def _handle_json(tok: str):
+    return {"pick": {"row": tok}} if tok.startswith("#") else tok
+
+
+def slots_json(slots: dict) -> dict:
+    """The slots of a parsed trace (`parse3`) as the runtime's `compile` op reads them. A row is a pick of the block
+    (`{"pick":{"row":"#n"}}`), a `dates[i]` a pick of the dates line, a `where` a list of typed conditions (a segment that is
+    not one is passed as text, which the runtime refuses naming `where`). CompileError for a date the compact form cannot read.
+    `scope`, `refer` and `target` are said to the guard, not to the compiler; `retry` and `time` are consumed here. A v4 trace
+    sends `"trace": "v4"`: the runtime infers what it leaves out, and its pick states the rows beside any other handle slot."""
+    out: dict = {"intent": slots["intent"][0]}
+    v4 = slots.get("v") == 4
+    if v4:
+        out["trace"] = "v4"
+    for k in ("via", "verb"):
+        if slots.get(k):
+            out[k] = slots[k]
+    for k in ("kind", "op", "field", "group", "name", "text", "order", "question", "reason"):
+        if k in slots:
+            out[k] = slots[k]
+    for k in ("trashed", "more"):
+        if k in slots:
+            out[k] = {"true": True, "false": False}.get(slots[k], slots[k])
+    if "limit" in slots:
+        out["limit"] = int(slots["limit"]) if re.fullmatch(r"\d+", slots["limit"]) else slots["limit"]
+    if "where" in slots:
+        try:
+            out["where"] = [cond_json(c) for c in where_conds(slots["where"])]
+        except ValueError:
+            out["where"] = slots["where"]
+    explicit = False
+    for k in HANDLE_SLOTS:
+        if k in slots:
+            explicit = True
+            toks = _pure_handles(slots[k])
+            vals = [_handle_json(t) for t in toks] if toks else [slots[k]]
+            out[k] = vals if (k not in ("row", "within", "value") or len(vals) > 1) else vals[0]
+    if slots.get("pick"):
+        out["pick"] = [dict({"row": f"#{n}", "verdict": "ok" if why is None else "no"}, **({"reason": slots["pick_reason"]} if v4 else {}))
+                       for n, why in slots["pick"]]
+    elif not explicit and slots.get("refer") and slots["refer"][2]:
+        tool = slots.get("via") or DEFAULT_TOOL[slots["intent"][0]]
+        hs = [_handle_json(t) for t in slots["refer"][2]]
+        if tool == "open":
+            out["row"] = hs[0]
+        else:
+            out["rows"] = hs
+    times = list(slots.get("time", []))
+
+    def date(text: str):
+        m = DATES_REF.match(text)
+        if m:
+            return {"pick": dict({"date": int(m.group(1))}, **({"reading": m.group(2)} if m.group(2) else {}))}
+        return date_from_compact(text, times)
+
+    if slots.get("when_expr"):
+        out["when"] = date(slots["when_expr"])
+    if slots.get("set"):
+        ents = []
+        for k, v, is_date in slots["set"]:
+            if is_date:
+                ents.append({"key": k, "date": date(v)})
+            else:
+                ents.append({"key": k, "value": _handle_json(v) if re.fullmatch(r"#\d+", v) else v})
+        out["set"] = ents
+    if times:
+        raise CompileError(f"{len(times)} time values with no `t` marker")
+    return out
+
+
+def arg_text(v) -> str:
+    """A compiled argument as the call text carries it: a handle list joined by `, `, a flag `true`/`false`."""
+    if isinstance(v, list):
+        return ", ".join(str(x) for x in v)
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    return str(v)
+
+
+def runtime_call(reply: dict, key: str = "call") -> dict:
+    """The `call` (or `stated`) of the runtime's compile reply as a call record: argument values as text."""
+    c = reply[key]  # the reply's arguments are in the order of its JSON map (sorted); a call writes them in CALL_ORDER
+    return canon_call({"tool": c["tool"], "args": {k: arg_text(v) for k, v in (c.get("args") or {}).items()}})
+
+
+def mentions(tool: str, args: dict, slots: dict, bad: bool = False) -> dict:
+    """What the call refers to, by kind: `rows` (a `#n`/`@k` the prompt or an earlier result shows: always a pick),
+    `names` (a name the model types for the runtime to find: a `name` or `text` of a lookup, or of a write that names no
+    row), `dates_anchored` (a `dates[i]`) and `dates_free` (a date the model writes). `anchored`: it refers to something and
+    every mention is a pick; `free`: some name or date is typed; `none`."""
+    handles = set()
+    for k in HANDLE_SLOTS:
+        if k in slots:
+            handles.update(HANDLE.findall(slots[k]))
+    for n, _why in slots.get("pick", []):
+        handles.add(f"#{n}")
+    if not any(k in slots for k in HANDLE_SLOTS) and not slots.get("pick") and slots.get("refer"):
+        handles.update(slots["refer"][2])
+    handles.update(HANDLE.findall(" ".join(v for _k, v, d in slots.get("set", []) if not d)))
+    names_slot = any(k in slots for k in ("name", "text")) and (tool != "act" or (slots.get("verb") != "create" and not handles))
+    names_slot = names_slot and tool not in ("ask", "decline")
+    exprs = ([slots["when_expr"]] if slots.get("when_expr") else []) + [v for _k, v, d in slots.get("set", []) if d]
+    anch = sum(1 for e in exprs if DATES_REF.match(e))
+    out = {"rows": len(handles), "names": int(names_slot), "dates_anchored": anch, "dates_free": len(exprs) - anch}
+    out["class"] = ("free" if out["names"] or out["dates_free"] else "anchored" if out["rows"] or out["dates_anchored"] else "none")
+    out["bad"] = bad
+    return out
+
+
+# ------ renderer and parser ------
+
+def render3(slots: dict) -> str:
+    """The text of a trace: one line per slot, in `SLOT_ORDER3` (`SLOT_ORDER4` for a v4 trace, `slots["v"] == 4`)."""
+    lines = []
+    v4 = slots.get("v") == 4
+    for key in (SLOT_ORDER4 if v4 else SLOT_ORDER3):
+        v = slots.get(key)
+        if v in (None, "", [], ()):
+            continue
+        if key == "retry":
+            lines.append("retry: " + ("rejected" if v is True else v))
+        elif key == "intent":
+            lines.append(f"intent: {v[0]}" + (f" {q(v[1])}" if v[1] else ""))
+        elif key == "via" or key == "verb":
+            lines.append(f"{key}: {v}")
+        elif key == "scope":
+            lines.append(f"scope: {v[0]}" + (f" {q(v[1])}" if v[1] else ""))
+        elif key == "refer":
+            lines.append("refer: none" if v[0] == "none" else f"refer: {v[0]}" + (f" {q(v[1])}" if v[1] else "") + " -> " + ", ".join(v[2]))
+        elif key == "target":
+            lines.append("target: " + " · ".join(q(t) for t in v))
+        elif key == "when":
+            src = (q(v[1]) if v[0] == "q" else ("earlier" + (" " + q(v[1]) if v[1] else "") if v[0] == "e" else v[1]))
+            lines.append("when: " + src + (f" = {slots['when_expr']}" if slots.get("when_expr") else ""))
+        elif key == "set":
+            lines.append("set: " + " · ".join(f"{k} = {'~' if d else ''}{val}" for k, val, d in v))
+        elif key == "time":
+            lines.append("time: " + " · ".join(v))
+        elif key == "pick" and v4:
+            lines.append(f"pick: #{v[0][0]} ({slots['pick_reason']})")
+        elif key == "pick":
+            lines.append("pick: " + " · ".join(f"#{n} ok" if why is None else f"#{n} no ({why})" for n, why in v))
+        else:  # RAW3
+            lines.append(f"{key}: {v}")
+    return "\n".join(lines)
+
+
+def render4(slots: dict) -> str:
+    """The text of a v4 trace (`render3` of the slots marked `v` = 4)."""
+    return render3(dict(slots, v=4))
+
+
+_QUOTED = r'"([^"\n]*)"'
+LINE_RX3 = {
+    "retry": re.compile(r"^retry: (rejected|[a-z_]+(?:\[\d+\])?)$"),
+    "intent": re.compile(r"^intent: (" + "|".join(INTENTS) + r")(?: " + _QUOTED + r")?$"),
+    "verb": re.compile(r"^verb: (\w+)$"),
+    "scope": re.compile(r"^scope: (" + "|".join(SCOPES) + r")(?: " + _QUOTED + r")?$"),
+    "target": re.compile(r"^target: (" + _QUOTED + r"(?: · " + _QUOTED + r")*)$"),
+    "pick": re.compile(r"^pick: (#\d+ (?:ok|no \((?:" + "|".join(REASONS) + r")\))(?: · #\d+ (?:ok|no \((?:" + "|".join(REASONS) + r")\)))*)$"),
+}
+LINE_RX3["via"] = re.compile(r"^via: (" + "|".join(VIA) + r")$")
+LINE_RX3["refer"] = re.compile(r"^refer: (?:(none)|(" + "|".join(REFERS) + r")(?: " + _QUOTED + r")? -> ([#@]\d+(?:, [#@]\d+)*))$")
+LINE_RX3["when"] = re.compile(r"^when: (?:" + _QUOTED + r"|(now)|(earlier)(?: " + _QUOTED.replace("(", "(?P<e>", 1) + r")?)(?: = (.+))?$")
+LINE_RX3["set"] = re.compile(r"^set: (.+)$")
+LINE_RX3["time"] = re.compile(r"^time: (.+)$")
+for _k in RAW3:
+    LINE_RX3[_k] = re.compile(r"^" + _k + r": (.+)$")
+
+
+# v4: the lines that differ (CONTRACT_V3.md section 8). A v3.1-only slot is "not a slot" here.
+LINE_RX4 = {k: v for k, v in LINE_RX3.items() if k not in V3_ONLY}
+LINE_RX4["via"] = re.compile(r"^via: (" + "|".join(VIA4) + r")$")
+LINE_RX4["pick"] = re.compile(r"^pick: #(\d+) \((" + "|".join(PICK4_REASONS) + r")\)$")
+
+
+def parse3(text: str) -> dict:
+    """The slots of a v3.1 trace text (ValueError when a line is not a slot, or the order is broken). `intent`, `scope` are
+    (word, quote), `refer` (kind, quote, handles), `target` a list of quotes, `when` (source, quote), `pick` [(n, reason or None)];
+    `when_expr` is the date after ` = `; `set` is [(key, value, is_date)]; `time` a list; the raw slots are strings."""
+    return _parse(text, SLOT_ORDER3, LINE_RX3)
+
+
+def parse4(text: str) -> dict:
+    """The slots of a v4 trace text, in the shape of `parse3` with `v` = 4: `pick` is `[(n, None)]` and `pick_reason` its
+    reason word. A pick beside a `rows` or `row` slot is refused (both say the rows)."""
+    slots = _parse(text, SLOT_ORDER4, LINE_RX4)
+    slots["v"] = 4
+    if "pick" in slots and ("rows" in slots or "row" in slots):
+        raise ValueError("a pick and a rows slot both name the rows")
+    return slots
+
+
+def parse_any(text: str, mode: str | None = None) -> dict:
+    """A trace of either version. `mode` is `v3.1` or `v4`; None is `default_mode()`. A think with a construct of only one
+    version (v3.1: `scope`, `refer`, `target`, `via: find`, a candidate pick; v4: a one-row pick) is read as that version
+    whatever the mode, so data of both stays readable; any other think is read in the mode, because the two versions
+    differ only in what the compile step infers."""
+    lines = text.split("\n")
+    if any(ln.startswith("pick: ") and re.match(r"pick: #\d+ \(", ln) for ln in lines):
+        return parse4(text)
+    if any(re.match(r"(?:scope|refer|target): |via: find$|pick: ", ln) for ln in lines):
+        return parse3(text)
+    return parse4(text) if (mode or default_mode()) == "v4" else parse3(text)
+
+
+def default_mode() -> str:
+    """`v4` (the contract the trainer, the decoder and the data checks use), or `v3.1` when NATIVE_TRACE says so."""
+    return "v3.1" if os.environ.get("NATIVE_TRACE", "").strip().lower() in ("v3.1", "v3", "3.1", "3") else "v4"
+
+
+def _parse(text: str, order: tuple, rx: dict) -> dict:
+    slots: dict = {}
+    last = -1
+    for line in text.strip().split("\n"):
+        line = line.rstrip()
+        key = line.split(":", 1)[0]
+        if key not in rx:
+            raise ValueError(f"not a slot: {line!r}")
+        m = rx[key].match(line)
+        if not m:
+            raise ValueError(f"bad {key} line: {line!r}")
+        pos = order.index(key)
+        if pos <= last:
+            raise ValueError(f"slot out of order: {line!r}")
+        last = pos
+        if key == "retry":
+            slots["retry"] = True if m.group(1) == "rejected" else m.group(1)
+        elif key == "intent":
+            slots["intent"] = (m.group(1), m.group(2) or "")
+        elif key in ("verb", "via"):
+            slots[key] = m.group(1)
+        elif key == "scope":
+            slots["scope"] = (m.group(1), m.group(2) or "")
+        elif key == "refer":
+            slots["refer"] = ("none", "", []) if m.group(1) else (m.group(2), m.group(3) or "", m.group(4).split(", "))
+        elif key == "target":
+            slots["target"] = re.findall(_QUOTED, m.group(1))
+        elif key == "when":
+            slots["when"] = ("q", m.group(1)) if m.group(1) is not None else (("w", "now") if m.group(2) else ("e", m.group("e") or ""))
+            if m.group(5):
+                slots["when_expr"] = m.group(5)
+        elif key == "set":
+            ents = []
+            for part in m.group(1).split(" · "):
+                k, sep, v = part.partition(" = ")
+                if not sep or not k:
+                    raise ValueError(f"bad set entry: {part!r}")
+                ents.append((k, v[1:], True) if v.startswith("~") else (k, v, False))
+            slots["set"] = ents
+        elif key == "time":
+            slots["time"] = m.group(1).split(" · ")
+        elif key == "pick" and order is SLOT_ORDER4:
+            slots["pick"], slots["pick_reason"] = [(int(m.group(1)), None)], m.group(2)
+        elif key == "pick":
+            slots["pick"] = [(int(n), None if v == "ok" else v[4:-1]) for n, v in re.findall(r"#(\d+) (ok|no \(\w+\))", m.group(1))]
+        else:
+            slots[key] = m.group(1)
+    if "intent" not in slots:
+        raise ValueError("no intent line")
+    return slots
+
+
+def derived_rows(slots: dict) -> str | None:
+    """The rows argument a trace states by itself: the `ok` rows of `pick`, else the handles of a real `refer`."""
+    if slots.get("pick"):
+        ok = [f"#{n}" for n, why in slots["pick"] if why is None]
+        return ", ".join(ok) or None
+    r = slots.get("refer")
+    if r and r[2]:
+        return ", ".join(r[2])
+    return None
+
+
+def compile_call(trace: str | dict, dates: str | None = None, mode: str | None = None) -> dict:
+    """The call a trace states: {"tool", "args"} with the arguments in CALL_ORDER. A pure function of the trace
+    text (parse3 first when it is a string) and, for a `dates[i]`, of the `dates:` line of the prompt (`dates`; the runtime's
+    `compile` op reads the same line from the session). A `where` of typed segments (` · `) is rendered in the runtime's
+    one spelling. CompileError when the trace does not state a whole call. `mode` (`v3.1` or `v4`, default `default_mode()`)
+    is how a text with no construct of either version is read (`parse_any`); a parsed trace carries its own."""
+    if isinstance(trace, str):
+        try:
+            slots = parse_any(trace, mode)
+        except ValueError as e:
+            raise CompileError(str(e)) from None
+    else:
+        slots = trace
+    v4 = slots.get("v") == 4
+    intent = slots["intent"][0]
+    tool = slots.get("via") or DEFAULT_TOOL[intent]
+    args: dict = {}
+    times = list(slots.get("time", []))
+    if tool == "act":
+        if "verb" not in slots:
+            raise CompileError("an act without a verb slot")
+        args["verb"] = slots["verb"]
+    for k in RAW3:
+        if k in slots:
+            args[k] = slots[k]
+    if "where" in args:
+        spelled = where_respell(args["where"])  # typed segments in the runtime's spelling; anything else stays as written
+        if spelled:
+            args["where"] = spelled[0]
+    if v4 or not any(k in slots for k in HANDLE_SLOTS):  # a v4 pick states the rows beside any other handle slot
+        d = derived_rows(slots)
+        if d:
+            args["row" if tool == "open" else "rows"] = d
+    if v4 and tool == "act" and "name" in args and "kind" not in args and not any(k in args for k in HANDLE_SLOTS) and slots.get("verb") in VERB_KIND:
+        args["kind"] = VERB_KIND[slots["verb"]]  # inferred: the one kind the verb applies to, for a name and no other handle
+    resolve = dates_resolver(dates)
+
+    def date(text: str) -> str:
+        m = DATES_REF.match(text)
+        if not m:
+            return _dumps(date_from_compact(text, times))
+        if dates is None:
+            raise CompileError("a dates[i] needs the dates line")
+        try:
+            return date_text(resolve(int(m.group(1)), m.group(2)))
+        except ValueError as e:
+            raise CompileError(f"dates[{m.group(1)}]: {e}") from None
+
+    if slots.get("when_expr"):
+        args["when"] = date(slots["when_expr"])
+    if slots.get("set"):
+        lines = []
+        for k, v, is_date in slots["set"]:
+            lines.append(f"{k}: " + (date(v) if is_date else v))
+        args["args"] = "\n".join(lines)
+    if times:
+        raise CompileError(f"{len(times)} time values with no `t` marker")
+    ordered = {k: args[k] for k in CALL_ORDER if k in args}
+    if len(ordered) != len(args):
+        raise CompileError("an argument outside the call order: " + ", ".join(sorted(set(args) - set(ordered))))
+    return {"tool": tool, "args": ordered}
+
+
+def canon_call(call: dict) -> dict:
+    """The call with its arguments in CALL_ORDER (an unknown argument keeps its place, last)."""
+    a = dict(call.get("args") or {})
+    out = {k: a.pop(k) for k in CALL_ORDER if k in a}
+    out.update(a)
+    return {"tool": call["tool"], "args": {k: str(v) if not isinstance(v, str) else v for k, v in out.items()}}
+
+
+def _json_or(text: str):
+    try:
+        return json.loads(text)
+    except ValueError:
+        return text
+
+
+def _arg_norm(k: str, v) -> object:
+    """An argument for comparison: text, except that a date (`when`, a date line of `args`) is compared as the object it
+    spells, so the order of its keys does not matter."""
+    v = arg_text(v)
+    if k == "when":
+        return _json_or(v)
+    if k == "args":
+        return [(a, _json_or(b) if b.startswith("{") else b) for a, _s, b in (ln.partition(": ") for ln in v.split("\n"))]
+    return v
+
+
+def same_call(a: dict, b: dict) -> bool:
+    """Two calls are the same when the tool and the arguments (order aside; a date as the object it spells) are."""
+    xa, xb = a.get("args") or {}, b.get("args") or {}
+    return a["tool"] == b["tool"] and set(xa) == set(xb) and all(_arg_norm(k, xa[k]) == _arg_norm(k, xb[k]) for k in xa)
+
+
+# ------ the refer rule: a turn that has a previous result says whether it refers back ------
+#
+# `refer_required(history)` is a pure function of the turn index and of whether an earlier turn showed a result: the
+# first step of every turn after the first that showed rows, and nothing else. There the think has a `refer:` line,
+# `refer: <kind> "..." -> @k` (the call names rows an earlier turn showed) or `refer: none` (it does not). On the first
+# turn of a session, or while no earlier turn showed a result, there is no `refer:` line at all. Nothing is read from the
+# words of the message: the `refer:` label depends on the call, not on the words, so the model has nothing to detect,
+# only to say.
+
+
+def has_prev_result(history: list[dict]) -> bool:
+    """An earlier turn of `history` showed rows or a result (the runtime's reply to a call, not the vault block)."""
+    ctx = build_ctx(history)
+    return any(l.turn < ctx.turn and l.kind != "block" for l in ctx.lists)
+
+
+def first_step(history: list[dict]) -> bool:
+    return bool(history) and history[-1]["role"] == "user"
+
+
+def refer_required(history: list[dict]) -> bool:
+    """Must the next think carry a `refer:` line? On the first step of a turn (the last record is the user's) when an
+    earlier turn showed a result; never otherwise. A pure function of (turn index, whether prior results exist)."""
+    return first_step(history) and has_prev_result(history)
+
+
+# ------ the generator ------
+
+def _body_entries(body: str, dline: str | None = None) -> tuple[list[tuple[str, str, bool]], list[str], str]:
+    """The `args` body as `set` entries (key, value, is_date), the time values of its dates, and the body with each date
+    written in the one spelling (`date_text`). A date a `dates:` line entry reads as exactly is the entry (`dates[i]`)."""
+    ents, times, lines = [], [], []
+    for ln in body.split("\n"):
+        k, sep, v = ln.partition(": ")
+        if not sep or not k:
+            raise TraceError("body-line", ln[:60])
+        if v.startswith("{"):
+            try:
+                obj = json.loads(v)
+                anchor = date_anchor(obj, dline)
+                c, ts = (anchor, []) if anchor else date_to_compact(obj)
+            except (ValueError, json.JSONDecodeError) as e:
+                raise TraceError("date-form", f"{k}: {e}") from None
+            ents.append((k, c, True))
+            times += ts
+            lines.append(f"{k}: " + (date_text(obj) if anchor else v))
+        else:
+            ents.append((k, v, False))
+            lines.append(ln)
+    return ents, times, "\n".join(lines)
+
+
+def derive_trace3(call: dict, history: list[dict], today: str | None = None, retry: bool = False, ahead=None,
+                  bad: bool = False, strict: bool = True) -> Trace:
+    """The trace of `call`: the base slots (`derive_slots`) plus one slot per argument. Raises TraceError when the call has no
+    base slots, or when the text it makes does not compile back to the very call (reason `roundtrip`)."""
+    tr = derive_slots(call, history, today, retry, ahead, bad, strict)
+    slots = dict(tr.slots)
+    required = refer_required(history)
+    if required and "refer" not in slots:
+        slots["refer"] = ("none", "", [])  # an earlier turn showed a result and the call names no rows of it
+    elif "refer" in slots and not required and first_step(history):
+        raise TraceError("refer-rule", "a refer line where no earlier turn showed a result")
+    tool, args = call["tool"], {k: (v if isinstance(v, str) else str(v)) for k, v in (call.get("args") or {}).items()}
+    intent = slots["intent"][0]
+    if tool != DEFAULT_TOOL[intent]:
+        if tool not in VIA:
+            raise TraceError("tool", f"{tool} under intent {intent}")
+        slots["via"] = tool
+    for k in RAW3:
+        if k in args:
+            if "\n" in args[k] or not args[k]:
+                raise TraceError("raw-arg", f"{k}={args[k][:40]!r}")
+            slots[k] = args[k]
+    if "where" in args:  # typed segments, the call in the runtime's spelling; a free string only on a repair call
+        spelled = where_respell(args["where"])
+        if spelled:
+            args["where"], slots["where"] = spelled
+        elif not bad:
+            raise TraceError("where-form", args["where"][:60])
+    dline = dates_line_of(history)
+    if tool != "act" and "verb" in args:
+        raise TraceError("verb-arg", tool)
+    # the rows argument the trace already states
+    rk = "row" if tool == "open" else "rows"
+    if rk in slots and not any(k in args for k in HANDLE_SLOTS if k != rk):
+        stated = derived_rows({k: v for k, v in slots.items() if k not in (rk,)})
+        if stated == args[rk]:
+            del slots[rk]
+    times: list[str] = []
+    if "when" in args and args["when"] not in ("", "null"):
+        try:
+            obj = json.loads(args["when"])
+            anchor = date_anchor(obj, dline)
+            c, ts = (anchor, []) if anchor else date_to_compact(obj)
+        except (ValueError, json.JSONDecodeError) as e:
+            raise TraceError("date-form", f"when: {e}") from None
+        slots["when_expr"] = c
+        if anchor:
+            args["when"] = date_text(obj)
+        times += ts
+        slots.pop("when_raw", None)
+    if "args" in args:
+        ents, ts, body = _body_entries(args["args"], dline)
+        slots["set"] = ents
+        args["args"] = body
+        times += ts
+    if times:
+        slots["time"] = times
+    if ("when_expr" in slots or any(d for _k, _v, d in slots.get("set", []))) and "when" not in slots:
+        slots["when"] = ("e", "")
+    if "when" in args and "when_expr" not in slots:
+        raise TraceError("when-arg", args["when"][:40])
+    # a quoted span the call's own slots already say (a name, a text, a `set` value, a where literal) is not said twice
+    said = [slots[k] for k in ("name", "text") if k in slots]
+    said += [v for _k, v, d in slots.get("set", []) if not d]
+    said += re.findall(r'"([^"]*)"', args.get("where", ""))
+    said = {fold(v).strip() for v in said}
+    if slots.get("target"):
+        slots["target"] = [t for t in slots["target"] if fold(t).strip() not in said]
+    tr.slots = slots
+    text = render3(slots)
+    try:
+        got = compile_call(text, dline)
+    except CompileError as e:
+        raise TraceError("roundtrip", f"does not compile: {e}") from None
+    want = canon_call({"tool": tool, "args": args})
+    if not same_call(got, want):
+        raise TraceError("roundtrip", f"compiled {json.dumps(got, ensure_ascii=False)[:160]} != {json.dumps(want, ensure_ascii=False)[:160]}")
+    tr.call = want
+    tr.mentions = mentions(tool, args, slots, bad)
+    return tr
+
+
+def trace_messages3(msgs: list[dict], today: str | None = None, strict: bool = True) -> dict[int, "Trace"]:
+    """The trace of every assistant message of a record (index -> Trace). A message marked `loss: False` is a deliberate
+    rejected call; `retry` is set on the call that follows it in the same turn."""
     out: dict[int, Trace] = {}
     prev_bad = False
     for i, m in enumerate(msgs):
@@ -1518,6 +2359,150 @@ def trace_messages(msgs: list[dict], today: str | None = None, strict: bool = Tr
         if m["role"] != "assistant":
             continue
         bad = m.get("loss") is False
-        out[i] = derive_trace({"tool": m["tool"], "args": m["args"]}, msgs[:i], today, prev_bad, msgs[i + 1:], bad=bad, strict=strict)
+        out[i] = derive_trace3({"tool": m["tool"], "args": m["args"]}, msgs[:i], today, prev_bad, msgs[i + 1:], bad=bad, strict=strict)
         prev_bad = bad
     return out
+
+
+def check_call3(text: str, call: dict, history: list[dict]) -> list[str]:
+    """Trace-call consistency for a think: the checks on the base slots (`check_slots`), then the call the think compiles
+    to must be the call. Returns the disagreements (empty = consistent)."""
+    try:
+        slots = parse_any(text)
+    except ValueError as e:
+        return [f"unparsable: {e}"]
+    if slots.get("v") == 4:  # v4 states no scope, refer or span to check: the intent against the tool, then the call
+        tool, bad = call["tool"], []
+        if tool not in LOOKUPS and tool not in TOOLS_FOR.get(slots["intent"][0], ()):
+            bad.append(f"intent {slots['intent'][0]} vs tool {tool}")
+        if tool == "act" and slots.get("verb") != (call.get("args") or {}).get("verb"):
+            bad.append(f"verb {slots.get('verb')} vs {(call.get('args') or {}).get('verb')}")
+    else:
+        base = {k: v for k, v in slots.items() if k in BASE_SLOTS}
+        if base.get("refer") and not base["refer"][2]:
+            del base["refer"]  # `refer: none` names no rows
+        bad = check_slots(base, call, history)
+    try:
+        got = compile_call(slots, dates_line_of(history))
+    except CompileError as e:
+        return bad + [f"does not compile: {e}"]
+    if not same_call(got, canon_call(call)):
+        bad.append(f"compiles to {json.dumps(got, ensure_ascii=False)[:120]}")
+    return bad
+
+
+# ------ v4: the converter from a v3.1 think (CONTRACT_V3.md section 8) ------
+#
+# A v4 think states what the harness cannot infer: no `scope` (the rows or the selector say it), no `refer` (a pick whose
+# reason is `focus`, `asked` or `created`, or a result handle, says it), no `target` (the `name` slot is the selector), no
+# candidate list in `pick` (one row, with the reason it is the one), and no `kind` an act's verb already fixes. `to_v4` makes the
+# v4 slots of a v3.1 trace and `v4_think` checks that both compile to the very same call.
+
+class V4Skip(Exception):
+    """A v3.1 think v4 cannot say, or says as another call (`reason`: `find`, `rows+row`, `unparsable`, `roundtrip`)."""
+
+    def __init__(self, reason: str, detail: str = ""):
+        super().__init__(reason, detail)
+        self.reason, self.detail = reason, detail
+
+
+FOCUS_SEG = re.compile(r" · (?=created |acted |@\d+: |asked: |earlier: )")
+
+
+def focus_sets(block: str) -> list[tuple[str, set[int]]]:
+    """The segments of the `focus:` line of a block as (reason, rows): `created #n ...` is `created`, `asked: ...` is `asked`,
+    `acted #n ...` (the rows a write acted on), `@k: ...` and `earlier: ...` are `focus`."""
+    for line in block.split("\n"):
+        if line.startswith("focus: "):
+            return [("created" if seg.startswith("created ") else "asked" if seg.startswith("asked: ") else "focus",
+                     {int(x) for x in re.findall(r"#(\d+)", seg)}) for seg in FOCUS_SEG.split(line[len("focus: "):])]
+    return []
+
+
+def _own_text(row: Row) -> str:
+    """The part of the row's line that is about this row: a line may show several rows (the vault block, the focus line)."""
+    at = row.line.find(f"#{row.n} ")
+    rest = row.line[at:] if at >= 0 else row.line
+    nxt = re.search(r" #\d+ ", rest[1:])
+    return rest[:nxt.start() + 1] if nxt else rest
+
+
+def pick_reason(ctx: Ctx, n: int) -> str:
+    """Why row `n` is the one the call takes, one of `PICK4_REASONS`, read from the context the model sees: a row the message
+    does not name is `created` (this session made it), `asked` (the runtime asked about it) or `focus` (the focus line shows
+    it), whichever the focus line says; a row the message names is `name`, or `nick` when only the person's nickname is said;
+    else `date` when the message has a date and the row one, else `kind`."""
+    row = ctx.rows.get(n)
+    words = [t.norm for t in toks(ctx.message)]
+    named = bool(row) and any(w not in STOP and any(same(w, x) for x in words) for w in norm_words(row.name))
+    if not named:
+        shown = focus_sets(ctx.block)
+        for why in ("created", "asked", "focus"):
+            if any(h == why and n in rows for h, rows in shown):
+                return why
+        nick = re.search(r'nickname "([^"]+)"', _own_text(row)) if row else None
+        if nick and any(same(w, x) for w in norm_words(nick.group(1)) for x in words):
+            return "nick"
+        if row and _row_date(_own_text(row)) and date_clusters(ctx.message):
+            return "date"
+        return "kind"
+    return "name"
+
+
+def reason_hint(slots: dict) -> str:
+    """`pick_reason` without a context (the golden file keeps thinks, not conversations): `focus` for a row an earlier turn
+    showed (a real `refer`), else what the rejected candidates of the v3.1 pick said, else `kind`."""
+    if slots.get("refer") and slots["refer"][2]:
+        return "focus"
+    why = {w for _n, w in slots.get("pick", []) if w}
+    return "name" if "name" in why else "date" if "date" in why else "kind"
+
+
+def v4_slots(slots: dict, ctx: Ctx | None = None) -> dict:
+    """The v4 slots of a parsed v3.1 trace. The rows the call names are a `pick` when they are one `#n` (the reason read from
+    `ctx`, else `reason_hint`), else a `rows` / `row` slot as written; `scope`, `refer` and `target` go; an act's `kind` goes when
+    its verb fixes it and a `name` selects. V4Skip for a lookup (`via: find`: the compile step looks for itself in v4)."""
+    if slots.get("via") == "find":
+        raise V4Skip("find", "a v3.1 lookup step has no v4 form")
+    if "rows" in slots and "row" in slots:
+        raise V4Skip("rows+row")
+    tool = slots.get("via") or DEFAULT_TOOL[slots["intent"][0]]
+    out = {k: v for k, v in slots.items() if k not in V3_ONLY + ("pick", "rows", "row", "pick_reason")}
+    out["v"] = 4
+    explicit = "rows" if "rows" in slots else "row" if "row" in slots else None
+    # the rows the v3.1 trace states: its own slot, else the ok rows of the pick or the handles of the refer (no other handle slot)
+    eff = slots[explicit] if explicit else (None if any(k in slots for k in HANDLE_SLOTS) else derived_rows(slots))
+    if eff:
+        key = explicit or ("row" if tool == "open" else "rows")
+        handles = _pure_handles(eff)
+        if handles and len(handles) == 1 and handles[0].startswith("#") and key == ("row" if tool == "open" else "rows"):
+            n = int(handles[0][1:])
+            out["pick"], out["pick_reason"] = [(n, None)], (pick_reason(ctx, n) if ctx else reason_hint(slots))
+        else:
+            out[key] = eff
+    if (tool == "act" and "name" in out and not eff and not any(k in out for k in HANDLE_SLOTS) and out.get("kind")
+            and VERB_KIND.get(out.get("verb")) == out["kind"]):
+        del out["kind"]  # the compile step takes it from the verb
+    return out
+
+
+def v4_think(think: str, history: list[dict] | None = None, dates: str | None = None) -> str:
+    """The v4 text of a v3.1 think. `history`: the messages before the call (the context the pick reason is read from; none for
+    the golden file); `dates`: the prompt's `dates:` line, which a `dates[i]` compiles against (default: the line of
+    `history`). V4Skip when v4 cannot say it, or when its compiled call is not the v3.1 think's."""
+    try:
+        old = parse_any(think, "v3.1")
+    except ValueError as e:
+        raise V4Skip("unparsable", str(e)) from None
+    if old.get("v") == 4:
+        return think.strip()
+    dline = dates if dates is not None else (dates_line_of(history) if history else None)
+    new = v4_slots(old, build_ctx(history) if history else None)
+    text = render3(new)
+    try:
+        want, got = compile_call(old, dline), compile_call(parse4(text), dline)
+    except (CompileError, ValueError) as e:
+        raise V4Skip("roundtrip", f"does not compile: {e}") from None
+    if not same_call(got, want):
+        raise V4Skip("roundtrip", f"v4 compiles to {json.dumps(got, ensure_ascii=False)[:140]}, v3.1 to {json.dumps(want, ensure_ascii=False)[:140]}")
+    return text

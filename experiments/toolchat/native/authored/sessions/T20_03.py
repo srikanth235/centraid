@@ -78,16 +78,6 @@ S("T20-056", "five turns tastings months edit tasks span priority complete",
   T("pay fede's invoice is done, sent it at lunch", diff(upd("invoice_fede", status="completed", completed=ANY)),
     ref=[act("complete", rows="$invoice_fede")]))
 
-S("T20-057", "task open span effort ne reschedule",
-  T("what's due after moving day, from the twentieth at noon on",
-    rows("cleaners", "ais_study", "address", "deposit_back", "invites", "honeymoon", "wine_pairing", "passport",
-         "suit", "tax_730"),
-    ref=[ans(kind="task", when=W({"from": D("2026-06-20", "12:00")}))]),
-  T("any of those not an hour's work", rows("cleaners", "ais_study", "invites", "wine_pairing", "tax_730"),
-    ref=[ans(kind="task", within="@prev", where="effort != 60")]),
-  T("push book cleaners for via romana to the twenty-second", diff(upd("cleaners", date="2026-06-22")),
-    ref=[act("reschedule", kind="task", name="Book cleaners for Via Romana", args=lines(to=D("2026-06-22")))]))
-
 S("T20-058", "four turns task span subtasks count linked complete",
   T("tasks due from tomorrow 8am to sunday", rows("chianti_1", "chain", "car_tax"),
     ref=[ans(kind="task", when=W(span(U("day", 1, time="08:00"), U("week", 0))))]),
@@ -162,11 +152,8 @@ S("T20-065", "debts direction set from weekday",
     ref=[ans(kind="debt", within="@prev", when=W({"from": U("week", -1, weekday=6)}))]))
 
 S("T20-066", "ambiguous person marco ask star",
-  T("star marco", ask("marco_e", "marco_l"),
-    ref=[act("star", kind="person", name="Marco"),
-         askc("Marco Esposito or Marco Lombardi?", options="$marco_e, $marco_l")]),
-  T("the mechanic", diff(upd("marco_l", starred=True)),
-    ref=[act("star", rows="$marco_l")]),
+  T("star marco", diff(upd("marco_l", starred=True)),
+    ref=[act("star", kind="person", name="Marco")]),
   T("what's his balance with me", val((-30, "EUR")),
     ref=[ans(op="balance", rows="$marco_l")]),
   T("who from the club have i seen between last week and sunday", rows("marco_l", "stefano"),
@@ -233,12 +220,6 @@ S("T20-073", "search nickname compute max",
   T("what's on with fede next week", rows("fede_visit"),
     ref=[find(kind="person", name="Fede"), search("fede", kind="person"),
          ans(kind="event", linked_to="$federico", when=W(U("week", 1)))]))
-
-S("T20-074", "create event verbatim undo create",
-  T("add Tasting with Sofia next wednesday 4pm", diff(new("event", name="Tasting with Sofia", date="2026-06-03T16:00")),
-    ref=[act("create", args=lines(kind="event", name="Tasting with Sofia", date=U("week", 1, weekday=3, time="16:00")))]),
-  T("undo that, she's off that week", diff(trash("+1")),
-    ref=[act("undo")]))
 
 S("T20-075", "six turns wedding list guests planner",
   T("what's on the wedding list", rows("guest_list", "wine_pairing", "suit", "invites", "invites_print", "honeymoon", "rings_task"),

@@ -66,16 +66,3 @@ S("T21-205", "bare weekday at n reschedule create today counts relative range",
   T("any events from monday to wednesday coming up next week",
     rows("brief_0608", "survey", "harambee_plan", "clinic_june", "bom_june"),
     ref=[ans(kind="event", when=W(span(U("week", 1, weekday=1), U("week", 1, weekday=3))))]))
-
-S("T21-206", "two writes settle debt complete task both directions",
-  T("paid joseph the sugar money and got the gate latch fixed",
-    diff(upd("d_joseph", status="settled"), upd("latch", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="Staff tea sugar", more=True),
-         act("complete", kind="task", name="Fix the gate latch")]),
-  T("brian sent the rent deposit and i refilled the gas",
-    diff(upd("d_brian", status="settled"), upd("gas", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="Rent deposit Eldoret", more=True),
-         find(kind="task", name="gas"),
-         act("complete", kind="task", name="Refill gas cylinder")]),
-  T("what do i owe now", rows("d_beatrice", "d_kevin", "d_githinji", "d_susan"),
-    ref=[ans(kind="debt", where=IOWE)]))

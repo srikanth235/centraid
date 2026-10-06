@@ -231,8 +231,7 @@ S("T27-070", "five turns task span today sunday complete multi insurer ambiguous
                                                          upd("vitamins", status="completed", completed=ANY)),
     ref=[act("complete", rows="$glass, $vitamins")]),
   T("call the insurer, done that too", diff(upd("insurer_1", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Call the insurer"),
-         act("complete", rows="$insurer_1")]),
+    ref=[act("complete", kind="task", name="Call the insurer")]),
   T("push order paper bags and boxes to monday", diff(upd("bags", date="2026-12-07")),
     ref=[act("reschedule", rows="$bags", args=lines(to=U("week", 1, weekday=1)))]),
   T("what's open for today", rows("butter_conf"),
@@ -261,8 +260,7 @@ S("T27-073", "task open end next month reschedule",
   T("move renew my passport to first february", diff(upd("passport", date="2027-02-01")),
     ref=[act("reschedule", rows="$passport", args=lines(to=D("2027-02-01")))]),
   T("and tick off order flour, did it on the portal", diff(upd("flour_b", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Order flour"),
-         act("complete", kind="task", name="Order flour", where='status = "open"')]))
+    ref=[act("complete", kind="task", name="Order flour")]))
 
 S("T27-074", "effort refused unit repair open reschedule undo field",
   T("what tasks would run past two hours of work", rows("bake_night", "crib", "nursery"),

@@ -28,9 +28,9 @@ S("T21-131", "recovery limit find repeat answer then min owed then sum typo then
     ref=[ans(op="max", field="amount", kind="debt", where=OWED)]))
 
 NEXT3 = find(kind="event", when=NOW, order="date asc", limit=3)
-S("T21-132", "recovery twice limit events then sum effort week then max duration then min",
+S("T21-132", "limit events then sum effort week then max duration then min",
   T("what's next in the diary, the next three", rows("chama_06", "kevin_call", "brief_0608", order=True),
-    ref=[NEXT3, bad(NEXT3), bad(NEXT3), ans(within="@prev")]),
+    ref=[ans(kind="event", when=NOW, order="date asc", limit=3)]),
   T("how many minutes of tasks are due this week, everything on every list added up, dont seperate them",
     val(70),
     ref=[ans(op="sum", field="effort", kind="task", when=THIS_WEEK, where='status = "open"')]),
@@ -78,22 +78,6 @@ S("T21-135", "sum church list max school list typo min home open next choir limi
   T("next 2 choir practces", rows("choir_0611", "choir_0618", order=True),
     ref=[ans(kind="event", name="Choir practice", when=NOW, order="date asc", limit=2)]))
 
-S("T21-136", "ask tick off contribution never mind hard then top three owed total then max then min",
-  T("tick off send chama contribution", ask("contrib", "contrib_may"),
-    ref=[act("complete", kind="task", name="Send chama contribution"),
-         find(kind="task", name="Send chama contribution"),
-         askc("this month's due today or the one from the 2nd of may?", options="$contrib, $contrib_may")]),
-  T("hold on, never mind, i just remembered susan collects the contributions in cash at two so i shouldn't tick either, ill sort it in the mornign",
-    decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("what do my three biggest debts to me add up to", val((18500, "KES")),
-    ref=[find(kind="debt", where=OWED, order="amount desc", limit=3),
-         ans(op="sum", field="amount", within="@prev")]),
-  T("and the biggest of those", rows("d_brian"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]),
-  T("smallest of the three", rows("d_alice"),
-    ref=[ans(within="@3", order="amount asc", limit=1)]))
-
 S("T21-137", "unbounded typo then ask star peter never mind then unbounded long",
   T("remove evrythng", decline("unbounded_destruction"),
     ref=[dec("unbounded_destruction")]),
@@ -117,20 +101,6 @@ S("T21-138", "oldest debt typo then unbounded debts then max owed then min durat
     ref=[ans(op="max", field="amount", kind="debt", where=IOWE)]),
   T("and the shortest event on the calendar", val(30),
     ref=[ans(op="min", field="duration", kind="event")]))
-
-S("T21-139", "three smallest owed then next clinic typo then sum chama then ask log mary never mind",
-  T("the three smallest debts i owe", rows("d_susan", "d_joseph", "d_beatrice", order=True),
-    ref=[ans(kind="debt", where=IOWE, order="amount asc", limit=3)]),
-  T("my next clinic reveiw", rows("clinic_june"),
-    ref=[ans(kind="event", name="Clinic review", when=NOW, order="date asc", limit=1)]),
-  T("how much effort is the whole chama list, all of it added up", val(80),
-    ref=[ans(op="sum", field="effort", kind="task", linked_to="$chama_l", where='status = "open"')]),
-  T("log a coffee with mary", ask("mary_w", "mary_a"),
-    ref=[act("log", kind="person", name="Mary", args=lines(kind="coffee")),
-         askc("mary the deputy head or mary the chama treasurer?", options="$mary_w, $mary_a")]),
-  T("oh wait, forget it, i'll see the deputy at school on monday and the treasurer is at chama at two anyway",
-    decline("never_mind"),
-    ref=[dec("never_mind")]))
 
 S("T21-140", "latest documents then unbounded typo then ask delete school folder never mind then sum tasks",
   T("my latest 2 documents", rows("insurance_doc", "scan_2", order=True),

@@ -78,26 +78,6 @@ S("T21-122", "balance alice mary susan family group",
   T("how many chama meetings are left this year", val(3),
     ref=[ans(op="count", kind="event", name="Chama meeting", when=W({"from": U("day", 0)}))]))
 
-S("T21-123", "shiru fees delete ask pick restore undo never_mind",
-  T("delete the shiru school fees task", ask("shiru_fees", "shiru_fees_old"),
-    ref=[act("delete", kind="task", name="Pay Shiru's school fees"),
-         find(kind="task", name="Pay Shiru's school fees"),
-         askc("the one due on the 20th or the one from january?", options="$shiru_fees, $shiru_fees_old")]),
-  T("the old one from january", diff(trash("shiru_fees_old")),
-    ref=[act("delete", rows="$shiru_fees_old")]),
-  T("no wait, forget it, i need the receipt date", diff(restore("shiru_fees_old")),
-    ref=[act("undo")]))
-
-S("T21-124", "shiru fees january delete month star receipt",
-  T("delete the january shiru fees task", diff(trash("shiru_fees_old")),
-    ref=[act("delete", kind="task", name="Pay Shiru's school fees", when=W(U("month", 0, name=1)))]),
-  T("and star the shiru fee receipt", diff(upd("shiru_receipt", starred=True)),
-    ref=[act("star", kind="document", name="Shiru fee receipt")]),
-  T("reschedule the harambee banner task to monday", decline("not_found"),
-    ref=[find(kind="task", name="harambee banner"), search("harambee banner", kind="task"), dec("not_found")]),
-  T("ok make it a new task then, print the harambee banner on monday", diff(new("task", name=has("banner"), date="2026-06-08")),
-    ref=[act("create", args=lines(kind="task", name="Print the harambee banner", date=U("week", 1, weekday=1)))]))
-
 S("T21-125", "fees documents star ask pick unstar",
   T("star the fees doc", ask("fee_structure", "arrears_list", "shiru_receipt"),
     ref=[act("star", kind="document", name="fee"),
@@ -109,17 +89,6 @@ S("T21-125", "fees documents star ask pick unstar",
     ref=[act("unstar", kind="document", name="Chama constitution")]),
   T("star the survey map though", diff(upd("survey_map", starred=True)),
     ref=[act("star", kind="document", name="Survey map")]))
-
-S("T21-126", "reopen tank reschedule next weekend read",
-  T("reopen the tank cleaning task, it's leaking again and the roof guys said they can't come before next week",
-    diff(upd("tank", status="open", completed=None)),
-    ref=[act("reopen", kind="task", name="Clean the water tank")]),
-  T("and move it to next weekend", diff(upd("tank", date="2026-06-13")),
-    ref=[act("reschedule", rows="$tank", args=lines(to=U("week", 1, weekday=6)))]),
-  T("what's on next weekend", rows("kevin_visit"),
-    ref=[ans(kind="event", when=W(span(U("week", 1, weekday=6), U("week", 1, weekday=7))))]),
-  T("give the eye test a due date of next saturday", diff(upd("eye_test", date="2026-06-13")),
-    ref=[act("reschedule", kind="task", name="Book eye test", args=lines(to=U("week", 1, weekday=6)))]))
 
 S("T21-127", "this weekend read create date repair saturday",
   T("what's on this weekend", rows("chama_06", "kevin_call"),

@@ -7,7 +7,7 @@ def W(expr):
 
 
 S("T17-051", "seven turns today debts sum max min direction log",
-  T("what's left today", rows("lunch_petar", "sofia_run"),
+  T("what's on today", rows("lunch_petar", "sofia_run"),
     ref=[ans(kind="event", when=W(U("day", 0)))]),
   T("who's coming to the run-through", rows("sofia_a"),
     ref=[ans(kind="person", linked_to="$sofia_run")]),
@@ -35,19 +35,6 @@ S("T17-052", "six turns renovation due before monday effort balance",
     ref=[ans(op="balance", rows="$mitko")]),
   T("when's the walkthrough with him again", rows("walkthrough"),
     ref=[ans(kind="event", name="Walkthrough")]))
-
-S("T17-053", "five turns description in open span complete sum effort find linked",
-  T("which tasks are recital prep or exam prep", rows("programme", "certificates", "piece_kalina", "piece_boris", "brahms"),
-    ref=[ans(kind="task", where='description in ("recital prep", "exam prep")')]),
-  T("any of those due from feb fifth on", rows("piece_boris", "programme", "certificates"),
-    ref=[ans(kind="task", within="@prev", when=W({"from": D("2026-02-05")}))]),
-  T("mark choose a piece for boris done, going with the clementi",
-    diff(upd("piece_boris", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Choose a piece for Boris")]),
-  T("total effort left on the recital ones?", val(30),
-    ref=[ans(op="sum", field="effort", kind="task", where='description = "recital prep" and status = "open"')]),
-  T("who's the recommendation letter for", rows("niki"),
-    ref=[find(kind="task", name="recommendation letter"), ans(kind="person", linked_to="@prev")]))
 
 S("T17-054", "four turns cadence != unit edit cadence contact before log",
   T("which students have a check-in cadence other than weekly", rows("maria_k", "kalina"),
@@ -223,14 +210,6 @@ S("T17-069", "five turns lists task count status set edit people reschedule",
     ref=[ans(kind="person", linked_to="$v_passport")]),
   T("push the email stefan task to monday", diff(upd("summer_email", date="2026-02-02")),
     ref=[act("reschedule", rows="$summer_email", args=lines(to=U("week", 1, weekday=1)))]))
-
-S("T17-070", "renovation status set effort empty sum max",
-  T("renovation tasks with a status but no effort estimate", rows("permit"),
-    ref=[ans(kind="task", linked_to="$reno_l", where="status is set and effort is empty")]),
-  T("how much effort is the whole renovation list", val(230),
-    ref=[ans(op="sum", field="effort", kind="task", linked_to="$reno_l", where='status = "open"')]),
-  T("what's the longest single one", val(120),
-    ref=[ans(op="max", field="effort", kind="task", linked_to="$reno_l", where='status = "open"')]))
 
 S("T17-071", "four turns rehearsals month span description != reschedule",
   T("rehearsals between february and the march fourteenth concert at 7",

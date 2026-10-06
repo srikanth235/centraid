@@ -2,15 +2,19 @@
 
     HF_HUB_OFFLINE=1 python -m unittest train/test_precision.py
 
-On CPU the defaults resolve to: TF32 a no-op, --autocast auto = none (exact fp32), fused AdamW off, grad ckpt off.
-So on CPU the DEFAULT run must equal the LEGACY run (--no-tf32 --autocast none --no-fused-adam) bit for bit, and
-the legacy run must equal the pre-flag trainer (_train_old.py). --autocast bf16 (allowed on CPU) is checked
-against the legacy losses within TOL, and for resume-exactness, the resume guard and the fallback.
+On CPU the defaults resolve to: --autocast auto = none (exact fp32), fused AdamW off, grad ckpt off, and TF32 a no-op where oneDNN has no
+TF32 path (not on an AMX CPU with a recent torch: there `--tf32` moves the fp32 matmul off IEEE, see `tf32_is_a_cpu_noop`). So on CPU the
+DEFAULT-precision run must equal the LEGACY-precision run (--no-tf32 --autocast none --no-fused-adam) bit for bit, TF32 aside, which is
+bit-identical on a CPU where it is a no-op and a close run elsewhere.
+That holds under the LEGACY loss flags (--decision-weight 1 --copy-weight 1 --no-pair-batches: the loss and the order before decision
+weight 2, copy weight 0 and pair batching became the defaults), which is what ties the trainer to the one before; a run with the new loss
+defaults differs from the legacy-loss run.
+--autocast bf16 (allowed on CPU) is checked against the legacy losses within TOL, and for resume-exactness, the
+resume guard and the fallback.
 The GPU-only parts (fla / Triton kernels under autocast, real speed) are what train/vm/bench_train.sh checks.
 """
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import signal
@@ -25,6 +29,7 @@ import test_resume as tr  # noqa: E402
 
 SMOKE = 2  # forward_loss calls of the autocast smoke check (one under autocast, one fp32 reference) before step 1
 LEGACY = ["--no-tf32", "--autocast", "none", "--no-fused-adam", "--no-grad-ckpt"]
+LEGACY_LOSS = ["--decision-weight", "1", "--copy-weight", "1", "--no-pair-batches"]  # train.LEGACY_LOSS: the loss and the order of before
 TOL = 0.05  # bf16 autocast: every logged step loss within 5% (relative) of the fp32 one on the tiny model
 
 
@@ -48,6 +53,13 @@ class PrecisionTest(unittest.TestCase):
             cls._legacy = cls.run_once(os.path.join(cls.tmp, "legacy"), *LEGACY)
         return cls._legacy
 
+    @classmethod
+    def legacy_loss(cls):
+        """The legacy precision AND the legacy loss and order: the trainer before the loss defaults."""
+        if not hasattr(cls, "_legacy_loss"):
+            cls._legacy_loss = cls.run_once(os.path.join(cls.tmp, "legacy-loss"), *LEGACY, *LEGACY_LOSS)
+        return cls._legacy_loss
+
     def close(self, got, want, tol=TOL):
         self.assertEqual(sorted(got), sorted(want))
         for k in got:
@@ -56,31 +68,51 @@ class PrecisionTest(unittest.TestCase):
 
     # ---- defaults == legacy on CPU, bit for bit -------------------------------------------------
 
-    def test_default_equals_legacy_bit_identical_on_cpu(self):
-        leg = self.legacy()
-        self.same_params(self.ref["model"], leg["model"])
-        self.assertEqual(self.ref["steps"], leg["steps"])
-        self.assertEqual(self.ref["meta"]["val"], leg["meta"]["val"])
-        self.assertIn("autocast none", self.ref["log"])  # auto resolved to none on CPU
+    def tf32_is_a_cpu_noop(self):
+        """Is `--tf32` (float32 matmul precision `high`) a no-op for the math on this CPU? It is where oneDNN has no TF32 path; on a CPU
+        with AMX and a recent torch, `high` moves oneDNN's fp32 matmul off IEEE (`torch.backends.mkldnn.matmul.fp32_precision`), so the
+        run is no longer the `highest` one bit for bit."""
+        torch = self.torch
+        mm = getattr(getattr(torch.backends, "mkldnn", None), "matmul", None)
+        if mm is None or not hasattr(mm, "fp32_precision"):
+            return True  # an older torch: `high` is for CUDA matmuls only
+        torch.set_float32_matmul_precision("high")
+        try:
+            return mm.fp32_precision in ("none", "ieee")
+        finally:
+            torch.set_float32_matmul_precision("highest")
 
-    def test_legacy_equals_the_pre_flag_trainer(self):
-        old = os.path.join(HERE, "_train_old.py")
-        spec = importlib.util.spec_from_file_location("train_old", old)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        out, models = os.path.join(self.tmp, "old"), []
-        real = self.AutoModel.from_pretrained
-        argv = ["train_old.py", "--model", self.model_dir, "--train", self.data, "--val", self.data, "--out", out] \
-            + [x for x in tr.BASE]
-        import contextlib
-        import io
-        buf = io.StringIO()
-        with mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(buf), \
-                mock.patch.object(self.AutoModel, "from_pretrained",
-                                  lambda *a, **k: models.append(real(*a, **k)) or models[-1]):
-            mod.main()
-        self.same_params(models[0], self.legacy()["model"])
-        self.assertEqual(self.losses(buf.getvalue()), self.legacy()["steps"])
+    def test_default_equals_legacy_bit_identical_on_cpu(self):
+        # under the legacy loss flags the precision defaults are the legacy run, bit for bit: the loss path at weights 1 is the plain
+        # mean CE of before, autocast auto resolves to none on CPU and fused AdamW is off there
+        leg = self.legacy_loss()
+        dflt = self.run_once(self.out(), "--no-tf32", *LEGACY_LOSS)  # every precision default but TF32, which the next lines treat apart
+        self.same_params(dflt["model"], leg["model"])
+        self.assertEqual(dflt["steps"], leg["steps"])
+        self.assertEqual(dflt["meta"]["val"], leg["meta"]["val"])
+        self.assertEqual(dflt["meta"]["train"], leg["meta"]["train"])
+        self.assertIn("autocast none", dflt["log"])  # auto resolved to none on CPU
+        for run in (dflt, leg):
+            a = run["meta"]["args"]
+            self.assertEqual((a["decision_weight"], a["copy_weight"], a["pair_batches"]), (1.0, 1.0, False))
+        # TF32 on: a no-op on a CPU whose oneDNN has no TF32 path (bit-identical too); else a close run, as the bf16 autocast is
+        full = self.run_once(self.out(), *LEGACY_LOSS)
+        self.assertIn("tf32 True", full["log"])
+        if self.tf32_is_a_cpu_noop():
+            self.same_params(full["model"], leg["model"])
+            self.assertEqual(full["steps"], leg["steps"])
+        else:
+            self.close(full["steps"], leg["steps"])
+
+    def test_the_new_loss_defaults_differ_from_the_legacy_loss(self):
+        leg = self.legacy_loss()
+        a, la = self.ref["meta"]["args"], leg["meta"]["args"]
+        self.assertEqual((a["decision_weight"], a["copy_weight"], a["pair_batches"]), (2.0, 0.0, True))  # what a run without flags is
+        self.assertEqual((la["decision_weight"], la["copy_weight"], la["pair_batches"]), (1.0, 1.0, False))
+        sa, sb = self.ref["model"].state_dict(), leg["model"].state_dict()
+        self.assertEqual(sa.keys(), sb.keys())
+        self.assertTrue(any(not self.torch.equal(sa[k], sb[k]) for k in sa))  # decision weight 2: another gradient, another model
+        self.assertNotEqual(self.ref["meta"]["val"], leg["meta"]["val"])
 
     def test_grad_ckpt_is_the_same_math(self):
         r = self.run_once(self.out(), *[f for f in LEGACY if f != "--no-grad-ckpt"], "--grad-ckpt")
@@ -177,6 +209,29 @@ class PrecisionTest(unittest.TestCase):
         r = self.run_once(out, *LEGACY, "--resume", "--save-every", "3")
         self.assertIn("RESUMED", r["log"])
         self.same_params(self.legacy()["model"], r["model"])
+
+    def test_a_checkpoint_from_before_the_loss_flags_resumes_only_under_them(self):
+        out = self.out()
+        flags = [*LEGACY, *LEGACY_LOSS]
+        self.run_once(out, *flags, "--resume", "--save-every", "3",
+                      hook=lambda n: os.kill(os.getpid(), signal.SIGTERM) if n == 3 * tr.BS else None)
+        (ck,) = [p for p in Path(out).glob("resume-step-*")]
+        st = self.torch.load(ck / "state.pt", map_location="cpu", weights_only=True)
+        for k in ("tf32", "autocast", "copy_weight", "pair_batches"):  # made before the precision and the loss flags existed
+            st["fingerprint"]["args"].pop(k, None)
+        st["fingerprint"].pop("copy", None)
+        st["meta_hist"].pop("marks", None)  # ... and before the marks (marks.json, best.json)
+        self.torch.save(st, ck / "state.pt")
+        meta = json.loads((ck / "COMPLETE").read_text())
+        meta["state_bytes"] = (ck / "state.pt").stat().st_size
+        (ck / "COMPLETE").write_text(json.dumps(meta))
+        with self.assertRaises(SystemExit) as cm:
+            self.run_once(out, "--resume", "--save-every", "3")  # the new loss defaults: refused, and the message names the flags
+        self.assertIn("--decision-weight 1 --copy-weight 1 --no-pair-batches", str(cm.exception))
+        r = self.run_once(out, *flags, "--resume", "--save-every", "3")
+        self.assertIn("RESUMED", r["log"])
+        self.same_params(self.legacy_loss()["model"], r["model"])
+        self.assertTrue((Path(out) / "DONE").exists())
 
     # ---- the safety nets ---------------------------------------------------------------------------
 

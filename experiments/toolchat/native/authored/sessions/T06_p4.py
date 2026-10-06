@@ -40,16 +40,6 @@ S("T06-203", "owe direction balance settle_debt group-me",
   T("my side of the band fund?", val((45.5, "EUR")),
     ref=[search("Lukas", kind="person"), ans(op="balance", kind="group", name="Kaeltewelle band fund", linked_to="$me")]))
 
-S("T06-204", "except rest reschedule weekday read",
-  T("what's due monday to wednesday next week", rows("kuhn_heat", "call_sophie", "snake", "vat", "in_ears"),
-    ref=[ans(kind="task", when=W(span(U("week", 1, weekday=1), U("week", 1, weekday=3))))]),
-  T("push all of them to friday except the vat return",
-    diff(upd("kuhn_heat", date="2026-02-13"), upd("call_sophie", date="2026-02-13"), upd("snake", date="2026-02-13"),
-         upd("in_ears", date="2026-02-13")),
-    ref=[find(within="@prev", exclude="$vat"), act("reschedule", rows="@prev", args=lines(to=U("week", 1, weekday=5)))]),
-  T("what's left monday to wednesday", rows("vat"),
-    ref=[ans(kind="task", when=W(span(U("week", 1, weekday=1), U("week", 1, weekday=3))))]))
-
 S("T06-205", "weekday at-N range reschedule create",
   T("what did i have monday to wednesday this week", rows("reh_0203", "coffee_ines"),
     ref=[ans(kind="event", when=W(span(U("week", 0, weekday=1), U("week", 0, weekday=3))))]),

@@ -120,10 +120,9 @@ S("T17-126", "compute balance group person out_of_scope star",
   T("star the bathroom quote, i need it for mitko", diff(upd("quote_bath", starred=True)),
     ref=[act("star", kind="document", name="Bathroom quote")]))
 
-S("T17-127", "repair reschedule weekday at time correction star",
+S("T17-127", "reschedule weekday at time correction star",
   T("move the electrician to thursday at 9", diff(upd("electrician", date="2026-02-05T09:00")),
-    ref=[bad(act("reschedule", kind="event", name="Electrician visit", args=lines(to=U("week", 1, time="09:00")))),
-         act("reschedule", kind="event", name="Electrician visit",
+    ref=[act("reschedule", kind="event", name="Electrician visit",
              args=lines(to=U("week", 1, weekday=4, time="09:00")))]),
   T("make it 8", diff(upd("electrician", date="2026-02-05T08:00")),
     ref=[act("reschedule", rows="$electrician", args=lines(to=U("day", 0, anchor="row", time="08:00")))]),

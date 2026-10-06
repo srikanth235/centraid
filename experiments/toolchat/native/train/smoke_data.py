@@ -1,8 +1,9 @@
 """Fallback smoke examples, rendered by driving the real runtime over the fixture world.
 
-Used only when the Data agent's files are not there yet. Every observation comes from
-`nativetools session` (default `--tools sig`); the assistant steps are hand-written calls with a
-short §7-style trace. One example = one whole session in render.py's records (SPEC §11.7):
+Used only when no data file is given. Every observation comes from `nativetools session`
+(default `--tools sig`); the assistant steps are hand-written calls, and each think is the slot trace
+of CONTRACT_V3.md derived from its call and the context in front of it (authored/trace.py), the way
+authored/build.py writes it. One example = one whole session in render.py's records (SPEC §11.7):
 system (with tools), user (vault block prepended), assistant {think, tool, args}, tool
 (compacted as the harness shows it on later turns).
 
@@ -20,44 +21,39 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import fmt  # noqa: E402  (the shared renderer, and the loader of authored/trace.py)
+
 REPO = HERE.parents[3]
 BIN = os.environ.get("NATIVETOOLS", str(REPO / "target" / "debug" / "nativetools"))
 WORLD = REPO / "crates" / "nativetools" / "tests" / "fixtures" / "world.json"
 TODAY, ME = "2026-09-27", "Sam Park"
 
-W = {"unit": "week", "rel": 0}
-# (user text, [(think, tool, args)]) — date keys in the generator's canonical order
+W = '{"unit":"week","rel":0}'
+# (user text, [(tool, args)]): the calls as the runtime reads them (every value a string, a date as compact JSON in the
+# authored key order)
 TURNS = {
     "benedikt": ("what have I got with Benedikt?", [
-        ('intent: read rows ("what have I got" = list) · named: "Benedikt"\nkind: task, event · cond: name ~ Benedikt · plan: answer (selector is enough)',
-         "answer", {"kind": "task,event", "name": "Benedikt"})]),
+        ("answer", {"kind": "task,event", "name": "Benedikt"})]),
     "nextweek": ("what's due next week?", [
-        ('intent: read rows · kind: task\ndate: "next week" → week, rel 1 · plan: answer',
-         "answer", {"kind": "task", "when": {"unit": "week", "rel": 1}})]),
+        ("answer", {"kind": "task", "when": '{"unit":"week","rel":1}'})]),
     "thisweek": ("anything on my calendar this week?", [
-        ('intent: read rows ("calendar" = events) · kind: event\ndate: "this week" → week, rel 0 · plan: answer',
-         "answer", {"kind": "event", "when": W})]),
+        ("answer", {"kind": "event", "when": W})]),
     "count": ("how many open tasks do I have?", [
-        ('intent: read value ("how many" = count) · kind: task · cond: status = open\nplan: answer op count',
-         "answer", {"kind": "task", "op": "count", "where": "status = open"})]),
+        ("answer", {"kind": "task", "op": "count", "where": "status = open"})]),
     "cabin": ("mark the cabin one done", [
-        ('intent: write complete ("mark … done" = complete) · not: read · named: "cabin"\nkind: task · plan: act on the selector',
-         "act", {"kind": "task", "name": "cabin", "verb": "complete"})]),
+        ("act", {"verb": "complete", "kind": "task", "name": "cabin"})]),
     "summer": ("what's in the Summer album?", [
-        ('intent: read rows · named: "Summer" = album #4 (directory)\nkind: photo · link: album #4 · plan: look first',
-         "find", {"kind": "photo", "linked_to": "#4"}),
-        ('intent: read rows · shown: @1 = the Summer photos\nplan: answer @1', "answer", {"rows": "@1"})]),
+        ("find", {"kind": "photo", "linked_to": "#4"}),
+        ("answer", {"rows": "@1"})]),
     "joke": ("tell me a joke", [
-        ('intent: outside the vault · plan: decline out_of_scope', "decline", {"reason": "out_of_scope"})]),
+        ("decline", {"reason": "out_of_scope"})]),
     "neha": ("how much does Neha owe me?", [
-        ('intent: read value (balance) · named: "Neha" fits two people\nplan: ask which Neha',
-         "ask", {"question": "Which Neha: Neha Rao or Neha Kulkarni?"})]),
+        ("ask", {"question": "Which Neha: Neha Rao or Neha Kulkarni?"})]),
     "dentist": ("when is the dentist?", [
-        ('intent: read rows · named: "dentist"\nkind: event · plan: answer (selector is enough)',
-         "answer", {"kind": "event", "name": "Dentist"})]),
+        ("answer", {"kind": "event", "name": "Dentist"})]),
     "effort": ("total effort on my tasks?", [
-        ('intent: read value ("total" = sum) · kind: task · field: effort\nplan: answer op sum',
-         "answer", {"field": "effort", "kind": "task", "op": "sum"})]),
+        ("answer", {"op": "sum", "field": "effort", "kind": "task"})]),
 }
 # sessions: 1–3 turns each, so compaction and kept thinking on follow-ups are covered
 PLAN = [[k] for k in TURNS] + [
@@ -83,8 +79,9 @@ class Rt:
 
 
 def user_content(resp, text):
-    """SPEC §6.1 / render.py: the harness prepends the vault block to the user turn."""
-    return (resp["preground"] + "\n\n" + text) if resp.get("preground") else text
+    """SPEC §6.1 / render.py: the harness prepends the block (vault, focus and dates lines) to the user turn."""
+    block = resp.get("block")
+    return (block + "\n\n" + text) if block else text
 
 
 def session_example(vault, keys):
@@ -100,13 +97,21 @@ def session_example(vault, keys):
                 if m.get("obs") in by_obs:
                     m["content"] = by_obs[m["obs"]]
             msgs.append({"role": "user", "content": user_content(r, text)})
-            for think, tool, args in steps:
-                res = rt.req({"op": "call", "tool": tool, "args": args})
-                msgs.append({"role": "assistant", "think": think, "tool": tool, "args": args})
+            for tool, args in steps:
+                res = rt.req({"op": "call_text", "text": fmt.render.call_text(tool, args)})
+                msgs.append({"role": "assistant", "think": "", "tool": tool, "args": args})
                 msgs.append({"role": "tool", "content": res["text"], "obs": res["obs"]})
         msgs = msgs[:-1]  # a session ends on the model's last call
         for m in msgs:
             m.pop("obs", None)
+        # the think of every call, from the context in front of it; the call is rewritten in the call order, and the
+        # decoder's rendering of the think must be the call
+        T = fmt.trace3()
+        for i, tr in T.trace_messages3(msgs, TODAY).items():
+            m = msgs[i]
+            m["think"] = T.render3(tr.slots)
+            m["args"] = T.canon_call({"tool": m["tool"], "args": m["args"]})["args"]
+            assert fmt.call_of_think(m["think"], None, "v3.1") == fmt.render.call_text(m["tool"], m["args"]), m["think"]
         return {"id": "smoke-" + "+".join(keys), "messages": msgs}
     finally:
         rt.close()

@@ -6,11 +6,14 @@
 
 Faithful to decode.py: the prompt is rendered by the same code (`prompt_from_transcript`) and
 sent as HF token ids, so the model sees the tokens the HF path feeds it; hard decoding uses the
-same specialised grammar (`decode.Grammar`, handles narrowed per step). One step is two requests
-on the same slot: (1) the think, under `THINK </think>` and capped at NATIVE_THINK_LIMIT tokens
-(`</think>` appended when the cap cuts it, as decode.py forces it); (2) the call, under the rest
-of the grammar. The server's prompt cache (recurrent-state checkpoints, `-cms 64`) means each step
-only prefills what the previous step did not see. `free` runs step (2) unconstrained. Greedy.
+same specialised grammar (`decode.Grammar`, handles narrowed per step). One step is up to two requests
+on the same slot: (1) the think, the slot lines of the trace (CONTRACT_V3.md) with the `refer:` line demanded
+where the refer rule demands it, ending in `</think>` and capped at NATIVE_THINK_LIMIT tokens (`</think>`
+appended when the cap cuts it, as decode.py forces it); (2) the call. The call is the one the think states
+(`fmt.call_of_think`, written as tokens, no request); a think that does not state a whole call leaves the call
+to a request under the rest of the grammar. The server's prompt cache (recurrent-state checkpoints, `-cms 64`)
+means each step only prefills what the previous step did not see. `free` runs the think under a loose stop
+(any text up to `</think>`) and a call the think does not state unconstrained. Greedy.
 """
 from __future__ import annotations
 
@@ -39,7 +42,7 @@ class LlamaBackend:
         ids = {t: self.tok.convert_tokens_to_ids(t) for t in ("</think>", "<tool_call>", "</tool_call>", "<|im_end|>")}
         self.think_end, self.call_open, self.call_end, self.im_end = (
             ids["</think>"], ids["<tool_call>"], ids["</tool_call>"], ids["<|im_end|>"])
-        self.think_grammar = "%%llguidance {}\nstart: THINK <[%d]>\nTHINK: /(.|\\n)*/\n" % self.think_end
+        self.loose_think = "%%llguidance {}\nstart: think <[%d]>\n%s\n" % (self.think_end, self.grammar.FREE_THINK)
         self.lock = threading.Lock()
         self.stats = {"steps": 0, "think_cut": 0, "grammar_error": 0, "new_tokens": 0, "seconds": 0.0}
 
@@ -57,6 +60,10 @@ class LlamaBackend:
         out = self._post(body)
         return [t for t in out.get("tokens") or [] if t != self.im_end]
 
+    def think_grammar(self, require_refer: bool) -> str:
+        """The think request's grammar: the slot lines of the trace, then `</think>`."""
+        return "%%llguidance {}\nstart: think <[%d]>\n%s\n" % (self.think_end, decode.think_rules(require_refer))
+
     def call_grammar(self, rows, results) -> str:
         g = self.grammar.specialise(rows, results, self.restrict)
         # decode.Grammar's start is `think </think> "\n\n" <tool_call> "\n" call </tool_call>`; the
@@ -71,20 +78,24 @@ class LlamaBackend:
         assert prompt.endswith("<|im_start|>assistant\n<think>\n"), prompt[-60:]
         t0 = time.time()
         ids = self.tok(prompt, add_special_tokens=False)["input_ids"]
-        think = self._gen(ids, self.think_limit, self.think_grammar)
+        hard = self.decoding == "hard"
+        think = self._gen(ids, self.think_limit,
+                          self.think_grammar(fmt.requires_refer_in_prompt(prompt)) if hard else self.loose_think)
         cut = not (think and think[-1] == self.think_end)
         if cut:
             think = [t for t in think if t != self.think_end] + [self.think_end]
-        rest_n = max(16, self.max_new - len(think))
-        if self.decoding == "hard":
-            call = self._gen(ids + think, rest_n, self.call_grammar(*fmt.addressable_in_prompt(prompt)))
+        stated = fmt.call_of_think(self.tok.decode(think[:-1], skip_special_tokens=False), fmt.dates_line_in_prompt(prompt))
+        if stated is not None:  # the call the think states: written, not sampled
+            call = self.tok("\n\n" + stated, add_special_tokens=False)["input_ids"]
+        elif hard:
+            call = self._gen(ids + think, max(16, self.max_new - len(think)), self.call_grammar(*fmt.addressable_in_prompt(prompt)))
         else:
-            call = self._gen(ids + think, rest_n, None)
+            call = self._gen(ids + think, max(16, self.max_new - len(think)), None)
             if self.call_end in call:
                 call = call[:call.index(self.call_end) + 1]
         closed = bool(call) and call[-1] == self.call_end
         text = "<think>\n" + self.tok.decode(think + call, skip_special_tokens=False)
-        info = {"mode": self.decoding, "think_cut": cut, "override": False, "stopped": closed,
+        info = {"mode": self.decoding, "think_cut": cut, "override": False, "stopped": closed, "rendered_call": stated is not None,
                 "grammar_error": None if closed or self.decoding == "free" else "unclosed call",
                 "prompt_tokens": len(ids), "new_tokens": len(think) + len(call), "think_tokens": len(think) - 1,
                 "seconds": time.time() - t0}

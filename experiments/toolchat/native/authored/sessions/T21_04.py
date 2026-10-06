@@ -62,7 +62,7 @@ S("T21-079", "list edit multi task count add_to undo link",
   T("undo, silly idea", diff(link("health_l", "walk"), unlink("garden_l", "walk")),
     ref=[act("undo")]))
 
-S("T21-080", "five turns person datetime spans refused unit cadence log",
+S("T21-080", "five turns person datetime spans refused unit cadence log nickname",
   T("who did i speak to on the fifth at 3:30pm", rows("mary_w"),
     ref=[ans(kind="person", when=D("2026-06-05", "15:30"))]),
   T("and from the week before last until tuesday 1pm",
@@ -80,8 +80,7 @@ S("T21-080", "five turns person datetime spans refused unit cadence log",
   T("what photos have i got of Shiru", rows("shiru_form1", "shiru_prize", "shiru_bday", "shiru_visit_p"),
     ref=[ans(kind="photo", linked_to="$wanjiru")]),
   T("and of Mama Njeri?", rows("memorial_p", "nyeri_farm"),
-    ref=[ans(kind="person", name="Mama Njeri"), search("Mama Njeri", kind="person"),
-         ans(kind="photo", linked_to="$esther")]))
+    ref=[ans(kind="photo", linked_to="$esther")]))
 
 S("T21-081", "chama members group count note count star",
   T("chama ladies who aren't in any other group", rows("alice", "mary_a", "beatrice", "rose"),
@@ -104,14 +103,6 @@ S("T21-082", "subtasks task count complete write read priority",
          ans(kind="task", linked_to="$mock_tt", where='status = "open"')]),
   T("school list tasks with a priority other than 2", rows("mock_tt", "ribbons", "tsc"),
     ref=[ans(kind="task", linked_to="$school_l", where="priority != 2")]))
-
-S("T21-083", "task list count effort unit reschedule anchor",
-  T("tasks on no list that are due next week", rows("hod_slots", "call_esther", "print_tt", "seedlings"),
-    ref=[ans(kind="task", where="list count = 0", when=U("week", 1))]),
-  T("which of those aren't thirty min jobs", rows("call_esther", "seedlings"),
-    ref=[ans(kind="task", within="@prev", where="effort != 30 min")]),
-  T("Plant the avocado seedlings, push it a week", diff(upd("seedlings", date="2026-06-21")),
-    ref=[act("reschedule", rows="$seedlings", args=lines(to=U("week", 1, anchor="row")))]))
 
 S("T21-084", "five turns document empty recovery search spans starred",
   T("open the fees structure doc", rows("fee_structure"),
@@ -190,14 +181,6 @@ S("T21-090", "note week weekday time pin prev",
     ref=[ans(kind="note", when=U("week", -1, weekday=5, time="21:00"))]),
   T("pin it", diff(upd("mock_plan", pinned=True)),
     ref=[act("edit", rows="@prev", args=lines(pinned="yes"))]))
-
-S("T21-091", "note spans count notebook count",
-  T("notes from tuesday to thursday this week", rows("car_notes", "bom_agenda", "obs_notes", "choir_songs"),
-    ref=[ans(kind="note", when=span(U("week", 0, weekday=2), U("week", 0, weekday=4)))]),
-  T("how many from last wednesday through end of june", val(12),
-    ref=[ans(op="count", kind="note", when=span(U("week", -1, weekday=3), U("month", 0, name=6)))]),
-  T("from these, any that belong to no notebook", rows("plot_notes", "car_notes", "gift_ideas"),
-    ref=[ans(kind="note", when=span(U("week", -1, weekday=3), U("month", 0, name=6)), where="notebook count <= 0")]))
 
 S("T21-092", "photo person count edit prev star undo",
   T("chama album photos with one person or fewer in them", rows("chama_cheque"),
@@ -285,8 +268,7 @@ S("T21-098", "six turns nickname empty recovery search notes tasks edit ambiguou
   T("open priority one tasks", rows("tsc", "shiru_fees", "insurance", "bp_pills", "grad_gift"),
     ref=[ans(kind="task", where='priority = 1 and status = "open"')]),
   T("Submit TSC returns is done", diff(upd("tsc", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Submit TSC returns"),
-         act("complete", kind="task", name="Submit TSC returns", where='status = "open"')]),
+    ref=[act("complete", kind="task", name="Submit TSC returns")]),
   T("undo, the portal didn't actually save it", diff(upd("tsc", status="open", completed=None)),
     ref=[act("undo")]))
 

@@ -61,11 +61,8 @@ S("T07-121", "gmail agrobanco reveal named not_found task",
     ref=[act("create", args=lines(kind="task", name="Look for a tractor rental", date=U("week", 0, weekday=5)))]))
 
 S("T07-122", "huaman star ask pick already",
-  T("star huaman", ask("julio", "diego", "valeria"),
-    ref=[act("star", kind="person", name="Huaman"),
-         askc("julio, diego or valeria?", options="$julio, $diego, $valeria")]),
-  T("the nephew", diff(upd("diego", starred=True)),
-    ref=[act("star", rows="$diego")]),
+  T("star huaman", diff(upd("diego", starred=True)),
+    ref=[act("star", kind="person", name="Huaman")]),
   T("star hugo", diff(already=["hugo"]),
     ref=[act("star", kind="person", name="Hugo"), ans(rows="$hugo")]),
   T("how many people are starred now", val(5),
@@ -108,22 +105,11 @@ S("T07-126", "group balance coop efrain wilber",
   T("log a visit with efrain, he came by the plots this morning", diff(upd("efrain", date=ANY)),
     ref=[act("log", rows="$efrain", args=lines(kind="visit"))]))
 
-S("T07-127", "weekend reschedule storehouse count events add_to multi",
-  T("do the storehouse cleaning this weekend instead", diff(upd("storehouse", date="2026-03-14")),
-    ref=[act("reschedule", kind="task", name="Clean out the storehouse", args=lines(to=U("week", 0, weekday=6)))]),
-  T("how many events do i have this weekend", val(3),
-    ref=[ans(op="count", kind="event", when=W(span(U("week", 0, weekday=6), U("week", 0, weekday=7))))]),
-  T("add a task to buy tarps for the storehouse and put it on the farm list",
-    diff(new("task", name=has("tarps")), link("farm_l", "new")),
-    ref=[act("create", more=True, args=lines(kind="task", name="Buy tarps for the storehouse")),
-         act("add_to", rows="$new", args=lines(to="$farm_l"))]))
-
 S("T07-128", "next weekend read create saturday decline bus",
   T("anything on next weekend?", rows("julio_bday", "mass_0322", "vcall_0322"),
     ref=[ans(kind="event", when=W(span(U("week", 1, weekday=6), U("week", 1, weekday=7))))]),
   T("remind me to collect the cake next saturday", diff(new("task", name=has("cake"), date="2026-03-21")),
-    ref=[bad(act("create", args=lines(kind="task", name="Collect the cake", date={"rel": 1, "weekday": 6}))),
-         act("create", args=lines(kind="task", name="Collect the cake", date=U("week", 1, weekday=6)))]),
+    ref=[act("create", args=lines(kind="task", name="Collect the cake", date=U("week", 1, weekday=6)))]),
   T("book me a bus ticket to lima for the expo", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
 

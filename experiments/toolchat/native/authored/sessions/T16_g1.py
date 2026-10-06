@@ -109,15 +109,6 @@ S("T16-111", "contrast star docs tin blood report unstar deed",
   T("unstar the comilla land deed, it's filed at the bank now", diff(upd("deed", starred=False)),
     ref=[act("unstar", kind="document", name="Comilla land deed")]))
 
-S("T16-112", "ask options scans delete pick then contrast",
-  T("delete the scan", ask("scan_a", "scan_b"),
-    ref=[act("delete", kind="document", name="scan"),
-         askc("scan 0012 or scan 0013?", options="$scan_a, $scan_b")]),
-  T("0013", diff(trash("scan_b")),
-    ref=[act("delete", rows="$scan_b")]),
-  T("and scan 0012 too, they're blurry duplicates", diff(trash("scan_a")),
-    ref=[act("delete", kind="document", name="Scan 0012")]))
-
 S("T16-113", "ask options login reveal never_mind then contrast dbbl",
   T("show me the login password", ask("gmail", "erp", "bkash_l", "dbbl"),
     ref=[act("reveal", kind="locker item", where='type = "login"', args=lines(field="password")),

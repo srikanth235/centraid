@@ -128,15 +128,6 @@ S("T15-063", "unstar photo named remove_from photo named count album",
   T("how many in best of 2026", val(4),
     ref=[ans(op="count", kind="photo", linked_to="$best_al")]))
 
-S("T15-064", "create debt settle new write read",
-  T("i owe jonas 380 for the pizza on friday",
-    diff(new("debt", name=ANY, amount=380, direction="i_owe"), link("new", "jonas")),
-    ref=[act("create", args=lines(kind="debt", name="Pizza on Friday", amount="380", direction="i_owe", person="$jonas"))]),
-  T("paid him, settle it and tell me what else i owe him",
-    rows("d_jonas_groceries", also=diff(upd("+1", status="settled"))),
-    ref=[act("settle_debt", rows="$c1", more=True),
-         ans(kind="debt", linked_to="$jonas", where='direction = "i_owe" and status = "open"')]))
-
 S("T15-065", "delete locker where undo delete",
   T("delete the document type thing in my locker", diff(trash("boat_licence")),
     ref=[act("delete", kind="locker item", where='type = "document"')]),
@@ -206,12 +197,6 @@ S("T15-072", "photo span delete undo albums",
   T("no undo that, torstein likes it", diff(restore("p_aurora3"), link("aurora_al", "p_aurora3"), link("cabin_al", "p_aurora3")),
     ref=[act("undo")]))
 
-S("T15-073", "debt weekday time settle",
-  T("what did i owe from last friday night", rows("d_jonas_groceries"),
-    ref=[ans(kind="debt", when=W(U("week", -1, weekday=5, time="20:00")))]),
-  T("settle it, paid jonas", diff(upd("d_jonas_groceries", status="settled")),
-    ref=[act("settle_debt", rows="$d_jonas_groceries")]))
-
 S("T15-074", "single note body set notebook",
   T("which notes in the cabin book actually have text in them", rows("woodstove", "cabin_rules"),
     ref=[ans(kind="note", linked_to="$cabin_nb", where="body is set")]))
@@ -230,15 +215,6 @@ S("T15-075", "debt amount set sum date settle prev",
 X("T15-062",
   T("where's the polarfeed contract", decline("not_found"),
     ref=[search("Polarfeed"), dec("not_found")]))
-
-X("T15-064",
-  T("also settle the headtorch with kaja and the coffee beans with hallvard, log a call with both, then what's my total owed out",
-    val((3060, "NOK"), also=diff(upd("d_kaja", status="settled"), upd("d_hallvard", status="settled"),
-                                 upd("kaja", date=ANY), upd("hallvard", date=ANY))),
-    ref=[act("settle_debt", kind="debt", name="Headtorch", more=True),
-         act("settle_debt", kind="debt", name="Coffee beans", more=True),
-         act("log", rows="$kaja, $hallvard", args=lines(kind="call"), more=True),
-         ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))
 
 X("T15-075",
   T("smallest open debt each way", vgroups({"i_owe": (95, "NOK"), "owes_me": (75, "NOK")}),

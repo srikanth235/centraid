@@ -26,21 +26,6 @@ S("T14-117", "ask options kleber invoice reschedule balance positive",
   T("and diego, does he owe me for mom's pharmacy", val((260, "BRL")),
     ref=[ans(op="balance", rows="$diego")]))
 
-S("T14-118", "ask options call task never mind",
-  T("done with the call task", ask("diego_call", "mae_plan"),
-    ref=[act("complete", kind="task", name="call"),
-         askc("call diego about mom's appointment or call the health plan?", options="$diego_call, $mae_plan")]),
-  T("never mind, i'll tick them tonight", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
-S("T14-119", "complete named complete named reopen",
-  T("done with the health plan call", diff(upd("mae_plan", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Call the health plan")]),
-  T("and the diego one, called him at lunch", diff(upd("diego_call", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Call Diego")]),
-  T("reopen the seat covers, they're still filthy", diff(upd("seat_covers", status="open", completed=None)),
-    ref=[act("reopen", kind="task", name="Clean the seat covers")]))
-
 S("T14-120", "ask options rafael star group balance positive",
   T("favourite rafael", ask("rafa_s", "rafa_m"),
     ref=[act("star", kind="person", name="Rafael"),
@@ -75,15 +60,6 @@ S("T14-123", "ask options campos log out of scope",
     ref=[act("log", rows="$regina", args=lines(kind="message"))]),
   T("look up the cheapest flights to buenos aires in december", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
-
-S("T14-124", "open invoice tasks repair complete balance negative",
-  T("any invoice tasks still open", rows("inv_kleber_nov"),
-    ref=[bad(ans(kind="task", where='name contains "invoice" and status = "open"')),
-         ans(kind="task", name="invoice", where='status = "open"')]),
-  T("sent it just now, tick it", diff(upd("inv_kleber_nov", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$inv_kleber_nov")]),
-  T("what do i owe nath", val((-40, "BRL")),
-    ref=[search("nath", kind="person"), ans(op="balance", rows="$nath")]))
 
 S("T14-125", "star by full name balance positive",
   T("star rafael from the car pool", diff(upd("rafa_s", starred=True)),
@@ -121,29 +97,11 @@ S("T14-129", "out of scope create undo never mind",
   T("don't bother with that, undo it", diff(trash("+1")),
     ref=[act("undo")]))
 
-S("T14-130", "long reschedule read two writes restore refused",
-  T("seu jorge can't do saturday so move the landlord visit to monday at 10 and show me that morning",
-    rows("hand_1026", "landlord", also=diff(upd("landlord", date="2026-10-26T10:00"))),
-    ref=[act("reschedule", kind="event", name="Landlord visit", args=lines(to=U("week", 1, weekday=1, time="10:00")), more=True),
-         ans(kind="event", when=W(U("week", 1, weekday=1)))]),
-  T("tick the gas cylinder and push the football fee to friday",
-    diff(upd("gas", status="completed", completed=ANY), upd("football_fee", date="2026-10-30")),
-    ref=[search("football fee", kind="task"),
-         act("complete", kind="task", name="Order gas cylinder", more=True),
-         act("reschedule", kind="task", name="Pay football pitch share", args=lines(to=U("week", 1, weekday=5)))]),
-  T("bring back the sell the bike task", ask(),
-    ref=[bad(act("restore", kind="task", name="Sell the bike", trashed=True)),
-         askc("that one's been in the bin past 30 days so it can't come back. add it as a new task?")]))
-
 
 # follow-up turns
 X("T14-116",
   T("and push the landlord visit an hour later", diff(upd("landlord", date="2026-10-31T11:00")),
     ref=[act("reschedule", kind="event", name="Landlord visit", args=lines(to=U("hour", 1, anchor="row")))]))
-
-X("T14-118",
-  T("just the plan one, i did that already", diff(upd("mae_plan", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$mae_plan")]))
 
 X("T14-120",
   T("what's the number of people with my star", val(3),

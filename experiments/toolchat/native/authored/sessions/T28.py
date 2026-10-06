@@ -82,14 +82,6 @@ S("T28-010", "trashed event restore prev undo restore",
   T("undo, no, it was done at the WOF", diff(trash("tyre")),
     ref=[act("undo")]))
 
-S("T28-011", "create task list delete task new",
-  T("add a task Pick up the hāngī baskets, due friday, on reunion catering",
-    diff(new("task", name="Pick up the hāngī baskets", date="2026-02-27"), link("reunion_cat_l", "new")),
-    ref=[act("create", args=lines(kind="task", name="Pick up the hāngī baskets", date=U("week", 1, weekday=5),
-                                  list="$reunion_cat_l"))]),
-  T("no delete that, ngaire's bringing them", diff(trash("+1")),
-    ref=[act("delete", rows="$c1")]))
-
 S("T28-012", "create task delete task new undo delete",
   T("remind me to ring Kevin about the lunch on thursday",
     diff(new("task", name=has("Kevin"), date="2026-02-26")),

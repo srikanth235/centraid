@@ -8,11 +8,8 @@ def W(expr):
 
 
 S("T08-118", "edit note pin ask reunion unpin",
-  T("pin the reunion note", ask("guest_ideas", "reunion_menu"),
-    ref=[act("edit", kind="note", name="Reunion", args=lines(pinned="yes")),
-         askc("the reunion guest list or the menu ideas?", options="$guest_ideas, $reunion_menu")]),
-  T("the menu one", diff(upd("reunion_menu", pinned=True)),
-    ref=[act("edit", rows="$reunion_menu", args=lines(pinned="yes"))]),
+  T("pin the reunion note", diff(upd("reunion_menu", pinned=True)),
+    ref=[act("edit", kind="note", name="Reunion", args=lines(pinned="yes"))]),
   T("and unpin the guest list", diff(upd("guest_ideas", pinned=False)),
     ref=[act("edit", kind="note", name="Reunion guest list", args=lines(pinned="no"))]),
   T("how many are pinned now", val(3),
@@ -71,19 +68,6 @@ S("T08-123", "reschedule contrast month group balance negative",
   T("where am i at in it", val((-27.18, "USD")),
     ref=[ans(op="balance", kind="group", name="Lanier fishing trip", linked_to="$me")]))
 
-S("T08-124", "delete ask timesheet undo scratch that repair attendees",
-  T("delete the timesheet task", ask("ts_mar", "ts_apr"),
-    ref=[act("delete", kind="task", name="Submit timesheet"),
-         find(kind="task", name="Submit timesheet"),
-         askc("the march one that's done or the april one that's still open?", options="$ts_mar, $ts_apr")]),
-  T("the done one", diff(trash("ts_mar")),
-    ref=[act("delete", rows="$ts_mar")]),
-  T("scratch that, i need march for the records", diff(restore("ts_mar")),
-    ref=[act("undo")]),
-  T("what's jalen got this week", rows("prac_0407", "dentist_jalen", "prac_0409"),
-    ref=[bad(ans(kind="event", where='attendees contains "Jalen"')),
-         ans(kind="event", linked_to="$jalen", when=W(U("week", 0)))]))
-
 S("T08-125", "star ask report card unstar star two writes",
   T("star the report card", ask("rc_jalen", "rc_jada"),
     ref=[act("star", kind="document", name="report card"),
@@ -124,13 +108,6 @@ S("T08-128", "star nickname search balance unstar nickname",
     ref=[ans(op="balance", rows="$dre")]),
   T("take the star off mama", diff(upd("mama", starred=False)),
     ref=[act("unstar", kind="person", where='nickname = "Mama"')]))
-
-S("T08-129", "reschedule task weekend long count weekend",
-  T("push the gutters to this weekend, landlord's not doing it after all and i've got the ladder",
-    diff(upd("gutters", date="2026-04-11")),
-    ref=[act("reschedule", kind="task", name="Clean gutters", args=lines(to=U("week", 0, weekday=6)))]),
-  T("how many things are due this weekend", val(4),
-    ref=[ans(op="count", kind="task", when=W(span(U("week", 0, weekday=6), U("week", 0, weekday=7))))]))
 
 S("T08-130", "reschedule ask union meeting next weekend at N",
   T("push the union chapter meeting to thursday at 8", ask("union_0408", "union_0513"),
