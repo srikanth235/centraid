@@ -39,3 +39,19 @@ A read-only census of `crates/assist`, `crates/assist-llama`, `crates/core/src/a
 - Every proto change must be additive (`buf breaking` in the gate); the stored chat schema hard-codes seven apps, so new card kinds take migration 012 (R-1088-7).
 - Android has no chat view; the confirm card lands in the shared KMP machine and on iOS.
 - The 18-tool shape is pinned by about a hundred tests in `crates/assist`, the 65 cases of `contracts/assist/eval-cases.json`, three core test files, `core-ffi/tests/assist.rs` and three KMP specs; wave 2c retires them with the registry.
+
+## Evidence: wave 2a, the runtime folds into `crates/assist` (2026-10-07)
+
+Two lanes, merged into `claude/qwen-sanity-harness` at `f37d1b650` (L3a fast-forward, L4a by merge commit). On the merged tree the two crates pass 1,089 tests (0 failed), and val v7.4 refreezes byte-identical on the release runtime (655 / 655, UNEXPLAINED 0, the refreeze report identical to wave 1's).
+
+| lane | commits | what it proves |
+| --- | --- | --- |
+| L3a fold | `460e57233`, `14bc71415`, `7be6cb1ef` | the move by `git mv` held 1,052 tests (75 unit tests moved with the code: assist 140 to 215, nativetools 912 to 837); the export and the `cells.py` universe are unchanged after every commit; 1,061 after the Locker policy |
+| L4a renderer + step | `db4ebccf9`, `ba2159cab`, `fc706a57d`, merge `f37d1b650` | 25 golden cases byte-equal; all 30,597 train and 402 train-val records render with identical hashes before (Python) and after (Rust); `decode_step` text-identical to `decode.py` on 6,039 scripted cases |
+
+- **The move.** The runtime is `centraid_assist::native`; `crates/nativetools` keeps its binary, `seed`, `export` and the harness `vaultio`, and re-exports the runtime under its old paths, so the Python harness and its `NATIVETOOLS` binary are unchanged.
+- **The `Door`.** `Session::with_door(Box<dyn Door>, …)`: paged table reads, tally, search, typed `run`, the clock, ids, `seal`/`unseal`. The harness `Handle` implements it with the same principal, clock, ids and seal; the core's implementation (wave 2b) writes through `api::invoke` so the change feed fires. Coupling to kit, tally, search and vault types is structural (rows, balances, search targets, Locker constants); no vault handle or path is held by the runtime.
+- **Locker off.** `Flags::locker` (on for the harness, off on the phone): no Locker table or sealed column is read, and `reveal` or a Locker kind ends in `decline sealed_egress`. The kind card is unchanged (R-1088-10).
+- **One renderer.** `native::transcript` is the transcript the model is trained, scored and prompted on; `render.py` is its client over `nativetools think`. Record maps keep their order (`serde_json::Value` sorts keys, so the renderer parses into an order-keeping `Json`); spans are code points; Python's `str.strip` (which also strips U+001C to U+001F) is reproduced. Rendering all train records takes 7.4 s with an optimised binary against 4.5 s in Python.
+- **The step.** `native::step::decode_step` writes one assistant message through any `Model`: the think under stop `</think>` and the think limit, the call compiled from the think, otherwise a free continuation to `</tool_call>`, within 512 tokens, cancellable between generations. Not yet run through a real GGUF (R-1088-1).
+- **Falsification.** L3a: removing the `if locker` guard fails 2 of 6 policy tests; a no-op `Door::advance` survived the whole nativetools suite, so `tests/door.rs` now pins the clock. L4a: all 1,112,064 code points at the edge of user and tool texts match Python's strip (a `trim()`-like result fails on U+001C); the token-faithful comparison against `decode.py` found two budget bugs on a tight-budget set, fixed and unit-tested, then 0 mismatches in text, `think_cut` and `rendered_call`.
