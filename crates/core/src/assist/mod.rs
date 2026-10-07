@@ -848,13 +848,7 @@ fn native_turn(
     let Some(kept) = held.as_mut() else {
         return Err(Refusal::QueryFailed("no native session".to_owned()));
     };
-    let outcome = NativePlane::new(model).run_turn(
-        &mut kept.chat,
-        text,
-        &ReadContext { tz },
-        &slot.cancel,
-        sink,
-    );
+    let outcome = NativePlane::new(model).run_turn(&mut kept.chat, text, &slot.cancel, sink);
     if outcome.is_err() {
         // A turn that did not end (a stop, an engine failure) leaves its session
         // between a question and its answer; the next one starts clean.

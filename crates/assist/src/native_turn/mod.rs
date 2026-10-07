@@ -52,7 +52,7 @@ use crate::native::world::Key;
 use crate::native::{Flags, Session};
 use crate::result::{CARD_CAP, Card};
 use crate::tool::App;
-use crate::turn::{Answered, Event, ReadContext, Refusal};
+use crate::turn::{Answered, Event, Refusal};
 use log::Log;
 use words::{Say, say, say_with};
 
@@ -154,7 +154,6 @@ impl<'a> NativePlane<'a> {
         &self,
         chat: &mut NativeChat,
         text: &str,
-        _context: &ReadContext<'_>,
         cancel: &Cancel,
         sink: &mut dyn FnMut(Event),
     ) -> Result<Answered, Refusal> {
