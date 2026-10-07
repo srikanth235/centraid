@@ -20,9 +20,40 @@
 //!   On the phone the Locker policy is off (`Flags::locker`), so `seal` and `unseal` are never
 //!   called and an implementation may refuse them.
 //!
+//! # What the core owes park and confirm (R-1088-2, R-1088-6)
+//!
+//! On the phone a session runs `Writes::Park` (`crate::native::park`): the runtime plans a turn's
+//! writes against a patched copy of the world and ends the turn with a pending write. During
+//! planning it calls [`Door::advance`], [`Door::mint_id`], [`Door::now_ms`] and the reads, and
+//! never [`Door::run`]: **nothing a card shows has touched the vault.** The writes happen only in
+//! `Session::confirm`, and the core's door must make them like this:
+//!
+//! * [`Door::run_keyed`] is `api::invoke` with `invoke_key` = the key it is given,
+//!   `<PendingWrite::id>:<step index>`. The key is derived from the pending write and the step's
+//!   place in it, so a confirm that is delivered twice (a retry after a dropped reply, a replayed
+//!   request) finds its steps already recorded by the vault's invocation ledger and writes nothing
+//!   more; the session answers the second confirm from memory as well, but the ledger is what holds
+//!   across a restart. The door must NOT mint a fresh key per call.
+//! * The change feed fires as it does for a screen's write (`ChangeFeed::tables_changed`), once per
+//!   step that ran, so every screen that reads those tables refreshes. The harness has no feed and
+//!   fires none.
+//! * A step the vault refuses comes back as a [`Ran`] with `ok` false (the check id in `predicate`,
+//!   the owner-facing sentence in `reason`), never an `Err`: `confirm` types it (`Confirmed::Refused`)
+//!   and names how many steps landed before it. A batch is not atomic across commands.
+//! * The reads (`table`, `tally`, `events`) see the vault as it is NOW, through the query path a
+//!   screen uses: `confirm` reads the rows its steps address again before it runs anything, and a
+//!   row that changed since the turn planned is a typed `Confirmed::Stale`, nothing written. A door
+//!   that served a cached world would make a stale card look fresh.
+//! * [`Door::events`] is `centraid_apps_agenda::occurrences` over the core's own `PageDoor`
+//!   (`VaultDoor`), the zone being the request's: the same function the harness's door calls, so the
+//!   chat and the Agenda tab cannot disagree about which day an event is on (R-1088-8).
+//! * [`Door::advance`] may do nothing on the phone (its clock is the device's), and [`Door::mint_id`]
+//!   must be unguessable-enough to be a row id: a parked create shows the id the confirm writes.
+//!
 //! A refusal by the vault is a value ([`Ran::ok`] false), never an `Err`: an `Err` is a door that
 //! could not answer at all.
 
+pub use centraid_apps_agenda::Occurrence;
 use centraid_apps_kit::row::{Cell, Row};
 use centraid_apps_tally::queries::TallyData;
 use centraid_search::Target;
@@ -56,6 +87,18 @@ pub trait Door: Send {
     /// The Tally ledger, folded by the Tally app's own read.
     fn tally(&self) -> Result<TallyData, String>;
 
+    /// Every occurrence of an event that occupies a civil day of `from_day..=to_day`
+    /// (`YYYY-MM-DD`, days of the IANA zone `tz`): repeating series expanded, the cancelled and
+    /// the trashed left out, each placed on the member's calendar in `tz` (its wall clock, its
+    /// end, the days it occupies). The rows Agenda's own `upcoming` answers, from the one
+    /// implementation of it (`centraid_apps_agenda::occurrences`), so the runtime cannot disagree
+    /// with the Agenda tab (R-1088-8). A door that cannot answer says so; the runtime then reads
+    /// the stored events as they are.
+    fn events(&self, from_day: &str, to_day: &str, tz: &str) -> Result<Vec<Occurrence>, String> {
+        let _ = (from_day, to_day, tz);
+        Err("this door reads no event window".to_owned())
+    }
+
     /// A full-text search over one searchable entity: the targets it found, best first. A text
     /// with no searchable word finds nothing and is not an error.
     fn search(&self, entity: &str, text: &str, limit: usize) -> Result<Vec<Target>, String>;
@@ -80,6 +123,15 @@ pub trait Door: Send {
     /// Open one sealed Locker cell of `item_id` that was sealed under `key_id`. Never called when
     /// the Locker policy is off.
     fn unseal(&self, key_id: &str, item_id: &str, sealed: &str) -> Result<String, String>;
+
+    /// Run one command of a confirmed pending write: [`run`](Self::run) under a key that names
+    /// the step (`<pending id>:<step index>`), so a confirm sent twice cannot write twice. The
+    /// harness keeps no ledger of keys and just runs it; the core passes the key to
+    /// `api::invoke` as the `invoke_key` (see the module docs, "park and confirm").
+    fn run_keyed(&self, key: &str, command: &str, input: Value) -> Result<Ran, String> {
+        let _ = key;
+        self.run(command, input)
+    }
 
     /// Run one command a second after the last: [`advance`](Self::advance), then
     /// [`run`](Self::run).

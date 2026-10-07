@@ -12,6 +12,7 @@ Agenda is **4 manifest queries plus the core's by-id `event` read, 7 actions, 14
 | `src/detail.rs` | `load_event`: one event, or one occurrence named by `original_start_local` or `instance_key`, by id — the detail screen's read ([#1029](https://github.com/srikanth235/centraid/issues/1029)); absent for an unknown, trashed or skipped one. It also carries the event's calendar row (#1047). `next_occurrence` names the occurrence a repeating search hit opens: the first at or after the vault clock within a year, else the last before it. |
 | `src/expansion.rs` | the recurrence FOLD — one row per occurrence, and the cap |
 | `src/local.rs` | where an occurrence falls in a stated zone: its local wall clock, the civil days it occupies (a timed end exclusive, an all-day end inclusive), today and now — what the core answers a shell with no calendar |
+| `src/window.rs` | `occurrences`: the occurrences that occupy a range of local days (`YYYY-MM-DD` in a stated zone), series expanded, cancelled and trashed left out, each with its `Placement` — `upcoming` and `local::place` composed for a reader that only needs what is on when. The assistant runtime's read model reaches it through `Door::events` (the harness over a vault file, the core over the phone's vault), so it cannot disagree with this tab ([#1088](https://github.com/srikanth235/centraid/issues/1088), R-1088-8) |
 | `src/commands.rs` | the seven actions, as a table of command invocations |
 
 ## The five things this app is about

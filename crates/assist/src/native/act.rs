@@ -1462,6 +1462,24 @@ impl Session {
                 return Err(refusal);
             }
             let row = self.row_of(key)?;
+            // ONE OCCURRENCE OF A REPEATING EVENT (`World::read_event_window`): the vault changes a
+            // series, or an exception to it, and neither is a verb of this runtime yet
+            if row.extra.contains_key("series") {
+                let name = self.named(key);
+                let refusal = format!(
+                    "error: {name} is one occurrence of a repeating event; changing a single occurrence is not possible here. Nothing was done."
+                );
+                if self.flags.compose {
+                    return Ok(self.compose_declined_write(
+                        verb,
+                        key,
+                        &refusal,
+                        "occurrence",
+                        "out_of_scope",
+                    ));
+                }
+                return Err(refusal);
+            }
             if row.trashed && !matches!(verb, Verb::Restore | Verb::Delete) {
                 let name = self.named(key);
                 let refusal =
@@ -1553,7 +1571,7 @@ impl Session {
                     let mut outputs = Vec::new();
                     let mut lapsed_row = false;
                     for step in steps {
-                        let ran = self.door.step(step.command, step.input.clone())?;
+                        let ran = self.write_step(step.command, &step.input)?;
                         if !ran.ok {
                             if verb == Verb::Restore
                                 && several
@@ -1672,7 +1690,7 @@ impl Session {
         if let Some(created) = &created {
             touched.push(created.clone());
         }
-        self.world = World::load_with(&*self.door, self.flags.locker)?;
+        self.settle()?;
         let mut diff = diff(&before, &self.world);
         // A SETTLEMENT MOVES A BALANCE, not a row field: the diff carries the
         // person's balance in the settled group (positive = they owe me),
@@ -1701,13 +1719,16 @@ impl Session {
             }
         }
         let mut lines = Vec::new();
+        let mut shown_lines: Vec<(Key, usize, String)> = Vec::new();
         self.mark_acted(&touched);
         self.mark_acted(&already_keys);
         for (shown, key) in touched.iter().enumerate() {
             let n = self.number(key);
             self.acted.insert(n);
             if verb != Verb::Reveal && shown < ROW_CAP {
-                lines.push(self.change_line(verb, &before, key, n));
+                let line = self.change_line(verb, &before, key, n);
+                shown_lines.push((key.clone(), n, line.clone()));
+                lines.push(line);
             }
         }
         if verb != Verb::Reveal && touched.len() > ROW_CAP {
@@ -1747,6 +1768,7 @@ impl Session {
                 .effect
                 .insert("revealed".to_owned(), json!(revealed));
         }
+        self.park_call(verb, shown_lines);
         Ok(outcome)
     }
 
@@ -1761,7 +1783,13 @@ impl Session {
     }
 
     /// `created: #31 task "Call plumber" · …` / `completed: #12 … · status open → completed`.
-    fn change_line(&mut self, verb: Verb, before: &World, key: &Key, n: usize) -> String {
+    pub(crate) fn change_line(
+        &mut self,
+        verb: Verb,
+        before: &World,
+        key: &Key,
+        n: usize,
+    ) -> String {
         let after = self.world.row(key).cloned();
         let old = before.row(key).cloned();
         let today = self.today();
@@ -1802,7 +1830,7 @@ impl Session {
         }
     }
 
-    fn diff_json(&mut self, diff: &Diff) -> Value {
+    pub(crate) fn diff_json(&mut self, diff: &Diff) -> Value {
         let rows: Vec<Value> = diff
             .rows
             .iter()
@@ -3227,6 +3255,12 @@ impl Session {
                         input[field] = json!(value);
                     }
                 }
+                // A PARKED PERSON KEEPS THE ID IT WAS SHOWN WITH: the vault honours a seat-minted
+                // party id (#922 G2), so the confirm writes the row the card named. A run lets the
+                // vault mint it, as every harness run always has.
+                if self.flags.writes != crate::native::park::Writes::Run {
+                    input["party_id"] = json!(mint());
+                }
                 ("people.add_person", input, "party_id")
             }
             Kind::Group => {
@@ -3423,7 +3457,7 @@ impl Session {
             Kind::Photo => unreachable!("photos are not created by a call"),
         };
         let before = self.world.clone();
-        let ran = self.door.step(command, input.clone())?;
+        let ran = self.write_step(command, &input)?;
         if !ran.ok {
             // A NEW EVENT THAT CLASHES WITH ANOTHER is a refusal the person can lift by
             // choosing another time (`compose_busy_conflict`).
@@ -3456,14 +3490,13 @@ impl Session {
             ));
         }
         for (command, input) in follow {
-            self.door.advance();
-            if let Err(error) = self.door.must(command, input) {
+            if let Err(error) = self.write_must(command, input) {
                 // Take the half-made row back out, so no later diff finds it.
                 if let Some(delete) = Verb::Delete.command(kind) {
                     self.door.advance();
-                    let _ = self.door.step(delete, json!({ id_param(kind): id }));
+                    let _ = self.write_step(delete, &json!({ id_param(kind): id }));
                 }
-                self.world = World::load_with(&*self.door, self.flags.locker)?;
+                self.settle()?;
                 return Err(error);
             }
         }
@@ -3522,7 +3555,7 @@ impl Session {
         let mut lines = Vec::new();
         let mut touched: Vec<Key> = Vec::new();
         for inverse in inverses.iter().rev() {
-            let ran = self.door.step(&inverse.command, inverse.input.clone())?;
+            let ran = self.write_step(&inverse.command, &inverse.input)?;
             if !ran.ok {
                 let name = self.named(&inverse.key);
                 lines.push(format!(
@@ -3533,7 +3566,7 @@ impl Session {
                 touched.push(inverse.key.clone());
             }
         }
-        self.world = World::load_with(&*self.door, self.flags.locker)?;
+        self.settle()?;
         let mut diff = diff(&before, &self.world);
         // A SETTLEMENT MOVES A BALANCE, not a row field: the diff carries the
         // person's balance in the settled group (positive = they owe me),
@@ -3563,11 +3596,14 @@ impl Session {
         }
         self.mark_acted(&touched);
         let mut out = Vec::new();
+        let mut shown_lines: Vec<(Key, usize, String)> = Vec::new();
         for (shown, key) in touched.iter().enumerate() {
             let n = self.number(key);
             self.acted.insert(n);
             if shown < ROW_CAP {
-                out.push(self.change_line(Verb::Undo, &before, key, n));
+                let line = self.change_line(Verb::Undo, &before, key, n);
+                shown_lines.push((key.clone(), n, line.clone()));
+                out.push(line);
             }
         }
         if touched.len() > ROW_CAP {
@@ -3586,6 +3622,7 @@ impl Session {
         let mut outcome = Outcome::text(out.join("\n"));
         let diff_json = self.diff_json(&diff);
         outcome.effect.insert("diff".to_owned(), diff_json);
+        self.park_call(Verb::Undo, shown_lines);
         Ok(outcome)
     }
 }
@@ -4099,7 +4136,7 @@ pub(crate) struct Diff {
     pub links: Vec<(bool, Key, Key)>,
 }
 
-fn snapshot(row: &Row) -> BTreeMap<String, Value> {
+pub(crate) fn snapshot(row: &Row) -> BTreeMap<String, Value> {
     let mut out = BTreeMap::new();
     out.insert("name".to_owned(), json!(row.name));
     out.insert(

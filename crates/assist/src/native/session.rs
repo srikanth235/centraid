@@ -44,6 +44,10 @@ pub struct Flags {
     /// `reveal` verb ends the turn in `decline sealed_egress` (`Session::locker_off_decline`). The
     /// kind card and the prompt are the same either way (R-1088-10).
     pub locker: bool,
+    /// What a write does (#1088, R-1088-2, R-1088-6): [`Writes::Run`](crate::native::park::Writes)
+    /// (the default: the vault runs it, as in every harness run), or `Park` (a patched copy of
+    /// the world takes it and it waits for the member's tap).
+    pub writes: crate::native::park::Writes,
 }
 
 impl Default for Flags {
@@ -56,6 +60,7 @@ impl Default for Flags {
             normalize: true,
             compose: true,
             locker: true,
+            writes: crate::native::park::Writes::Run,
         }
     }
 }
@@ -338,8 +343,12 @@ pub(crate) struct Mark {
 /// The whole session.
 pub struct Session {
     pub(crate) door: Box<dyn Door>,
+    /// The patched world and the parked steps (`crate::native::park`).
+    pub(crate) park: crate::native::park::ParkState,
     pub(crate) world: World,
     pub(crate) now: DateTime,
+    /// The IANA zone the person's days are in.
+    pub(crate) tz: String,
     pub(crate) me_name: String,
     pub(crate) flags: Flags,
     pub(crate) numbers: BTreeMap<Key, usize>,
@@ -572,7 +581,26 @@ impl Session {
         me: &str,
         flags: Flags,
     ) -> Result<Self, String> {
-        let world = World::load_with(&*door, flags.locker)?;
+        Self::with_door_in(door, now, "Etc/UTC", me, flags)
+    }
+
+    /// Open a session whose person's days are in the IANA zone `tz` (R-1088-8): `now` is their
+    /// civil today there, and the events of the days around it are read as Agenda places them in
+    /// that zone, a repeating series as its occurrences. [`with_door`](Self::with_door) is `Etc/UTC`,
+    /// where a stored event reads as it is stored. A request that brings another zone or another
+    /// instant calls [`set_clock`](Self::set_clock).
+    pub fn with_door_in(
+        door: Box<dyn Door>,
+        now: DateTime,
+        tz: &str,
+        me: &str,
+        flags: Flags,
+    ) -> Result<Self, String> {
+        let standing = crate::native::world::Standing {
+            today: now.date(),
+            tz: tz.to_owned(),
+        };
+        let world = World::load_in(&*door, flags.locker, Some(&standing))?;
         let me_name = if me.is_empty() {
             world
                 .row(&world.me_key())
@@ -581,10 +609,16 @@ impl Session {
         } else {
             me.to_owned()
         };
+        let park = crate::native::park::ParkState {
+            world: (flags.writes != crate::native::park::Writes::Run).then(|| world.clone()),
+            ..Default::default()
+        };
         let mut session = Self {
             door,
+            park,
             world,
             now,
+            tz: tz.to_owned(),
             me_name,
             flags,
             numbers: BTreeMap::new(),
@@ -637,6 +671,32 @@ impl Session {
     #[must_use]
     pub fn today(&self) -> jiff::civil::Date {
         self.now.date()
+    }
+
+    /// The vault as the model reads it now, the events in the person's zone.
+    pub(crate) fn load_world(&self) -> Result<World, String> {
+        let standing = crate::native::world::Standing {
+            today: self.now.date(),
+            tz: self.tz.clone(),
+        };
+        World::load_in(&*self.door, self.flags.locker, Some(&standing))
+    }
+
+    /// The session clock follows the request: the person's civil `now` and their zone. The world
+    /// is read again, so the events sit on the days of that zone, and a card still waiting is
+    /// dismissed (call it before [`user`](Self::user), as a turn begins).
+    pub fn set_clock(&mut self, now: DateTime, tz: &str) -> Result<(), String> {
+        self.now = now;
+        self.tz = tz.to_owned();
+        if self.flags.writes == crate::native::park::Writes::Park {
+            self.discard();
+            return Ok(());
+        }
+        self.world = self.load_world()?;
+        if self.park.world.is_some() {
+            self.park.world = Some(self.world.clone());
+        }
+        Ok(())
     }
 
     /// The `#n` of a row, minting one on first sight.
@@ -1771,6 +1831,7 @@ impl Session {
     /// (`crate::native::block::picks_line`), joined as `block`, which is what precedes the message in the user turn. A message that takes the request back
     /// (`phrases::is_retraction`) also carries `ended`, the turn's own end.
     pub fn user(&mut self, message: &str) -> Value {
+        self.park_begin_turn();
         self.turn += 1;
         self.turn_starts.push(self.results.len());
         self.steps = 0;
@@ -2023,6 +2084,7 @@ impl Session {
             outcome.text.push_str(&note);
             trailing.push(note);
         }
+        self.park_capture(&mut outcome);
         if outcome.ends_turn {
             self.turn_over = true;
         }

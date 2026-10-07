@@ -6,8 +6,16 @@
 //! nativetools copy <vault path> <new vault path>
 //! nativetools session <vault path> --today <YYYY-MM-DD[THH:MM]> [--me <name>]
 //!                     [--no-directory] [--no-preground] [--no-normalize] [--no-compose] [--tools sig|compact|full]
+//!                     [--writes run|park|shadow] [--auto-confirm]
 //! nativetools think
 //! ```
+//!
+//! `--writes` picks what a write does: `run` (the default: the vault runs it), `park` (a patched copy of
+//! the world takes it and nothing reaches the vault: `authored/park_oracle.py` holds its texts to
+//! `run`'s), or `shadow` (the vault runs it AND the patch follows; where they part, a step's
+//! `effect.drift` says so). With `--writes park --auto-confirm` the binary taps the card itself: when a
+//! response ends a turn with a pending write it confirms it and adds the outcome as `effect.confirmed`,
+//! so the next turn plans against the vault as a run would have left it.
 //!
 //! `--tools` picks the tools block's spelling (`sig`, the default:
 //! one-line signatures; `compact`, `tools.json`; `full`, `tools.full.json`).
@@ -40,6 +48,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use centraid_assist::native::transcript;
+use centraid_nativetools::park::Writes;
 use centraid_nativetools::prompt::ToolsMode;
 use centraid_nativetools::think::{Call, Context, RowText, TraceMode};
 use centraid_nativetools::{Flags, Session, dates, export, parse, seed, think};
@@ -49,7 +58,8 @@ fn usage() -> ExitCode {
     eprintln!(
         "usage:\n  nativetools export <dir>\n  nativetools seed <world.json> <vault path>\n  nativetools copy <vault> <new vault>\n  \
          nativetools session <vault path> --today <YYYY-MM-DD[THH:MM]> [--me <name>] \
-         [--no-directory] [--no-preground] [--no-normalize] [--no-compose] [--tools sig|compact|full]\n  \
+         [--no-directory] [--no-preground] [--no-normalize] [--no-compose] [--tools sig|compact|full] \
+         [--writes run|park|shadow] [--auto-confirm]\n  \
          nativetools think"
     );
     ExitCode::from(2)
@@ -112,6 +122,7 @@ fn session(path: &str, rest: &[String]) -> ExitCode {
     let mut today = None;
     let mut me = String::new();
     let mut flags = Flags::default();
+    let mut auto_confirm = false;
     let mut iter = rest.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -121,6 +132,11 @@ fn session(path: &str, rest: &[String]) -> ExitCode {
             "--no-preground" => flags.preground = false,
             "--no-normalize" => flags.normalize = false,
             "--no-compose" => flags.compose = false,
+            "--auto-confirm" => auto_confirm = true,
+            "--writes" => match iter.next().and_then(|mode| Writes::parse(mode)) {
+                Some(mode) => flags.writes = mode,
+                None => return fail("--writes takes run, park or shadow"),
+            },
             "--tools" => match iter.next().and_then(|mode| ToolsMode::parse(mode)) {
                 Some(mode) => flags.tools = mode,
                 None => return fail("--tools takes sig, compact or full"),
@@ -148,7 +164,20 @@ fn session(path: &str, rest: &[String]) -> ExitCode {
             continue;
         }
         let response = match serde_json::from_str::<Value>(&line) {
-            Ok(request) => answer(&mut session, &request),
+            Ok(request) => {
+                let mut response = answer(&mut session, &request);
+                if auto_confirm
+                    && let Some(id) = session.pending().map(|pending| pending.id.clone())
+                {
+                    response["effect"]["confirmed"] = session.confirm(&id).to_json();
+                }
+                // `--writes shadow`: where the patched world parted from the vault at this step
+                let drift = session.take_drift();
+                if !drift.is_empty() {
+                    response["effect"]["drift"] = json!(drift);
+                }
+                response
+            }
             Err(error) => json!({"error": format!("not JSON: {error}")}),
         };
         if writeln!(stdout, "{response}")

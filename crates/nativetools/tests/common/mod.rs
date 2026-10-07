@@ -6,6 +6,12 @@ use std::path::{Path, PathBuf};
 use centraid_nativetools::{Flags, Session, dates, seed, vaultio};
 use serde_json::{Value, json};
 
+pub mod drive;
+
+use std::collections::BTreeMap;
+
+use centraid_nativetools::vaultio::SetClock;
+
 pub const FIXTURE: &str = include_str!("../fixtures/world.json");
 /// A Sunday.
 pub const TODAY: &str = "2026-09-27";
@@ -78,6 +84,22 @@ pub fn call(session: &mut Session, tool: &str, args: Value) -> Value {
     session.call(tool, &args)
 }
 
+/// One call whose write, if the session parks it, the member taps at once: a setup step of a
+/// driver that goes on to ask the vault about it.
+pub fn settled(session: &mut Session, tool: &str, args: Value) -> Value {
+    let response = session.call(tool, &args);
+    if let Some(id) = session.pending().map(|pending| pending.id.clone()) {
+        assert!(
+            matches!(
+                session.confirm(&id),
+                centraid_nativetools::park::Confirmed::Done { .. }
+            ),
+            "a setup write did not confirm: {response}"
+        );
+    }
+    response
+}
+
 /// The observation text of one call.
 pub fn text(session: &mut Session, tool: &str, args: Value) -> String {
     call(session, tool, args)["text"]
@@ -143,4 +165,68 @@ pub fn diff_rows(response: &Value) -> Vec<Value> {
         .as_array()
         .cloned()
         .unwrap_or_default()
+}
+
+/// The vault's own journal: how many commands it has answered, per command id and status.
+pub fn journal(world: &World) -> BTreeMap<(String, String), usize> {
+    let handle = vaultio::Handle::open(world.path(), SetClock::at(1_800_000_000_000), "journal")
+        .expect("the journal opens");
+    let rows = handle
+        .table(
+            "agent_command_invocation",
+            "invocation_id, command_id, status, requested_at",
+            "requested_at",
+            "invocation_id",
+        )
+        .expect("the journal reads");
+    let mut counts = BTreeMap::new();
+    for row in &rows {
+        let key = (
+            vaultio::text(row, "command_id").unwrap_or_default(),
+            vaultio::text(row, "status").unwrap_or_default(),
+        );
+        *counts.entry(key).or_insert(0) += 1;
+    }
+    counts
+}
+
+impl World {
+    /// A session whose person's days are in `tz`.
+    #[must_use]
+    pub fn session_in(&self, today: &str, tz: &str) -> Session {
+        vaultio::open_session_in(
+            &self.path,
+            dates::parse_now(today).expect("a date"),
+            tz,
+            "",
+            Flags::default(),
+        )
+        .expect("the session opens")
+    }
+
+    /// Another writer: a command the vault takes while a session is open.
+    pub fn elsewhere(&self, command: &str, input: Value) -> Value {
+        let handle =
+            vaultio::Handle::open(&self.path, SetClock::at(1_900_000_000_000), "elsewhere")
+                .expect("the vault opens");
+        handle
+            .must(command, input)
+            .expect("the other writer's command runs")
+    }
+
+    /// The vault's calendar.
+    #[must_use]
+    pub fn calendar(&self) -> String {
+        let handle = vaultio::Handle::open(&self.path, SetClock::at(1_900_000_000_000), "calendar")
+            .expect("the vault opens");
+        let rows = handle
+            .table(
+                "schedule_calendar",
+                "calendar_id, created_at",
+                "created_at",
+                "calendar_id",
+            )
+            .expect("calendars read");
+        vaultio::text(&rows[0], "calendar_id").expect("a calendar")
+    }
 }

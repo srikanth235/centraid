@@ -211,6 +211,16 @@ The runtime's search for a name that reached no tier of the selector's kinds (nt
 
 What the vault refuses and the model repairs stays an `error:` (§4.6): a schema, a name in use, a parent that is not top level, a cancelled event on `edit`, a member removal that clashes with nothing here, and any refusal after part of a write landed. A read with a `when`, `where` or `linked_to` whose name does reach a row, and no row meeting the rest, is the empty answer of §8.5, unchanged.
 
+### 4.9 The phone: a write parks behind a card, events read on the person's own days (#1088)
+
+Nothing above changes for the model. Two session policies decide what the runtime does for it on the phone (`Flags::writes`, `Session::with_door_in`); the harness runs both off.
+
+**A write parks (R-1088-2, R-1088-6, R-1088-10).** With `Writes::Park` no step of an `act`, a `create` or an `undo` reaches the vault. The runtime plans it as always, applies the steps to an in-memory patched copy of the world (`park::apply`: what the vault's command does to the rows the model sees, with the refusals the runtime acts on), and shows the model the observation it was trained on, so a `more=true` chain that names a row the first write created works. The turn's writes, in order, are ONE pending write on the step that ends the turn, `effect.pending = {id, turn, verbs, preview, steps: [{command, input}], destructive, not_undoable}`; a session holds one. A new message (or `set_clock`) dismisses it and puts the session back as the turn found it. `Session::dismiss(id)` does the same on the member's tap; nothing reached the vault.
+
+`Session::confirm(id)` is the other tap. It reads the vault again and answers `stale` (typed, nothing ran) when any row a step addresses reads differently than when the turn planned it; otherwise it runs the steps through the door in order, call by call, reading the vault after each call, under the key `<pending id>:<step index>` (`Door::run_keyed`, so a confirm sent twice writes once and answers the same), and shows the after-write texts from the vault's own before and after: for a turn of one write the parked text byte for byte. A vault refusal stops the batch and is typed (`refused`: the step, the check id, how many steps landed; commands are not atomic across a batch). An id only the vault can name (a debt) is the vault's own once the step has run, and the later steps and the undo memory follow it. `undo` parks like any write; one turn after a confirm it is a card that runs the inverses.
+
+**Events are read on the person's days (R-1088-8).** `World` reads the events of the 31 days before and the 120 days after today through Agenda's own read (`centraid_apps_agenda::occurrences`, by `Door::events`) in the zone the session was opened with or last given (`Session::set_clock`): an event the zone moves reads where Agenda places it, and a repeating series is one row per occurrence whose id is the occurrence's key (`#n event "Book club" · Tue 2026-09-29 19:00`). A write to an occurrence ends in `decline out_of_scope`: the vault changes a series or an exception to it, and neither is a verb yet. An event the zone does not move, one outside those days, a cancelled one and a trashed one read as stored. The harness's zone is `Etc/UTC`, where a stored event is the same event.
+
 ## 5. Observations
 
 - **Result header, kind card, rows:**

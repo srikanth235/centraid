@@ -263,6 +263,16 @@
       "why_no_example": ""
     },
     {
+      "argument": "rows",
+      "example": null,
+      "family": "value",
+      "id": "act.name_is_one_occurrence_of_a",
+      "source": "act.rs",
+      "template": "error: {name} is one occurrence of a repeating event; changing a single occurrence is not possible here. Nothing was done.",
+      "tool": "act",
+      "why_no_example": "needs an event the vault repeats (a series read as its occurrences, World::read_event_window); the fixture world has none and no call makes one, so tests/events_local.rs drives it"
+    },
+    {
       "argument": "name",
       "example": [
         {

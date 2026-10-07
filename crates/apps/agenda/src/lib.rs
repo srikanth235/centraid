@@ -48,6 +48,7 @@ pub mod expansion;
 pub mod local;
 pub mod manifest;
 pub mod queries;
+pub mod window;
 
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use detail::{EventDetailData, NEXT_OCCURRENCE_REACH_DAYS, load_event, next_occurrence};
@@ -61,6 +62,7 @@ pub use queries::{
     SEARCH_LIMIT, SHELF_CAP, SearchData, TAG_CAP, TASK_CAP, UpcomingData, load_day_context,
     load_parties, load_search, load_search_term, load_upcoming,
 };
+pub use window::{Occurrence, occurrences};
 
 /// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
 /// every app so the core settles all of them through one door.

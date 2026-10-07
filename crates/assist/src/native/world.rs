@@ -17,6 +17,41 @@ pub const FOLDER_SCHEME: &str = "https://centraid.dev/schemes/folders";
 pub const STARRED: &str = "starred";
 pub const ROOT_FOLDER: &str = "root";
 
+/// The days before today the runtime reads events in, in the person's zone, with every repeating
+/// series expanded (R-1088-8). An event farther away is read as stored.
+pub const EVENT_DAYS_BACK: i64 = 31;
+/// The days after today (Agenda's own default horizon for an open-ended `upcoming`).
+pub const EVENT_DAYS_AHEAD: i64 = 120;
+
+/// Where and when the person stands: their today, and the zone their days are in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Standing {
+    pub today: jiff::civil::Date,
+    /// An IANA zone name (`Etc/UTC`, `Pacific/Auckland`).
+    pub tz: String,
+}
+
+/// An event's `date` and `duration`, read from where it starts and where it ends: a day when it
+/// starts at midnight and runs a whole number of days, else its start and its length in minutes.
+pub(crate) fn shape_event(row: &mut Row, start: Option<Stamp>, end: Option<Stamp>) {
+    row.fields.remove("duration");
+    row.date = start;
+    if let (Some(start), Some(end)) = (start, end) {
+        let minutes = end.at().duration_since(start.at()).as_secs() / 60;
+        let all_day = start.time == Some(jiff::civil::Time::midnight())
+            && minutes > 0
+            && minutes % (24 * 60) == 0;
+        if all_day {
+            row.date = Some(Stamp {
+                date: start.date,
+                time: None,
+            });
+        } else {
+            row.fields.insert("duration", Val::Num(minutes));
+        }
+    }
+}
+
 /// A model-facing value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Val {
@@ -251,8 +286,14 @@ impl World {
     }
 
     /// Load everything. With `locker` false (`Flags::locker`) no Locker table and no sealed
-    /// column is read, and the world holds no Locker item.
+    /// column is read, and the world holds no Locker item. Events are read as stored.
     pub fn load_with(door: &dyn Door, locker: bool) -> Result<Self, String> {
+        Self::load_in(door, locker, None)
+    }
+
+    /// Load everything, the events of the days around `at.today` read in the zone `at.tz` with
+    /// every repeating series expanded (R-1088-8, [`Door::events`]).
+    pub fn load_in(door: &dyn Door, locker: bool, at: Option<&Standing>) -> Result<Self, String> {
         let mut world = Self::default();
         let vault = door.table(
             "core_vault",
@@ -286,7 +327,7 @@ impl World {
         world.root_folder = concepts.root_folder.clone();
         world.load_people(door, &concepts)?;
         world.load_groups(door)?;
-        world.load_events(door)?;
+        world.load_events(door, at)?;
         world.load_tasks(door)?;
         // Photos before collections: an album's entries are edges to them.
         world.load_photos(door, &concepts)?;
@@ -328,7 +369,7 @@ impl World {
         let profiles = door.table(
             "people_profile",
             "profile_id, party_id, role, nickname, cadence_days, last_contacted_at, met, \
-             created_at, updated_at, deleted_at",
+             created_at, updated_at, deleted_at, purge_at",
             "created_at",
             "profile_id",
         )?;
@@ -365,6 +406,9 @@ impl World {
             let mut extra = BTreeMap::new();
             if profile.is_some() {
                 extra.insert("profile", "yes".to_owned());
+            }
+            if let Some(purge) = profile.and_then(|profile| text(profile, "purge_at")) {
+                extra.insert("purge_at", purge);
             }
             self.insert(Row {
                 kind: Kind::Person,
@@ -443,11 +487,11 @@ impl World {
         Ok(())
     }
 
-    fn load_events(&mut self, door: &dyn Door) -> Result<(), String> {
+    fn load_events(&mut self, door: &dyn Door, at: Option<&Standing>) -> Result<(), String> {
         let events = door.table(
             "core_event",
-            "event_id, summary, description, dtstart, dtend, status, created_at, updated_at, \
-             deleted_at",
+            "event_id, summary, description, dtstart, dtend, status, rrule, created_at, \
+             updated_at, deleted_at, purge_at",
             "created_at",
             "event_id",
         )?;
@@ -463,37 +507,37 @@ impl World {
             {
                 fields.insert("status", Val::Enum(value));
             }
-            let mut date = start;
-            if let (Some(start), Some(end)) = (start, end) {
-                let minutes = end.at().duration_since(start.at()).as_secs() / 60;
-                let all_day = start.time == Some(jiff::civil::Time::midnight())
-                    && minutes > 0
-                    && minutes % (24 * 60) == 0;
-                if all_day {
-                    date = Some(Stamp {
-                        date: start.date,
-                        time: None,
-                    });
-                } else {
-                    fields.insert("duration", Val::Num(minutes));
-                }
-            }
             put(
                 &mut fields,
                 "description",
                 nonempty(text(event, "description")),
             );
-            self.insert(Row {
+            let mut extra = BTreeMap::new();
+            // the stored spellings of the span and the trash window: what a write's checks read
+            // (the clash of a new event, the restore window)
+            for (name, column) in [
+                ("dtstart", "dtstart"),
+                ("dtend", "dtend"),
+                ("purge_at", "purge_at"),
+                ("rrule", "rrule"),
+            ] {
+                if let Some(value) = text(event, column) {
+                    extra.insert(name, value);
+                }
+            }
+            let mut row = Row {
                 kind: Kind::Event,
                 id: text(event, "event_id").unwrap_or_default(),
                 name: text(event, "summary").unwrap_or_default(),
-                date,
+                date: None,
                 fields,
                 trashed: text(event, "deleted_at").is_some(),
                 created: text(event, "created_at").unwrap_or_default(),
                 updated: text(event, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
-            });
+                extra,
+            };
+            shape_event(&mut row, start, end);
+            self.insert(row);
         }
         let attendees = door.table(
             "schedule_attendee",
@@ -513,7 +557,133 @@ impl World {
                 );
             }
         }
+        if let Some(at) = at {
+            self.read_event_window(door, at);
+        }
         Ok(())
+    }
+
+    /// THE EVENTS OF THE DAYS AROUND TODAY, as Agenda reads them (R-1088-8): in the person's zone,
+    /// and a repeating series as its occurrences. A one-off the zone does not move stays as stored
+    /// (so a UTC person reads what the stored events say); one it moves is placed where Agenda
+    /// places it. A series is replaced by one row per occurrence in the window, whose id is the
+    /// occurrence's key (`extra["series"]` names the series): what a write to an occurrence
+    /// cannot do yet is declined (`Session::write`). A door that cannot answer leaves every event
+    /// as stored.
+    fn read_event_window(&mut self, door: &dyn Door, at: &Standing) {
+        let span = |days: i64| jiff::Span::new().days(days);
+        let (Ok(from), Ok(to)) = (
+            at.today.checked_sub(span(EVENT_DAYS_BACK)),
+            at.today.checked_add(span(EVENT_DAYS_AHEAD)),
+        ) else {
+            return;
+        };
+        let Ok(occurrences) = door.events(&from.to_string(), &to.to_string(), &at.tz) else {
+            return;
+        };
+        let mut by_event: BTreeMap<String, Vec<&crate::native::door::Occurrence>> = BTreeMap::new();
+        for occurrence in &occurrences {
+            by_event
+                .entry(occurrence.event_id.clone())
+                .or_default()
+                .push(occurrence);
+        }
+        let mut removed = false;
+        for (event_id, list) in &by_event {
+            let key = (Kind::Event, event_id.clone());
+            let Some(base) = self.rows.get(&key).cloned() else {
+                continue;
+            };
+            if list.iter().all(|occurrence| !occurrence.is_instance) {
+                let placement = &list[0].placement;
+                let start = Stamp::parse(&placement.local_start);
+                if start != base.date
+                    && let Some(row) = self.rows.get_mut(&key)
+                {
+                    shape_event(row, start, Stamp::parse(&placement.local_end));
+                }
+                continue;
+            }
+            let guests: Vec<Key> = self
+                .edges
+                .iter()
+                .filter(|edge| edge.via == Via::Attendee && edge.from == key)
+                .map(|edge| edge.to.clone())
+                .collect();
+            self.rows.remove(&key);
+            removed = true;
+            for occurrence in list {
+                let mut row = Row {
+                    kind: Kind::Event,
+                    id: occurrence.instance_key.clone(),
+                    name: occurrence
+                        .summary
+                        .clone()
+                        .unwrap_or_else(|| base.name.clone()),
+                    date: None,
+                    fields: BTreeMap::new(),
+                    trashed: false,
+                    created: base.created.clone(),
+                    updated: base.updated.clone(),
+                    extra: BTreeMap::new(),
+                };
+                if let Some(value) = occurrence.status.as_deref().and_then(|status| {
+                    Kind::Event
+                        .spec()
+                        .field("status")
+                        .and_then(|field| field.model_value(status))
+                }) {
+                    row.fields.insert("status", Val::Enum(value));
+                }
+                put(
+                    &mut row.fields,
+                    "description",
+                    nonempty(occurrence.description.clone()),
+                );
+                row.extra.insert("series", event_id.clone());
+                if let Some(rule) = base.extra.get("rrule") {
+                    row.extra.insert("rrule", rule.clone());
+                }
+                shape_event(
+                    &mut row,
+                    Stamp::parse(&occurrence.placement.local_start),
+                    Stamp::parse(&occurrence.placement.local_end),
+                );
+                let id = row.id.clone();
+                self.insert(row);
+                for guest in &guests {
+                    self.edge(
+                        (Kind::Event, id.clone()),
+                        guest.clone(),
+                        Via::Attendee,
+                        None,
+                    );
+                }
+            }
+        }
+        // a live series with nothing in the window is on no day the person can ask about
+        let idle: Vec<Key> = self
+            .rows
+            .values()
+            .filter(|row| {
+                row.kind == Kind::Event
+                    && !row.trashed
+                    && row.extra.contains_key("rrule")
+                    && !row.extra.contains_key("series")
+                    && row.field("status") != Some(&Val::Enum("cancelled"))
+                    && !by_event.contains_key(&row.id)
+            })
+            .map(Row::key)
+            .collect();
+        for key in idle {
+            self.rows.remove(&key);
+            removed = true;
+        }
+        if removed {
+            let rows = &self.rows;
+            self.edges
+                .retain(|edge| rows.contains_key(&edge.from) && rows.contains_key(&edge.to));
+        }
     }
 
     fn load_tasks(&mut self, door: &dyn Door) -> Result<(), String> {
@@ -541,7 +711,7 @@ impl World {
         let tasks = door.table(
             "schedule_task",
             "task_id, title, description, status, priority, due_at, completed_at, effort_min, \
-             parent_task_id, project_id, created_at, updated_at, deleted_at",
+             parent_task_id, project_id, created_at, updated_at, deleted_at, purge_at, rrule",
             "created_at",
             "task_id",
         )?;
@@ -573,6 +743,12 @@ impl World {
                 "description",
                 nonempty(text(task, "description")),
             );
+            let mut extra = BTreeMap::new();
+            for column in ["purge_at", "rrule"] {
+                if let Some(value) = text(task, column) {
+                    extra.insert(column, value);
+                }
+            }
             self.insert(Row {
                 kind: Kind::Task,
                 id: text(task, "task_id").unwrap_or_default(),
@@ -582,7 +758,7 @@ impl World {
                 trashed: text(task, "deleted_at").is_some(),
                 created: text(task, "created_at").unwrap_or_default(),
                 updated: text(task, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
         for task in &tasks {
@@ -620,7 +796,7 @@ impl World {
             .collect();
         let notes = door.table(
             "knowledge_note",
-            "note_id, title, body_content_id, pinned, created_at, updated_at, deleted_at",
+            "note_id, title, body_content_id, pinned, created_at, updated_at, deleted_at, purge_at",
             "created_at",
             "note_id",
         )?;
@@ -630,6 +806,10 @@ impl World {
             put(&mut fields, "body", nonempty(body));
             fields.insert("pinned", Val::Bool(int(note, "pinned") == Some(1)));
             let created = text(note, "created_at").unwrap_or_default();
+            let mut extra = BTreeMap::new();
+            if let Some(purge) = text(note, "purge_at") {
+                extra.insert("purge_at", purge);
+            }
             self.insert(Row {
                 kind: Kind::Note,
                 id: text(note, "note_id").unwrap_or_default(),
@@ -639,7 +819,7 @@ impl World {
                 trashed: text(note, "deleted_at").is_some(),
                 created,
                 updated: text(note, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
         // ALBUM OR NOTEBOOK. Both are `core_collection` rows and the table
@@ -693,13 +873,17 @@ impl World {
         }
         let collections = door.table(
             "core_collection",
-            "collection_id, name, created_at, updated_at",
+            "collection_id, name, parent_collection_id, created_at, updated_at",
             "created_at",
             "collection_id",
         )?;
         for collection in &collections {
             let id = text(collection, "collection_id").unwrap_or_default();
             let kind = roles.get(&id).copied().unwrap_or(Kind::Notebook);
+            let mut extra = BTreeMap::new();
+            if let Some(parent) = text(collection, "parent_collection_id") {
+                extra.insert("parent", parent);
+            }
             self.insert(Row {
                 kind,
                 name: text(collection, "name").unwrap_or_default(),
@@ -709,7 +893,7 @@ impl World {
                 trashed: false,
                 created: text(collection, "created_at").unwrap_or_default(),
                 updated: text(collection, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
         for entry in &entries {
@@ -740,7 +924,11 @@ impl World {
     }
 
     fn load_documents(&mut self, door: &dyn Door, concepts: &Concepts) -> Result<(), String> {
-        for (id, label, created, updated) in &concepts.folders {
+        for (id, label, created, updated, parent) in &concepts.folders {
+            let mut extra = BTreeMap::new();
+            if let Some(parent) = parent {
+                extra.insert("parent", parent.clone());
+            }
             self.insert(Row {
                 kind: Kind::Folder,
                 id: id.clone(),
@@ -750,12 +938,12 @@ impl World {
                 trashed: false,
                 created: created.clone(),
                 updated: updated.clone(),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
         let documents = door.table(
             "core_document",
-            "document_id, title, created_at, updated_at, deleted_at",
+            "document_id, title, created_at, updated_at, deleted_at, purge_at",
             "created_at",
             "document_id",
         )?;
@@ -764,6 +952,10 @@ impl World {
             let mut fields = BTreeMap::new();
             fields.insert("starred", Val::Bool(concepts.starred("core.document", &id)));
             let created = text(document, "created_at").unwrap_or_default();
+            let mut extra = BTreeMap::new();
+            if let Some(purge) = text(document, "purge_at") {
+                extra.insert("purge_at", purge);
+            }
             self.insert(Row {
                 kind: Kind::Document,
                 name: text(document, "title").unwrap_or_default(),
@@ -773,7 +965,7 @@ impl World {
                 trashed: text(document, "deleted_at").is_some(),
                 created,
                 updated: text(document, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
         for (document, folder) in &concepts.filed {
@@ -790,7 +982,7 @@ impl World {
     fn load_photos(&mut self, door: &dyn Door, concepts: &Concepts) -> Result<(), String> {
         let assets = door.table(
             "media_asset",
-            "asset_id, kind, title, captured_at, created_at, updated_at, deleted_at",
+            "asset_id, kind, title, captured_at, created_at, updated_at, deleted_at, purge_at",
             "created_at",
             "asset_id",
         )?;
@@ -801,6 +993,10 @@ impl World {
             let id = text(asset, "asset_id").unwrap_or_default();
             let mut fields = BTreeMap::new();
             fields.insert("starred", Val::Bool(concepts.starred("media.asset", &id)));
+            let mut extra = BTreeMap::new();
+            if let Some(purge) = text(asset, "purge_at") {
+                extra.insert("purge_at", purge);
+            }
             self.insert(Row {
                 kind: Kind::Photo,
                 name: text(asset, "title")
@@ -812,7 +1008,7 @@ impl World {
                 trashed: text(asset, "deleted_at").is_some(),
                 created: text(asset, "created_at").unwrap_or_default(),
                 updated: text(asset, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
         Ok(())
@@ -872,7 +1068,7 @@ impl World {
         let items = door.table(
             "locker_item",
             "item_id, type, title, username, url, notes, created_at, updated_at, deleted_at, \
-             key_id, password, otp_seed, card_number, cvv, content, cardholder, expiry, brand, \
+             purge_at, key_id, password, otp_seed, card_number, cvv, content, cardholder, expiry, brand, \
              fullname, email, phone, address, network",
             "created_at",
             "item_id",
@@ -900,6 +1096,9 @@ impl World {
             let mut extra = BTreeMap::new();
             if let Some(key) = text(item, "key_id") {
                 extra.insert("key_id", key);
+            }
+            if let Some(purge) = text(item, "purge_at") {
+                extra.insert("purge_at", purge);
             }
             for (_, column) in crate::native::meta::REVEAL_FIELDS {
                 if let Some(sealed) = text(item, column) {
@@ -974,8 +1173,8 @@ impl World {
 /// The concept plane: stars and folders.
 struct Concepts {
     starred: BTreeSet<(String, String)>,
-    /// `(id, label, created, updated)`.
-    folders: Vec<(String, String, String, String)>,
+    /// `(id, label, created, updated, parent)`.
+    folders: Vec<(String, String, String, String, Option<String>)>,
     /// `(document, folder)` — not the root.
     filed: Vec<(String, String)>,
     root_folder: Option<String>,
@@ -999,7 +1198,7 @@ impl Concepts {
         let folders_scheme = scheme_of(FOLDER_SCHEME);
         let concepts = door.table(
             "core_concept",
-            "concept_id, scheme_id, notation, pref_label, created_at, updated_at",
+            "concept_id, scheme_id, notation, pref_label, broader_concept_id, created_at, updated_at",
             "created_at",
             "concept_id",
         )?;
@@ -1024,6 +1223,7 @@ impl Concepts {
                         text(concept, "pref_label").unwrap_or_default(),
                         text(concept, "created_at").unwrap_or_default(),
                         text(concept, "updated_at").unwrap_or_default(),
+                        text(concept, "broader_concept_id"),
                     ));
                 }
             }

@@ -18,6 +18,7 @@ path = "src/bin/nativetools.rs"
 
 [dependencies]
 centraid-assist = { path = "../assist" }
+centraid-apps-agenda = { path = "../apps/agenda" }
 centraid-apps-kit = { path = "../apps/kit" }
 centraid-apps-tally = { path = "../apps/tally" }
 centraid-ontology = { path = "../ontology" }
