@@ -544,26 +544,42 @@ struct Op {
     op: Option<String>,
 }
 
-/// One answer for a `render` request line, or `None` when the line is another op's.
+/// The op of a request line. The Python client writes `{"op":"…",…` compactly, so the name is read off the front of the
+/// line; any other spelling of the same JSON takes the slow way, a parse.
+fn op_of(line: &str) -> Option<std::borrow::Cow<'_, str>> {
+    if let Some(rest) = line.strip_prefix("{\"op\":\"")
+        && let Some(end) = rest.find('"')
+        && !rest[..end].contains('\\')
+    {
+        return Some(std::borrow::Cow::Borrowed(&rest[..end]));
+    }
+    serde_json::from_str::<Op>(line)
+        .ok()?
+        .op
+        .map(std::borrow::Cow::Owned)
+}
+
+/// One answer for a transcript request line, or `None` when the line is another op's.
 ///
-/// `{"op":"render","messages":[<records>]}` answers
-/// `{"text":…,"spans":[[start,end],…],"prompt":<text + the generation header>}`;
-/// `{"op":"render_many","conversations":[[<records>],…]}` answers `{"renders":[<one answer each>]}`. A refusal
+/// `{"op":"render","messages":[<records>]}` answers `{"text":…,"spans":[[start,end],…]}`;
+/// `{"op":"prompt","messages":[…]}` answers `{"prompt":<the text + the generation header>}`;
+/// `{"op":"render_many","conversations":[[<records>],…]}` answers `{"renders":[<one render answer each>]}`. A refusal
 /// is `{"error":…}`. `{"op":"call_text","tool":…,"args":{…}}` answers `{"text":<the call as the template writes it>}`
 /// and `{"op":"user_content","text":…,"block":<the runtime's block or null>}` answers `{"text":<the user turn's content>}`.
 /// The records are read with their map order kept ([`Json`]).
 #[must_use]
 pub fn answer_line(line: &str) -> Option<String> {
-    let op = serde_json::from_str::<Op>(line).ok()?.op?;
-    match op.as_str() {
-        "render" => {
+    let op = op_of(line)?;
+    match &*op {
+        "render" | "prompt" => {
             #[derive(Deserialize)]
             struct One {
                 messages: Vec<Message>,
             }
             Some(match serde_json::from_str::<One>(line) {
-                Ok(one) => answer_one(&one.messages),
-                Err(error) => error_line(&format!("render: {error}")),
+                Ok(one) if &*op == "render" => answer_render(&one.messages),
+                Ok(one) => answer_prompt(&one.messages),
+                Err(error) => error_line(&format!("{op}: {error}")),
             })
         }
         "render_many" => {
@@ -576,7 +592,7 @@ pub fn answer_line(line: &str) -> Option<String> {
                     let renders: Vec<String> = many
                         .conversations
                         .iter()
-                        .map(|messages| answer_one(messages))
+                        .map(|messages| answer_render(messages))
                         .collect();
                     format!("{{\"renders\":[{}]}}", renders.join(","))
                 }
@@ -619,23 +635,25 @@ fn error_line(message: &str) -> String {
     json!({ "error": message }).to_string()
 }
 
-fn answer_one(messages: &[Message]) -> String {
+fn answer_render(messages: &[Message]) -> String {
     #[derive(Serialize)]
-    struct Answer {
-        text: String,
-        spans: Vec<(usize, usize)>,
-        prompt: String,
+    struct Answer<'a> {
+        text: &'a str,
+        spans: &'a [(usize, usize)],
     }
     match render(messages) {
-        Ok(rendered) => {
-            let prompt = format!("{}{}", rendered.text, assistant_open());
-            serde_json::to_string(&Answer {
-                text: rendered.text,
-                spans: rendered.spans,
-                prompt,
-            })
-            .unwrap_or_else(|error| error_line(&error.to_string()))
-        }
+        Ok(rendered) => serde_json::to_string(&Answer {
+            text: &rendered.text,
+            spans: &rendered.spans,
+        })
+        .unwrap_or_else(|error| error_line(&error.to_string())),
+        Err(error) => error_line(&error.to_string()),
+    }
+}
+
+fn answer_prompt(messages: &[Message]) -> String {
+    match render_prompt_for_generation(messages) {
+        Ok(prompt) => json!({ "prompt": prompt }).to_string(),
         Err(error) => error_line(&error.to_string()),
     }
 }

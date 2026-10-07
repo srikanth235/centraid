@@ -95,9 +95,31 @@ fn the_line_protocol_answers_what_render_does() {
     let answer: serde_json::Value = serde_json::from_str(&answer_line(&request).unwrap()).unwrap();
     assert_eq!(answer["text"], rendered.text);
     assert_eq!(answer["spans"], serde_json::json!(rendered.spans));
+    let request = request.replacen("\"render\"", "\"prompt\"", 1);
+    let answer: serde_json::Value = serde_json::from_str(&answer_line(&request).unwrap()).unwrap();
     assert_eq!(
         answer["prompt"],
         render_prompt_for_generation(&case.messages).unwrap()
     );
+    // many transcripts in one request answer as each would alone, a refusal in its own place
+    let again = request.replacen("\"prompt\"", "\"render\"", 1);
+    let messages = &again["{\"op\":\"render\",\"messages\":".len()..again.len() - 1];
+    let many = format!(
+        "{{\"op\":\"render_many\",\"conversations\":[{messages},[{{\"role\":\"tool\",\"content\":\"x\"}},{{\"role\":\"system\",\"content\":\"s\"}}],{messages}]}}"
+    );
+    let many: serde_json::Value = serde_json::from_str(&answer_line(&many).unwrap()).unwrap();
+    let renders = many["renders"].as_array().unwrap();
+    assert_eq!(renders.len(), 3);
+    assert_eq!(renders[0]["text"], rendered.text);
+    assert_eq!(renders[2], renders[0]);
+    assert!(renders[1]["error"].is_string());
+    // a refusal is an answer; another op's line is not ours, spelled compactly or not
+    let late = r#"{"op":"render","messages":[{"role":"user","content":"x"},{"role":"system","content":"s"}]}"#;
+    assert!(
+        answer_line(late)
+            .unwrap()
+            .contains("system message must come first")
+    );
+    assert!(answer_line(r#"{ "op": "render", "messages": [] }"#).is_some());
     assert!(answer_line(r#"{"op":"compile"}"#).is_none());
 }

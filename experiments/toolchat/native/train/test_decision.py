@@ -18,6 +18,15 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import fmt  # noqa: E402
+import render  # noqa: E402
+
+
+def assistant_body(message: dict) -> str:
+    """What the renderer writes of one assistant record from just after `<think>\\n` through `<|im_end|>`: its trained region."""
+    text, spans = render.render([dict(message, role="assistant")])
+    (a, b), = spans
+    return text[a:b]
+
 
 TOOLS = [{"type": "function", "function": {"name": n, "description": "d", "parameters": {"type": "object", "properties": {}}}}
          for n in ("act", "answer", "ask")]
@@ -45,8 +54,7 @@ def texts(body, spans):
 
 class SpanRules(unittest.TestCase):
     def body(self, think, tool="act", args=ARGS):
-        import render
-        return render._assistant_body({"think": think, "tool": tool, "args": args})
+        return assistant_body({"think": think, "tool": tool, "args": args})
 
     def think_texts(self, think, cfg=None):
         b = self.body(think)
@@ -117,8 +125,7 @@ class HardTier(unittest.TestCase):
     """The narrow hard tier inside the decision tokens (fmt.HardConfig)."""
 
     def body(self, think, tool="act", args=ARGS):
-        import render
-        return render._assistant_body({"think": think, "tool": tool, "args": args})
+        return assistant_body({"think": think, "tool": tool, "args": args})
 
     def test_defaults_are_one_constant_each(self):
         c = fmt.HardConfig()
@@ -456,8 +463,7 @@ class CopySpans(unittest.TestCase):
     """fmt.copy_char_spans: the think values that are verbatim copies of the user's message (text only, no tokenizer)."""
 
     def body(self, think, tool="act", args=ARGS):
-        import render
-        return render._assistant_body({"think": think, "tool": tool, "args": args})
+        return assistant_body({"think": think, "tool": tool, "args": args})
 
     def copies(self, think, message, cfg=None, **kw):
         b = self.body(think, **kw)

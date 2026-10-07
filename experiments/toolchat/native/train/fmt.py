@@ -607,7 +607,7 @@ def check_decisions(enc: dict, cfg: DecisionConfig | None = None) -> None:
             # arguments as the renderer wrote them, in order (only punctuation may be left out)
             vals = replace(cfg, param_names=False)
             got = "".join(text[s + a:s + b] for a, b, p in decision_char_spans(body, vals) if p == PART_CALL)
-            want = "".join(render._arg_value(v) for k, v in args.items() if k not in cfg.skip_params)
+            want = "".join(_arg_text(v) for k, v in args.items() if k not in cfg.skip_params)
             if re.sub(r"\W|_", "", got) != re.sub(r"\W|_", "", want):
                 raise AssertionError("decision text of the call %r != its arguments %r" % (got[:120], want[:120]))
         hard = cfg.hard
@@ -619,11 +619,17 @@ def check_decisions(enc: dict, cfg: DecisionConfig | None = None) -> None:
                 only = replace(hard, ref_params=(), param_names=False)
                 c0 = body.index(render.TOOL_CALL_OPEN)
                 got = "".join(body[c0 + a:c0 + b] for a, b in hard_call_spans(body[c0:], only))
-                want = "".join(render._arg_value(v) for v in hargs.values())
+                want = "".join(_arg_text(v) for v in hargs.values())
                 if not hard.json_keys:  # a date expression counts by its leaves: drop its `"key":`
                     want = re.sub(r'"[A-Za-z_][A-Za-z0-9_]*"\s*:', "", want)
                 if re.sub(r"\W|_", "", got) != re.sub(r"\W|_", "", want):
                     raise AssertionError("hard text of the call %r != its hard arguments %r" % (got[:120], want[:120]))
+
+
+def _arg_text(value) -> str:
+    """An argument's text as the renderer writes it (the runtime's rule: a mapping or a list as JSON, a boolean as `true`/`false`,
+    anything else as a string), read back from the call the runtime renders for it."""
+    return PARAM.search(render.call_text("_", {"p": value})).group(2)
 
 
 def encode(tok, ex: dict, default_tools=None, cfg: DecisionConfig | None = None) -> dict:

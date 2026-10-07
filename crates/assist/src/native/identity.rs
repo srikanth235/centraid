@@ -1,15 +1,17 @@
 //! THE MODEL'S IDENTITY: which tokenizer the fine-tuned model reads, and the
 //! special strings of its chat and tool-call format, named once.
 //!
-//! The runtime's prompt (`prompt.rs`) and its call reader (`parse.rs`) spell
-//! these tokens from [`MODEL`]; `nativetools export` writes the same struct as
-//! `identity.json`, and `experiments/toolchat/native/render.py` reads that
-//! file instead of carrying its own literals, so the renderer that makes the
+//! The runtime's prompt (`prompt.rs`), its call reader (`parse.rs`) and the
+//! transcript renderer (`transcript.rs`) spell these tokens from [`MODEL`];
+//! `nativetools export` writes the same struct as `identity.json`, and
+//! `experiments/toolchat/native/render.py` reads that file for the constants
+//! it still names (the tokenizer id, the markers its tokenizer code looks for)
+//! instead of carrying its own literals, so the renderer that makes the
 //! training text and the prompt the runtime makes cannot name different
 //! tokens. The layout around the markers (a role name and a newline after
-//! `im_start`, a blank line between `think_close` and the call) stays in
-//! `render.py`, which `render.py`'s self-test checks against the tokenizer's
-//! own chat template.
+//! `im_start`, a blank line between `think_close` and the call) is written
+//! once, in `transcript.rs`, which `render.py`'s self-test checks against the
+//! tokenizer's own chat template.
 
 use serde::Serialize;
 

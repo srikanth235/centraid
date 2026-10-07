@@ -23,6 +23,11 @@
 //! `{"op":"peek_repeat","text":<raw model message>}` (would this call repeat
 //! the previous one: `{"repeat": bool, "strikes": repeats answered so far}`).
 //!
+//! `think` also serves the transcript renderer of `transcript.rs`, which Python's `render.py` is a client of:
+//! `{"op":"render","messages":[<records>]}` answers `{"text":…,"spans":[[start,end],…],"prompt":…}` (spans in code points),
+//! `{"op":"render_many","conversations":[…]}` answers `{"renders":[…]}`, `{"op":"call_text","tool":…,"args":{…}}` and
+//! `{"op":"user_content","text":…,"block":…}` answer `{"text":…}`.
+//!
 //! `think` is the stateless compiler of `think.rs`, with no vault behind it: one JSON request per line on stdin, one JSON
 //! answer on stdout. `{"op":"compile","think":…,"dates":<the prompt's dates line or null>,"mode":"v3.1"|"v4"}` answers
 //! `{"call":{"tool":…,"args":{…}}}` (the arguments in the order a call writes them) or
@@ -34,6 +39,7 @@ use std::io::{BufRead as _, Write as _};
 use std::path::Path;
 use std::process::ExitCode;
 
+use centraid_assist::native::transcript;
 use centraid_nativetools::prompt::ToolsMode;
 use centraid_nativetools::think::{Call, Context, RowText, TraceMode};
 use centraid_nativetools::{Flags, Session, dates, export, parse, seed, think};
@@ -201,9 +207,14 @@ fn think() -> ExitCode {
         if line.trim().is_empty() {
             continue;
         }
-        let response = match serde_json::from_str::<Value>(&line) {
-            Ok(request) => think_answer(&request),
-            Err(error) => format!("{}", json!({"error": format!("not JSON: {error}")})),
+        // the transcript ops read the line themselves: a record's maps keep their key order
+        let response = if let Some(answer) = transcript::answer_line(&line) {
+            answer
+        } else {
+            match serde_json::from_str::<Value>(&line) {
+                Ok(request) => think_answer(&request),
+                Err(error) => format!("{}", json!({"error": format!("not JSON: {error}")})),
+            }
         };
         if writeln!(stdout, "{response}")
             .and_then(|()| stdout.flush())
