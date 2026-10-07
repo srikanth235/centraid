@@ -45,8 +45,9 @@ pub struct Ran {
 }
 
 /// A live vault, as the runtime sees it. See the module docs for what each implementation
-/// owes.
-pub trait Door {
+/// owes. `Send` because a chat's session, which owns its door, is held by the core across the
+/// calls of a turn and moves between the threads a shell calls on.
+pub trait Door: Send {
     /// Every row of one table, through the kit's paged read (`PageQuery` over `table`, ordered by
     /// `sort` then `pk`). `columns` is the comma-separated list to read; a table or a column the
     /// runtime never names is never read.

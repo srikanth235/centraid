@@ -614,6 +614,7 @@ dependencies = [
  "centraid-gateway",
  "centraid-identity",
  "centraid-media",
+ "centraid-nativetools",
  "centraid-ontology",
  "centraid-protocol",
  "centraid-search",

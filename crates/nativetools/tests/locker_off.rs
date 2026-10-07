@@ -4,8 +4,7 @@
 
 mod common;
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use centraid_nativetools::vaultio::{Door, Handle, Ran, SetClock};
 use centraid_nativetools::{Flags, Session, dates, vaultio};
@@ -26,7 +25,7 @@ struct Log {
 /// A door that records what it is asked and answers from a real vault file.
 struct Recording {
     inner: Handle,
-    log: Rc<RefCell<Log>>,
+    log: Arc<Mutex<Log>>,
 }
 
 impl Door for Recording {
@@ -38,7 +37,8 @@ impl Door for Recording {
         pk: &str,
     ) -> Result<Vec<centraid_apps_kit::row::Row>, String> {
         self.log
-            .borrow_mut()
+            .lock()
+            .unwrap()
             .tables
             .push((table.to_owned(), columns.to_owned()));
         Door::table(&self.inner, table, columns, sort, pk)
@@ -54,12 +54,12 @@ impl Door for Recording {
         text: &str,
         limit: usize,
     ) -> Result<Vec<centraid_search::Target>, String> {
-        self.log.borrow_mut().searches.push(entity.to_owned());
+        self.log.lock().unwrap().searches.push(entity.to_owned());
         Door::search(&self.inner, entity, text, limit)
     }
 
     fn run(&self, command: &str, input: Value) -> Result<Ran, String> {
-        self.log.borrow_mut().commands.push(command.to_owned());
+        self.log.lock().unwrap().commands.push(command.to_owned());
         Door::run(&self.inner, command, input)
     }
 
@@ -76,12 +76,12 @@ impl Door for Recording {
     }
 
     fn seal(&self, item_id: &str, value: &str) -> Result<(String, String), String> {
-        self.log.borrow_mut().seals += 1;
+        self.log.lock().unwrap().seals += 1;
         Door::seal(&self.inner, item_id, value)
     }
 
     fn unseal(&self, key_id: &str, item_id: &str, sealed: &str) -> Result<String, String> {
-        self.log.borrow_mut().unseals += 1;
+        self.log.lock().unwrap().unseals += 1;
         Door::unseal(&self.inner, key_id, item_id, sealed)
     }
 }
@@ -94,14 +94,14 @@ fn flags(locker: bool) -> Flags {
 }
 
 /// A session over the world through a recording door.
-fn recorded(world: &World, locker: bool) -> (Session, Rc<RefCell<Log>>) {
+fn recorded(world: &World, locker: bool) -> (Session, Arc<Mutex<Log>>) {
     let now = dates::parse_now(TODAY).expect("a date");
     let clock = SetClock::at(vaultio::millis_of(now));
     let inner = Handle::open(world.path(), clock, "locker-off").expect("the vault opens");
-    let log = Rc::new(RefCell::new(Log::default()));
+    let log = Arc::new(Mutex::new(Log::default()));
     let door = Recording {
         inner,
-        log: Rc::clone(&log),
+        log: Arc::clone(&log),
     };
     let session = Session::with_door(Box::new(door), now, "", flags(locker)).expect("it opens");
     (session, log)
@@ -168,7 +168,7 @@ fn with_the_locker_off_no_locker_table_and_no_sealed_column_is_read() {
     session.user("anything about the wifi");
     call(&mut session, "search", json!({"text": "wifi"}));
     call(&mut session, "find", json!({"kind": "note"}));
-    let log = log.borrow();
+    let log = log.lock().unwrap();
     assert!(
         !log.tables.is_empty(),
         "the world was read through the door"
@@ -201,7 +201,7 @@ fn the_recording_door_does_see_the_locker_when_the_policy_is_on() {
         shown["text"].as_str().unwrap().contains("hunter2"),
         "{shown}"
     );
-    let log = log.borrow();
+    let log = log.lock().unwrap();
     assert!(
         locker_reads(&log)
             .iter()
@@ -272,7 +272,7 @@ fn reveal_and_a_locker_kind_decline_sealed_egress() {
         let response = call(&mut session, tool, args);
         assert_sealed_egress(&response, what);
     }
-    let log = log.borrow();
+    let log = log.lock().unwrap();
     assert_eq!(locker_reads(&log), Vec::<String>::new());
     assert!(log.commands.is_empty(), "nothing ran: {:?}", log.commands);
     assert_eq!((log.seals, log.unseals), (0, 0));

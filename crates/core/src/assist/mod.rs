@@ -55,6 +55,7 @@ use crate::error::{CoreError, Result};
 use crate::handle::Handle;
 
 pub mod attach;
+pub mod door;
 pub mod reads;
 pub mod store;
 

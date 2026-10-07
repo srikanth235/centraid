@@ -326,6 +326,36 @@ pub fn invoke(
     request: &wire::Command,
     changes: &crate::events::ChangeFeed,
 ) -> Result<wire::CommandOutcome> {
+    let outcome = invoke_raw(vault, registry, principal, request, changes)?;
+    Ok(wire::CommandOutcome {
+        status: match outcome.status {
+            CommandStatus::Executed => wire::CommandStatus::Executed,
+            CommandStatus::Failed => wire::CommandStatus::Failed,
+        } as i32,
+        output: serde_json::to_vec(&outcome.output).map_err(|error| CoreError::Invariant {
+            context: format!("a handler's own output is not JSON: {error}"),
+        })?,
+        // THE AUTHOR'S SENTENCE, never the raw predicate. The predicate reaches
+        // the audit trail and never a member.
+        reason: outcome.reason.unwrap_or_default(),
+        invocation_id: outcome.invocation_id,
+        receipt_id: outcome.receipt_id,
+        revoked_at: None,
+    })
+}
+
+/// [`invoke`]'s gate order and change feed, answered as the vault's own
+/// outcome rather than the wire's: the chat's door (`assist::door`) needs the
+/// predicate that failed, which the wire answer deliberately drops, to tell the
+/// runtime WHY a write was refused. Same `invoke_key` rule, same
+/// after-the-commit change events.
+pub(crate) fn invoke_raw(
+    vault: &Vault,
+    registry: &Registry,
+    principal: &centraid_vault::Principal,
+    request: &wire::Command,
+    changes: &crate::events::ChangeFeed,
+) -> Result<centraid_vault::commands::CommandOutcome> {
     if request.invoke_key.is_empty() {
         // REQUIRED, unlike v0, where the fallback was the call's ORDINAL and
         // only stable for a handler making the same call sequence every time.
@@ -350,21 +380,7 @@ pub fn invoke(
     // screen redrawn from a transaction that could still roll back is the
     // failure this ordering exists to prevent.
     changes.tables_changed(&outcome.tables);
-    Ok(wire::CommandOutcome {
-        status: match outcome.status {
-            CommandStatus::Executed => wire::CommandStatus::Executed,
-            CommandStatus::Failed => wire::CommandStatus::Failed,
-        } as i32,
-        output: serde_json::to_vec(&outcome.output).map_err(|error| CoreError::Invariant {
-            context: format!("a handler's own output is not JSON: {error}"),
-        })?,
-        // THE AUTHOR'S SENTENCE, never the raw predicate. The predicate reaches
-        // the audit trail and never a member.
-        reason: outcome.reason.unwrap_or_default(),
-        invocation_id: outcome.invocation_id,
-        receipt_id: outcome.receipt_id,
-        revoked_at: None,
-    })
+    Ok(outcome)
 }
 
 /// The registered definition, so a shell can render a form for it.
