@@ -45,6 +45,7 @@ pub mod grammar;
 pub mod host;
 pub mod model;
 pub mod native;
+pub mod native_turn;
 pub mod prompt;
 pub mod result;
 pub mod suggest;
