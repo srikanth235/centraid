@@ -20,6 +20,36 @@
 //!   On the phone the Locker policy is off (`Flags::locker`), so `seal` and `unseal` are never
 //!   called and an implementation may refuse them.
 //!
+//! # What the core owes park and confirm (R-1088-2, R-1088-6)
+//!
+//! On the phone a session runs `Writes::Park` (`crate::native::park`): the runtime plans a turn's
+//! writes against a patched copy of the world and ends the turn with a pending write. During
+//! planning it calls [`Door::advance`], [`Door::mint_id`], [`Door::now_ms`] and the reads, and
+//! never [`Door::run`]: **nothing a card shows has touched the vault.** The writes happen only in
+//! `Session::confirm`, and the core's door must make them like this:
+//!
+//! * [`Door::run_keyed`] is `api::invoke` with `invoke_key` = the key it is given,
+//!   `<PendingWrite::id>:<step index>`. The key is derived from the pending write and the step's
+//!   place in it, so a confirm that is delivered twice (a retry after a dropped reply, a replayed
+//!   request) finds its steps already recorded by the vault's invocation ledger and writes nothing
+//!   more; the session answers the second confirm from memory as well, but the ledger is what holds
+//!   across a restart. The door must NOT mint a fresh key per call.
+//! * The change feed fires as it does for a screen's write (`ChangeFeed::tables_changed`), once per
+//!   step that ran, so every screen that reads those tables refreshes. The harness has no feed and
+//!   fires none.
+//! * A step the vault refuses comes back as a [`Ran`] with `ok` false (the check id in `predicate`,
+//!   the owner-facing sentence in `reason`), never an `Err`: `confirm` types it (`Confirmed::Refused`)
+//!   and names how many steps landed before it. A batch is not atomic across commands.
+//! * The reads (`table`, `tally`, `events`) see the vault as it is NOW, through the query path a
+//!   screen uses: `confirm` reads the rows its steps address again before it runs anything, and a
+//!   row that changed since the turn planned is a typed `Confirmed::Stale`, nothing written. A door
+//!   that served a cached world would make a stale card look fresh.
+//! * [`Door::events`] is `centraid_apps_agenda::occurrences` over the core's own `PageDoor`
+//!   (`VaultDoor`), the zone being the request's: the same function the harness's door calls, so the
+//!   chat and the Agenda tab cannot disagree about which day an event is on (R-1088-8).
+//! * [`Door::advance`] may do nothing on the phone (its clock is the device's), and [`Door::mint_id`]
+//!   must be unguessable-enough to be a row id: a parked create shows the id the confirm writes.
+//!
 //! A refusal by the vault is a value ([`Ran::ok`] false), never an `Err`: an `Err` is a door that
 //! could not answer at all.
 
