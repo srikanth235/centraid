@@ -52,7 +52,7 @@ step infers the rest. `parse4`/`render4` read and write it, `parse_any` picks th
 v3.1 think as v4 and checks that both compile to the same call.
 
 `check_slots` and `check_call3` are the trace-call consistency checks: a call rebuilt from the parsed slots
-equals the gold call in every field the slots decide. The Rust guard (crates/nativetools/src/trace.rs) parses the
+equals the gold call in every field the slots decide. The Rust guard (crates/assist/src/native/trace.rs) parses the
 three slots it enforces (intent, scope, refer) from the same text.
 """
 from __future__ import annotations
@@ -1595,7 +1595,7 @@ def date_from_compact(text: str, times: list[str]):
 # (`slots_json`) resolves it against the session.
 
 DATES_REF = re.compile(r"^dates\[(\d+)\](?: (past|upcoming))?$")
-DATE_KEY_ORDER = ("from", "to", "date", "unit", "rel", "name", "weekday", "time", "anchor")  # crates/nativetools/src/compile.rs
+DATE_KEY_ORDER = ("from", "to", "date", "unit", "rel", "name", "weekday", "time", "anchor")  # crates/assist/src/native/compile.rs
 READINGS = ("past", "upcoming")
 
 

@@ -10,14 +10,14 @@
 //!
 //! The runtime reads a person's date phrases in one place, `dates_line`: the
 //! phrases of a message it can resolve, each read into the expression the
-//! table pairs with it and evaluated by `crate::dates`, printed in the user
+//! table pairs with it and evaluated by `crate::native::dates`, printed in the user
 //! turn's block so the model copies a date instead of computing it.
 
 use jiff::ToSpan as _;
 use jiff::civil::{Date, DateTime, Time};
 use serde::Serialize;
 
-use crate::dates::{self, Expr, Resolved, Unit};
+use crate::native::dates::{self, Expr, Resolved, Unit};
 
 /// One worked example.
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -1137,7 +1137,7 @@ const COUNTED: [&str; 18] = [
 /// What may follow a day of the month that could also be a position, when the word before it
 /// says a date (nt15 R3a): not a noun the ordinal counts.
 fn counted_noun(word: &str) -> bool {
-    COUNTED.contains(&word) || crate::meta::Kind::parse(word).is_some()
+    COUNTED.contains(&word) || crate::native::meta::Kind::parse(word).is_some()
 }
 
 fn qualifier(word: &str) -> Option<i64> {

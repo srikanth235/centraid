@@ -520,9 +520,9 @@ class KeepWords(unittest.TestCase):
 
 
 class Lexicon(unittest.TestCase):
-    """The protected words cover every word the runtime reads in a message: arrays of crates/nativetools/src, and the cue
+    """The protected words cover every word the runtime reads in a message: arrays of crates/assist/src/native, and the cue
     regexes of eval/regen.py. A word added there and not here fails this test."""
-    SRC = HERE.parents[3] / "crates" / "nativetools" / "src"
+    SRC = HERE.parents[3] / "crates" / "assist" / "src" / "native"
     ARRAYS = {"act.rs": ["UNNAMING", "PICKED", "YES", "WITHHOLD"], "block.rs": ["PRONOUNS", "FIRST_PERSON", "SENSE"], "follow.rs": ["OTHER_NOT", "FILLER"],
               "ground.rs": ["WORD_LIKE", "BROAD", "SPANNING", "SINCE_ENDS", "BEFORE_SHORT_WEEKDAY", "WAITING", "UNITS", "TIME_SPANS", "ROW_MARKERS", "SETTERS",
                             "DESTINATIONS", "STATUS_WORDS", "EVERY_STATUS", "NEXT_NOT", "NUMBER_WORDS"],
@@ -530,7 +530,7 @@ class Lexicon(unittest.TestCase):
                              "BEFORE_MONTH", "BEFORE_YEAR", "EVENING", "MORNING", "UNITS", "AFTER_HOUR", "AFTER_DAY", "WRITE_WORDS", "ROW_FILLER"],
               "search.rs": ["STOPWORDS", "SHORT_STOP", "VERB_FORMS", "ARTICLES"], "dates_ctx.rs": ["UNITS"]}
 
-    @unittest.skipUnless((HERE.parents[3] / "crates" / "nativetools" / "src").is_dir(), "the runtime source is not here")
+    @unittest.skipUnless((HERE.parents[3] / "crates" / "assist" / "src" / "native").is_dir(), "the runtime source is not here")
     def test_every_word_of_the_runtime_arrays_is_protected(self):
         array = re.compile(r"(?:pub(?:\(crate\))? )?(?:const|static) ([A-Z_0-9]+): (?:\[&str; \d+\]|&\[&str\]) = &?\[(.*?)\];", re.S)
         tuples = re.compile(r"const ([A-Z_0-9]+): \[\(&str, i8\); \d+\] = \[(.*?)\];", re.S)

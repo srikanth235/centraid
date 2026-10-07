@@ -24,7 +24,7 @@ A report gives sessions, clean turns (turns not downstream of a session's first 
 | `data/` | the built artefacts of the current version: `train.jsonl.gz`, `train-val.jsonl.gz`, `README.md` (counts, hashes, the build command) |
 | `render.py` | the renderer shared by the runtime export and the trainer; the tokenizer id and the chat markers it writes are `identity.json` of the export, not literals (read from `export/` beside it in a job tree, else from `contracts/assist/export/`) |
 
-The runtime is the Rust crate `crates/nativetools`; `NATIVETOOLS` names the binary the Python tools drive. Its export (`nativetools export DIR`: tool schemas, kind card, tables, rendered prompts, `identity.json`) is committed under `contracts/assist/export/` and checked against a fresh export by `crates/nativetools/tests/export_fixture.rs`; `bundle.py` still ships a fresh export in the job tree.
+The runtime is `centraid_assist::native` (`crates/assist/src/native/`, #1088); `crates/nativetools` keeps the `nativetools` binary the Python tools drive (`NATIVETOOLS` names it), the world seeder and the export. Its export (`nativetools export DIR`: tool schemas, kind card, tables, rendered prompts, `identity.json`) is committed under `contracts/assist/export/` and checked against a fresh export by `crates/nativetools/tests/export_fixture.rs`; `bundle.py` still ships a fresh export in the job tree.
 
 ## The loop
 

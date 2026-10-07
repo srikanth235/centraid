@@ -19,11 +19,12 @@
 //! | [`result`] | What a read answers: cards to draw, a digest for the model. |
 //! | [`suggest`] | Three questions this vault can answer. |
 //! | [`eval`], [`cli`] | The routing eval set, its JSONL export, the accuracy harness and the `assist-eval` command line. |
+//! | [`native`] | The native tool runtime: eight flat tools over a vault, one metadata table, the date evaluator, observations and the system prompt (`experiments/toolchat/native/SPEC.md`). |
 //! | [`testing`] | Deterministic stand-ins for the engine and the vault. |
 //!
 //! # WHAT THIS CRATE DOES NOT HAVE
 //!
-//! No SQL, no connection, no engine, and no persistence of its own: a
+//! No SQL, no connection of its own, no engine, and no persistence of its own: a
 //! [`turn::Session`] is in memory and ends with the app. What was said is saved
 //! by `crates/core` through the `chat.*` commands, and a stored thread comes
 //! back through [`turn::Session::restore`] (R-CHAT-1). The read goes through
@@ -32,7 +33,9 @@
 //! binding implements.
 //!
 //! v1 is READ-ONLY. A write would be a second kind of route that parks behind a
-//! confirm card; nothing here can express one yet, deliberately.
+//! confirm card; nothing here can express one yet, deliberately. [`native`] is the other
+//! runtime in this crate (#1088): the flat tool surface the fine-tuning loop trains, which does
+//! write, through typed vault commands and never SQL.
 
 pub mod attach;
 pub mod call;
@@ -41,6 +44,7 @@ pub mod eval;
 pub mod grammar;
 pub mod host;
 pub mod model;
+pub mod native;
 pub mod prompt;
 pub mod result;
 pub mod suggest;

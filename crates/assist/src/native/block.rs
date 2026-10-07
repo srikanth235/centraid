@@ -24,11 +24,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::meta::{Kind, LOOKUP_CAP, ROW_CAP, Via};
-use crate::render;
-use crate::search::{can_name, fold, spellings_of};
-use crate::session::Session;
-use crate::world::{Key, Val, World};
+use crate::native::meta::{Kind, LOOKUP_CAP, ROW_CAP, Via};
+use crate::native::render;
+use crate::native::search::{can_name, fold, spellings_of};
+use crate::native::session::Session;
+use crate::native::world::{Key, Val, World};
 
 /// Result sets the focus line holds, newest first.
 pub(crate) const FOCUS_SETS: usize = 3;
@@ -256,9 +256,9 @@ pub(crate) fn sets_parts(session: &Session) -> SetsParts {
         } else {
             0
         };
-        let live = crate::prompt::live_numbers(session, &numbered[..take]);
+        let live = crate::native::prompt::live_numbers(session, &numbered[..take]);
         named.extend(live.iter().copied());
-        let rows = crate::prompt::named_rows(session, &live);
+        let rows = crate::native::prompt::named_rows(session, &live);
         budget -= rows.len();
         let hidden = if lists_rows {
             set.keys.len().saturating_sub(rows.len())
@@ -340,7 +340,7 @@ pub(crate) fn acted_rows(session: &Session) -> Vec<usize> {
             rows.push(mark.number);
         }
     }
-    crate::prompt::live_numbers(session, &rows)
+    crate::native::prompt::live_numbers(session, &rows)
 }
 
 /// The written rows the focus line can name: the last `LOOKUP_CAP` of
@@ -374,7 +374,7 @@ pub(crate) fn acted_part(session: &Session, named: &BTreeSet<usize>) -> Option<S
     let hidden = rows.len().saturating_sub(LOOKUP_CAP);
     let mut part = format!(
         "acted {}",
-        crate::prompt::named_rows(session, &rows[hidden..]).join(", ")
+        crate::native::prompt::named_rows(session, &rows[hidden..]).join(", ")
     );
     if hidden > 0 {
         part.push_str(&format!(" +{hidden} earlier"));
@@ -698,7 +698,7 @@ fn ordinal_asks(message: &str) -> Vec<(String, Ask)> {
 fn pick_list(session: &Session) -> Option<(Vec<usize>, usize)> {
     let (turn, options) = &session.last_ask;
     let (list, hidden) = if turn + 1 == session.turn && !options.is_empty() {
-        let live = crate::prompt::live_numbers(session, options);
+        let live = crate::native::prompt::live_numbers(session, options);
         let hidden = live.len().saturating_sub(ROW_CAP);
         (live.into_iter().take(ROW_CAP).collect::<Vec<_>>(), hidden)
     } else {
@@ -720,7 +720,7 @@ fn pick_list(session: &Session) -> Option<(Vec<usize>, usize)> {
                 .filter_map(|key| session.numbers.get(key).copied())
                 .collect();
             let take = numbered.len().min(budget);
-            let live = crate::prompt::live_numbers(session, &numbered[..take]);
+            let live = crate::native::prompt::live_numbers(session, &numbered[..take]);
             budget -= live.len();
             let hidden = set.keys.len().saturating_sub(live.len());
             if set.note.is_none() {

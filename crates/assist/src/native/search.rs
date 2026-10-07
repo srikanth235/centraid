@@ -15,10 +15,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
-use crate::meta::{Kind, PREGROUND_CAP, lookup_shown};
-use crate::render;
-use crate::session::{Outcome, ResultSet, Session};
-use crate::world::{Key, Row, Val};
+use crate::native::meta::{Kind, PREGROUND_CAP, lookup_shown};
+use crate::native::render;
+use crate::native::session::{Outcome, ResultSet, Session};
+use crate::native::world::{Key, Row, Val};
 
 /// The FTS domains and the model kind each answers for.
 const FTS: &[(&str, Kind)] = &[
@@ -201,7 +201,7 @@ const VERB_FORMS: &[&str] = &[
 /// Whether a message token is a verb word rather than a name.
 fn is_verb_word(token: &str) -> bool {
     VERB_FORMS.contains(&token)
-        || crate::meta::VERBS
+        || crate::native::meta::VERBS
             .iter()
             .any(|verb| verb.name.split('_').any(|part| part == token))
 }
@@ -583,7 +583,7 @@ pub(crate) fn name_in_part(
     let content: Vec<Spoken> = spoken_tokens(text)
         .into_iter()
         .filter(|token| !token.is_article())
-        .filter(|token| !token.single().is_some_and(crate::meta::kind_word))
+        .filter(|token| !token.single().is_some_and(crate::native::meta::kind_word))
         .collect();
     let hits: Vec<(Key, u32)> = ranked_with(session, text, kinds, false, false)
         .into_iter()
@@ -866,7 +866,7 @@ pub fn search(session: &mut Session, args: &Map<String, Value>) -> Result<Outcom
                 let parsed = Kind::parse(part).ok_or_else(|| {
                     format!(
                         "error: no kind \"{part}\". kinds: any, {}.",
-                        crate::whr::kind_names()
+                        crate::native::whr::kind_names()
                     )
                 })?;
                 out.push(parsed);
@@ -1091,7 +1091,7 @@ fn near_candidate(token: &str) -> bool {
 }
 
 /// Whether a message word reaches a row only as a NEAR SPELLING (nt15 R3c, R3e): one edit
-/// (`crate::resolve::one_edit`) from a word of the row's names with the same first letter (a slip
+/// (`crate::native::resolve::one_edit`) from a word of the row's names with the same first letter (a slip
 /// is rarely the first letter: `brazil` for `Brasil`, not `right` for `night`), and not the plain
 /// plural or singular of it (`logins` for `login` is a category, not a slip); or the one word the
 /// words of a name make when said joined, or one edit from it (`weijie` for `Wei Jie`).
@@ -1106,7 +1106,9 @@ fn near_spelling(token: &str, names: &[&str], spelled: &[String]) -> bool {
         })
     };
     if spelled.iter().any(|word| {
-        word.chars().next() == first && !plural(word) && crate::resolve::one_edit(token, word)
+        word.chars().next() == first
+            && !plural(word)
+            && crate::native::resolve::one_edit(token, word)
     }) {
         return true;
     }
@@ -1116,7 +1118,8 @@ fn near_spelling(token: &str, names: &[&str], spelled: &[String]) -> bool {
             (from + 1..words.len()).any(|to| {
                 let joined = words[from..=to].concat();
                 joined == token
-                    || (joined.chars().next() == first && crate::resolve::one_edit(token, &joined))
+                    || (joined.chars().next() == first
+                        && crate::native::resolve::one_edit(token, &joined))
             })
         })
     })
@@ -1211,9 +1214,9 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
     // WHAT THE MESSAGE POINTS AT WITHOUT NAMING IT: the container of the focus
     // rows when the message says "that album" leads the line; the person's own
     // row, for "my balance", closes it and only when no other person is in play
-    // (`crate::block`).
+    // (`crate::native::block`).
     let mut leading: Vec<Key> = Vec::new();
-    leading.extend(crate::block::container_hit(session, message));
+    leading.extend(crate::native::block::container_hit(session, message));
     let me = session.world.me_key();
     let other = found
         .iter()
@@ -1226,7 +1229,7 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
                 || (hit.hits > 0
                     && usize::try_from(hit.score).is_ok_and(|score| score >= 3 * hit.hits)))
     });
-    let closing = crate::block::me_hit(session, message, other, group_named);
+    let closing = crate::native::block::me_hit(session, message, other, group_named);
     let reach: Vec<usize> = (0..tokens.len())
         .map(|at| found.iter().filter(|hit| hit.reached.contains(&at)).count())
         .collect();
@@ -1274,7 +1277,7 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
     }
     // A NAME MANY ROWS SHARE is cut (`Dentist` ×19): the rows the conversation
     // touched and the nearest to today, then `+n more "Dentist"`.
-    let copies = crate::block::same_name(
+    let copies = crate::native::block::same_name(
         session,
         &found.iter().map(|hit| hit.key.clone()).collect::<Vec<_>>(),
     );

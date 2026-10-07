@@ -44,7 +44,7 @@ NEVER TOUCHED (by any op; a test checks the sequence of these tokens, case folde
     all, every, both, else, besides, apart, except, due, open, done, finished, overdue, still, left, remaining, trash,
     delete, undo, never mind, wifi, password, diary, journal, ...); currency words; the cues of a decline (text, send,
     invent, wipe, everything, forget it, ...); every word the runtime reads in a message (`PROTECTED` is their union with
-    the lists above: the arrays of crates/nativetools/src and the cue regexes of eval/regen.py, which
+    the lists above: the arrays of crates/assist/src/native and the cue regexes of eval/regen.py, which
     authored/test_noise.py compares against the sources); anything inside quotes; addresses and other glued strings;
     acronyms; and the `keep` words.
 `keep` is for what the gold repeats: the words a created or edited row's text must carry (`keep_words(turn)` reads them
@@ -90,7 +90,7 @@ def _w(text: str) -> frozenset[str]:
 # What is never touched
 # ---------------------------------------------------------------------------------------------
 
-# the arrays of crates/nativetools/src that read a message (act.rs UNNAMING PICKED YES WITHHOLD; block.rs PRONOUNS
+# the arrays of crates/assist/src/native that read a message (act.rs UNNAMING PICKED YES WITHHOLD; block.rs PRONOUNS
 # FIRST_PERSON SENSE; follow.rs; ground.rs; phrases.rs, WEEKDAYS and MONTHS included; search.rs STOPWORDS SHORT_STOP
 # VERB_FORMS ARTICLES; dates_ctx.rs): `test_noise.RuntimeLexicon` rereads them and fails on a word this set lacks
 RUNTIME = _w("""

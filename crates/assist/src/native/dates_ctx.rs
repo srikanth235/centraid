@@ -10,9 +10,9 @@ use std::collections::BTreeSet;
 
 use jiff::civil::Date;
 
-use crate::meta::Kind;
-use crate::phrases::{self, Context, Reading, RowDate};
-use crate::session::{Session, words};
+use crate::native::meta::Kind;
+use crate::native::phrases::{self, Context, Reading, RowDate};
+use crate::native::session::{Session, words};
 
 /// "the first" to "the thirty-first": a day of the month, as a person says it.
 fn ordinal_word(day: i8) -> String {
@@ -109,7 +109,7 @@ impl Session {
     /// The dated events a "before X" can anchor on: the pre-grounded rows and the focus line's.
     fn anchor_rows(&self) -> Vec<RowDate> {
         let mut numbers: Vec<usize> = self.preground.iter().copied().collect();
-        if let Some(line) = crate::prompt::focus_line(self) {
+        if let Some(line) = crate::native::prompt::focus_line(self) {
             let mut rest = line.as_str();
             while let Some(at) = rest.find('#') {
                 let digits: String = rest[at + 1..]

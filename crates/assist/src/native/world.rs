@@ -8,9 +8,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use centraid_apps_kit::row::Row as VaultRow;
 use centraid_apps_tally::queries::TallyData;
 
-use crate::dates::Stamp;
-use crate::meta::{Field, FieldType, Kind, Via};
-use crate::vaultio::{Handle, int, text};
+use crate::native::dates::Stamp;
+use crate::native::meta::{Field, FieldType, Kind, Via};
+use crate::native::vaultio::{Handle, int, text};
 
 pub const FLAGS_SCHEME: &str = "https://centraid.dev/schemes/flags";
 pub const FOLDER_SCHEME: &str = "https://centraid.dev/schemes/folders";
@@ -36,7 +36,9 @@ impl Val {
         match self {
             Self::Text(value) => format!("\"{value}\""),
             Self::Num(value) => match field.and_then(|field| field.unit) {
-                Some(unit) if unit != crate::meta::PRIORITY_SCALE => format!("{value} {unit}"),
+                Some(unit) if unit != crate::native::meta::PRIORITY_SCALE => {
+                    format!("{value} {unit}")
+                }
                 _ => value.to_string(),
             },
             Self::Money(minor, currency) => money(*minor, currency),
@@ -891,7 +893,7 @@ impl World {
             if let Some(key) = text(item, "key_id") {
                 extra.insert("key_id", key);
             }
-            for (_, column) in crate::meta::REVEAL_FIELDS {
+            for (_, column) in crate::native::meta::REVEAL_FIELDS {
                 if let Some(sealed) = text(item, column) {
                     extra.insert(column, sealed);
                 }

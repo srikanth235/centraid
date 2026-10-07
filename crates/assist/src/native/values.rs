@@ -5,10 +5,10 @@ use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
 
-use crate::meta::Kind;
-use crate::render;
-use crate::session::Session;
-use crate::world::{Key, Row, Val, World, units};
+use crate::native::meta::Kind;
+use crate::native::render;
+use crate::native::session::Session;
+use crate::native::world::{Key, Row, Val, World, units};
 
 type Bucket = BTreeMap<Option<String>, i64>;
 

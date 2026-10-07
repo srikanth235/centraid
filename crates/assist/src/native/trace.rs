@@ -35,9 +35,9 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 
-use crate::identity::MODEL;
-use crate::session::Session;
-use crate::world::Key;
+use crate::native::identity::MODEL;
+use crate::native::session::Session;
+use crate::native::world::Key;
 
 /// What the call is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

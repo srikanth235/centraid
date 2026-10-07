@@ -10,8 +10,8 @@
 
 use serde_json::Value;
 
-use crate::meta::Kind;
-use crate::session::{Session, words};
+use crate::native::meta::Kind;
+use crate::native::session::{Session, words};
 
 /// Words after "other" that make it part of a date or a figure of speech, not a cue.
 const OTHER_NOT: [&str; 12] = [
@@ -155,22 +155,24 @@ impl Session {
         // nickname) the message says word for word, when no other live row of the kind answers
         // to that name (a recurring series is no one row).
         let said: std::collections::BTreeSet<String> =
-            crate::search::spellings_of(&format!("{} {}", self.prev_message, self.message))
+            crate::native::search::spellings_of(&format!("{} {}", self.prev_message, self.message))
                 .into_iter()
                 .collect();
         for row in self.world.rows.values() {
             if row.trashed != trashed || !kinds.contains(&row.kind) {
                 continue;
             }
-            let named = crate::search::aliases(row).into_iter().any(|alias| {
-                let tokens = crate::search::spoken_tokens(alias);
-                let words = words(alias);
-                !tokens.is_empty()
-                    && (words.len() > 1 || words.iter().any(|word| word.chars().count() >= 4))
-                    && tokens
-                        .iter()
-                        .all(|token| token.is_among(true, |word| said.contains(word)))
-            });
+            let named = crate::native::search::aliases(row)
+                .into_iter()
+                .any(|alias| {
+                    let tokens = crate::native::search::spoken_tokens(alias);
+                    let words = words(alias);
+                    !tokens.is_empty()
+                        && (words.len() > 1 || words.iter().any(|word| word.chars().count() >= 4))
+                        && tokens
+                            .iter()
+                            .all(|token| token.is_among(true, |word| said.contains(word)))
+                });
             if !named {
                 continue;
             }
@@ -214,7 +216,7 @@ impl Session {
     /// "Dentist appointment"); the longest run of words that fits any row decides, and two rows
     /// that fit it are no answer.
     fn focus_row_named(&self, words_after: &[String], kinds: &[Kind]) -> Option<usize> {
-        let line = crate::prompt::focus_line(self)?;
+        let line = crate::native::prompt::focus_line(self)?;
         let mut rows: Vec<(usize, Vec<String>)> = Vec::new();
         let mut rest = line.as_str();
         while let Some(at) = rest.find('#') {

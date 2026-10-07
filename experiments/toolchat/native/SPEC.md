@@ -269,7 +269,7 @@ What the vault refuses and the model repairs stays an `error:` (§4.6): a schema
 
 ## 7. Reasoning (the slot trace)
 
-A short `<think>` block before each call: one `label: value` line per slot, in a fixed order. The slots say what the call is for (intent, verb, scope), which earlier rows it takes (refer, pick) and where its values come from (target, when), then state every argument of the call, so the call is a deterministic rendering of the think and the decoder writes it from the think instead of sampling it. Every value is a closed word, a quoted span of the user message, or an argument as the call carries it; nothing the runtime can compute (no row lists, no resolved dates). Each slot depends only on the message, the context and the slots above it. The format, the slot rules, the `refer:` rule and the compiler are in [CONTRACT_V3.md](CONTRACT_V3.md). The generator is `authored/trace.py`; the Rust guard (`crates/nativetools/src/trace.rs`) parses the three slots it enforces (intent, scope, refer) from the same text (§4.5).
+A short `<think>` block before each call: one `label: value` line per slot, in a fixed order. The slots say what the call is for (intent, verb, scope), which earlier rows it takes (refer, pick) and where its values come from (target, when), then state every argument of the call, so the call is a deterministic rendering of the think and the decoder writes it from the think instead of sampling it. Every value is a closed word, a quoted span of the user message, or an argument as the call carries it; nothing the runtime can compute (no row lists, no resolved dates). Each slot depends only on the message, the context and the slots above it. The format, the slot rules, the `refer:` rule and the compiler are in [CONTRACT_V3.md](CONTRACT_V3.md). The generator is `authored/trace.py`; the Rust guard (`crates/assist/src/native/trace.rs`) parses the three slots it enforces (intent, scope, refer) from the same text (§4.5).
 
 | slot | values | closed set defined in |
 | --- | --- | --- |
@@ -344,7 +344,7 @@ Checks: `authored/trace3_check.py` (the round trip through the decoder's own fun
 
 ## 9. Decoding
 
-Decoding is **free**: no grammar constrains the model's tokens, and the runtime reads what the model wrote (`crates/nativetools/src/parse.rs`, which also salvages leaked parameter syntax). Under HF `generate`, `train/decode.py` adds only:
+Decoding is **free**: no grammar constrains the model's tokens, and the runtime reads what the model wrote (`crates/assist/src/native/parse.rs`, which also salvages leaked parameter syntax). Under HF `generate`, `train/decode.py` adds only:
 
 - the **think guard** (§6.6): at `think_limit` think tokens `</think>` is forced (`think_cut`);
 - the **rendered call**: once the think closes, the call the think states is written by `fmt.call_of_think`, the function the data builder checks every authored call against, one forced token at a time (`rendered_call`); a think that does not state a whole call leaves the call to the model;

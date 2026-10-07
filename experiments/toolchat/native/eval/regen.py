@@ -113,7 +113,7 @@ import gold
 from lib import SECTION_KIND, load_world, turn_effect
 from score import Ids, judge_accept, match_value, value_list_match
 
-ROW_CAP = 12  # crates/nativetools/src/meta.rs: a write over this many rows is the runtime's to ask about
+ROW_CAP = 12  # crates/assist/src/native/meta.rs: a write over this many rows is the runtime's to ask about
 VOLATILE = {"completed"}  # fields the runtime stamps with the time of the write: any value will do
 CONVENTIONS = ("bulk-cap", "bare-plural", "series-ask", "refusal", "ask-options", "composed-refusal", "composed-ask",
                "composed-decline", "name-match", "status", "what-else", "container", "status-words", "next", "last-one",
@@ -128,7 +128,7 @@ KINDS_WITH_EFFECT = ("rows", "value", "act", "ask", "decline")
 # D-1044-8 and D-1044-13 (G2): "what else", "the other ones", "besides X", "apart from X", "the one after"
 WHAT_ELSE = re.compile(r"\b(?:else|other|others|remaining|besides|except|(?:apart|aside) from|ones? after)\b", re.I)
 MATCHED = re.compile(r'matched ".*?" to #\d+')
-# the notes the runtime's conventions add to a reply (crates/nativetools/src/ground.rs, session.rs; #1044)
+# the notes the runtime's conventions add to a reply (crates/assist/src/native/ground.rs, session.rs; #1044)
 NOTE_CONTAINER = "(active rows; add status = completed or all for the rest)"
 NOTE_STATUS_WORDS = "status: the message asks what is left; used status = open."
 NOTE_NEXT = "next: the message asks for the next one;"
@@ -1408,7 +1408,7 @@ def explain_broken_off(old: dict, new: dict, cx: Cx) -> str | None:
             + ", ".join(sorted(rows[0] - rows[1] | links[0] - links[1]))[:160])
 
 
-# K4, a bare plural is not "all". The words are the runtime's own closed list (crates/nativetools/src/ground.rs,
+# K4, a bare plural is not "all". The words are the runtime's own closed list (crates/assist/src/native/ground.rs,
 # `said_every_row` and `TIME_SPANS`; a test reads the source and fails when the two differ)
 EVERY_ROW = ("both", "everyone")  # always say every row
 EVERY_ROW_QUANTIFIERS = ("all", "every", "everything", "each", "whole", "entire")  # ... unless a stretch of time follows
@@ -1461,7 +1461,7 @@ def explain_bare_plural(old: dict, new: dict, cx: Cx) -> str | None:
 
 
 # M5d and M5e, a recurring event or task is asked about. What a message may say to aim at one instance of a series is read
-# from the runtime's own lists (crates/nativetools/src/act.rs `PICKED`, ground.rs `BROAD`, `SPANNING`, `DESTINATIONS`,
+# from the runtime's own lists (crates/assist/src/native/act.rs `PICKED`, ground.rs `BROAD`, `SPANNING`, `DESTINATIONS`,
 # `SETTERS`, `ROW_MARKERS`, `WEEKDAYS`, `WORD_LIKE`, `BEFORE_SHORT_WEEKDAY`, `MONTHS`; a test reads those sources and fails
 # when one differs) and from two lists of the rule's own, which no source holds: `NOT_A_PICK` and `STATED_PRONOUNS`
 PICKED = ("it", "them", "that", "this", "those", "these", "he", "she", "her", "him", "his", "they", "one", "ones", "too",
@@ -2031,7 +2031,7 @@ def composed_marks(session: dict, record: dict) -> set[tuple[int, int]]:
 # ---------------------------------------------------------------------------------------------
 #
 # The runtime ends a turn by composition at the call that causes it (an ambiguous or unmatched write, an `answer`
-# whose name reaches nothing, a refusal; crates/nativetools/src/compose.rs): the reference calls after that call are
+# whose name reaches nothing, a refusal; crates/assist/src/native/compose.rs): the reference calls after that call are
 # not sent. A `find` is a lookup and never ends a turn that way (SPEC §4.8): its miss is a reply the turn goes on
 # from. That is no verify problem when the outcome is of the kind the reference was heading for, an ask or a decline
 # after an ambiguous write or a dead end; it is one when the reference was heading for a write, which the data would
@@ -2047,7 +2047,7 @@ def composed_marks(session: dict, record: dict) -> set[tuple[int, int]]:
 # and that is where it is reported, never a verify problem of its own (`composed_problems`).
 
 COMPOSED_NAMES = ("composed-ask", "composed-decline", "composed-refusal", "composed-answer", "composed-apply")
-# the `compose.action` of the writes the runtime applies to rows it chose (crates/nativetools/src/act.rs `Decided`)
+# the `compose.action` of the writes the runtime applies to rows it chose (crates/assist/src/native/act.rs `Decided`)
 APPLY_ACTIONS = ("apply_all", "apply_near_spelling", "apply_other_kind")
 # the ends a reference may head for, by the outcome the runtime composed instead
 HEADING = {"composed-ask": ("ask", "decline"), "composed-decline": ("ask", "decline"),
@@ -2184,7 +2184,7 @@ def _read_miss(step: dict, ids: Ids) -> tuple[list[str], str] | None:
     or an `answer` with a `name` and no when, where or linked_to. A `find` that missed is a plain miss, `find_miss`:
     the turn goes on, it carries no rows and a hint is not an answer (SPEC §4.8). An `answer` that missed is the
     runtime's composed answer, `answer_empty`, `answer_near_spellings`, `answer_all_fits` or `answer_trashed`, its
-    rows the ones the reply carried (crates/nativetools/src/compose.rs)."""
+    rows the ones the reply carried (crates/assist/src/native/compose.rs)."""
     resp = step.get("response") or {}
     call, eff = resp.get("call") or {}, resp.get("effect") or {}
     args, compose = call.get("args") or {}, eff.get("compose") or {}

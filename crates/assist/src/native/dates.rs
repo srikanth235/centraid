@@ -1,7 +1,7 @@
 //! DATE EXPRESSIONS (SPEC §4.4): the model writes a small JSON object, the
 //! runtime evaluates it against `today` (or the target row's date) and echoes
 //! the absolute range. No English reaches this module; the phrase readings
-//! live in `crate::phrases`, which is data for the generator.
+//! live in `crate::native::phrases`, which is data for the generator.
 
 use jiff::civil::{Date, DateTime, Time};
 use jiff::{Span, ToSpan as _};

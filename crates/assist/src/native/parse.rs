@@ -3,9 +3,9 @@
 
 use serde_json::{Map, Value, json};
 
-use crate::identity::MODEL;
-use crate::meta;
-use crate::session::handle_list;
+use crate::native::identity::MODEL;
+use crate::native::meta;
+use crate::native::session::handle_list;
 
 /// Parameters whose value is a list of `#n` / `@n`.
 const HANDLE_LISTS: &[&str] = &["rows", "options", "exclude", "linked_to"];
@@ -107,7 +107,8 @@ pub fn parse_call(text: &str) -> Result<Value, String> {
 /// and with a kind name is `kind`. Only when the value says which. A key the
 /// tool really takes is never renamed: `open`'s own parameter is `row`.
 fn salvage(tool: &str, key: &str, raw: &str) -> Option<(String, Value)> {
-    if (key != "result" && key != "row") || crate::session::tool_params(tool).contains(&key) {
+    if (key != "result" && key != "row") || crate::native::session::tool_params(tool).contains(&key)
+    {
         return None;
     }
     let value = raw.trim();
@@ -124,7 +125,7 @@ fn salvage(tool: &str, key: &str, raw: &str) -> Option<(String, Value)> {
     } else {
         word.strip_suffix('s').unwrap_or(&word).to_owned()
     };
-    crate::meta::Kind::ALL
+    crate::native::meta::Kind::ALL
         .iter()
         .find(|kind| kind.name() == word)
         .map(|kind| ("kind".to_owned(), Value::String(kind.name().to_owned())))

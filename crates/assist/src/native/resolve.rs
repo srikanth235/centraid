@@ -31,9 +31,9 @@
 
 use std::collections::BTreeSet;
 
-use crate::search::{Spoken, aliases, fold, is_apostrophe, spellings_of, spoken_tokens};
-use crate::session::Session;
-use crate::world::{Key, Row};
+use crate::native::search::{Spoken, aliases, fold, is_apostrophe, spellings_of, spoken_tokens};
+use crate::native::session::Session;
+use crate::native::world::{Key, Row};
 
 /// The shortest prefix of a name word a person's word may be (`kit` for `kitchen`, never `ki`).
 const PREFIX_MIN: usize = 3;
@@ -152,7 +152,7 @@ struct Query {
 /// separator, so a hyphen, an underscore and a space are one.
 fn folded_words(text: &str, possessive: bool) -> Vec<String> {
     let text = if possessive {
-        crate::search::without_possessive(text)
+        crate::native::search::without_possessive(text)
     } else {
         text.to_owned()
     };
@@ -480,10 +480,10 @@ fn kin_reading(query: &str, rows: &[&Row]) -> Option<Resolution<Key>> {
     });
     let people: Vec<&&Row> = rows
         .iter()
-        .filter(|row| row.kind == crate::meta::Kind::Person)
+        .filter(|row| row.kind == crate::native::meta::Kind::Person)
         .filter(|row| {
             ["role", "nickname"].iter().any(|field| {
-                let Some(crate::world::Val::Text(text)) = row.field(field) else {
+                let Some(crate::native::world::Val::Text(text)) = row.field(field) else {
                     return false;
                 };
                 let have = folded_words(text, true).join(" ");
@@ -508,7 +508,7 @@ impl Session {
     pub(crate) fn resolve_name(
         &self,
         name: &str,
-        kinds: &[crate::meta::Kind],
+        kinds: &[crate::native::meta::Kind],
         trashed: bool,
         within: Option<&BTreeSet<Key>>,
     ) -> Resolution<Key> {

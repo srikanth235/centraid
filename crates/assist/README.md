@@ -15,6 +15,7 @@ This crate is the plane, and none of the engine or the vault. The vault side is 
 | [`result`](src/result.rs) | What a read answers: cards, and a deterministic digest for the model. |
 | [`suggest`](src/suggest.rs) | Three questions the current vault can answer, with its own names and titles in them. |
 | [`eval`](src/eval.rs), [`cli`](src/cli.rs), [`bin/assist-eval`](src/bin/assist-eval.rs) | The routing eval set, its JSONL export, the accuracy harness and the `assist-eval` command line. This crate links no engine; [`assist-eval-llama`](../assist-llama/src/bin/assist-eval-llama.rs) is the same command line with llama.cpp, and the only one that takes `--model`. |
+| [`native`](src/native.rs) | The native tool runtime, moved here from `crates/nativetools` (#1088, R-1088-4): eight flat tools over a vault, one metadata table they are all generated from, the date-expression evaluator, observations, the system prompt and the `Session` that runs a call. The fine-tuning loop and the phone run this one runtime; `crates/nativetools` keeps its binary, the world seeder and the export. It never writes SQL: reads go through the app kit's paged door and writes through typed commands. |
 | [`testing`](src/testing.rs) | Deterministic stand-ins: a scripted model, an oracle that says what a case expects, one that stalls until cancelled, a canned reader. |
 
 ## What a turn is
@@ -44,6 +45,6 @@ cargo run --release -p centraid-assist-llama --bin assist-eval-llama -- --model 
 | --- | --- |
 | SQL, in any form | `sql-confinement` scans this crate; a read is a name and arguments handed to `Reader` |
 | Locker in a prompt, a tool list or a scope | `App` has no such variant; `tests::locker_is_in_no_tool_and_in_no_scope`, and the eval fixture refuses it |
-| A write | nothing in `ToolSpec` or `Route` can carry one |
+| A write, in the read-only plane | nothing in `ToolSpec` or `Route` can carry one; the `native` runtime writes, through typed vault commands only |
 | A persisted transcript | a `Session` is a `Vec<Turn>` in memory; there is no table and no file |
 | A tool name that drifts | `tests::the_tool_names_are_the_fine_tunes_targets` |

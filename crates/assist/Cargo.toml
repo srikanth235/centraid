@@ -17,6 +17,13 @@ name = "assist-eval"
 path = "src/bin/assist-eval.rs"
 
 [dependencies]
+centraid-apps-kit = { path = "../apps/kit" }
+centraid-apps-tally = { path = "../apps/tally" }
+centraid-ontology = { path = "../ontology" }
+centraid-search = { path = "../search" }
+centraid-vault = { path = "../vault" }
+base64.workspace = true
+jiff.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

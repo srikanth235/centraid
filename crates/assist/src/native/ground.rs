@@ -56,11 +56,11 @@ use jiff::ToSpan as _;
 use jiff::civil::{Date, DateTime, Time};
 use serde_json::{Map, Value, json};
 
-use crate::dates::{self, Resolved};
-use crate::meta::{FieldType, Kind};
-use crate::session::Session;
-use crate::trace::Scope;
-use crate::whr::{Cond, Op};
+use crate::native::dates::{self, Resolved};
+use crate::native::meta::{FieldType, Kind};
+use crate::native::session::Session;
+use crate::native::trace::Scope;
+use crate::native::whr::{Cond, Op};
 
 const WEEKDAYS: [(&str, i8); 17] = [
     ("monday", 1),
@@ -577,7 +577,7 @@ pub(crate) fn said(message: &str, now: DateTime) -> Said {
             .iter()
             .any(|earlier| month_of(earlier).is_some());
         let month_here = month_of(word).is_some()
-            && (crate::phrases::month_is_here(word, prev.unwrap_or(""), month_before)
+            && (crate::native::phrases::month_is_here(word, prev.unwrap_or(""), month_before)
                 || next.is_some_and(is_number_like));
         if !in_a_name && (BROAD.contains(&word) || SPANNING.contains(&word)) {
             let after_weekday =
@@ -790,7 +790,7 @@ pub(crate) fn said(message: &str, now: DateTime) -> Said {
     out.same_time = words
         .windows(2)
         .any(|pair| pair[0] == "same" && matches!(pair[1].as_str(), "time" | "hour" | "slot"));
-    for reading in crate::phrases::read_dates(message, now) {
+    for reading in crate::native::phrases::read_dates(message, now) {
         match bare_pair(&reading.resolution) {
             Some((am, pm)) => out.bare.push((reading.phrase, am, pm)),
             None => out.timed |= reading.resolution.contains(':'),
@@ -1107,7 +1107,8 @@ impl Grounder<'_> {
             return None;
         }
         // the one decision of a bare hour (`phrases::at_hour`): no word and no row settle it here
-        let (pick, other) = if crate::phrases::at_hour(am.hour(), None, None).0 == pm.hour() {
+        let (pick, other) = if crate::native::phrases::at_hour(am.hour(), None, None).0 == pm.hour()
+        {
             (pm, am)
         } else {
             (am, pm)
@@ -1549,7 +1550,7 @@ impl Session {
         words
             .windows(2)
             .any(|pair| pair[0] == "same" && pair[1] == "time")
-            && !crate::phrases::read_dates(&self.message, self.now)
+            && !crate::native::phrases::read_dates(&self.message, self.now)
                 .iter()
                 .any(|reading| reading.resolution.contains(':'))
     }
@@ -1568,7 +1569,7 @@ impl Session {
             messages.push(self.prev_message.as_str());
         }
         for message in messages {
-            let readings = crate::phrases::read_dates(message, self.now);
+            let readings = crate::native::phrases::read_dates(message, self.now);
             let Some(clock) = readings
                 .iter()
                 .find(|reading| is_clock_only(&reading.resolution))
@@ -3123,7 +3124,7 @@ mod tests {
 
     /// The harvested phrase table: every create / reschedule of the training
     /// and validation sets whose user text holds a weekday, a month or an
-    /// ordinal (`tests/fixtures/phrases.json`: today, message, verb, the
+    /// ordinal (`crates/assist/tests/fixtures/phrases.json`: today, message, verb, the
     /// authored date expression). Each is replayed with the model's expression
     /// wrong in two ways: the right date a month early (a wrong month or
     /// year), and a structured weekday in the wrong week. A case passes when
@@ -3139,7 +3140,7 @@ mod tests {
             gold: Value,
         }
         let cases: Vec<Harvest> =
-            serde_json::from_str(include_str!("../tests/fixtures/phrases.json")).unwrap();
+            serde_json::from_str(include_str!("../../tests/fixtures/phrases.json")).unwrap();
         let mut total = [0_usize; 2];
         let mut passed = [0_usize; 2];
         let mut reasons: std::collections::BTreeMap<String, Vec<String>> = Default::default();

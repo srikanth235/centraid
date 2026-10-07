@@ -228,7 +228,7 @@ def edit_session(src: dict, turn_idx: int, step: int, call: dict) -> Edit:
 # --- the runtime's error families ----------------------------------------------------------------
 
 # id -> regex over the first line of the error text. Order matters (first match wins). The families are the classes of
-# `error:` constructors of crates/nativetools/src (act.rs, session.rs, dates.rs, whr.rs, search.rs), grouped by what a
+# `error:` constructors of crates/assist/src/native (act.rs, session.rs, dates.rs, whr.rs, search.rs), grouped by what a
 # model has to change to repair the call.
 FAMILIES: list[tuple[str, str]] = [
     ("repeated_call", r"^error: repeated call"),

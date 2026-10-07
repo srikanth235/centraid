@@ -2,9 +2,9 @@
 
 use jiff::civil::Date;
 
-use crate::dates::{Stamp, relative_label};
-use crate::meta::{FieldType, Kind};
-use crate::world::{Row, Val, World};
+use crate::native::dates::{Stamp, relative_label};
+use crate::native::meta::{FieldType, Kind};
+use crate::native::world::{Row, Val, World};
 
 /// `Fri 2026-06-19 09:00 (this Friday)`.
 #[must_use]
@@ -180,7 +180,7 @@ pub fn amounts(values: &[(i64, Option<String>)]) -> String {
     values
         .iter()
         .map(|(value, currency)| match currency {
-            Some(currency) => crate::world::money(*value, currency),
+            Some(currency) => crate::native::world::money(*value, currency),
             None => value.to_string(),
         })
         .collect::<Vec<_>>()
@@ -189,7 +189,7 @@ pub fn amounts(values: &[(i64, Option<String>)]) -> String {
 
 /// The name of a row for an echo, with its number.
 #[must_use]
-pub fn named(world: &World, number: usize, key: &crate::world::Key) -> String {
+pub fn named(world: &World, number: usize, key: &crate::native::world::Key) -> String {
     world
         .row(key)
         .map_or_else(|| format!("#{number}"), |row| short(number, row))
@@ -199,7 +199,7 @@ pub fn named(world: &World, number: usize, key: &crate::world::Key) -> String {
 /// "tasks")`. A list, notebook, album, folder or group is a container, and so
 /// is a task that has subtasks; nothing else holds rows.
 #[must_use]
-pub fn contents(world: &World, key: &crate::world::Key) -> Option<(usize, &'static str)> {
+pub fn contents(world: &World, key: &crate::native::world::Key) -> Option<(usize, &'static str)> {
     let link = key.0.holds()?;
     let count = world
         .edges
@@ -218,7 +218,7 @@ pub fn contents(world: &World, key: &crate::world::Key) -> Option<(usize, &'stat
 /// how many rows it holds after the closing quote, so the name part reads
 /// exactly as `named`'s; a task shows its subtasks only when it has some.
 #[must_use]
-pub fn grounded(world: &World, number: usize, key: &crate::world::Key) -> String {
+pub fn grounded(world: &World, number: usize, key: &crate::native::world::Key) -> String {
     let line = named(world, number, key);
     match contents(world, key) {
         Some((count, label)) if count > 0 || key.0.spec().container => {

@@ -6,7 +6,7 @@ the rows it chose: explained, no gold change, when the old gold accepts that dif
 
     python3 -m unittest test_composed -v      # from experiments/toolchat/native/eval
 
-Runs are built as the runtime reports them (crates/nativetools/src/compose.rs) against world A.
+Runs are built as the runtime reports them (crates/assist/src/native/compose.rs) against world A.
 """
 
 from __future__ import annotations

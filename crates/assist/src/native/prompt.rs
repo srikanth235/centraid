@@ -8,11 +8,11 @@ use std::collections::BTreeSet;
 
 use serde_json::{Value, json};
 
-use crate::dates::Unit;
-use crate::identity::MODEL;
-use crate::meta::{self, Kind, LOOKUP_CAP, VERBS};
-use crate::render;
-use crate::session::Session;
+use crate::native::dates::Unit;
+use crate::native::identity::MODEL;
+use crate::native::meta::{self, Kind, LOOKUP_CAP, VERBS};
+use crate::native::render;
+use crate::native::session::Session;
 
 /// The nested schema of a date expression, as `find` carries it.
 #[must_use]
@@ -479,7 +479,7 @@ pub fn prompt(session: &mut Session) -> Value {
     let today = session.today();
     let mut system = format!(
         "today: {} {today}\nme: {}\n\nkinds:\n{}",
-        crate::dates::weekday_name(today),
+        crate::native::dates::weekday_name(today),
         session.me_name,
         kind_card(&session.world.currency).join("\n")
     );
@@ -554,7 +554,7 @@ pub(crate) fn named_rows(session: &Session, numbers: &[usize]) -> Vec<String> {
 /// holds on to, so a follow-up ("put it in the new group", "the second one",
 /// "the first Neha") points at rows the model reads again here instead of
 /// finding them in a long transcript. Up to five parts, each only when the
-/// session has something to say (`crate::block` renders all but the first):
+/// session has something to say (`crate::native::block` renders all but the first):
 ///
 /// - `created #52 group "Lisboa"`: the rows an `act` created, the last
 ///   `LOOKUP_CAP` of them (`+N earlier` for the rest);
@@ -597,11 +597,11 @@ pub fn focus_line(session: &Session) -> Option<String> {
         named.extend(created[hidden..].iter().copied());
         parts.push(part);
     }
-    let sets = crate::block::sets_parts(session);
+    let sets = crate::native::block::sets_parts(session);
     named.extend(sets.rows.iter().copied());
     parts.extend(sets.parts);
-    parts.extend(crate::block::acted_part(session, &named));
-    parts.extend(crate::block::asked_part(session));
+    parts.extend(crate::native::block::acted_part(session, &named));
+    parts.extend(crate::native::block::asked_part(session));
     (!parts.is_empty()).then(|| format!("focus: {}", parts.join(" · ")))
 }
 

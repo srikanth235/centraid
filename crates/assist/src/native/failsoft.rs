@@ -27,10 +27,10 @@ use std::collections::BTreeSet;
 
 use serde_json::{Map, Value, json};
 
-use crate::meta::{self, Kind, ROW_CAP};
-use crate::session::{Outcome, Rejected, ResultSet, Session, arg_str, handle_list};
-use crate::whr;
-use crate::world::Key;
+use crate::native::meta::{self, Kind, ROW_CAP};
+use crate::native::session::{Outcome, Rejected, ResultSet, Session, arg_str, handle_list};
+use crate::native::whr;
+use crate::native::world::Key;
 
 /// Corrections one repeat may stack (a dropped kind that leaves a selector
 /// without one is a second error to fix).
@@ -169,7 +169,7 @@ impl Session {
             let family = *family.get_or_insert(fix.family);
             self.pending_notes.push(note);
             let ran = if tool == "search" {
-                crate::search::search(self, &args).map(Self::search_as_answer)
+                crate::native::search::search(self, &args).map(Self::search_as_answer)
             } else {
                 self.answer(&args)
             };
@@ -349,7 +349,7 @@ impl Session {
                 }
                 [only] => {
                     let number = self.number(only);
-                    let named = crate::render::named(&self.world, number, only);
+                    let named = crate::native::render::named(&self.world, number, only);
                     let op = args.get("op").cloned().unwrap_or_else(|| json!("balance"));
                     args.clear();
                     args.insert("op".to_owned(), op);

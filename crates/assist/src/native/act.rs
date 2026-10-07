@@ -29,15 +29,15 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
-use crate::dates::{self, Stamp};
-use crate::meta::{self, FieldType, Kind, ROW_CAP, Verb, Via};
-use crate::render;
-use crate::session::{
+use crate::native::dates::{self, Stamp};
+use crate::native::meta::{self, FieldType, Kind, ROW_CAP, Verb, Via};
+use crate::native::render;
+use crate::native::session::{
     Inverse, Outcome, ResultSet, Selector, Session, arg_bool, arg_str, canonical_json,
 };
-use crate::vaultio::Ran;
-use crate::whr;
-use crate::world::{Key, Row, SEALED, Val, World, minor_of};
+use crate::native::vaultio::Ran;
+use crate::native::whr;
+use crate::native::world::{Key, Row, SEALED, Val, World, minor_of};
 
 /// A write over `ROW_CAP` rows that the runtime asked about (`Session::bulk_ask`).
 /// The person's yes in the turn right after the ask lets that same write through
@@ -342,7 +342,7 @@ fn picks_by_word(words: &[String], at: usize) -> bool {
 /// the day it is on, as "saturday's" does.
 fn plural_weekday(word: &str) -> bool {
     word.strip_suffix('s')
-        .is_some_and(|day| crate::ground::weekday_of(day).is_some())
+        .is_some_and(|day| crate::native::ground::weekday_of(day).is_some())
 }
 
 impl Session {
@@ -382,7 +382,7 @@ impl Session {
         if outcome.effect.contains_key("compose") {
             outcome
         } else {
-            crate::compose::marked(outcome, family, action)
+            crate::native::compose::marked(outcome, family, action)
         }
     }
 
@@ -639,7 +639,7 @@ impl Session {
                 // the ask the selector that made the handle ends in (nt11 R5)
                 let what = args
                     .get("rows")
-                    .map(crate::session::handle_list)
+                    .map(crate::native::session::handle_list)
                     .and_then(|parts| match parts.as_slice() {
                         [only] => only.strip_prefix('@')?.parse::<usize>().ok(),
                         _ => None,
@@ -676,14 +676,14 @@ impl Session {
                 ..selector.clone()
             });
             if named.keys.is_empty()
-                || trashed
-                    .tier
-                    .is_some_and(|tier| tier < named.tier.unwrap_or(crate::resolve::Tier::Typo))
+                || trashed.tier.is_some_and(|tier| {
+                    tier < named.tier.unwrap_or(crate::native::resolve::Tier::Typo)
+                })
             {
                 named = trashed;
             }
         }
-        let keys = if named.tier == Some(crate::resolve::Tier::Typo) {
+        let keys = if named.tier == Some(crate::native::resolve::Tier::Typo) {
             // the writes a guess must not make stay the ask: a delete or a removal (destructive),
             // money, a secret (egress), and a write the message says takes every row
             let guess_ok = !matches!(
@@ -904,7 +904,7 @@ impl Session {
                     what,
                     &keys,
                     extra,
-                    |_| crate::compose::WHICH_ONE.to_owned(),
+                    |_| crate::native::compose::WHICH_ONE.to_owned(),
                 )));
             }
             return Ok(Err(self.ambiguous_block(what, &keys)));
@@ -973,7 +973,7 @@ impl Session {
             return None;
         }
         let said = self.said();
-        let message_words = crate::session::words(&self.message);
+        let message_words = crate::native::session::words(&self.message);
         // A PERSONAL PRONOUN POINTS AT A ROW IN FOCUS: with none of the picked row's kind there,
         // "it" at the end of a sentence ("star the wifi, i keep needing it") settles nothing.
         let referable = self.focus(false, true).iter().any(|number| {
@@ -993,28 +993,28 @@ impl Session {
         // says, and the selector alone singled the row out. An over-specific name (a word the
         // person did not say) is still the check's case.
         if by_selector && let Some(name) = arg_str(args, "name") {
-            let own: Vec<String> = crate::session::words(&name)
+            let own: Vec<String> = crate::native::session::words(&name)
                 .into_iter()
                 .filter(|word| !UNNAMING.contains(&word.as_str()))
                 .collect();
             if !own.is_empty()
                 && own.iter().all(|word| {
-                    message_words
-                        .iter()
-                        .any(|said| crate::resolve::word_near(word, &crate::search::fold(said)))
+                    message_words.iter().any(|said| {
+                        crate::native::resolve::word_near(word, &crate::native::search::fold(said))
+                    })
                 })
             {
                 return None;
             }
         }
         let row = self.world.row(key)?;
-        let name_words = crate::search::spellings_of(&row.name);
+        let name_words = crate::native::search::spellings_of(&row.name);
         // A word that extends a name word of four letters or more ("renewal" for "Renew") names
         // it too: "put the passport renewal on it" fits "Renew passport" and not "Get passport photos".
         let names_it = |word: &String| {
             !UNNAMING.contains(&word.as_str())
                 && name_words.iter().any(|name| {
-                    crate::resolve::word_near(name, word)
+                    crate::native::resolve::word_near(name, word)
                         || (name.chars().count() >= 4
                             && word.chars().count() > name.chars().count()
                             && word.starts_with(name.as_str()))
@@ -1024,14 +1024,14 @@ impl Session {
         // ask) names nothing; the message before it only adds to a naming one.
         let now: Vec<String> = message_words
             .iter()
-            .map(|word| crate::search::fold(word))
+            .map(|word| crate::native::search::fold(word))
             .collect();
         if !now.iter().any(&names_it) {
             return None;
         }
         let mut spoken = now;
-        for word in crate::session::words(&self.prev_message) {
-            let word = crate::search::fold(&word);
+        for word in crate::native::session::words(&self.prev_message) {
+            let word = crate::native::search::fold(&word);
             if !spoken.contains(&word) {
                 spoken.push(word);
             }
@@ -1046,10 +1046,10 @@ impl Session {
             .of_kind(key.0)
             .filter(|other| !other.trashed)
             .filter(|other| {
-                let have = crate::search::spellings_of(&other.name);
+                let have = crate::native::search::spellings_of(&other.name);
                 reference.iter().all(|word| {
                     have.iter()
-                        .any(|name| crate::resolve::word_near(name, word))
+                        .any(|name| crate::native::resolve::word_near(name, word))
                 })
             })
             .map(Row::key)
@@ -1075,7 +1075,7 @@ impl Session {
                     .chain(nickname)
                     .any(|alias| {
                         // a word of the name spelled with its joiners or without (`Yun-ho`, `yunho`)
-                        let words: Vec<_> = crate::search::spoken_tokens(alias)
+                        let words: Vec<_> = crate::native::search::spoken_tokens(alias)
                             .into_iter()
                             .filter(|token| {
                                 token.single().is_none_or(|word| !UNNAMING.contains(&word))
@@ -1086,7 +1086,7 @@ impl Session {
                                 token.is_among(true, |name| {
                                     spoken
                                         .iter()
-                                        .any(|word| crate::resolve::word_near(name, word))
+                                        .any(|word| crate::native::resolve::word_near(name, word))
                                 })
                             })
                     })
@@ -1693,8 +1693,8 @@ impl Session {
                     "updated",
                     json!({
                         "balance": [
-                            {"amount": crate::world::units(old, &currency), "unit": currency},
-                            {"amount": crate::world::units(new, &currency), "unit": currency},
+                            {"amount": crate::native::world::units(old, &currency), "unit": currency},
+                            {"amount": crate::native::world::units(new, &currency), "unit": currency},
                         ],
                     }),
                 ));
@@ -2103,7 +2103,7 @@ impl Session {
             let found = self.resolve_name(&name, &[expected], false, None);
             if matches!(
                 found.tier,
-                Some(crate::resolve::Tier::Equal | crate::resolve::Tier::Words)
+                Some(crate::native::resolve::Tier::Equal | crate::native::resolve::Tier::Words)
             ) && let [only] = found.matches.as_slice()
             {
                 container = only.clone();
@@ -2233,7 +2233,7 @@ impl Session {
         let Some(name) = self.world.row(wrong).map(|row| row.name.clone()) else {
             return String::new();
         };
-        let fits: Vec<Key> = crate::search::name_reach(self, &name, kinds)
+        let fits: Vec<Key> = crate::native::search::name_reach(self, &name, kinds)
             .into_iter()
             .filter(|key| key != wrong && self.world.row(key).is_some_and(|row| !row.trashed))
             .take(3)
@@ -2313,7 +2313,7 @@ impl Session {
             let name = self.named(group);
             return Ok(Plan::Already(format!(
                 "is settled up in {name} (balance {})",
-                crate::world::money(0, &currency)
+                crate::native::world::money(0, &currency)
             )));
         }
         let (from, to) = if owes >= 0 {
@@ -2343,7 +2343,7 @@ impl Session {
             not_undoable: Some("a settlement is real cash and stays recorded".to_owned()),
             note: Some(format!(
                 "settlement: {} paid {}{}",
-                crate::world::money(amount, &currency),
+                crate::native::world::money(amount, &currency),
                 if owes >= 0 { "to you" } else { "by you" },
                 by_default.map_or_else(String::new, |key| format!(
                     "\nnote: used group {} (the only group with a balance between you and {})",
@@ -2376,9 +2376,12 @@ impl Session {
     /// its own name or one of the other names the runtime reads for it (`meta::reveal_names`).
     pub(crate) fn message_names_secret(&self, field: &str) -> bool {
         let field = if field == "notes" { "content" } else { field };
-        let said = format!(" {} ", crate::search::fold_words(&self.message).join(" "));
+        let said = format!(
+            " {} ",
+            crate::native::search::fold_words(&self.message).join(" ")
+        );
         meta::reveal_names(field).iter().any(|name| {
-            let folded = crate::search::fold_words(name).join(" ");
+            let folded = crate::native::search::fold_words(name).join(" ");
             said.contains(&format!(" {folded} ")) || said.contains(&format!(" {folded}s "))
         })
     }
@@ -2466,7 +2469,7 @@ impl Session {
             "reveal_guard".to_owned(),
             json!({"asked": first, "not_revealed": asked}),
         );
-        Some(Ok(crate::compose::marked(
+        Some(Ok(crate::native::compose::marked(
             outcome,
             "reveal_other_field",
             "ask_fields",
@@ -2489,8 +2492,11 @@ impl Session {
     /// ruled out (`reveal_guard`).
     fn asked_by_message(&self, field: &str) -> bool {
         let field = field.trim().trim_matches('"').to_lowercase();
-        let said = format!(" {} ", crate::search::fold_words(&self.message).join(" "));
-        let own = crate::search::fold_words(&field).join(" ");
+        let said = format!(
+            " {} ",
+            crate::native::search::fold_words(&self.message).join(" ")
+        );
+        let own = crate::native::search::fold_words(&field).join(" ");
         let meant = meta::REVEAL_FIELDS
             .iter()
             .find(|(name, _)| *name == field)
@@ -2562,7 +2568,7 @@ impl Session {
         };
         let key_id = row.extra.get("key_id").cloned().unwrap_or_default();
         let secret = centraid_vault::custody::locker_key::decrypt_under_locker_key(
-            crate::vaultio::HARNESS_LOCKER_KEY,
+            crate::native::vaultio::HARNESS_LOCKER_KEY,
             &key_id,
             &row.id,
             &sealed,
@@ -2738,7 +2744,7 @@ impl Session {
         // early reading for a row that is in the afternoon or evening: the row's clock decides
         if let (Some((am, pm)), Some(clock)) = (words.bare, stamp.time)
             && clock.hour() >= 12
-            && crate::phrases::at_hour(am.hour(), None, Some(clock)).0 == pm.hour()
+            && crate::native::phrases::at_hour(am.hour(), None, Some(clock)).0 == pm.hour()
             && at.time() == am
         {
             at = at.date().to_datetime(pm);
@@ -3551,8 +3557,8 @@ impl Session {
                     "updated",
                     json!({
                         "balance": [
-                            {"amount": crate::world::units(old, &currency), "unit": currency},
-                            {"amount": crate::world::units(new, &currency), "unit": currency},
+                            {"amount": crate::native::world::units(old, &currency), "unit": currency},
+                            {"amount": crate::native::world::units(new, &currency), "unit": currency},
                         ],
                     }),
                 ));
@@ -3667,7 +3673,7 @@ fn says_yes(message: &str) -> bool {
     if lower.contains("n't") || lower.contains("n\u{2019}t") {
         return false;
     }
-    let words = crate::session::words(message);
+    let words = crate::native::session::words(message);
     !words.is_empty()
         && words.len() <= YES_WORDS
         && words.iter().any(|word| YES.contains(&word.as_str()))
@@ -3728,7 +3734,7 @@ impl Session {
         let question = format!("this would {phrase} {what}{destination}; {phrase} all of them?");
         let selector = args
             .get("rows")
-            .map(|value| crate::session::handle_list(value).join(", "))
+            .map(|value| crate::native::session::handle_list(value).join(", "))
             .unwrap_or_default();
         let kind_names = kinds
             .iter()
@@ -3864,7 +3870,7 @@ impl Session {
             asked
                 .effect
                 .insert("refusal".to_owned(), with_outcome(facts, "ask"));
-            crate::compose::marked(asked, "refused_write", "ask_options")
+            crate::native::compose::marked(asked, "refused_write", "ask_options")
         } else {
             let lead = format!(
                 "refused: restore {name}: it is in the trash but past the vault's restore window, so it cannot come back (vault: {said})."
@@ -3877,7 +3883,7 @@ impl Session {
             declined
                 .effect
                 .insert("refusal".to_owned(), with_outcome(facts, "decline"));
-            crate::compose::marked(declined, "refused_write", "decline")
+            crate::native::compose::marked(declined, "refused_write", "decline")
         };
         outcome
             .effect

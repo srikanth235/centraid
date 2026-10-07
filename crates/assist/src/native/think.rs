@@ -26,11 +26,11 @@ use std::collections::BTreeMap;
 
 use serde_json::Value;
 
-use crate::compile::{
+use crate::native::compile::{
     CALL_ORDER, HANDLE_SLOTS, PICK_REASONS, date_text, default_tool, infers_kind,
     kind_a_verb_fixes, pick_states_rows, reading_expr, rows_key,
 };
-use crate::meta::Verb;
+use crate::native::meta::Verb;
 use text::{
     focus_sets, has_time_phrase, is_word, nickname, normal_int, own_text, py_repr, py_rstrip,
     py_split_ws, py_strip, same, shows_date, words,

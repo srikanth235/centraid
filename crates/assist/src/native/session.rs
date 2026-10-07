@@ -6,13 +6,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use jiff::civil::DateTime;
 use serde_json::{Map, Value, json};
 
-use crate::dates::{self, Resolved};
-use crate::meta::{self, FieldType, Kind, ROW_CAP, STEP_CAP};
-use crate::render;
-use crate::resolve::{Resolution, Tier};
-use crate::vaultio::Handle;
-use crate::whr::{self, Cond};
-use crate::world::{Key, Row, Val, World};
+use crate::native::dates::{self, Resolved};
+use crate::native::meta::{self, FieldType, Kind, ROW_CAP, STEP_CAP};
+use crate::native::render;
+use crate::native::resolve::{Resolution, Tier};
+use crate::native::vaultio::Handle;
+use crate::native::whr::{self, Cond};
+use crate::native::world::{Key, Row, Val, World};
 
 /// Which ablated parts of the prompt are on (SPEC §6.0.4, §6.1).
 #[derive(Debug, Clone, Copy)]
@@ -21,15 +21,15 @@ pub struct Flags {
     pub directory: bool,
     /// The block of every user turn: the `vault:`, `focus:` and `dates:` lines.
     pub preground: bool,
-    pub tools: crate::prompt::ToolsMode,
-    /// Which conventions of `crate::ground` run.
-    pub defaults: crate::ground::Defaults,
-    /// Whether a malformed call is repaired before it runs (`crate::normalize`). A best-effort
+    pub tools: crate::native::prompt::ToolsMode,
+    /// Which conventions of `crate::native::ground` run.
+    pub defaults: crate::native::ground::Defaults,
+    /// Whether a malformed call is repaired before it runs (`crate::native::normalize`). A best-effort
     /// help for the model's calls: the reference runs that make the gold turn it off, so what a
     /// reference states is what runs.
     pub normalize: bool,
     /// Whether the runtime composes the asks and declines the model never has to write
-    /// (`crate::compose`, SPEC §4.8): a write whose selector fits several rows or none, an
+    /// (`crate::native::compose`, SPEC §4.8): a write whose selector fits several rows or none, an
     /// `answer` whose name reaches no row, a refusal of the vault or of the verb, and what it
     /// decides without ending the turn: a `find` that missed is a plain miss with a hint, a
     /// write the person says takes every row takes them, and a write by a name that reached
@@ -44,8 +44,8 @@ impl Default for Flags {
         Self {
             directory: true,
             preground: true,
-            tools: crate::prompt::ToolsMode::Sig,
-            defaults: crate::ground::Defaults::default(),
+            tools: crate::native::prompt::ToolsMode::Sig,
+            defaults: crate::native::ground::Defaults::default(),
             normalize: true,
             compose: true,
         }
@@ -323,7 +323,7 @@ pub(crate) struct Mark {
     pub number: usize,
     /// A write acted on it (a change, an already-so answer, an undo), as opposed to an `ask`
     /// offering it as an option. The `focus:` line names a written row in its `acted` part for
-    /// `ACTED_TURNS` turns (`crate::block::acted_part`).
+    /// `ACTED_TURNS` turns (`crate::native::block::acted_part`).
     pub written: bool,
 }
 
@@ -337,9 +337,9 @@ pub struct Session {
     pub(crate) numbers: BTreeMap<Key, usize>,
     pub(crate) by_number: Vec<Key>,
     pub(crate) results: Vec<ResultSet>,
-    /// What a value's result handle says about it (`crate::block::SetNote`),
+    /// What a value's result handle says about it (`crate::native::block::SetNote`),
     /// by handle: the focus line's `@2: 10 documents (counted) in #39 …`.
-    pub(crate) result_notes: BTreeMap<usize, crate::block::SetNote>,
+    pub(crate) result_notes: BTreeMap<usize, crate::native::block::SetNote>,
     /// What each result handle's selector called its rows (`Selector::what`), for the ask a write
     /// over the handle ends in (nt11 R5).
     pub(crate) result_whats: BTreeMap<usize, String>,
@@ -373,7 +373,7 @@ pub struct Session {
     /// `(person, group id, currency)` of the settlements the running `act`
     /// planned, so its diff can carry the balance they moved.
     pub(crate) settling: Vec<(Key, String, String)>,
-    /// The current user message, for grounding dates (`crate::ground`).
+    /// The current user message, for grounding dates (`crate::native::ground`).
     pub(crate) message: String,
     /// The user message before it: a row the person named there and only
     /// points at now ("what's the card number then") is still named
@@ -388,11 +388,11 @@ pub struct Session {
     /// (`compose_find_miss`): the second miss of an `answer` is its answer.
     pub(crate) read_misses: usize,
     /// The slots of the running call's slot trace, when it carries one
-    /// (`crate::trace`): the trace guard reads them, and so does the write that may take
+    /// (`crate::native::trace`): the trace guard reads them, and so does the write that may take
     /// every row (`Session::said_every_row`). The cap on a write's rows does not read them.
-    pub(crate) trace: Option<crate::trace::Trace>,
+    pub(crate) trace: Option<crate::native::trace::Trace>,
     /// `#n` of every row an `act` created this session, in order: the focus
-    /// line's `created` (`crate::prompt::focus_line`).
+    /// line's `created` (`crate::native::prompt::focus_line`).
     pub(crate) created: Vec<usize>,
     /// The turn the last `ask` ended and the `#n` of its options: the focus
     /// line's `asked`, for the one turn that answers it.
@@ -417,11 +417,11 @@ pub struct Session {
     pub(crate) last_rejected: Option<Rejected>,
     /// What the compile step repaired in the call it last returned: reported by the step
     /// that runs that call (`normalize.rs`).
-    pub(crate) compiled: Option<crate::normalize::Carry>,
+    pub(crate) compiled: Option<crate::native::normalize::Carry>,
     /// The write over `ROW_CAP` rows the last turn ended asking about: the
     /// same write, sent after the person's yes, goes through
     /// (`Session::confirmed`).
-    pub(crate) pending_bulk: Option<crate::act::PendingBulk>,
+    pub(crate) pending_bulk: Option<crate::native::act::PendingBulk>,
     /// The cancelled event the last turn ended offering to plan anew (`plan a new one instead?`):
     /// the turn it was offered in and the row. A reschedule of that row in the turn after is the
     /// person's yes (`Session::plan_anew`, nt13 R6).
@@ -469,10 +469,10 @@ pub(crate) struct Selector {
     pub trashed: bool,
 }
 
-/// Lowercase alphanumeric words, accents folded (`crate::search::fold`).
+/// Lowercase alphanumeric words, accents folded (`crate::native::search::fold`).
 #[must_use]
 pub fn words(text: &str) -> Vec<String> {
-    crate::search::fold_words(text)
+    crate::native::search::fold_words(text)
 }
 
 pub(crate) fn arg_str(args: &Map<String, Value>, key: &str) -> Option<String> {
@@ -562,7 +562,7 @@ impl Session {
         me: &str,
         flags: Flags,
     ) -> Result<Self, String> {
-        let clock = crate::vaultio::SetClock::at(crate::vaultio::millis_of(now));
+        let clock = crate::native::vaultio::SetClock::at(crate::native::vaultio::millis_of(now));
         // A probe handle reads the journal size, which names this session's id
         // sequence: two sessions over one file never mint the same id, and the
         // same file and clock always mint the same ones.
@@ -1000,7 +1000,7 @@ impl Session {
             if let Some(code) = row.extra.get("currency") {
                 codes.push(code.clone());
             }
-            if let Some(crate::world::Val::Money(_, code)) = row.field("amount") {
+            if let Some(crate::native::world::Val::Money(_, code)) = row.field("amount") {
                 codes.push(code.clone());
             }
         }
@@ -1093,7 +1093,7 @@ impl Session {
         let rows = self.select(&widened);
         let note = format!(
             "note: read {} as the {part}",
-            crate::dates::clock(at.time())
+            crate::native::dates::clock(at.time())
         );
         (!rows.is_empty()).then_some((widened, rows, note))
     }
@@ -1197,7 +1197,7 @@ impl Session {
                     let Some(Val::Text(value)) = row.field(field) else {
                         continue;
                     };
-                    let Some(rank) = crate::resolve::text_reading(literal, value) else {
+                    let Some(rank) = crate::native::resolve::text_reading(literal, value) else {
                         continue;
                     };
                     if best.is_none_or(|have| rank < have) {
@@ -1344,7 +1344,7 @@ impl Session {
             named: Vec::new(),
         };
         if let Some(name) = &selector.name {
-            named = crate::resolve::resolve_rows(
+            named = crate::native::resolve::resolve_rows(
                 name,
                 out.iter().filter_map(|key| self.world.row(key)),
                 self.flags.normalize,
@@ -1765,8 +1765,8 @@ impl Session {
 
     /// A new user message: compaction first, then the turn's block (SPEC
     /// §6.1): the pre-grounded `vault:` line (`preground`), the `focus:` line,
-    /// the `answer:` line (`crate::block::answer_line`), the `dates:` line and the `picks:` line
-    /// (`crate::block::picks_line`), joined as `block`, which is what precedes the message in the user turn. A message that takes the request back
+    /// the `answer:` line (`crate::native::block::answer_line`), the `dates:` line and the `picks:` line
+    /// (`crate::native::block::picks_line`), joined as `block`, which is what precedes the message in the user turn. A message that takes the request back
     /// (`phrases::is_retraction`) also carries `ended`, the turn's own end.
     pub fn user(&mut self, message: &str) -> Value {
         self.turn += 1;
@@ -1817,23 +1817,24 @@ impl Session {
         let (preground, focus, answer, dates, picks) = if self.flags.preground {
             // The containers of the focus rows are numbered first, so the
             // `vault:` and `focus:` lines can name them (`#8 album "Wedding"`).
-            crate::block::number_containers(self);
+            crate::native::block::number_containers(self);
             (
-                crate::search::preground(self, message),
-                crate::prompt::focus_line(self),
-                crate::block::answer_line(self),
+                crate::native::search::preground(self, message),
+                crate::native::prompt::focus_line(self),
+                crate::native::block::answer_line(self),
                 self.dates_line(message),
-                crate::block::picks_line(self, message),
+                crate::native::block::picks_line(self, message),
             )
         } else {
             (None, None, None, None, None)
         };
-        let block = crate::prompt::user_block(&[&preground, &focus, &answer, &dates, &picks]);
+        let block =
+            crate::native::prompt::user_block(&[&preground, &focus, &answer, &dates, &picks]);
         // A RETRACTION ENDS THE TURN BEFORE ANY CALL: the runtime makes the
         // `decline never_mind` itself, so the model never has to learn it. The
         // reply carries it as `ended`, and a call after it is refused as a call
         // after the turn ended.
-        let ended = crate::phrases::is_retraction(message)
+        let ended = crate::native::phrases::is_retraction(message)
             .then(|| self.step("decline", &json!({"reason": "never_mind"}), None, None));
         let mut out = json!({
             "turn": self.turn,
@@ -1857,7 +1858,7 @@ impl Session {
     }
 
     /// One model call with the think block written before it. A slot trace in it
-    /// (`crate::trace::parse`) is enforced; any other think is ignored, so
+    /// (`crate::native::trace::parse`) is enforced; any other think is ignored, so
     /// old-format calls behave exactly as `call`.
     pub fn call_traced(&mut self, tool: &str, args: &Value, think: Option<&str>) -> Value {
         self.step(tool, args, None, think)
@@ -1868,14 +1869,14 @@ impl Session {
     /// its reply ends with `note: only the first call ran` (nt12 R5); one that holds no readable
     /// call is `call_unreadable`. The response carries the call it read as `call`.
     pub fn call_text(&mut self, text: &str) -> Value {
-        match crate::parse::parse_call(text) {
+        match crate::native::parse::parse_call(text) {
             Ok(call) => {
                 let tool = call["tool"].as_str().unwrap_or_default().to_owned();
                 if call["extra_calls"].as_u64().unwrap_or(0) > 0 {
-                    self.closing_note = Some(crate::parse::ONLY_FIRST.to_owned());
+                    self.closing_note = Some(crate::native::parse::ONLY_FIRST.to_owned());
                 }
                 let mut response =
-                    self.call_traced(&tool, &call["args"], crate::trace::think_of(text));
+                    self.call_traced(&tool, &call["args"], crate::native::trace::think_of(text));
                 response["call"] = call;
                 response
             }
@@ -1917,7 +1918,7 @@ impl Session {
             self.repeat_outcome()
         } else {
             self.repeats = 0;
-            self.trace = think.and_then(crate::trace::parse);
+            self.trace = think.and_then(crate::native::trace::parse);
             let outcome = if let Some(trace) = &self.trace
                 && let Some(refusal) = self.trace_guard(tool, args, trace)
             {
@@ -2208,7 +2209,7 @@ impl Session {
     /// (the `asked:` part).
     pub(crate) fn focus(&self, own_turn: bool, any_size: bool) -> BTreeSet<usize> {
         let in_reach = |turn: usize| turn + 1 >= self.turn && (own_turn || turn < self.turn);
-        let named = crate::block::named_written(self);
+        let named = crate::native::block::named_written(self);
         self.observations
             .iter()
             .filter(|obs| in_reach(obs.turn) && !obs.header.starts_with("ambiguous"))
@@ -2238,15 +2239,15 @@ impl Session {
     /// Whether the message names a person other than the user or says a pronoun for them
     /// (a person only in focus does not count: nt14).
     pub(crate) fn names_a_person_or_pronoun(&self) -> bool {
-        crate::search::message_names_a_person(self, &self.message)
-            || crate::block::says_a_pronoun_for_them(&self.message)
+        crate::native::search::message_names_a_person(self, &self.message)
+            || crate::native::block::says_a_pronoun_for_them(&self.message)
     }
 
     /// Whether the turn is about a person other than the user: the message says one's name, or
     /// a pronoun for them, or one is in focus (`block::other_person_in_play`).
     pub(crate) fn names_someone_else(&self) -> bool {
-        crate::search::message_names_a_person(self, &self.message)
-            || crate::block::other_person_in_play(self, &self.message)
+        crate::native::search::message_names_a_person(self, &self.message)
+            || crate::native::block::other_person_in_play(self, &self.message)
     }
 
     /// Rows this turn offered as options of an `ask`: in focus next turn
@@ -2490,7 +2491,7 @@ impl Session {
     /// The tool a call names, run once.
     fn run_tool(&mut self, tool: &str, args: &Map<String, Value>) -> Result<Outcome, String> {
         match tool {
-            "search" => crate::search::search(self, args),
+            "search" => crate::native::search::search(self, args),
             "find" => self.find(args),
             "open" => self.open_row(args),
             "compute" => self.compute(args, false),
@@ -2590,7 +2591,7 @@ impl Session {
             if let Some((line, _)) = hint {
                 self.pending_notes.push(line);
                 self.read_misses += 1;
-                outcome = crate::compose::marked(outcome, "unmatched_read", "find_miss");
+                outcome = crate::native::compose::marked(outcome, "unmatched_read", "find_miss");
             }
         } else {
             let handle = self.issue(
@@ -2893,7 +2894,7 @@ impl Session {
                     self.pending_notes.push(line);
                     self.read_misses += 1;
                     outcome.effect.insert("rows".to_owned(), json!([]));
-                    return Ok(crate::compose::marked(
+                    return Ok(crate::native::compose::marked(
                         outcome,
                         "unmatched_read",
                         "answer_miss",
@@ -2987,7 +2988,7 @@ impl Session {
             // tier are still the error
             let chosen = match selector.as_ref().and_then(|s| s.name.as_ref()) {
                 Some(name) if keys.len() > 1 => {
-                    let best = crate::resolve::resolve_rows(
+                    let best = crate::native::resolve::resolve_rows(
                         name,
                         keys.iter().filter_map(|key| self.world.row(key)),
                         self.flags.normalize,
@@ -3000,7 +3001,7 @@ impl Session {
                 }
                 _ => keys.clone(),
             };
-            crate::values::balance(self, kind, &chosen, &linked)?
+            crate::native::values::balance(self, kind, &chosen, &linked)?
         } else {
             if op == "count" && field.is_some() {
                 return Err("error: count takes no field.".to_owned());
@@ -3030,7 +3031,7 @@ impl Session {
             {
                 return Err(whr::no_field(kind, group));
             }
-            crate::values::fold(&op, field.as_deref(), group.as_deref(), &rows, &self.world)
+            crate::native::values::fold(&op, field.as_deref(), group.as_deref(), &rows, &self.world)
         };
         // A VALUE KEEPS ITS ROWS: the rows it was computed over, so
         // `within: @n` and `exclude: @n` reach them next turn. A balance also
@@ -3057,8 +3058,8 @@ impl Session {
         let counted = render::count_phrase(&kinds, &rows.iter().collect::<Vec<_>>());
         self.result_notes.insert(
             handle,
-            crate::block::SetNote {
-                text: crate::block::value_text(
+            crate::native::block::SetNote {
+                text: crate::native::block::value_text(
                     &op,
                     field.as_deref(),
                     group.as_deref(),
@@ -3067,7 +3068,7 @@ impl Session {
                 ),
                 container: selector
                     .as_ref()
-                    .map(|s| crate::block::named_containers(&self.world, &s.linked_to))
+                    .map(|s| crate::native::block::named_containers(&self.world, &s.linked_to))
                     .unwrap_or_default(),
                 list_rows: op == "balance",
             },
@@ -3135,7 +3136,7 @@ impl Session {
             self.pending_notes.push(line);
             self.read_misses += 1;
             if answering {
-                outcome = crate::compose::marked(outcome, "unmatched_read", "answer_miss");
+                outcome = crate::native::compose::marked(outcome, "unmatched_read", "answer_miss");
             }
         }
         Ok(outcome)
@@ -3143,7 +3144,7 @@ impl Session {
 
     /// The system prompt pieces (SPEC §6.0).
     pub fn prompt(&mut self) -> Value {
-        crate::prompt::prompt(self)
+        crate::native::prompt::prompt(self)
     }
 }
 

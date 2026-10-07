@@ -56,11 +56,11 @@ use std::collections::BTreeSet;
 
 use serde_json::{Map, Value, json};
 
-use crate::dates;
-use crate::meta::{FieldType, Kind, Verb};
-use crate::normalize::name_lift_report;
-use crate::session::Session;
-use crate::whr;
+use crate::native::dates;
+use crate::native::meta::{FieldType, Kind, Verb};
+use crate::native::normalize::name_lift_report;
+use crate::native::session::Session;
+use crate::native::whr;
 
 /// The order the arguments are written in a call.
 pub const CALL_ORDER: [&str; 23] = [
@@ -249,11 +249,11 @@ impl Session {
             if let Some(value) = slots.get(key).filter(|value| !value.is_null()) {
                 let flag = value
                     .as_bool()
-                    .or_else(|| value.as_str().and_then(crate::whr::parse_bool));
+                    .or_else(|| value.as_str().and_then(crate::native::whr::parse_bool));
                 let Some(flag) = flag else {
                     return refuse(
                         key,
-                        crate::whr::bool_error(key, &value.to_string())
+                        crate::native::whr::bool_error(key, &value.to_string())
                             .trim_start_matches("error: ")
                             .to_owned(),
                     );
@@ -393,8 +393,8 @@ impl Session {
         let (grounded, grounding) = self.ground(tool, &repaired.args);
         // a default the grounding filled is recorded like a repair, and its note rides with the
         // call: the step that runs `call` finds the slot filled and has nothing left to say
-        let defaults = crate::follow::default_notes(&grounding);
-        entries.extend(crate::follow::default_entries(&defaults));
+        let defaults = crate::native::follow::default_notes(&grounding);
+        entries.extend(crate::native::follow::default_entries(&defaults));
         let mut carried = notes.clone();
         carried.extend(defaults);
         self.remember_compiled(tool, &grounded, &carried, &entries);
@@ -417,7 +417,7 @@ impl Session {
     fn block_numbers(&self) -> BTreeSet<usize> {
         let mut out: BTreeSet<usize> = self.directory.iter().copied().collect();
         out.extend(self.preground.iter().copied());
-        if let Some(line) = crate::prompt::focus_line(self) {
+        if let Some(line) = crate::native::prompt::focus_line(self) {
             out.extend(numbers_in(&line));
         }
         for obs in &self.observations {
@@ -472,7 +472,7 @@ impl Session {
             };
             let handle = match item {
                 Value::String(text) => {
-                    for part in crate::session::handle_list(&Value::String(text.clone())) {
+                    for part in crate::native::session::handle_list(&Value::String(text.clone())) {
                         let checked = self.check_handle(&place, &part)?;
                         if !out.contains(&checked) {
                             out.push(checked);
@@ -521,7 +521,7 @@ impl Session {
 
     /// The `index`-th row of the `focus:` line, as `#n`.
     fn focus_handle(&self, place: &str, index: u64) -> Compiled<String> {
-        let numbers: Vec<usize> = crate::prompt::focus_line(self)
+        let numbers: Vec<usize> = crate::native::prompt::focus_line(self)
             .map(|line| numbers_in(&line))
             .unwrap_or_default();
         usize::try_from(index)
@@ -887,7 +887,7 @@ impl Session {
         let Some(rows) = rows else {
             return;
         };
-        let handles = crate::session::handle_list(rows);
+        let handles = crate::native::session::handle_list(rows);
         let from_result = handles.iter().any(|handle| handle.starts_with('@'));
         if reasons
             .iter()

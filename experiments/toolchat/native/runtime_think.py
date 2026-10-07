@@ -1,7 +1,7 @@
 """The stateless think compiler, as the Python side calls it: one `nativetools think` process per Python process.
 
 The compiler that turns the slots of a think into the call the renderer writes (`compile_think`), and the rewrite of a v3.1
-think as v4 (`v4_think`), live in the Rust runtime (`crates/nativetools/src/think.rs`); this module is the client. It is what
+think as v4 (`v4_think`), live in the Rust runtime (`crates/assist/src/native/think.rs`); this module is the client. It is what
 `train/fmt.py` `call_of_think` (the decoder's forced call, the data builder's check of every record) and `fmt.records` (the
 v4 rewrite of the thinks at training time) call, and what `authored/trace.py`'s `derive_trace3` round-trips against.
 

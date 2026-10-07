@@ -175,14 +175,23 @@ fn rendered_prompts(dir: &Path) -> Result<(), String> {
 
 /// The sources the messages are read from.
 const SOURCES: [(&str, &str); 8] = [
-    ("act.rs", include_str!("act.rs")),
-    ("session.rs", include_str!("session.rs")),
-    ("whr.rs", include_str!("whr.rs")),
-    ("values.rs", include_str!("values.rs")),
-    ("search.rs", include_str!("search.rs")),
-    ("trace.rs", include_str!("trace.rs")),
-    ("parse.rs", include_str!("parse.rs")),
-    ("dates.rs", include_str!("dates.rs")),
+    ("act.rs", include_str!("../../assist/src/native/act.rs")),
+    (
+        "session.rs",
+        include_str!("../../assist/src/native/session.rs"),
+    ),
+    ("whr.rs", include_str!("../../assist/src/native/whr.rs")),
+    (
+        "values.rs",
+        include_str!("../../assist/src/native/values.rs"),
+    ),
+    (
+        "search.rs",
+        include_str!("../../assist/src/native/search.rs"),
+    ),
+    ("trace.rs", include_str!("../../assist/src/native/trace.rs")),
+    ("parse.rs", include_str!("../../assist/src/native/parse.rs")),
+    ("dates.rs", include_str!("../../assist/src/native/dates.rs")),
 ];
 /// What a message literal starts with.
 const MESSAGE_PREFIXES: [&str; 4] = ["error: ", "already: ", "ambiguous: ", "refused: "];

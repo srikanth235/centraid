@@ -40,11 +40,11 @@ use std::collections::BTreeSet;
 
 use serde_json::{Map, Value, json};
 
-use crate::meta::{Kind, ROW_CAP, Verb};
-use crate::render;
-use crate::search;
-use crate::session::{Outcome, Selector, Session};
-use crate::world::Key;
+use crate::native::meta::{Kind, ROW_CAP, Verb};
+use crate::native::render;
+use crate::native::search;
+use crate::native::session::{Outcome, Selector, Session};
+use crate::native::world::Key;
 
 /// What the runtime asks when a write fits several rows.
 pub(crate) const WHICH_ONE: &str = "Which one?";
@@ -70,7 +70,7 @@ fn constrained(selector: &Selector) -> bool {
 /// to: #n`) has no use for a row of a kind that container cannot hold (nt13 B1), so such a row is
 /// no other-kind target and no candidate of a name that reached nothing of the stated kind.
 fn holds_in(into: Option<Kind>, kind: Kind) -> bool {
-    into.is_none_or(|container| crate::act::container_of(kind) == Some(container))
+    into.is_none_or(|container| crate::native::act::container_of(kind) == Some(container))
 }
 
 impl Session {
@@ -343,7 +343,7 @@ impl Session {
             .and_then(|handle| self.results.get(handle.checked_sub(1)?))
             .map(|result| result.keys.iter().cloned().collect());
         for kinds in [selector.kinds.as_slice(), Kind::ALL.as_slice()] {
-            let reached = crate::resolve::resolve_rows(
+            let reached = crate::native::resolve::resolve_rows(
                 name,
                 self.world.rows.values().filter(|row| {
                     kinds.contains(&row.kind)
@@ -716,13 +716,13 @@ impl Session {
             .of_kind(Kind::Event)
             .filter(|row| {
                 !row.trashed
-                    && row.field("status") != Some(&crate::world::Val::Enum("cancelled"))
+                    && row.field("status") != Some(&crate::native::world::Val::Enum("cancelled"))
                     && {
-                        let (from, to) = crate::act::event_span(row);
+                        let (from, to) = crate::native::act::event_span(row);
                         from < end && to > start
                     }
             })
-            .map(crate::world::Row::key)
+            .map(crate::native::world::Row::key)
             .collect();
         let clashing = self.live_first(&clashing);
         let names: Vec<String> = clashing

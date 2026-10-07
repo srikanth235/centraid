@@ -55,11 +55,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
-use crate::act::{arg_lines, arg_value, create_allowed, create_arg_alias};
-use crate::dates;
-use crate::meta::{self, Kind};
-use crate::session::{Session, arg_str, canonical_json};
-use crate::whr;
+use crate::native::act::{arg_lines, arg_value, create_allowed, create_arg_alias};
+use crate::native::dates;
+use crate::native::meta::{self, Kind};
+use crate::native::session::{Session, arg_str, canonical_json};
+use crate::native::whr;
 
 /// A call after its repairs: the args, one `note:` line and one `normalized` entry each.
 pub(crate) struct Normalized {
@@ -451,9 +451,11 @@ impl Session {
         let Some(within) = arg_str(object, "within").filter(|_| tool != "find") else {
             return;
         };
-        let parts = crate::session::handle_list(&Value::String(within));
+        let parts = crate::native::session::handle_list(&Value::String(within));
         if parts.is_empty()
-            || !parts.iter().all(|part| crate::session::is_row_handle(part))
+            || !parts
+                .iter()
+                .all(|part| crate::native::session::is_row_handle(part))
             || parts.iter().any(|part| self.resolve_row(part).is_err())
             || object.get("rows").is_some_and(|rows| !rows.is_null())
             || selector_params(object) != ["within"]
@@ -489,7 +491,7 @@ impl Session {
         if kinds.is_empty() || keys.len() < 2 {
             return;
         }
-        let links = |key: &crate::world::Key| {
+        let links = |key: &crate::native::world::Key| {
             kinds
                 .iter()
                 .all(|kind| kind.spec().link_to(key.0).is_some())
@@ -498,7 +500,7 @@ impl Session {
         if valid.is_empty() || invalid.is_empty() {
             return;
         }
-        let said = |keys: &[&crate::world::Key]| -> Vec<String> {
+        let said = |keys: &[&crate::native::world::Key]| -> Vec<String> {
             keys.iter()
                 .map(|key| match self.numbers.get(*key) {
                     Some(number) => format!("#{number} {}", key.0.name()),
@@ -764,7 +766,7 @@ impl Session {
         };
         let Some(kind) = arg_str(object, "kind")
             .and_then(|text| Kind::parse(text.trim()))
-            .filter(|kind| crate::meta::Verb::Create.command(*kind).is_some())
+            .filter(|kind| crate::native::meta::Verb::Create.command(*kind).is_some())
         else {
             return;
         };
@@ -997,11 +999,11 @@ impl Session {
             return;
         };
         let rows = object.get("rows").is_some_and(|value| !value.is_null());
-        if rows || crate::session::Session::has_selector(object) {
+        if rows || crate::native::session::Session::has_selector(object) {
             return;
         }
         // a verb that fits one kind names it; with several the match would have no kind
-        let Some(verb) = crate::meta::Verb::parse(verb) else {
+        let Some(verb) = crate::native::meta::Verb::parse(verb) else {
             return;
         };
         let kinds = verb.kinds();

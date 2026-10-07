@@ -5,10 +5,10 @@
 //! - G3 `without_part`: a read with two or more conditions that reached nothing names each
 //!   condition whose removal gives rows, unless the message itself states that condition.
 
-use crate::render;
-use crate::session::{Selector, Session, words};
-use crate::whr::Cond;
-use crate::world::Key;
+use crate::native::render;
+use crate::native::session::{Selector, Session, words};
+use crate::native::whr::Cond;
+use crate::native::world::Key;
 
 /// The most rows an empty read's hint names in all (`compose::HINT_ROWS`).
 pub(crate) const WITHOUT_ROWS: usize = 4;
@@ -185,13 +185,13 @@ impl Session {
         }
         for target in &selector.linked_to {
             let named = self.world.row(target).map(|row| row.name.clone());
-            let in_focus = crate::block::focus_sets(self)
+            let in_focus = crate::native::block::focus_sets(self)
                 .iter()
                 .any(|set| set.keys.contains(target) || set.container.contains(target));
             let said = named.is_some_and(|name| self.stated(&name))
                 || in_focus
                 || (*target == self.world.me_key() && self.message_has(&FIRST_PERSON))
-                || (target.0 == crate::meta::Kind::Person && self.message_has(&PRONOUNS));
+                || (target.0 == crate::native::meta::Kind::Person && self.message_has(&PRONOUNS));
             if said {
                 continue;
             }
@@ -293,9 +293,9 @@ impl Session {
 
 use serde_json::{Map, Value, json};
 
-use crate::meta::Kind;
-use crate::search;
-use crate::session::{arg_str, tool_params};
+use crate::native::meta::Kind;
+use crate::native::search;
+use crate::native::session::{arg_str, tool_params};
 
 /// A call in the model's own terms: `act verb: edit, rows: #3, args: description: x`. Parameters
 /// in the tool's order; a name is quoted, a date expression is its compact JSON, the lines of
@@ -456,7 +456,7 @@ impl Session {
         match tool {
             "find" | "answer" | "compute" => {
                 if let Some(text) = arg_str(args, "where").filter(|_| in_where) {
-                    let clauses = crate::whr::split_and(&text);
+                    let clauses = crate::native::whr::split_and(&text);
                     let swapped: Vec<String> = clauses
                         .iter()
                         .map(|clause| {
@@ -706,7 +706,7 @@ impl Session {
         if !error.starts_with("error: a selector needs kind (or within=@n).")
             || args.contains_key("kind")
             || args.contains_key("within")
-            || !crate::session::Session::has_selector(args)
+            || !crate::native::session::Session::has_selector(args)
         {
             return None;
         }

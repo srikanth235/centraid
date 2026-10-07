@@ -323,7 +323,7 @@ class RecordedCalls(run.Backend):
         return run.StepOut(text=f"<think>\n{m['think']}\n</think>\n\n" + run.format_call(m["tool"], m["args"]), think_cut=False)
 
 
-GUARD_MARK = "contradicts the call"  # the runtime's trace guard error (crates/nativetools/src/trace.rs)
+GUARD_MARK = "contradicts the call"  # the runtime's trace guard error (crates/assist/src/native/trace.rs)
 
 
 def guard_replay(session: dict, msgs: list[dict], unmarked: frozenset | set = frozenset()) -> list[dict]:

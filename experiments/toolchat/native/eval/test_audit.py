@@ -25,7 +25,7 @@ from lib import load_keys
 from score import Ids
 
 KEYS = load_keys("A")
-RUNTIME = Path(__file__).resolve().parents[4] / "crates" / "nativetools" / "src"
+RUNTIME = Path(__file__).resolve().parents[4] / "crates" / "assist" / "src" / "native"
 GROUND = RUNTIME / "ground.rs"
 DAY0 = {"unit": "day", "rel": 0}
 WEEKEND = {"from": {"unit": "week", "rel": 0, "weekday": 6}, "to": {"unit": "week", "rel": 0, "weekday": 7}}
@@ -531,7 +531,7 @@ class BarePlural(unittest.TestCase):
 
     @unittest.skipUnless(GROUND.exists(), "the runtime's source is not here")
     def test_the_list_agrees_with_the_runtime(self):
-        """Reads crates/nativetools/src/ground.rs: when the runtime's closed list changes, this fails and says so."""
+        """Reads crates/assist/src/native/ground.rs: when the runtime's closed list changes, this fails and says so."""
         text = GROUND.read_text(encoding="utf-8")
         spans = re.search(r"const TIME_SPANS: \[&str; \d+\] = \[(.*?)\];", text, re.S)
         self.assertIsNotNone(spans, "ground.rs no longer has TIME_SPANS")

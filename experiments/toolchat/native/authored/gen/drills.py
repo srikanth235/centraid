@@ -127,7 +127,7 @@ HONORIFICS = {"dr", "mr", "mrs", "ms", "miss", "prof", "sir", "madam", "fr", "re
 
 
 # =============================================================================================================
-# dates: a port of crates/nativetools/src/dates.rs (evaluate, contains) for the expressions drills write
+# dates: a port of crates/assist/src/native/dates.rs (evaluate, contains) for the expressions drills write
 # =============================================================================================================
 
 D0, D1 = dt.date.min, dt.date.max

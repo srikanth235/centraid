@@ -243,7 +243,7 @@ def universe_h() -> dict:
 # --- the export -------------------------------------------------------------------------------
 
 
-# What the `where` mini-language takes of a field, by the type metadata.json gives it (the runtime's own table, crates/nativetools/src/whr.rs):
+# What the `where` mini-language takes of a field, by the type metadata.json gives it (the runtime's own table, crates/assist/src/native/whr.rs):
 # number, money: the six comparisons on a number; text: = and != on a literal, contains, in; enum: = and != on one of its values, in;
 # bool: = and != on yes|no (a value form of "enum"); date: no condition. Every field but a bool also takes `is empty` / `is set`.
 # A link takes a count comparison: `<linked kind> count`.
