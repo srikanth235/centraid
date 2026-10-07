@@ -3,8 +3,8 @@
 
     python3 -m unittest train/test_trace3.py
 
-The decoder tests need torch and the cached Qwen tokenizer, the `compile` tests a `nativetools` binary; each is skipped when
-one is missing. The compiler tests need none of them.
+The decoder tests need torch and the cached Qwen tokenizer, and every test that compiles a think a `nativetools` binary
+(`NATIVETOOLS`, default `target/debug/nativetools`: the think compiler is the runtime's); each is skipped when one is missing.
 """
 from __future__ import annotations
 
@@ -18,8 +18,10 @@ from unittest import mock
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE.parent)]
 import fmt  # noqa: E402
+import runtime_think as R  # noqa: E402  (the runtime's think compiler, as a client)
 
 T = fmt.trace3()
+needs_runtime = unittest.skipUnless(os.path.isfile(R.binary()), "the think compiler is the runtime's: set NATIVETOOLS to the nativetools binary")
 GOLDEN = HERE.parent / "authored" / "golden_v3.json"
 
 SYSTEM = {"role": "system", "content": "today: Friday 2026-03-13\nme: Sam Park\n\nvault directory:\nlists: Home (#1)", "tools": []}
@@ -43,6 +45,7 @@ class PinnedV31(unittest.TestCase):
         self.addCleanup(patch.stop)
 
 
+@needs_runtime
 class CallOfThink(PinnedV31):
     def test_the_decoder_renders_the_golden_calls_exactly_as_the_data_writes_them(self):
         rows = json.loads(GOLDEN.read_text())
@@ -67,6 +70,7 @@ class CallOfThink(PinnedV31):
         self.assertEqual(fmt.dates_line_in_prompt(prompt), line)
 
 
+@needs_runtime
 class V4Decoding(unittest.TestCase):
     """CONTRACT_V3.md section 8 on the decoding side: NATIVE_TRACE=v4 reads and renders the v4 trace, the records of the data are
     converted as they are read."""
@@ -114,6 +118,7 @@ class V4Decoding(unittest.TestCase):
             self.assertEqual(fmt.records(ex)[4]["think"], msgs[4]["think"])
 
 
+@needs_runtime
 class StepRendersTheCall(unittest.TestCase):
     """`decode._Step` with a stub decoder: once the think closes, the call the think states is the only thing allowed, and after
     `</tool_call>` only `<|im_end|>`."""
@@ -204,6 +209,7 @@ class StepRendersTheCall(unittest.TestCase):
         self.assertFalse(step.info["rendered_call"])
 
 
+@needs_runtime
 class DecoderWiring(unittest.TestCase):
     """`Decoder.step` and `Decoder.complete` hand `generate` the prompt, the sampling options, the think's given prefix and the
     `dates:` line of the turn (what the call the think states is read against), the same either way (a decoder with no model:
@@ -253,7 +259,7 @@ class DecoderWiring(unittest.TestCase):
 
 class RuntimeCompile(unittest.TestCase):
     """The runtime's `compile` op on the fixture world (crates/nativetools/tests/fixtures/world.json, today 2026-09-27): the call
-    it states for the slots of a think is the call `trace.compile_call` renders, a refusal names the slot, and the backend retries
+    it states for the slots of a think is the call the stateless compiler (`nativetools think`) renders, a refusal names the slot, and the backend retries
     once with `retry: <slot>` and then falls back. Needs a `nativetools` binary."""
 
     WORLD = HERE.parents[3] / "crates" / "nativetools" / "tests" / "fixtures" / "world.json"
@@ -300,7 +306,7 @@ class RuntimeCompile(unittest.TestCase):
                       'intent: read\nkind: event\nwhen: "next week" = week+1\norder: date asc\nlimit: 2'):
             reply = req({"op": "compile", "slots": T.slots_json(T.parse3(think))})
             self.assertNotIn("refused", reply, think)
-            want = T.compile_call(think, dates)
+            want = R.compile_think(think, dates)
             self.assertTrue(T.same_call(T.runtime_call(reply, "stated"), want), (think, reply["stated"], want))
 
     def test_the_runtime_states_the_call_a_v4_think_compiles_to_and_says_what_it_inferred(self):
@@ -311,7 +317,7 @@ class RuntimeCompile(unittest.TestCase):
                                 ('intent: read\nkind: event\nwhen: "next week" = dates[1]', [])):
             reply = req({"op": "compile", "slots": T.slots_json(T.parse4(think))})
             self.assertNotIn("refused", reply, think)
-            self.assertTrue(T.same_call(T.runtime_call(reply, "stated"), T.compile_call(think, dates, "v4")), (think, reply["stated"]))
+            self.assertTrue(T.same_call(T.runtime_call(reply, "stated"), R.compile_think(think, dates, "v4")), (think, reply["stated"]))
             self.assertEqual(reply["inferred"], inferred, think)
 
     def test_a_refusal_names_the_slot(self):

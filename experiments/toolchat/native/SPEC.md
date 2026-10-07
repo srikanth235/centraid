@@ -178,7 +178,7 @@ refusal: {"refused":{"slot":"pick[1]","why":"#9 is not in the block"}}
 ```
 
 - slots: `intent`, `via`, `verb`, `kind`, `op`, `field`, `group`, `trashed`, `name`, `text`, `where`, `when`, `linked_to`, `within`, `exclude`, `order`, `limit`, `more`, `set`, `pick`, `rows`, `row`, `value`, `options`, `question`, `reason` (`scope`, `refer`, `target` are accepted and ignored).
-- the tool is `via`, else the intent's own (read and count: `answer`; write: `act`; ask; decline). The rows are the explicit `rows` / `row`, else the `ok` entries of `pick`, and only when no other handle slot is given (the rule of `trace.compile_call`).
+- the tool is `via`, else the intent's own (read and count: `answer`; write: `act`; ask; decline). The rows are the explicit `rows` / `row`, else the `ok` entries of `pick`, and only when no other handle slot is given (the rule of the stateless compiler, `think.rs`).
 - `where` is a list of typed conditions: `{"field","op","value"}` (op: `= != < <= > >=`, `contains`, `in` with a list, `is empty`, `is set`), `{"link":"person","op":">=","value":2}` for a linked count, an optional `"currency"`. A string is refused. Each is rendered in one spelling and checked against the kind (`where[i]` names the one that fails).
 - `pick` is a list of entries: `{"row":"#n","verdict":"ok"|"no"}` (a row the model can see: directory, pre-grounded rows, `focus:` line, visible observations), `{"focus":i}` (the i-th row of the `focus:` line), `{"date":i,"reading":"past"|"upcoming","into":"when"|"set:<key>"}` (the i-th entry of the `dates:` line; `reading` when the line gives two). `{"pick":{…}}` stands where a handle or a date is written. A row resolves to its `#n` and vault id, a date to the date expression of its resolution (a day, a day with a clock, a range; a clock alone is refused).
 - `set` is a list of `{"key","value"}` / `{"key","date"}`: the lines of an act's `args`. Dates are written key by key in the call's order (`from, to, date, unit, rel, name, weekday, time, anchor`), `when` as JSON text like the reference calls.
@@ -284,7 +284,7 @@ A short `<think>` block before each call: one `label: value` line per slot, in a
 | `target`, all quotes | spans of the message | `trace.py` `find_span` |
 | `kind` ... `reason`, `set`, `time` | the argument as the call carries it | `trace.py` `RAW3`, `CALL_ORDER` |
 
-Slot order is `trace.py` `SLOT_ORDER3`; `parse3` rejects a line that is not a slot or is out of order. `compile_call` turns a think back into the call it states.
+Slot order is `trace.py` `SLOT_ORDER3`; `parse3` rejects a line that is not a slot or is out of order. The runtime's `think::compile_think` (`nativetools think`, `runtime_think.py`) turns a think back into the call it states.
 
 Examples (from the train data; the message is the user turn, the call follows the trace):
 

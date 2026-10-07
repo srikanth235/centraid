@@ -10,7 +10,7 @@
 `train/vm/bundles.sh` builds the three scoring bundles (trainfit, val, test) that `train/vm/score_ckpt.sh` runs.
 
 Staging: $BUNDLE_STAGE (default ${TMPDIR:-/tmp}/centraid-bundles)/<job>/{data,kernel}. data/ is flat: `bundle.dat` (a gzip
-tar of train/, eval/, authored/, export/, bin/nativetools.bin, lib/ loader + libs, data/ and render.py) and `job.json`, plus
+tar of train/, eval/, authored/, export/, bin/nativetools.bin, lib/ loader + libs, data/, render.py and runtime_think.py) and `job.json`, plus
 ckpt.<name> files for --ckpt-dir. kernel/ holds kernel.py. A build only stages: launch.sh and score_ckpt.sh upload.
 $BUNDLE_NATIVETOOLS names the exact runtime build to ship (default: the repo's target/release or target/debug build).
 
@@ -50,7 +50,8 @@ NATIVE = HERE.parent
 REPO = HERE.parents[3]
 STAGE = Path(os.environ.get("BUNDLE_STAGE") or Path(os.environ.get("TMPDIR") or "/tmp") / "centraid-bundles")
 TRAIN_FILES = ["fmt.py", "train.py", "decode.py", "hf_backend.py", "batching.py"]
-# + ../render.py, the shared renderer, and ../authored/trace.py (fmt.py compiles the slot trace with it; stage_eval copies it)
+# + ../render.py, the shared renderer, ../runtime_think.py (the client of the runtime's think compiler: fmt.py's `call_of_think` and v4 rewrite
+# run through `bin/nativetools think`) and ../authored/trace.py (fmt.py reads the slot trace's data side with it; stage_eval copies it)
 # Scoring. Placeholders are filled by kernel.py. The driver runs `--threads` sessions at once against one batched model. `eval_procs` driver processes share the GPU (a 0.8B step is Python
 # bound, so one process leaves it mostly idle) and one claims directory, so every session runs once; `eval_chunks` launches
 # in all ({part} = a launch's index, {only} = its session ids when the run is narrowed). The kernel merges {out}/run-*.jsonl
@@ -268,6 +269,7 @@ def build(a):
     for f in TRAIN_FILES:
         shutil.copy(HERE / f, tree / "train" / f)
     shutil.copy(NATIVE / "render.py", tree / "render.py")  # fmt.py imports it from the parent dir
+    shutil.copy(NATIVE / "runtime_think.py", tree / "runtime_think.py")  # ... and this one: the think compiler is bin/nativetools's
     sessions = set_sessions(a)
     worlds = {s["world"] for s in sessions}
     stage_eval(tree, a, worlds)

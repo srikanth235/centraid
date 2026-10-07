@@ -13,7 +13,7 @@ sessions of A to D: eval/sessions/e1 and eval/worlds).
 The `<think>` before each call is the slot trace of CONTRACT_V3.md (section 7, v3.1), written mechanically from the
 call and the prompt in front of it (authored/trace.py), never authored: a row is its `#n`, a date the dates line reads
 as exactly is `dates[i]`, a `where` is typed segments. The call is a deterministic rendering of its think
-(`trace.compile_call`): every record's call is rebuilt from its own think by the very function the decoder uses
+(the runtime's stateless compiler, `think.rs`): every record's call is rebuilt from its own think by the very function the decoder uses
 (`fmt.call_of_think`), and a record whose compiled call differs from the authored call is refused with reason
 `roundtrip` (reported like any other trace failure, the session left out). The arguments of a record are written in the
 call order `trace.CALL_ORDER`, in the one spelling of the runtime's `compile` op (a `where` bare enum word is quoted).

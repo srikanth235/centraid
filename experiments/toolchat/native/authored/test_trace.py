@@ -1,15 +1,19 @@
 """Unit tests for the slot trace (authored/trace.py, CONTRACT_V3.md): the text round trip, the base slot rules on small
-hand-built contexts, the trace -> call compiler, the refer rule, and the golden set (one think and call per distinct call
-shape of the train data). The runtime side of the base slots is tested in crates/nativetools/tests/trace.rs;
-`trace3_check.py` measures the rules on a built corpus.
+hand-built contexts, the trace -> call compiler (the runtime's, through `runtime_think.py`), the refer rule, and the golden set
+(one think and call per distinct call shape of the train data). The runtime side of the base slots is tested in
+crates/nativetools/tests/trace.rs, the compiler's own in crates/nativetools/tests/think.rs; `trace3_check.py` measures the
+rules on a built corpus.
 
-    python3 -m unittest authored/test_trace.py
+    NATIVETOOLS=target/debug/nativetools python3 -m unittest authored/test_trace.py
+
+The tests that compile a think need the binary (`NATIVETOOLS`, default `target/debug/nativetools`) and are skipped without it.
 """
 from __future__ import annotations
 
 import importlib.util
 import json
 import os
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -20,6 +24,15 @@ spec = importlib.util.spec_from_file_location("authored_trace", HERE / "trace.py
 T = importlib.util.module_from_spec(spec)
 sys.modules["authored_trace"] = T
 spec.loader.exec_module(T)
+
+R = T._client()  # runtime_think.py: the runtime's think compiler (`nativetools think`) and v4 rewrite
+needs_runtime = unittest.skipUnless(os.path.isfile(R.binary()), "the think compiler is the runtime's: set NATIVETOOLS to the nativetools binary")
+
+
+def compiled(trace, dates=None, mode=None):
+    """The call a think states, from the runtime's compiler: {"tool", "args"}, the arguments in the order a call writes them."""
+    return R.compile_think(trace, dates, mode)
+
 
 SYSTEM = {"role": "system", "content": "today: Friday 2026-03-13\nme: Sam Park\n\nvault directory:\nlists: Home (#1), Work (#2)"}
 
@@ -152,6 +165,7 @@ class TraceText(unittest.TestCase):
                 T.parse3(bad)
 
 
+@needs_runtime
 class Compile(unittest.TestCase):
     def test_dates_round_trip_in_the_calls_own_key_order(self):
         for expr in ('{"unit":"week","rel":1,"weekday":5}', '{"unit":"day","rel":0,"anchor":"row","time":"09:00"}', '{"date":"2026-03-27","time":"15:00"}',
@@ -165,35 +179,36 @@ class Compile(unittest.TestCase):
                 T.date_to_compact(bad)
 
     def test_a_trace_states_the_whole_call(self):
-        c = T.compile_call(FULL3)
+        c = compiled(FULL3)
         self.assertEqual(c["tool"], "act")
         self.assertEqual(list(c["args"]), ["verb", "rows", "kind", "name", "linked_to", "when", "where", "exclude", "order", "limit", "more", "args"])
         self.assertEqual(c["args"]["when"], '{"from":{"unit":"week","rel":0,"weekday":5},"to":{"unit":"day","rel":1,"anchor":"row","time":"09:00"}}')
         self.assertEqual(c["args"]["args"], 'to: {"unit":"week","rel":1,"weekday":5,"time":"14:30"}\nnotes: Dr Patel, 2 pm\nlist: #12')
         self.assertEqual(c["args"]["rows"], "#12, #13")  # an explicit slot wins over the ok rows of pick
-        c = T.compile_call("intent: write\nverb: cancel\nscope: some\nrefer: both \"both\" -> @3\nkind: event")
+        c = compiled("intent: write\nverb: cancel\nscope: some\nrefer: both \"both\" -> @3\nkind: event")
         self.assertEqual(c["args"], {"verb": "cancel", "kind": "event", "rows": "@3"})  # rows stated by refer
-        c = T.compile_call("intent: write\nverb: cancel\nscope: one\npick: #7 ok · #8 no (kind)")
+        c = compiled("intent: write\nverb: cancel\nscope: one\npick: #7 ok · #8 no (kind)")
         self.assertEqual(c["args"], {"verb": "cancel", "rows": "#7"})  # ... or by the ok rows of pick
-        c = T.compile_call("intent: read\nvia: open\npick: #7 ok")
+        c = compiled("intent: read\nvia: open\npick: #7 ok")
         self.assertEqual((c["tool"], c["args"]), ("open", {"row": "#7"}))
-        self.assertEqual(T.compile_call('intent: read\nrefer: none "x"'.replace('refer: none "x"', "refer: none"))["tool"], "answer")
+        self.assertEqual(compiled('intent: read\nrefer: none "x"'.replace('refer: none "x"', "refer: none"))["tool"], "answer")
 
     def test_tools_follow_the_intent_or_via(self):
-        self.assertEqual([T.compile_call(f"intent: {i}\nverb: star")["tool"] for i in ("read", "count", "write", "ask", "decline")],
+        self.assertEqual([compiled(f"intent: {i}\nverb: star")["tool"] for i in ("read", "count", "write", "ask", "decline")],
                          ["answer", "answer", "act", "ask", "decline"])
-        self.assertEqual(T.compile_call("intent: count\nvia: compute\nop: sum")["tool"], "compute")
-        self.assertEqual(T.compile_call("intent: write\nvia: find\nverb: cancel\nkind: task")["args"], {"kind": "task"})  # a lookup has no verb
+        self.assertEqual(compiled("intent: count\nvia: compute\nop: sum")["tool"], "compute")
+        self.assertEqual(compiled("intent: write\nvia: find\nverb: cancel\nkind: task")["args"], {"kind": "task"})  # a lookup has no verb
 
     def test_a_trace_that_is_not_a_call_does_not_compile(self):
         for bad in ("intent: write\nkind: task", "intent: read\nwhen: now = day+0 t", "intent: read\nwhen: now = day+0\ntime: 09:00",
                     "intent: read\nwhen: now = fortnight+1"):
-            with self.assertRaises(T.CompileError, msg=bad):
-                T.compile_call(bad)
-        with self.assertRaises(T.CompileError):
-            T.compile_call("not a trace")
+            with self.assertRaises(R.Refused, msg=bad):
+                compiled(bad)
+        with self.assertRaises(R.Refused):
+            compiled("not a trace")
 
 
+@needs_runtime
 class Generate(unittest.TestCase):
     def setUp(self):
         self.history = [SYSTEM, user("what's on friday"), call("answer", kind="event"),
@@ -203,7 +218,7 @@ class Generate(unittest.TestCase):
     def round_trip(self, history, tool_, args, **kw):
         tr = T.derive_trace3({"tool": tool_, "args": args}, history, None, **kw)
         self.assertEqual(T.check_call3(T.render3(tr.slots), {"tool": tool_, "args": args}, history), [])
-        got = T.compile_call(T.render3(tr.slots))
+        got = compiled(T.render3(tr.slots))
         self.assertTrue(T.same_call(got, {"tool": tool_, "args": args}))
         return tr.slots
 
@@ -258,6 +273,7 @@ class Generate(unittest.TestCase):
         self.assertFalse(s.get("target"))
 
 
+@needs_runtime
 class Refer(unittest.TestCase):
     def test_previous_result_reads_the_context(self):
         self.assertFalse(T.has_prev_result([SYSTEM, user("what's on friday")]))
@@ -297,6 +313,7 @@ class Refer(unittest.TestCase):
         self.assertNotIn("refer", tr.slots)
 
 
+@needs_runtime
 class V31(unittest.TestCase):
     """CONTRACT_V3.md section 7: a date the dates line reads as `dates[i]`, a `where` of typed segments, `retry: <slot>`, the slots
     the runtime's `compile` op reads. The runtime side (the same text through the real op) is train/test_trace3.py."""
@@ -319,7 +336,7 @@ class V31(unittest.TestCase):
         self.assertIsNone(T.where_respell("status == open"))
 
     def test_the_slot_compiles_to_the_call_in_one_spelling(self):
-        c = T.compile_call('intent: read\nkind: task\nwhere: status = open · effort > 60')
+        c = compiled('intent: read\nkind: task\nwhere: status = open · effort > 60')
         self.assertEqual(c["args"]["where"], 'status = "open" and effort > 60')
         self.assertEqual(T.slots_json(T.parse3('intent: read\nkind: task\nwhere: status = open · effort > 60'))["where"],
                          [{"field": "status", "op": "=", "value": "open"}, {"field": "effort", "op": ">", "value": 60}])
@@ -347,11 +364,11 @@ class V31(unittest.TestCase):
         self.assertEqual(tr.slots["when_expr"], "dates[0]")
         self.assertIn("= dates[0]", T.render3(tr.slots))
         self.assertEqual(tr.call["args"]["when"], '{"from":{"date":"2026-03-16"},"to":{"date":"2026-03-22"}}')  # the one key order
-        self.assertEqual(T.compile_call(T.render3(tr.slots), self.DATES)["args"]["when"], tr.call["args"]["when"])
-        with self.assertRaises(T.CompileError):
-            T.compile_call(T.render3(tr.slots))  # without the line the pick has nothing to read
-        with self.assertRaises(T.CompileError):
-            T.compile_call("intent: read\nkind: event\nwhen: now = dates[7]", self.DATES)
+        self.assertEqual(compiled(T.render3(tr.slots), self.DATES)["args"]["when"], tr.call["args"]["when"])
+        with self.assertRaises(R.Refused):
+            compiled(T.render3(tr.slots))  # without the line the pick has nothing to read
+        with self.assertRaises(R.Refused):
+            compiled("intent: read\nkind: event\nwhen: now = dates[7]", self.DATES)
         self.assertEqual(T.slots_json(tr.slots)["when"], {"pick": {"date": 0}})
         self.assertEqual(tr.mentions["dates_anchored"], 1)
         self.assertEqual(tr.mentions["class"], "anchored")
@@ -362,7 +379,7 @@ class V31(unittest.TestCase):
         tr = T.derive_trace3({"tool": "act", "args": args}, hist)
         self.assertEqual(tr.slots["set"], [("to", "dates[1] upcoming", True)])
         self.assertEqual(T.slots_json(tr.slots)["set"], [{"key": "to", "date": {"pick": {"date": 1, "reading": "upcoming"}}}])
-        self.assertEqual(T.compile_call(T.render3(tr.slots), self.DATES)["args"]["args"], 'to: {"date":"2026-03-20"}')
+        self.assertEqual(compiled(T.render3(tr.slots), self.DATES)["args"]["args"], 'to: {"date":"2026-03-20"}')
 
     def test_a_date_the_line_does_not_read_stays_typed_and_a_where_that_is_not_typed_is_refused(self):
         tr = T.derive_trace3({"tool": "answer", "args": {"kind": "event", "when": '{"unit":"week","rel":1}'}}, self.HIST)
@@ -435,6 +452,7 @@ class V31(unittest.TestCase):
         self.assertEqual((m["rows"], m["names"], m["class"]), (1, 0, "anchored"))
 
 
+@needs_runtime
 class V4(unittest.TestCase):
     """CONTRACT_V3.md section 8: the v4 trace. Its slots, how it compiles, what the compile step infers, and the converter from a
     v3.1 think. The runtime side (the same slots through the real op) is crates/nativetools/tests/phase7_v4.rs."""
@@ -481,75 +499,81 @@ class V4(unittest.TestCase):
             self.assertEqual(T.default_mode(), "v4")
 
     def test_a_pick_states_the_rows_beside_another_handle_slot(self):
-        c = T.compile_call("intent: write\nverb: complete\npick: #31 (name)\nwithin: @1", None, "v4")
+        c = compiled("intent: write\nverb: complete\npick: #31 (name)\nwithin: @1", None, "v4")
         self.assertEqual(c["args"], {"verb": "complete", "rows": "#31", "within": "@1"})
-        c = T.compile_call("intent: read\nvia: open\npick: #31 (name)", None, "v4")
+        c = compiled("intent: read\nvia: open\npick: #31 (name)", None, "v4")
         self.assertEqual(c, {"tool": "open", "args": {"row": "#31"}})
 
     def test_an_act_that_names_a_row_takes_the_kind_of_its_verb(self):
         want = {"tool": "act", "args": {"verb": "complete", "kind": "task", "name": "Pay rent"}}
-        self.assertEqual(T.compile_call("intent: write\nverb: complete\nname: Pay rent", None, "v4"), want)
-        self.assertEqual(T.compile_call("intent: write\nverb: complete\nkind: task\nname: Pay rent", None, "v4"), want)
-        self.assertNotIn("kind", T.compile_call("intent: write\nverb: complete\nname: Pay rent", None, "v3.1")["args"])
+        self.assertEqual(compiled("intent: write\nverb: complete\nname: Pay rent", None, "v4"), want)
+        self.assertEqual(compiled("intent: write\nverb: complete\nkind: task\nname: Pay rent", None, "v4"), want)
+        self.assertNotIn("kind", compiled("intent: write\nverb: complete\nname: Pay rent", None, "v3.1")["args"])
         for text in ("intent: write\nverb: delete\nname: Pay rent", "intent: read\nname: Pay rent", "intent: write\nverb: complete\npick: #31 (name)",
                      "intent: write\nverb: complete\nname: Pay rent\nwithin: @1"):  # a handle slot carries the kind
-            self.assertNotIn("kind", T.compile_call(text, None, "v4")["args"], text)
+            self.assertNotIn("kind", compiled(text, None, "v4")["args"], text)
+
+    def reason(self, n, text, block=None):
+        """The reason of the pick of row `n`, as the runtime's v4 rewrite reads it from the context in front of the call."""
+        got = R.v4_think(f"intent: write\nverb: delete\nscope: one\nrefer: none\nrows: #{n}", self.hist(text, block))
+        return re.search(r"pick: #\d+ \((\w+)\)", got).group(1)
 
     def test_a_pick_reason_is_read_from_the_context(self):
-        def reason(n, text, block=None):
-            return T.pick_reason(T.build_ctx(self.hist(text, block)), n)
-        self.assertEqual(reason(34, "and delete it"), "created")
-        self.assertEqual(reason(35, "and delete it"), "focus")
-        self.assertEqual(reason(36, "and delete it"), "asked")
-        self.assertEqual(reason(31, "tick off the rent"), "name")
-        self.assertEqual(reason(34, "tick off the plants"), "name")  # the message names it: not a back reference
-        self.assertEqual(reason(32, "rang chi", self.BLOCK.replace('person "Chioma Eze"', 'person "Chioma Eze" · nickname "Chi"')), "nick")
-        self.assertEqual(reason(33, "move it to friday", 'vault: #33 event "Kids dentist" · Thu 2026-03-12 10:00'), "date")
-        self.assertEqual(reason(33, "move it", 'vault: #33 event "Kids dentist"'), "kind")
-        self.assertEqual(T.reason_hint({"refer": ("it", "", ["@1"])}), "focus")
-        self.assertEqual(T.reason_hint({"pick": [(1, None), (2, "name")]}), "name")
+        self.assertEqual(self.reason(34, "and delete it"), "created")
+        self.assertEqual(self.reason(35, "and delete it"), "focus")
+        self.assertEqual(self.reason(36, "and delete it"), "asked")
+        self.assertEqual(self.reason(31, "tick off the rent"), "name")
+        self.assertEqual(self.reason(34, "tick off the plants"), "name")  # the message names it: not a back reference
+        self.assertEqual(self.reason(32, "rang chi", self.BLOCK.replace('person "Chioma Eze"', 'person "Chioma Eze" · nickname "Chi"')), "nick")
+        self.assertEqual(self.reason(33, "move it to friday", 'vault: #33 event "Kids dentist" · Thu 2026-03-12 10:00'), "date")
+        self.assertEqual(self.reason(33, "move it", 'vault: #33 event "Kids dentist"'), "kind")
+        # no context (the golden file keeps thinks, not conversations): a real refer is `focus`, else what the candidates said
+        self.assertEqual(R.v4_think('intent: write\nverb: delete\nscope: one\nrefer: it "it" -> #7'), 'intent: write\nverb: delete\npick: #7 (focus)')
+        self.assertEqual(R.v4_think("intent: write\nverb: delete\nscope: one\npick: #1 ok · #2 no (name)"), "intent: write\nverb: delete\npick: #1 (name)")
+        self.assertEqual(R.v4_think("intent: write\nverb: delete\nscope: one\npick: #1 ok · #2 no (date)"), "intent: write\nverb: delete\npick: #1 (date)")
+        self.assertEqual(R.v4_think("intent: write\nverb: delete\nscope: one\npick: #1 ok · #2 no (kind)"), "intent: write\nverb: delete\npick: #1 (kind)")
 
     def test_an_acted_part_of_the_focus_line_is_its_own_segment(self):
         """The `acted ...` part sits after the sets and before `asked:`; a pick of its row is `focus`, not `created`."""
         block = ('vault: #31 task "Pay rent"\n'
                  'focus: created #34 task "Water the plants" · acted #37 task "Call Ama", #38 event "Dentist" · '
                  '@1: #35 note "Dal recipe" · asked: #36 person "Priya Nair"\nresult line')
-        self.assertEqual(T.focus_sets(block), [("created", {34}), ("focus", {37, 38}), ("focus", {35}), ("asked", {36})])
+        self.assertEqual(self.reason(37, "and delete it", block), "focus")
+        self.assertEqual(self.reason(38, "and delete it", block), "focus")
+        self.assertEqual(self.reason(35, "and delete it", block), "focus")
+        self.assertEqual(self.reason(34, "and delete it", block), "created")
+        self.assertEqual(self.reason(36, "and delete it", block), "asked")
         short = 'focus: created #34 task "Water the plants" · acted #37 task "Call Ama"\nresult line'
-        self.assertEqual(T.focus_sets(short), [("created", {34}), ("focus", {37})])
-        h = self.hist("and delete it", block)
-        ctx = T.build_ctx(h)
-        self.assertEqual(T.pick_reason(ctx, 37), "focus")
-        self.assertEqual(T.pick_reason(ctx, 34), "created")
-        self.assertEqual(T.pick_reason(ctx, 36), "asked")
+        self.assertEqual(self.reason(37, "and delete it", short), "focus")
+        self.assertEqual(self.reason(34, "and delete it", short), "created")
 
     def test_the_converter_drops_what_the_compile_step_infers(self):
         h = self.hist("tick off the rent")
-        got = T.v4_think('intent: write "tick off"\nverb: complete\nscope: one\nrefer: none\ntarget: "rent"\npick: #31 ok · #33 no (kind)', h)
+        got = R.v4_think('intent: write "tick off"\nverb: complete\nscope: one\nrefer: none\ntarget: "rent"\npick: #31 ok · #33 no (kind)', h)
         self.assertEqual(got, 'intent: write "tick off"\nverb: complete\npick: #31 (name)')
         # a result handle and several rows are a rows slot, one row of an earlier turn a pick with its reason
-        self.assertEqual(T.v4_think('intent: write "delete"\nverb: delete\nscope: all "them"\nrefer: both "them" -> @1', h),
+        self.assertEqual(R.v4_think('intent: write "delete"\nverb: delete\nscope: all "them"\nrefer: both "them" -> @1', h),
                          'intent: write "delete"\nverb: delete\nrows: @1')
-        self.assertEqual(T.v4_think('intent: write "delete"\nverb: delete\nscope: some\nrows: #31, #33', h), 'intent: write "delete"\nverb: delete\nrows: #31, #33')
+        self.assertEqual(R.v4_think('intent: write "delete"\nverb: delete\nscope: some\nrows: #31, #33', h), 'intent: write "delete"\nverb: delete\nrows: #31, #33')
         h2 = self.hist("and delete it")
-        self.assertEqual(T.v4_think('intent: write "delete"\nverb: delete\nscope: one\nrefer: it "it" -> #35', h2), 'intent: write "delete"\nverb: delete\npick: #35 (focus)')
+        self.assertEqual(R.v4_think('intent: write "delete"\nverb: delete\nscope: one\nrefer: it "it" -> #35', h2), 'intent: write "delete"\nverb: delete\npick: #35 (focus)')
         # the kind goes only when the verb fixes it and a name selects
-        self.assertEqual(T.v4_think('intent: write "done"\nverb: complete\nscope: one\nkind: task\nname: Pay rent', h), 'intent: write "done"\nverb: complete\nname: Pay rent')
+        self.assertEqual(R.v4_think('intent: write "done"\nverb: complete\nscope: one\nkind: task\nname: Pay rent', h), 'intent: write "done"\nverb: complete\nname: Pay rent')
         keep = 'intent: write "remove"\nverb: delete\nscope: one\nkind: task\nname: Pay rent'
-        self.assertIn("kind: task", T.v4_think(keep, h))
+        self.assertIn("kind: task", R.v4_think(keep, h))
         # a v4 think is itself; a lookup has no v4 form
-        self.assertEqual(T.v4_think('intent: write\nverb: star\npick: #5 (nick)', h), 'intent: write\nverb: star\npick: #5 (nick)')
-        with self.assertRaises(T.V4Skip) as e:
-            T.v4_think('intent: read\nvia: find\nkind: task\nname: Pay rent', h)
+        self.assertEqual(R.v4_think('intent: write\nverb: star\npick: #5 (nick)', h), 'intent: write\nverb: star\npick: #5 (nick)')
+        with self.assertRaises(R.V4Skip) as e:
+            R.v4_think('intent: read\nvia: find\nkind: task\nname: Pay rent', h)
         self.assertEqual(e.exception.reason, "find")
 
     def test_the_v4_think_compiles_to_the_v31_calls_where_a_date_is_picked(self):
         dates = "dates: friday = 2026-03-13 · at 3pm = 15:00"
         h = [SYSTEM, {"role": "user", "content": dates + "\n\nmove it to friday"}]
         t3 = 'intent: write "move"\nverb: reschedule\nscope: one\nrefer: none\nkind: event\nname: Dentist\nwhen: "friday" = dates[0]\nset: to = ~dates[0]'
-        t4 = T.v4_think(t3, h)
+        t4 = R.v4_think(t3, h)
         self.assertNotIn("scope", t4)
-        self.assertEqual(T.compile_call(t4, dates, "v4"), T.compile_call(t3, dates))
+        self.assertEqual(compiled(t4, dates, "v4"), compiled(t3, dates))
 
     def test_the_slots_the_runtime_reads_say_v4_and_the_reason(self):
         j = T.slots_json(T.parse4("intent: write\nverb: complete\npick: #31 (name)\nwithin: @1"))
@@ -569,6 +593,7 @@ class V4(unittest.TestCase):
         self.assertTrue(T.check_call3("intent: write\nverb: delete\npick: #31 (name)", call_, h))
 
 
+@needs_runtime
 class GoldenV4(unittest.TestCase):
     """The v4 renderings of the golden file (`trace3_check.py golden4`): each compiles to the call of its v3.1 think."""
 
@@ -578,11 +603,12 @@ class GoldenV4(unittest.TestCase):
         self.assertGreater(len(said), 500)
         self.assertEqual({r["call"]["tool"] for r in rows if r.get("think4") is None}, {"find"})  # v4 has no lookup step
         for r in said:
-            got = T.compile_call(r["think4"], r.get("dates"), "v4")
+            got = compiled(r["think4"], r.get("dates"), "v4")
             self.assertEqual(got, T.canon_call(r["call"]), r["shape"])
             self.assertEqual(T.render3(T.parse4(r["think4"])), r["think4"], r["shape"])
 
 
+@needs_runtime
 class Golden(unittest.TestCase):
     """The trace -> call compiler on one example of every distinct call shape of the train corpus (`trace3_check.py golden`).
     The decoder renders its call with the same function."""
@@ -591,7 +617,7 @@ class Golden(unittest.TestCase):
         rows = json.loads((HERE / "golden_v3.json").read_text())
         self.assertGreater(len(rows), 500)
         for r in rows:
-            got = T.compile_call(r["think"], r.get("dates"), "v3.1")  # golden thinks are v3.1
+            got = compiled(r["think"], r.get("dates"), "v3.1")  # golden thinks are v3.1
             self.assertEqual(got, T.canon_call(r["call"]), r["shape"])
             self.assertEqual(list(got["args"]), list(T.canon_call(r["call"])["args"]), r["shape"])  # the order is part of the text
             self.assertEqual(T.render3(T.parse3(r["think"])), r["think"], r["shape"])

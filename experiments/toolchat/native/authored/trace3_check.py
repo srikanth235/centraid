@@ -11,11 +11,11 @@
         think length (Qwen tokens when the tokenizer is cached, else words).
     python3 authored/trace3_check.py v4 DATA.jsonl.gz [--turns N] [--no-runtime] [--write OUT.jsonl.gz]
         the v4 trace (CONTRACT_V3.md section 8) over the first N turns of a built data file: every v3.1 think rewritten as v4,
-        its compiled call against the v3.1 think's (Python, and the runtime's `compile` op over the session's own world
+        its compiled call against the v3.1 think's (the runtime's stateless compiler, and its session `compile` op over the session's own world
         unless --no-runtime; the world must be seeded under EVAL_VAULTS, as `build.py` leaves it), the steps v4 does not say,
         and the mean think and decision tokens per turn of both versions (the tokenizer `fmt.encode` uses).
     python3 authored/trace3_check.py golden4 [--golden authored/golden_v3.json]
-        add the v4 think of every row of the golden file (`think4`; the pick reason is `trace.reason_hint`: no context).
+        add the v4 think of every row of the golden file (`think4`; the pick reason is the runtime's hint: no context).
 
 The report:
   round trip      compile(parse(think)) == the call, through `fmt.call_of_think`, the decoder's own function
@@ -39,6 +39,7 @@ HERE = Path(__file__).resolve().parent
 NATIVE = HERE.parent
 sys.path[:0] = [str(NATIVE / "train"), str(NATIVE)]
 import fmt  # noqa: E402
+import runtime_think as R  # noqa: E402  (the runtime's think compiler and v4 rewrite, as a client)
 
 T = fmt.trace3()
 
@@ -187,8 +188,8 @@ def golden(src, out):
                 if "dates[" in m["think"]:  # a dates[i] compiles against the dates line of its prompt
                     seen[key]["dates"] = T.dates_line_of(ex["messages"][:i])
                 try:
-                    seen[key]["think4"] = T.v4_think(m["think"], ex["messages"][:i])
-                except T.V4Skip:
+                    seen[key]["think4"] = R.v4_think(m["think"], ex["messages"][:i])
+                except R.V4Skip:
                     pass
     rows = sorted(seen.values(), key=lambda r: r["shape"])
     Path(out).write_text(json.dumps(rows, indent=0, ensure_ascii=False) + "\n")
@@ -196,14 +197,14 @@ def golden(src, out):
 
 
 def golden4(path):
-    """Add `think4` to every row of the golden file that v4 can say (no context: `trace.reason_hint`), `null` for the others."""
+    """Add `think4` to every row of the golden file that v4 can say (no context: the runtime's reason hint), `null` for the others."""
     rows = json.loads(Path(path).read_text())
     n = 0
     for r in rows:
         try:
-            r["think4"] = T.v4_think(r["think"], dates=r.get("dates") or "")
+            r["think4"] = R.v4_think(r["think"], dates=r.get("dates") or "")
             n += 1
-        except T.V4Skip:
+        except R.V4Skip:
             r["think4"] = None
     Path(path).write_text(json.dumps(rows, indent=0, ensure_ascii=False) + "\n")
     print(f"{n}/{len(rows)} golden shapes have a v4 think -> {path}")
@@ -303,8 +304,8 @@ def v4_check(path, turns, runtime, write):
                 upto += 1
                 steps_n += 1
                 try:
-                    t4 = T.v4_think(m["think"], msgs[:i])
-                except T.V4Skip as e:
+                    t4 = R.v4_think(m["think"], msgs[:i])
+                except R.V4Skip as e:
                     skipped[e.reason] += 1
                     if e.reason == "roundtrip":
                         problems.append((ex["id"], i, e.detail))

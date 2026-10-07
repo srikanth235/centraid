@@ -77,12 +77,12 @@ import bisect
 import json
 import re
 import sys
-import threading
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import render  # noqa: E402  (experiments/toolchat/native/render.py)
+import runtime_think  # noqa: E402  (experiments/toolchat/native/runtime_think.py: the runtime's think compiler, as a client)
 
 IGNORE = -100
 ASSISTANT_OPEN = "<|im_start|>assistant\n<think>\n"
@@ -116,19 +116,18 @@ def tools_hash(tools) -> str:
 
 def trace_mode() -> str:
     """The trace version of the think: `v4`, or `v3.1` when NATIVE_TRACE says so (CONTRACT_V3.md sections 7 and 8)."""
-    return trace3().default_mode()
+    return runtime_think.default_mode()
 
 
 def v4_records(msgs: list[dict]) -> list[dict]:
-    """The records with every think rewritten as v4 (`trace.v4_think`, which checks that it compiles to the same call). A
-    step v4 cannot say (a lookup, `via: find`) keeps its v3.1 think: both versions are readable (`trace.parse_any`)."""
-    t = trace3()
+    """The records with every think rewritten as v4 (`runtime_think.v4_think`, the runtime's: it checks that the v4 think compiles
+    to the same call). A step v4 cannot say (a lookup, `via: find`) keeps its v3.1 think: both versions are readable."""
     out = []
     for i, m in enumerate(msgs):
         if m["role"] == "assistant" and m.get("think"):
             try:
-                m = dict(m, think=t.v4_think(m["think"], msgs[:i]))
-            except t.V4Skip:
+                m = dict(m, think=runtime_think.v4_think(m["think"], msgs[:i]))
+            except runtime_think.V4Skip:
                 pass
         out.append(m)
     return out
@@ -710,25 +709,10 @@ def check_spans(ex: dict, enc: dict) -> None:
 
 # ---- the slot trace (authored/trace.py, CONTRACT_V3.md): the call a think states
 
-_TRACE3_LOCK = threading.RLock()
-
-
 def trace3():
-    """authored/trace.py by path (the name `trace` is also a standard-library module), loaded once. The one place the
-    trace's functions live: the data builder and the decoder both call these."""
-    with _TRACE3_LOCK:  # batched scoring calls this from many threads: a half-executed module must never be visible
-        if "authored_trace" not in sys.modules:
-            import importlib.util
-            path = Path(__file__).resolve().parents[1] / "authored" / "trace.py"
-            spec = importlib.util.spec_from_file_location("authored_trace", path)
-            mod = importlib.util.module_from_spec(spec)
-            sys.modules["authored_trace"] = mod  # trace.py's own dataclasses look itself up here while it executes
-            try:
-                spec.loader.exec_module(mod)
-            except BaseException:
-                sys.modules.pop("authored_trace", None)
-                raise
-        return sys.modules["authored_trace"]
+    """authored/trace.py by path (the name `trace` is also a standard-library module), loaded once: the data's side of the
+    trace (its generator, its slots, its context). The compiler is not in it: it is the runtime's (`runtime_think`)."""
+    return runtime_think.authored_trace()
 
 
 def msgs_in_prompt(prompt: str) -> list[dict]:
@@ -754,10 +738,10 @@ def call_of_think(think: str, dates: str | None = None, mode: str | None = None)
     writes exactly this text after `</think>`; the data builder checks the same function against every authored call.
     `dates`: the `dates:` line of the prompt, which a `dates[i]` of the think is read against (without it such a think
     states no whole call). `mode`: `v3.1` or `v4` (default `trace_mode()`); the data builders pass `v3.1` for the v3.1 thinks they
-    write. The runtime's `compile` op is the authority; this is the render path it falls back to."""
-    t = trace3()
+    write. The compiler is the runtime's (`nativetools think`, through `runtime_think`); the runtime's session `compile` op is
+    the same step with a vault behind it, which grounds the rows and repairs the call."""
     try:
-        c = t.compile_call(think.strip(), dates, mode)
-    except t.CompileError:
+        c = runtime_think.compile_think(think.strip(), dates, mode)
+    except runtime_think.Refused:
         return None
     return render.call_text(c["tool"], c["args"])
