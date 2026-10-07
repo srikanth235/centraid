@@ -6,6 +6,12 @@ use std::path::{Path, PathBuf};
 use centraid_nativetools::{Flags, Session, dates, seed, vaultio};
 use serde_json::{Value, json};
 
+pub mod drive;
+
+use std::collections::BTreeMap;
+
+use centraid_nativetools::vaultio::SetClock;
+
 pub const FIXTURE: &str = include_str!("../fixtures/world.json");
 /// A Sunday.
 pub const TODAY: &str = "2026-09-27";
@@ -143,4 +149,27 @@ pub fn diff_rows(response: &Value) -> Vec<Value> {
         .as_array()
         .cloned()
         .unwrap_or_default()
+}
+
+/// The vault's own journal: how many commands it has answered, per command id and status.
+pub fn journal(world: &World) -> BTreeMap<(String, String), usize> {
+    let handle = vaultio::Handle::open(world.path(), SetClock::at(1_800_000_000_000), "journal")
+        .expect("the journal opens");
+    let rows = handle
+        .table(
+            "agent_command_invocation",
+            "invocation_id, command_id, status, requested_at",
+            "requested_at",
+            "invocation_id",
+        )
+        .expect("the journal reads");
+    let mut counts = BTreeMap::new();
+    for row in &rows {
+        let key = (
+            vaultio::text(row, "command_id").unwrap_or_default(),
+            vaultio::text(row, "status").unwrap_or_default(),
+        );
+        *counts.entry(key).or_insert(0) += 1;
+    }
+    counts
 }

@@ -328,7 +328,7 @@ impl World {
         let profiles = door.table(
             "people_profile",
             "profile_id, party_id, role, nickname, cadence_days, last_contacted_at, met, \
-             created_at, updated_at, deleted_at",
+             created_at, updated_at, deleted_at, purge_at",
             "created_at",
             "profile_id",
         )?;
@@ -365,6 +365,9 @@ impl World {
             let mut extra = BTreeMap::new();
             if profile.is_some() {
                 extra.insert("profile", "yes".to_owned());
+            }
+            if let Some(purge) = profile.and_then(|profile| text(profile, "purge_at")) {
+                extra.insert("purge_at", purge);
             }
             self.insert(Row {
                 kind: Kind::Person,
@@ -447,7 +450,7 @@ impl World {
         let events = door.table(
             "core_event",
             "event_id, summary, description, dtstart, dtend, status, created_at, updated_at, \
-             deleted_at",
+             deleted_at, purge_at",
             "created_at",
             "event_id",
         )?;
@@ -483,6 +486,18 @@ impl World {
                 "description",
                 nonempty(text(event, "description")),
             );
+            let mut extra = BTreeMap::new();
+            // the stored spellings of the span and the trash window: what a write's checks read
+            // (the clash of a new event, the restore window)
+            for (name, column) in [
+                ("dtstart", "dtstart"),
+                ("dtend", "dtend"),
+                ("purge_at", "purge_at"),
+            ] {
+                if let Some(value) = text(event, column) {
+                    extra.insert(name, value);
+                }
+            }
             self.insert(Row {
                 kind: Kind::Event,
                 id: text(event, "event_id").unwrap_or_default(),
@@ -492,7 +507,7 @@ impl World {
                 trashed: text(event, "deleted_at").is_some(),
                 created: text(event, "created_at").unwrap_or_default(),
                 updated: text(event, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
         let attendees = door.table(
@@ -541,7 +556,7 @@ impl World {
         let tasks = door.table(
             "schedule_task",
             "task_id, title, description, status, priority, due_at, completed_at, effort_min, \
-             parent_task_id, project_id, created_at, updated_at, deleted_at",
+             parent_task_id, project_id, created_at, updated_at, deleted_at, purge_at, rrule",
             "created_at",
             "task_id",
         )?;
@@ -573,6 +588,12 @@ impl World {
                 "description",
                 nonempty(text(task, "description")),
             );
+            let mut extra = BTreeMap::new();
+            for column in ["purge_at", "rrule"] {
+                if let Some(value) = text(task, column) {
+                    extra.insert(column, value);
+                }
+            }
             self.insert(Row {
                 kind: Kind::Task,
                 id: text(task, "task_id").unwrap_or_default(),
@@ -582,7 +603,7 @@ impl World {
                 trashed: text(task, "deleted_at").is_some(),
                 created: text(task, "created_at").unwrap_or_default(),
                 updated: text(task, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
         for task in &tasks {
@@ -620,7 +641,7 @@ impl World {
             .collect();
         let notes = door.table(
             "knowledge_note",
-            "note_id, title, body_content_id, pinned, created_at, updated_at, deleted_at",
+            "note_id, title, body_content_id, pinned, created_at, updated_at, deleted_at, purge_at",
             "created_at",
             "note_id",
         )?;
@@ -630,6 +651,10 @@ impl World {
             put(&mut fields, "body", nonempty(body));
             fields.insert("pinned", Val::Bool(int(note, "pinned") == Some(1)));
             let created = text(note, "created_at").unwrap_or_default();
+            let mut extra = BTreeMap::new();
+            if let Some(purge) = text(note, "purge_at") {
+                extra.insert("purge_at", purge);
+            }
             self.insert(Row {
                 kind: Kind::Note,
                 id: text(note, "note_id").unwrap_or_default(),
@@ -639,7 +664,7 @@ impl World {
                 trashed: text(note, "deleted_at").is_some(),
                 created,
                 updated: text(note, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
         // ALBUM OR NOTEBOOK. Both are `core_collection` rows and the table
@@ -693,13 +718,17 @@ impl World {
         }
         let collections = door.table(
             "core_collection",
-            "collection_id, name, created_at, updated_at",
+            "collection_id, name, parent_collection_id, created_at, updated_at",
             "created_at",
             "collection_id",
         )?;
         for collection in &collections {
             let id = text(collection, "collection_id").unwrap_or_default();
             let kind = roles.get(&id).copied().unwrap_or(Kind::Notebook);
+            let mut extra = BTreeMap::new();
+            if let Some(parent) = text(collection, "parent_collection_id") {
+                extra.insert("parent", parent);
+            }
             self.insert(Row {
                 kind,
                 name: text(collection, "name").unwrap_or_default(),
@@ -709,7 +738,7 @@ impl World {
                 trashed: false,
                 created: text(collection, "created_at").unwrap_or_default(),
                 updated: text(collection, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
         for entry in &entries {
@@ -740,7 +769,11 @@ impl World {
     }
 
     fn load_documents(&mut self, door: &dyn Door, concepts: &Concepts) -> Result<(), String> {
-        for (id, label, created, updated) in &concepts.folders {
+        for (id, label, created, updated, parent) in &concepts.folders {
+            let mut extra = BTreeMap::new();
+            if let Some(parent) = parent {
+                extra.insert("parent", parent.clone());
+            }
             self.insert(Row {
                 kind: Kind::Folder,
                 id: id.clone(),
@@ -750,12 +783,12 @@ impl World {
                 trashed: false,
                 created: created.clone(),
                 updated: updated.clone(),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
         let documents = door.table(
             "core_document",
-            "document_id, title, created_at, updated_at, deleted_at",
+            "document_id, title, created_at, updated_at, deleted_at, purge_at",
             "created_at",
             "document_id",
         )?;
@@ -764,6 +797,10 @@ impl World {
             let mut fields = BTreeMap::new();
             fields.insert("starred", Val::Bool(concepts.starred("core.document", &id)));
             let created = text(document, "created_at").unwrap_or_default();
+            let mut extra = BTreeMap::new();
+            if let Some(purge) = text(document, "purge_at") {
+                extra.insert("purge_at", purge);
+            }
             self.insert(Row {
                 kind: Kind::Document,
                 name: text(document, "title").unwrap_or_default(),
@@ -773,7 +810,7 @@ impl World {
                 trashed: text(document, "deleted_at").is_some(),
                 created,
                 updated: text(document, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
         for (document, folder) in &concepts.filed {
@@ -790,7 +827,7 @@ impl World {
     fn load_photos(&mut self, door: &dyn Door, concepts: &Concepts) -> Result<(), String> {
         let assets = door.table(
             "media_asset",
-            "asset_id, kind, title, captured_at, created_at, updated_at, deleted_at",
+            "asset_id, kind, title, captured_at, created_at, updated_at, deleted_at, purge_at",
             "created_at",
             "asset_id",
         )?;
@@ -801,6 +838,10 @@ impl World {
             let id = text(asset, "asset_id").unwrap_or_default();
             let mut fields = BTreeMap::new();
             fields.insert("starred", Val::Bool(concepts.starred("media.asset", &id)));
+            let mut extra = BTreeMap::new();
+            if let Some(purge) = text(asset, "purge_at") {
+                extra.insert("purge_at", purge);
+            }
             self.insert(Row {
                 kind: Kind::Photo,
                 name: text(asset, "title")
@@ -812,7 +853,7 @@ impl World {
                 trashed: text(asset, "deleted_at").is_some(),
                 created: text(asset, "created_at").unwrap_or_default(),
                 updated: text(asset, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
+                extra,
             });
         }
         Ok(())
@@ -872,7 +913,7 @@ impl World {
         let items = door.table(
             "locker_item",
             "item_id, type, title, username, url, notes, created_at, updated_at, deleted_at, \
-             key_id, password, otp_seed, card_number, cvv, content, cardholder, expiry, brand, \
+             purge_at, key_id, password, otp_seed, card_number, cvv, content, cardholder, expiry, brand, \
              fullname, email, phone, address, network",
             "created_at",
             "item_id",
@@ -900,6 +941,9 @@ impl World {
             let mut extra = BTreeMap::new();
             if let Some(key) = text(item, "key_id") {
                 extra.insert("key_id", key);
+            }
+            if let Some(purge) = text(item, "purge_at") {
+                extra.insert("purge_at", purge);
             }
             for (_, column) in crate::native::meta::REVEAL_FIELDS {
                 if let Some(sealed) = text(item, column) {
@@ -974,8 +1018,8 @@ impl World {
 /// The concept plane: stars and folders.
 struct Concepts {
     starred: BTreeSet<(String, String)>,
-    /// `(id, label, created, updated)`.
-    folders: Vec<(String, String, String, String)>,
+    /// `(id, label, created, updated, parent)`.
+    folders: Vec<(String, String, String, String, Option<String>)>,
     /// `(document, folder)` — not the root.
     filed: Vec<(String, String)>,
     root_folder: Option<String>,
@@ -999,7 +1043,7 @@ impl Concepts {
         let folders_scheme = scheme_of(FOLDER_SCHEME);
         let concepts = door.table(
             "core_concept",
-            "concept_id, scheme_id, notation, pref_label, created_at, updated_at",
+            "concept_id, scheme_id, notation, pref_label, broader_concept_id, created_at, updated_at",
             "created_at",
             "concept_id",
         )?;
@@ -1024,6 +1068,7 @@ impl Concepts {
                         text(concept, "pref_label").unwrap_or_default(),
                         text(concept, "created_at").unwrap_or_default(),
                         text(concept, "updated_at").unwrap_or_default(),
+                        text(concept, "broader_concept_id"),
                     ));
                 }
             }

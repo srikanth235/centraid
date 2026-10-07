@@ -44,6 +44,10 @@ pub struct Flags {
     /// `reveal` verb ends the turn in `decline sealed_egress` (`Session::locker_off_decline`). The
     /// kind card and the prompt are the same either way (R-1088-10).
     pub locker: bool,
+    /// What a write does (#1088, R-1088-2, R-1088-6): [`Writes::Run`](crate::native::park::Writes)
+    /// (the default: the vault runs it, as in every harness run), or `Park` (a patched copy of
+    /// the world takes it and it waits for the member's tap).
+    pub writes: crate::native::park::Writes,
 }
 
 impl Default for Flags {
@@ -56,6 +60,7 @@ impl Default for Flags {
             normalize: true,
             compose: true,
             locker: true,
+            writes: crate::native::park::Writes::Run,
         }
     }
 }
@@ -338,6 +343,8 @@ pub(crate) struct Mark {
 /// The whole session.
 pub struct Session {
     pub(crate) door: Box<dyn Door>,
+    /// The patched world and the parked steps (`crate::native::park`).
+    pub(crate) park: crate::native::park::ParkState,
     pub(crate) world: World,
     pub(crate) now: DateTime,
     pub(crate) me_name: String,
@@ -581,8 +588,13 @@ impl Session {
         } else {
             me.to_owned()
         };
+        let park = crate::native::park::ParkState {
+            world: (flags.writes != crate::native::park::Writes::Run).then(|| world.clone()),
+            ..Default::default()
+        };
         let mut session = Self {
             door,
+            park,
             world,
             now,
             me_name,

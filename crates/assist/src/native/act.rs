@@ -1553,7 +1553,7 @@ impl Session {
                     let mut outputs = Vec::new();
                     let mut lapsed_row = false;
                     for step in steps {
-                        let ran = self.door.step(step.command, step.input.clone())?;
+                        let ran = self.write_step(step.command, &step.input)?;
                         if !ran.ok {
                             if verb == Verb::Restore
                                 && several
@@ -1672,7 +1672,7 @@ impl Session {
         if let Some(created) = &created {
             touched.push(created.clone());
         }
-        self.world = World::load_with(&*self.door, self.flags.locker)?;
+        self.settle()?;
         let mut diff = diff(&before, &self.world);
         // A SETTLEMENT MOVES A BALANCE, not a row field: the diff carries the
         // person's balance in the settled group (positive = they owe me),
@@ -3227,6 +3227,12 @@ impl Session {
                         input[field] = json!(value);
                     }
                 }
+                // A PARKED PERSON KEEPS THE ID IT WAS SHOWN WITH: the vault honours a seat-minted
+                // party id (#922 G2), so the confirm writes the row the card named. A run lets the
+                // vault mint it, as every harness run always has.
+                if self.flags.writes != crate::native::park::Writes::Run {
+                    input["party_id"] = json!(mint());
+                }
                 ("people.add_person", input, "party_id")
             }
             Kind::Group => {
@@ -3423,7 +3429,7 @@ impl Session {
             Kind::Photo => unreachable!("photos are not created by a call"),
         };
         let before = self.world.clone();
-        let ran = self.door.step(command, input.clone())?;
+        let ran = self.write_step(command, &input)?;
         if !ran.ok {
             // A NEW EVENT THAT CLASHES WITH ANOTHER is a refusal the person can lift by
             // choosing another time (`compose_busy_conflict`).
@@ -3456,14 +3462,13 @@ impl Session {
             ));
         }
         for (command, input) in follow {
-            self.door.advance();
-            if let Err(error) = self.door.must(command, input) {
+            if let Err(error) = self.write_must(command, input) {
                 // Take the half-made row back out, so no later diff finds it.
                 if let Some(delete) = Verb::Delete.command(kind) {
                     self.door.advance();
-                    let _ = self.door.step(delete, json!({ id_param(kind): id }));
+                    let _ = self.write_step(delete, &json!({ id_param(kind): id }));
                 }
-                self.world = World::load_with(&*self.door, self.flags.locker)?;
+                self.settle()?;
                 return Err(error);
             }
         }
@@ -3522,7 +3527,7 @@ impl Session {
         let mut lines = Vec::new();
         let mut touched: Vec<Key> = Vec::new();
         for inverse in inverses.iter().rev() {
-            let ran = self.door.step(&inverse.command, inverse.input.clone())?;
+            let ran = self.write_step(&inverse.command, &inverse.input)?;
             if !ran.ok {
                 let name = self.named(&inverse.key);
                 lines.push(format!(
@@ -3533,7 +3538,7 @@ impl Session {
                 touched.push(inverse.key.clone());
             }
         }
-        self.world = World::load_with(&*self.door, self.flags.locker)?;
+        self.settle()?;
         let mut diff = diff(&before, &self.world);
         // A SETTLEMENT MOVES A BALANCE, not a row field: the diff carries the
         // person's balance in the settled group (positive = they owe me),

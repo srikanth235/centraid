@@ -19,6 +19,6 @@ pub mod seed;
 pub mod vaultio;
 
 pub use centraid_assist::native::{
-    Flags, Session, act, compile, dates, ground, identity, meta, parse, phrases, prompt, render,
-    resolve, search, session, think, trace, values, whr, world,
+    Flags, Session, act, compile, dates, ground, identity, meta, park, parse, phrases, prompt,
+    render, resolve, search, session, think, trace, values, whr, world,
 };
