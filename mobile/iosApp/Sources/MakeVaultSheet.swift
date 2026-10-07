@@ -2,7 +2,8 @@ import SwiftUI
 
 /// MAKE A VAULT ON THIS PHONE (#1029 §1).
 ///
-/// The door behind Settings, and what `GatewaySheet` became. Named apart from
+/// The door behind Settings, and what `GatewaySheet` became. A device that
+/// holds no vault never reaches it: that is `FirstLaunchView`'s. Named apart from
 /// `HomeView`'s own private `VaultSheet`, which is the SWITCHER: one lists the
 /// vaults this device holds, this one adds to them.
 ///
@@ -31,6 +32,7 @@ struct MakeVaultSheet: View {
     @ObservedObject var shell: ShellModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
+    @State private var removingSample = false
 
     var body: some View {
         NavigationStack {
@@ -39,8 +41,9 @@ struct MakeVaultSheet: View {
                     Button("Make a vault on this phone") { shell.makeVault() }
                         .accessibilityIdentifier("vault-found-button")
 
-                    // BRING THIS MEMBER'S VAULTS BACK from their 24 words — a
-                    // fresh install, or a phone told to restore first.
+                    // BRING THIS MEMBER'S VAULTS BACK from their 24 words. A
+                    // fresh install meets this door on `FirstLaunchView`; here
+                    // it serves a phone that already holds a vault.
                     Button(ShellWords.wordsRestore) { shell.openRestore() }
                         .accessibilityIdentifier("vault-restore-button")
 
@@ -52,6 +55,27 @@ struct MakeVaultSheet: View {
                             .centraidType("small")
                             .foregroundStyle(Theme.color("textSoft", scheme))
                             .accessibilityIdentifier("vault-status")
+                    }
+                }
+
+                // THE SAMPLE VAULT'S DOOR (R-SAMPLE-1): remove it while it is
+                // held, add a fresh one back when it is not. Removal deletes a
+                // vault, so it asks first — the same confirm Home's notice
+                // raises.
+                Section(ShellWords.sampleMark) {
+                    if shell.hasSample {
+                        Button(ShellWords.sampleRemove) { removingSample = true }
+                            .foregroundStyle(Theme.color("net", scheme))
+                            .accessibilityIdentifier("vault-sample-remove")
+                    } else if shell.addingSample {
+                        // SEEDING: quiet and not tappable, so a second tap
+                        // cannot start a second found.
+                        Button(ShellWords.sampleAdding) {}
+                            .disabled(true)
+                            .accessibilityIdentifier("vault-sample-adding")
+                    } else {
+                        Button(ShellWords.sampleAdd) { shell.addSample() }
+                            .accessibilityIdentifier("vault-sample-add")
                     }
                 }
 
@@ -69,6 +93,7 @@ struct MakeVaultSheet: View {
                         .accessibilityIdentifier("vault-transfer-rules")
                 }
             }
+            .sampleRemoveConfirm(isPresented: $removingSample, shell: shell)
             .navigationTitle("Vault")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

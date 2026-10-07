@@ -248,6 +248,12 @@ public object CustodyCopy {
 
     public const val PAIR_NO_VAULT: String = "Make a vault on this phone first, then pair it with your laptop."
 
+    /**
+     * THE SAMPLE VAULT IS IN FRONT. It never pairs — the core refuses — so the
+     * screen says where pairing is instead of offering a code it would refuse.
+     */
+    public const val PAIR_SAMPLE: String = dev.centraid.design.copy.SharedCopy.SAMPLE_NO_PAIR
+
     public const val DONE: String = "Done"
 
     public const val CANCEL: String = "Cancel"

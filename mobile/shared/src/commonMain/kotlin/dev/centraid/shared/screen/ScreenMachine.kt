@@ -241,6 +241,18 @@ public object Reads {
         sentence = sentence,
     )
 
+    /**
+     * THE SENTENCE FOR A DEVICE THAT HOLDS NO VAULT, said once.
+     *
+     * Home, every app screen's read and a write's settle all reach this
+     * state, and a member who sees "No vault yet" on Home and then something
+     * else in an app is being told two things about one fact.
+     */
+    public const val NO_VAULT: String = "No vault is open on this device."
+
+    /** There is no vault to read. Not a fault, and never an empty `data`. */
+    public fun noVault(): ReadFailure = refused(NO_VAULT)
+
     /** This seat has no copy yet. A first sync, not a refusal. */
     public fun noCopyYet(): ReadFailure = ReadFailure(
         kind = ReadFailureKind.READ_FAILURE_KIND_NO_COPY_YET,

@@ -1312,7 +1312,7 @@ fn agenda(seeder: &mut Seeder, circle: &Circle) {
 /// THE SAMPLE ROLL, COMPILED IN — and borrowed rather than copied.
 ///
 /// These rasters already exist as the demo seed's assets
-/// (`crates/centraid/src/bin/seed-assets/photos/`), they are original
+/// (`crates/core/src/sample/photos/`), they are original
 /// procedurally drawn frames rather than any photograph of a person, and they
 /// carry the `thumbhash` and `phash` values computed off these exact bytes.
 /// Copying 200 KB of PNG into a second crate to avoid one relative path would
@@ -1322,7 +1322,7 @@ macro_rules! sample {
     ($file:literal) => {
         include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../centraid/src/bin/seed-assets/photos/",
+            "/../core/src/sample/photos/",
             $file
         ))
     };

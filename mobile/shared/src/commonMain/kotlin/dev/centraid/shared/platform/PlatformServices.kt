@@ -80,6 +80,14 @@ public interface DeviceClock {
         public val zone: String,
         /** The wall clock, milliseconds since 1970-01-01T00:00:00Z. */
         public val epochMillis: Long,
+        /**
+         * The zone's offset from UTC AT [epochMillis], in minutes (east is
+         * positive). It exists for ONE question `commonMain` cannot answer from
+         * the name above: which local calendar day an instant falls on
+         * ([dev.centraid.shared.shell.FoundingDay]). Never a calendar and never
+         * used to place an agenda — the core does that, in [zone].
+         */
+        public val utcOffsetMinutes: Int = 0,
     )
 }
 

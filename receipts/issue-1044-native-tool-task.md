@@ -228,3 +228,19 @@ CPU only; no model was trained or scored live. Replays rescore S2's recorded nt1
 - **Data for the rejection-sampled run**: 2,514 fresh sessions (train worlds, rewordings new to training) and 355 skill sessions for the seven model-hard skills (S1 referent 53, S2 units and windows 53, S3 read vs write 54, S4 no invention 47, S5 decline after a miss 53, S6 vocabulary 50, S7 look then pick 45), all verified on nt15; the screen set `eval/sets/roll-screen.jsonl` holds the 2,869.
 - **Tooling**: `eval/rollout.py` (screen and sample sets, RFT records and DPO pairs; 33 tests), `train.py --dpo` with a precomputed reference (21 tests) and `bundle.py --continue-from` (1 epoch, lr 4e-6, EMA 0.999), retry on a runtime signal (`NATIVE_RETRY`), opt-in fast kernels and bf16 scoring.
 - Open: the live S2 score on nt15, then screen, sample, RFT and DPO, each on the owner's go: `experiments/toolchat/native/HANDOFF.md`.
+
+## Evidence: the merge onto main and #1078 (2026-10-07)
+
+The branch carried #1020 unsquashed, so a plain merge of main conflicted in 413 product files and in none of #1044's. Main (`f5487678`, #1080) is the source of truth, ruled by the owner: its tree was taken whole, #1044's estate kept beside it, and #1044's own product changes re-applied on top. #1078's branch (`claude/ios-app-simulator-aaef2f`: the onboarding deck, the sample vault and the on-device chat) was then merged onto that.
+
+| check | result |
+| --- | --- |
+| val v7.4 refreeze on the merged runtime | byte-identical (`5d3d9035…`), 655 / 655 sessions, UNEXPLAINED 0, after each merge |
+| lines of main the result lacks | 31, each attributed: rung eleven, the field number, the sample refusals, the nudge's removal, re-indentation; 92 more are #1044's clock fixes and manifest surfaces; the rest #1078 removed itself |
+| vault DDL | main's plus #1078's chat schema: 115 lines added, none removed |
+| workspace tests | all pass but `validate_suite_is_clean_on_all_three_corpora` (s85, DEFECTS.md #B9), red before the merge too |
+| grammar derivation | 154 commands, verb classes 100 %; every egress candidate ruled |
+
+- **Main against #1078.** The chat migration is rung eleven (`011_chat.sql`), because main's `010_backup_v2.sql` landed first, and `assist` is envelope field 31, because main's `handoff` holds 23. A sample vault is refused by main's pass and its upload handoff too, and is left out of the iOS upload loop. #1078's "no backup yet" nudge is folded into main's backup line: the field it read, `laptop_paired`, is retired in main's `phone.proto`. R-SAMPLE-8 is recorded in `docs/decisions.md`.
+- **Found by the tests, not by the conflicts.** Main's rung-ten and rung-five climb tests rewind a fresh vault, which now holds the chat, so they undo rung eleven first (`common::UNDO_RUNG_ELEVEN`). The registry count gains `chat.*`. #1078's spending-headline test assumed the sample's expenses (four to six days old) sat in last month, which is true only early in a month; it now asks this month and last.
+- **Not run here.** The iOS build (no Xcode on Linux) and Android's Compose build. Gradle's Kotlin tests ran through `cargo xtask gate --profile mobile-jvm`; see the commit.

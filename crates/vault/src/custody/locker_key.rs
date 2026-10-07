@@ -521,6 +521,10 @@ mod tests {
                  CREATE UNIQUE INDEX locker_key_live_idx
                    ON locker_key(retired_at IS NULL) WHERE retired_at IS NULL;
                  CREATE TABLE notifications_notice (notice_id TEXT PRIMARY KEY) STRICT;
+                 DROP TABLE chat_message_attachment;
+                 DROP TABLE chat_message_card;
+                 DROP TABLE chat_message;
+                 DROP TABLE chat_thread;
                  ALTER TABLE locker_item ADD COLUMN url_match_policy TEXT NOT NULL
                    DEFAULT 'registrable-domain';
                  ALTER TABLE locker_item_address ADD COLUMN match_policy TEXT NOT NULL

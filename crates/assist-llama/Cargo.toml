@@ -1,0 +1,47 @@
+[package]
+name = "centraid-assist-llama"
+description = "The on-device chat engine: llama.cpp behind centraid-assist's Model and ModelLoader traits."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_assist_llama"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-assist = { path = "../assist" }
+# `default-features = false` drops `openmp` (iOS has no libomp; ggml's own
+# thread pool is what runs), `common` (llama.cpp's examples library: this crate
+# needs the core grammar sampler only) and the Android shared-libc++ default.
+# `mtmd` is llama.cpp's multimodal library: the projector loader and the image
+# encoder behind a photo attachment.
+llama-cpp-2 = { version = "=0.1.158", default-features = false, features = [
+  "mtmd",
+] }
+
+# Metal on every Apple target. The crate adds it by itself for macOS on arm64
+# only; an iPhone is the target this engine is for.
+[target.'cfg(target_vendor = "apple")'.dependencies]
+llama-cpp-2 = { version = "=0.1.158", default-features = false, features = [
+  "metal",
+  "mtmd",
+] }
+
+# Android links libc++ statically so the one `libcentraid_core_ffi.so` is the
+# only native library the APK carries.
+[target.'cfg(target_os = "android")'.dependencies]
+llama-cpp-2 = { version = "=0.1.158", default-features = false, features = [
+  "android-static-stdcxx",
+  "mtmd",
+] }
+
+[[bin]]
+name = "assist-eval-llama"
+path = "src/bin/assist-eval-llama.rs"
+
+[dev-dependencies]
+image.workspace = true

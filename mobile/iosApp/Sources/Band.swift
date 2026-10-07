@@ -84,6 +84,10 @@ struct HomeBand: View {
         .padding(.horizontal, BandMetrics.inset)
         .padding(.top, BandMetrics.topGap)
         .padding(.bottom, BandMetrics.floorPadding)
+        // `.contain`, or the plate's identifier REPLACES each tab's own: the
+        // hierarchy showed every tab as `home-band`, so no flow could select
+        // Chat or More by id.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home-band")
     }
 }
@@ -470,11 +474,20 @@ enum BandDestinations {
 
     static var tabs: [Place] {
         #if canImport(CentraidShared)
-        return BandPolicy.shared.bandTabs(pins: BandPolicy.shared.DEFAULT_PINS).map {
+        var places = BandPolicy.shared.bandTabs(pins: BandPolicy.shared.DEFAULT_PINS).map {
             // `short_`, not `short`: Kotlin/Native suffixes a name that
             // collides with an Objective-C keyword, and `short` is a C type.
             Place(id: $0.id, short: $0.short_, iconKey: $0.iconKey)
         }
+        // CHAT IS THE BAND'S SECOND PLACE, BETWEEN HOME AND MORE. It is added
+        // here and not to `BandPolicy.PLACES` because the on-device chat has
+        // only this shell so far: a shared policy row would draw a Chat tab on
+        // Android that opens nothing, which is a control that lies. When
+        // Android ships chat the row moves into the policy and this line goes.
+        if let home = places.firstIndex(where: { $0.id == "home" }) {
+            places.insert(Place(id: "chat", short: ShellWords.bandChat, iconKey: "MessageCircle"), at: home + 1)
+        }
+        return places
         #else
         return []
         #endif
@@ -490,6 +503,7 @@ enum ShellWords {
     static var bandHome: String { HomeWords.shared.BAND_HOME }
     static var bandMore: String { HomeWords.shared.BAND_MORE }
     static var bandMoreSpoken: String { HomeWords.shared.BAND_MORE_SPOKEN }
+    static var bandChat: String { ChatCopy.shared.TAB_LABEL }
     static var allApps: String { HomeWords.shared.ALL_APPS }
     static var loading: String { HomeWords.shared.LOADING }
     static var photosAbsent: String { HomeWords.shared.PHOTOS_ABSENT }
@@ -497,10 +511,19 @@ enum ShellWords {
     static var dayOneBody: String { HomeWords.shared.DAY_ONE_BODY }
     static var firstMoves: String { HomeWords.shared.FIRST_MOVES }
     static var vaultsTitle: String { HomeWords.shared.VAULTS_TITLE }
-    static var vaultsNone: String { HomeWords.shared.VAULTS_NONE }
     static var vaultsOne: String { HomeWords.shared.VAULTS_ONE }
-    static var vaultsMake: String { HomeWords.shared.VAULTS_MAKE }
-    static var vaultsMakeSpoken: String { HomeWords.shared.VAULTS_MAKE_SPOKEN }
+    /// THE FIRST-LAUNCH GATE's sentence and two actions (`FirstLaunchView`).
+    static var firstLaunchBody: String { HomeWords.shared.FIRST_LAUNCH_BODY }
+    static var firstLaunchHouseTitle: String { HomeWords.shared.FIRST_LAUNCH_HOUSE_TITLE }
+    static var firstLaunchHouseBody: String { HomeWords.shared.FIRST_LAUNCH_HOUSE_BODY }
+    static var firstLaunchKeyTitle: String { HomeWords.shared.FIRST_LAUNCH_KEY_TITLE }
+    static var firstLaunchKeyBody: String { HomeWords.shared.FIRST_LAUNCH_KEY_BODY }
+    static var firstLaunchCopyTitle: String { HomeWords.shared.FIRST_LAUNCH_COPY_TITLE }
+    static var firstLaunchCopyBody: String { HomeWords.shared.FIRST_LAUNCH_COPY_BODY }
+    static var firstLaunchNext: String { HomeWords.shared.FIRST_LAUNCH_NEXT }
+    static var firstLaunchSkip: String { HomeWords.shared.FIRST_LAUNCH_SKIP }
+    static var firstLaunchMake: String { HomeWords.shared.FIRST_LAUNCH_MAKE }
+    static var firstLaunchRestore: String { HomeWords.shared.FIRST_LAUNCH_RESTORE }
     /// "Restore my vaults" — words.enter's door on the vault sheets (#1047 E2).
     static var wordsRestore: String { WordsCopy.shared.RESTORE_FIRST_ACTION }
     /// The More sheet's custody rows (#1047 E5): "Show my 24 words", and
@@ -511,14 +534,27 @@ enum ShellWords {
     static var vaultsForget: String { HomeWords.shared.VAULTS_FORGET }
     static var vaultsForgetBody: String { HomeWords.shared.VAULTS_FORGET_BODY }
     static var cancel: String { KitWords.shared.CANCEL }
+    /// THE SAMPLE VAULT (R-SAMPLE-1): Home's one notice line, its two verbs,
+    /// the switcher's mark (the vault's own name), and the removal's confirm.
+    static var sampleLine: String { HomeWords.shared.SAMPLE_LINE }
+    static var sampleRemove: String { HomeWords.shared.SAMPLE_REMOVE }
+    static var sampleAdd: String { HomeWords.shared.SAMPLE_ADD }
+    static var sampleAdding: String { HomeWords.shared.SAMPLE_ADDING }
+    static var sampleMark: String { SharedCopy.shared.SAMPLE_VAULT_NAME }
+    static var sampleRemoveConfirm: String { HomeWords.shared.SAMPLE_REMOVE_CONFIRM }
+    static var sampleRemoveBody: String { HomeWords.shared.SAMPLE_REMOVE_BODY }
     static func vaultName(_ name: String) -> String { HomeWords.shared.vaultName(name: name) }
     static func forgetTitle(_ name: String) -> String { HomeWords.shared.forgetTitle(name: name) }
     #else
-    static let bandHome = "", bandMore = "", bandMoreSpoken = "", allApps = "", loading = ""
+    static let bandHome = "", bandMore = "", bandMoreSpoken = "", bandChat = "", allApps = "", loading = ""
     static let photosAbsent = "", dayOneTitle = "", dayOneBody = "", firstMoves = ""
-    static let vaultsTitle = "", vaultsNone = "", vaultsOne = "", vaultsMake = "", vaultsMakeSpoken = ""
+    static let vaultsTitle = "", vaultsOne = ""
+    static let firstLaunchBody = "", firstLaunchMake = "", firstLaunchRestore = ""
+    static let firstLaunchHouseTitle = "", firstLaunchHouseBody = "", firstLaunchKeyTitle = "", firstLaunchKeyBody = "", firstLaunchCopyTitle = "", firstLaunchCopyBody = "", firstLaunchNext = "", firstLaunchSkip = ""
     static let wordsRestore = "", showWords = "", pairLaptop = ""
     static let vaultsCurrent = "", vaultsForget = "", vaultsForgetBody = "", cancel = ""
+    static let sampleLine = "", sampleRemove = "", sampleAdd = "", sampleAdding = "", sampleMark = ""
+    static let sampleRemoveConfirm = "", sampleRemoveBody = ""
     static func vaultName(_ name: String) -> String { name }
     static func forgetTitle(_ name: String) -> String { "" }
     #endif

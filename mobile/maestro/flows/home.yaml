@@ -5,11 +5,14 @@
 # only one of them may say the vault is empty. A unit test asserts the state; a
 # flow is the only thing that can assert the two RENDER differently, which is
 # where the confusion actually reaches a member.
-appId: dev.centraid
+appId: dev.centraid.Centraid
 name: home
 ---
-- launchApp:
-    clearState: true
+# A VAULT-HOLDING INSTALL, NOT A FRESH ONE: a fresh install holds no vault and
+# opens onto the first-launch deck (`first-launch.yaml`), and `clearState` here
+# would throw away the vault this flow reads. Seed one first with
+# `mobile/scripts/demo-vault.sh`, which relaunches the debug app on it.
+- launchApp
 # The grid is the root. Every other screen in the product is reached through it.
 - assertVisible:
     id: "home-grid"

@@ -5,7 +5,7 @@
 **The cause.** `mobile/shared/build.gradle.kts` links the Rust core with
 
 ```
-linkerOpts("-force_load", "$slice/libcentraid_core_ffi.a")
+linkerOpts("-Wl,-u,_centraid_open", /* …the other four… */ "$slice/libcentraid_core_ffi.a")
 ```
 
 where `slice` is a **path into `target/<triple>/<profile>/`**. It is a path and not a Gradle dependency, so nothing in the Gradle graph knows the archive exists, nothing declares it as an input, and nothing rebuilds it. Gradle's up-to-date check cannot see a file it was never told about, and the linker is perfectly happy to link a five-hour-old archive.

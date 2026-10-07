@@ -21,6 +21,7 @@ import os
 import re
 
 FILES = (
+    "chat",
     "core",
     "core_links",
     "knowledge",
@@ -33,7 +34,7 @@ FILES = (
 )
 
 _FN = re.compile(r"\n(?:pub )?fn (\w+)\(\)\s*->\s*CommandDefinition\s*\{")
-_NAME = re.compile(r'"((?:core|knowledge|locker|media|people|schedule|social|tally)\.[a-z_0-9]+)"')
+_NAME = re.compile(r'"((?:chat|core|knowledge|locker|media|people|schedule|social|tally)\.[a-z_0-9]+)"')
 _RAW = re.compile(r'r#"(.*?)"#', re.S)
 _SQL = re.compile(
     r'"((?:INSERT|UPDATE|DELETE|SELECT)\s[^"]*?)"',

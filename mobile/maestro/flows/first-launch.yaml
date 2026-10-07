@@ -1,0 +1,35 @@
+# First launch: a device that holds no vault opens onto the deck, not Home.
+#
+# THE POINT OF THIS FLOW is that the first frame a new member sees is the way to
+# make a vault. Home behind it would be a grid with nothing to read, so the gate
+# stands in its place, and what is asserted here is the one thing a unit test
+# cannot: that the two RENDER differently, and that no system prompt lands on
+# top of it (the photo-library observer waits for a grant, so none appears).
+appId: dev.centraid.Centraid
+name: first-launch
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    id: "first-launch"
+- assertNotVisible:
+    id: "home-grid"
+# Restore is one tap from the first slip and stays on every slip.
+- assertVisible: "Restore vault"
+# Next throws the top slip; Skip jumps to the last, where the ink button changes
+# its verb and Skip goes away.
+- tapOn:
+    id: "first-launch-primary"
+- assertVisible: "24 words are the key"
+- tapOn:
+    id: "first-launch-skip"
+- assertVisible: "Make a vault on this phone"
+- assertNotVisible:
+    id: "first-launch-skip"
+# Making a vault opens the words screens over the deck; Cancel returns to it.
+- tapOn:
+    id: "first-launch-primary"
+- assertVisible: "Before your words"
+- tapOn: "Cancel"
+- assertVisible:
+    id: "first-launch"

@@ -19,6 +19,7 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/app_query.proto";
+import "centraid/core/v1/assist.proto";
 import "centraid/core/v1/change.proto";
 import "centraid/core/v1/command.proto";
 import "centraid/core/v1/content.proto";
@@ -112,6 +113,9 @@ message Request {
     ForgetDestinationRequest forget_destination = 28;
     ReleasableRequest releasable = 29;
     ReleasedRequest released = 30;
+    // THE ON-DEVICE CHAT: a session, a question, and the model's file. Reads
+    // only; nothing a turn does is written. See `assist.proto`.
+    AssistRequest assist = 31;
   }
 }
 
@@ -148,6 +152,7 @@ message Response {
     ForgetDestinationResponse forget_destination = 28;
     ReleasableResponse releasable = 29;
     ReleasedResponse released = 30;
+    AssistResponse assist = 31;
   }
 }
 
@@ -156,6 +161,8 @@ message Event {
     ChangeEvent change = 1;
     HealthEvent health = 2;
     ConnectivityEvent connectivity = 3;
+    // A running chat turn: its activity, cards, sentence and outcome.
+    AssistEvent assist = 4;
   }
 }
 

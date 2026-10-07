@@ -76,6 +76,8 @@ fn rung_ten_drops_the_backup_index_and_the_climbed_file_is_a_fresh_one() {
             .expect("rung four's tables come back");
         let h = "ab".repeat(32);
         let object = "cd".repeat(32);
+        raw.execute_batch(common::UNDO_RUNG_ELEVEN)
+            .expect("rung eleven's chat leaves");
         raw.execute_batch(&format!(
             "BEGIN;
              INSERT INTO backup_object_range

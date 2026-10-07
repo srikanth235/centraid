@@ -319,7 +319,7 @@ public class ScreenRuntime<S, E>(
         if (handle == null) {
             // NO VAULT IS NOT A CRASH, and not an empty list either: a device
             // before its first pairing has not learned that it holds nothing.
-            host.send(reads.refused(Reads.refused("No vault is open on this device.")))
+            host.send(reads.refused(Reads.noVault()))
             return
         }
         val request = Envelope(
@@ -467,7 +467,7 @@ internal suspend fun <S, E> serveWrite(
     }
     val handle = pinned.core
     if (handle == null) {
-        settle(CommandStatus.COMMAND_STATUS_DENIED, "No vault is open on this device.")
+        settle(CommandStatus.COMMAND_STATUS_DENIED, Reads.NO_VAULT)
         return
     }
     val request = Envelope(

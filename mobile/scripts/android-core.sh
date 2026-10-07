@@ -43,7 +43,14 @@ echo "==> building $triple"
 upper="$(echo "$triple" | tr 'a-z-' 'A-Z_')"
 export "CARGO_TARGET_${upper}_LINKER=$toolchain/${cc_prefix}${api}-clang"
 export "CC_${triple//-/_}=$toolchain/${cc_prefix}${api}-clang"
+export "CXX_${triple//-/_}=$toolchain/${cc_prefix}${api}-clang++"
 export "AR_${triple//-/_}=$toolchain/llvm-ar"
+# llama.cpp (the on-device chat's engine) is built by CMake against the NDK's
+# own toolchain file, and its build script finds the NDK and the API level from
+# these two — the linker/CC variables above are not what it reads. `cmake` must
+# be on PATH (docs/toolchain.md).
+export ANDROID_NDK="$sdk/ndk/$ndk_version"
+export ANDROID_PLATFORM="android-$api"
 (cd "$root" && cargo build -p centraid-core-ffi --target "$triple")
 
 out="$root/mobile/androidApp/src/main/jniLibs/$abi"

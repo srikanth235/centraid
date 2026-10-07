@@ -202,3 +202,13 @@ pub fn enrol(vault: &Vault, device_id: &str, public_key: &str) -> Result<()> {
     })?;
     Ok(())
 }
+
+/// UNDO RUNG ELEVEN on a raw connection: the chat's four tables (their
+/// triggers and indexes go with them) and the entity kind the rung seeds
+/// (R-CHAT-1). A test that winds a founded file back below rung eleven runs
+/// this first, or the climb finds the chat already there and refuses.
+pub const UNDO_RUNG_ELEVEN: &str = "DROP TABLE chat_message_attachment;
+     DROP TABLE chat_message_card;
+     DROP TABLE chat_message;
+     DROP TABLE chat_thread;
+     DELETE FROM core_entity_kind WHERE kind = 'chat.thread';";

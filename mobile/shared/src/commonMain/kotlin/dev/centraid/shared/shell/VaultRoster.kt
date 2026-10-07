@@ -1,6 +1,7 @@
 package dev.centraid.shared.shell
 
 import centraid.core.v1.Envelope
+import centraid.core.v1.FoundContent
 import centraid.core.v1.FoundRequest
 import centraid.core.v1.PageOrder
 import centraid.core.v1.PageQuery
@@ -45,9 +46,39 @@ public object VaultRoster {
      */
     public val QUERY: PageQuery = PageQuery(
         name = "home.vault",
-        select = listOf("vault_id", "display_name"),
+        select = listOf(
+            "vault_id",
+            "display_name",
+            // THE SAMPLE MARK, read by the vault rather than parsed here:
+            // `commonMain` carries no JSON dependency, and `settings_json` is
+            // `json_valid` by its own CHECK. `seeding`, `ready`, or null for a
+            // vault that is not a sample (`crates/vault`'s `SampleMark`).
+            "json_extract(settings_json, '$.sample') AS sample",
+            // WHEN THE VAULT WAS FOUNDED, for Home's notice slot (R-SAMPLE-8):
+            // `created_at`, as the core wrote it. Last, so the positions above
+            // do not move.
+            "created_at",
+        ),
         from = "core_vault",
         order = PageOrder(sort_column = "vault_id", pk_column = "vault_id"),
+    )
+
+    /** The sample mark's two words, as `crates/vault`'s `SampleMark::word` spells them. */
+    public const val SAMPLE_SEEDING: String = "seeding"
+    public const val SAMPLE_READY: String = "ready"
+
+    /**
+     * WHAT A FILE SAYS IT IS: its lockup, and whether it is a sample vault
+     * whose scenario never finished.
+     *
+     * An UNFINISHED sample is a sample vault whose mark still says `seeding` —
+     * the found's own commit landed and the process went before the scenario
+     * did. It is not a holding: [Shelf] deletes its directory rather than
+     * holding half a scenario as if it were whole.
+     */
+    public data class Named(
+        public val lockup: VaultLockup,
+        public val unfinishedSample: Boolean,
     )
 
     /**
@@ -61,7 +92,14 @@ public object VaultRoster {
      * it replaced came to say "not connected to a gateway" over a synced device
      * for two waves.
      */
-    public suspend fun identify(core: CentraidCore): VaultLockup? {
+    public suspend fun identify(core: CentraidCore): VaultLockup? = name(core)?.lockup
+
+    /**
+     * [identify], and whether the file is a sample vault that never finished
+     * ([Named.unfinishedSample]). [VaultLockup.sample] is true only for a
+     * FINISHED sample: half a scenario is never drawn as one.
+     */
+    public suspend fun name(core: CentraidCore): Named? {
         val envelope = Envelope(
             request_id = 0,
             request = Request(page = PageRequest(query = QUERY, limit = 1)),
@@ -76,7 +114,17 @@ public object VaultRoster {
         // read with neither is one whose `core_vault` has not been founded, and
         // a roster row for it would be a blank the member could tap.
         if (id.isEmpty() && name.isEmpty()) return null
-        return VaultLockup(vault_id = id, vault_name = name)
+        val mark = row.values.getOrNull(2)?.text
+        val foundedAt = row.values.getOrNull(3)?.text.orEmpty()
+        return Named(
+            lockup = VaultLockup(
+                vault_id = id,
+                vault_name = name,
+                sample = mark == SAMPLE_READY,
+                founded_at = foundedAt,
+            ),
+            unfinishedSample = mark == SAMPLE_SEEDING,
+        )
     }
 
     /**
@@ -106,11 +154,17 @@ public object VaultRoster {
         core: CentraidCore,
         displayName: String,
         ownerName: String,
+        /**
+         * What the core fills the new vault with (`vault.proto`'s
+         * `FoundContent`): nothing, two starter rows in a member's first vault,
+         * or the sample scenario — which makes this file THE SAMPLE VAULT.
+         */
+        content: FoundContent = FoundContent.FOUND_CONTENT_EMPTY,
     ): Boolean {
         val envelope = Envelope(
             request_id = 0,
             request = Request(
-                found = FoundRequest(display_name = displayName, owner_name = ownerName),
+                found = FoundRequest(display_name = displayName, owner_name = ownerName, content = content),
             ),
         )
         return when (val outcome = core.call(envelope)) {

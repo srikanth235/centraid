@@ -52,6 +52,14 @@ centraid-apps-notes = { path = "../apps/notes" }
 centraid-apps-tally = { path = "../apps/tally" }
 # The door an app crate reads through (`PageDoor`), and the rows it answers.
 centraid-apps-kit = { path = "../apps/kit" }
+# THE PHOTO LIBRARY, FOR THE CHAT'S TWO PHOTO READS (`assist::reads::photos`):
+# Photos has no app query, so the chat reads its crate's `load_library` over
+# the same `VaultDoor` the other apps read through.
+centraid-apps-photos = { path = "../apps/photos" }
+# THE ON-DEVICE CHAT PLANE: the tool registry, prompt, grammar, turn loop and
+# the `Model` trait an engine implements. It holds no vault; this crate gives
+# it one through `assist::VaultReader`.
+centraid-assist = { path = "../assist" }
 # THE FTS DOOR, for `agenda.search`. It owns every `MATCH` in the workspace and
 # takes a connection; the core hands it `Vault::read`'s, and writes no SQL.
 centraid-search = { path = "../search" }
@@ -88,6 +96,14 @@ rustix.workspace = true
 # and every flow `block_on`s it from the shell's own thread. This crate opens
 # no socket of its own and listens on none.
 tokio.workspace = true
+# DECODING AND SCALING AN ATTACHED PHOTOGRAPH (`assist::attach`): the chat's
+# model reads 448 pixels on the long edge, so the core decodes what the vault
+# or the shell hands it and scales it before the engine ever sees it. The same
+# pure-Rust decoder the derivatives are made with; no new codec.
+image.workspace = true
+# THE STORED THUMBNAIL of a camera-roll image rides the `chat.save_turn` command
+# as a `data:` URI (`assist::store`).
+base64.workspace = true
 centraid-ontology = { path = "../ontology" }
 centraid-protocol = { path = "../protocol" }
 centraid-vault = { path = "../vault" }

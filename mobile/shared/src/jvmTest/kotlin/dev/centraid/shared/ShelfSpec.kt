@@ -2,10 +2,14 @@ package dev.centraid.shared
 
 import centraid.screen.v1.VaultLockup
 import dev.centraid.core.CentraidCore
+import dev.centraid.shared.platform.FakePlatformServices
 import dev.centraid.shared.shell.Shelf
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.runTest
+import kotlin.io.path.createTempDirectory
 
 /**
  * A VAULT'S STATE IS DERIVED, NEVER STORED (#1025 S7-9), AND ON A PHONE THAT IS
@@ -61,6 +65,22 @@ class ShelfSpec : StringSpec({
         val resting = holding(core = null)
         resting.resting shouldBe true
         resting.state shouldBe VaultLockup.State.STATE_ONLINE
+    }
+
+    "the first-launch gate waits for the read: unknown until load, then true over an empty directory" {
+        runTest {
+            val shelf = Shelf(
+                vaultDir = createTempDirectory("first-launch").toFile().path,
+                services = FakePlatformServices(),
+                dispatcher = Dispatchers.Unconfined,
+                uiThreadName = "test",
+            )
+            // NOT READ YET IS NOT EMPTY: the roster starts empty too, and a
+            // gate that took that for "no vault" would flash on every launch.
+            shelf.holdsNoVault.value.shouldBeNull()
+            shelf.load()
+            shelf.holdsNoVault.value shouldBe true
+        }
     }
 
     "the lockup a switcher row draws is never the unfilled one" {

@@ -345,9 +345,29 @@ public object HomeReads {
                 status = TileStatus.TILE_STATUS_CONTENT,
                 count = TileCount(value_ = rows.size, capped = capped),
                 count_label = label,
-                body = bodyFor(appId, rows),
+                body = bodyFor(appId, rows, capped),
             ),
         )
+    }
+
+    /**
+     * THE ROWS THE PHOTOS MOSAIC DRAWS: the newest [PHOTO_CELLS] that have a
+     * thumbnail to draw.
+     *
+     * An asset can have none for a reason that never goes away — a video with
+     * no poster frame has no thumbnail row to resolve a path from — and taking
+     * the newest four as they come left such a vault's strip with a blank cell
+     * for as long as that asset stayed among them. So the cells skip over them.
+     *
+     * **When NO row in the window is drawable the newest four are kept as they
+     * are**: that is the "these photographs are not on this device yet" state,
+     * whose grey strip and sentence are the truthful answer, and an empty
+     * `cells` would draw as a tile with a count and nothing beneath it. The
+     * count and the label are still every row's — only the strip is chosen.
+     */
+    private fun mosaicRows(rows: List<Row>): List<Row> {
+        val drawable = rows.filter { it.text(PHOTO_THUMBNAIL).isNotEmpty() }
+        return (drawable.ifEmpty { rows }).take(PHOTO_CELLS)
     }
 
     /**
@@ -360,16 +380,18 @@ public object HomeReads {
     private fun bodyFor(
         appId: String,
         rows: List<Row>,
+        capped: Boolean,
     ): TileBody? {
         val preview = rows.take(PREVIEW)
         return when (appId) {
             "photos" -> TileBody(
                 photos = TileBody.Photos(
                     // FOUR CELLS, one row, fixed count — only the cell contents
-                    // change. A cell with no addressable bytes is still a cell:
-                    // dropping the row would reflow ten photographs as one
-                    // blank under a "10".
-                    cells = rows.take(PHOTO_CELLS).map { row ->
+                    // change. [mosaicRows] says which rows: the newest that can
+                    // be DRAWN, so an asset with no thumbnail (a video with no
+                    // poster) is stepped over for the next photograph instead
+                    // of holding a permanently blank cell in the strip.
+                    cells = mosaicRows(rows).map { row ->
                         TileBody.Photos.Cell(
                             asset_id = row.text(0),
                             // ABSENT IS A REAL ANSWER, and it has more than one
@@ -476,10 +498,20 @@ public object HomeReads {
             }
 
             // Tally's figure is a BALANCE, and a balance is derived by the
-            // app's own projection rather than counted off a table. The tile
-            // says how many groups there are until that projection is wired,
-            // and says nothing it cannot stand behind.
-            "tally" -> null
+            // app's own projection (`tally.dashboard`'s valuation) rather than
+            // counted off a table, so this tile states NO figure until that
+            // projection is wired into Home. What it can stand behind is the
+            // count, WITH ITS NOUN: the header draws the bare number, and a
+            // body of nothing under "Tally 1" read as a tile that had failed
+            // to load. The caption is that number and its noun, from the
+            // tile's own count label; `figure` is absent, which a renderer
+            // draws as the caption alone.
+            "tally" -> TileBody(
+                tally = TileBody.Tally(
+                    caption = "${rows.size}${if (capped) "+" else ""} " +
+                        (READS.firstOrNull { it.appId == "tally" }?.countLabel(rows.size, capped) ?: ""),
+                ),
+            )
 
             // A STATE AND ITS WORDS, never a row (the read carries none).
             "locker" -> lockerOpen().let { open ->

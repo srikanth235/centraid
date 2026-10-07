@@ -545,6 +545,8 @@ fn the_rung_classifies_a_vault_written_before_it() {
             .expect("rung three's tables come back");
         raw.execute_batch(centraid_vault::migrations::BLOB_CUSTODY_SQL)
             .expect("rung four's tables come back");
+        raw.execute_batch(common::UNDO_RUNG_ELEVEN)
+            .expect("rung eleven's chat leaves");
         raw.execute_batch("PRAGMA foreign_keys = ON;")
             .expect("foreign keys");
         let rows = format!(

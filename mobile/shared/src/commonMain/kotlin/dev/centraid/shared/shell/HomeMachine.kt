@@ -10,6 +10,7 @@ import centraid.screen.v1.Loading
 import centraid.screen.v1.TileRow
 import centraid.screen.v1.TileStatus
 import centraid.screen.v1.VaultLockup
+import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
@@ -32,9 +33,21 @@ import dev.centraid.shared.screen.Step
  * both impossible: every app starts `LOADING`, in [SpringboardPolicy.SPRINGBOARD_ORDER],
  * and a tile only ever leaves that state because its own read said something.
  *
+ * ## A device with no vault is a FAILED Home, not a loading one
+ *
+ * Reading needs a vault, and a seat that says it is waiting for one
+ * ([SeatState.Availability.AVAILABILITY_WAITING_FOR_MOUNT]) has nothing for a
+ * tile to read: no core answers, so seeding `LOADING` tiles would spin for ever
+ * (seen on a fresh install), and grading them `EMPTY` would claim a vault that
+ * does not exist. The third branch of the read law is for exactly this, so
+ * [reloaded] answers `failure` and asks for nothing; the vault arriving
+ * (`VaultChanged`, which the session publishes right after the seat) is what
+ * reloads into the tiles.
+ *
  * ## Where the derived verdicts live
  *
- * `earns_grid`, `springboard`, `things` and `every_tile_unreadable` are computed
+ * `earns_grid`, `springboard`, `things`, `every_tile_unreadable` and
+ * `sample_notice` are computed
  * HERE and written onto the state. The views own nothing: SwiftUI and Compose
  * render a finished message, and two shells cannot disagree about which Home
  * they are drawing because neither of them decides.
@@ -123,8 +136,10 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
             // not sort it, does not drop the active vault out of it, and does
             // not decide that a vault it cannot identify is not there: a row
             // with no id draws as unswitchable, which is what it is.
+            // THE ROSTER DECIDES WHETHER A SAMPLE IS HELD, which is one of the
+            // notice slot's inputs, so the slot is settled again here.
             event.roster_changed != null ->
-                Step(state.copy(vaults = event.roster_changed.vaults))
+                Step(noticed(state.copy(vaults = event.roster_changed.vaults)))
 
             // THE BACKUP LINE IS SHELL KNOWLEDGE too (#1080): finished by
             // `BackupLines` from the core's `backup_status`, and recorded as is.
@@ -139,12 +154,22 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
                 // names it must not throw away the tiles that were landing
                 // beside it. Only a name that CHANGES is a switch.
                 val known = state.vault
-                if (known == null || known.sameVaultAs(vault)) {
+                // A FAILED HOME HAS NO TILES TO KEEP, whatever the lockup says:
+                // it is the no-vault state, and the vault arriving is the one
+                // thing that moves it. Keeping it on a same-named lockup would
+                // leave Home saying "no vault" over a vault that is open.
+                val failed = state.failure != null
+                if (!failed && (known == null || known.sameVaultAs(vault))) {
                     // Same vault, changed gateway or reachability: the tiles are
-                    // still this vault's, so only the lockup moves.
-                    Step(state.copy(vault = vault))
+                    // still this vault's, so only the lockup moves. The notice
+                    // slot is settled again because the lockup is where "this
+                    // is the sample" is read from.
+                    Step(noticed(state.copy(vault = vault)))
                 } else {
-                    state.reloaded(vault = vault)
+                    // THE FOUNDING DAY IS THE OLD VAULT'S: it says nothing
+                    // about this one, and the session tells Home the new
+                    // vault's right after the lockup.
+                    state.reloaded(vault = vault, sameVault = false)
                 }
             }
 
@@ -174,6 +199,13 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
             event.move_picked != null ->
                 Step(state, listOf(ScreenEffect.ReadPage(event.move_picked.move_id, null)))
 
+            // THE SESSION LEARNED WHETHER THIS VAULT WAS FOUNDED TODAY. Told,
+            // so it survives a reload (see [reloaded]); the notice slot is
+            // derived from it, the roster and the lockup.
+            event.founding_day != null -> Step(
+                noticed(state.copy(founded_today = event.founding_day.founded_today)),
+            )
+
             else -> Step(state)
         }
 
@@ -197,18 +229,31 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
      *
      * It lives here now: a reload replaces what was read and carries what was
      * told. [vault] is a parameter because a vault SWITCH is the one reload
-     * where the lockup is genuinely new.
+     * where the lockup is genuinely new, and [sameVault] says whether the
+     * facts told about the vault in front (the day it was founded) still hold
+     * — they are about one vault and a switch drops them.
+     *
+     * **NO VAULT IS NOT A LOAD.** See the class header: a seat waiting for a
+     * vault gets the `failure` branch and no effect, because nothing can answer
+     * a read and a spinner nobody will stop is the one lie this state can tell.
      */
-    private fun HomeState.reloaded(vault: VaultLockup? = this.vault): Step<HomeState> {
-        val fresh = firstLoad()
+    private fun HomeState.reloaded(
+        vault: VaultLockup? = this.vault,
+        sameVault: Boolean = true,
+    ): Step<HomeState> {
+        val noVault = seat?.availability == SeatState.Availability.AVAILABILITY_WAITING_FOR_MOUNT
+        val fresh = if (noVault) Step(HomeState(failure = Reads.noVault())) else firstLoad()
         return Step(
-            fresh.state.copy(
-                seat = seat,
-                vault = vault,
-                vaults = vaults,
-                all_apps_sheet_open = all_apps_sheet_open,
-                vault_sheet_open = vault_sheet_open,
-                backup_line = backup_line,
+            noticed(
+                fresh.state.copy(
+                    seat = seat,
+                    vault = vault,
+                    vaults = vaults,
+                    all_apps_sheet_open = all_apps_sheet_open,
+                    vault_sheet_open = vault_sheet_open,
+                    backup_line = backup_line,
+                    founded_today = sameVault && founded_today,
+                ),
             ),
             fresh.effects,
         )
@@ -268,7 +313,58 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
         edit: (List<HomeTile>) -> List<HomeTile>,
     ): HomeState {
         val data = state.data_ ?: return state
-        return state.copy(data_ = regraded(data.copy(tiles = edit(data.tiles))))
+        return noticed(state.copy(data_ = regraded(data.copy(tiles = edit(data.tiles)))))
+    }
+
+    /**
+     * THE VERDICTS THAT READ WHAT THE SHELL TOLD US, written onto the data:
+     * the notice slot (the sample line), and the first moves a sample cannot
+     * honour.
+     *
+     * Not part of [regraded] because they read facts the tiles do not carry —
+     * the lockup, the roster and `founded_today` — and recomputed everywhere
+     * any of those moves: a roster can bring a sample or remove it, a switch
+     * can put the sample in front.
+     *
+     * ## ONE NOTICE SLOT (R-SAMPLE-8)
+     *
+     * Home draws one line above the grid, and two things want it: the sample
+     * line and the backup line (`HomeState.backup_line`, #1080).
+     *
+     *  - **On the sample vault the sample line always has it.** A sample never
+     *    pairs and is never backed up (R-SAMPLE-5), so a backup line over it
+     *    states a backup that can never exist.
+     *  - **On a member's own vault the sample line has it for the day the
+     *    vault was founded**, while a sample is held, and the backup line has
+     *    it from the next day on. Holding the slot for as long as the sample
+     *    exists would mean a member who never removed it never saw the one
+     *    line that protects their rows.
+     *
+     * `sample_notice` is the verdict: a shell draws the sample line while it is
+     * set and the backup line otherwise, never both.
+     *
+     * Settings' Remove/Add sample is a different door and is always offered.
+     *
+     * ## LOCKER IN THE SAMPLE OFFERS LIKE ANY VAULT'S (R-SAMPLE-2, amended)
+     *
+     * The sample's Locker holds fake items sealed under the member's own keys,
+     * so it is not idle there and is never offered as a move; a sample that
+     * could not be keyed (no seed on the phone) leaves Locker idle and offers
+     * it exactly as an unkeyed member vault would, which lands on Locker's own
+     * no-words wall. There is no sample-only exclusion.
+     */
+    private fun noticed(state: HomeState): HomeState {
+        val data = state.data_ ?: return state
+        val onSample = state.vault?.sample == true
+        val sampleHeld = onSample || state.vaults.any { it.sample }
+        val sampleNotice = sampleHeld && (onSample || state.founded_today)
+        val idle = SpringboardPolicy.gridMembership(data.tiles).idleAppIds
+        return state.copy(
+            data_ = data.copy(
+                sample_notice = sampleNotice,
+                first_moves = FirstMoves.forIdle(idle),
+            ),
+        )
     }
 
     /**

@@ -1211,7 +1211,7 @@ macro_rules! sample {
     ($file:literal) => {
         include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../centraid/src/bin/seed-assets/photos/",
+            "/../core/src/sample/photos/",
             $file
         ))
     };

@@ -6,7 +6,9 @@ Use this runbook when pairing did not take, a pairing QR expired, a phone stoppe
 
 ## Founding
 
-A vault is founded **on the phone**, at first launch. It mints 24 words, derives the vault's keys from them and creates `vault.db` in the directory the shell hands the core. Nothing on a gateway founds anything: `centraid-gateway serve` on an empty directory mints the gateway's identity, listens, and stores nothing until a phone pairs.
+A vault is founded **on the phone**, and a device that holds no vault opens onto exactly that: a first-launch screen in place of Home — on iOS three paper slips (the house, the key, the sealed copy on a laptop), flung off one at a time, over two actions that stay put: make a vault on this phone, or restore from the 24 words. Skip jumps to the last slip. It is up whenever the shelf holds no vault (a fresh install, or the last vault forgotten), and cancelling out of either action returns to it. Making a vault first says, in one sentence, to have paper ready for the 24 words; then it mints them, derives the vault's keys from them and creates `vault.db` in the directory the shell hands the core ([R-1047-E1](../decisions.md#the-24-words-on-the-phone-1047-e1)'s order is unchanged). A phone that already holds a settled seed makes the vault with no words, so it sees no framing. Nothing on a gateway founds anything: `centraid-gateway serve` on an empty directory mints the gateway's identity, listens, and stores nothing until a phone pairs.
+
+A member's **first** vault also brings the **sample vault** with it ([R-SAMPLE-1…7](../decisions.md#the-sample-vault)): a second, separate vault named Sample, founded in the background beside it and seeded with a scenario to look around in, while the member's vault stays in front. **A sample vault never pairs and is never backed up**: the core refuses pairing, the pass and its upload handoff for it (`CoreError::SampleVault`), the drain skips it, and the pairing screen over it says to switch to the member's own vault. So a gateway only ever holds the member's own vaults. Removing the sample deletes its directory on the phone and touches nothing a gateway holds.
 
 ## Ordinary pairing
 

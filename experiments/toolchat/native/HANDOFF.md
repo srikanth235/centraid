@@ -24,6 +24,10 @@ This is the state on 2026-10-06, written for the next coding agent.
   - `build_sets.py check` accepts the hashes. It still lists 9 structural failures that belong to the deferred test redesign (test is held out of val's worlds whole, e2 origins). Those were in the tree before this phase.
   - **Test is not refrozen or scored on the phase-7 runtime** (owner deferred).
 - 82 % is a val number: every fix, ruling and soup choice was derived on val. Expect test lower until it is scored.
+- **The branch is on main** (`f5487678`, #1080) **plus #1078's on-device chat** (the `ios-app-simulator-aaef2f` branch), merged 2026-10-07. Main wins every overlap; the record is in the receipt's merge section.
+  - The four native crates are ported to main's APIs. Harness worlds seal Locker cells under a fixed `HARNESS_LOCKER_KEY` (`crates/evalworld`, `crates/nativetools/src/vaultio.rs`) and name the generation through `Vault::locker_generation`, because the phone derives `K` from the 24 words.
+  - Val v7.4 refreezes byte-identical on the merged runtime.
+  - #1078's product assistant (`crates/assist`, `crates/assist-llama`, `crates/core/src/assist`) is a separate, read-only tool registry of 18 `<app>.<verb>` reads over llama.cpp. Wiring this task's model and its 8 tools into it is integration work that has not started.
 
 ## What phase 0 built (all CPU, all tested)
 

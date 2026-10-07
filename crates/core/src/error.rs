@@ -87,6 +87,17 @@ pub enum CoreError {
         moved_at_ms: i64,
     },
 
+    /// THIS IS THE SAMPLE VAULT, AND IT NEVER LEAVES THE PHONE.
+    ///
+    /// A sample vault is founded beside the member's first vault to look around
+    /// in (`crate::sample`). Pairing it would put a laptop behind it and
+    /// draining it would put the scenario's rows in the member's backup, so the
+    /// core refuses both — the shell hides the doors, and this is the guard
+    /// behind them. `INVALID_REQUEST`, because asking is the mistake: nothing
+    /// about the vault's state would make the same request right later.
+    #[error("this is the sample vault, and a sample vault does not {what}")]
+    SampleVault { what: &'static str },
+
     /// The request itself is wrong: a zero limit, a cursor with a non-decimal
     /// seq, a page query with no order column. Not the state.
     #[error("invalid request: {detail}")]
@@ -167,9 +178,10 @@ impl CoreError {
             Self::VaultMoved { .. } => ErrorCode::VaultMoved,
             Self::Unpaired => ErrorCode::RebootstrapRequired,
             Self::VaultAlreadyHeld { .. } => ErrorCode::VaultAlreadyHeld,
-            Self::InvalidRequest { .. } | Self::NotCancellable { .. } | Self::Decode(_) => {
-                ErrorCode::InvalidRequest
-            }
+            Self::InvalidRequest { .. }
+            | Self::NotCancellable { .. }
+            | Self::Decode(_)
+            | Self::SampleVault { .. } => ErrorCode::InvalidRequest,
             Self::Unsupported { .. } => ErrorCode::UnsupportedMessage,
             Self::ReadBoundReached { .. } => ErrorCode::ReadBoundReached,
             Self::NotYetAvailable { .. } => ErrorCode::NotYetAvailable,

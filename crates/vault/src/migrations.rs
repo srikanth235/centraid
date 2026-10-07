@@ -135,6 +135,14 @@ pub const NO_NOTICES_SQL: &str = include_str!("../../../contracts/migrations/009
 /// holds, so nothing reads them. Four `DROP`s, the child before its parent.
 pub const BACKUP_V2_SQL: &str = include_str!("../../../contracts/migrations/010_backup_v2.sql");
 
+/// Rung eleven: the on-device chat keeps its history in the vault (R-CHAT-1).
+///
+/// The `chat` schema: `chat_thread` (an entity), `chat_message` (a projection
+/// of its thread) and the card and attachment projections of a message. A card
+/// is a snapshot with no foreign key to its row; an attachment is a typed
+/// reference. The file states each choice.
+pub const CHAT_SQL: &str = include_str!("../../../contracts/migrations/011_chat.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -190,6 +198,11 @@ pub const LADDER: &[Migration] = &[
         version: 10,
         name: "backup-v2",
         sql: BACKUP_V2_SQL,
+    },
+    Migration {
+        version: 11,
+        name: "chat",
+        sql: CHAT_SQL,
     },
 ];
 

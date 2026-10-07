@@ -36,6 +36,7 @@
 //! A duplicate delivery therefore **executes once** and the second delivery is
 //! answered from the ledger.
 
+pub mod chat;
 pub mod core;
 pub mod core_links;
 mod event_time;
@@ -379,6 +380,17 @@ pub struct DeclaredEgress {
 /// `Egress::None` beside a reason is how a candidate is cleared.
 pub const DECLARED_EGRESS: &[DeclaredEgress] = &[
     DeclaredEgress {
+        command: "chat.save_turn",
+        egress: Egress::None,
+        why: "sealed input so the turn leaves the audit journal as a token (R-CHAT-6); \
+              the thread and its messages are rows in this vault and go nowhere.",
+    },
+    DeclaredEgress {
+        command: "chat.rename_thread",
+        egress: Egress::None,
+        why: "as `chat.save_turn`: the title is sealed from the journal and stays a row.",
+    },
+    DeclaredEgress {
         command: "locker.export",
         egress: Egress::Export,
         why: "every secret the locker holds, in the clear, in a file the seat writes.",
@@ -605,6 +617,9 @@ impl Registry {
     /// The registry the gateway serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
+        for definition in chat::definitions() {
+            registry.register(definition)?;
+        }
         for definition in core::definitions() {
             registry.register(definition)?;
         }

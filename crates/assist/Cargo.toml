@@ -1,0 +1,22 @@
+[package]
+name = "centraid-assist"
+description = "The on-device chat plane: the read-only tool registry, the Qwen prompt, the GBNF grammar, the turn loop and the Model trait an engine implements."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_assist"
+path = "src/lib.rs"
+
+[[bin]]
+name = "assist-eval"
+path = "src/bin/assist-eval.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
