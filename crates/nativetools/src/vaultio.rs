@@ -246,6 +246,34 @@ impl Handle {
             .map_err(|error| format!("reading the ledger: {error}"))
     }
 
+    /// The occurrences of the days `from_day..=to_day` in the zone `tz`: Agenda's own read
+    /// (`centraid_apps_agenda::occurrences`) over the owner's view, as the core's door asks it.
+    pub fn events(
+        &self,
+        from_day: &str,
+        to_day: &str,
+        tz: &str,
+    ) -> Result<Vec<centraid_apps_agenda::Occurrence>, String> {
+        let zone = centraid_vault::time::zone::FireZone::named(tz)
+            .map_err(|_| format!("{tz} is not a time zone"))?;
+        let now = centraid_vault::clock::format_iso_ms(self.clock.get());
+        self.vault
+            .read(|connection| {
+                let door = TestDoor::new(connection);
+                Ok(centraid_apps_agenda::occurrences(
+                    &door, from_day, to_day, &now, &zone,
+                ))
+            })
+            .map_err(|error| error.to_string())?
+            .map_err(|error| format!("reading the events: {error}"))
+            .and_then(|(rows, denial)| match denial {
+                Some(denial) => Err(denial
+                    .message
+                    .unwrap_or_else(|| "the events are refused".to_owned())),
+                None => Ok(rows),
+            })
+    }
+
     /// Run a search through the vault's FTS door.
     pub fn search(
         &self,
@@ -322,6 +350,15 @@ impl Door for Handle {
         Self::tally(self)
     }
 
+    fn events(
+        &self,
+        from_day: &str,
+        to_day: &str,
+        tz: &str,
+    ) -> Result<Vec<centraid_apps_agenda::Occurrence>, String> {
+        Self::events(self, from_day, to_day, tz)
+    }
+
     fn search(
         &self,
         entity: &str,
@@ -371,11 +408,24 @@ pub fn open_session(
     me: &str,
     flags: Flags,
 ) -> Result<Session, String> {
+    open_session_in(path, now, "Etc/UTC", me, flags)
+}
+
+/// [`open_session`] for a person whose days are in the IANA zone `tz` (`now` is their civil
+/// today there): the events around it are read in that zone, a repeating series as its
+/// occurrences (R-1088-8). The harness passes `Etc/UTC`.
+pub fn open_session_in(
+    path: &Path,
+    now: jiff::civil::DateTime,
+    tz: &str,
+    me: &str,
+    flags: Flags,
+) -> Result<Session, String> {
     let clock = SetClock::at(millis_of(now));
     // A probe handle reads the journal size, which names this session's id sequence.
     let probe = Handle::open(path, clock.clone(), "nativetools:probe")?;
     let count = World::load(&probe)?.entity_count;
     drop(probe);
     let handle = Handle::open(path, clock, &format!("nativetools:session:{count}:{now}"))?;
-    Session::with_door(Box::new(handle), now, me, flags)
+    Session::with_door_in(Box::new(handle), now, tz, me, flags)
 }

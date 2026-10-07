@@ -1,28 +1,42 @@
-//! PARK: a write that is planned, and shown to the model, but not made (#1088, R-1088-2, R-1088-6).
+//! PARK: a write that is planned, and shown to the model, but not made until the member taps
+//! (#1088, R-1088-2, R-1088-6, R-1088-10).
 //!
 //! On the phone every write waits for the member's tap. The runtime still plans it as it always
 //! has and shows the model what it was trained to see after a write: the change lines of the
 //! row, the `created:` echo, the diff. It does that against a PATCHED COPY OF THE WORLD instead
-//! of the vault: [`apply`] takes the command a step would have run and does to the in-memory
+//! of the vault: `apply` takes the command a step would have run and does to the in-memory
 //! [`World`] what the vault's command does to its tables, as far as the model's rows can tell.
 //! Every later call of the turn then reads the patched world, so a `more=true` chain that names a
 //! row the first write created works, and the observation text is the one a run would have shown.
 //!
-//! The steps themselves are kept, in order, as [`ParkedStep`]s: they are what a confirm runs.
+//! # The pending write
+//!
+//! The steps themselves are kept, in order, as [`ParkedStep`]s. The step that ends the turn carries
+//! them as `effect.pending` ([`PendingWrite`]): one per session, in memory, dismissed by a new
+//! message and inert in a reopened thread. [`Session::confirm`] checks that the rows the steps
+//! address still read as they did, runs the steps through [`crate::native::door::Door::run_keyed`] call by call and
+//! reads the vault after each, so the after-write text is the vault's own; [`Session::dismiss`]
+//! puts the session back as the turn found it. `Door` documents what the core owes both.
 //!
 //! # What a patch owes the vault
 //!
 //! * The refusals the runtime acts on (`Session::refusal`, `compose_busy_conflict`): the id of
 //!   the check that fails and its sentence are the vault's own, and a refusal changes nothing.
 //! * The shape of every row a command touches, field for field, as `World::load` would read it
-//!   back (`tests/park.rs` holds each patch to a real vault in [`Writes::Shadow`]).
-//! * Ids: a row the runtime names before its command ([`Door::mint_id`]) keeps that id; an id the
-//!   vault makes inside a command (a debt, a revision) is minted here and replaced by the real
-//!   one when the step runs for real (`PendingWrite::aliases`).
+//!   back. `tests/park.rs` holds every `(verb, kind)` of the table to a real vault in
+//!   [`Writes::Shadow`], and `authored/park_oracle.py` holds the texts to a run's over the
+//!   authored sessions of the train worlds.
+//! * Ids: a row the runtime names before its command (`Door::mint_id`) keeps that id, a person
+//!   included (the vault honours a seat-minted party id); an id the vault makes inside a command
+//!   (a debt, an album's revision) is minted here for the card and replaced by the real one when
+//!   its step runs, in the later steps and in the undo memory.
 //!
-//! What a patch cannot know is what only the vault's tables hold and the world does not read: the
-//! next occurrence a repeating task makes when it is completed, a trigger's host-time stamp
-//! (`updated` is therefore not compared). Those are listed in the receipt, not guessed.
+//! # What a patch cannot know
+//!
+//! What only the vault's tables hold and the world does not read: the next occurrence a repeating
+//! task makes when it is completed (the card shows the completion; the vault's own after-write text
+//! shows the successor), and the stamp a trigger puts on `updated` from the host clock (so
+//! `updated` is not compared). A command this file does not name is an error, never a guess.
 
 use std::collections::BTreeMap;
 
@@ -43,7 +57,7 @@ pub enum Writes {
     /// No step reaches the vault: it is applied to a patched copy of the world and parked.
     Park,
     /// The vault runs every step AND the patched world follows it; after each write the two are
-    /// compared and a difference is kept (`Session::drift`). The check that holds [`apply`] to
+    /// compared and a difference is kept (`Session::take_drift`). The check that holds `apply` to
     /// the vault; the harness binary takes it as `--writes shadow`.
     Shadow,
 }
@@ -356,24 +370,7 @@ fn untrash(row: &mut Row, cx: &Cx) {
 
 /// An event's `date` and `duration` from its stored span, as the loader reads them.
 fn shape_event(row: &mut Row, start: &str, end: Option<&str>) {
-    let start = Stamp::parse(start);
-    let end = end.and_then(Stamp::parse);
-    row.fields.remove("duration");
-    row.date = start;
-    if let (Some(start), Some(end)) = (start, end) {
-        let minutes = end.at().duration_since(start.at()).as_secs() / 60;
-        let all_day = start.time == Some(jiff::civil::Time::midnight())
-            && minutes > 0
-            && minutes % (24 * 60) == 0;
-        if all_day {
-            row.date = Some(Stamp {
-                date: start.date,
-                time: None,
-            });
-        } else {
-            row.fields.insert("duration", Val::Num(minutes));
-        }
-    }
+    crate::native::world::shape_event(row, Stamp::parse(start), end.and_then(Stamp::parse));
 }
 
 /// Apply one command to the patched world: what the vault's command does, as far as the model's
@@ -1889,8 +1886,7 @@ impl Session {
     pub(crate) fn settle(&mut self) -> Result<(), String> {
         match self.flags.writes {
             Writes::Run => {
-                self.world =
-                    crate::native::world::World::load_with(&*self.door, self.flags.locker)?;
+                self.world = self.load_world()?;
             }
             Writes::Park => {
                 self.world = self
@@ -1900,7 +1896,7 @@ impl Session {
                     .ok_or("error: a parking session has no patched world")?;
             }
             Writes::Shadow => {
-                let real = crate::native::world::World::load_with(&*self.door, self.flags.locker)?;
+                let real = self.load_world()?;
                 if let Some(patched) = &self.park.world {
                     let apart = drift(patched, &real);
                     self.park.drift.extend(apart);
@@ -2371,7 +2367,7 @@ impl Session {
 
     /// Put the session back as the turn found it and read the vault again: nothing the parked
     /// steps did is left, in the world or in what the conversation remembers.
-    fn discard(&mut self) {
+    pub(crate) fn discard(&mut self) {
         if let Some(memory) = self.park.memory.take()
             && (self.park.pending.is_some() || !self.park.steps.is_empty())
         {
@@ -2388,7 +2384,7 @@ impl Session {
         self.park.call = None;
         self.park.before = None;
         self.park.pending = None;
-        if let Ok(world) = World::load_with(&*self.door, self.flags.locker) {
+        if let Ok(world) = self.load_world() {
             self.park.world = Some(world.clone());
             self.world = world;
         }
@@ -2437,7 +2433,7 @@ impl Session {
                 self.created = memory.created;
                 self.marks = memory.marks;
             }
-            if let Ok(world) = World::load_with(&*self.door, self.flags.locker) {
+            if let Ok(world) = self.load_world() {
                 self.park.world = Some(world.clone());
                 self.world = world;
             }
@@ -2447,7 +2443,7 @@ impl Session {
     }
 
     fn run_pending(&mut self, pending: &PendingWrite) -> Confirmed {
-        let Ok(fresh) = World::load_with(&*self.door, self.flags.locker) else {
+        let Ok(fresh) = self.load_world() else {
             return Confirmed::Refused {
                 step: 0,
                 command: String::new(),
@@ -2522,7 +2518,7 @@ impl Session {
                     Err(error) => return refusal("door".to_owned(), error),
                 }
             }
-            let Ok(after) = World::load_with(&*self.door, self.flags.locker) else {
+            let Ok(after) = self.load_world() else {
                 return Confirmed::Refused {
                     step: landed,
                     command: String::new(),

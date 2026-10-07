@@ -23,6 +23,7 @@
 //! A refusal by the vault is a value ([`Ran::ok`] false), never an `Err`: an `Err` is a door that
 //! could not answer at all.
 
+pub use centraid_apps_agenda::Occurrence;
 use centraid_apps_kit::row::{Cell, Row};
 use centraid_apps_tally::queries::TallyData;
 use centraid_search::Target;
@@ -54,6 +55,18 @@ pub trait Door {
 
     /// The Tally ledger, folded by the Tally app's own read.
     fn tally(&self) -> Result<TallyData, String>;
+
+    /// Every occurrence of an event that occupies a civil day of `from_day..=to_day`
+    /// (`YYYY-MM-DD`, days of the IANA zone `tz`): repeating series expanded, the cancelled and
+    /// the trashed left out, each placed on the member's calendar in `tz` (its wall clock, its
+    /// end, the days it occupies). The rows Agenda's own `upcoming` answers, from the one
+    /// implementation of it (`centraid_apps_agenda::occurrences`), so the runtime cannot disagree
+    /// with the Agenda tab (R-1088-8). A door that cannot answer says so; the runtime then reads
+    /// the stored events as they are.
+    fn events(&self, from_day: &str, to_day: &str, tz: &str) -> Result<Vec<Occurrence>, String> {
+        let _ = (from_day, to_day, tz);
+        Err("this door reads no event window".to_owned())
+    }
 
     /// A full-text search over one searchable entity: the targets it found, best first. A text
     /// with no searchable word finds nothing and is not an error.

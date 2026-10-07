@@ -1462,6 +1462,24 @@ impl Session {
                 return Err(refusal);
             }
             let row = self.row_of(key)?;
+            // ONE OCCURRENCE OF A REPEATING EVENT (`World::read_event_window`): the vault changes a
+            // series, or an exception to it, and neither is a verb of this runtime yet
+            if row.extra.contains_key("series") {
+                let name = self.named(key);
+                let refusal = format!(
+                    "error: {name} is one occurrence of a repeating event; changing a single occurrence is not possible here. Nothing was done."
+                );
+                if self.flags.compose {
+                    return Ok(self.compose_declined_write(
+                        verb,
+                        key,
+                        &refusal,
+                        "occurrence",
+                        "out_of_scope",
+                    ));
+                }
+                return Err(refusal);
+            }
             if row.trashed && !matches!(verb, Verb::Restore | Verb::Delete) {
                 let name = self.named(key);
                 let refusal =

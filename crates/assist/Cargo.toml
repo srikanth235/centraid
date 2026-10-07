@@ -17,6 +17,7 @@ name = "assist-eval"
 path = "src/bin/assist-eval.rs"
 
 [dependencies]
+centraid-apps-agenda = { path = "../apps/agenda" }
 centraid-apps-kit = { path = "../apps/kit" }
 centraid-apps-tally = { path = "../apps/tally" }
 centraid-search = { path = "../search" }

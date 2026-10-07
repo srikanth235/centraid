@@ -189,3 +189,44 @@ pub fn journal(world: &World) -> BTreeMap<(String, String), usize> {
     }
     counts
 }
+
+impl World {
+    /// A session whose person's days are in `tz`.
+    #[must_use]
+    pub fn session_in(&self, today: &str, tz: &str) -> Session {
+        vaultio::open_session_in(
+            &self.path,
+            dates::parse_now(today).expect("a date"),
+            tz,
+            "",
+            Flags::default(),
+        )
+        .expect("the session opens")
+    }
+
+    /// Another writer: a command the vault takes while a session is open.
+    pub fn elsewhere(&self, command: &str, input: Value) -> Value {
+        let handle =
+            vaultio::Handle::open(&self.path, SetClock::at(1_900_000_000_000), "elsewhere")
+                .expect("the vault opens");
+        handle
+            .must(command, input)
+            .expect("the other writer's command runs")
+    }
+
+    /// The vault's calendar.
+    #[must_use]
+    pub fn calendar(&self) -> String {
+        let handle = vaultio::Handle::open(&self.path, SetClock::at(1_900_000_000_000), "calendar")
+            .expect("the vault opens");
+        let rows = handle
+            .table(
+                "schedule_calendar",
+                "calendar_id, created_at",
+                "created_at",
+                "calendar_id",
+            )
+            .expect("calendars read");
+        vaultio::text(&rows[0], "calendar_id").expect("a calendar")
+    }
+}
