@@ -20,6 +20,7 @@
 //! | [`suggest`] | Three questions this vault can answer. |
 //! | [`eval`], [`cli`] | The routing eval set, its JSONL export, the accuracy harness and the `assist-eval` command line. |
 //! | [`native`] | The native tool runtime: eight flat tools over a vault, one metadata table, the date evaluator, observations and the system prompt (`experiments/toolchat/native/SPEC.md`). |
+//! | [`native_turn`] | The native turn loop (#1088): the model drives [`native`] one call per message; the chat's own cards and a line composed from the effect. |
 //! | [`testing`] | Deterministic stand-ins for the engine and the vault. |
 //!
 //! # WHAT THIS CRATE DOES NOT HAVE

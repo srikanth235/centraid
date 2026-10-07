@@ -208,20 +208,25 @@ impl<'a> NativePlane<'a> {
             }
             let sent = first_call(&written.text);
             let call = parse_call(sent).ok();
-            if let Some((app, tool)) = call.as_ref().and_then(|call| activity_of(chat, call)) {
+            // A WRITE IS NOT RUN WHILE WRITES ARE REFUSED. A call the Locker policy declines
+            // (a Locker kind, `reveal`) is the session's own to answer, and it does so before it
+            // runs or reads anything, so it is let through: "secrets stay in Locker" is the
+            // true reason, not "writes are off".
+            let writing = self.writes == Writes::Refused
+                && call
+                    .as_ref()
+                    .is_some_and(|call| call["tool"] == "act" && !locker_declined(call));
+            if !writing
+                && let Some((app, tool)) = call.as_ref().and_then(|call| activity_of(chat, call))
+            {
                 sink(Event::Activity { app, tool });
             }
-            let writing = call.as_ref().is_some_and(|call| call["tool"] == "act");
             let reply = if writing {
-                match self.writes {
-                    Writes::Refused => {
-                        // The typed decline stands in for the write, and the session knows it
-                        // as its own turn's end: nothing was run, nothing is half-done.
-                        writes_off = true;
-                        chat.session
-                            .call("decline", &json!({"reason": "out_of_scope"}))
-                    }
-                }
+                // The typed decline stands in for the write, and the session knows it as its own
+                // turn's end: nothing was run, nothing is half-done.
+                writes_off = true;
+                chat.session
+                    .call("decline", &json!({"reason": "out_of_scope"}))
             } else {
                 chat.session.call_text(sent)
             };
@@ -262,6 +267,21 @@ fn first_call(text: &str) -> &str {
     let close = crate::native::identity::MODEL.tool_call_close;
     text.find(close)
         .map_or(text, |at| &text[..at + close.len()])
+}
+
+/// Whether the session declines this call on the Locker policy before it reads or runs anything
+/// (`Session::locker_off_decline`): it names a Locker kind, or it is `reveal`.
+fn locker_declined(call: &Value) -> bool {
+    let args = &call["args"];
+    let kind_named = args["kind"].as_str().is_some_and(|kinds| {
+        kinds.split(',').any(|part| {
+            Kind::parse(part) == Some(Kind::LockerItem) || part.to_lowercase().contains("locker")
+        })
+    });
+    let reveal = args["verb"].as_str().is_some_and(|verb| {
+        crate::native::meta::Verb::parse(verb) == Some(crate::native::meta::Verb::Reveal)
+    });
+    kind_named || reveal
 }
 
 /// The activity a call announces: the app it looks in and the tool it uses. Only a call that
