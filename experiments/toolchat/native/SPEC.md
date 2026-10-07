@@ -265,7 +265,7 @@ What the vault refuses and the model repairs stays an `error:` (§4.6): a schema
 
 4. **Compaction.** Before each new turn, results of turns OLDER than the previous one are compacted (§5); the previous turn's results stay whole, since follow-ups pick from them. Rows the model created or acted on are always kept. Earlier turns' **thinking is kept**: the harness renders the history itself (not Qwen's default template, which drops it), so on a follow-up the model sees how it read the earlier turn. Training and inference use the same renderer: `crates/assist/src/native/transcript.rs` (#1088), which `render.py` asks through `runtime_think` (`nativetools think`) and the phone links. The generator renders training sessions with the same compaction.
 5. `#n` and `@n` persist across the session; `#n` of compacted rows are not addressable (§3).
-6. **Decoding.** The headline score is **greedy** (reproducible). Sampled decoding as Qwen recommends (temperature 0.6, top-p 0.95, fixed seed) is an arm in the first run and stays an arm only if it beats greedy by more than the noise floor. **Think guard**: at 200 think tokens the harness forces `</think>` and lets the call follow; the event is counted (`think_cut`) as a diagnostic, not a fail.
+6. **Decoding.** The headline score is **greedy** (reproducible). Sampled decoding as Qwen recommends (temperature 0.6, top-p 0.95, fixed seed) is an arm in the first run and stays an arm only if it beats greedy by more than the noise floor. **Think guard**: at 200 think tokens the harness forces `</think>` and lets the call follow; the event is counted (`think_cut`) as a diagnostic, not a fail. The step is written twice, as one contract (§9): over tokens in `train/decode.py`, over text in `crates/assist/src/native/step.rs`.
 
 ## 7. Reasoning (the slot trace)
 
@@ -344,7 +344,7 @@ Checks: `authored/trace3_check.py` (the round trip through the decoder's own fun
 
 ## 9. Decoding
 
-Decoding is **free**: no grammar constrains the model's tokens, and the runtime reads what the model wrote (`crates/assist/src/native/parse.rs`, which also salvages leaked parameter syntax). Under HF `generate`, `train/decode.py` adds only:
+Decoding is **free**: no grammar constrains the model's tokens, and the runtime reads what the model wrote (`crates/assist/src/native/parse.rs`, which also salvages leaked parameter syntax). Two arms run the step, and they write the same message text for the same model behaviour: under HF `generate`, `train/decode.py` forces tokens; over any engine behind the `Model` trait (llama.cpp on the phone), `decode_step` in `crates/assist/src/native/step.rs` cuts and continues the text (the think is generated with `</think>` as its stop string and `think_limit` tokens at most, the rendered call is appended, the continuation stops at `</tool_call>`; the engine's `Finish` cannot say whether a stop string or the end of turn ended a generation, so a continuation that ends inside an unclosed `<tool_call>` gets its `</tool_call>` back; the step is not yet measured through a GGUF, R-1088-1). Both add only:
 
 - the **think guard** (§6.6): at `think_limit` think tokens `</think>` is forced (`think_cut`);
 - the **rendered call**: once the think closes, the call the think states is written by `fmt.call_of_think`, the function the data builder checks every authored call against, one forced token at a time (`rendered_call`); a think that does not state a whole call leaves the call to the model;

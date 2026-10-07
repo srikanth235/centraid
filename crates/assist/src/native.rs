@@ -40,6 +40,7 @@ pub mod render;
 pub mod resolve;
 pub mod search;
 pub mod session;
+pub mod step;
 pub mod think;
 pub mod trace;
 pub mod transcript;
