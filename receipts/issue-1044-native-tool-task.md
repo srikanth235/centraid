@@ -244,3 +244,30 @@ The branch carried #1020 unsquashed, so a plain merge of main conflicted in 413 
 - **Main against #1078.** The chat migration is rung eleven (`011_chat.sql`), because main's `010_backup_v2.sql` landed first, and `assist` is envelope field 31, because main's `handoff` holds 23. A sample vault is refused by main's pass and its upload handoff too, and is left out of the iOS upload loop. #1078's "no backup yet" nudge is folded into main's backup line: the field it read, `laptop_paired`, is retired in main's `phone.proto`. R-SAMPLE-8 is recorded in `docs/decisions.md`.
 - **Found by the tests, not by the conflicts.** Main's rung-ten and rung-five climb tests rewind a fresh vault, which now holds the chat, so they undo rung eleven first (`common::UNDO_RUNG_ELEVEN`). The registry count gains `chat.*`. #1078's spending-headline test assumed the sample's expenses (four to six days old) sat in last month, which is true only early in a month; it now asks this month and last.
 - **Not run here.** The iOS build (no Xcode on Linux) and Android's Compose build. Gradle's Kotlin tests ran through `cargo xtask gate --profile mobile-jvm`; see the commit.
+
+## Evidence: only what S2 depends on, and free decoding (2026-10-07)
+
+Two owner rulings, recorded as D-1044-17 and D-1044-18. The native task (`experiments/toolchat/native`, `crates/nativetools`) imports, reads and builds on none of what was deleted; each cut was held to a baseline taken before it.
+
+| check | result |
+| --- | --- |
+| lines removed from the branch | 1,202,492 (2,099 files) by the cleanup; about 1,600 more by the grammar cut (Rust 261, the rest Python) |
+| the branch's diff against main | +1,766,848 before, +564,361 after the cleanup |
+| val v7.4 refreeze | byte-identical (`5d3d9035…`) after the cleanup and again on the cut runtime; 655 / 655 sessions, 2,055 / 2,055 turns, UNEXPLAINED 0; the refreeze report is identical line for line |
+| `build_sets.py check` | hashes accepted; the same 9 structural test-redesign failures |
+| free decoding, base Qwen3.5-0.8B on CPU, train sessions only | token-identical before and after: 3 first steps (no think closes within 160 tokens), and 12 steps with think limit 0 and the record's own think as the prefix (every one cut, rendered and stopped) |
+| `cells.py`'s universe (now read from `metadata.json`, `tools.json`, `prompt.sig.txt` and `kind_card.txt`) | identical but for one reason label, `where.lark:` to `where:` |
+| native Python suite, 26 modules | every module keeps its status; 28 grammar tests and 1 soft-mode test removed, 3 free-path tests added; `test_batching` 1,021 s to 59 s |
+| `centraid-nativetools` | 887 tests (889 less the 2 grammar-only ones); the 10 export files that remain are byte-identical |
+| workspace | `cargo xtask gate --profile local`: every step green (fmt, clippy, test, restore-drill, rules, ledgers), over its 120 s budget on this 4-core box; `--profile mobile-jvm` passes with no fixture drift |
+
+- **What went in the cleanup.**
+  - Deleted: the canonical-English harness (`crates/evalsuite`, `crates/evalworld`, `crates/candidates`, `experiments/canon-model`, `joined-*.jsonl`), the toolchat rounds v2 to v8 with their scripts and Kaggle runner, the `afm-spike`, `frontier-probe`, `qwen-mobile` and `qwen-sanity` experiments, and `eval/engineered.py`.
+  - Back to main's: the product declarations only that harness read (the manifests' `surface`, `surfaceReason` and `derivedFields`, the registry's `role`, `DECLARED_EFFECTS` and `DECLARED_EGRESS`, `kit/fixtures.rs` `stage_face_proposal`).
+  - Kept: the vault's injected-clock fixes and `found_in`, which the runtime uses.
+  - The known `validate_suite_is_clean_on_all_three_corpora` red left with `evalsuite`.
+- **What went in the grammar cut.**
+  - Deleted: the `hard` and `soft` modes, the Lark exports (`call.lark`, `where.lark`, `date_expr.lark`), llguidance and its pins, `train/llama_backend.py` and the llama.cpp arm of `kernel.py` and `bundle.py`, and the `fmt` helpers only the grammar read.
+  - Refused: `free` is the only arm `bundle.py` and `kernel.py` accept, and the four removed environment variables are refused rather than ignored.
+  - Kept: the think guard, the call rendered from the think, the one-call stop, sampling for rollouts and the compile path.
+- **Found on the way, not fixed.** `authored/test_noise.py` has 2 failures from before either cut: six words the nt14 and nt15 rules read in a message are not protected by `authored/noise.py`. It is listed in HANDOFF as the owner's call with the next train build.

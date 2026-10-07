@@ -3,7 +3,7 @@
     python bundle.py build <job> --train T.jsonl.gz --val V.jsonl.gz [--test X.jsonl.gz] [--set eval/sets/val.jsonl] ...
                                       # a training job: train/vm/run_job.sh trains it, then scores the final checkpoint on --set
     python bundle.py build <job> --base --set eval/sets/val.jsonl
-                                      # eval only: no training, the arms drive `--model` as is (a scoring bundle)
+                                      # eval only: no training, the arm drives `--model` as is (a scoring bundle)
     python bundle.py build <job> --ckpt-dir CKPT --set eval/sets/val.jsonl [--sample N]
                                       # eval only on a local checkpoint, shipped inside the job's data dir
 
@@ -29,7 +29,9 @@ to the trainer unconditionally), and train.py only scores it (the original-data 
 
 Scoring defaults, the same for every bundle: arm `free`, eval/run_batched.py with 16 sessions per process and a 0.05 s batch
 wait, 4 processes sharing one GPU and one claims directory (--eval-procs, --eval-chunks), OMP_NUM_THREADS=4 and expandable
-CUDA segments. --eval-drive, --eval-env, --eval-chunks and --eval-procs override them.
+CUDA segments. --eval-drive, --eval-env, --eval-chunks and --eval-procs override them. Decoding is always free (greedy, nothing
+masked, the runtime parses the model's text), so `free` is the only arm: it names the output folder eval/free/, and `--arms
+free@sig|compact|full` adds the tools-block spelling (NATIVE_TOOLS); any other arm is refused.
 """
 from __future__ import annotations
 
@@ -47,10 +49,9 @@ HERE = Path(__file__).resolve().parent
 NATIVE = HERE.parent
 REPO = HERE.parents[3]
 STAGE = Path(os.environ.get("BUNDLE_STAGE") or Path(os.environ.get("TMPDIR") or "/tmp") / "centraid-bundles")
-TRAIN_FILES = ["fmt.py", "train.py", "decode.py", "hf_backend.py", "llama_backend.py", "batching.py"]
+TRAIN_FILES = ["fmt.py", "train.py", "decode.py", "hf_backend.py", "batching.py"]
 # + ../render.py, the shared renderer, and ../authored/trace.py (fmt.py compiles the slot trace with it; stage_eval copies it)
-# Scoring. Placeholders are filled by kernel.py; the arm's decoding reaches the driver as NATIVE_DECODING. The driver runs
-# `--threads` sessions at once against one batched model. `eval_procs` driver processes share the GPU (a 0.8B step is Python
+# Scoring. Placeholders are filled by kernel.py. The driver runs `--threads` sessions at once against one batched model. `eval_procs` driver processes share the GPU (a 0.8B step is Python
 # bound, so one process leaves it mostly idle) and one claims directory, so every session runs once; `eval_chunks` launches
 # in all ({part} = a launch's index, {only} = its session ids when the run is narrowed). The kernel merges {out}/run-*.jsonl
 # into {out}/run.jsonl and scores it.
@@ -67,12 +68,6 @@ EVAL_SETUP = [["{python}", "eval/seed_worlds.py"]]
 EVAL_DRIVE_BATCHED = ["{python}", "eval/run_batched.py", "--set", "{set}", "--checkpoint", "{ckpt}",
                       "--only", "{only}", "--out", "{out}/run-{part}.jsonl", "--claim", "{out}/claims",
                       "--threads", "{threads}", "--wait", "{wait}"]
-# llama.cpp mode (`--llama Q4_K_M,Q8_0`): the phone setup on a CPU host. The kernel builds
-# llama.cpp (pinned, with llguidance), converts the model to a BF16 GGUF, quantizes one GGUF per
-# arm, and drives each arm through a single-slot llama-server (`--model llama`), one arm at a time.
-LLAMA_COMMIT = "81ef10ea58fcc8a591cec50dc4b45e0bb00d9022"
-LLAMA_DRIVE = ["{python}", "eval/run.py", "--set", "{set}", "--model", "llama", "--tools", "{tools}",
-               "--only", "{only}", "--out", "{out}/run-{part}.jsonl"]
 
 
 def binary(release: bool) -> Path:
@@ -127,6 +122,18 @@ def stage_ckpt(src: Path, ds: Path) -> list[str]:
         except OSError:
             shutil.copy(src / n, dst)
     return names
+
+
+def check_arms(arms: str | None) -> list[str]:
+    """`--arms`: `free`, the only arm (decoding is always free), optionally `free@sig|compact|full` for the tools-block spelling.
+    Anything else is refused, here and again by kernel.py."""
+    out = (arms or "free").split(",")
+    for arm in out:
+        name, _, tools = arm.partition("@")
+        if name != "free" or (tools and tools not in ("sig", "compact", "full")):
+            sys.exit("--arms %s: the only arm is `free` (decoding is unconstrained); `free@sig|compact|full` sets the tools-block "
+                     "spelling" % arm)
+    return out
 
 
 def set_sessions(a) -> list[dict]:
@@ -272,8 +279,8 @@ def build(a):
     for f in ("/lib64/ld-linux-x86-64.so.2", "/lib/x86_64-linux-gnu/libc.so.6",
               "/lib/x86_64-linux-gnu/libm.so.6", "/lib/x86_64-linux-gnu/libgcc_s.so.1"):
         shutil.copy(os.path.realpath(f), tree / "lib" / os.path.basename(f))
-    arms = (a.arms or "free").split(",")
-    batched = a.eval_threads > 0 and not a.llama and not a.eval_drive
+    arms = check_arms(a.arms)
+    batched = a.eval_threads > 0 and not a.eval_drive
     ids = [s["id"] for s in sessions]
     narrowed = bool(a.eval_only or a.sample) and bool(ids)
     setup = json.loads(a.eval_setup) if a.eval_setup else \
@@ -281,23 +288,19 @@ def build(a):
     drive = json.loads(a.eval_drive) if a.eval_drive else EVAL_DRIVE_BATCHED if batched else \
         EVAL_DRIVE + (["--only", "{only}"] if narrowed else [])
     job = {"model": a.model, "init": a.init_ckpt, "hours": a.hours, "kernel_hours": a.kernel_hours,
-           "transformers": a.transformers, "llguidance": a.llguidance, "fast_kernels": a.fast_kernels,
+           "transformers": a.transformers, "fast_kernels": a.fast_kernels,
            "train": "data/train" + "".join(Path(a.train).suffixes) if a.train else None, "val": None,
            "train_args": train_args(a),
            "arms": arms, "eval_set": a.eval_set, "eval_drive": drive,
            "eval_score": json.loads(a.eval_score) if a.eval_score else EVAL_SCORE,
            "eval_setup": setup,
-           "eval_env": dict({} if a.llama else EVAL_ENV, **({"NATIVE_DTYPE": a.dtype} if a.dtype else {}),
+           "eval_env": dict(EVAL_ENV, **({"NATIVE_DTYPE": a.dtype} if a.dtype else {}),
                             **(json.loads(a.eval_env) if a.eval_env else {})),
            "eval_batched": {"threads": a.eval_threads, "wait": a.eval_wait} if batched else None,
            "eval_chunks": a.eval_chunks, "eval_procs": a.eval_procs, "eval_only": ids if narrowed else None}
     if a.ckpt_dir:
         names = stage_ckpt(Path(a.ckpt_dir).resolve(), ds)
         job["ckpt_prefix"], job["ckpt_files"] = CKPT_PREFIX, names
-    if a.llama:
-        job["llama"] = {"commit": LLAMA_COMMIT, "threads": a.llama_threads, "ctx": 32768}
-        job["arms"] = a.llama.split(",")  # one arm per quantization
-        job["eval_drive"] = [x.replace("{tools}", a.llama_tools) for x in LLAMA_DRIVE]
     if a.no_eval:
         job["eval_drive"] = None
     if a.train:
@@ -321,7 +324,6 @@ def build(a):
                                                                   for f in sorted(ds.iterdir()))))
     if job.get("eval_drive"):
         how = ("batched: one process per GPU, %d threads each" % a.eval_threads if job["eval_batched"]
-               else "llama.cpp: %d chunks one after another per arm" % a.eval_chunks if a.llama
                else "%d launches, %d side by side on the GPU" % (a.eval_chunks, a.eval_procs))
         print("eval: %d sessions%s, arms %s, %s" % (len(ids), " (sample %d)" % a.sample if a.sample else "", job["arms"], how))
         fill = dict(python="python", code="<code>", work="<work>", ckpt="<ckpt>", arm="<arm>", out="<out>", set=a.eval_set,
@@ -396,8 +398,8 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--val-n", type=int, default=400)
     ap.add_argument("--max-steps", type=int, default=0)
     ap.add_argument("--lora", type=int, default=0, help="LoRA rank (0 = full fine-tune)")
-    ap.add_argument("--arms", help="decoding arms scored on the set, comma list (default free); `<decoding>@<tools>` "
-                    "also sets the tools-block spelling (e.g. hard@sig)")
+    ap.add_argument("--arms", help="arms scored on the set, comma list (default free, the only arm: greedy unconstrained "
+                    "decoding, outputs in eval/free/); `free@<tools>` also sets the tools-block spelling (sig, compact or full)")
     ap.add_argument("--ckpt-dir", help="eval only: a local checkpoint folder (save_pretrained), shipped in the job's "
                                        "data dir; implies --base's no-training run, scored on --set")
     ap.add_argument("--sample", type=int, default=0, help="run a fixed stratified subset of N sessions (quick check)")
@@ -422,13 +424,8 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--eval-only", help="comma list of session ids to score (default: the whole set)")
     ap.add_argument("--eval-setup", help="JSON list of commands run once before the eval arms")
     ap.add_argument("--no-eval", action="store_true")
-    ap.add_argument("--llama", help="phone setup: CPU host, llama.cpp, one arm per GGUF quantization "
-                                    "(e.g. Q4_K_M,Q8_0); needs --base")
-    ap.add_argument("--llama-threads", type=int, default=4)
-    ap.add_argument("--llama-tools", default="sig", help="tools-block spelling of the llama arms")
     ap.add_argument("--fast-kernels", action="store_true", help="try fla + causal-conv1d (kept only if exact)")
     ap.add_argument("--transformers", default="5.17.0")
-    ap.add_argument("--llguidance", default="1.8.0")
     ap.add_argument("--release", action="store_true", help="cargo build --release nativetools first (not with BUNDLE_NATIVETOOLS)")
     ap.add_argument("--dry", action="store_true", help="accepted and ignored: a build only stages, nothing is uploaded")
     return ap
@@ -452,6 +449,7 @@ def main():
         sys.exit("build needs --train (or --base / --ckpt-dir for an eval-only run)")
     if a.base and a.no_eval:
         sys.exit("--base with --no-eval would do nothing")
+    check_arms(a.arms)
     check_set(a)
     build(a)
 

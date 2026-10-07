@@ -4,14 +4,15 @@ On the VM, train/vm/run_job.sh trains by itself (resumable across preemptions) a
 stage: `train` null, the checkpoint presented as `ckpt_prefix` + `ckpt_files`. score_ckpt.sh runs it the same way on a
 checkpoint it pulled. Run directly, a job with a train file trains first.
 
-Input, in KERNEL_INPUT (default /opt/centraid/score-input): `bundle.dat` (built by bundle.py: code, exported grammar,
+Input, in KERNEL_INPUT (default /opt/centraid/score-input): `bundle.dat` (built by bundle.py: code, the runtime's export,
 nativetools binary + the loader and libs it was linked against, eval worlds and sets, data) and `job.json`. Everything
 it writes lands in KERNEL_WORK (default /opt/centraid/score), as run_job.sh lays them out under CENTRAID_BASE:
 
     run.log                  this script's own log (every command, exit code, seconds)
     train.log                the trainer's log (mask assertion, loss, val, tok/s, TRUNCATED)
     ckpt/ckpt-025|050|075|100/   bf16 checkpoints (ckpt/FINAL names the last one; marks.json, best.json); ckpt/train_meta.json
-    eval/<arm>/...           the eval driver's outputs per decoding arm; eval/<arm>.log (batched: one
+    eval/<arm>/...           the eval driver's outputs for the arm (`free`: greedy, unconstrained decoding, the only arm;
+                             `free@<tools>` adds the tools-block spelling); eval/<arm>.log (batched: one
                              eval/<arm>-gpu<g>.log per GPU process, run-<g>.jsonl written as sessions finish)
     summary.json             job, timings, final checkpoint, arms run and their exit codes, and (job.json `fast_kernels`)
                              which fused kernels the exactness probe kept: {"fast_kernels": {"<pkg>": bool}}
@@ -38,6 +39,21 @@ os.makedirs(W, exist_ok=True)
 LOG = open(os.path.join(W, "run.log"), "a")
 DEADLINE = T0 + JOB.get("kernel_hours", 11.5) * 3600  # the job's own wall-clock budget, in hours
 SUMMARY = {"job": JOB, "started": time.strftime("%Y-%m-%d %H:%M:%S"), "stages": {}}
+ARMS = JOB.get("arms", ["free"])
+
+
+def arm_tools(arm):
+    """The tools-block spelling of an arm ("" = the driver's default). Decoding is always free, so `free` is the only arm; `free@sig`
+    (or compact, full) also sets the spelling. Anything else is refused."""
+    name, _, tools = arm.partition("@")
+    if name != "free" or (tools and tools not in ("sig", "compact", "full")):
+        raise SystemExit("arm %r: the only arm is `free` (decoding is unconstrained); `free@sig|compact|full` sets the tools-block "
+                         "spelling" % arm)
+    return tools
+
+
+for _arm in ARMS:
+    arm_tools(_arm)
 
 
 def say(*a):
@@ -90,8 +106,8 @@ if not _arch:
     raise SystemExit("bundle not found under %s: %s" % (D, sorted(os.listdir(D))))
 with tarfile.open(_arch[0], "r:gz") as tf:
     tf.extractall(C)
-sh("pip", [sys.executable, "-m", "pip", "install", "-q", "transformers==%s" % JOB["transformers"],
-           "llguidance==%s" % JOB["llguidance"]] + (["peft"] if "--lora" in JOB.get("train_args", []) else []))
+sh("pip", [sys.executable, "-m", "pip", "install", "-q", "transformers==%s" % JOB["transformers"]]
+   + (["peft"] if "--lora" in JOB.get("train_args", []) else []))
 # nativetools is linked against the builder's glibc, which can be newer than the VM image's (Ubuntu 22.04): run it
 # through the loader and libs shipped next to it.
 wrapper = os.path.join(C, "bin", "nativetools")
@@ -203,36 +219,7 @@ if JOB.get("train"):
     SUMMARY["final_ckpt"] = final
     dump()
 
-# ---- 3b. llama.cpp (phone setup, CPU): build the pinned llama.cpp with llguidance, convert the
-# model to a BF16 GGUF, quantize one GGUF per arm (the arm name is the llama-quantize type)
-LL = JOB.get("llama")
-GGUF = {}
-if LL:
-    src = os.path.join(W, "llama.cpp")
-    cargo = os.path.expanduser("~/.cargo/bin")
-    if not shutil.which("cargo") and not os.path.exists(os.path.join(cargo, "cargo")):
-        sh("rustup", ["bash", "-c", "curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"])
-    LENV = dict(ENV, PATH=cargo + ":" + ENV["PATH"])
-    sh("llama-clone", ["bash", "-c", "git init -q %s && cd %s && git remote add origin https://github.com/ggml-org/llama.cpp "
-                       "&& git fetch -q --depth 1 origin %s && git checkout -q FETCH_HEAD" % (src, src, LL["commit"])])
-    sh("llama-build", ["bash", "-c", "cd %s && cmake -B build -DCMAKE_BUILD_TYPE=Release -DLLAMA_LLGUIDANCE=ON -DLLAMA_CURL=OFF "
-                       "-DLLAMA_BUILD_TESTS=OFF > cmake.log 2>&1 && cmake --build build -j%d --target llama-server llama-quantize "
-                       "llama-bench" % (src, os.cpu_count() or 4)], env=LENV, out=os.path.join(W, "llama-build.log"))
-    from huggingface_hub import snapshot_download
-    hf = snapshot_download(JOB["model"])
-    bf16 = os.path.join(W, "gguf-bf16.gguf")
-    sh("gguf-convert", [sys.executable, os.path.join(src, "convert_hf_to_gguf.py"), hf, "--outtype", "bf16",
-                        "--outfile", bf16], env=dict(ENV, PYTHONPATH=os.path.join(src, "gguf-py")),
-       out=os.path.join(W, "gguf-convert.log"))
-    for q in JOB["arms"]:
-        GGUF[q] = os.path.join(W, "gguf-%s.gguf" % q)
-        sh("quantize-" + q, [os.path.join(src, "build", "bin", "llama-quantize"), bf16, GGUF[q], q],
-           out=os.path.join(W, "quantize-%s.log" % q))
-        sh("bench-" + q, [os.path.join(src, "build", "bin", "llama-bench"), "-m", GGUF[q], "-t", str(LL["threads"]),
-                          "-p", "512", "-n", "128"], out=os.path.join(W, "bench-%s.log" % q), check=False)
-    say("cpu", os.cpu_count(), "threads", LL["threads"])
-
-# ---- 4. score the set with the eval driver: one decoding arm per GPU, in parallel. Each arm drives
+# ---- 4. score the set with the eval driver: one arm per GPU, in parallel. Each arm drives
 # the set in chunks; the run files are merged and scored here, a deadline cut leaving only the
 # sessions that finished to score.
 EVAL_SET = JOB.get("eval_set", "eval/sets/val.jsonl")
@@ -246,27 +233,18 @@ def fill(cmd, arm, **kw):
 
 
 def arm_script(arm, chunks):
-    """The arm's chunks in order, in one process; a failed chunk does not stop the next. Without
-    llama.cpp, `eval_procs` lanes run side by side on the arm's GPU (a 0.8B step is Python-bound, so
-    the GPU is mostly idle in one process); chunk k goes to lane k % lanes."""
+    """The arm's chunks in order; a failed chunk does not stop the next. `eval_procs` lanes run side by side on the arm's
+    GPU (a 0.8B step is Python-bound, so the GPU is mostly idle in one process); chunk k goes to lane k % lanes."""
     import shlex
     cmds = [" ".join(shlex.quote(x) for x in fill(JOB["eval_drive"], arm, only=",".join(ids), part=k))
             for k, ids in enumerate(chunks)]
-    lanes = 1 if LL else max(1, min(JOB.get("eval_procs", 1), len(cmds)))
-    body = " ; ".join(cmds)
-    if not LL:
-        return " & ".join("( %s )" % " ; ".join(cmds[j::lanes]) for j in range(lanes)) + " ; wait"
-    # the arm's own single-slot server (a phone serves one conversation), up for the arm's chunks only
-    server = [os.path.join(W, "llama.cpp", "build", "bin", "llama-server"), "-m", GGUF[arm], "-t", str(LL["threads"]),
-              "-np", "1", "-c", str(LL["ctx"]), "-cms", "64", "--port", "8089", "--no-webui"]
-    return ("%s > %s 2>&1 & S=$! ; for i in $(seq 200); do curl -sf localhost:8089/health >/dev/null && break; kill -0 $S || exit 1; sleep 3; done ; %s ; kill $S"
-            % (" ".join(shlex.quote(x) for x in server), shlex.quote(os.path.join(W, "eval", arm + "-server.log")), body))
+    lanes = max(1, min(JOB.get("eval_procs", 1), len(cmds)))
+    return " & ".join("( %s )" % " ; ".join(cmds[j::lanes]) for j in range(lanes)) + " ; wait"
 
 
 def arm_env(arm, gpu=None):
-    decoding, _, tools = arm.partition("@")  # "hard@sig": decoding arm + tools-block spelling
-    env = dict(ENV, **JOB.get("eval_env", {}), NATIVE_DECODING=decoding,
-               NATIVE_LARK=os.path.join(C, "export", "call.lark"), EVAL_TMP=os.path.join(W, "tmp-" + arm))
+    tools = arm_tools(arm)  # "free@sig": the arm, then the tools-block spelling
+    env = dict(ENV, **JOB.get("eval_env", {}), EVAL_TMP=os.path.join(W, "tmp-" + arm))
     if gpu is not None:
         env["CUDA_VISIBLE_DEVICES"] = str(gpu)
     if tools:
@@ -309,8 +287,8 @@ if JOB.get("eval_drive"):
     ids = all_ids = [json.loads(l)["id"] for l in open(os.path.join(C, EVAL_SET)) if l.strip()]
     if JOB.get("eval_only"):
         ids = [i for i in ids if i in set(JOB["eval_only"])]
-    arms = JOB.get("arms", ["hard", "free"])
-    if JOB.get("eval_batched") and not LL:
+    arms = ARMS
+    if JOB.get("eval_batched"):
         # batched: one process per GPU per arm (CUDA_VISIBLE_DEVICES), each running `threads` sessions at
         # once against its own batched model; the processes take sessions from {out}/claims, so the GPUs
         # stay level. Arms run one after another, each over every GPU.
@@ -340,9 +318,6 @@ if JOB.get("eval_drive"):
         for i, arm in enumerate(arms):
             os.makedirs(os.path.join(W, "eval", arm), exist_ok=True)
             env = arm_env(arm, i % max(NGPU, 1))
-            if LL:  # per-step latency and message log (NATIVE_STEP_LOG), one file per arm
-                env.update(NATIVE_DECODING="hard", NATIVE_LLAMA_URL="http://127.0.0.1:8089", NATIVE_VERBOSE="1",
-                           NATIVE_STEP_LOG=os.path.join(W, "eval", arm, "steps.jsonl"))
             script = arm_script(arm, chunks)
             say("$ [gpu %s, %s] %d sessions in %d chunks: %s" % (env["CUDA_VISIBLE_DEVICES"], arm, len(ids), n, script[:400]))
             p = subprocess.Popen(["bash", "-c", script], cwd=C, env=env, stderr=subprocess.STDOUT,

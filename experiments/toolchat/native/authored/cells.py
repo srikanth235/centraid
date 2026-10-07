@@ -17,9 +17,9 @@ The tables (BRIEF.md "Coverage" gives authors the same list):
      that detect them are the H_* constants right below (readable and editable in one place).
 
 The universe is derived from a fresh `nativetools export` (kind_card.txt: kinds, fields, enums,
-verbs; call.lark: tools, params, decline reasons, compute ops; where.lark: every where field and
-its operators) plus the runtime rules in BRIEF.md "Runtime rules". A cell whose reachability is
-uncertain is kept reachable: the report over-states gaps rather than hiding one.
+verbs; tools.json and prompt.sig.txt: tools and their params; metadata.json: decline reasons, compute ops,
+all verbs, and every where field with its operators) plus the runtime rules in BRIEF.md "Runtime rules".
+A cell whose reachability is uncertain is kept reachable: the report over-states gaps rather than hiding one.
 
 Cells are tuples of strings; the first element is always the table letter, so a cell is
 self-describing in json and markdown (`cell_str`).
@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import json
 import os
 import re
 import subprocess
@@ -242,18 +243,55 @@ def universe_h() -> dict:
 # --- the export -------------------------------------------------------------------------------
 
 
+# What the `where` mini-language takes of a field, by the type metadata.json gives it (the runtime's own table, crates/nativetools/src/whr.rs):
+# number, money: the six comparisons on a number; text: = and != on a literal, contains, in; enum: = and != on one of its values, in;
+# bool: = and != on yes|no (a value form of "enum"); date: no condition. Every field but a bool also takes `is empty` / `is set`.
+# A link takes a count comparison: `<linked kind> count`.
+_NUM = {o: "number" for o in WHERE_OPS[:6]}
+_TEXT = {"=": "literal", "!=": "literal", "contains": "literal", "in": "literal"}
+_ENUM = {"=": "enum", "!=": "enum", "in": "enum"}
+_BOOL = {"=": "enum", "!=": "enum"}
+_FIELD_OPS = {"number": _NUM, "money": _NUM, "text": _TEXT, "enum": _ENUM, "bool": _BOOL, "date": {}}
+
+
+def _field_ops(field: dict) -> dict:
+    ops = dict(_FIELD_OPS[field["type"]])
+    if field["type"] != "bool":
+        ops["is empty"] = ops["is set"] = "—"
+    return ops
+
+
+def _tool_params(tools: list[dict], sig: str, selector: list[str]) -> dict[str, list[str]]:
+    """tool -> its parameter names. tools.json lists a tool's properties alphabetically, so it says WHICH names; the order is the
+    runtime's: the parameters the tool's signature line in prompt.sig.txt lists (`act(verb: ..., rows? | selector, args?, more?)`; `selector` stands
+    for the selector parameters, which it does not spell out), then the selector parameters in `metadata.json` order."""
+    lines = sig.split("<tools>\n", 1)[1].split("</tools>", 1)[0].splitlines()
+    listed = {}
+    for line in lines:
+        fn = json.loads(line)["function"]
+        inner = re.match(r"\w+\((.*?)\) — ", fn["description"]).group(1)
+        listed[fn["name"]] = [n for p in inner.split(", ") if (n := re.match(r"\w+", p).group()) != "selector"]
+    out = {}
+    for t in tools:
+        fn = t["function"]
+        have = set(fn["parameters"]["properties"])
+        names = listed[fn["name"]] + [p for p in selector if p in have and p not in listed[fn["name"]]]
+        if set(names) != have:
+            raise ValueError("tools.json and prompt.sig.txt disagree on the parameters of %s: %s" % (fn["name"], sorted(set(names) ^ have)))
+        out[fn["name"]] = names
+    return out
+
+
 @functools.lru_cache(maxsize=1)
 def export(path: str | None = None) -> dict:
-    """Parse a `nativetools export` (a fresh one unless `path` names an existing directory)."""
+    """Read a `nativetools export` (a fresh one unless `path` names an existing directory)."""
     d = path or tempfile.mkdtemp(prefix="cells-export-")
     if not path:
         subprocess.run([NT, "export", d], check=True, capture_output=True)
-    lark = Path(d, "call.lark").read_text()
+    meta = json.loads(Path(d, "metadata.json").read_text())
     card = Path(d, "kind_card.txt").read_text()
-    wl = Path(d, "where.lark").read_text()
-    tools = {}
-    for m in re.finditer(r"^(\w+)_param: (.*?)(?=^\w+:|\Z)", lark, re.M | re.S):
-        tools[m.group(1)] = re.findall(r"<parameter=(\w+)>", m.group(2))
+    tool_defs = {t["function"]["name"]: t for t in json.loads(Path(d, "tools.json").read_text())}
+    tools = _tool_params([tool_defs[n] for n in meta["tools"]], Path(d, "prompt.sig.txt").read_text(), meta["selector_params"])
     verbs, fields, enums, dated, units = {}, {}, {}, set(), {}
     for line in card.splitlines():
         m = re.match(r"^([a-z ]+): (.*)$", line)
@@ -270,39 +308,17 @@ def export(path: str | None = None) -> dict:
             dated.add(kind)
         for f, vals in re.findall(r"(\w+) \(([a-z_]+(?:\|[a-z_]+)+)\)", head):
             enums[f"{kind}.{f}"] = vals.split("|")
-    # where.lark: per kind, per field, the operators and value types the grammar admits
+    # where: per kind, per field, the operators and value types the language admits (a kind with no field and no link has none)
     where = {}
-    for m in re.finditer(r"^cond_(\w+): (.*?)(?=^\s*$|^where_|\Z)", wl, re.M | re.S):
-        kind = m.group(1).replace("_", " ")
-        per = where.setdefault(kind, {})
-        for alt in re.split(r"\n\s*\|", m.group(2)):
-            alt = alt.strip()
-            fm = re.match(r'"([a-z_]+(?: count)?)', alt)
-            if not fm:
-                continue
-            f = fm.group(1).strip()
-            ops = per.setdefault(f, {})
-            if f.endswith(" count"):
-                for o in WHERE_OPS[:6]:
-                    ops[o] = "linkcount"
-            elif '" contains "' in alt:
-                ops["contains"] = "literal"
-            elif '" in ("' in alt:
-                ops["in"] = "enum" if '("' in alt.split("in (", 1)[1][:4] or '"\\""' in alt else "literal"
-            elif "is empty" in alt:
-                ops["is empty"] = ops["is set"] = "—"
-            elif " CMP " in alt:
-                for o in WHERE_OPS[:6]:
-                    ops[o] = "number"
-            elif " EQ " in alt:
-                val = "enum" if "STRING" not in alt else "literal"
-                ops["="] = ops["!="] = val
-    reasons = re.search(r'^reason: (.*)$', lark, re.M).group(1).replace('"', "").split(" | ")
-    ops = re.search(r'^op: (.*)$', lark, re.M).group(1).replace('"', "").split(" | ")
-    all_verbs = re.search(r'^verb: (.*)$', lark, re.M).group(1).replace('"', "").split(" | ")
-    kinds = re.search(r'^kind: (.*)$', lark, re.M).group(1).replace('"', "").split(" | ")
+    for k in meta["kinds"]:
+        per = where.setdefault(k["name"], {})
+        for f in k["fields"]:
+            per[f["name"]] = _field_ops(f)
+        for link in k["links"]:
+            per[f"{link['kind']} count"] = {o: "linkcount" for o in WHERE_OPS[:6]}
     return {"tools": tools, "verbs": verbs, "fields": fields, "enums": enums, "dated": dated,
-            "where": where, "units": units, "reasons": reasons, "ops": ops, "all_verbs": all_verbs, "kinds": kinds}
+            "where": where, "units": units, "reasons": meta["decline_reasons"], "ops": meta["ops"],
+            "all_verbs": [v["name"] for v in meta["verbs"]], "kinds": [k["name"] for k in meta["kinds"]]}
 
 
 # --- the universe -----------------------------------------------------------------------------
@@ -341,7 +357,7 @@ def _table_b(x):
             forms_seen = set()
             for op in WHERE_OPS:
                 if op not in ops:
-                    unr.append((("B", key, op, "*"), f"where.lark: {f} on {kind} has no `{op}`"))
+                    unr.append((("B", key, op, "*"), f"where: {f} on {kind} has no `{op}`"))
                     continue
                 t = ops[op]
                 if t == "—":

@@ -10,7 +10,7 @@ Status: draft 2, approved for build; §14 decisions taken. Draft 2 folds in the 
 4. **Plain words, human units.** Model-facing kind and field names are plain English (`person`, `debt`, `date`, `amount`), amounts in currency units, every dated kind has a `date`. The runtime maps to vault names (`core.party`, `obligation`, `dtstart`, `amount_minor`).
 5. **No dead ends.** Every observation says what exists and what can be done next.
 6. **One name per effect; one way per action.** Exactly one spelling for each write and each read pattern, so equivalent calls cannot differ. Concretely: names are filtered only by `name`, dates only by `when`, values are computed only by `op` (§4.3).
-7. **One source of truth.** Tool schemas, the kind card, the constrained-decoding grammar, the runtime tables, the row cap and the generator's vocabulary are generated from one metadata table that lives in the runtime crate (model-facing name, runtime name, unit, kind, links, verbs).
+7. **One source of truth.** Tool schemas, the kind card, the runtime tables, the row cap and the generator's vocabulary are generated from one metadata table that lives in the runtime crate (model-facing name, runtime name, unit, kind, links, verbs).
 8. **Native format.** Calls use Qwen3.5's own tool format (XML tool calls, JSON schemas in the system prompt, `<tool_response>` results). The only reason to deviate is a session that does not fit the training length (§11.6).
 
 Non-goals: the model never writes SQL; no reference operators (`the other one`, `that one`, `it`, `them`, ordinal refs) — rows are named only by `#n` / `@n` the model has seen; the runtime never turns the message into a call: names, dates and amounts arrive typed from the model, and where the runtime reads the message (principle 1) it shows what it read or checks the call against it.
@@ -342,15 +342,15 @@ Checks: `authored/trace3_check.py` (the round trip through the decoder's own fun
 13. **Conventions** are the §14 rulings: bare "wifi password" is a read; "diary" is calendar; members are people linked to a group; the §4.4 date readings; `undo` = the whole previous turn; amounts in the default currency; positive balance = they owe me.
 14. **A write over the cap** (more than `ROW_CAP` rows) ends in the runtime's ask (§4.6), whatever the trace's `scope` says; the reference is the write, and after the person's yes the same write is sent again. Over a handle, with no all said, the same write ends as its selector's does: `Which one?` (nt11 R5).
 
-## 9. Constrained decoding
+## 9. Decoding
 
-Built from the metadata table, llguidance under HF `generate`:
+Decoding is **free**: no grammar constrains the model's tokens, and the runtime reads what the model wrote (`crates/nativetools/src/parse.rs`, which also salvages leaked parameter syntax). Under HF `generate`, `train/decode.py` adds only:
 
-- the `<think>` block is free; after it, exactly one call of a known tool with its parameter names;
-- `kind`, `op`, `verb`, `reason` are enums; `where`/`order` fields are the chosen kind's fields; `act` args are the verb's args; date values follow the §4.4 grammar;
-- `#n` limited to numbers shown and not compacted, `@n` to handles issued (own flag). The harness tracks the kind of every issued `#n`, so `edit`/`where` fields for a `#n` target are typed too; when `rows` mixes kinds the grammar falls back to the union and the runtime's error catches it;
-- `name`, `text`, `question` and string values are free text;
-- **soft mode** (flag): if the mask would force a token the model gives low probability, emit unconstrained so the runtime returns its informative error instead of a silent wrong call.
+- the **think guard** (§6.6): at `think_limit` think tokens `</think>` is forced (`think_cut`);
+- the **rendered call**: once the think closes, the call the think states is written by `fmt.call_of_think`, the function the data builder checks every authored call against, one forced token at a time (`rendered_call`); a think that does not state a whole call leaves the call to the model;
+- **one call per message**: after `</tool_call>` only `<|im_end|>`.
+
+The scoring arm is `free` (greedy; `bundle.py`); rollouts sample (`NATIVE_SAMPLE=1`: temperature 0.6, top-p 0.95, a fixed seed). The grammar-constrained modes (`hard`, `soft`: llguidance masks over an exported Lark grammar) and the llama.cpp arm were deleted on 2026-10-07 (D-1044-18): scoring had used only `free` since phase 7, and a grammar is a second statement of the call format that the runtime's parser already holds.
 
 ## 10. Scoring
 

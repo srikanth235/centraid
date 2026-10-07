@@ -32,9 +32,6 @@ fn export_writes_every_contract_file() {
     }
     for file in [
         "kind_card.txt",
-        "where.lark",
-        "date_expr.lark",
-        "call.lark",
         "prompt.sig.txt",
         "prompt.compact.txt",
         "prompt.full.txt",

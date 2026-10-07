@@ -36,7 +36,7 @@ pub fn date_expr_property(description: &str) -> Value {
 /// THE PROMPT'S BUDGET: the selector is ten parameters and four tools take
 /// it. `find` carries it with its descriptions and the nested date schema;
 /// `compute`, `answer` and `act` carry name and type only and point at
-/// `find`. The interface is the same either way, so the grammars and the
+/// `find`. The interface is the same either way, so the parser and the
 /// runtime do not change; `full` is the spelling `tools.full.json` exports.
 fn selector_properties(described: bool) -> serde_json::Map<String, Value> {
     let text = |description: &str| {
@@ -110,7 +110,7 @@ pub fn tools() -> Vec<Value> {
 }
 
 /// The eight tools with the selector described in every tool that takes it
-/// (`tools.full.json`, for docs and grammar work).
+/// (`tools.full.json`, for docs).
 #[must_use]
 pub fn tools_full() -> Vec<Value> {
     tools_with(true)
@@ -232,7 +232,7 @@ fn tools_with(full: bool) -> Vec<Value> {
 /// example. `Sig` keeps Qwen's native `<tools>` block but gives each tool a
 /// one-line signature and no parameter schema; `Compact` is the described
 /// JSON schema (`tools.json`); `Full` repeats the described selector in every
-/// tool (`tools.full.json`). The call grammar, the parser and the runtime are
+/// tool (`tools.full.json`). The call format, the parser and the runtime are
 /// the same in all three.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ToolsMode {

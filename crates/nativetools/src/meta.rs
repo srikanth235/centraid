@@ -2,9 +2,9 @@
 //!
 //! Model-facing kinds, fields, enums, units, links and verbs, each mapped to
 //! the vault table, column and typed command it stands for. The tool schemas,
-//! the kind card, the `where` grammar, the runtime's reads and writes and the
-//! generator's vocabulary (through `nativetools export`) are all generated
-//! from these rows. `tests/meta.rs` proves every mapped column exists in a
+//! the kind card, the `where` parser's fields, the runtime's reads and writes
+//! and the generator's vocabulary (through `nativetools export`) are all
+//! generated from these rows. `tests/meta.rs` proves every mapped column exists in a
 //! freshly founded vault and every mapped command is registered.
 //!
 //! Derived rather than restated where the vault states it: the Locker item

@@ -1,6 +1,6 @@
 """Batched decoding for the eval driver: many sessions (threads) share one GPU.
 
-    b = BatchedBackend(HFBackend(ckpt, lark, ...), max_batch=32, max_wait=0.1)
+    b = BatchedBackend(HFBackend(ckpt, ...), max_batch=32, max_wait=0.1)
     text, info = b.complete_info(prompt)     # blocks; called from any number of threads
 
 `eval/run.py` drives one session at a time and each step is one unbatched `generate` (Python bound,
@@ -11,13 +11,12 @@ requests (up to `max_batch`, up to a padded-token budget) after a short wait, ru
 - `Batcher`: the queue logic, model free (a fake `run_batch` tests it): dynamic batch, max-wait,
   a batch also starts as soon as every active client is waiting, FIFO, results routed by request.
 - `BatchedBackend`: the HF part. Prompts are the same strings `HFBackend.complete` gets (the caller
-  renders them with the shared renderer); tokenization, the grammar matcher and the addressable
-  handles are prepared by `Decoder`'s own code in the caller's thread; the per-row step logic is
-  `decode._Step` itself (think guard, llguidance mask, one call per message), so a row's tokens are
+  renders them with the shared renderer); tokenization is done in the caller's thread; the per-row step logic is
+  `decode._Step` itself (think guard, the rendered call, one call per message), so a row's tokens are
   those of the serial run (left padding with an attention mask; greedy equality is tested in
   test_batching.py). Rows are stopped per request: `<|im_end|>` (also forced after `</tool_call>`),
-  or the request's own `max_new_tokens`. A request carries what the serial path gives `Decoder.generate`: `require_refer`,
-  the prompt's dates line (`n_dates` of the grammar, `dates` of `_Step`) and the think's given prefix. `complete_info(...,
+  or the request's own `max_new_tokens`. A request carries what the serial path gives `Decoder.generate`: the prompt's
+  dates line (`dates` of `_Step`) and the think's given prefix. `complete_info(...,
   compile=...)` applies the session's compile op after the draw (hf_backend.compiled_message); its one retry is a second request.
 
 Also here: `stratified_sample`, the fixed subset behind `--sample`.
@@ -142,65 +141,19 @@ class Batcher:
 # ---- the HF backend
 
 class _Req:
-    __slots__ = ("ids", "matcher", "max_new", "sample", "rows", "results", "used", "refer", "dates", "prefix", "pre")
+    __slots__ = ("ids", "max_new", "sample", "dates", "prefix")
 
-    def __init__(self, ids, matcher, max_new, sample, rows, results, refer=False, dates=None, prefix="", pre=()):
-        self.ids, self.matcher, self.max_new, self.sample = ids, matcher, max_new, sample
-        self.rows, self.results, self.used = rows, results, False  # a matcher is consumed by one attempt
-        self.refer, self.dates = refer, dates  # `require_refer` and the prompt's dates line, as decode.Decoder.generate takes them
-        self.prefix, self.pre = prefix, list(pre)  # the think's given first lines (`retry: <slot>`) and their token ids (the tail of `ids`)
-
-
-class _FastDecoder:
-    """What decode._Step reads off its Decoder (token ids, limits, the tokenizer, `mask_of`), with the
-    bitmask unpacked on the model's device: one 31 KB copy per row and step instead of a
-    248k-element CPU tensor. The first mask on a CUDA device is checked against the CPU unpacking
-    and the CPU path stays if they differ or the device op is missing."""
-
-    def __init__(self, dec, device):
-        import torch
-        self.d, self.device, self.torch = dec, device, torch
-        for k in ("im_end", "think_end", "call_end", "think_limit", "soft_threshold", "vocab", "tok"):
-            setattr(self, k, getattr(dec, k))
-        self.on_device = torch.device(device).type != "cpu"
-        self.shifts = torch.arange(8, dtype=torch.uint8, device=device)
-
-    def mask_of(self, m):
-        torch = self.torch
-        if not self.on_device:
-            return self.d.mask_of(m)
-        raw = bytearray(m.compute_bitmask())
-        try:
-            bits = torch.frombuffer(raw, dtype=torch.uint8).to(self.device)
-            allowed = ((bits.unsqueeze(1) >> self.shifts) & 1).flatten().bool()
-            out = torch.zeros(self.vocab, dtype=torch.bool, device=self.device)
-            n = min(self.vocab, allowed.numel())
-            out[:n] = allowed[:n]
-            if not getattr(self, "_checked", False):
-                self._checked = True
-                if not torch.equal(out.cpu(), self._cpu(raw)):
-                    raise RuntimeError("device bitmask differs from the CPU one")
-            return out
-        except Exception as e:  # noqa: BLE001
-            print("[batching] device bitmask unusable (%r): CPU unpacking" % (e,), file=sys.stderr, flush=True)
-            self.on_device = False
-            return self._cpu(raw).to(self.device)
-
-    def _cpu(self, raw):
-        torch = self.torch
-        bits = torch.frombuffer(bytearray(raw), dtype=torch.uint8)
-        allowed = ((bits.unsqueeze(1) >> torch.arange(8, dtype=torch.uint8)) & 1).flatten().bool()
-        out = torch.zeros(self.vocab, dtype=torch.bool)
-        n = min(self.vocab, allowed.numel())
-        out[:n] = allowed[:n]
-        return out
+    def __init__(self, ids, max_new, sample, dates=None, prefix=""):
+        self.ids, self.max_new, self.sample = ids, max_new, sample  # `ids` ends with the token ids of `prefix`
+        self.dates = dates  # the prompt's dates line, as decode.Decoder.generate takes it
+        self.prefix = prefix  # the think's given first lines (`retry: <slot>`)
 
 
 class _BatchProc:
     """One HF logits processor for the whole batch: row i runs decode._Step's logic on its own
     slice (its prompt_len is the padded width, so `new` = its generated tokens), plus its own
     max_new_tokens. A row that already ended (`<|im_end|>`, HF pads it with im_end) is left
-    alone: the serial run never asks the matcher about anything after `<|im_end|>`."""
+    alone: the serial run never asks a step about anything after `<|im_end|>`."""
 
     def __init__(self, steps, limits, width, im_end):
         self.steps, self.limits, self.width, self.im_end = steps, limits, width, im_end
@@ -223,14 +176,13 @@ class _BatchProc:
 
 class BatchedBackend:
     """Thread-safe drop-in for HFBackend.complete over a shared `Batcher`. Wraps an HFBackend
-    (its model, tokenizer, `Decoder`, mode and stats); do not also call the wrapped one."""
+    (its model, tokenizer, `Decoder` and stats); do not also call the wrapped one."""
 
     def __init__(self, hf, max_batch=32, max_wait=0.1, max_tokens=None):
         import torch
         self.hf, self.dec, self.tok, self.model = hf, hf.dec, hf.tok, hf.model
-        self.mode, self.sample, self.seed = hf.decoding, hf.sample, hf.seed
+        self.sample, self.seed = hf.sample, hf.seed
         self.device = next(self.model.parameters()).device
-        self.fast = _FastDecoder(self.dec, self.device)
         self._tok_lock = threading.Lock()
         self._local = threading.local()
         self.stats = hf.stats
@@ -273,8 +225,7 @@ class BatchedBackend:
         if prompt.endswith("<|im_start|>assistant\n"):
             prompt += "<think>\n"
         assert prompt.endswith("<|im_start|>assistant\n<think>\n"), prompt[-60:]
-        rows, results = decode.fmt.addressable_in_prompt(prompt)
-        refer, dates = decode.fmt.requires_refer_in_prompt(prompt), decode.fmt.dates_line_in_prompt(prompt)
+        dates = decode.fmt.dates_line_in_prompt(prompt)
         with self._tok_lock:
             ids = self.tok(prompt, add_special_tokens=False)["input_ids"]
         limit = self.dec.max_new_tokens if max_new_tokens is None else max_new_tokens
@@ -287,8 +238,7 @@ class BatchedBackend:
                 with self._tok_lock:
                     pre = self.tok(prefix, add_special_tokens=False)["input_ids"]
             for _ in range(1 if only_once else max(1, tries) if banned else 1):
-                matcher = self._matcher(rows, results, refer, dates, pre)  # one per draw
-                text, info = self.batcher.submit(_Req(ids + pre, matcher, limit, do_sample, rows, results, refer, dates, prefix, pre))
+                text, info = self.batcher.submit(_Req(ids + pre, limit, do_sample, dates, prefix))
                 if only_once or not banned or _call_key(text) not in banned:
                     break
             return text, info
@@ -305,18 +255,6 @@ class BatchedBackend:
                 self.stats["fallback"] += how in ("fallback", "retry-fallback")
         self._local.info = info
         return text, info
-
-    def _matcher(self, rows, results, refer, dates, pre):
-        """The grammar matcher of one draw (None when free): the prompt's rows, results and dates entries, with the think's given
-        prefix already consumed (a prefix the grammar does not take leaves the draw free of it, as decode.Decoder.generate)."""
-        import decode
-        if self.mode == "free":
-            return None
-        matcher = self.dec.matcher(rows, results, refer, len(decode.fmt.trace3().dates_entries(dates)))
-        for t in pre:
-            if not matcher.consume_token(t):
-                return None
-        return matcher
 
     def close(self):
         self.batcher.close()
@@ -362,12 +300,7 @@ class BatchedBackend:
             input_ids[i, width - len(r.ids):] = torch.tensor(r.ids)
             attn[i, width - len(r.ids):] = 1
         input_ids, attn = input_ids.to(self.device), attn.to(self.device)
-        steps = []
-        for r in reqs:
-            if r.used and self.mode != "free":  # a retry after an OOM: the first attempt consumed the matcher
-                r.matcher = self._matcher(r.rows, r.results, r.refer, r.dates, r.pre)
-            r.used = True
-            steps.append(decode._Step(self.fast, r.matcher, self.mode, width, r.dates, r.prefix))
+        steps = [decode._Step(self.dec, width, r.dates, r.prefix) for r in reqs]
         limits = [r.max_new for r in reqs]
         proc = _BatchProc(steps, limits, width, im_end)
         kw = dict(do_sample=True, temperature=0.6, top_p=0.95, top_k=0) if sample else dict(do_sample=False)
@@ -398,9 +331,7 @@ class BatchedBackend:
         s = self.stats
         with self._stats_lock:
             s["steps"] += 1
-            for k in ("think_cut", "override"):
-                s[k] += int(bool(info[k]))
-            s["grammar_error"] += int(info["grammar_error"] is not None)
+            s["think_cut"] += int(bool(info["think_cut"]))
             s["unstopped"] += int(not info["stopped"])
             s["new_tokens"] += info["new_tokens"]
             s["seconds"] += info["seconds"] / info["batch"]  # this row's share of the batch's wall time

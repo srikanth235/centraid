@@ -1,10 +1,10 @@
-"""Tests for the think on the decoding side (CONTRACT_V3.md): the call a think states, the refer rule that makes the
-`refer:` line mandatory, the grammar of the think lines, and the decoder's rendering of the call.
+"""Tests for the think on the decoding side (CONTRACT_V3.md): the call a think states, the decoder's rendering of the call
+(forced tokens, the stop after the one call) and its wiring, and the runtime's `compile` op.
 
     python3 -m unittest train/test_trace3.py
 
-The grammar tests need llguidance, the cached Qwen tokenizer and a `nativetools` binary (for the exported call grammar);
-they are skipped when one is missing. The compiler and rule tests need none of them.
+The decoder tests need torch and the cached Qwen tokenizer, the `compile` tests a `nativetools` binary; each is skipped when
+one is missing. The compiler tests need none of them.
 """
 from __future__ import annotations
 
@@ -50,141 +50,12 @@ class CallOfThink(PinnedV31):
             want = fmt.render.call_text(r["call"]["tool"], T.canon_call(r["call"])["args"])
             self.assertEqual(fmt.call_of_think(r["think"], r.get("dates")), want, r["shape"])
 
-    def test_a_think_that_is_not_a_call_leaves_the_call_to_the_grammar(self):
+    def test_a_think_that_is_not_a_call_leaves_the_call_to_the_model(self):
         self.assertIsNone(fmt.call_of_think('intent: write "move"\nkind: event'))   # an act with no verb
         self.assertIsNone(fmt.call_of_think("intent: read\nwhen: now = fortnight+1"))
         self.assertIsNone(fmt.call_of_think("what is on friday"))                    # not a trace at all
         self.assertEqual(fmt.call_of_think("intent: read\nkind: event\n"),
                          "<tool_call>\n<function=answer>\n<parameter=kind>\nevent\n</parameter>\n</function>\n</tool_call>")
-
-
-class ReferRule(PinnedV31):
-    """`refer:` is a function of the turn index and of whether an earlier turn showed a result, never of the words."""
-
-    def test_it_holds_on_the_first_step_of_every_turn_that_has_a_previous_result(self):
-        first = turns("what's on friday", "which of those need a reminder")
-        self.assertTrue(fmt.requires_refer(first))
-        self.assertTrue(fmt.requires_refer(turns("what's on friday", "add milk to the shopping list")))   # no cue: still required
-        self.assertTrue(fmt.requires_refer(turns("a", "what's left on the kitchen list", "how many tasks are open")))
-
-    def test_it_does_not_hold_on_the_first_turn_nor_on_a_later_step(self):
-        self.assertFalse(fmt.requires_refer(turns("which of those need a reminder")))               # nothing earlier to point at
-        self.assertFalse(fmt.requires_refer(turns("star it")))
-        first = turns("what's on friday", "which of those need a reminder")
-        self.assertFalse(fmt.requires_refer(first + [{"role": "assistant", "think": "intent: read\nrefer: none", "tool": "find", "args": {}}]))
-
-    def test_the_rendered_prompt_gives_the_same_answer_as_the_records(self):
-        for texts in (("what's on friday", "star it"), ("what's on friday", "add milk"), ("star it",), ("a", "which of them are open")):
-            msgs = turns(*texts)
-            prompt = fmt.render.render_prompt_for_generation(msgs)
-            self.assertEqual(fmt.requires_refer_in_prompt(prompt), fmt.requires_refer(msgs), texts)
-
-
-class Grammar(PinnedV31):
-    @classmethod
-    def setUpClass(cls):
-        os.environ.setdefault("HF_HUB_OFFLINE", "1")
-        try:
-            import llguidance
-            import llguidance.hf
-            import hf_backend
-            import decode
-            from transformers import AutoTokenizer
-            cls.tok = AutoTokenizer.from_pretrained("Qwen/Qwen3.5-0.8B")
-            cls.lark = hf_backend.export_lark()
-            cls.llg, cls.decode = llguidance, decode
-            cls.lltok = llguidance.hf.from_tokenizer(cls.tok, eos_token=cls.tok.convert_tokens_to_ids("<|im_end|>"))
-            cls.gram = decode.Grammar(cls.lark, cls.tok)
-        except Exception as e:  # noqa: BLE001
-            raise unittest.SkipTest("no llguidance / tokenizer / nativetools: %r" % (e,))
-
-    def accepts(self, think: str, require_refer: bool, n_dates=None) -> bool:
-        text = think + "\n</think>"
-        g = self.gram.specialise([5, 6], [1], require_refer=require_refer, n_dates=n_dates)
-        return self.decode.accepts_think(self.lltok, self.llg, g, self.tok, text)
-
-    def test_the_slot_lines_in_order(self):
-        for think in ('intent: read "what\'s on"\nkind: event\nwhen: now = from day+0',
-                      FULL, 'intent: decline "never mind"\nreason: never_mind'):
-            self.assertTrue(self.accepts(think, False), think)
-
-    def test_a_line_out_of_order_or_unknown_is_refused(self):
-        for think in ('kind: event\nintent: read', 'intent: read\nplan: act', 'intent: read "x"\nvia: grep', 'intent: read\nwhen: friday'):
-            self.assertFalse(self.accepts(think, False), think)
-
-    def test_refer_is_demanded_on_a_turn_with_a_previous_result(self):
-        self.assertTrue(self.accepts('intent: read "which of"\nkind: event', False))
-        self.assertFalse(self.accepts('intent: read "which of"\nkind: event', True))
-        self.assertFalse(self.accepts('intent: read "which of"\nverb: star\nkind: event', True))
-        for refer in ('refer: none', 'refer: both "those" -> @1', 'refer: it "it" -> #5, #6'):
-            self.assertTrue(self.accepts('intent: read "which of"\n%s\nkind: event' % refer, True), refer)
-        self.assertTrue(self.accepts('retry: rejected\nintent: read\nrefer: none', True))
-        self.assertFalse(self.accepts('intent: read\nrefer: both "x"', True))   # a referent needs its handles
-
-    def test_the_rule_reads_the_step_the_decoder_is_at(self):
-        msgs = turns("what's on friday", "which of those need a reminder")
-        rows, results = fmt.addressable(msgs)
-        free = self.gram.specialise(rows, results, require_refer=fmt.requires_refer(msgs))
-        self.assertIn("T3_SCOPE? T3_REFER T3_TARGET?", free)
-        self.assertIn("T3_REFER?", self.gram.specialise(rows, results, require_refer=False))
-
-
-    def test_the_call_grammar_reads_what_the_runtime_reads(self):
-        """Quoted enum values after `=`, a number field's unit word and a month's `rel` before its `name` (decode.relax_where)."""
-        g = self.gram.specialise([5, 6], [1])
-
-        def call(**args):
-            return "<tool_call>\n<function=answer>\n" + "".join("<parameter=%s>\n%s\n</parameter>\n" % kv for kv in args.items()) + "</function>\n</tool_call>"
-
-        for args in ({"kind": "task", "where": 'status = "open"'}, {"kind": "task", "where": "status = open"},
-                     {"kind": "task", "where": 'status in ("open", "completed")'}, {"kind": "task", "where": "effort > 60 minutes"},
-                     {"kind": "debt", "where": 'direction = "owes_me" and status != "settled"'},
-                     {"kind": "event", "when": '{"unit":"month","rel":0,"name":3}'}):
-            ok, why = self.decode.accepts(self.lltok, self.llg, g, self.tok, "intent: read\n</think>\n\n" + call(**args))
-            self.assertTrue(ok, (args, why))
-        for args in ({"kind": "task", "where": 'status = "bogus"'}, {"kind": "task", "where": "effort > 1 hour"}):
-            ok, _ = self.decode.accepts(self.lltok, self.llg, g, self.tok, "intent: read\n</think>\n\n" + call(**args))
-            self.assertFalse(ok, args)
-
-
-FULL = "\n".join([
-    'intent: write "move"', "verb: reschedule", 'scope: one "it"', 'refer: it "it" -> @1', 'target: "gym" · "friday"', "kind: event",
-    "name: Gym", 'where: status = "open"', 'when: "monday at 3" = week+1 wd1 t', "order: date asc", "limit: 1", "more: true",
-    "set: notes = Dr Patel, 2 pm", "time: 15:00", "pick: #5 ok · #6 no (name)"])
-
-
-class GrammarV31(Grammar):
-    """The think grammar takes the v3.1 lines (CONTRACT_V3.md section 7): typed `where` segments, `when` with a `dates[i]` of the
-    prompt's dates line (its readings, only the entries the line has), the compact date as before, `retry: <slot>`."""
-
-    def test_where_is_typed_segments(self):
-        for where in ("status = open", 'status = "open" · effort > 60', 'role contains "hiking" · notes is empty', "document count = 0",
-                      'role in ("mother", "cousin")', "amount > 35 BRL", "effort > 1 hour", "starred = yes"):
-            self.assertTrue(self.accepts("intent: read\nkind: task\nwhere: " + where, False), where)
-        for where in ("whichever tasks are due", "status == open", "status = open and effort > 60", "status ="):
-            self.assertFalse(self.accepts("intent: read\nkind: task\nwhere: " + where, False), where)
-
-    def test_when_picks_an_entry_of_the_dates_line(self):
-        pick = 'intent: read\nkind: event\nwhen: "friday" = dates[%d]%s'
-        self.assertTrue(self.accepts(pick % (2, " past"), False, n_dates=3))
-        self.assertTrue(self.accepts(pick % (0, ""), False, n_dates=3))
-        self.assertTrue(self.accepts(pick % (7, " upcoming"), False))          # the line is not known: any index
-        self.assertFalse(self.accepts(pick % (3, ""), False, n_dates=3))        # the line has entries 0 to 2
-        self.assertFalse(self.accepts(pick % (0, ""), False, n_dates=0))        # no dates line, nothing to pick
-        self.assertFalse(self.accepts(pick % (0, " later"), False, n_dates=3))
-        typed = 'intent: read\nkind: event\nwhen: "next week" = week+1'
-        self.assertTrue(self.accepts(typed, False, n_dates=0) and self.accepts(typed, False, n_dates=3))
-        self.assertTrue(self.accepts('intent: read\nkind: event\nwhen: "sat to mon" = from day+0 wd6 to day+0 wd1', False, n_dates=3))
-        self.assertFalse(self.accepts('intent: read\nkind: event\nwhen: "x" = 2026-03-13T10:00', False, n_dates=3))
-
-    def test_a_set_line_may_pick_a_date(self):
-        self.assertTrue(self.accepts('intent: write\nverb: reschedule\nset: to = ~dates[1] upcoming · name = Dentist', False, n_dates=2))
-
-    def test_retry_names_a_slot(self):
-        for line in ("retry: rejected", "retry: where[1]", "retry: pick", "retry: linked_to[0]"):
-            self.assertTrue(self.accepts(line + '\nintent: read\nkind: event', False), line)
-        self.assertFalse(self.accepts('retry: Where\nintent: read', False))
-        self.assertFalse(self.accepts('intent: read\nretry: where', False))   # the retry line leads
 
     def test_a_dates_pick_states_a_call_only_against_the_line(self):
         think = 'intent: read\nkind: event\nwhen: "next week" = dates[0]'
@@ -198,7 +69,7 @@ class GrammarV31(Grammar):
 
 class V4Decoding(unittest.TestCase):
     """CONTRACT_V3.md section 8 on the decoding side: NATIVE_TRACE=v4 reads and renders the v4 trace, the records of the data are
-    converted as they are read, and the refer rule is gone."""
+    converted as they are read."""
 
     def setUp(self):
         patch = mock.patch.dict(os.environ, {"NATIVE_TRACE": "v4"})
@@ -225,13 +96,6 @@ class V4Decoding(unittest.TestCase):
         old = fmt.call_of_think('intent: write\nverb: complete\nscope: one\nname: Pay rent')
         self.assertNotIn("<parameter=kind>", old)
 
-    def test_the_refer_rule_is_gone(self):
-        msgs = turns("what's on friday", "which of those need a reminder")
-        self.assertFalse(fmt.requires_refer(msgs))
-        self.assertFalse(fmt.requires_refer_in_prompt(fmt.render.render_prompt_for_generation(msgs)))
-        with mock.patch.dict(os.environ, {"NATIVE_TRACE": "v3.1"}):
-            self.assertTrue(fmt.requires_refer(msgs))
-
     def test_the_records_are_converted_as_they_are_read_and_a_lookup_keeps_its_think(self):
         block = 'vault: #31 task "Pay rent" · #32 task "Book dentist"'
         msgs = [SYSTEM,
@@ -250,62 +114,9 @@ class V4Decoding(unittest.TestCase):
             self.assertEqual(fmt.records(ex)[4]["think"], msgs[4]["think"])
 
 
-class GrammarV4(unittest.TestCase):
-    """The v4 think grammar (`decode.THINK4_LINES`): the same terminals in the v4 order, no `scope`, `refer`, `target` or
-    `via: find`, a one-row `pick` with its reason, and no `refer:` line to demand."""
-
-    setUpClass = classmethod(Grammar.setUpClass.__func__)  # the same tokenizer, llguidance and exported call grammar
-
-    FULL4 = "\n".join([
-        'intent: write "move"', "verb: reschedule", "pick: #5 (focus)", "kind: event", 'where: status = "open"',
-        'when: "monday at 3" = week+1 wd1 t', "order: date asc", "limit: 1", "more: true", "set: notes = Dr Patel, 2 pm", "time: 15:00"])
-
-    def accepts(self, think: str, require_refer: bool = False, n_dates=None) -> bool:
-        g = self.gram.specialise([5, 6], [1], require_refer=require_refer, n_dates=n_dates, trace="v4")
-        return self.decode.accepts_think(self.lltok, self.llg, g, self.tok, think + "\n</think>")
-
-    def test_the_slot_lines_in_order(self):
-        for think in ('intent: read "what\'s on"\nkind: event\nwhen: now = from day+0', self.FULL4, 'intent: decline "never mind"\nreason: never_mind',
-                      'retry: pick\nintent: write\nverb: star\npick: #5 (nick)', "intent: write\nverb: delete\nrows: #5, #6",
-                      'intent: read\nvia: search\nkind: person\ntext: Chi'):
-            self.assertTrue(self.accepts(think), think)
-
-    def test_a_line_out_of_order_or_unknown_is_refused(self):
-        for think in ("kind: event\nintent: read", "intent: read\nplan: act", 'intent: read "x"\nvia: grep', "intent: read\nwhen: friday",
-                      "intent: write\nkind: event\nverb: star", "intent: write\nverb: star\nkind: event\npick: #5 (name)"):
-            self.assertFalse(self.accepts(think), think)
-
-    def test_what_v4_dropped_is_refused(self):
-        for think in ('intent: write\nverb: star\nscope: one', 'intent: read\nrefer: none', 'intent: read\ntarget: "x"', "intent: read\nvia: find\nkind: task",
-                      "intent: write\nverb: star\npick: #5 ok · #6 no (kind)", "intent: write\nverb: star\npick: #5 (position)",
-                      "intent: write\nverb: star\npick: #5 (name) · #6 (name)", "intent: write\nverb: star\npick: #5 ok"):
-            self.assertFalse(self.accepts(think), think)
-
-    def test_refer_is_never_demanded(self):
-        self.assertTrue(self.accepts('intent: read "which of"\nkind: event', True))
-        self.assertNotIn("T3_REFER", self.gram.specialise([5], [1], require_refer=True, trace="v4"))
-
-    def test_the_rule_reads_the_step_the_decoder_is_at(self):
-        with mock.patch.dict(os.environ, {"NATIVE_TRACE": "v4"}):
-            msgs = turns("what's on friday", "which of those need a reminder")
-            rows, results = fmt.addressable(msgs)
-            free = self.gram.specialise(rows, results, require_refer=fmt.requires_refer(msgs))
-            self.assertNotIn("T3_REFER", free)
-            self.assertIn("T3_PICK? T3_ROWS?", free)
-
-    def test_the_golden_v4_thinks_are_accepted(self):
-        rows = [r for r in json.loads(GOLDEN.read_text()) if r.get("think4")]
-        for r in rows[::7]:
-            n = len(T.dates_entries(r.get("dates")))
-            self.assertTrue(self.accepts(r["think4"], n_dates=n), r["shape"] + "\n" + r["think4"])
-
-    def test_where_is_typed_segments(self):
-        for where in ('status = "open"', "effort > 60 · status = open", 'role in ("mother", "cousin")', "document count = 0"):
-            self.assertTrue(self.accepts("intent: read\nkind: task\nwhere: %s" % where), where)
-
-
 class StepRendersTheCall(unittest.TestCase):
-    """`decode._Step` with a stub decoder: once the think closes, the call the think states is the only thing allowed."""
+    """`decode._Step` with a stub decoder: once the think closes, the call the think states is the only thing allowed, and after
+    `</tool_call>` only `<|im_end|>`."""
 
     @classmethod
     def setUpClass(cls):
@@ -336,7 +147,7 @@ class StepRendersTheCall(unittest.TestCase):
         torch = self.torch
         text = think + "\n</think>"
         think_ids = self.tok(text, add_special_tokens=False)["input_ids"]
-        step = self.decode._Step(d, None, "free", 3)
+        step = self.decode._Step(d, 3)
         ids = [1, 2, 3] + think_ids
         vocab = len(self.tok)
         out_ids = []
@@ -358,16 +169,47 @@ class StepRendersTheCall(unittest.TestCase):
     def test_with_a_think_that_is_no_call_nothing_is_forced(self):
         vocab = len(self.tok)
         for think in ("intent: write\nkind: event", "what is on friday"):  # an act with no verb; not a trace at all
-            step = self.decode._Step(self.stub(), None, "free", 3)
+            step = self.decode._Step(self.stub(), 3)
             ids = [1, 2, 3] + self.tok(think + "\n</think>", add_special_tokens=False)["input_ids"]
             row = step(self.torch.tensor([ids]), self.torch.zeros(1, vocab))[0]
             self.assertGreater(int(self.torch.isfinite(row).sum()), 1)
             self.assertFalse(step.info["rendered_call"])
 
 
-class DecoderWiring(PinnedV31):
-    """`Decoder.step` and `Decoder.complete` demand the `refer:` line exactly where `fmt.requires_refer` says (a decoder with no
-    model: `generate` records what it is given)."""
+    def allowed(self, step, ids):
+        row = step(self.torch.tensor([ids]), self.torch.zeros(1, len(self.tok)))[0]
+        return self.torch.isfinite(row).nonzero().flatten().tolist()
+
+    def test_the_think_guard_forces_the_end_of_the_think_at_the_limit(self):
+        d = self.stub()
+        d.think_limit = 3
+        thought = self.tok("one two three four", add_special_tokens=False)["input_ids"]
+        step = self.decode._Step(d, 3)
+        for n in range(1, 3):  # under the limit nothing is forced
+            self.assertGreater(len(self.allowed(step, [1, 2, 3] + thought[:n])), 1)
+            self.assertFalse(step.info["think_cut"])
+        self.assertEqual(self.allowed(step, [1, 2, 3] + thought[:3]), [d.think_end])
+        self.assertTrue(step.info["think_cut"])
+        self.assertEqual(step.n_think, 3)
+
+    def test_after_the_one_call_only_the_end_of_the_message_is_allowed(self):
+        d = self.stub()
+        step = self.decode._Step(d, 3)
+        text = "what is on friday\n</think>\n\n<tool_call>\n<function=answer>\n</function>\n</tool_call>"  # a think that is no call
+        ids = [1, 2, 3] + self.tok(text, add_special_tokens=False)["input_ids"]
+        self.assertEqual(ids[-1], d.call_end)
+        self.assertEqual(self.allowed(step, ids[:-1]).count(d.im_end), 1)  # inside the call the model is free (the whole vocabulary)
+        self.assertGreater(len(self.allowed(self.decode._Step(d, 3), ids[:-1])), 1)
+        self.assertEqual(self.allowed(step, ids), [d.im_end])
+        self.assertFalse(step.info["rendered_call"])
+
+
+class DecoderWiring(unittest.TestCase):
+    """`Decoder.step` and `Decoder.complete` hand `generate` the prompt, the sampling options, the think's given prefix and the
+    `dates:` line of the turn (what the call the think states is read against), the same either way (a decoder with no model:
+    `generate` records what it is given)."""
+
+    DATES = "dates: next week = 2026-03-16..2026-03-22"
 
     @classmethod
     def setUpClass(cls):
@@ -384,20 +226,29 @@ class DecoderWiring(PinnedV31):
             def __init__(self):  # no model, no tokenizer
                 pass
 
-            def generate(self, prompt, rows, results, mode="hard", sample=False, seed=0, require_refer=False, dates=None, prefix=""):
-                seen.append((rows, results, require_refer))
+            def generate(self, prompt, sample=False, seed=0, dates=None, prefix=""):
+                seen.append((prompt, sample, seed, dates, prefix))
                 return "<think>\n", {}
 
         return D(), seen
 
-    def test_the_serial_paths_pass_the_refer_rule_of_the_step(self):
-        for texts, want in ((("what's on friday", "star it"), True), (("star it",), False), (("what's on friday", "add milk"), True)):
+    def test_the_serial_paths_pass_the_same_prompt_and_dates_line(self):
+        for texts, dates in ((("what's on friday", "star it"), None), (("star it",), None),
+                             (("what's on friday", self.DATES + "\n\nwhat is on next week"), self.DATES)):
             msgs = turns(*texts)
+            prompt = fmt.render.render_prompt_for_generation(msgs)
             d, seen = self.recorder()
             d.step(msgs)
-            d.complete(fmt.render.render_prompt_for_generation(msgs))
-            self.assertEqual([r for _, _, r in seen], [want, want], texts)
-            self.assertEqual(seen[0][:2], seen[1][:2])  # the same addressable handles either way
+            d.complete(prompt)
+            self.assertEqual(seen[0], seen[1], texts)
+            self.assertEqual(seen[0], (prompt, False, 0, dates, ""), texts)
+
+    def test_the_sampling_options_and_the_prefix_reach_generate(self):
+        msgs = turns("what's on friday")
+        d, seen = self.recorder()
+        d.step(msgs, sample=True, seed=7, prefix="retry: where\n")
+        d.complete(fmt.render.render_prompt_for_generation(msgs), sample=True, seed=7, prefix="retry: where\n")
+        self.assertEqual([x[1:] for x in seen], [(True, 7, None, "retry: where\n")] * 2)
 
 
 class RuntimeCompile(unittest.TestCase):
@@ -502,81 +353,6 @@ class RuntimeCompile(unittest.TestCase):
         self.assertEqual(how, "compiled")
         self.assertIn("<parameter=rows>\n#9\n", text)
         self.assertNotIn("#7", text)
-
-
-class LlamaBackendStub(PinnedV31):
-    """`llama_backend.LlamaBackend.complete` against a scripted server: the think request carries the think grammar (with the
-    step's refer rule), the call is written from the think with no second request, and a think that states no call leaves the
-    call to a request under the call grammar. Needs llguidance, the cached tokenizer and a `nativetools` binary."""
-
-    @classmethod
-    def setUpClass(cls):
-        os.environ.setdefault("HF_HUB_OFFLINE", "1")
-        try:
-            import llguidance
-            import llguidance.hf
-            import hf_backend
-            import llama_backend
-            cls.lark = hf_backend.export_lark()
-            cls.llg = llguidance
-            cls.backend = llama_backend.LlamaBackend("http://127.0.0.1:1", cls.lark, decoding="hard")
-            cls.lltok = llguidance.hf.from_tokenizer(cls.backend.tok, eos_token=cls.backend.im_end)
-        except Exception as e:  # noqa: BLE001
-            raise unittest.SkipTest("no llguidance / tokenizer / nativetools: %r" % (e,))
-        cls.golden = json.loads(GOLDEN.read_text())
-
-    def matcher(self, grammar):
-        prefix = "%llguidance {}\n"
-        self.assertTrue(grammar.startswith(prefix))
-        m = self.llg.LLMatcher(self.lltok, self.llg.LLMatcher.grammar_from_lark(grammar[len(prefix):]), log_level=0)
-        self.assertFalse(m.is_error(), m.get_error() if m.is_error() else "")
-        return m
-
-    def test_the_grammars_compile_and_the_think_grammar_takes_the_golden_thinks(self):
-        b = self.backend
-        for g in (b.think_grammar(True), b.think_grammar(False), b.loose_think, b.call_grammar([1, 2], [1])):
-            self.matcher(g)
-        for r in self.golden[::9]:
-            m = self.matcher(b.think_grammar(False))
-            ids = b.tok(r["think"] + "\n</think>", add_special_tokens=False)["input_ids"]
-            self.assertTrue(all(m.consume_token(t) for t in ids) and m.is_accepting(), r["shape"])
-
-    def test_the_call_the_think_states_is_written_with_one_request(self):
-        b, msgs = self.backend, turns("what's on friday", "star it")
-        prompt = fmt.render.render_prompt_for_generation(msgs)
-        for r in self.golden[::97]:
-            seen = []
-
-            def gen(ids, n, grammar, think=r["think"]):
-                seen.append(grammar)
-                return b.tok(think + "\n</think>", add_special_tokens=False)["input_ids"]
-
-            b._gen = gen
-            text, info = b.complete(prompt)
-            want = "<think>\n" + r["think"] + "\n</think>\n\n" + fmt.render.call_text(r["call"]["tool"], T.canon_call(r["call"])["args"])
-            self.assertEqual(text, want, r["shape"])
-            self.assertEqual(seen, [b.think_grammar(True)])  # a follow-up turn: the refer line is demanded
-            self.assertTrue(info["rendered_call"] and info["stopped"] and not info["think_cut"])
-
-    def test_a_think_that_states_no_call_leaves_the_call_to_the_call_grammar(self):
-        b = self.backend
-        prompt = fmt.render.render_prompt_for_generation(turns("what's on friday"))
-        seen = []
-
-        def gen(ids, n, grammar):
-            seen.append(grammar)
-            if len(seen) == 1:
-                return b.tok("intent: write\n</think>", add_special_tokens=False)["input_ids"]  # an act with no verb
-            return b.tok("\n\n<tool_call>\n<function=answer>\n</function>\n</tool_call>", add_special_tokens=False)["input_ids"]
-
-        b._gen = gen
-        text, info = b.complete(prompt)
-        self.assertEqual(len(seen), 2)
-        self.assertEqual(seen[0], b.think_grammar(False))  # the first turn: no refer line demanded
-        self.assertTrue(seen[1].startswith("%llguidance {}\n") and 'start: "\\n\\n" <[' in seen[1])  # the call request starts after `</think>`
-        self.assertNotIn("start: think", seen[1])
-        self.assertFalse(info["rendered_call"])
-        self.assertTrue(info["stopped"])
 
 
 if __name__ == "__main__":

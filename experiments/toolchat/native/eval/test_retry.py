@@ -48,7 +48,7 @@ class Scripted(Backend):
             return None
         self.excluded.append(exclude)
         self.seen.append([m["role"] for m in transcript.history()])
-        return StepOut(text=think(self.alternatives.pop(0), "y"), think_cut=False, decoding="free+resample")
+        return StepOut(text=think(self.alternatives.pop(0), "y"), think_cut=False)
 
 
 def run(backend: Backend, retry: str | None, cap: str | None = None) -> dict:
@@ -122,7 +122,7 @@ class Driver(unittest.TestCase):
         self.assertIn("<function=find>", backend.excluded[0])
         self.assertNotIn("retry", steps[0])
         self.assertEqual(steps[1]["retry"], "empty")
-        self.assertEqual(steps[1]["decoding"], "free+resample")
+        self.assertEqual(set(steps[1]), {"model", "response", "think_cut", "retry"})  # no `override` / `decoding` any more
         self.assertIn("<function=answer>", steps[1]["model"])
         self.assertTrue(steps[1]["response"]["ends_turn"])
         # the first call really ran: it is the runtime's step 1, the retried call its step 2

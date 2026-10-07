@@ -8,7 +8,7 @@
 mod common;
 
 use centraid_nativetools::meta::Kind;
-use centraid_nativetools::{export, whr};
+use centraid_nativetools::whr;
 use common::{call, diff_rows, ids, seeded_with, text};
 use serde_json::{Value, json};
 
@@ -345,28 +345,6 @@ fn an_unknown_status_still_names_every_value() {
         refused.contains("open, in_progress, completed, cancelled"),
         "{refused}"
     );
-}
-
-#[test]
-fn the_exported_grammar_names_the_rule() {
-    let rule =
-        "`open` selects the active rows, open and in_progress, and `!= open` leaves out both";
-    assert!(whr::lark().contains(rule), "where grammar");
-    assert!(export::call_lark().contains(rule), "call grammar");
-    // the files `nativetools export` writes carry it too
-    let dir = tempfile::tempdir().unwrap();
-    export::export(dir.path()).unwrap();
-    for name in ["where.lark", "call.lark"] {
-        let body = std::fs::read_to_string(dir.path().join(name)).unwrap();
-        assert!(body.contains(rule), "{name}");
-        // the rule is a comment; the grammar's rules still take every status
-        assert!(
-            body.contains(
-                "\"status\" \" \" EQ \" \" (\"open\" | \"in_progress\" | \"completed\" | \"cancelled\")"
-            ),
-            "{name}: status still takes every value"
-        );
-    }
 }
 
 #[test]

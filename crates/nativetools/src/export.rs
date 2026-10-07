@@ -7,11 +7,10 @@ use std::path::Path;
 use serde_json::{Value, json};
 
 use crate::dates::{EXAMPLES, Unit};
-use crate::meta::{self, KINDS, Kind, VERBS};
+use crate::meta::{self, KINDS, VERBS};
 use crate::phrases::PHRASES;
 use crate::prompt;
 use crate::render;
-use crate::whr;
 
 /// The strict JSON schema of a date expression.
 #[must_use]
@@ -57,144 +56,6 @@ pub fn date_expr_schema() -> Value {
             }
         ]
     })
-}
-
-/// The date grammar in Lark, embedding the JSON schema through llguidance's
-/// `%json` directive.
-#[must_use]
-pub fn date_expr_lark() -> String {
-    format!(
-        "// A date expression (SPEC §4.4), for llguidance. The JSON schema carries\n\
-         // the key rules; the co-occurrence rules (name with month, weekday with\n\
-         // week, time with day/weekday/date) are the runtime's and its error\n\
-         // quotes the examples.\n\
-         start: date_expr\n\
-         date_expr: %json {}\n",
-        serde_json::to_string(&date_expr_schema()).unwrap_or_default()
-    )
-}
-
-/// One Lark grammar for a whole native call: exactly one known tool, its own
-/// parameter names, enums for kind/op/verb/reason, the where grammar and the
-/// date grammar. `#n`/`@n` reach is the harness's to narrow per session.
-#[must_use]
-pub fn call_lark() -> String {
-    let kinds: Vec<String> = Kind::ALL
-        .iter()
-        .map(|kind| format!("\"{}\"", kind.name()))
-        .collect();
-    let verbs: Vec<String> = VERBS
-        .iter()
-        .map(|verb| format!("\"{}\"", verb.name))
-        .collect();
-    let ops: Vec<String> = meta::OPS.iter().map(|op| format!("\"{op}\"")).collect();
-    let reasons: Vec<String> = meta::DECLINE_REASONS
-        .iter()
-        .map(|r| format!("\"{r}\""))
-        .collect();
-    let wheres: Vec<String> = Kind::ALL
-        .iter()
-        .map(|kind| format!("where_{}", kind.name().replace(' ', "_")))
-        .collect();
-    let param = |name: &str, value: &str| {
-        format!("\"<parameter={name}>\\n\" {value} \"\\n</parameter>\\n\"")
-    };
-    let selector = [
-        ("kind", "kinds"),
-        ("name", "TEXT"),
-        ("where", "where_any"),
-        ("when", "date_expr"),
-        ("linked_to", "handles"),
-        ("within", "RESULT"),
-        ("exclude", "handles"),
-        ("order", "ORDER"),
-        ("limit", "INT"),
-        ("trashed", "BOOL"),
-    ];
-    let mut out = String::from(
-        "// One native Qwen3.5 tool call, generated from the metadata table.\n\
-         // Self-contained: the where grammar and the date grammar follow.\n\
-         start: \"<tool_call>\\n\" call \"</tool_call>\"\n\
-         call: search | find | open | compute | act | answer | ask | decline\n",
-    );
-    let tool = |name: &str, params: &[String]| {
-        format!(
-            "{name}: \"<function={name}>\\n\" ({name}_param)* \"</function>\\n\"\n{name}_param: {}\n",
-            params.join("\n    | ")
-        )
-    };
-    let sel: Vec<String> = selector
-        .iter()
-        .map(|(name, value)| param(name, value))
-        .collect();
-    out.push_str(&tool(
-        "search",
-        &[param("text", "TEXT"), param("kind", "search_kinds")],
-    ));
-    out.push_str(&tool("find", &sel));
-    out.push_str(&tool("open", &[param("row", "ROW")]));
-    let mut compute = vec![
-        param("op", "op"),
-        param("field", "FIELD"),
-        param("group", "FIELD"),
-        param("rows", "handles"),
-    ];
-    compute.extend(sel.clone());
-    out.push_str(&tool("compute", &compute));
-    let mut act = vec![
-        param("verb", "verb"),
-        param("rows", "handles"),
-        param("args", "ARGS"),
-        param("more", "BOOL"),
-    ];
-    act.extend(sel.clone());
-    out.push_str(&tool("act", &act));
-    let mut answer = vec![
-        param("rows", "handles"),
-        param("op", "op"),
-        param("field", "FIELD"),
-        param("value", "RESULT"),
-    ];
-    answer.extend(sel);
-    out.push_str(&tool("answer", &answer));
-    out.push_str(&tool(
-        "ask",
-        &[param("question", "TEXT"), param("options", "handles")],
-    ));
-    out.push_str(&tool("decline", &[param("reason", "reason")]));
-    out.push_str(&format!(
-        "kind: {}\n\
-         kinds: kind (\",\" kind)*\n\
-         search_kinds: \"any\" | kinds\n\
-         verb: {}\n\
-         op: {}\n\
-         reason: {}\n\
-         where_any: {}\n\
-         handles: HANDLE (\", \" HANDLE)*\n\
-         HANDLE: /[#@][1-9][0-9]*/\n\
-         ROW: /#[1-9][0-9]*/\n\
-         RESULT: /@[1-9][0-9]*/\n\
-         ORDER: /[a-z_]+ (asc|desc)/\n\
-         FIELD: /[a-z_]+/\n\
-         BOOL: \"true\" | \"false\"\n\
-         TEXT: /[^<\\n][^<]*/\n\
-         ARGS: /[^<]+/\n\
-\n",
-        kinds.join(" | "),
-        verbs.join(" | "),
-        ops.join(" | "),
-        reasons.join(" | "),
-        wheres.join(" | ")
-    ));
-    // Self-contained: the where rules and the date rule ride along, so one
-    // file is one grammar.
-    out.push('\n');
-    out.push_str(&whr::lark());
-    out.push_str(&format!(
-        "\ndate_expr: %json {}\n",
-        serde_json::to_string(&date_expr_schema()).unwrap_or_default()
-    ));
-    out
 }
 
 /// The phrase table with each expression as JSON, for the generator.
@@ -720,10 +581,7 @@ pub fn export(dir: &Path) -> Result<Vec<&'static str>, String> {
         "kind_card.txt",
         &(prompt::kind_card("USD").join("\n") + "\n"),
     )?;
-    write(dir, "where.lark", &whr::lark())?;
     write(dir, "date_expr.schema.json", &pretty(&date_expr_schema()))?;
-    write(dir, "date_expr.lark", &date_expr_lark())?;
-    write(dir, "call.lark", &call_lark())?;
     write(dir, "phrases.json", &pretty(&phrases()))?;
     write(dir, "metadata.json", &pretty(&metadata()))?;
     write(dir, "errors.json", &pretty(&errors()))?;
@@ -732,10 +590,7 @@ pub fn export(dir: &Path) -> Result<Vec<&'static str>, String> {
         "tools.json",
         "tools.full.json",
         "kind_card.txt",
-        "where.lark",
         "date_expr.schema.json",
-        "date_expr.lark",
-        "call.lark",
         "phrases.json",
         "metadata.json",
         "errors.json",

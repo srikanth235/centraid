@@ -11,7 +11,7 @@ re-implements it. Its records:
 
 Trace version: v4 by default (`NATIVE_TRACE=v3.1` keeps v3.1) renders the thinks of the records as v4 (CONTRACT_V3.md section 8: fewer slots, one-row pick, the
 compile step infers the rest); the records on disk stay v3.1 until the data is regenerated, and `records()` converts each think
-as it is read (`trace_mode`, `v4_records`). The decoder's grammar, the refer rule and `call_of_think` follow the same switch.
+as it is read (`trace_mode`, `v4_records`). `call_of_think` follows the same switch.
 
 The loss mask comes from render()'s char spans and is checked against an independent reading
 of the text: every `<|im_start|>assistant\\n<think>\\n` header opens one trained region that runs
@@ -484,7 +484,7 @@ def user_message(content) -> str:
     """The person's own words in a user record: what follows the blank line of the block (`render.user_content`: the runtime's
     `vault:` / `focus:` / `dates:` lines, a blank line, the message; the split `authored/trace.py` reads). The block is context, never the
     user's words, so a value found only there is not a copy."""
-    if not isinstance(content, str):  # content blocks, as `addressable` reads them
+    if not isinstance(content, str):  # content blocks
         content = " ".join(x.get("text", "") for x in (content or ()) if isinstance(x, dict))
     return content.rpartition("\n\n")[2]
 
@@ -708,56 +708,14 @@ def check_spans(ex: dict, enc: dict) -> None:
         raise AssertionError("n_tokens %d != %d" % (ex["n_tokens"], len(enc["input_ids"])))
 
 
-# ---- session state visible to the model: which #n / @n it may name (SPEC §3, §6.5, §9)
-
-HASH = re.compile(r"(?<![\w#])#([1-9][0-9]*)\b")
-AT = re.compile(r"(?<![\w@])@([1-9][0-9]*)\b")
-
-
-def addressable(msgs: list[dict]) -> tuple[list[int], list[int]]:
-    """(#n shown and not compacted, @n issued), read from what the model sees.
-
-    `#n`: every number in the system prompt (vault directory), user messages (pre-grounding
-    block) and tool results — earlier turns' results are already compacted in the messages, so
-    only kept rows survive there. `@n`: every handle a tool result issued (compaction keeps the
-    header, so handles persist). Assistant messages are never a source: a number the model wrote
-    (in a call or in its thinking) does not become addressable by being written.
-    """
-    rows, results = set(), set()
-    for m in msgs:
-        if m["role"] == "assistant":
-            continue
-        c = m.get("content") or ""
-        if not isinstance(c, str):
-            c = " ".join(x.get("text", "") for x in c if isinstance(x, dict))
-        rows.update(int(x) for x in HASH.findall(c))
-        if m["role"] == "tool" or (m["role"] == "user" and "<tool_response>" in c):
-            results.update(int(x) for x in AT.findall(c))
-    return sorted(rows), sorted(results)
-
-
-def addressable_in_prompt(prompt: str) -> tuple[list[int], list[int]]:
-    """`addressable` over an already rendered prompt: the system block's own content (after
-    the template's tool preamble), user turns and tool responses; assistant turns skipped."""
-    msgs = []
-    for seg in prompt.split("<|im_start|>")[1:]:
-        role, _, body = seg.partition("\n")
-        body = body.split(IM_END)[0]
-        if role == "system":
-            msgs.append({"role": "system", "content": body.split("</IMPORTANT>")[-1]})
-        elif role == "user":
-            msgs.append({"role": "tool" if "<tool_response>" in body else "user", "content": body})
-    return addressable(msgs)
-
-
-# ---- the slot trace (authored/trace.py, CONTRACT_V3.md): the refer rule and the call a think states
+# ---- the slot trace (authored/trace.py, CONTRACT_V3.md): the call a think states
 
 _TRACE3_LOCK = threading.RLock()
 
 
 def trace3():
     """authored/trace.py by path (the name `trace` is also a standard-library module), loaded once. The one place the
-    trace's functions live: the data builder, the grammar and the decoder all call these."""
+    trace's functions live: the data builder and the decoder both call these."""
     with _TRACE3_LOCK:  # batched scoring calls this from many threads: a half-executed module must never be visible
         if "authored_trace" not in sys.modules:
             import importlib.util
@@ -773,15 +731,8 @@ def trace3():
         return sys.modules["authored_trace"]
 
 
-def requires_refer(msgs: list[dict]) -> bool:
-    """Must the next think carry a `refer:` line? True on the first step of a turn (the last message is the user's) when an
-    earlier turn showed a result: a function of the turn index and of the earlier results, not of the words of the message
-    (`trace.refer_required`). msgs: render.py records. Never in a v4 trace, which has no `refer:` line."""
-    return trace_mode() != "v4" and trace3().refer_required(msgs)
-
-
 def msgs_in_prompt(prompt: str) -> list[dict]:
-    """The records a rendered prompt shows (system, user, tool; assistant turns skipped), enough for `requires_refer`."""
+    """The records a rendered prompt shows (system, user, tool; assistant turns skipped), enough for `dates_line_in_prompt`."""
     msgs = []
     for seg in prompt.split("<|im_start|>")[1:]:
         role, _, body = seg.partition("\n")
@@ -791,10 +742,6 @@ def msgs_in_prompt(prompt: str) -> list[dict]:
         elif role == "user":
             msgs.append({"role": "tool" if "<tool_response>" in body else "user", "content": body})
     return msgs
-
-
-def requires_refer_in_prompt(prompt: str) -> bool:
-    return requires_refer(msgs_in_prompt(prompt))
 
 
 def dates_line_in_prompt(prompt: str) -> str | None:

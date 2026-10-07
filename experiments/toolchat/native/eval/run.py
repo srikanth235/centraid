@@ -34,11 +34,9 @@ Backends
   sonnet  `claude -p --model sonnet`, given the rendered system prompt, a policy digest and the
           transcript; asked for exactly one Qwen `<tool_call>` per step. Every output is cached
           on disk keyed by the hash of its full input, so reruns are free.
-  hf      the trained Qwen model (train/hf_backend.py). The call it executes is the one the session's `compile` op
-          builds from the think's slots; each step records `compile` (compiled | retry | fallback | retry-fallback |
-          none) and the run's counts go to <out>.stats.json.
-  llama   the same step on a local llama-server (GGUF of the base or a trained checkpoint): the
-          CPU loop for prompt iteration; `--jobs` = the server's slots.
+  hf      the trained Qwen model (train/hf_backend.py), decoded free: greedy, nothing masked. The call it executes is the
+          one the session's `compile` op builds from the think's slots; each step records `compile` (compiled | retry |
+          fallback | retry-fallback | none) and the run's counts go to <out>.stats.json.
 Each backend fixes the session's `--tools` spelling of the tools block: sonnet `full` (untrained,
 needs described schemas), hf `sig` (what the fine-tuned model saw); `--tools` overrides it.
   replay  re-sends the model messages recorded in an earlier run file.
@@ -68,7 +66,8 @@ TMP = os.environ.get("EVAL_TMP")  # where per-session vault copies live (default
 
 class StepOut(dict):
     """{"text": raw model message, "think_cut": bool}; the hf backend adds `compile` (what the runtime's compile op did:
-    compiled | retry | fallback | retry-fallback | none)."""
+    compiled | retry | fallback | retry-fallback | none). Older run files also carry `override` and `decoding` on a step; they
+    are no longer written, and no reader may require them."""
 
 
 def compile_key(info: dict) -> dict:
@@ -255,7 +254,7 @@ class SonnetBackend(Backend):
 class HFBackend(Backend):
     """The trained Qwen3.5 model. The trainer step fills this in: load the checkpoint, render
     `transcript.system_rendered` + `transcript.history()` with experiments/toolchat/native/render.py
-    (earlier turns keep their thinking), generate greedily (optionally under the §9 grammar)
+    (earlier turns keep their thinking), generate greedily and unconstrained
     until `</tool_call>` or the think budget, and return the FULL message (think + call) as
     `text` with `think_cut` set when the budget cut a <think>. The driver records that full
     text in the run file and appends it to the history the next step sees."""
@@ -264,8 +263,8 @@ class HFBackend(Backend):
     tools_mode = "sig"  # what the fine-tuned model was trained on
 
     def __init__(self, checkpoint: str | None = None, **kwargs):
-        # implemented in ../train/hf_backend.py; the model loads once per process (decoding
-        # mode and grammar from NATIVE_* environment variables, see `from_env`)
+        # implemented in ../train/hf_backend.py; the model loads once per process (options from
+        # NATIVE_* environment variables, see `from_env`)
         sys.path.insert(0, str(HERE.parent / "train"))
         from hf_backend import from_env
 
@@ -279,37 +278,14 @@ class HFBackend(Backend):
 
         text = self.impl.complete(prompt_from_transcript(transcript), compile=self.compile)
         info = self.impl.last_info
-        return StepOut(text=text, think_cut=bool(info.get("think_cut")), override=bool(info.get("override")),
-                       decoding=info.get("mode"), **compile_key(info))
+        return StepOut(text=text, think_cut=bool(info.get("think_cut")), **compile_key(info))
 
     def resample(self, transcript: Transcript, ctx: dict, exclude: str) -> StepOut | None:
         from hf_backend import prompt_from_transcript
 
         text = self.impl.complete(prompt_from_transcript(transcript), sample=True, exclude=[exclude], compile=self.compile)
         info = self.impl.last_info
-        return StepOut(text=text, think_cut=bool(info.get("think_cut")), override=bool(info.get("override")),
-                       decoding=f"{info.get('mode')}+resample", **compile_key(info))
-
-
-class LlamaBackend(Backend):
-    """The same step as `hf`, served by a local llama-server (../train/llama_backend.py): the
-    fast CPU loop for prompt work. The GGUF on the server is the checkpoint; `--tools` picks the
-    tools-block spelling (default `sig`, what the fine-tuned model saw)."""
-
-    name = "llama"
-    tools_mode = "sig"
-
-    def __init__(self):
-        sys.path.insert(0, str(HERE.parent / "train"))
-        from llama_backend import from_env
-
-        self.impl = from_env()
-
-    def step(self, transcript: Transcript, ctx: dict) -> StepOut:
-        from hf_backend import prompt_from_transcript
-
-        text, info = self.impl.complete(prompt_from_transcript(transcript))
-        return StepOut(text=text, think_cut=bool(info["think_cut"]), decoding=info["mode"])
+        return StepOut(text=text, think_cut=bool(info.get("think_cut")), **compile_key(info))
 
 
 class ReplayBackend(Backend):
@@ -456,8 +432,7 @@ def run_session(session: dict, backend: Backend) -> dict:
                 transcript.assistant(sent)
                 transcript.tool(resp.get("obs"), resp.get("text", ""))
                 steps.append({"model": out["text"], "response": slim(resp), "think_cut": out.get("think_cut", False),
-                              **{k: out[k] for k in ("override", "decoding", "resampled_from", "compile", "retry")
-                                 if k in out}})
+                              **{k: out[k] for k in ("resampled_from", "compile", "retry") if k in out}})
                 return resp
 
             for si in range(0 if ended else STEP_CAP + 2):
@@ -492,14 +467,12 @@ def make_backend(args) -> Backend:
         backend = SonnetBackend(args.claude_model)
     elif args.model == "hf":
         backend = HFBackend(args.checkpoint)
-    elif args.model == "llama":
-        backend = LlamaBackend()
     elif args.model == "replay":
         backend = ReplayBackend(args.replay)
     else:
         raise SystemExit(f"unknown model {args.model}")
     tools = args.tools or (os.environ.get("NATIVE_TOOLS") if args.model == "hf" else None)
-    if tools:  # NATIVE_TOOLS: kernel.py's per-arm tools-block spelling (arm "hard@sig")
+    if tools:  # NATIVE_TOOLS: kernel.py's per-arm tools-block spelling (arm "free@sig")
         backend.tools_mode = tools
     return backend
 
@@ -507,7 +480,7 @@ def make_backend(args) -> Backend:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--set", required=True)
-    parser.add_argument("--model", required=True, choices=["ref", "sonnet", "hf", "llama", "replay"])
+    parser.add_argument("--model", required=True, choices=["ref", "sonnet", "hf", "replay"])
     parser.add_argument("--out", required=True)
     parser.add_argument("--jobs", type=int, default=1)
     parser.add_argument("--only", help="comma list of session ids")

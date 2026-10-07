@@ -20,7 +20,7 @@ Everything runs from your machine with `gcloud` logged in; no credential is stor
 
 ## Bundles
 
-`python ../bundle.py build <job> ...` stages `<stage>/<job>/{data,kernel}` under `$BUNDLE_STAGE` (default `${TMPDIR:-/tmp}/centraid-bundles`): `data/bundle.dat` (a gzip tar of the code, the exported grammar, the `nativetools` runtime with the loader and libs it was linked against, the eval worlds, the one scored set and the train/val files), `data/job.json` (what to run) and `kernel/kernel.py` (the stage that scores). `BUNDLE_NATIVETOOLS` names the exact runtime build to ship; without it the repo's `target/release` or `target/debug` build goes in. A build only stages; `launch.sh` and `score_ckpt.sh` upload. Two kinds:
+`python ../bundle.py build <job> ...` stages `<stage>/<job>/{data,kernel}` under `$BUNDLE_STAGE` (default `${TMPDIR:-/tmp}/centraid-bundles`): `data/bundle.dat` (a gzip tar of the code, the runtime's export (tool schemas, prompts, metadata), the `nativetools` runtime with the loader and libs it was linked against, the eval worlds, the one scored set and the train/val files), `data/job.json` (what to run) and `kernel/kernel.py` (the stage that scores). `BUNDLE_NATIVETOOLS` names the exact runtime build to ship; without it the repo's `target/release` or `target/debug` build goes in. A build only stages; `launch.sh` and `score_ckpt.sh` upload. Two kinds:
 
 - a **training job** (`--train T --val V`): `launch.sh` uploads it, the VM trains (resumable across preemptions), then scores the final checkpoint on its `--set` (default `eval/sets/val.jsonl`);
 - a **scoring bundle** (`--base`, or `--ckpt-dir` for a local checkpoint): no training. `bundles.sh` stages one per set and `score_ckpt.sh` runs a checkpoint on them. The VM refuses to train one.

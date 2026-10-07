@@ -8,8 +8,7 @@ sessions run concurrently, each thread being `run.run_session` (the per-session 
 over a backend whose `step` calls `train/batching.py`'s proxy: all threads' steps are queued and
 run as one padded batched `generate`. Each step carries the session's `compile` op (run_session sets it), so the executed call is
 the one the runtime compiles from the think; `compile` counts of the run (compiled, retry, fallback, ...) are in the stats. Decoding, prompt and options are `--model hf`'s
-(NATIVE_DECODING hard|soft|free, NATIVE_LARK, NATIVE_THINK_LIMIT, NATIVE_DTYPE, NATIVE_MAX_NEW,
-NATIVE_HANDLES, NATIVE_TOOLS); the run file has the same records, so score.py reads it as is.
+(free decoding; NATIVE_THINK_LIMIT, NATIVE_DTYPE, NATIVE_MAX_NEW, NATIVE_TOOLS); the run file has the same records, so score.py reads it as is.
 One greedy draw per step (NATIVE_SAMPLE=0, the default); the only sampled draw is the loop breaker's
 single resample of a repeated call (run.py `break_loop`), plus, when NATIVE_RETRY is set (run.py docstring:
 `NATIVE_RETRY=empty,error,refused`, `NATIVE_RETRY_MAX` per turn, default 1), one re-draw of a step whose
@@ -57,16 +56,14 @@ class BatchedHF(run.Backend):
         from hf_backend import prompt_from_transcript
 
         text, info = self.impl.complete_info(prompt_from_transcript(transcript), compile=self.compile)
-        return run.StepOut(text=text, think_cut=bool(info.get("think_cut")), override=bool(info.get("override")),
-                           decoding=info.get("mode"), **run.compile_key(info))
+        return run.StepOut(text=text, think_cut=bool(info.get("think_cut")), **run.compile_key(info))
 
     def resample(self, transcript, ctx, exclude):
         from hf_backend import prompt_from_transcript
 
         text, info = self.impl.complete_info(prompt_from_transcript(transcript), sample=True, exclude=[exclude],
                                              compile=self.compile)
-        return run.StepOut(text=text, think_cut=bool(info.get("think_cut")), override=bool(info.get("override")),
-                           decoding=f"{info.get('mode')}+resample", **run.compile_key(info))
+        return run.StepOut(text=text, think_cut=bool(info.get("think_cut")), **run.compile_key(info))
 
 
 def select(sessions: list[dict], only: str | None, sample: int) -> list[dict]:

@@ -1,5 +1,5 @@
-"""CPU smoke, end to end: data -> grammar -> mask -> 2 training steps -> save -> reload ->
-dev-like sessions through the real runtime with the eval driver (hard, soft, free decoding) ->
+"""CPU smoke, end to end: data -> loss mask -> 2 training steps -> save -> reload ->
+dev-like sessions through the real runtime with the eval driver (free decoding, the one decoding) ->
 score when gold exists. Checkpoints go to the scratch dir and are deleted at the end.
 
     python smoke.py --work <scratch dir> [--data <sessions.jsonl.gz> [--tools tools.json]] [--keep]
@@ -75,13 +75,10 @@ def main():
     ap.add_argument("--keep", action="store_true", help="keep the smoke checkpoint")
     ap.add_argument("--ckpt", help="reuse this training output dir (with FINAL) instead of training")
     ap.add_argument("--max-new", type=int, default=260)
-    ap.add_argument("--modes", default="hard,free,soft", help="decoding arms (soft runs on the first session)")
     a = ap.parse_args()
     w = Path(a.work)
     w.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, HF_HUB_OFFLINE="1", NATIVETOOLS=NT, TOKENIZERS_PARALLELISM="false")
-    exp = w / "export"
-    run([NT, "export", exp])
 
     # 1. data: the given examples (e.g. the train file), else 20 sessions from the fixture world
     src = a.data
@@ -96,13 +93,7 @@ def main():
     stage("data", n == 20, "%d sessions from %s" % (n, origin))
     tools_arg = ["--tools", a.tools] if a.tools else []
 
-    # 2. grammar acceptance of every target step (whole source file)
-    r = run([PY, HERE / "decode.py", "check", src, "--lark", exp / "call.lark", *tools_arg], env=env, log=w / "grammar.log")
-    last = [l for l in r.stdout.splitlines() if "grammar-accepted" in l]
-    stage("grammar", r.returncode == 0 and last and "(100.00%)  with handle restriction" in last[0]
-          and last[0].endswith("(100.00%)"), last[0] if last else r.stderr[-300:])
-
-    # 3+4. two training steps (the trainer asserts the loss mask on a sample first), save
+    # 2+3. two training steps (the trainer asserts the loss mask on a sample first), save
     ck = w / "ckpt"
     if a.ckpt:  # reuse a checkpoint (debugging the later stages)
         ck = Path(a.ckpt)
@@ -122,13 +113,13 @@ def main():
         return finish(w, a.keep)
     ckpt = ck / final
 
-    # 5. the eval driver's prompt equals the chat template the trainer used (no train/infer skew)
+    # 4. the eval driver's prompt equals the chat template the trainer used (no train/infer skew)
     sys.path.insert(0, str(NATIVE / "eval"))
     sys.path.insert(0, str(HERE))
-    parity_ok, parity_detail = parity(exp, env)
+    parity_ok, parity_detail = parity(env)
     stage("render-parity", parity_ok, parity_detail)
 
-    # 6. reload the checkpoint; dev-like sessions through the runtime via eval/run.py, per decoding
+    # 5. reload the checkpoint; dev-like sessions through the runtime via eval/run.py (free decoding)
     vaults = w / "vaults"
     dev = NATIVE / "eval" / "sets" / "val.jsonl"
     sess = w / "sessions.jsonl"
@@ -141,41 +132,34 @@ def main():
     sess.write_text("".join(json.dumps(s) + "\n" for s in rows))
     worlds = sorted({s["world"] for s in rows})
     run([PY, NATIVE / "eval" / "seed_worlds.py", "--vaults", vaults, *worlds], env=env)
-    eenv = dict(env, EVAL_VAULTS=str(vaults), NATIVE_LARK=str(exp / "call.lark"), EVAL_TMP=str(w))
-    for mode in a.modes.split(","):
-        out = w / ("run-%s.jsonl" % mode)
-        only = ["--only", rows[0]["id"]] if mode == "soft" else []  # soft differs from hard only on a low-p mask
-        r = run([PY, NATIVE / "eval" / "run.py", "--set", sess, "--model", "hf", "--checkpoint", ckpt, "--out", out, *only],
-                env=dict(eenv, NATIVE_DECODING=mode, NATIVE_MAX_NEW=str(a.max_new)), log=w / ("run-%s.log" % mode))
-        recs = [json.loads(l) for l in out.read_text().splitlines()] if out.exists() else []
-        steps = [s for rec in recs for t in rec.get("turns", []) for s in t["steps"]]
-        errs = [rec.get("error") for rec in recs if rec.get("error")]
-        thought = sum(1 for s in steps if "</think>" in s["model"])
-        parsed = sum(1 for s in steps if "call" in s["response"])
-        unreadable = sum(1 for s in steps if "could not read the call" in s["response"].get("text", ""))
-        cut = sum(1 for s in steps if s.get("think_cut"))
-        detail = ("%d sessions, %d steps: think block %d/%d, runtime parsed call %d/%d, unreadable %d, think_cut %d%s"
-                  % (len(recs), len(steps), thought, len(steps), parsed, len(steps), unreadable, cut,
-                     ("; errors: %s" % errs[:2]) if errs else ""))
-        # constrained arms must yield a think block and a call the runtime parses at every step;
-        # the free arm only has to run end to end (a 2-step model's free text is not a call)
-        ok = bool(recs) and not errs and bool(steps)
-        if mode in ("hard", "soft"):
-            ok = ok and thought == len(steps) and parsed == len(steps)
-        stage("sessions-" + mode, ok, detail)
-        if steps:
-            print("  first step (%s):\n%s\n  -> %s" % (mode, steps[0]["model"][-700:], steps[0]["response"].get("text", "")[:200]))
-        if gold:
-            r = run([PY, NATIVE / "eval" / "score.py", out, "--gold", gold,
-                     "--only", only[1] if only else ",".join(s["id"] for s in rows),
-                     "--json", w / ("score-%s.json" % mode)], env=eenv, log=w / ("score-%s.log" % mode))
-            stage("score-" + mode, r.returncode == 0, r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr[-300:])
-    if not gold:
+    eenv = dict(env, EVAL_VAULTS=str(vaults), EVAL_TMP=str(w))
+    out = w / "run-free.jsonl"
+    r = run([PY, NATIVE / "eval" / "run.py", "--set", sess, "--model", "hf", "--checkpoint", ckpt, "--out", out],
+            env=dict(eenv, NATIVE_MAX_NEW=str(a.max_new)), log=w / "run-free.log")
+    recs = [json.loads(l) for l in out.read_text().splitlines()] if out.exists() else []
+    steps = [s for rec in recs for t in rec.get("turns", []) for s in t["steps"]]
+    errs = [rec.get("error") for rec in recs if rec.get("error")]
+    thought = sum(1 for s in steps if "</think>" in s["model"])
+    parsed = sum(1 for s in steps if "call" in s["response"])
+    unreadable = sum(1 for s in steps if "could not read the call" in s["response"].get("text", ""))
+    cut = sum(1 for s in steps if s.get("think_cut"))
+    detail = ("%d sessions, %d steps: think block %d/%d, runtime parsed call %d/%d, unreadable %d, think_cut %d%s"
+              % (len(recs), len(steps), thought, len(steps), parsed, len(steps), unreadable, cut,
+                 ("; errors: %s" % errs[:2]) if errs else ""))
+    # the free decoder only has to run end to end: a 2-step model's free text is not a call
+    stage("sessions-free", bool(recs) and not errs and bool(steps), detail)
+    if steps:
+        print("  first step:\n%s\n  -> %s" % (steps[0]["model"][-700:], steps[0]["response"].get("text", "")[:200]))
+    if gold:
+        r = run([PY, NATIVE / "eval" / "score.py", out, "--gold", gold, "--only", ",".join(s["id"] for s in rows),
+                 "--json", w / "score-free.json"], env=eenv, log=w / "score-free.log")
+        stage("score-free", r.returncode == 0, r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr[-300:])
+    else:
         stage("score", True, "skipped: eval/sets/val.jsonl not present yet")
     finish(w, a.keep)
 
 
-def parity(exp, env):
+def parity(env):
     """Train/infer parity over one real runtime conversation (2 turns, 3 steps, compaction,
     vault blocks): (a) the runtime's system block == render.py's; (b) the prompt eval/run.py's
     hf backend builds from its Transcript == render.py's generation prompt over the records the

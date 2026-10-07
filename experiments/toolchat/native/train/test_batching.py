@@ -1,13 +1,13 @@
 """Tests for batching.py: the queue logic with a fake backend (no torch), the stratified sample, and
 greedy equality of the batched HF path with the serial HFBackend on a tiny random Qwen3.5 (float64,
-CPU, the real tokenizer and the runtime's exported grammar; skipped when those are not around).
+CPU, the real tokenizer; skipped when it is not around). Decoding is free: the think guard, the rendered call and the
+one-call stop are what the batched rows must reproduce.
 
     python -m unittest train/test_batching.py     (HF_HUB_OFFLINE=1)
 """
 from __future__ import annotations
 
 import os
-import re
 import sys
 import tempfile
 import threading
@@ -21,10 +21,10 @@ import batching  # noqa: E402
 from batching import Batcher, stratified_sample  # noqa: E402
 
 
-def stable(value):
-    """An info value to compare across runs: a grammar error carries llguidance's parser dump, whose
-    `compute_time_us` is the parser's own timing and differs from one run to the next."""
-    return re.sub(r'"compute_time_us": \d+', '"compute_time_us": 0', value) if isinstance(value, str) else value
+# what every draw's info carries (`seconds` is a timing, the rest is compared between the serial and the batched draw) ...
+INFO_KEYS = ("think_cut", "rendered_call", "prompt_tokens", "new_tokens", "think_tokens", "stopped")
+# ... and the keys of the removed grammar path, which no draw carries any more
+GONE_KEYS = {"mode", "override", "override_at", "grammar_error"}
 
 
 def fan(b, items, gap=0.0):
@@ -286,23 +286,21 @@ class HFEqualityTest(unittest.TestCase):
         try:
             import torch  # noqa: F401
             import hf_backend
-            cls.lark = hf_backend.export_lark()
             cls.tmp = tempfile.TemporaryDirectory()
             _build_tiny(cls.tmp.name)
         except Exception as e:  # noqa: BLE001
-            raise unittest.SkipTest("no tiny model / tokenizer / nativetools: %r" % (e,))
+            raise unittest.SkipTest("no tiny model / tokenizer: %r" % (e,))
         cls.hf_backend = hf_backend
 
     @classmethod
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
-    def backend(self, decoding, **kw):
-        return self.hf_backend.HFBackend(self.tmp.name, self.lark, decoding=decoding, device="cpu",
-                                         dtype="float64", think_limit=6, max_new_tokens=40, **kw)
+    def backend(self, **kw):
+        return self.hf_backend.HFBackend(self.tmp.name, device="cpu", dtype="float64", think_limit=6, max_new_tokens=40, **kw)
 
-    def check(self, decoding, limits):
-        hf = self.backend(decoding)
+    def check(self, limits):
+        hf = self.backend()
         serial = []
         for p, k in zip(PROMPTS, limits):
             hf.dec.max_new_tokens = k
@@ -329,9 +327,9 @@ class HFEqualityTest(unittest.TestCase):
         bb.close()
         self.assertEqual(bb.batcher.sizes, [len(PROMPTS)], "one padded batch")
         for i, ((st, si), (bt, bi)) in enumerate(zip(serial, res)):
-            self.assertEqual(bt, st, "prompt %d (%s) text" % (i, decoding))
-            for k in ("think_cut", "override", "grammar_error", "prompt_tokens", "new_tokens", "think_tokens", "stopped"):
-                self.assertEqual(stable(bi[k]), stable(si[k]), "prompt %d (%s) info %s" % (i, decoding, k))
+            self.assertEqual(bt, st, "prompt %d text" % i)
+            for k in INFO_KEYS:
+                self.assertEqual(bi[k], si[k], "prompt %d info %s" % (i, k))
         widths = {bi["padded"] for _, bi in res}
         self.assertEqual(len(widths), 1)
         self.assertGreater(max(bi["prompt_tokens"] for _, bi in res), min(bi["prompt_tokens"] for _, bi in res))
@@ -341,7 +339,7 @@ class HFEqualityTest(unittest.TestCase):
         """The tiny model's greedy text hardly depends on the prompt, so also compare the logits
         (which do): a left-padded row of a batch against the same prompt alone."""
         import torch
-        hf = self.backend("free")
+        hf = self.backend()
         ids = [hf.tok(p, add_special_tokens=False)["input_ids"] for p in PROMPTS]
         width = max(map(len, ids))
         x = torch.full((len(ids), width), hf.dec.im_end)
@@ -361,7 +359,7 @@ class HFEqualityTest(unittest.TestCase):
     def test_resample_excluding_a_call(self):
         """The loop breaker's draw (`sample=True, exclude=[call]`): a sampled row batched with a
         greedy one; every draw is a whole message and the redraw loop ends."""
-        hf = self.backend("hard")
+        hf = self.backend()
         greedy = hf.complete(PROMPTS[0])
         bb = batching.BatchedBackend(hf, max_batch=4, max_wait=0.05, max_tokens=10**9)
         res = {}
@@ -374,17 +372,21 @@ class HFEqualityTest(unittest.TestCase):
         bb.close()
         self.assertEqual(res["g"][0], greedy)
         self.assertTrue(res["s"][0].startswith("<think>\n"))
-        self.assertEqual(res["s"][1]["mode"], "hard")  # the same info a serial draw carries
+        info = res["s"][1]  # the same info a serial draw carries
+        self.assertTrue(set(INFO_KEYS) | {"seconds"} <= set(info), sorted(info))
+        self.assertFalse(GONE_KEYS & set(info), sorted(info))
 
-    def test_hard_greedy(self):
-        s = self.check("hard", [40, 40, 40, 40])
+    def test_greedy(self):
+        s = self.check([40, 40, 40, 40])
         self.assertTrue(any(i["think_cut"] for _, i in s), "the think guard fires in this case")
+        for _, i in s:
+            self.assertFalse(GONE_KEYS & set(i), sorted(i))
 
-    def test_dates_line_reaches_the_grammar_and_the_step(self):
-        """A prompt with a dates line: the batched draw is the serial one (n_dates for the grammar, the line for the call's reading)."""
+    def test_dates_line_reaches_the_step(self):
+        """A prompt with a dates line: the batched draw is the serial one (the line is what the call the think states is read against)."""
         prompt = ("<|im_start|>system\nVault. rows #1 #2<|im_end|>\n<|im_start|>user\ndates: friday = 2026-03-13 \u00b7 "
                   "monday = 2026-03-16\n\nmove it to friday<|im_end|>\n<|im_start|>assistant\n<think>\n")
-        hf = self.backend("hard")
+        hf = self.backend()
         serial = hf.complete(prompt)
         self.assertEqual(self.hf_backend.decode.fmt.dates_line_in_prompt(prompt).count(" = "), 2)
         bb = batching.BatchedBackend(hf, max_batch=2, max_wait=0.01, max_tokens=10**9)
@@ -398,9 +400,9 @@ class HFEqualityTest(unittest.TestCase):
     def test_retry_prefix_draw_and_compile_stats(self):
         """`compile=` on the batched path: the retry is a second draw whose think starts with `retry: <slot>`, equal to the serial
         draw with that prefix; `info["compile"]` and the stats say what the op did."""
-        hf = self.backend("hard")
+        hf = self.backend()
         prefix = "retry: where\n"
-        want, _ = hf.dec.complete(PROMPTS[0], mode="hard", prefix=prefix)
+        want, _ = hf.dec.complete(PROMPTS[0], prefix=prefix)
         self.assertTrue(want.startswith("<think>\n" + prefix))
         seen = {}
 
@@ -419,13 +421,10 @@ class HFEqualityTest(unittest.TestCase):
         self.assertEqual(info["compile"], "retry")
         self.assertEqual((bb.stats["compiled"], bb.stats["retried"], bb.stats["retry_ok"], bb.stats["fallback"]), (1, 1, 1, 0))
 
-    def test_free_greedy_with_per_request_limits(self):
-        s = self.check("free", [7, 40, 13, 40])
+    def test_greedy_with_per_request_limits(self):
+        s = self.check([7, 40, 13, 40])
         self.assertEqual([i["new_tokens"] for _, i in s][0], 7)
         self.assertFalse(s[0][1]["stopped"])
-
-    def test_soft_greedy(self):
-        self.check("soft", [40, 25, 40, 40])
 
 
 if __name__ == "__main__":

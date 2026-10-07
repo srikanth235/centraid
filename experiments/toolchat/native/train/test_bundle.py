@@ -133,10 +133,19 @@ class TrainArgs(unittest.TestCase):
         for argv, why in ((["build", "j", "--train", "t", "--continue-from", "/local/ckpt"], "gs://"),
                           (["build", "j", "--dpo", "p.jsonl"], "--train"),
                           (["build", "j", "--train", "t", "--dpo", "/no/such/pairs.jsonl"], "not a file"),
-                          (["build", "j", "--base", "--continue-from", "gs://b/c"], "training flags")):
+                          (["build", "j", "--base", "--continue-from", "gs://b/c"], "training flags"),
+                          (["build", "j", "--base", "--arms", "hard"], "the only arm is `free`")):
             with mock.patch.object(sys, "argv", ["bundle.py", *argv]), self.assertRaises(SystemExit) as cm:
                 bundle.main()
             self.assertIn(why, str(cm.exception), argv)
+
+    def test_free_is_the_only_arm(self):
+        self.assertEqual(bundle.check_arms(None), ["free"])
+        self.assertEqual(bundle.check_arms("free,free@sig"), ["free", "free@sig"])  # `@<tools>` is the tools-block spelling
+        for arm in ("hard", "soft", "hard,free", "free@bogus", "Q4_K_M"):
+            with self.assertRaises(SystemExit, msg=arm) as cm:
+                bundle.check_arms(arm)
+            self.assertIn("the only arm is `free`", str(cm.exception), arm)
 
     def test_the_flags_are_ones_train_py_accepts(self):
         import importlib.util

@@ -177,20 +177,6 @@ fn a_where_on_name_is_refused_by_the_parser_and_repaired_by_the_call() {
     assert!(said.ends_with("note: used name: Pay rent for the where clause on name"));
 }
 
-#[test]
-fn the_grammar_export_has_a_rule_per_kind() {
-    let lark = whr::lark();
-    for kind in Kind::ALL {
-        assert!(
-            lark.contains(&format!("where_{}:", kind.name().replace(' ', "_"))),
-            "{kind:?}"
-        );
-    }
-    assert!(lark.contains(
-        "\"status\" \" \" EQ \" \" (\"open\" | \"in_progress\" | \"completed\" | \"cancelled\")"
-    ));
-}
-
 proptest! {
     /// `in (a, b)` is exactly `= a` or `= b` — the only `or` the language has.
     #[test]

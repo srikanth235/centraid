@@ -248,17 +248,17 @@ ensure_triton() {  # flash-linear-attention refuses Triton 3.4.0 to 3.7.0 on Hop
 ensure_deps() {
   ensure_pyheaders
   ensure_triton || return 1
-  local info tr lg lora pins key py
+  local info tr lora pins key py
   info=$(python3 - "$JOBDIR/job.json" <<'PY'
 import json, sys
 j = json.load(open(sys.argv[1]))
-print(j["transformers"], j["llguidance"], "1" if "--lora" in j.get("train_args", []) else "0")
+print(j["transformers"], "1" if "--lora" in j.get("train_args", []) else "0")
 PY
   ) || return 1
-  read -r tr lg lora <<<"$info"
+  read -r tr lora <<<"$info"
   # The Modal image's pins (modal_run.py): torch 2.8.0 (PyPI's default wheel is CUDA 12.8) + these, installed in one command;
-  # transformers / llguidance come from the staged job.json (kernel.py installs the same pair); peft only for --lora (kernel.py).
-  pins=(torch==2.8.0 numpy huggingface_hub sentencepiece protobuf packaging wheel setuptools "transformers==$tr" "llguidance==$lg" "$FLA_SPEC")
+  # transformers comes from the staged job.json (kernel.py installs the same pin); peft only for --lora (kernel.py).
+  pins=(torch==2.8.0 numpy huggingface_hub sentencepiece protobuf packaging wheel setuptools "transformers==$tr" "$FLA_SPEC")
   [ "$lora" = 1 ] && pins+=(peft)
   key=$(printf '%s ' "${pins[@]}" | md5sum | cut -c1-12)
   if [ -f "$STATE/deps-$key.ok" ] && [ -x "$VENV/bin/python" ]; then return 0; fi
