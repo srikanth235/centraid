@@ -76,8 +76,12 @@ pub struct Handle {
     /// `None` is a core opened at a path with no file and `create: false` —
     /// a shell asking to open a vault a restore has not written yet. It is a
     /// state the shell draws ("no vault here"), not a failure.
-    vault: Mutex<Option<Vault>>,
-    registry: Registry,
+    ///
+    /// An `Arc` because a chat's native session outlives any one call and
+    /// reaches the vault through [`crate::assist::door::CoreDoor`], which holds
+    /// a clone of this very lock: one lock, one open file, whoever asks.
+    vault: Arc<Mutex<Option<Vault>>>,
+    registry: Arc<Registry>,
     ui_thread_name: Option<String>,
     events: Arc<EventQueue>,
     closed: AtomicBool,
@@ -260,8 +264,8 @@ impl Core {
             plane: crate::phone::Plane::of(&path).with_ceiling(spool_ceiling),
             path,
             keys,
-            vault: Mutex::new(vault),
-            registry: Registry::with_system_commands()?,
+            vault: Arc::new(Mutex::new(vault)),
+            registry: Arc::new(Registry::with_system_commands()?),
             ui_thread_name,
             events: Arc::new(EventQueue::new()),
             staging: crate::stage::Staging::default(),
@@ -763,7 +767,7 @@ impl Handle {
 
     /// The command catalogue this core serves.
     #[must_use]
-    pub const fn registry(&self) -> &Registry {
+    pub fn registry(&self) -> &Registry {
         &self.registry
     }
 
@@ -775,6 +779,21 @@ impl Handle {
     #[must_use]
     pub fn owner(&self) -> centraid_vault::Principal {
         centraid_vault::Principal::owner(OWNER_DEVICE)
+    }
+
+    /// THE DOOR A CHAT'S NATIVE SESSION READS AND WRITES THROUGH (#1088).
+    ///
+    /// It holds clones of this handle's own lock, registry and event queue, so
+    /// it outlives the call that made it and still reaches the one open vault
+    /// only through [`Self::with_vault`]'s mutex. See
+    /// [`crate::assist::door::CoreDoor`].
+    pub fn assist_door(&self) -> crate::assist::door::CoreDoor {
+        crate::assist::door::CoreDoor::new(
+            Arc::clone(&self.vault),
+            Arc::clone(&self.registry),
+            self.events(),
+            self.owner(),
+        )
     }
 
     /// WHETHER THE VAULT THIS CORE HOLDS IS A SAMPLE VAULT, finished or not
@@ -1375,9 +1394,11 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             | K::ForgetDestination(_)
             | K::Releasable(_)
             | K::Released(_)
-            // A CHAT TURN IS BOUNDED BY ITS TOKEN CEILINGS (96 to route, 64 to
-            // phrase) and one read. It stops through `AssistCancel`, not
-            // through this registry, so it is not classed cancellable here.
+            // A CHAT TURN IS BOUNDED BY ITS CEILINGS: on the routed plane 96
+            // tokens to route, 64 to phrase and one read; on the native plane
+            // `STEP_CAP` (6) steps of at most 512 tokens, each read from memory.
+            // It stops through `AssistCancel`, not through this registry, so it
+            // is not classed cancellable here.
             | K::Assist(_),
         )
         | None => RequestKind::Bounded,

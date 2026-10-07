@@ -23,6 +23,7 @@
 //! safe for, say, a health event, which is a sample rather than a set.
 
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
@@ -72,6 +73,11 @@ pub struct EventQueue {
     /// would also be two things that can be signalled wrongly; the queue's
     /// state tells a woken thread which case it is in.
     signal: Condvar,
+    /// How many commits have announced a change on this queue, ever. Not an
+    /// event and never drained: a reader that built a picture of the vault
+    /// (the chat's native session reads the world once) asks whether the
+    /// number moved since it did, and a moved number is "that picture is old".
+    changes: AtomicU64,
 }
 
 impl Default for EventQueue {
@@ -92,7 +98,16 @@ impl EventQueue {
                 behind: 0,
             }),
             signal: Condvar::new(),
+            changes: AtomicU64::new(0),
         }
+    }
+
+    /// How many changes this vault has announced since the queue was made. See
+    /// the field: a comparison of two reads of it answers "did anything change
+    /// in between", and nothing else.
+    #[must_use]
+    pub fn change_count(&self) -> u64 {
+        self.changes.load(Ordering::SeqCst)
     }
 
     /// Record how far behind the gateway this seat is, for health events.
@@ -304,6 +319,9 @@ impl ChangeFeed {
     /// every change in the vault's life, because the hook knows the tables and
     /// no position at all. The field is deleted; see `change.proto`.
     pub fn tables_changed(&self, tables: &[String]) {
+        if !tables.is_empty() {
+            self.queue.changes.fetch_add(1, Ordering::SeqCst);
+        }
         for table in tables {
             self.offer(Event {
                 kind: Some(event::Kind::Change(ChangeEvent {

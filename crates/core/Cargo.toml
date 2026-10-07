@@ -118,6 +118,10 @@ serde_json.workspace = true
 # A REAL GATEWAY ON A REAL SOCKET for the phone's flows (#1080): the gateway
 # crate's own test harness, the whole server, spawned on 127.0.0.1:0.
 centraid-gateway = { path = "../gateway" }
+# THE HARNESS'S DOOR for the chat's native runtime (#1088): the read-equality
+# test opens a copy of the sample vault through it and asks the core's door the
+# same questions.
+centraid-nativetools = { path = "../nativetools" }
 tempfile.workspace = true
 
 [[test]]

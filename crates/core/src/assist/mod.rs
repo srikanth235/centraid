@@ -7,8 +7,21 @@
 //! * [`reads`] runs each registered tool through the query path a screen uses;
 //! * [`attach`] turns an asset id, a document id or picked bytes into what the
 //!   plane reads over a question, and refuses what the chat does not read;
-//! * [`Hub`] holds the sessions and the model slot;
+//! * [`Hub`] holds the sessions, the model slot and which plane ([`PlaneKind`]) answers a tool turn;
+//! * [`door`] is the native runtime's way into the open vault (#1088), the other plane's
+//!   counterpart of [`reads`];
 //! * [`answer`] is `Request::Assist`'s arm.
+//!
+//! # TWO PLANES, ONE ARM (#1088)
+//!
+//! A tool turn is answered by the routed plane (#1078: a route, one of eighteen reads, a phrase)
+//! or by the native one (the model drives `centraid_assist::native_turn` over the same runtime the
+//! fine-tuning loop trains), whichever [`Hub::plane`] says. The routed plane is the default until
+//! wave 2c retires it; nothing on the wire chooses. Everything around the turn is shared: the
+//! slot, `BUSY`, stop, the event queue, and the saved turn, whose stored shape does not change. A
+//! turn with an attachment takes the attached path on either (R-1088-9). A native chat's session
+//! lives in its [`Slot`], in memory (R-1088-10): a new chat, a reopened thread, a retry, a new day
+//! and a vault that changed since the chat last finished each start a fresh one.
 //!
 //! # A TURN RUNS ON THE CALLING THREAD, AND NOTHING HOLDS THE VAULT WHILE THE
 //! # MODEL THINKS
@@ -43,18 +56,20 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_assist::native_turn::{NativeChat, NativePlane};
 use centraid_assist::prompt::Budget;
 use centraid_assist::suggest::suggest;
 use centraid_assist::turn::Event as TurnEvent;
 use centraid_assist::{
-    Answered, App, Cancel, Card, ModelHost, ModelState, Notice, Plane, ReadContext, ReadError,
-    Reader, Reading, Refusal, Session, ToolCall, ToolOutput, VisionState, VisionStatus,
+    Answered, App, Cancel, Card, Model, ModelHost, ModelState, Notice, Plane, ReadContext,
+    ReadError, Reader, Reading, Refusal, Session, ToolCall, ToolOutput, VisionState, VisionStatus,
 };
 
 use crate::error::{CoreError, Result};
 use crate::handle::Handle;
 
 pub mod attach;
+pub mod door;
 pub mod reads;
 pub mod store;
 
@@ -71,8 +86,18 @@ fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// A chat's native session, and how many changes the vault had announced when the chat last
+/// finished with it (R-1088-10: in memory, inert on reopen, never stored).
+struct NativeSlot {
+    chat: NativeChat,
+    changes: u64,
+}
+
 struct Slot {
     session: Mutex<Session>,
+    /// The native plane's session for this chat: `None` until its first native turn, and `None`
+    /// again after a new chat. A reopened thread starts with none (R-1088-10).
+    native: Mutex<Option<NativeSlot>>,
     cancel: Cancel,
     running: AtomicBool,
     /// The stored thread this chat saves into: `None` until its first turn is
@@ -105,6 +130,21 @@ struct Sessions {
 pub struct Hub {
     host: Mutex<Arc<ModelHost>>,
     sessions: Mutex<Sessions>,
+    plane: Mutex<PlaneKind>,
+}
+
+/// WHICH PLANE ANSWERS A TOOL TURN (#1088).
+///
+/// `Routed` is #1078's: the route grammar, one of eighteen reads, a phrase step. `Native` is the
+/// one assistant plane: the model drives the same runtime the fine-tuning loop trains. Both live
+/// until wave 2c retires the first, so the default stays `Routed` and the choice is the core's, not
+/// the wire's: no request carries it. A turn with an attachment is neither's business and always
+/// takes the attached path (R-1088-9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PlaneKind {
+    #[default]
+    Routed,
+    Native,
 }
 
 impl Default for Hub {
@@ -120,7 +160,21 @@ impl Hub {
         Self {
             host: Mutex::new(Arc::new(ModelHost::new())),
             sessions: Mutex::new(Sessions::default()),
+            plane: Mutex::new(PlaneKind::default()),
         }
+    }
+
+    /// Choose the plane that answers tool turns, from the next turn on. The core's own switch:
+    /// nothing on the wire sets it, and nothing in a shipped build calls it until wave 2c flips the
+    /// default (#1088).
+    pub fn use_plane(&self, kind: PlaneKind) {
+        *locked(&self.plane) = kind;
+    }
+
+    /// The plane that answers tool turns.
+    #[must_use]
+    pub fn plane(&self) -> PlaneKind {
+        *locked(&self.plane)
     }
 
     /// Share a model slot between handles. A phone holds several vaults and one
@@ -148,6 +202,7 @@ impl Hub {
             id,
             Arc::new(Slot {
                 session: Mutex::new(session),
+                native: Mutex::new(None),
                 cancel: Cancel::new(),
                 running: AtomicBool::new(false),
                 last_saved: AtomicBool::new(thread.is_some()),
@@ -483,6 +538,7 @@ pub fn answer(handle: &Handle, request: &wire::AssistRequest) -> Result<wire::As
             slot.cancel.cancel();
             // Waits for a running turn to stop: the lock is the turn's.
             locked(&slot.session).clear();
+            *locked(&slot.native) = None;
             // A NEW CHAT IS A NEW THREAD: the old one keeps what it holds.
             *locked(&slot.thread) = None;
             slot.last_saved.store(false, Ordering::SeqCst);
@@ -673,38 +729,61 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
         }
     };
 
-    let reader = VaultReader { handle };
-    let plane = Plane {
-        model: &*model,
-        reader: &reader,
-        budget: Budget::DEFAULT,
-    };
     // WHAT WAS DRAWN, for a turn that ends before its answer: the words that
     // streamed and the cards that arrived, which a stop keeps on screen.
     let mut streamed = String::new();
     let mut cards_seen: Vec<Card> = Vec::new();
-    let history_before = session.history().len();
-    let outcome = plane.run_attached_turn(
-        &mut session,
-        &text,
-        carried.as_ref(),
-        &ReadContext { tz: &asked.tz },
-        &slot.cancel,
-        &mut |event| {
-            match &event {
-                TurnEvent::Token(piece) => streamed.push_str(piece),
-                TurnEvent::Cards(cards) => cards_seen.clone_from(cards),
-                _ => {}
-            }
-            emit(handle, session_id, turn_id, event_to_wire(&event));
-        },
-    );
-    // The plane's own record of the turn, when it kept one: what lets a
-    // reopened chat route a follow-up as this one would have been.
-    let record = (session.history().len() == history_before + 1)
-        .then(|| session.history().last().cloned())
-        .flatten();
-    Ok(match outcome {
+    let mut sink = |event: TurnEvent| {
+        match &event {
+            TurnEvent::Token(piece) => streamed.push_str(piece),
+            TurnEvent::Cards(cards) => cards_seen.clone_from(cards),
+            _ => {}
+        }
+        emit(handle, session_id, turn_id, event_to_wire(&event));
+    };
+    // A TOOL TURN GOES TO THE PLANE THE HUB IS SET TO; AN ATTACHMENT NEVER DOES
+    // (R-1088-9): a photograph or a document is read over the question by the
+    // attached path, whichever plane answers the rest.
+    let native = hub.plane() == PlaneKind::Native && carried.is_none();
+    let (outcome, record) = if native {
+        // The old session only remembers the question, so Retry asks it again.
+        // The native turn keeps no record: a reopened thread starts fresh
+        // (R-1088-10), so there is nothing a stored record would restore.
+        session.note_question(&text);
+        let outcome = native_turn(
+            handle,
+            &slot,
+            &*model,
+            &text,
+            &asked.tz,
+            asked.regenerate,
+            &mut sink,
+        );
+        (outcome, None)
+    } else {
+        let reader = VaultReader { handle };
+        let plane = Plane {
+            model: &*model,
+            reader: &reader,
+            budget: Budget::DEFAULT,
+        };
+        let history_before = session.history().len();
+        let outcome = plane.run_attached_turn(
+            &mut session,
+            &text,
+            carried.as_ref(),
+            &ReadContext { tz: &asked.tz },
+            &slot.cancel,
+            &mut sink,
+        );
+        // The plane's own record of the turn, when it kept one: what lets a
+        // reopened chat route a follow-up as this one would have been.
+        let record = (session.history().len() == history_before + 1)
+            .then(|| session.history().last().cloned())
+            .flatten();
+        (outcome, record)
+    };
+    let response = match outcome {
         Ok(answered) => {
             let said = store::Said {
                 outcome: "answered",
@@ -726,7 +805,56 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
                 .and_then(|said| persist(&said, record.as_ref(), carried.as_ref()));
             refused(session_id, turn_id, &refusal, saved.as_ref())
         }
-    })
+    };
+    if native {
+        // THE PICTURE IS AS NEW AS THE END OF THIS TURN, its own save included:
+        // what changes the vault from here on makes the next turn start over.
+        if let Some(held) = locked(&slot.native).as_mut() {
+            held.changes = handle.events().change_count();
+        }
+    }
+    Ok(response)
+}
+
+/// One turn on the native plane (#1088): the chat's native session, kept from
+/// its last turn or opened fresh, and the model driving it.
+///
+/// A session is opened fresh when it has none (a new chat, a reopened thread:
+/// R-1088-10), when the member asked the question again (a retry cannot take
+/// the earlier attempt back out of a session), when the day has turned (its
+/// "today" is fixed at open), and when the vault changed since the chat last
+/// finished with it (its picture of the vault is read once, at open). A fresh
+/// session forgets the earlier turns' `#n`; the stored thread still shows them.
+fn native_turn(
+    handle: &Handle,
+    slot: &Slot,
+    model: &dyn Model,
+    text: &str,
+    tz: &str,
+    regenerate: bool,
+    sink: &mut dyn FnMut(TurnEvent),
+) -> std::result::Result<Answered, Refusal> {
+    let mut held = locked(&slot.native);
+    let changes = handle.events().change_count();
+    let keep = !regenerate
+        && held
+            .as_ref()
+            .is_some_and(|kept| kept.changes == changes && !kept.chat.is_stale(tz));
+    if !keep {
+        let chat =
+            NativeChat::open(Box::new(handle.assist_door()), tz).map_err(Refusal::QueryFailed)?;
+        *held = Some(NativeSlot { chat, changes });
+    }
+    let Some(kept) = held.as_mut() else {
+        return Err(Refusal::QueryFailed("no native session".to_owned()));
+    };
+    let outcome = NativePlane::new(model).run_turn(&mut kept.chat, text, &slot.cancel, sink);
+    if outcome.is_err() {
+        // A turn that did not end (a stop, an engine failure) leaves its session
+        // between a question and its answer; the next one starts clean.
+        *held = None;
+    }
+    outcome
 }
 
 #[cfg(test)]
