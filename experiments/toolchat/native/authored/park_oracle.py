@@ -122,13 +122,37 @@ def canon(record: dict) -> list:
     for turn in record["turns"]:
         for step in turn["steps"]:
             r = step["response"]
-            blob = json.dumps(r.get("effect") or {}, sort_keys=True, ensure_ascii=False)
+            effect = {k: v for k, v in (r.get("effect") or {}).items() if k not in ("pending", "confirmed")}
+            blob = json.dumps(effect, sort_keys=True, ensure_ascii=False)
             out.append((r.get("text"), r.get("ends_turn"), r.get("obs"), r.get("step"), UUID.sub(rename, blob)))
     return out
 
 
 def raw_of(r: dict) -> tuple:
-    return (r.get("text"), r.get("effect"), r.get("ends_turn"), r.get("obs"), r.get("step"))
+    effect = {k: v for k, v in (r.get("effect") or {}).items() if k not in ("pending", "confirmed")}
+    return (r.get("text"), effect, r.get("ends_turn"), r.get("obs"), r.get("step"))
+
+
+def check_confirms(a: dict, b: dict, report: dict) -> bool:
+    """With `--auto-confirm` B taps every card: the vault's own after-write observation of a turn
+    (`effect.confirmed.text`) must be the texts Run showed for the turn's write calls, joined."""
+    ok = True
+    for ta, tb in zip(a["turns"], b["turns"]):
+        confirmed = [st["response"]["effect"]["confirmed"] for st in tb["steps"]
+                     if (st["response"].get("effect") or {}).get("confirmed")]
+        pending = [st for st in tb["steps"] if (st["response"].get("effect") or {}).get("pending")]
+        if not confirmed and not pending:
+            continue
+        report["cards"] += 1
+        expected = "\n".join(st["response"]["text"] for st in ta["steps"]
+                             if "diff" in (st["response"].get("effect") or {}))
+        got = confirmed[0] if confirmed else None
+        if got and got.get("status") == "done" and got.get("text") == expected:
+            report["cards_same"] += 1
+        else:
+            ok = False
+            report["card_diffs"].append({"session": a["id"], "expected": expected, "confirmed": got})
+    return ok
 
 
 def compare(a: dict, b: dict, report: dict) -> None:
@@ -162,6 +186,8 @@ def compare(a: dict, b: dict, report: dict) -> None:
             report["diff_kinds"][key] += 1
             report["diffs"].append({"session": a["id"], "turn": ti + 1, "step": si + 1, "kind": key,
                                     "model": sa.get("model"), "run": ra, "park": rb})
+    if not check_confirms(a, b, report):
+        mismatch = True
     report["sessions_same"] += not mismatch
 
 
@@ -193,7 +219,8 @@ def main() -> None:
             keep = set(args.only.split(","))
             sessions = [s for s in sessions if s["id"] in keep]
         report = {"sessions": 0, "sessions_same": 0, "steps": 0, "writes": 0, "writes_same": 0, "reads": 0,
-                  "reads_same": 0, "writes_raw": 0, "reads_raw": 0, "errors": [], "shape": [], "diffs": [], "diff_kinds": collections.Counter()}
+                  "reads_same": 0, "writes_raw": 0, "reads_raw": 0,
+                  "cards": 0, "cards_same": 0, "card_diffs": [], "errors": [], "shape": [], "diffs": [], "diff_kinds": collections.Counter()}
         a_bin, a_flags = args.a_bin or args.bin, args.a_flags.split()
         b_flags = args.b_flags.split()
 
@@ -209,6 +236,11 @@ def main() -> None:
         print(f"{world}: sessions {report['sessions']} (identical {report['sessions_same']}) | steps {report['steps']} | "
               f"write steps {report['writes']} identical {report['writes_same']} (byte for byte {report['writes_raw']}) | "
               f"read steps {report['reads']} identical {report['reads_same']} (byte for byte {report['reads_raw']}) | errors {len(report['errors'])} shape {len(report['shape'])}")
+        if report["cards"]:
+            print(f"    cards (a turn that ended in a pending write): {report['cards']}, "
+                  f"the vault's own after-write text equals Run's: {report['cards_same']}")
+            for item in report["card_diffs"][:3]:
+                print("    card:", json.dumps(item, ensure_ascii=False)[:600])
         for key, count in report["diff_kinds"].most_common():
             print(f"    {count:5d}  verb={key[0]}  first difference: {key[1]}")
         for item in report["errors"][:5]:
@@ -216,7 +248,7 @@ def main() -> None:
         for item in report["shape"][:5]:
             print("    shape:", item)
         for key in ("sessions", "sessions_same", "steps", "writes", "writes_same", "writes_raw", "reads", "reads_same",
-                    "reads_raw"):
+                    "reads_raw", "cards", "cards_same"):
             total[key] += report[key]
         total["errors"] += len(report["errors"])
         total["shape"] += len(report["shape"])

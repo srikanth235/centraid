@@ -1783,6 +1783,7 @@ impl Session {
     /// (`crate::native::block::picks_line`), joined as `block`, which is what precedes the message in the user turn. A message that takes the request back
     /// (`phrases::is_retraction`) also carries `ended`, the turn's own end.
     pub fn user(&mut self, message: &str) -> Value {
+        self.park_begin_turn();
         self.turn += 1;
         self.turn_starts.push(self.results.len());
         self.steps = 0;
@@ -2035,6 +2036,7 @@ impl Session {
             outcome.text.push_str(&note);
             trailing.push(note);
         }
+        self.park_capture(&mut outcome);
         if outcome.ends_turn {
             self.turn_over = true;
         }

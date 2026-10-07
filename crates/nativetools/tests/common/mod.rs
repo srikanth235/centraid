@@ -84,6 +84,22 @@ pub fn call(session: &mut Session, tool: &str, args: Value) -> Value {
     session.call(tool, &args)
 }
 
+/// One call whose write, if the session parks it, the member taps at once: a setup step of a
+/// driver that goes on to ask the vault about it.
+pub fn settled(session: &mut Session, tool: &str, args: Value) -> Value {
+    let response = session.call(tool, &args);
+    if let Some(id) = session.pending().map(|pending| pending.id.clone()) {
+        assert!(
+            matches!(
+                session.confirm(&id),
+                centraid_nativetools::park::Confirmed::Done { .. }
+            ),
+            "a setup write did not confirm: {response}"
+        );
+    }
+    response
+}
+
 /// The observation text of one call.
 pub fn text(session: &mut Session, tool: &str, args: Value) -> String {
     call(session, tool, args)["text"]

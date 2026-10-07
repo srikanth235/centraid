@@ -31,7 +31,7 @@ use serde_json::{Value, json};
 
 use crate::native::dates::Stamp;
 use crate::native::door::Ran;
-use crate::native::meta::{Kind, Via};
+use crate::native::meta::{Kind, Verb, Via};
 use crate::native::world::{Edge, Key, Row, Val, World};
 
 /// What a session does with a write.
@@ -64,6 +64,8 @@ impl Writes {
 /// One step the turn would have run, and what the patch said it produced.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParkedStep {
+    /// The write call of the turn that made the step (an index into its calls, in order).
+    pub call: usize,
     pub command: String,
     pub input: Value,
     /// The patched world's answer: the ids it minted (`debt_id`, `revision_id`) are placeholders
@@ -83,6 +85,139 @@ pub(crate) struct ParkState {
     /// Albums deleted by a parked step, by the revision id the delete answered: what
     /// `media.restore_album` puts back.
     pub bin: BTreeMap<String, (Row, Vec<Edge>)>,
+    /// The world the turn planned its writes against: the vault's, as read when the turn began.
+    pub before: Option<World>,
+    /// The call the running step parked, until `park_capture` has its final text.
+    pub call: Option<ParkedCall>,
+    /// Every call of the turn that parked something.
+    pub calls: Vec<ParkedCall>,
+    /// What the session remembered before the turn: what a dismissal puts back.
+    pub memory: Option<Memory>,
+    /// The one pending write of the session (R-1088-10).
+    pub pending: Option<PendingWrite>,
+    /// The last confirm, kept so one sent twice answers the same and writes once.
+    pub confirmed: Option<(String, Confirmed)>,
+}
+
+/// One call that parked a write: the verb, the lines it showed for the rows it changed and the
+/// text it ended in. A confirm regenerates the lines from the vault's own before and after.
+#[derive(Debug, Clone)]
+pub(crate) struct ParkedCall {
+    pub verb: Verb,
+    /// `(row, its #n, the change line shown)`.
+    pub lines: Vec<(Key, usize, String)>,
+    pub text: String,
+}
+
+/// What the session remembers of a conversation that a write changes, as it was when the turn
+/// began: a dismissed turn leaves none of it behind.
+#[derive(Debug, Clone)]
+pub(crate) struct Memory {
+    writes: usize,
+    undone: std::collections::BTreeSet<usize>,
+    noops: std::collections::BTreeSet<usize>,
+    acted: std::collections::BTreeSet<usize>,
+    created: Vec<usize>,
+    marks: Vec<crate::native::session::Mark>,
+}
+
+/// THE PENDING WRITE: every write of one turn, planned against a patched world and waiting for the
+/// member's tap (R-1088-2, R-1088-6). One per session, in memory (R-1088-10): a new message
+/// dismisses it, and a reopened thread starts a fresh session that never had it.
+#[derive(Debug, Clone)]
+pub struct PendingWrite {
+    pub id: String,
+    pub turn: usize,
+    /// The verbs of the turn's write calls, in order.
+    pub verbs: Vec<&'static str>,
+    /// The commands a confirm runs, in order.
+    pub steps: Vec<ParkedStep>,
+    /// What the card says will change: the change lines the calls showed the model.
+    pub preview: Vec<String>,
+    /// What `undo` would run to take it back, and what it cannot take back.
+    pub inverses: Vec<(String, Value)>,
+    pub not_undoable: Vec<String>,
+    /// How each row the steps address read when they were planned: a confirm that finds any of them
+    /// read differently is stale.
+    base: BTreeMap<Key, String>,
+    before: World,
+    calls: Vec<ParkedCall>,
+}
+
+impl PendingWrite {
+    /// Whether the card should ask twice: a delete, a cancel, a money write, or anything the vault
+    /// cannot take back.
+    #[must_use]
+    pub fn destructive(&self) -> bool {
+        self.not_undoable.len()
+            + self
+                .verbs
+                .iter()
+                .filter(|verb| matches!(**verb, "delete" | "cancel" | "settle_up" | "settle_debt"))
+                .count()
+            > 0
+    }
+
+    /// The pending write as the core hands it to the shell.
+    #[must_use]
+    pub fn to_json(&self) -> Value {
+        json!({
+            "id": self.id,
+            "turn": self.turn,
+            "verbs": self.verbs,
+            "preview": self.preview,
+            "steps": self.steps.iter().map(|step| json!({"command": step.command, "input": step.input})).collect::<Vec<_>>(),
+            "destructive": self.destructive(),
+            "not_undoable": self.not_undoable,
+        })
+    }
+}
+
+/// What a confirm did.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Confirmed {
+    /// Every step ran. `text` is the vault's own after-write observation of the turn (the parked
+    /// text, with the change lines read back from the vault) and `diff` its effect.
+    Done {
+        text: String,
+        diff: Value,
+        steps: usize,
+    },
+    /// A row the steps address reads differently than when they were planned: nothing ran.
+    Stale { rows: Vec<String> },
+    /// The vault refused a step. Steps before it ran (a batch is not atomic across commands).
+    Refused {
+        step: usize,
+        command: String,
+        predicate: String,
+        reason: String,
+        landed: usize,
+    },
+    /// No pending write by that id: dismissed, replaced, or never made.
+    Unknown,
+}
+
+impl Confirmed {
+    #[must_use]
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Done { text, diff, steps } => {
+                json!({"status": "done", "text": text, "diff": diff, "steps": steps})
+            }
+            Self::Stale { rows } => json!({"status": "stale", "rows": rows}),
+            Self::Refused {
+                step,
+                command,
+                predicate,
+                reason,
+                landed,
+            } => json!({
+                "status": "refused", "step": step, "command": command,
+                "predicate": predicate, "reason": reason, "landed": landed,
+            }),
+            Self::Unknown => json!({"status": "unknown"}),
+        }
+    }
 }
 
 /// What a patch needs of the session.
@@ -1676,10 +1811,12 @@ impl Session {
         match self.flags.writes {
             Writes::Run => self.door.step(command, input.clone()),
             Writes::Park => {
+                self.park_first();
                 self.door.advance();
                 let ran = self.patch(command, input, None)?;
                 if ran.ok {
                     self.park.steps.push(ParkedStep {
+                        call: self.park.calls.len(),
                         command: command.to_owned(),
                         input: input.clone(),
                         output: ran.output.clone(),
@@ -2071,4 +2208,385 @@ fn locker_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
     }
     row.updated = cx.now.clone();
     Ok(ok(json!({"item_id": id, "rotated": false, "columns": []})))
+}
+
+// ---------------------------------------------------------------------
+// park, confirm, dismiss
+// ---------------------------------------------------------------------
+
+fn substitute(value: &mut Value, aliases: &BTreeMap<String, String>) {
+    match value {
+        Value::String(text) => {
+            if let Some(real) = aliases.get(text.as_str()) {
+                text.clone_from(real);
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(|item| substitute(item, aliases)),
+        Value::Object(map) => map.values_mut().for_each(|item| substitute(item, aliases)),
+        _ => {}
+    }
+}
+
+fn strings<'v>(value: &'v Value, out: &mut Vec<&'v str>) {
+    match value {
+        Value::String(text) => out.push(text),
+        Value::Array(items) => items.iter().for_each(|item| strings(item, out)),
+        Value::Object(map) => map.values().for_each(|item| strings(item, out)),
+        _ => {}
+    }
+}
+
+/// How a row reads: the fields the model sees, its trash state and its edges. What a stale check
+/// compares, since a timestamp is not stamped by every write.
+fn fingerprint(world: &World, key: &Key) -> String {
+    let Some(row) = world.rows.get(key) else {
+        return "absent".to_owned();
+    };
+    let mut edges: Vec<String> = world
+        .edges
+        .iter()
+        .filter(|edge| edge.from == *key || edge.to == *key)
+        .map(|edge| format!("{:?}>{:?}:{:?}", edge.from, edge.to, edge.via))
+        .collect();
+    edges.sort();
+    format!(
+        "{:?}|{}",
+        crate::native::act::snapshot(row),
+        edges.join(",")
+    )
+}
+
+impl Session {
+    /// The pending write, while the member has not answered it.
+    #[must_use]
+    pub fn pending(&self) -> Option<&PendingWrite> {
+        self.park.pending.as_ref()
+    }
+
+    /// A write call parked: its verb and the lines it showed (`Session::execute`, `Session::undo`).
+    pub(crate) fn park_call(&mut self, verb: Verb, lines: Vec<(Key, usize, String)>) {
+        if self.flags.writes == Writes::Park {
+            self.park.call = Some(ParkedCall {
+                verb,
+                lines,
+                text: String::new(),
+            });
+        }
+    }
+
+    /// The step is final: keep the text of the call that parked, and, when the turn ends, make the
+    /// turn's pending write.
+    pub(crate) fn park_capture(&mut self, outcome: &mut crate::native::session::Outcome) {
+        if self.flags.writes != Writes::Park {
+            return;
+        }
+        if let Some(mut call) = self.park.call.take() {
+            call.text.clone_from(&outcome.text);
+            self.park.calls.push(call);
+        }
+        if outcome.ends_turn && !self.park.steps.is_empty() {
+            let pending = self.make_pending();
+            outcome
+                .effect
+                .insert("pending".to_owned(), pending.to_json());
+            self.park.pending = Some(pending);
+        }
+    }
+
+    fn make_pending(&mut self) -> PendingWrite {
+        let before = self
+            .park
+            .before
+            .clone()
+            .unwrap_or_else(|| self.world.clone());
+        let steps = self.park.steps.clone();
+        let calls = self.park.calls.clone();
+        let (inverses, not_undoable) = self
+            .writes
+            .iter()
+            .filter(|(turn, ..)| *turn == self.turn)
+            .fold(
+                (Vec::new(), Vec::new()),
+                |(mut inverses, mut notes), (_, list, more)| {
+                    inverses.extend(
+                        list.iter()
+                            .map(|inverse| (inverse.command.clone(), inverse.input.clone())),
+                    );
+                    notes.extend(more.iter().cloned());
+                    (inverses, notes)
+                },
+            );
+        let mut ids = Vec::new();
+        for step in &steps {
+            strings(&step.input, &mut ids);
+        }
+        let base = before
+            .rows
+            .keys()
+            .filter(|key| ids.contains(&key.1.as_str()))
+            .map(|key| (key.clone(), fingerprint(&before, key)))
+            .collect();
+        PendingWrite {
+            id: self.door.mint_id(),
+            turn: self.turn,
+            verbs: calls.iter().map(|call| call.verb.spec().name).collect(),
+            preview: calls
+                .iter()
+                .flat_map(|call| call.lines.iter().map(|(_, _, line)| line.clone()))
+                .collect(),
+            steps,
+            inverses,
+            not_undoable,
+            base,
+            before,
+            calls,
+        }
+    }
+
+    /// The first parked step of a turn: the world it plans against, kept to read the after-state
+    /// back against.
+    pub(crate) fn park_first(&mut self) {
+        if self.park.before.is_none() {
+            self.park.before = Some(self.world.clone());
+        }
+    }
+
+    /// A turn begins: the pending write of the last one, if the member did not answer it, is
+    /// dismissed (one per session), and the world is read afresh so the turn plans against what
+    /// the vault holds now.
+    pub(crate) fn park_begin_turn(&mut self) {
+        if self.flags.writes != Writes::Park {
+            return;
+        }
+        self.discard();
+        self.park.memory = Some(Memory {
+            writes: self.writes.len(),
+            undone: self.undone.clone(),
+            noops: self.noops.clone(),
+            acted: self.acted.clone(),
+            created: self.created.clone(),
+            marks: self.marks.clone(),
+        });
+    }
+
+    /// Put the session back as the turn found it and read the vault again: nothing the parked
+    /// steps did is left, in the world or in what the conversation remembers.
+    fn discard(&mut self) {
+        if let Some(memory) = self.park.memory.take()
+            && (self.park.pending.is_some() || !self.park.steps.is_empty())
+        {
+            self.writes.truncate(memory.writes);
+            self.undone = memory.undone;
+            self.noops = memory.noops;
+            self.acted = memory.acted;
+            self.created = memory.created;
+            self.marks = memory.marks;
+        }
+        self.settling.clear();
+        self.park.steps.clear();
+        self.park.calls.clear();
+        self.park.call = None;
+        self.park.before = None;
+        self.park.pending = None;
+        if let Ok(world) = World::load_with(&*self.door, self.flags.locker) {
+            self.park.world = Some(world.clone());
+            self.world = world;
+        }
+    }
+
+    /// The member dismissed the card: the vault is untouched and the session is as it was before
+    /// the turn. `false` when `id` is not the pending write.
+    pub fn dismiss(&mut self, id: &str) -> bool {
+        if self
+            .park
+            .pending
+            .as_ref()
+            .is_none_or(|pending| pending.id != id)
+        {
+            return false;
+        }
+        self.discard();
+        true
+    }
+
+    /// The member tapped the card: run the steps through the door, in order, with a key per step
+    /// so a confirm sent twice writes once. The after-write observation is read back from the
+    /// vault, not from the patch. See [`Confirmed`].
+    pub fn confirm(&mut self, id: &str) -> Confirmed {
+        if let Some((done, outcome)) = &self.park.confirmed
+            && done == id
+        {
+            return outcome.clone();
+        }
+        let Some(pending) = self.park.pending.clone().filter(|pending| pending.id == id) else {
+            return Confirmed::Unknown;
+        };
+        let outcome = self.run_pending(&pending);
+        // the pending write is answered either way: a stale or refused one is not offered again
+        self.park.steps.clear();
+        self.park.calls.clear();
+        self.park.before = None;
+        self.park.pending = None;
+        if !matches!(outcome, Confirmed::Done { .. }) {
+            self.settling.clear();
+            if let Some(memory) = self.park.memory.take() {
+                self.writes.truncate(memory.writes);
+                self.undone = memory.undone;
+                self.noops = memory.noops;
+                self.acted = memory.acted;
+                self.created = memory.created;
+                self.marks = memory.marks;
+            }
+            if let Ok(world) = World::load_with(&*self.door, self.flags.locker) {
+                self.park.world = Some(world.clone());
+                self.world = world;
+            }
+        }
+        self.park.confirmed = Some((id.to_owned(), outcome.clone()));
+        outcome
+    }
+
+    fn run_pending(&mut self, pending: &PendingWrite) -> Confirmed {
+        let Ok(fresh) = World::load_with(&*self.door, self.flags.locker) else {
+            return Confirmed::Refused {
+                step: 0,
+                command: String::new(),
+                predicate: "door".to_owned(),
+                reason: "the vault could not be read".to_owned(),
+                landed: 0,
+            };
+        };
+        let stale: Vec<String> = pending
+            .base
+            .iter()
+            .filter(|(key, print)| fingerprint(&fresh, key) != **print)
+            .map(|(key, _)| {
+                let name = fresh
+                    .rows
+                    .get(key)
+                    .or_else(|| pending.before.rows.get(key))
+                    .map_or_else(String::new, |row| row.name.clone());
+                format!("{} {name}", key.0.name())
+            })
+            .collect();
+        if !stale.is_empty() {
+            return Confirmed::Stale { rows: stale };
+        }
+        let mut aliases: BTreeMap<String, String> = BTreeMap::new();
+        let mut landed = 0;
+        let mut texts = Vec::new();
+        let mut before = pending.before.clone();
+        // the steps run call by call, and the vault is read after each call, as a run reads it: a
+        // call's lines are the vault's own change from the call before
+        let rounds = pending.calls.len()
+            + usize::from(pending.steps.iter().any(|s| s.call >= pending.calls.len()));
+        for round in 0..rounds {
+            for (index, step) in pending.steps.iter().enumerate() {
+                if step.call.min(pending.calls.len()) != round {
+                    continue;
+                }
+                let mut input = step.input.clone();
+                substitute(&mut input, &aliases);
+                self.door.advance();
+                let key = format!("{}:{index}", pending.id);
+                let refusal = |predicate: String, reason: String| Confirmed::Refused {
+                    step: index,
+                    command: step.command.clone(),
+                    predicate,
+                    reason,
+                    landed,
+                };
+                match self.door.run_keyed(&key, &step.command, input) {
+                    Ok(ran) if ran.ok => {
+                        // an id the patch made up for a row the vault names itself is the vault's now
+                        if let (Some(parked), Some(real)) =
+                            (step.output.as_object(), ran.output.as_object())
+                        {
+                            for (name, parked) in parked {
+                                if let (Some(parked), Some(real)) =
+                                    (parked.as_str(), real.get(name).and_then(Value::as_str))
+                                    && parked != real
+                                {
+                                    aliases.insert(parked.to_owned(), real.to_owned());
+                                }
+                            }
+                        }
+                        landed += 1;
+                    }
+                    Ok(ran) => {
+                        return refusal(
+                            ran.predicate.unwrap_or_default(),
+                            ran.reason.unwrap_or_default(),
+                        );
+                    }
+                    Err(error) => return refusal("door".to_owned(), error),
+                }
+            }
+            let Ok(after) = World::load_with(&*self.door, self.flags.locker) else {
+                return Confirmed::Refused {
+                    step: landed,
+                    command: String::new(),
+                    predicate: "door".to_owned(),
+                    reason: "the vault could not be read after the write".to_owned(),
+                    landed,
+                };
+            };
+            self.remap(&aliases);
+            self.world = after.clone();
+            self.park.world = Some(after.clone());
+            if let Some(call) = pending.calls.get(round) {
+                let mut text = call.text.clone();
+                for (key, n, shown) in &call.lines {
+                    let key = (
+                        key.0,
+                        aliases
+                            .get(&key.1)
+                            .cloned()
+                            .unwrap_or_else(|| key.1.clone()),
+                    );
+                    let line = self.change_line(call.verb, &before, &key, *n);
+                    text = text.replacen(shown.as_str(), &line, 1);
+                }
+                texts.push(text);
+            }
+            before = after;
+        }
+        let diff = crate::native::act::diff(&pending.before, &self.world);
+        Confirmed::Done {
+            text: texts.join("\n"),
+            diff: self.diff_json(&diff),
+            steps: pending.steps.len(),
+        }
+    }
+
+    /// A row the patch gave an id the vault replaced keeps its `#n` and its place in the undo
+    /// memory.
+    fn remap(&mut self, aliases: &BTreeMap<String, String>) {
+        if aliases.is_empty() {
+            return;
+        }
+        let rename = |key: &mut Key| {
+            if let Some(real) = aliases.get(&key.1) {
+                key.1.clone_from(real);
+            }
+        };
+        let numbers = std::mem::take(&mut self.numbers);
+        self.numbers = numbers
+            .into_iter()
+            .map(|(mut key, n)| {
+                rename(&mut key);
+                (key, n)
+            })
+            .collect();
+        self.by_number.iter_mut().for_each(rename);
+        for result in &mut self.results {
+            result.keys.iter_mut().for_each(rename);
+        }
+        for (_, inverses, _) in &mut self.writes {
+            for inverse in inverses {
+                substitute(&mut inverse.input, aliases);
+                rename(&mut inverse.key);
+            }
+        }
+    }
 }

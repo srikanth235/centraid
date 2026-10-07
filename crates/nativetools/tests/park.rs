@@ -65,7 +65,7 @@ fn is_id(text: &str) -> bool {
 
 /// Drive every pair of `VERBS` once on a fresh fixture world, in `writes` mode, and hand each
 /// pair's session, world and measured response to `check`.
-fn each_pair(writes: Writes, mut check: impl FnMut(&str, &mut Session, &World, &Value)) {
+fn each_pair(writes: Writes, mut check: impl FnMut(&str, &str, &mut Session, &World, &Value)) {
     for spec in VERBS {
         for (kind, command) in spec.commands {
             let pair = format!("{} {} -> {command}", spec.name, kind.name());
@@ -82,6 +82,7 @@ fn each_pair(writes: Writes, mut check: impl FnMut(&str, &mut Session, &World, &
             }
             check(
                 &pair,
+                command,
                 &mut session,
                 &world,
                 &measured.expect("a driven pair makes its measured call"),
@@ -93,7 +94,7 @@ fn each_pair(writes: Writes, mut check: impl FnMut(&str, &mut Session, &World, &
 #[test]
 fn the_patched_world_is_the_vaults_after_every_mapped_write() {
     let mut driven = 0;
-    each_pair(Writes::Shadow, |pair, session, _, _| {
+    each_pair(Writes::Shadow, |pair, _, session, _, _| {
         driven += 1;
         let drift = session.take_drift();
         assert!(
@@ -109,7 +110,7 @@ fn the_patched_world_is_the_vaults_after_every_mapped_write() {
 #[test]
 fn a_parked_write_answers_what_a_run_answers_and_writes_nothing() {
     let mut run = BTreeMap::new();
-    each_pair(Writes::Run, |pair, _, _, response| {
+    each_pair(Writes::Run, |pair, _, _, _, response| {
         run.insert(
             pair.to_owned(),
             (response["text"].clone(), canon(&response["effect"])),
@@ -117,13 +118,23 @@ fn a_parked_write_answers_what_a_run_answers_and_writes_nothing() {
     });
     let fresh = seeded_journal();
     let mut compared = 0;
-    each_pair(Writes::Park, |pair, _, world, response| {
+    each_pair(Writes::Park, |pair, command, _, world, response| {
         let (text, effect) = &run[pair];
         assert_eq!(&response["text"], text, "{pair}: the observation text");
-        assert_eq!(&canon(&response["effect"]), effect, "{pair}: the effect");
+        // the card the turn ended in is the parked turn's own; the rest of the effect is a run's
+        let mut shown = response["effect"].clone();
+        shown.as_object_mut().expect("an effect").remove("pending");
+        assert_eq!(&canon(&shown), effect, "{pair}: the effect");
+        // the setup a driver confirms (a folder made to be deleted) reaches the vault; the measured
+        // command never does
+        let ran = |journal: &BTreeMap<(String, String), usize>| {
+            journal
+                .get(&((*command).to_owned(), "executed".to_owned()))
+                .copied()
+        };
         assert_eq!(
-            journal(world),
-            fresh,
+            ran(&journal(world)),
+            ran(&fresh),
             "{pair}: a parked write reached the vault"
         );
         compared += 1;

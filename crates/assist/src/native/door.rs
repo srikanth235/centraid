@@ -80,6 +80,15 @@ pub trait Door {
     /// the Locker policy is off.
     fn unseal(&self, key_id: &str, item_id: &str, sealed: &str) -> Result<String, String>;
 
+    /// Run one command of a confirmed pending write: [`run`](Self::run) under a key that names
+    /// the step (`<pending id>:<step index>`), so a confirm sent twice cannot write twice. The
+    /// harness keeps no ledger of keys and just runs it; the core passes the key to
+    /// `api::invoke` as the `invoke_key` (see the module docs, "park and confirm").
+    fn run_keyed(&self, key: &str, command: &str, input: Value) -> Result<Ran, String> {
+        let _ = key;
+        self.run(command, input)
+    }
+
     /// Run one command a second after the last: [`advance`](Self::advance), then
     /// [`run`](Self::run).
     fn step(&self, command: &str, input: Value) -> Result<Ran, String> {

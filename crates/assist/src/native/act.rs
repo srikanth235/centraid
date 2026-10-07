@@ -1701,13 +1701,16 @@ impl Session {
             }
         }
         let mut lines = Vec::new();
+        let mut shown_lines: Vec<(Key, usize, String)> = Vec::new();
         self.mark_acted(&touched);
         self.mark_acted(&already_keys);
         for (shown, key) in touched.iter().enumerate() {
             let n = self.number(key);
             self.acted.insert(n);
             if verb != Verb::Reveal && shown < ROW_CAP {
-                lines.push(self.change_line(verb, &before, key, n));
+                let line = self.change_line(verb, &before, key, n);
+                shown_lines.push((key.clone(), n, line.clone()));
+                lines.push(line);
             }
         }
         if verb != Verb::Reveal && touched.len() > ROW_CAP {
@@ -1747,6 +1750,7 @@ impl Session {
                 .effect
                 .insert("revealed".to_owned(), json!(revealed));
         }
+        self.park_call(verb, shown_lines);
         Ok(outcome)
     }
 
@@ -1761,7 +1765,13 @@ impl Session {
     }
 
     /// `created: #31 task "Call plumber" · …` / `completed: #12 … · status open → completed`.
-    fn change_line(&mut self, verb: Verb, before: &World, key: &Key, n: usize) -> String {
+    pub(crate) fn change_line(
+        &mut self,
+        verb: Verb,
+        before: &World,
+        key: &Key,
+        n: usize,
+    ) -> String {
         let after = self.world.row(key).cloned();
         let old = before.row(key).cloned();
         let today = self.today();
@@ -1802,7 +1812,7 @@ impl Session {
         }
     }
 
-    fn diff_json(&mut self, diff: &Diff) -> Value {
+    pub(crate) fn diff_json(&mut self, diff: &Diff) -> Value {
         let rows: Vec<Value> = diff
             .rows
             .iter()
@@ -3568,11 +3578,14 @@ impl Session {
         }
         self.mark_acted(&touched);
         let mut out = Vec::new();
+        let mut shown_lines: Vec<(Key, usize, String)> = Vec::new();
         for (shown, key) in touched.iter().enumerate() {
             let n = self.number(key);
             self.acted.insert(n);
             if shown < ROW_CAP {
-                out.push(self.change_line(Verb::Undo, &before, key, n));
+                let line = self.change_line(Verb::Undo, &before, key, n);
+                shown_lines.push((key.clone(), n, line.clone()));
+                out.push(line);
             }
         }
         if touched.len() > ROW_CAP {
@@ -3591,6 +3604,7 @@ impl Session {
         let mut outcome = Outcome::text(out.join("\n"));
         let diff_json = self.diff_json(&diff);
         outcome.effect.insert("diff".to_owned(), diff_json);
+        self.park_call(Verb::Undo, shown_lines);
         Ok(outcome)
     }
 }
@@ -4104,7 +4118,7 @@ pub(crate) struct Diff {
     pub links: Vec<(bool, Key, Key)>,
 }
 
-fn snapshot(row: &Row) -> BTreeMap<String, Value> {
+pub(crate) fn snapshot(row: &Row) -> BTreeMap<String, Value> {
     let mut out = BTreeMap::new();
     out.insert("name".to_owned(), json!(row.name));
     out.insert(

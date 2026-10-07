@@ -5,7 +5,7 @@ use centraid_nativetools::Session;
 use centraid_nativetools::meta::Kind;
 use serde_json::{Value, json};
 
-use super::{call, number, numbers, trashed_number};
+use super::{call, number, numbers, settled, trashed_number};
 
 /// The measured call: the one whose journal delta is checked.
 pub type Measure<'a> = &'a mut dyn FnMut(&mut Session, Value) -> Value;
@@ -98,7 +98,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 Kind::Group => "Flat",
                 Kind::Folder => {
                     session.user("");
-                    let made = call(
+                    let made = settled(
                         session,
                         "act",
                         json!({"verb": "create", "kind": "folder", "args": {"name": "Scratch"}}),
@@ -138,7 +138,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
             });
             if already.is_none() {
                 let row = number(session, name, target);
-                let deleted = call(session, "act", json!({"verb": "delete", "rows": row}));
+                let deleted = settled(session, "act", json!({"verb": "delete", "rows": row}));
                 assert!(
                     deleted["text"].as_str().unwrap().starts_with("deleted"),
                     "{}",
