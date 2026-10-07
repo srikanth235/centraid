@@ -566,6 +566,7 @@ dependencies = [
  "centraid-apps-tally",
  "centraid-search",
  "centraid-vault",
+ "flate2",
  "jiff",
  "serde",
  "serde_json",

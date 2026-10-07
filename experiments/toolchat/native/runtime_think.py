@@ -1,7 +1,9 @@
-"""The stateless think compiler, as the Python side calls it: one `nativetools think` process per Python process.
+"""The stateless side of the runtime, as the Python side calls it: one `nativetools think` process per Python process.
 
 The compiler that turns the slots of a think into the call the renderer writes (`compile_think`), and the rewrite of a v3.1
-think as v4 (`v4_think`), live in the Rust runtime (`crates/assist/src/native/think.rs`); this module is the client. It is what
+think as v4 (`v4_think`), live in the Rust runtime (`crates/assist/src/native/think.rs`), and so does the transcript renderer
+(`render`, `render_many`, `call_text`, `user_content`: `crates/assist/src/native/transcript.rs`, the one text the trainer, the eval
+driver and the phone's prompt are made of); this module is the client. It is what
 `train/fmt.py` `call_of_think` (the decoder's forced call, the data builder's check of every record) and `fmt.records` (the
 v4 rewrite of the thinks at training time) call, and what `authored/trace.py`'s `derive_trace3` round-trips against.
 
@@ -14,6 +16,12 @@ every sampled step of a turn, and a build checks the same think of every drill).
     v4_think(think, history=None, dates=None) -> str                                raises V4Skip
     context_of(think, history) -> dict       what the v4 rewrite reads of the conversation in front of the call: the turn's
                                              message, the block's `focus:` line, and the rows the think names
+    render(messages) -> (text, spans)        the transcript of render records (`render.py` documents them): its text and the loss
+                                             spans (code points) of every assistant message
+    prompt(messages) -> str                  the transcript followed by the generation header
+    render_many(list of messages) -> [(text, spans)]   `render` of many transcripts in one request
+    call_text(tool, args) -> str             one tool call as the chat template writes it
+    user_content(text, block) -> str         a user turn's content: the runtime's block, a blank line, the message
 
 `mode` is `v3.1` or `v4`, how a think with no construct of either version is read (None: `default_mode()`).
 """
@@ -86,10 +94,12 @@ class _Process:
             return self._start()
         return self.proc
 
-    def ask(self, request: dict) -> dict:
+    def ask(self, request: dict, cache: bool = True, error: type = RuntimeError) -> dict:
+        """One request line in, one answer line out. `cache=False` for a request that is large or seen once (a transcript:
+        the cache holds the lines themselves); `error` is what an `{"error": ...}` answer raises."""
         line = json.dumps(request, ensure_ascii=False, separators=(",", ":"))
         with self.lock:
-            hit = self.cache.get(line)
+            hit = self.cache.get(line) if cache else None
             if hit is not None:
                 self.cache.move_to_end(line)
                 return hit
@@ -109,10 +119,11 @@ class _Process:
                     raise RuntimeError(f"`{binary()} think` did not answer: {err.strip()[:300]}")
             reply = json.loads(answer)
             if "error" in reply:
-                raise RuntimeError(f"`nativetools think`: {reply['error']}")
-            self.cache[line] = reply
-            if len(self.cache) > CACHE_SIZE:
-                self.cache.popitem(last=False)
+                raise error(f"`nativetools think`: {reply['error']}")
+            if cache:
+                self.cache[line] = reply
+                if len(self.cache) > CACHE_SIZE:
+                    self.cache.popitem(last=False)
             return reply
 
     def close(self) -> None:
@@ -148,6 +159,43 @@ def compile_think(think: str, dates: str | None = None, mode: str | None = None)
         raise Refused(reply["refused"]["class"], reply["refused"]["message"])
     call = reply["call"]
     return {"tool": call["tool"], "args": dict(call["args"])}  # the cached answer is shared: a caller gets its own
+
+
+def render(messages: list[dict]) -> tuple[str, list[tuple[int, int]]]:
+    """The transcript of `messages` (render records: system with its tools, user, assistant with its think and call, tool):
+    `(text, loss spans in code points)`. The renderer is the runtime's (`transcript.rs`); a transcript it refuses (a system
+    message that is not first, an unknown role) raises ValueError."""
+    return _transcript(_PROCESS.ask({"op": "render", "messages": messages}, cache=False, error=ValueError))
+
+
+def prompt(messages: list[dict]) -> str:
+    """The transcript of `messages` followed by the assistant header that opens a generation (`<|im_start|>assistant\\n<think>\\n`)."""
+    return _PROCESS.ask({"op": "prompt", "messages": messages}, cache=False, error=ValueError)["prompt"]
+
+
+def render_many(conversations: list[list[dict]]) -> list[tuple[str, list[tuple[int, int]]]]:
+    """`render` of each transcript, in one request."""
+    reply = _PROCESS.ask({"op": "render_many", "conversations": conversations}, cache=False, error=ValueError)
+    out = []
+    for one in reply["renders"]:
+        if "error" in one:
+            raise ValueError(f"`nativetools think`: {one['error']}")
+        out.append(_transcript(one))
+    return out
+
+
+def _transcript(reply: dict) -> tuple[str, list[tuple[int, int]]]:
+    return reply["text"], [(a, b) for a, b in reply["spans"]]
+
+
+def call_text(tool: str, args: dict) -> str:
+    """One native tool call, as the chat template writes it (the runtime's `parse_call` reads it back)."""
+    return _PROCESS.ask({"op": "call_text", "tool": tool, "args": args}, error=ValueError)["text"]
+
+
+def user_content(text: str, block: str | None) -> str:
+    """A user turn's content (SPEC §6.1): the runtime's block (`vault:`, `focus:` and `dates:` lines), a blank line, the message."""
+    return _PROCESS.ask({"op": "user_content", "text": text, "block": block}, error=ValueError)["text"]
 
 
 def v4_think(think: str, history: list[dict] | None = None, dates: str | None = None) -> str:

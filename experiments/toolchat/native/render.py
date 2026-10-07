@@ -1,5 +1,9 @@
 """The one renderer for native sessions (SPEC §6.4, §11.7): data, trainer and eval driver import it.
 
+The renderer is the Rust runtime's (`crates/assist/src/native/transcript.rs`, #1088); the functions here are thin wrappers that
+ask it through `runtime_think` (`nativetools think`), so the text the trainer learns, the eval driver prompts with and the phone
+prompts with is made by one implementation. What stays here is what only Python has: the HF tokenizer and `tokens_with_loss`.
+
 Qwen3.5's token format (its identity and special strings are `identity.json` of the Rust runtime's export, read once
 below), except that EVERY assistant message keeps its thinking (Qwen's default
 chat template drops the thinking of turns before the last user message; the harness keeps it so
@@ -12,8 +16,9 @@ Message records (plain dicts):
   {"role": "tool", "content": str}                      # the runtime's text, compacted as the harness shows it
 
   render(messages) -> (text, loss_char_spans)
-      loss spans cover each assistant message from just after "<think>\\n" through "<|im_end|>";
-      nothing of system, user or tool text carries loss.
+      loss spans cover each assistant message from just after "<think>\\n" through "<|im_end|>" (code points of the text);
+      nothing of system, user or tool text carries loss. A record keeps the order of its `args` (and of a nested map): the
+      call is written in that order. Raises ValueError for a system message that is not first and for an unknown role.
   render_prompt_for_generation(messages) -> text
       the history (thinking kept) followed by "<|im_start|>assistant\\n<think>\\n".
 """
@@ -22,6 +27,8 @@ from __future__ import annotations
 import functools
 import json
 from pathlib import Path
+
+import runtime_think  # the runtime's renderer, as a client (experiments/toolchat/native/runtime_think.py)
 
 
 def _load_identity() -> dict:
@@ -58,75 +65,13 @@ def tokenizer():
     return AutoTokenizer.from_pretrained(TOKENIZER)
 
 
-@functools.lru_cache(maxsize=16)
-def _system_block(content: str, tools_json: str) -> str:
-    """Qwen's own system block (the <tools> preamble + the system text), taken from its chat template."""
-    tools = json.loads(tools_json) or None
-    probe = "⁣probe⁣"
-    text = tokenizer().apply_chat_template(
-        [{"role": "system", "content": content}, {"role": "user", "content": probe}],
-        tools=tools, tokenize=False)
-    cut = text.index(f"{IM_START}user\n{probe}")
-    return text[:cut]
-
-
-def _arg_value(v) -> str:
-    # the chat template: mappings and sequences as JSON (tojson), everything else as a string
-    if isinstance(v, (dict, list)):
-        return json.dumps(v, ensure_ascii=False)
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    return str(v)
-
-
 def call_text(tool: str, args: dict) -> str:
-    """One native tool call, exactly as the template writes it (the runtime's `call_text` parses it)."""
-    out = f"{TOOL_CALL_OPEN}\n{FUNCTION_OPEN}{tool}>\n"
-    for k, v in args.items():
-        out += f"{PARAMETER_OPEN}{k}>\n{_arg_value(v)}\n{PARAMETER_CLOSE}\n"
-    return out + f"{FUNCTION_CLOSE}\n{TOOL_CALL_CLOSE}"
-
-
-def _assistant_body(m: dict) -> str:
-    think = (m.get("think") or "").strip()
-    return f"{think}\n{THINK_CLOSE}\n\n{call_text(m['tool'], m['args'])}{IM_END}"
+    """One native tool call, exactly as the template writes it (the runtime's `parse_call` reads it back)."""
+    return runtime_think.call_text(tool, args)
 
 
 def render(messages: list[dict]) -> tuple[str, list[tuple[int, int]]]:
-    parts: list[str] = []
-    spans: list[tuple[int, int]] = []
-    pos = 0
-
-    def put(s: str) -> None:
-        nonlocal pos
-        parts.append(s)
-        pos += len(s)
-
-    prev = None
-    for i, m in enumerate(messages):
-        role = m["role"]
-        if role == "system":
-            if i != 0:
-                raise ValueError("system message must come first")
-            put(_system_block(m["content"].strip(), json.dumps(m.get("tools") or [], sort_keys=False)))
-        elif role == "user":
-            put(f"{IM_START}user\n{m['content'].strip()}{IM_END}\n")
-        elif role == "assistant":
-            put(ASSISTANT_OPEN)
-            body = _assistant_body(m)
-            spans.append((pos, pos + len(body)))
-            put(body + "\n")
-        elif role == "tool":
-            if prev != "tool":
-                put(f"{IM_START}user")
-            put(f"\n{TOOL_RESPONSE_OPEN}\n{m['content'].strip()}\n{TOOL_RESPONSE_CLOSE}")
-            nxt = messages[i + 1]["role"] if i + 1 < len(messages) else None
-            if nxt != "tool":
-                put(f"{IM_END}\n")
-        else:
-            raise ValueError(f"unknown role {role}")
-        prev = role
-    return "".join(parts), spans
+    return runtime_think.render(messages)
 
 
 def user_content(text: str, preground: str | None) -> str:
@@ -134,12 +79,11 @@ def user_content(text: str, preground: str | None) -> str:
     `focus:` and `dates:` lines, the `block` of the `user` reply; the argument keeps its old name), a blank
     line, then the message. Every path that feeds a Qwen model (training data, the eval driver's hf
     backend) uses this."""
-    return f"{preground}\n\n{text}" if preground else text
+    return runtime_think.user_content(text, preground)
 
 
 def render_prompt_for_generation(messages: list[dict]) -> str:
-    text, _ = render(messages)
-    return text + ASSISTANT_OPEN
+    return runtime_think.prompt(messages)
 
 
 def tokens_with_loss(text: str, spans: list[tuple[int, int]]) -> tuple[list[int], list[tuple[int, int]]]:
