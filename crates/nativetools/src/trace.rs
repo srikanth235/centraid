@@ -35,6 +35,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 
+use crate::identity::MODEL;
 use crate::session::Session;
 use crate::world::Key;
 
@@ -119,12 +120,14 @@ pub struct Trace {
 /// `None` when the message holds no call.
 #[must_use]
 pub fn think_of(message: &str) -> Option<&str> {
-    let head = &message[..message.find("<tool_call>")?];
+    let head = &message[..message.find(MODEL.tool_call_open)?];
     let head = head
-        .rsplit_once("</think>")
+        .rsplit_once(MODEL.think_close)
         .map_or(head, |(inside, _)| inside);
     let head = head.trim_start();
-    let head = head.strip_prefix("<think>").unwrap_or(head);
+    let head = head
+        .strip_prefix(MODEL.think_open.trim_end())
+        .unwrap_or(head);
     Some(head.trim())
 }
 

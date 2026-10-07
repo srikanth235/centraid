@@ -301,7 +301,7 @@ def load_tokenizer(name: str | None):
     try:
         from transformers import AutoTokenizer
 
-        return AutoTokenizer.from_pretrained(name or "Qwen/Qwen3.5-0.8B")
+        return AutoTokenizer.from_pretrained(name or render.TOKENIZER)
     except Exception as e:  # noqa: BLE001
         print(f"note: no tokenizer ({e!r:.100}); estimating by characters", file=sys.stderr)
         return None
@@ -918,7 +918,7 @@ def main() -> None:
     s.add_argument("--frac", type=float, default=0.3, help="share of the passing sessions that are sampled too")
     s.add_argument("--seed", type=int, default=1044, help="seed of that draw")
     s.add_argument("--tokens", action="store_true", help="estimate the tokens of the set from the reference records of --built")
-    s.add_argument("--tokenizer", help="tokenizer for --tokens (default Qwen/Qwen3.5-0.8B from the HF cache)")
+    s.add_argument("--tokenizer", help=f"tokenizer for --tokens (default {render.TOKENIZER} from the HF cache)")
     e = sub.add_parser("export", parents=[common], help="RFT records, DPO pairs and a summary from the scored screen and sample runs")
     e.add_argument("--screen-run", nargs="+", required=True)
     e.add_argument("--screen-report", nargs="+", help="report.json of the screen scoring run (else the runs are rescored: EVAL_WORLDS)")

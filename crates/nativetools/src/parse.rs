@@ -3,6 +3,7 @@
 
 use serde_json::{Map, Value, json};
 
+use crate::identity::MODEL;
 use crate::meta;
 use crate::session::handle_list;
 
@@ -45,49 +46,54 @@ pub fn parse_call(text: &str) -> Result<Value, String> {
     // ONE CALL PER MESSAGE (nt12 R5): a second call is not queued; the first runs and the reply
     // says so (`ONLY_FIRST`, `extra_calls`). The model could not have meant the second to run
     // first, and the reply tells it the second did not run.
-    let calls = text.matches("<tool_call>").count();
-    let functions = text.matches("<function=").count();
+    let calls = text.matches(MODEL.tool_call_open).count();
+    let functions = text.matches(MODEL.function_open).count();
     let extra = calls.max(functions).saturating_sub(1);
-    let body = match text.find("<tool_call>") {
+    let body = match text.find(MODEL.tool_call_open) {
         Some(start) => {
-            let rest = &text[start + "<tool_call>".len()..];
-            rest.find("</tool_call>").map_or(rest, |end| &rest[..end])
+            let rest = &text[start + MODEL.tool_call_open.len()..];
+            rest.find(MODEL.tool_call_close)
+                .map_or(rest, |end| &rest[..end])
         }
-        None => return Err(unreadable("no <tool_call>")),
+        None => {
+            return Err(unreadable(&format!("no {}", MODEL.tool_call_open)));
+        }
     };
-    let (name, rest) =
-        between(body, "<function=", ">").ok_or_else(|| unreadable("no <function=…>"))?;
+    let (name, rest) = between(body, MODEL.function_open, ">")
+        .ok_or_else(|| unreadable(&format!("no {}…>", MODEL.function_open)))?;
     let name = name.trim();
     if !meta::TOOLS.contains(&name) {
         return Err(unreadable(&format!("no tool \"{name}\"")));
     }
-    let inner = rest.find("</function>").map_or(rest, |end| &rest[..end]);
+    let inner = rest
+        .find(MODEL.function_close)
+        .map_or(rest, |end| &rest[..end]);
     let mut args = Map::new();
     let mut cursor = inner;
-    while let Some(start) = cursor.find("<parameter=") {
-        let after = &cursor[start + "<parameter=".len()..];
+    while let Some(start) = cursor.find(MODEL.parameter_open) {
+        let after = &cursor[start + MODEL.parameter_open.len()..];
         let close = after
             .find('>')
-            .ok_or_else(|| unreadable("an unclosed <parameter=…>"))?;
+            .ok_or_else(|| unreadable(&format!("an unclosed {}…>", MODEL.parameter_open)))?;
         let key = after[..close].trim().to_owned();
         let value_start = &after[close + 1..];
         // A LEAKED OPENER: `<parameter=within>` straight followed by another
         // `<parameter=…>` has no value of its own; the inner one is the
         // parameter the model meant.
-        if value_start.trim_start().starts_with("<parameter=") {
+        if value_start.trim_start().starts_with(MODEL.parameter_open) {
             cursor = value_start;
             continue;
         }
-        let end = value_start
-            .find("</parameter>")
-            .ok_or_else(|| unreadable(&format!("parameter {key} has no </parameter>")))?;
+        let end = value_start.find(MODEL.parameter_close).ok_or_else(|| {
+            unreadable(&format!("parameter {key} has no {}", MODEL.parameter_close))
+        })?;
         let raw = trim_one_newline(&value_start[..end]);
         let (key, value) = salvage(name, &key, raw).unwrap_or_else(|| {
             let value = typed(&key, raw);
             (key.clone(), value)
         });
         args.entry(key).or_insert(value);
-        cursor = &value_start[end + "</parameter>".len()..];
+        cursor = &value_start[end + MODEL.parameter_close.len()..];
     }
     let mut call = json!({"tool": name, "args": Value::Object(args)});
     if extra > 0 {

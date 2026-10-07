@@ -85,8 +85,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import render  # noqa: E402  (experiments/toolchat/native/render.py)
 
 IGNORE = -100
-ASSISTANT_OPEN = "<|im_start|>assistant\n<think>\n"
-IM_END = "<|im_end|>"
+ASSISTANT_OPEN = render.ASSISTANT_OPEN
+IM_END = render.IM_END
 
 
 def read_examples(path: str | Path, partial_ok: bool = False):
@@ -171,7 +171,7 @@ THINK_LABELS = ("intent", "verb", "scope", "refer", "target", "when", "pick",   
 DEFAULT_LABELS = THINK_LABELS
 SLOT_SEP = r"(?:^|\n| · )"  # what may precede a slot label in a think
 SLOT = re.compile(SLOT_SEP + r"([a-z_][a-z0-9_]*): ?")
-PARAM = re.compile(r"<parameter=([^>\n]+)>\n(.*?)\n</parameter>", re.S)
+PARAM = re.compile(re.escape(render.PARAMETER_OPEN) + r"([^>\n]+)>\n(.*?)\n" + re.escape(render.PARAMETER_CLOSE), re.S)
 JSON_ATOM = re.compile(r'"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null')
 PART_THINK, PART_CALL = 1, 2  # values of `encode()["decision"]`: 0 = not a decision token
 PART_HARD = 4                 # bit added to PART_THINK / PART_CALL on a hard-tier decision token
@@ -397,8 +397,8 @@ def call_spans(call: str, cfg: DecisionConfig) -> list[tuple[int, int]]:
 def decision_char_spans(body: str, cfg: DecisionConfig) -> list[tuple[int, int, int]]:
     """(start, end, part) char spans over one trained region `body` (think + `</think>` + call +
     `<|im_end|>`, as render.render's spans cover it), sorted; part is PART_THINK or PART_CALL."""
-    cut = body.index("</think>")
-    c0 = body.index("<tool_call>", cut)
+    cut = body.index(render.THINK_CLOSE)
+    c0 = body.index(render.TOOL_CALL_OPEN, cut)
     out = [(a, b, PART_THINK) for a, b in think_spans(body[:cut], cfg)]
     out += [(c0 + a, c0 + b, PART_CALL) for a, b in call_spans(body[c0:], cfg)]
     return sorted(out)
@@ -473,8 +473,8 @@ def hard_char_spans(body: str, cfg: DecisionConfig) -> list[tuple[int, int]]:
     hard = cfg.hard
     if hard is None or hard.empty:
         return []
-    cut = body.index("</think>")
-    c0 = body.index("<tool_call>", cut)
+    cut = body.index(render.THINK_CLOSE)
+    c0 = body.index(render.TOOL_CALL_OPEN, cut)
     return sorted(hard_think_spans(body[:cut], hard) + [(c0 + a, c0 + b) for a, b in hard_call_spans(body[c0:], hard)])
 
 
@@ -549,7 +549,7 @@ def copy_char_spans(body: str, user: str | None, cfg: DecisionConfig) -> list[tu
     copy = cfg.copy
     if copy is None or copy.empty or not user:
         return []
-    think = body[:body.index("</think>")]
+    think = body[:body.index(render.THINK_CLOSE)]
     ms = list(SLOT.finditer(think))
     out = []
     for i, m in enumerate(ms):
@@ -599,7 +599,7 @@ def check_decisions(enc: dict, cfg: DecisionConfig | None = None) -> None:
         body = text[s:e]
         if any(k not in cfg.skip_params for k in args) and PART_CALL not in parts:
             raise AssertionError("call with arguments has no decision token: %r" % body[-200:])
-        slots = {x.group(1) for x in SLOT.finditer(body[:body.index("</think>")])} & (set(cfg.labels) - set(cfg.ref_labels))
+        slots = {x.group(1) for x in SLOT.finditer(body[:body.index(render.THINK_CLOSE)])} & (set(cfg.labels) - set(cfg.ref_labels))
         copied = cfg.copy is not None and not cfg.copy.empty and any(dec[i] & PART_COPY for i in toks)
         if slots and PART_THINK not in parts and not copied:  # a slot whose whole value is a copy has no decision token left
             raise AssertionError("think slots %s have no decision token: %r" % (sorted(slots), body[:200]))
@@ -618,7 +618,7 @@ def check_decisions(enc: dict, cfg: DecisionConfig | None = None) -> None:
                 raise AssertionError("call with hard arguments %s has no hard token: %r" % (sorted(hargs), body[-200:]))
             if hargs:  # the hard text of the call holds every letter and digit of the hard values, in order
                 only = replace(hard, ref_params=(), param_names=False)
-                c0 = body.index("<tool_call>")
+                c0 = body.index(render.TOOL_CALL_OPEN)
                 got = "".join(body[c0 + a:c0 + b] for a, b in hard_call_spans(body[c0:], only))
                 want = "".join(render._arg_value(v) for v in hargs.values())
                 if not hard.json_keys:  # a date expression counts by its leaves: drop its `"key":`
@@ -644,7 +644,7 @@ def encode(tok, ex: dict, default_tools=None, cfg: DecisionConfig | None = None)
                              % (spans[:3], assistant_ranges(text)[:3], n_assistant))
     for s, e in spans:
         body = text[s:e]
-        if body.count("</think>") != 1 or body.count("<tool_call>") != 1 or "<|im_start|>" in body:
+        if body.count(render.THINK_CLOSE) != 1 or body.count(render.TOOL_CALL_OPEN) != 1 or render.IM_START in body:
             raise AssertionError("trained region is not one think + one call: %r" % body[:200])
     enc = tok(text, add_special_tokens=False, return_offsets_mapping=True)
     ids, offs = enc["input_ids"], enc["offset_mapping"]
@@ -734,13 +734,13 @@ def trace3():
 def msgs_in_prompt(prompt: str) -> list[dict]:
     """The records a rendered prompt shows (system, user, tool; assistant turns skipped), enough for `dates_line_in_prompt`."""
     msgs = []
-    for seg in prompt.split("<|im_start|>")[1:]:
+    for seg in prompt.split(render.IM_START)[1:]:
         role, _, body = seg.partition("\n")
         body = body.split(IM_END)[0]
         if role == "system":
             msgs.append({"role": "system", "content": body.split("</IMPORTANT>")[-1]})
         elif role == "user":
-            msgs.append({"role": "tool" if "<tool_response>" in body else "user", "content": body})
+            msgs.append({"role": "tool" if render.TOOL_RESPONSE_OPEN in body else "user", "content": body})
     return msgs
 
 

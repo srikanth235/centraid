@@ -1,0 +1,1673 @@
+{
+  "constants": {
+    "DIRECTORY_CAP": 8,
+    "OPEN_LINK_CAP": 8,
+    "PREGROUND_CAP": 8,
+    "ROW_CAP": 12,
+    "STEP_CAP": 6
+  },
+  "date_examples": [
+    {
+      "expr": "{\"unit\":\"month\",\"name\":11,\"rel\":-1}",
+      "reads": "last november"
+    },
+    {
+      "expr": "{\"unit\":\"day\",\"rel\":0}",
+      "reads": "today"
+    },
+    {
+      "expr": "{\"unit\":\"day\",\"rel\":1}",
+      "reads": "tomorrow"
+    },
+    {
+      "expr": "{\"unit\":\"day\",\"rel\":-3}",
+      "reads": "three days ago"
+    },
+    {
+      "expr": "{\"unit\":\"week\",\"rel\":0}",
+      "reads": "this week"
+    },
+    {
+      "expr": "{\"unit\":\"week\",\"rel\":1,\"weekday\":1,\"time\":\"14:00\"}",
+      "reads": "next monday at 2"
+    },
+    {
+      "expr": "{\"unit\":\"hour\",\"rel\":-1,\"anchor\":\"row\"}",
+      "reads": "an hour earlier"
+    },
+    {
+      "expr": "{\"date\":\"2026-09-30\"}",
+      "reads": "a date"
+    },
+    {
+      "expr": "{\"date\":\"2026-09-30\",\"time\":\"09:30\"}",
+      "reads": "a date with a time"
+    },
+    {
+      "expr": "{\"from\":{...},\"to\":{...}}",
+      "reads": "a span"
+    },
+    {
+      "expr": "{\"to\":{\"unit\":\"day\",\"rel\":-1}}",
+      "reads": "before today"
+    }
+  ],
+  "date_units": [
+    "minute",
+    "hour",
+    "day",
+    "week",
+    "month",
+    "year"
+  ],
+  "decline_reasons": [
+    "out_of_scope",
+    "unbounded_destruction",
+    "sealed_egress",
+    "fabricated_secret",
+    "never_mind",
+    "not_found"
+  ],
+  "kinds": [
+    {
+      "balance": "me versus that person; positive = they owe me",
+      "card": "person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: groups, events, tasks, notes, photos, debts · verbs: create edit delete restore star unstar add_to remove_from log settle_up · balance: me versus that person; positive = they owe me",
+      "container": false,
+      "date": {
+        "label": "last contacted",
+        "source": {
+          "column": "last_contacted_at",
+          "table": "people_profile"
+        }
+      },
+      "entity": "core.party",
+      "fields": [
+        {
+          "create": true,
+          "edit": "people.edit_person",
+          "name": "role",
+          "source": {
+            "column": "role",
+            "table": "people_profile"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": true,
+          "edit": "people.edit_person",
+          "name": "nickname",
+          "source": {
+            "column": "nickname",
+            "table": "people_profile"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": "people.edit_person",
+          "name": "met",
+          "source": {
+            "column": "met",
+            "table": "people_profile"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": true,
+          "edit": "people.set_cadence",
+          "name": "cadence",
+          "source": {
+            "column": "cadence_days",
+            "table": "people_profile"
+          },
+          "type": "number",
+          "unit": "days",
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "starred",
+          "source": {
+            "column": "concept_id",
+            "table": "core_tag"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "person",
+      "links": [
+        {
+          "kind": "group",
+          "label": "groups",
+          "via": "membership"
+        },
+        {
+          "kind": "event",
+          "label": "events",
+          "via": "attendee"
+        },
+        {
+          "kind": "task",
+          "label": "tasks",
+          "via": "about"
+        },
+        {
+          "kind": "note",
+          "label": "notes",
+          "via": "about"
+        },
+        {
+          "kind": "photo",
+          "label": "photos",
+          "via": "about"
+        },
+        {
+          "kind": "debt",
+          "label": "debts",
+          "via": "counterparty"
+        }
+      ],
+      "name": "person",
+      "name_source": {
+        "column": "display_name",
+        "table": "core_party"
+      },
+      "pk": "party_id",
+      "plural": "people",
+      "table": "core_party",
+      "trash": true,
+      "verbs": [
+        "create",
+        "edit",
+        "delete",
+        "restore",
+        "star",
+        "unstar",
+        "add_to",
+        "remove_from",
+        "log",
+        "settle_up"
+      ],
+      "where_fields": [
+        "role",
+        "nickname",
+        "met",
+        "cadence",
+        "starred"
+      ]
+    },
+    {
+      "balance": "with linked_to a person: that person's net position in the group; positive = the group owes them",
+      "card": "group: name, currency · links: members · verbs: create edit delete · balance: with linked_to a person: that person's net position in the group; positive = the group owes them",
+      "container": true,
+      "date": null,
+      "entity": "tally.group",
+      "fields": [
+        {
+          "create": true,
+          "edit": null,
+          "name": "currency",
+          "source": {
+            "column": "currency",
+            "table": "tally_group"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "group",
+      "links": [
+        {
+          "kind": "person",
+          "label": "members",
+          "via": "membership"
+        }
+      ],
+      "name": "group",
+      "name_source": {
+        "column": "name",
+        "table": "social_circle"
+      },
+      "pk": "group_id",
+      "plural": "groups",
+      "table": "tally_group",
+      "trash": false,
+      "verbs": [
+        "create",
+        "edit",
+        "delete"
+      ],
+      "where_fields": [
+        "currency"
+      ]
+    },
+    {
+      "balance": null,
+      "card": "event: name, date (start), status (confirmed|tentative|cancelled), duration (min), description · links: people · verbs: create edit reschedule cancel delete restore",
+      "container": false,
+      "date": {
+        "label": "start",
+        "source": {
+          "column": "dtstart",
+          "table": "core_event"
+        }
+      },
+      "entity": "core.event",
+      "fields": [
+        {
+          "create": false,
+          "edit": null,
+          "name": "status",
+          "source": {
+            "column": "status",
+            "table": "core_event"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "confirmed",
+              "confirmed"
+            ],
+            [
+              "tentative",
+              "tentative"
+            ],
+            [
+              "cancelled",
+              "cancelled"
+            ]
+          ]
+        },
+        {
+          "create": true,
+          "edit": "schedule.edit_event",
+          "name": "duration",
+          "source": {
+            "column": "dtend",
+            "table": "core_event"
+          },
+          "type": "number",
+          "unit": "min",
+          "values": []
+        },
+        {
+          "create": true,
+          "edit": "schedule.edit_event",
+          "name": "description",
+          "source": {
+            "column": "description",
+            "table": "core_event"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "event",
+      "links": [
+        {
+          "kind": "person",
+          "label": "people",
+          "via": "attendee"
+        }
+      ],
+      "name": "event",
+      "name_source": {
+        "column": "summary",
+        "table": "core_event"
+      },
+      "pk": "event_id",
+      "plural": "events",
+      "table": "core_event",
+      "trash": true,
+      "verbs": [
+        "create",
+        "edit",
+        "reschedule",
+        "cancel",
+        "delete",
+        "restore"
+      ],
+      "where_fields": [
+        "status",
+        "duration",
+        "description"
+      ]
+    },
+    {
+      "balance": null,
+      "card": "task: name, date (due), status (open|in_progress|completed|cancelled), effort (min), priority (1 highest..9 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen delete restore add_to remove_from",
+      "container": false,
+      "date": {
+        "label": "due",
+        "source": {
+          "column": "due_at",
+          "table": "schedule_task"
+        }
+      },
+      "entity": "schedule.task",
+      "fields": [
+        {
+          "create": false,
+          "edit": "schedule.set_task_status",
+          "name": "status",
+          "source": {
+            "column": "status",
+            "table": "schedule_task"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "open",
+              "needs-action"
+            ],
+            [
+              "in_progress",
+              "in-process"
+            ],
+            [
+              "completed",
+              "completed"
+            ],
+            [
+              "cancelled",
+              "cancelled"
+            ]
+          ]
+        },
+        {
+          "create": true,
+          "edit": "schedule.edit_task",
+          "name": "effort",
+          "source": {
+            "column": "effort_min",
+            "table": "schedule_task"
+          },
+          "type": "number",
+          "unit": "min",
+          "values": []
+        },
+        {
+          "create": true,
+          "edit": "schedule.edit_task",
+          "name": "priority",
+          "source": {
+            "column": "priority",
+            "table": "schedule_task"
+          },
+          "type": "number",
+          "unit": "1 highest..9 lowest, 0 none",
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "completed",
+          "source": {
+            "column": "completed_at",
+            "table": "schedule_task"
+          },
+          "type": "date",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": true,
+          "edit": "schedule.edit_task",
+          "name": "description",
+          "source": {
+            "column": "description",
+            "table": "schedule_task"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "task",
+      "links": [
+        {
+          "kind": "task",
+          "label": "subtasks",
+          "via": "subtask"
+        },
+        {
+          "kind": "person",
+          "label": "people",
+          "via": "about"
+        },
+        {
+          "kind": "list",
+          "label": "list",
+          "via": "list_column"
+        }
+      ],
+      "name": "task",
+      "name_source": {
+        "column": "title",
+        "table": "schedule_task"
+      },
+      "pk": "task_id",
+      "plural": "tasks",
+      "table": "schedule_task",
+      "trash": true,
+      "verbs": [
+        "create",
+        "edit",
+        "reschedule",
+        "complete",
+        "reopen",
+        "delete",
+        "restore",
+        "add_to",
+        "remove_from"
+      ],
+      "where_fields": [
+        "status",
+        "effort",
+        "priority",
+        "completed",
+        "description"
+      ]
+    },
+    {
+      "balance": null,
+      "card": "note: name, date (created), body, pinned (yes|no) · links: notebook, people · verbs: create edit delete restore add_to remove_from",
+      "container": false,
+      "date": {
+        "label": "created",
+        "source": {
+          "column": "created_at",
+          "table": "knowledge_note"
+        }
+      },
+      "entity": "knowledge.note",
+      "fields": [
+        {
+          "create": true,
+          "edit": "knowledge.edit_note",
+          "name": "body",
+          "source": {
+            "column": "body_text",
+            "table": "core_content_text"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": "knowledge.edit_note",
+          "name": "pinned",
+          "source": {
+            "column": "pinned",
+            "table": "knowledge_note"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "note",
+      "links": [
+        {
+          "kind": "notebook",
+          "label": "notebook",
+          "via": "entry"
+        },
+        {
+          "kind": "person",
+          "label": "people",
+          "via": "about"
+        }
+      ],
+      "name": "note",
+      "name_source": {
+        "column": "title",
+        "table": "knowledge_note"
+      },
+      "pk": "note_id",
+      "plural": "notes",
+      "table": "knowledge_note",
+      "trash": true,
+      "verbs": [
+        "create",
+        "edit",
+        "delete",
+        "restore",
+        "add_to",
+        "remove_from"
+      ],
+      "where_fields": [
+        "body",
+        "pinned"
+      ]
+    },
+    {
+      "balance": null,
+      "card": "document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar add_to remove_from",
+      "container": false,
+      "date": {
+        "label": "created",
+        "source": {
+          "column": "created_at",
+          "table": "core_document"
+        }
+      },
+      "entity": "core.document",
+      "fields": [
+        {
+          "create": false,
+          "edit": null,
+          "name": "starred",
+          "source": {
+            "column": "concept_id",
+            "table": "core_tag"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "document",
+      "links": [
+        {
+          "kind": "folder",
+          "label": "folder",
+          "via": "folder_tag"
+        }
+      ],
+      "name": "document",
+      "name_source": {
+        "column": "title",
+        "table": "core_document"
+      },
+      "pk": "document_id",
+      "plural": "documents",
+      "table": "core_document",
+      "trash": true,
+      "verbs": [
+        "create",
+        "edit",
+        "delete",
+        "restore",
+        "star",
+        "unstar",
+        "add_to",
+        "remove_from"
+      ],
+      "where_fields": [
+        "starred"
+      ]
+    },
+    {
+      "balance": null,
+      "card": "photo: name, date (taken), starred (yes|no) · links: albums, people · verbs: edit delete restore star unstar add_to remove_from",
+      "container": false,
+      "date": {
+        "label": "taken",
+        "source": {
+          "column": "captured_at",
+          "table": "media_asset"
+        }
+      },
+      "entity": "media.asset",
+      "fields": [
+        {
+          "create": false,
+          "edit": null,
+          "name": "starred",
+          "source": {
+            "column": "concept_id",
+            "table": "core_tag"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "photo",
+      "links": [
+        {
+          "kind": "album",
+          "label": "albums",
+          "via": "entry"
+        },
+        {
+          "kind": "person",
+          "label": "people",
+          "via": "about"
+        }
+      ],
+      "name": "photo",
+      "name_source": {
+        "column": "title",
+        "table": "media_asset"
+      },
+      "pk": "asset_id",
+      "plural": "photos",
+      "table": "media_asset",
+      "trash": true,
+      "verbs": [
+        "edit",
+        "delete",
+        "restore",
+        "star",
+        "unstar",
+        "add_to",
+        "remove_from"
+      ],
+      "where_fields": [
+        "starred"
+      ]
+    },
+    {
+      "balance": null,
+      "card": "album: name · links: photos · verbs: create edit delete",
+      "container": true,
+      "date": null,
+      "entity": "core.collection",
+      "fields": [],
+      "kind": "album",
+      "links": [
+        {
+          "kind": "photo",
+          "label": "photos",
+          "via": "entry"
+        }
+      ],
+      "name": "album",
+      "name_source": {
+        "column": "name",
+        "table": "core_collection"
+      },
+      "pk": "collection_id",
+      "plural": "albums",
+      "table": "core_collection",
+      "trash": false,
+      "verbs": [
+        "create",
+        "edit",
+        "delete"
+      ],
+      "where_fields": []
+    },
+    {
+      "balance": null,
+      "card": "debt: name, date (incurred), amount (USD), direction (owes_me|i_owe), status (open|settled) · links: person · verbs: create settle_debt",
+      "container": false,
+      "date": {
+        "label": "incurred",
+        "source": {
+          "column": "incurred_on",
+          "table": "tally_obligation"
+        }
+      },
+      "entity": "tally.obligation",
+      "fields": [
+        {
+          "create": true,
+          "edit": null,
+          "name": "amount",
+          "source": {
+            "column": "amount_minor",
+            "table": "tally_obligation"
+          },
+          "type": "money",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": true,
+          "edit": null,
+          "name": "direction",
+          "source": {
+            "column": "from_party",
+            "table": "tally_obligation"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "owes_me",
+              "owed"
+            ],
+            [
+              "i_owe",
+              "owe"
+            ]
+          ]
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "status",
+          "source": {
+            "column": "settled_at",
+            "table": "tally_obligation"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "open",
+              "open"
+            ],
+            [
+              "settled",
+              "settled"
+            ]
+          ]
+        }
+      ],
+      "kind": "debt",
+      "links": [
+        {
+          "kind": "person",
+          "label": "person",
+          "via": "counterparty"
+        }
+      ],
+      "name": "debt",
+      "name_source": {
+        "column": "reason",
+        "table": "tally_obligation"
+      },
+      "pk": "obligation_id",
+      "plural": "debts",
+      "table": "tally_obligation",
+      "trash": false,
+      "verbs": [
+        "create",
+        "settle_debt"
+      ],
+      "where_fields": [
+        "amount",
+        "direction",
+        "status"
+      ]
+    },
+    {
+      "balance": null,
+      "card": "locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal",
+      "container": false,
+      "date": null,
+      "entity": "locker.item",
+      "fields": [
+        {
+          "create": true,
+          "edit": null,
+          "name": "type",
+          "source": {
+            "column": "type",
+            "table": "locker_item"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "login",
+              "login"
+            ],
+            [
+              "card",
+              "card"
+            ],
+            [
+              "note",
+              "note"
+            ],
+            [
+              "identity",
+              "identity"
+            ],
+            [
+              "wifi",
+              "wifi"
+            ],
+            [
+              "password",
+              "password"
+            ],
+            [
+              "ssh_key",
+              "ssh_key"
+            ],
+            [
+              "api_credential",
+              "api_credential"
+            ],
+            [
+              "passport",
+              "passport"
+            ],
+            [
+              "bank_account",
+              "bank_account"
+            ],
+            [
+              "driving_licence",
+              "driving_licence"
+            ],
+            [
+              "software_licence",
+              "software_licence"
+            ],
+            [
+              "crypto_wallet",
+              "crypto_wallet"
+            ],
+            [
+              "membership",
+              "membership"
+            ],
+            [
+              "document",
+              "document"
+            ]
+          ]
+        },
+        {
+          "create": true,
+          "edit": "locker.edit_item",
+          "name": "username",
+          "source": {
+            "column": "username",
+            "table": "locker_item"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": true,
+          "edit": "locker.edit_item",
+          "name": "url",
+          "source": {
+            "column": "url",
+            "table": "locker_item"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": true,
+          "edit": "locker.edit_item",
+          "name": "notes",
+          "source": {
+            "column": "notes",
+            "table": "locker_item"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "starred",
+          "source": {
+            "column": "concept_id",
+            "table": "core_tag"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "locker_item",
+      "links": [],
+      "name": "locker item",
+      "name_source": {
+        "column": "title",
+        "table": "locker_item"
+      },
+      "pk": "item_id",
+      "plural": "locker items",
+      "table": "locker_item",
+      "trash": true,
+      "verbs": [
+        "create",
+        "edit",
+        "delete",
+        "restore",
+        "star",
+        "unstar",
+        "reveal"
+      ],
+      "where_fields": [
+        "type",
+        "username",
+        "url",
+        "notes",
+        "starred"
+      ]
+    },
+    {
+      "balance": null,
+      "card": "notebook: name · links: notes · verbs: create edit delete",
+      "container": true,
+      "date": null,
+      "entity": "core.collection",
+      "fields": [],
+      "kind": "notebook",
+      "links": [
+        {
+          "kind": "note",
+          "label": "notes",
+          "via": "entry"
+        }
+      ],
+      "name": "notebook",
+      "name_source": {
+        "column": "name",
+        "table": "core_collection"
+      },
+      "pk": "collection_id",
+      "plural": "notebooks",
+      "table": "core_collection",
+      "trash": false,
+      "verbs": [
+        "create",
+        "edit",
+        "delete"
+      ],
+      "where_fields": []
+    },
+    {
+      "balance": null,
+      "card": "folder: name · links: documents · verbs: create edit delete",
+      "container": true,
+      "date": null,
+      "entity": "core.concept",
+      "fields": [],
+      "kind": "folder",
+      "links": [
+        {
+          "kind": "document",
+          "label": "documents",
+          "via": "folder_tag"
+        }
+      ],
+      "name": "folder",
+      "name_source": {
+        "column": "pref_label",
+        "table": "core_concept"
+      },
+      "pk": "concept_id",
+      "plural": "folders",
+      "table": "core_concept",
+      "trash": false,
+      "verbs": [
+        "create",
+        "edit",
+        "delete"
+      ],
+      "where_fields": []
+    },
+    {
+      "balance": null,
+      "card": "list: name, area · links: tasks · verbs: create edit",
+      "container": true,
+      "date": null,
+      "entity": "schedule.project",
+      "fields": [
+        {
+          "create": true,
+          "edit": "schedule.save_project",
+          "name": "area",
+          "source": {
+            "column": "area",
+            "table": "schedule_project"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "list",
+      "links": [
+        {
+          "kind": "task",
+          "label": "tasks",
+          "via": "list_column"
+        }
+      ],
+      "name": "list",
+      "name_source": {
+        "column": "name",
+        "table": "schedule_project"
+      },
+      "pk": "project_id",
+      "plural": "lists",
+      "table": "schedule_project",
+      "trash": false,
+      "verbs": [
+        "create",
+        "edit"
+      ],
+      "where_fields": [
+        "area"
+      ]
+    }
+  ],
+  "log_kinds": [
+    "call",
+    "message",
+    "visit",
+    "coffee"
+  ],
+  "mapped_columns": [
+    "core_collection.collection_id",
+    "core_collection.name",
+    "core_concept.concept_id",
+    "core_concept.pref_label",
+    "core_content_text.body_text",
+    "core_document.created_at",
+    "core_document.document_id",
+    "core_document.title",
+    "core_event.description",
+    "core_event.dtend",
+    "core_event.dtstart",
+    "core_event.event_id",
+    "core_event.status",
+    "core_event.summary",
+    "core_party.display_name",
+    "core_party.party_id",
+    "core_tag.concept_id",
+    "knowledge_note.created_at",
+    "knowledge_note.note_id",
+    "knowledge_note.pinned",
+    "knowledge_note.title",
+    "locker_item.item_id",
+    "locker_item.notes",
+    "locker_item.title",
+    "locker_item.type",
+    "locker_item.url",
+    "locker_item.username",
+    "media_asset.asset_id",
+    "media_asset.captured_at",
+    "media_asset.title",
+    "people_profile.cadence_days",
+    "people_profile.last_contacted_at",
+    "people_profile.met",
+    "people_profile.nickname",
+    "people_profile.role",
+    "schedule_project.area",
+    "schedule_project.name",
+    "schedule_project.project_id",
+    "schedule_task.completed_at",
+    "schedule_task.description",
+    "schedule_task.due_at",
+    "schedule_task.effort_min",
+    "schedule_task.priority",
+    "schedule_task.status",
+    "schedule_task.task_id",
+    "schedule_task.title",
+    "social_circle.name",
+    "tally_group.currency",
+    "tally_group.group_id",
+    "tally_obligation.amount_minor",
+    "tally_obligation.from_party",
+    "tally_obligation.incurred_on",
+    "tally_obligation.obligation_id",
+    "tally_obligation.reason",
+    "tally_obligation.settled_at"
+  ],
+  "mapped_commands": [
+    "core.add_document",
+    "core.create_folder",
+    "core.delete_folder",
+    "core.link_entities",
+    "core.move_document",
+    "core.rename_document",
+    "core.rename_folder",
+    "core.restore_document",
+    "core.star_document",
+    "core.trash_document",
+    "core.unlink_entities",
+    "core.unstar_document",
+    "knowledge.create_note",
+    "knowledge.create_notebook",
+    "knowledge.delete_note",
+    "knowledge.delete_notebook",
+    "knowledge.edit_note",
+    "knowledge.move_note",
+    "knowledge.rename_notebook",
+    "knowledge.restore_note",
+    "locker.add_item",
+    "locker.edit_item",
+    "locker.restore_item",
+    "locker.reveal_receipt",
+    "locker.star_item",
+    "locker.trash_item",
+    "locker.unstar_item",
+    "media.add_asset",
+    "media.add_to_album",
+    "media.create_album",
+    "media.delete_album",
+    "media.delete_asset",
+    "media.remove_from_album",
+    "media.rename_album",
+    "media.restore_asset",
+    "media.set_favorite",
+    "media.update_asset",
+    "people.add_debt",
+    "people.add_person",
+    "people.edit_person",
+    "people.log_interaction",
+    "people.restore_person",
+    "people.set_cadence",
+    "people.settle_debt",
+    "people.star_person",
+    "people.trash_person",
+    "people.unstar_person",
+    "schedule.add_task",
+    "schedule.cancel_event",
+    "schedule.delete_event",
+    "schedule.delete_task",
+    "schedule.edit_event",
+    "schedule.edit_task",
+    "schedule.organize_task",
+    "schedule.propose_event",
+    "schedule.reschedule_event",
+    "schedule.restore_event",
+    "schedule.restore_task",
+    "schedule.save_project",
+    "schedule.set_task_status",
+    "tally.add_expense",
+    "tally.add_group_member",
+    "tally.create_group",
+    "tally.delete_group",
+    "tally.remove_group_member",
+    "tally.rename_group",
+    "tally.settle_up"
+  ],
+  "multi_kind_params": [
+    "kind",
+    "name",
+    "when",
+    "linked_to",
+    "within",
+    "exclude",
+    "limit",
+    "trashed"
+  ],
+  "ops": [
+    "count",
+    "sum",
+    "min",
+    "max",
+    "balance"
+  ],
+  "reveal_fields": [
+    {
+      "column": "password",
+      "name": "password"
+    },
+    {
+      "column": "otp_seed",
+      "name": "code"
+    },
+    {
+      "column": "card_number",
+      "name": "card_number"
+    },
+    {
+      "column": "cvv",
+      "name": "cvv"
+    },
+    {
+      "column": "content",
+      "name": "content"
+    }
+  ],
+  "selector_params": [
+    "kind",
+    "name",
+    "where",
+    "when",
+    "linked_to",
+    "within",
+    "exclude",
+    "order",
+    "limit",
+    "trashed"
+  ],
+  "tools": [
+    "search",
+    "find",
+    "open",
+    "compute",
+    "act",
+    "answer",
+    "ask",
+    "decline"
+  ],
+  "verbs": [
+    {
+      "args": "kind: <kind>, name: <text>, then that kind's fields (dates as date expressions)",
+      "commands": [
+        [
+          "person",
+          "people.add_person"
+        ],
+        [
+          "group",
+          "tally.create_group"
+        ],
+        [
+          "event",
+          "schedule.propose_event"
+        ],
+        [
+          "task",
+          "schedule.add_task"
+        ],
+        [
+          "note",
+          "knowledge.create_note"
+        ],
+        [
+          "document",
+          "core.add_document"
+        ],
+        [
+          "album",
+          "media.create_album"
+        ],
+        [
+          "debt",
+          "people.add_debt"
+        ],
+        [
+          "locker_item",
+          "locker.add_item"
+        ],
+        [
+          "notebook",
+          "knowledge.create_notebook"
+        ],
+        [
+          "folder",
+          "core.create_folder"
+        ],
+        [
+          "list",
+          "schedule.save_project"
+        ]
+      ],
+      "done": "created",
+      "name": "create",
+      "verb": "create"
+    },
+    {
+      "args": "field: value lines (name, or any editable field; body+: or description+: adds text)",
+      "commands": [
+        [
+          "person",
+          "people.edit_person"
+        ],
+        [
+          "group",
+          "tally.rename_group"
+        ],
+        [
+          "event",
+          "schedule.edit_event"
+        ],
+        [
+          "task",
+          "schedule.edit_task"
+        ],
+        [
+          "note",
+          "knowledge.edit_note"
+        ],
+        [
+          "document",
+          "core.rename_document"
+        ],
+        [
+          "photo",
+          "media.update_asset"
+        ],
+        [
+          "album",
+          "media.rename_album"
+        ],
+        [
+          "locker_item",
+          "locker.edit_item"
+        ],
+        [
+          "notebook",
+          "knowledge.rename_notebook"
+        ],
+        [
+          "folder",
+          "core.rename_folder"
+        ],
+        [
+          "list",
+          "schedule.save_project"
+        ]
+      ],
+      "done": "edited",
+      "name": "edit",
+      "verb": "edit"
+    },
+    {
+      "args": "to: <date expression>",
+      "commands": [
+        [
+          "task",
+          "schedule.edit_task"
+        ],
+        [
+          "event",
+          "schedule.reschedule_event"
+        ]
+      ],
+      "done": "rescheduled",
+      "name": "reschedule",
+      "verb": "reschedule"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "task",
+          "schedule.set_task_status"
+        ]
+      ],
+      "done": "completed",
+      "name": "complete",
+      "verb": "complete"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "task",
+          "schedule.set_task_status"
+        ]
+      ],
+      "done": "reopened",
+      "name": "reopen",
+      "verb": "reopen"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "event",
+          "schedule.cancel_event"
+        ]
+      ],
+      "done": "cancelled",
+      "name": "cancel",
+      "verb": "cancel"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "person",
+          "people.trash_person"
+        ],
+        [
+          "group",
+          "tally.delete_group"
+        ],
+        [
+          "event",
+          "schedule.delete_event"
+        ],
+        [
+          "task",
+          "schedule.delete_task"
+        ],
+        [
+          "note",
+          "knowledge.delete_note"
+        ],
+        [
+          "document",
+          "core.trash_document"
+        ],
+        [
+          "photo",
+          "media.delete_asset"
+        ],
+        [
+          "album",
+          "media.delete_album"
+        ],
+        [
+          "locker_item",
+          "locker.trash_item"
+        ],
+        [
+          "notebook",
+          "knowledge.delete_notebook"
+        ],
+        [
+          "folder",
+          "core.delete_folder"
+        ]
+      ],
+      "done": "deleted",
+      "name": "delete",
+      "verb": "delete"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "person",
+          "people.restore_person"
+        ],
+        [
+          "event",
+          "schedule.restore_event"
+        ],
+        [
+          "task",
+          "schedule.restore_task"
+        ],
+        [
+          "note",
+          "knowledge.restore_note"
+        ],
+        [
+          "document",
+          "core.restore_document"
+        ],
+        [
+          "photo",
+          "media.restore_asset"
+        ],
+        [
+          "locker_item",
+          "locker.restore_item"
+        ]
+      ],
+      "done": "restored",
+      "name": "restore",
+      "verb": "restore"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "person",
+          "people.star_person"
+        ],
+        [
+          "document",
+          "core.star_document"
+        ],
+        [
+          "photo",
+          "media.set_favorite"
+        ],
+        [
+          "locker_item",
+          "locker.star_item"
+        ]
+      ],
+      "done": "starred",
+      "name": "star",
+      "verb": "star"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "person",
+          "people.unstar_person"
+        ],
+        [
+          "document",
+          "core.unstar_document"
+        ],
+        [
+          "photo",
+          "media.set_favorite"
+        ],
+        [
+          "locker_item",
+          "locker.unstar_item"
+        ]
+      ],
+      "done": "unstarred",
+      "name": "unstar",
+      "verb": "unstar"
+    },
+    {
+      "args": "to: #n (the group, album, notebook, folder or list)",
+      "commands": [
+        [
+          "person",
+          "tally.add_group_member"
+        ],
+        [
+          "photo",
+          "media.add_to_album"
+        ],
+        [
+          "note",
+          "knowledge.move_note"
+        ],
+        [
+          "document",
+          "core.move_document"
+        ],
+        [
+          "task",
+          "schedule.organize_task"
+        ]
+      ],
+      "done": "added",
+      "name": "add_to",
+      "verb": "add_to"
+    },
+    {
+      "args": "from: #n",
+      "commands": [
+        [
+          "person",
+          "tally.remove_group_member"
+        ],
+        [
+          "photo",
+          "media.remove_from_album"
+        ],
+        [
+          "note",
+          "knowledge.move_note"
+        ],
+        [
+          "document",
+          "core.move_document"
+        ],
+        [
+          "task",
+          "schedule.organize_task"
+        ]
+      ],
+      "done": "removed",
+      "name": "remove_from",
+      "verb": "remove_from"
+    },
+    {
+      "args": "kind: call|message|visit|coffee",
+      "commands": [
+        [
+          "person",
+          "people.log_interaction"
+        ]
+      ],
+      "done": "logged",
+      "name": "log",
+      "verb": "log"
+    },
+    {
+      "args": "group: #n (amount = their balance unless given as amount: N)",
+      "commands": [
+        [
+          "person",
+          "tally.settle_up"
+        ]
+      ],
+      "done": "settled up",
+      "name": "settle_up",
+      "verb": "settle_up"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "debt",
+          "people.settle_debt"
+        ]
+      ],
+      "done": "settled",
+      "name": "settle_debt",
+      "verb": "settle_debt"
+    },
+    {
+      "args": "field: password|code|card_number|cvv|content",
+      "commands": [
+        [
+          "locker_item",
+          "locker.reveal_receipt"
+        ]
+      ],
+      "done": "revealed",
+      "name": "reveal",
+      "verb": "reveal"
+    },
+    {
+      "args": "",
+      "commands": [],
+      "done": "undone",
+      "name": "undo",
+      "verb": "undo"
+    }
+  ]
+}

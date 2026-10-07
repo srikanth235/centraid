@@ -9,6 +9,7 @@ use std::collections::BTreeSet;
 use serde_json::{Value, json};
 
 use crate::dates::Unit;
+use crate::identity::MODEL;
 use crate::meta::{self, Kind, LOOKUP_CAP, VERBS};
 use crate::render;
 use crate::session::Session;
@@ -435,18 +436,41 @@ pub fn kind_card(currency: &str) -> Vec<String> {
         .collect()
 }
 
-const QWEN_CALL_FORMAT: &str = "If you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n<parameter=example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\n</IMPORTANT>";
+/// Qwen's own sentence that tells the model how to call a function, written
+/// from the model's identity so the markers are the ones the parser reads.
+fn call_format() -> String {
+    format!(
+        "If you choose to call a function ONLY reply in the following format with NO suffix:\n\n\
+{tc}\n{fo}example_function_name>\n{po}example_parameter_1>\nvalue_1\n{pc}\n{po}example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n{pc}\n{fc}\n{tcc}\n\n\
+<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner {fo}...>{fc} block must be nested within {tc}{tcc} XML tags\n\
+- Required parameters MUST be specified\n\
+- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n\
+- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\n\
+</IMPORTANT>",
+        tc = MODEL.tool_call_open,
+        tcc = MODEL.tool_call_close,
+        fo = MODEL.function_open,
+        fc = MODEL.function_close,
+        po = MODEL.parameter_open,
+        pc = MODEL.parameter_close,
+    )
+}
 
 /// The Qwen3.5 tools block of the system turn.
 #[must_use]
 pub fn tools_block(tools: &[Value]) -> String {
-    let mut out = String::from("# Tools\n\nYou have access to the following functions:\n\n<tools>");
+    let mut out = format!(
+        "# Tools\n\nYou have access to the following functions:\n\n{}",
+        MODEL.tools_open
+    );
     for tool in tools {
         out.push('\n');
         out.push_str(&py_json(tool));
     }
-    out.push_str("\n</tools>\n\n");
-    out.push_str(QWEN_CALL_FORMAT);
+    out.push('\n');
+    out.push_str(MODEL.tools_close);
+    out.push_str("\n\n");
+    out.push_str(&call_format());
     out
 }
 
@@ -490,8 +514,10 @@ pub fn prompt(session: &mut Session) -> Value {
     }
     let tools = tools_for(session.flags.tools);
     let rendered = format!(
-        "<|im_start|>system\n{}\n\n{system}<|im_end|>\n",
-        tools_block(&tools)
+        "{}system\n{}\n\n{system}{}\n",
+        MODEL.im_start,
+        tools_block(&tools),
+        MODEL.im_end
     );
     json!({
         "system": system,

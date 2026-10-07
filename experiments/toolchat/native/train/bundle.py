@@ -48,6 +48,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 NATIVE = HERE.parent
 REPO = HERE.parents[3]
+sys.path.insert(0, str(NATIVE))
+import render  # noqa: E402  (the shared renderer: the model's tokenizer id is its identity.json)
 STAGE = Path(os.environ.get("BUNDLE_STAGE") or Path(os.environ.get("TMPDIR") or "/tmp") / "centraid-bundles")
 TRAIN_FILES = ["fmt.py", "train.py", "decode.py", "hf_backend.py", "batching.py"]
 # + ../render.py, the shared renderer, and ../authored/trace.py (fmt.py compiles the slot trace with it; stage_eval copies it)
@@ -383,7 +385,7 @@ def parser() -> argparse.ArgumentParser:
                     "default 0 = none)")
     ap.add_argument("--resume", action="store_true", help="train.py --resume (continue from the newest resume "
                     "checkpoint in the run's out folder, else start fresh)")
-    ap.add_argument("--model", default="Qwen/Qwen3.5-0.8B")
+    ap.add_argument("--model", default=render.TOKENIZER)
     ap.add_argument("--init-ckpt", help="gs:// checkpoint directory the training starts from instead of --model (job.json `init`; "
                     "run_job.sh pulls it): a continuation run")
     ap.add_argument("--hours", type=float, default=8.0, help="training wall-clock budget")

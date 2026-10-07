@@ -30,6 +30,7 @@ pub mod export;
 mod failsoft;
 mod follow;
 pub mod ground;
+pub mod identity;
 pub mod meta;
 mod normalize;
 pub mod parse;

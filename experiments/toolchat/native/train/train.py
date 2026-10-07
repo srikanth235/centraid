@@ -970,7 +970,7 @@ def write_marks(out, marks):
 def parser() -> argparse.ArgumentParser:
     """The command line (a function of its own so that the defaults can be read, and tested, without running a training)."""
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="Qwen/Qwen3.5-0.8B")
+    ap.add_argument("--model", default=fmt.render.TOKENIZER)
     ap.add_argument("--train", help="train file (required unless --dpo; with --dpo it is never trained on: it is the sample the TRAIN "
                     "metrics score)")
     ap.add_argument("--val")

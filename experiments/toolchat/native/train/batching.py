@@ -222,9 +222,10 @@ class BatchedBackend:
         says what happened."""
         import decode
         from hf_backend import _call_key, compiled_message
-        if prompt.endswith("<|im_start|>assistant\n"):
-            prompt += "<think>\n"
-        assert prompt.endswith("<|im_start|>assistant\n<think>\n"), prompt[-60:]
+        render = decode.fmt.render
+        if prompt.endswith(render.ASSISTANT_HEADER):
+            prompt += render.THINK_OPEN
+        assert prompt.endswith(render.ASSISTANT_OPEN), prompt[-60:]
         dates = decode.fmt.dates_line_in_prompt(prompt)
         with self._tok_lock:
             ids = self.tok(prompt, add_special_tokens=False)["input_ids"]
@@ -323,7 +324,7 @@ class BatchedBackend:
             info = dict(st.info, prompt_tokens=len(r.ids), new_tokens=len(toks), think_tokens=st.n_think,
                         seconds=secs, stopped=bool(toks and toks[-1] == im_end), batch=n, padded=width)
             body = self.tok.decode([t for t in toks if t != im_end], skip_special_tokens=False)
-            out.append(("<think>\n" + r.prefix + body, info))
+            out.append((decode.fmt.render.THINK_OPEN + r.prefix + body, info))
             self._record(info)
         return out
 

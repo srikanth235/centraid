@@ -30,9 +30,9 @@ class Decoder:
         """`think_limit`: think tokens before `</think>` is forced. Once the think is closed the call is not sampled but written by
         `fmt.call_of_think` (a think that does not state a whole call leaves the call to the model)."""
         self.model, self.tok = model, tok
-        self.im_end = tok.convert_tokens_to_ids("<|im_end|>")
-        self.think_end = tok.convert_tokens_to_ids("</think>")
-        self.call_end = tok.convert_tokens_to_ids("</tool_call>")
+        self.im_end = tok.convert_tokens_to_ids(fmt.render.IM_END)
+        self.think_end = tok.convert_tokens_to_ids(fmt.render.THINK_CLOSE)
+        self.call_end = tok.convert_tokens_to_ids(fmt.render.TOOL_CALL_CLOSE)
         self.think_limit = think_limit
         self.max_new_tokens = max_new_tokens
 
@@ -45,8 +45,8 @@ class Decoder:
         """One assistant message for an already rendered prompt (ending `<|im_start|>assistant\\n`,
         with or without the `<think>\\n` the template's generation prompt adds). `prefix`: the start of the think, given
         (`retry: <slot>\\n` after the runtime refused a slot); the message returned includes it."""
-        if prompt.endswith("<|im_start|>assistant\n"):
-            prompt += "<think>\n"
+        if prompt.endswith(fmt.render.ASSISTANT_HEADER):
+            prompt += fmt.render.THINK_OPEN
         return self.generate(prompt, sample=sample, seed=seed, dates=fmt.dates_line_in_prompt(prompt), prefix=prefix)
 
     @torch.no_grad()
@@ -55,7 +55,7 @@ class Decoder:
         text is the whole assistant message and starts with `<think>\\n`. `dates`: the `dates:` line of the turn's message
         (what the call the think states is read against); `prefix`: the first lines of the think, given before the model writes."""
         from transformers import LogitsProcessorList
-        assert prompt.endswith("<|im_start|>assistant\n<think>\n"), prompt[-60:]
+        assert prompt.endswith(fmt.render.ASSISTANT_OPEN), prompt[-60:]
         dev = next(self.model.parameters()).device
         pre = self.tok(prefix, add_special_tokens=False)["input_ids"] if prefix else []
         ids = torch.tensor([self.tok(prompt, add_special_tokens=False)["input_ids"] + pre], device=dev)
@@ -71,7 +71,7 @@ class Decoder:
         info = dict(proc.info, prompt_tokens=ids.shape[1], new_tokens=len(out), think_tokens=proc.n_think,
                     seconds=time.time() - t0, stopped=bool(out and out[-1] == self.im_end))
         body = self.tok.decode([t for t in out if t != self.im_end], skip_special_tokens=False)
-        return "<think>\n" + prefix + body, info
+        return fmt.render.THINK_OPEN + prefix + body, info
 
 
 class _Step:

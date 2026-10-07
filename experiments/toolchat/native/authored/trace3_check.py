@@ -59,8 +59,9 @@ def today_of(system: str) -> str | None:
 
 def tokenizer():
     try:
+        import render
         from transformers import AutoTokenizer
-        return AutoTokenizer.from_pretrained("Qwen/Qwen3.5-0.8B", local_files_only=True)
+        return AutoTokenizer.from_pretrained(render.TOKENIZER, local_files_only=True)
     except Exception:  # noqa: BLE001
         return None
 

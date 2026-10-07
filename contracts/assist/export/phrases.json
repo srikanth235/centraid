@@ -1,0 +1,1085 @@
+[
+  {
+    "echo": "Wed 2026-09-30",
+    "expr": {
+      "rel": 0,
+      "unit": "day"
+    },
+    "phrase": "today",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Thu 2026-10-01",
+    "expr": {
+      "rel": 1,
+      "unit": "day"
+    },
+    "phrase": "tomorrow",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Tue 2026-09-29",
+    "expr": {
+      "rel": -1,
+      "unit": "day"
+    },
+    "phrase": "yesterday",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Fri 2026-10-02",
+    "expr": {
+      "rel": 2,
+      "unit": "day"
+    },
+    "phrase": "the day after tomorrow",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Mon 2026-09-28",
+    "expr": {
+      "rel": -2,
+      "unit": "day"
+    },
+    "phrase": "the day before yesterday",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Sun 2026-09-27",
+    "expr": {
+      "rel": -3,
+      "unit": "day"
+    },
+    "phrase": "three days ago",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Sat 2026-10-03",
+    "expr": {
+      "rel": 3,
+      "unit": "day"
+    },
+    "phrase": "in three days",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2026-09-23",
+    "expr": {
+      "rel": -7,
+      "unit": "day"
+    },
+    "phrase": "a week ago",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2026-10-07",
+    "expr": {
+      "rel": 7,
+      "unit": "day"
+    },
+    "phrase": "in a week",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2026-09-16",
+    "expr": {
+      "rel": -14,
+      "unit": "day"
+    },
+    "phrase": "two weeks ago",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-09-28..2026-10-04",
+    "expr": {
+      "rel": 0,
+      "unit": "week"
+    },
+    "phrase": "this week",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-10-05..2026-10-11",
+    "expr": {
+      "rel": 1,
+      "unit": "week"
+    },
+    "phrase": "next week",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-09-21..2026-09-27",
+    "expr": {
+      "rel": -1,
+      "unit": "week"
+    },
+    "phrase": "last week",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-10-12..2026-10-18",
+    "expr": {
+      "rel": 2,
+      "unit": "week"
+    },
+    "phrase": "the week after next",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-09-21..2026-09-27",
+    "expr": {
+      "rel": 0,
+      "unit": "week"
+    },
+    "phrase": "this week",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-27"
+  },
+  {
+    "echo": "2026-09-01..2026-09-30",
+    "expr": {
+      "rel": 0,
+      "unit": "month"
+    },
+    "phrase": "this month",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-10-01..2026-10-31",
+    "expr": {
+      "rel": 1,
+      "unit": "month"
+    },
+    "phrase": "next month",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-08-01..2026-08-31",
+    "expr": {
+      "rel": -1,
+      "unit": "month"
+    },
+    "phrase": "last month",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-12-01..2026-12-31",
+    "expr": {
+      "rel": -1,
+      "unit": "month"
+    },
+    "phrase": "last month",
+    "row": null,
+    "rule": null,
+    "today": "2027-01-19"
+  },
+  {
+    "echo": "2026-01-01..2026-12-31",
+    "expr": {
+      "rel": 0,
+      "unit": "year"
+    },
+    "phrase": "this year",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2025-01-01..2025-12-31",
+    "expr": {
+      "rel": -1,
+      "unit": "year"
+    },
+    "phrase": "last year",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2027-01-01..2027-12-31",
+    "expr": {
+      "rel": 1,
+      "unit": "year"
+    },
+    "phrase": "next year",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-11-01..2026-11-30",
+    "expr": {
+      "name": 11,
+      "rel": -1,
+      "unit": "month"
+    },
+    "phrase": "last november",
+    "row": null,
+    "rule": "\"last <month>\" = the most recent fully ended month of that name (rel -1)",
+    "today": "2027-01-19"
+  },
+  {
+    "echo": "2025-11-01..2025-11-30",
+    "expr": {
+      "name": 11,
+      "rel": -1,
+      "unit": "month"
+    },
+    "phrase": "last november",
+    "row": null,
+    "rule": "\"last <month>\" = the most recent fully ended month of that name (rel -1)",
+    "today": "2026-11-10"
+  },
+  {
+    "echo": "2025-09-01..2025-09-30",
+    "expr": {
+      "name": 9,
+      "rel": -1,
+      "unit": "month"
+    },
+    "phrase": "last september",
+    "row": null,
+    "rule": "\"last <month>\" = the most recent fully ended month of that name (rel -1)",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-06-01..2026-06-30",
+    "expr": {
+      "name": 6,
+      "rel": -1,
+      "unit": "month"
+    },
+    "phrase": "last june",
+    "row": null,
+    "rule": "\"last <month>\" = the most recent fully ended month of that name (rel -1)",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-12-01..2026-12-31",
+    "expr": {
+      "name": 12,
+      "rel": -1,
+      "unit": "month"
+    },
+    "phrase": "last december",
+    "row": null,
+    "rule": "\"last <month>\" = the most recent fully ended month of that name (rel -1)",
+    "today": "2027-01-19"
+  },
+  {
+    "echo": "2026-11-01..2026-11-30",
+    "expr": {
+      "name": 11,
+      "rel": 0,
+      "unit": "month"
+    },
+    "phrase": "this november",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2027-03-01..2027-03-31",
+    "expr": {
+      "name": 3,
+      "rel": 1,
+      "unit": "month"
+    },
+    "phrase": "next march",
+    "row": null,
+    "rule": "\"next <month>\" = the next month of that name that has not begun (rel 1)",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-10-01..2026-10-31",
+    "expr": {
+      "name": 10,
+      "rel": 1,
+      "unit": "month"
+    },
+    "phrase": "next october",
+    "row": null,
+    "rule": "\"next <month>\" = the next month of that name that has not begun (rel 1)",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2027-09-01..2027-09-30",
+    "expr": {
+      "name": 9,
+      "rel": 1,
+      "unit": "month"
+    },
+    "phrase": "next september",
+    "row": null,
+    "rule": "\"next <month>\" = the next month of that name that has not begun (rel 1)",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2025-11-01..2025-11-30",
+    "expr": {
+      "name": 11,
+      "rel": -2,
+      "unit": "month"
+    },
+    "phrase": "the november before last",
+    "row": null,
+    "rule": null,
+    "today": "2027-01-19"
+  },
+  {
+    "echo": "Mon 2026-10-05",
+    "expr": {
+      "rel": 1,
+      "unit": "week",
+      "weekday": 1
+    },
+    "phrase": "next monday",
+    "row": null,
+    "rule": "\"next <weekday>\" = that day of next week (week rel 1), even on a Sunday",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Mon 2026-09-28",
+    "expr": {
+      "rel": 1,
+      "unit": "week",
+      "weekday": 1
+    },
+    "phrase": "next monday",
+    "row": null,
+    "rule": "\"next <weekday>\" = that day of next week (week rel 1), even on a Sunday",
+    "today": "2026-09-27"
+  },
+  {
+    "echo": "Mon 2026-10-05 14:00",
+    "expr": {
+      "rel": 1,
+      "time": "14:00",
+      "unit": "week",
+      "weekday": 1
+    },
+    "phrase": "next monday at 2",
+    "row": null,
+    "rule": "\"at N\" = N+12:00 for N in 1..7, else as written",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Fri 2026-10-09",
+    "expr": {
+      "rel": 1,
+      "unit": "week",
+      "weekday": 5
+    },
+    "phrase": "next friday",
+    "row": null,
+    "rule": "\"next <weekday>\" = that day of next week (week rel 1), even on a Sunday",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Fri 2026-10-02",
+    "expr": {
+      "rel": 0,
+      "unit": "week",
+      "weekday": 5
+    },
+    "phrase": "this friday",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Fri 2026-09-25",
+    "expr": {
+      "rel": -1,
+      "unit": "week",
+      "weekday": 5
+    },
+    "phrase": "last friday",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Mon 2026-09-21",
+    "expr": {
+      "rel": -1,
+      "unit": "week",
+      "weekday": 1
+    },
+    "phrase": "last monday",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Mon 2026-10-05",
+    "expr": {
+      "rel": 1,
+      "unit": "week",
+      "weekday": 1
+    },
+    "phrase": "monday",
+    "row": null,
+    "rule": "a bare weekday = its next occurrence, today included: week rel 0 when the day is today or later this week, else week rel 1",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Fri 2026-10-02",
+    "expr": {
+      "rel": 0,
+      "unit": "week",
+      "weekday": 5
+    },
+    "phrase": "friday",
+    "row": null,
+    "rule": "a bare weekday = its next occurrence, today included: week rel 0 when the day is today or later this week, else week rel 1",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2026-09-30",
+    "expr": {
+      "rel": 0,
+      "unit": "week",
+      "weekday": 3
+    },
+    "phrase": "wednesday",
+    "row": null,
+    "rule": "a bare weekday = its next occurrence, today included: week rel 0 when the day is today or later this week, else week rel 1",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Sat 2026-10-03 10:00",
+    "expr": {
+      "rel": 0,
+      "time": "10:00",
+      "unit": "week",
+      "weekday": 6
+    },
+    "phrase": "saturday at 10",
+    "row": null,
+    "rule": "\"at N\" = N+12:00 for N in 1..7, else as written",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Fri 2026-10-02 09:30",
+    "expr": {
+      "rel": 0,
+      "time": "09:30",
+      "unit": "week",
+      "weekday": 5
+    },
+    "phrase": "friday at 9:30",
+    "row": null,
+    "rule": "a bare weekday = its next occurrence, today included: week rel 0 when the day is today or later this week, else week rel 1",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-10-03..2026-10-04",
+    "expr": {
+      "from": {
+        "rel": 0,
+        "unit": "week",
+        "weekday": 6
+      },
+      "to": {
+        "rel": 0,
+        "unit": "week",
+        "weekday": 7
+      }
+    },
+    "phrase": "this weekend",
+    "row": null,
+    "rule": "\"this weekend\" = the coming Saturday–Sunday, today if it is Saturday or Sunday (weeks start Monday)",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-10-03..2026-10-04",
+    "expr": {
+      "from": {
+        "rel": 0,
+        "unit": "week",
+        "weekday": 6
+      },
+      "to": {
+        "rel": 0,
+        "unit": "week",
+        "weekday": 7
+      }
+    },
+    "phrase": "this weekend",
+    "row": null,
+    "rule": "\"this weekend\" = the coming Saturday–Sunday, today if it is Saturday or Sunday (weeks start Monday)",
+    "today": "2026-10-03"
+  },
+  {
+    "echo": "2026-10-03..2026-10-04",
+    "expr": {
+      "from": {
+        "rel": 0,
+        "unit": "week",
+        "weekday": 6
+      },
+      "to": {
+        "rel": 0,
+        "unit": "week",
+        "weekday": 7
+      }
+    },
+    "phrase": "this weekend",
+    "row": null,
+    "rule": "\"this weekend\" = the coming Saturday–Sunday, today if it is Saturday or Sunday (weeks start Monday)",
+    "today": "2026-10-04"
+  },
+  {
+    "echo": "2026-10-10..2026-10-11",
+    "expr": {
+      "from": {
+        "rel": 1,
+        "unit": "week",
+        "weekday": 6
+      },
+      "to": {
+        "rel": 1,
+        "unit": "week",
+        "weekday": 7
+      }
+    },
+    "phrase": "next weekend",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-09-26..2026-09-27",
+    "expr": {
+      "from": {
+        "rel": -1,
+        "unit": "week",
+        "weekday": 6
+      },
+      "to": {
+        "rel": -1,
+        "unit": "week",
+        "weekday": 7
+      }
+    },
+    "phrase": "last weekend",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Thu 2026-10-01 09:00",
+    "expr": {
+      "rel": 1,
+      "time": "09:00",
+      "unit": "day"
+    },
+    "phrase": "tomorrow at 9",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Thu 2026-10-01 15:00",
+    "expr": {
+      "rel": 1,
+      "time": "15:00",
+      "unit": "day"
+    },
+    "phrase": "tomorrow at 3",
+    "row": null,
+    "rule": "\"at N\" = N+12:00 for N in 1..7, else as written",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Thu 2026-10-01 15:00",
+    "expr": {
+      "rel": 1,
+      "time": "15:00",
+      "unit": "day"
+    },
+    "phrase": "tomorrow at 3pm",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2026-09-30 12:00",
+    "expr": {
+      "rel": 0,
+      "time": "12:00",
+      "unit": "day"
+    },
+    "phrase": "today at noon",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2026-09-30 20:00",
+    "expr": {
+      "rel": 0,
+      "time": "20:00",
+      "unit": "day"
+    },
+    "phrase": "tonight at 8",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Thu 2026-10-01 19:00",
+    "expr": {
+      "rel": 1,
+      "time": "19:00",
+      "unit": "day"
+    },
+    "phrase": "at 7 tomorrow",
+    "row": null,
+    "rule": "\"at N\" = N+12:00 for N in 1..7, else as written",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Thu 2026-10-01 08:00",
+    "expr": {
+      "rel": 1,
+      "time": "08:00",
+      "unit": "day"
+    },
+    "phrase": "tomorrow at 8",
+    "row": null,
+    "rule": "\"at N\" = N+12:00 for N in 1..7, else as written",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2026-09-30 12:00",
+    "expr": {
+      "rel": 2,
+      "unit": "hour"
+    },
+    "phrase": "in two hours",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30T10:00"
+  },
+  {
+    "echo": "Wed 2026-09-30 09:00",
+    "expr": {
+      "rel": -1,
+      "unit": "hour"
+    },
+    "phrase": "an hour ago",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30T10:00"
+  },
+  {
+    "echo": "Wed 2026-09-30 10:30",
+    "expr": {
+      "rel": 30,
+      "unit": "minute"
+    },
+    "phrase": "in 30 minutes",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30T10:00"
+  },
+  {
+    "echo": "Fri 2026-06-19 08:00",
+    "expr": {
+      "anchor": "row",
+      "rel": -1,
+      "unit": "hour"
+    },
+    "phrase": "an hour earlier",
+    "row": "2026-06-19T09:00",
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Fri 2026-06-19 10:00",
+    "expr": {
+      "anchor": "row",
+      "rel": 1,
+      "unit": "hour"
+    },
+    "phrase": "an hour later",
+    "row": "2026-06-19T09:00",
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Fri 2026-06-19 09:30",
+    "expr": {
+      "anchor": "row",
+      "rel": 30,
+      "unit": "minute"
+    },
+    "phrase": "half an hour later",
+    "row": "2026-06-19T09:00",
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Sat 2026-06-20 09:00",
+    "expr": {
+      "anchor": "row",
+      "rel": 1,
+      "unit": "day"
+    },
+    "phrase": "a day later",
+    "row": "2026-06-19T09:00",
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2026-06-17 09:00",
+    "expr": {
+      "anchor": "row",
+      "rel": -2,
+      "unit": "day"
+    },
+    "phrase": "two days earlier",
+    "row": "2026-06-19T09:00",
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Fri 2026-06-26 09:00",
+    "expr": {
+      "anchor": "row",
+      "rel": 1,
+      "unit": "week"
+    },
+    "phrase": "a week later",
+    "row": "2026-06-19T09:00",
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Sat 2026-06-20 10:00",
+    "expr": {
+      "anchor": "row",
+      "rel": 1,
+      "time": "10:00",
+      "unit": "day"
+    },
+    "phrase": "the next day at 10",
+    "row": "2026-06-19T09:00",
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Sun 2026-07-19",
+    "expr": {
+      "anchor": "row",
+      "rel": 1,
+      "unit": "month"
+    },
+    "phrase": "a month later",
+    "row": "2026-06-19",
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2026-10-14",
+    "expr": {
+      "date": "2026-10-14"
+    },
+    "phrase": "on 2026-10-14",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2026-10-14 09:30",
+    "expr": {
+      "date": "2026-10-14",
+      "time": "09:30"
+    },
+    "phrase": "october 14 at 9:30",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2026-09-30",
+    "expr": {
+      "date": "2026-09-30"
+    },
+    "phrase": "on the 30th",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-27"
+  },
+  {
+    "echo": "2026-06-01..2026-09-30",
+    "expr": {
+      "from": {
+        "name": 6,
+        "rel": -1,
+        "unit": "month"
+      },
+      "to": {
+        "rel": 0,
+        "unit": "day"
+      }
+    },
+    "phrase": "since last june",
+    "row": null,
+    "rule": "\"last <month>\" = the most recent fully ended month of that name (rel -1)",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-09-24..2026-09-30",
+    "expr": {
+      "from": {
+        "rel": -6,
+        "unit": "day"
+      },
+      "to": {
+        "rel": 0,
+        "unit": "day"
+      }
+    },
+    "phrase": "the last 7 days",
+    "row": null,
+    "rule": "\"the last N days\" = N days ending today",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-10-05..2026-10-07",
+    "expr": {
+      "from": {
+        "rel": 1,
+        "unit": "week",
+        "weekday": 1
+      },
+      "to": {
+        "rel": 1,
+        "unit": "week",
+        "weekday": 3
+      }
+    },
+    "phrase": "from monday to wednesday next week",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-09-30..2026-10-02",
+    "expr": {
+      "from": {
+        "rel": 0,
+        "unit": "day"
+      },
+      "to": {
+        "rel": 0,
+        "unit": "week",
+        "weekday": 5
+      }
+    },
+    "phrase": "between now and friday",
+    "row": null,
+    "rule": "a bare weekday = its next occurrence, today included: week rel 0 when the day is today or later this week, else week rel 1",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2026-10-14",
+    "expr": {
+      "rel": 14,
+      "unit": "day"
+    },
+    "phrase": "in two weeks",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Fri 2026-10-02",
+    "expr": {
+      "rel": 2,
+      "unit": "day"
+    },
+    "phrase": "two days from now",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Tue 2026-09-29",
+    "expr": {
+      "rel": -1,
+      "unit": "day"
+    },
+    "phrase": "last night",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-07-01..2026-07-31",
+    "expr": {
+      "rel": -2,
+      "unit": "month"
+    },
+    "phrase": "two months ago",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Fri 2026-10-16",
+    "expr": {
+      "rel": 2,
+      "unit": "week",
+      "weekday": 5
+    },
+    "phrase": "friday week",
+    "row": null,
+    "rule": "\"<weekday> week\" = that day of the week after next (week rel 2)",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Thu 2026-10-08",
+    "expr": {
+      "rel": 1,
+      "unit": "week",
+      "weekday": 4
+    },
+    "phrase": "thursday next week",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Mon 2026-09-14",
+    "expr": {
+      "rel": -2,
+      "unit": "week",
+      "weekday": 1
+    },
+    "phrase": "monday two weeks back",
+    "row": null,
+    "rule": null,
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "2026-10-03..2026-10-04",
+    "expr": {
+      "from": {
+        "rel": 0,
+        "unit": "week",
+        "weekday": 6
+      },
+      "to": {
+        "rel": 0,
+        "unit": "week",
+        "weekday": 7
+      }
+    },
+    "phrase": "the weekend",
+    "row": null,
+    "rule": "\"this weekend\" = the coming Saturday–Sunday, today if it is Saturday or Sunday (weeks start Monday)",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2026-09-30",
+    "expr": {
+      "date": "2026-09-30"
+    },
+    "phrase": "end of the month",
+    "row": null,
+    "rule": "\"end of the month\" = this month's last day; \"end of <month>\" = the last day of the next one that is not past, in a write",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2027-03-31",
+    "expr": {
+      "date": "2027-03-31"
+    },
+    "phrase": "end of march",
+    "row": null,
+    "rule": "\"end of the month\" = this month's last day; \"end of <month>\" = the last day of the next one that is not past, in a write",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Fri 2026-12-11",
+    "expr": {
+      "date": "2026-12-11"
+    },
+    "phrase": "dec 11",
+    "row": null,
+    "rule": "a month and day, or a day of the month, in a write = its next occurrence, today included",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Wed 2027-09-01",
+    "expr": {
+      "date": "2027-09-01"
+    },
+    "phrase": "sept first",
+    "row": null,
+    "rule": "a month and day, or a day of the month, in a write = its next occurrence, today included",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "Sun 2026-10-25",
+    "expr": {
+      "date": "2026-10-25"
+    },
+    "phrase": "the 25th",
+    "row": null,
+    "rule": "a month and day, or a day of the month, in a write = its next occurrence, today included",
+    "today": "2026-09-30"
+  },
+  {
+    "echo": "..2026-09-29",
+    "expr": {
+      "to": {
+        "rel": -1,
+        "unit": "day"
+      }
+    },
+    "phrase": "overdue",
+    "row": null,
+    "rule": "\"overdue\" = up to yesterday",
+    "today": "2026-09-30"
+  }
+]

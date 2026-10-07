@@ -1,0 +1,545 @@
+[
+  {
+    "function": {
+      "description": "Fuzzy name search across the vault, any kind.",
+      "name": "search",
+      "parameters": {
+        "properties": {
+          "kind": {
+            "description": "any, a kind or a comma list",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Rows a selector matches, numbered #n, as result @n.",
+      "name": "find",
+      "parameters": {
+        "properties": {
+          "exclude": {
+            "description": "#n, #m",
+            "type": "string"
+          },
+          "kind": {
+            "description": "a kind or a comma list",
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "linked_to": {
+            "description": "#n",
+            "type": "string"
+          },
+          "name": {
+            "description": "words, any order; the only name filter",
+            "type": "string"
+          },
+          "order": {
+            "description": "field asc|desc; one kind only",
+            "type": "string"
+          },
+          "trashed": {
+            "description": "only trashed rows",
+            "type": "boolean"
+          },
+          "when": {
+            "description": "the only date filter, on the kind's date. rel: offset in units, 0 = this; name: month 1..12; weekday: 1..7 Mon..Sun; time: HH:MM; date: YYYY-MM-DD; from, to: a span, one end may be open; anchor row: the target's own date (act)",
+            "properties": {
+              "anchor": {
+                "enum": [
+                  "today",
+                  "row"
+                ],
+                "type": "string"
+              },
+              "date": {
+                "type": "string"
+              },
+              "from": {
+                "type": "object"
+              },
+              "name": {
+                "type": "integer"
+              },
+              "rel": {
+                "type": "integer"
+              },
+              "time": {
+                "type": "string"
+              },
+              "to": {
+                "type": "object"
+              },
+              "unit": {
+                "enum": [
+                  "minute",
+                  "hour",
+                  "day",
+                  "week",
+                  "month",
+                  "year"
+                ],
+                "type": "string"
+              },
+              "weekday": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "where": {
+            "description": "field = value (!= < <= > >=), contains \"…\", in (\"a\", \"b\"), is empty, is set, <kind> count >= N; joined by and; one kind",
+            "type": "string"
+          },
+          "within": {
+            "description": "@n to narrow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Every fact and link of one row.",
+      "name": "open",
+      "parameters": {
+        "properties": {
+          "row": {
+            "description": "#n",
+            "type": "string"
+          }
+        },
+        "required": [
+          "row"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "A value for a later step, or one per group value.",
+      "name": "compute",
+      "parameters": {
+        "properties": {
+          "exclude": {
+            "description": "#n, #m",
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "group": {
+            "description": "field to group by",
+            "type": "string"
+          },
+          "kind": {
+            "description": "a kind or a comma list",
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "linked_to": {
+            "description": "#n",
+            "type": "string"
+          },
+          "name": {
+            "description": "words, any order; the only name filter",
+            "type": "string"
+          },
+          "op": {
+            "enum": [
+              "count",
+              "sum",
+              "min",
+              "max",
+              "balance"
+            ],
+            "type": "string"
+          },
+          "order": {
+            "description": "field asc|desc; one kind only",
+            "type": "string"
+          },
+          "rows": {
+            "description": "#n, @n list",
+            "type": "string"
+          },
+          "trashed": {
+            "description": "only trashed rows",
+            "type": "boolean"
+          },
+          "when": {
+            "description": "the only date filter, on the kind's date. rel: offset in units, 0 = this; name: month 1..12; weekday: 1..7 Mon..Sun; time: HH:MM; date: YYYY-MM-DD; from, to: a span, one end may be open; anchor row: the target's own date (act)",
+            "properties": {
+              "anchor": {
+                "enum": [
+                  "today",
+                  "row"
+                ],
+                "type": "string"
+              },
+              "date": {
+                "type": "string"
+              },
+              "from": {
+                "type": "object"
+              },
+              "name": {
+                "type": "integer"
+              },
+              "rel": {
+                "type": "integer"
+              },
+              "time": {
+                "type": "string"
+              },
+              "to": {
+                "type": "object"
+              },
+              "unit": {
+                "enum": [
+                  "minute",
+                  "hour",
+                  "day",
+                  "week",
+                  "month",
+                  "year"
+                ],
+                "type": "string"
+              },
+              "weekday": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "where": {
+            "description": "field = value (!= < <= > >=), contains \"…\", in (\"a\", \"b\"), is empty, is set, <kind> count >= N; joined by and; one kind",
+            "type": "string"
+          },
+          "within": {
+            "description": "@n to narrow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Change the vault. Ends the turn unless more.",
+      "name": "act",
+      "parameters": {
+        "properties": {
+          "args": {
+            "description": "field: value lines, dates as date expressions (create: name and fields, kind as the kind param · edit: field: value, or body+: / description+: text to add · reschedule, add_to: to · remove_from: from · log: kind · settle_up: group · reveal: field)",
+            "type": "string"
+          },
+          "exclude": {
+            "description": "#n, #m",
+            "type": "string"
+          },
+          "kind": {
+            "description": "a kind or a comma list",
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "linked_to": {
+            "description": "#n",
+            "type": "string"
+          },
+          "more": {
+            "description": "another call follows",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "words, any order; the only name filter",
+            "type": "string"
+          },
+          "order": {
+            "description": "field asc|desc; one kind only",
+            "type": "string"
+          },
+          "rows": {
+            "description": "#n, @n list",
+            "type": "string"
+          },
+          "trashed": {
+            "description": "only trashed rows",
+            "type": "boolean"
+          },
+          "verb": {
+            "enum": [
+              "create",
+              "edit",
+              "reschedule",
+              "complete",
+              "reopen",
+              "cancel",
+              "delete",
+              "restore",
+              "star",
+              "unstar",
+              "add_to",
+              "remove_from",
+              "log",
+              "settle_up",
+              "settle_debt",
+              "reveal",
+              "undo"
+            ],
+            "type": "string"
+          },
+          "when": {
+            "description": "the only date filter, on the kind's date. rel: offset in units, 0 = this; name: month 1..12; weekday: 1..7 Mon..Sun; time: HH:MM; date: YYYY-MM-DD; from, to: a span, one end may be open; anchor row: the target's own date (act)",
+            "properties": {
+              "anchor": {
+                "enum": [
+                  "today",
+                  "row"
+                ],
+                "type": "string"
+              },
+              "date": {
+                "type": "string"
+              },
+              "from": {
+                "type": "object"
+              },
+              "name": {
+                "type": "integer"
+              },
+              "rel": {
+                "type": "integer"
+              },
+              "time": {
+                "type": "string"
+              },
+              "to": {
+                "type": "object"
+              },
+              "unit": {
+                "enum": [
+                  "minute",
+                  "hour",
+                  "day",
+                  "week",
+                  "month",
+                  "year"
+                ],
+                "type": "string"
+              },
+              "weekday": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "where": {
+            "description": "field = value (!= < <= > >=), contains \"…\", in (\"a\", \"b\"), is empty, is set, <kind> count >= N; joined by and; one kind",
+            "type": "string"
+          },
+          "within": {
+            "description": "@n to narrow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verb"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Answer with rows, a value (op) or value=@n. Ends the turn.",
+      "name": "answer",
+      "parameters": {
+        "properties": {
+          "exclude": {
+            "description": "#n, #m",
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "a kind or a comma list",
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "linked_to": {
+            "description": "#n",
+            "type": "string"
+          },
+          "name": {
+            "description": "words, any order; the only name filter",
+            "type": "string"
+          },
+          "op": {
+            "enum": [
+              "count",
+              "sum",
+              "min",
+              "max",
+              "balance"
+            ],
+            "type": "string"
+          },
+          "order": {
+            "description": "field asc|desc; one kind only",
+            "type": "string"
+          },
+          "rows": {
+            "description": "#n, @n list",
+            "type": "string"
+          },
+          "trashed": {
+            "description": "only trashed rows",
+            "type": "boolean"
+          },
+          "value": {
+            "description": "@n",
+            "type": "string"
+          },
+          "when": {
+            "description": "the only date filter, on the kind's date. rel: offset in units, 0 = this; name: month 1..12; weekday: 1..7 Mon..Sun; time: HH:MM; date: YYYY-MM-DD; from, to: a span, one end may be open; anchor row: the target's own date (act)",
+            "properties": {
+              "anchor": {
+                "enum": [
+                  "today",
+                  "row"
+                ],
+                "type": "string"
+              },
+              "date": {
+                "type": "string"
+              },
+              "from": {
+                "type": "object"
+              },
+              "name": {
+                "type": "integer"
+              },
+              "rel": {
+                "type": "integer"
+              },
+              "time": {
+                "type": "string"
+              },
+              "to": {
+                "type": "object"
+              },
+              "unit": {
+                "enum": [
+                  "minute",
+                  "hour",
+                  "day",
+                  "week",
+                  "month",
+                  "year"
+                ],
+                "type": "string"
+              },
+              "weekday": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "where": {
+            "description": "field = value (!= < <= > >=), contains \"…\", in (\"a\", \"b\"), is empty, is set, <kind> count >= N; joined by and; one kind",
+            "type": "string"
+          },
+          "within": {
+            "description": "@n to narrow",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Ask the person to choose or clarify. Ends the turn.",
+      "name": "ask",
+      "parameters": {
+        "properties": {
+          "options": {
+            "description": "#n choices",
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Decline. Ends the turn.",
+      "name": "decline",
+      "parameters": {
+        "properties": {
+          "reason": {
+            "enum": [
+              "out_of_scope",
+              "unbounded_destruction",
+              "sealed_egress",
+              "fabricated_secret",
+              "never_mind",
+              "not_found"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  }
+]

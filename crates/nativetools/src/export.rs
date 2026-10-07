@@ -585,6 +585,7 @@ pub fn export(dir: &Path) -> Result<Vec<&'static str>, String> {
     write(dir, "phrases.json", &pretty(&phrases()))?;
     write(dir, "metadata.json", &pretty(&metadata()))?;
     write(dir, "errors.json", &pretty(&errors()))?;
+    write(dir, "identity.json", &pretty(&crate::identity::json()))?;
     rendered_prompts(dir)?;
     Ok(vec![
         "tools.json",
@@ -594,6 +595,7 @@ pub fn export(dir: &Path) -> Result<Vec<&'static str>, String> {
         "phrases.json",
         "metadata.json",
         "errors.json",
+        "identity.json",
         "prompt.sig.txt",
         "prompt.compact.txt",
         "prompt.full.txt",
