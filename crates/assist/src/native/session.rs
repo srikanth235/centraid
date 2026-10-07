@@ -7,10 +7,10 @@ use jiff::civil::DateTime;
 use serde_json::{Map, Value, json};
 
 use crate::native::dates::{self, Resolved};
+use crate::native::door::Door;
 use crate::native::meta::{self, FieldType, Kind, ROW_CAP, STEP_CAP};
 use crate::native::render;
 use crate::native::resolve::{Resolution, Tier};
-use crate::native::vaultio::Handle;
 use crate::native::whr::{self, Cond};
 use crate::native::world::{Key, Row, Val, World};
 
@@ -329,7 +329,7 @@ pub(crate) struct Mark {
 
 /// The whole session.
 pub struct Session {
-    pub(crate) handle: Handle,
+    pub(crate) door: Box<dyn Door>,
     pub(crate) world: World,
     pub(crate) now: DateTime,
     pub(crate) me_name: String,
@@ -555,22 +555,16 @@ pub(crate) fn tool_params(tool: &str) -> Vec<&'static str> {
 }
 
 impl Session {
-    /// Open a session over a vault.
-    pub fn open(
-        path: &std::path::Path,
+    /// Open a session over a vault, reached only through `door` (the runtime holds no path and
+    /// no connection). `now` is the person's today. The harness opens a vault FILE through
+    /// `centraid_nativetools::vaultio::open_session`; the phone passes the core's door.
+    pub fn with_door(
+        door: Box<dyn Door>,
         now: DateTime,
         me: &str,
         flags: Flags,
     ) -> Result<Self, String> {
-        let clock = crate::native::vaultio::SetClock::at(crate::native::vaultio::millis_of(now));
-        // A probe handle reads the journal size, which names this session's id
-        // sequence: two sessions over one file never mint the same id, and the
-        // same file and clock always mint the same ones.
-        let probe = Handle::open(path, clock.clone(), "nativetools:probe")?;
-        let count = World::load(&probe)?.entity_count;
-        drop(probe);
-        let handle = Handle::open(path, clock, &format!("nativetools:session:{count}:{now}"))?;
-        let world = World::load(&handle)?;
+        let world = World::load(&*door)?;
         let me_name = if me.is_empty() {
             world
                 .row(&world.me_key())
@@ -580,7 +574,7 @@ impl Session {
             me.to_owned()
         };
         let mut session = Self {
-            handle,
+            door,
             world,
             now,
             me_name,

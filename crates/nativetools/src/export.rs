@@ -148,7 +148,7 @@ fn rendered_prompts(dir: &Path) -> Result<(), String> {
                 tools: mode,
                 ..crate::Flags::default()
             };
-            let mut session = crate::Session::open(&path, now, "", flags)?;
+            let mut session = crate::vaultio::open_session(&path, now, "", flags)?;
             let prompt = prompt::prompt(&mut session);
             write(
                 dir,

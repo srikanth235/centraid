@@ -813,7 +813,7 @@ fn ranked_with(
         if !full_text || !kinds.contains(kind) {
             continue;
         }
-        let Ok(targets) = session.handle.search(entity, text, 50) else {
+        let Ok(targets) = session.door.search(entity, text, 50) else {
             continue;
         };
         for target in targets {

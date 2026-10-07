@@ -30,12 +30,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Map, Value, json};
 
 use crate::native::dates::{self, Stamp};
+use crate::native::door::Ran;
 use crate::native::meta::{self, FieldType, Kind, ROW_CAP, Verb, Via};
 use crate::native::render;
 use crate::native::session::{
     Inverse, Outcome, ResultSet, Selector, Session, arg_bool, arg_str, canonical_json,
 };
-use crate::native::vaultio::Ran;
 use crate::native::whr;
 use crate::native::world::{Key, Row, SEALED, Val, World, minor_of};
 
@@ -1553,7 +1553,7 @@ impl Session {
                     let mut outputs = Vec::new();
                     let mut lapsed_row = false;
                     for step in steps {
-                        let ran = self.handle.step(step.command, step.input.clone())?;
+                        let ran = self.door.step(step.command, step.input.clone())?;
                         if !ran.ok {
                             if verb == Verb::Restore
                                 && several
@@ -1672,7 +1672,7 @@ impl Session {
         if let Some(created) = &created {
             touched.push(created.clone());
         }
-        self.world = World::load(&self.handle)?;
+        self.world = World::load(&*self.door)?;
         let mut diff = diff(&before, &self.world);
         // A SETTLEMENT MOVES A BALANCE, not a row field: the diff carries the
         // person's balance in the settled group (positive = they owe me),
@@ -2567,13 +2567,10 @@ impl Session {
             ));
         };
         let key_id = row.extra.get("key_id").cloned().unwrap_or_default();
-        let secret = centraid_vault::custody::locker_key::decrypt_under_locker_key(
-            crate::native::vaultio::HARNESS_LOCKER_KEY,
-            &key_id,
-            &row.id,
-            &sealed,
-        )
-        .map_err(|error| format!("error: this seat cannot open the secret: {error}"))?;
+        let secret = self
+            .door
+            .unseal(&key_id, &row.id, &sealed)
+            .map_err(|error| format!("error: this seat cannot open the secret: {error}"))?;
         let name = self.named(&key);
         Ok(Plan::Run {
             steps: vec![Step {
@@ -3067,7 +3064,7 @@ impl Session {
             })?;
             if column == "content" {
                 back.remove(field);
-                let (key_id, sealed) = self.handle.seal(&row.id, &text_of(&value))?;
+                let (key_id, sealed) = self.door.seal(&row.id, &text_of(&value))?;
                 input.insert("content".to_owned(), json!(sealed));
                 input.insert("key_id".to_owned(), json!(key_id));
                 match (row.extra.get("content"), row.extra.get("key_id")) {
@@ -3220,7 +3217,7 @@ impl Session {
         } else {
             None
         };
-        let mint = || centraid_vault::Ids::next(self.handle.vault.ids());
+        let mint = || self.door.mint_id();
         let (command, input, id_out): (&'static str, Value, &'static str) = match kind {
             Kind::Person => {
                 let mut input =
@@ -3397,7 +3394,7 @@ impl Session {
                         )
                     })?;
                     if column == "content" {
-                        let (key_id, sealed) = self.handle.seal(&item_id, &value)?;
+                        let (key_id, sealed) = self.door.seal(&item_id, &value)?;
                         input["content"] = json!(sealed);
                         input["key_id"] = json!(key_id);
                     } else {
@@ -3414,7 +3411,7 @@ impl Session {
                     let Some(column) = meta::locker_secret_column(kind_value, field) else {
                         continue;
                     };
-                    let (key_id, sealed) = self.handle.seal(&item_id, &value)?;
+                    let (key_id, sealed) = self.door.seal(&item_id, &value)?;
                     input[column] = json!(sealed);
                     input["key_id"] = json!(key_id);
                     if column == "password" {
@@ -3426,7 +3423,7 @@ impl Session {
             Kind::Photo => unreachable!("photos are not created by a call"),
         };
         let before = self.world.clone();
-        let ran = self.handle.step(command, input.clone())?;
+        let ran = self.door.step(command, input.clone())?;
         if !ran.ok {
             // A NEW EVENT THAT CLASHES WITH ANOTHER is a refusal the person can lift by
             // choosing another time (`compose_busy_conflict`).
@@ -3459,14 +3456,14 @@ impl Session {
             ));
         }
         for (command, input) in follow {
-            self.handle.clock.tick();
-            if let Err(error) = self.handle.must(command, input) {
+            self.door.advance();
+            if let Err(error) = self.door.must(command, input) {
                 // Take the half-made row back out, so no later diff finds it.
                 if let Some(delete) = Verb::Delete.command(kind) {
-                    self.handle.clock.tick();
-                    let _ = self.handle.step(delete, json!({ id_param(kind): id }));
+                    self.door.advance();
+                    let _ = self.door.step(delete, json!({ id_param(kind): id }));
                 }
-                self.world = World::load(&self.handle)?;
+                self.world = World::load(&*self.door)?;
                 return Err(error);
             }
         }
@@ -3525,7 +3522,7 @@ impl Session {
         let mut lines = Vec::new();
         let mut touched: Vec<Key> = Vec::new();
         for inverse in inverses.iter().rev() {
-            let ran = self.handle.step(&inverse.command, inverse.input.clone())?;
+            let ran = self.door.step(&inverse.command, inverse.input.clone())?;
             if !ran.ok {
                 let name = self.named(&inverse.key);
                 lines.push(format!(
@@ -3536,7 +3533,7 @@ impl Session {
                 touched.push(inverse.key.clone());
             }
         }
-        self.world = World::load(&self.handle)?;
+        self.world = World::load(&*self.door)?;
         let mut diff = diff(&before, &self.world);
         // A SETTLEMENT MOVES A BALANCE, not a row field: the diff carries the
         // person's balance in the settled group (positive = they owe me),

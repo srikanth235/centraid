@@ -1,6 +1,7 @@
-//! Opening a vault for the tool runtime: an injectable clock, deterministic
-//! ids, the content store beside the file, and the one door every write goes
-//! through (`Vault::execute` with the system registry).
+//! The harness's side of the runtime's door (`centraid_assist::native::Door`): opening a vault
+//! FILE for the tool runtime with an injectable clock, deterministic ids, the content store beside
+//! the file, and the one door every write goes through (`Vault::execute` with the system
+//! registry, as the owner principal `nativetools`, with no change feed).
 //!
 //! Nothing here holds SQL: reads go through the app kit's `PageQuery` over
 //! its test door (the owner's view, which is what an eval harness is), and
@@ -11,12 +12,15 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use centraid_apps_kit::reads::{FanOutBound, read_pages};
-use centraid_apps_kit::row::{Cell, Row};
+use centraid_apps_kit::row::Row;
 use centraid_apps_kit::statement::{PageOrder, PageQuery};
 use centraid_apps_kit::testdoor::TestDoor;
+use centraid_assist::native::{Flags, Session, world::World};
 use centraid_vault::access::Principal;
 use centraid_vault::bytes::FsBlobStore;
 use centraid_vault::{Clock, Command, CommandStatus, Registry, SeededIds, Vault};
+
+pub use centraid_assist::native::door::{Door, Ran, int, text};
 
 /// The device every command is invoked from.
 pub const DEVICE: &str = "nativetools";
@@ -118,22 +122,6 @@ pub struct Handle {
     pub registry: Registry,
     pub clock: SetClock,
     pub path: PathBuf,
-}
-
-/// What running one command produced, reduced to what the runtime reads.
-///
-/// A refusal is a value: `reason` is the vault's owner-facing sentence and
-/// `predicate` the id of the check that failed (`folder_is_empty`,
-/// `group_empty`, `no_busy_conflict`, ...), or `schema` for an input the
-/// command's schema rejects and `authority` for a caller it does not allow.
-/// The runtime classifies a refusal by that id, never by the sentence
-/// (`act.rs`, `Session::refusal`).
-#[derive(Debug, Clone)]
-pub struct Ran {
-    pub ok: bool,
-    pub output: serde_json::Value,
-    pub reason: Option<String>,
-    pub predicate: Option<String>,
 }
 
 impl Handle {
@@ -325,23 +313,69 @@ fn with_store(vault: Vault, path: &Path) -> Result<Vault, String> {
     Ok(vault.with_blobs(Box::new(store)))
 }
 
-/// The text of a cell, or `None` for NULL / absent / non-text.
-#[must_use]
-pub fn text(row: &Row, column: &str) -> Option<String> {
-    match row.get(column) {
-        Some(Cell::Text(value)) => Some(value.clone()),
-        Some(Cell::Integer(value)) => Some(value.to_string()),
-        _ => None,
+impl Door for Handle {
+    fn table(&self, table: &str, columns: &str, sort: &str, pk: &str) -> Result<Vec<Row>, String> {
+        Self::table(self, table, columns, sort, pk)
+    }
+
+    fn tally(&self) -> Result<centraid_apps_tally::queries::TallyData, String> {
+        Self::tally(self)
+    }
+
+    fn search(
+        &self,
+        entity: &str,
+        text: &str,
+        limit: usize,
+    ) -> Result<Vec<centraid_search::Target>, String> {
+        Self::search(self, entity, text, limit)
+    }
+
+    fn run(&self, command: &str, input: serde_json::Value) -> Result<Ran, String> {
+        Self::run(self, command, input)
+    }
+
+    fn advance(&self) {
+        self.clock.tick();
+    }
+
+    fn now_ms(&self) -> i64 {
+        self.clock.get()
+    }
+
+    fn mint_id(&self) -> String {
+        centraid_vault::Ids::next(self.vault.ids())
+    }
+
+    fn seal(&self, item_id: &str, value: &str) -> Result<(String, String), String> {
+        Self::seal(self, item_id, value)
+    }
+
+    fn unseal(&self, key_id: &str, item_id: &str, sealed: &str) -> Result<String, String> {
+        centraid_vault::custody::locker_key::decrypt_under_locker_key(
+            HARNESS_LOCKER_KEY,
+            key_id,
+            item_id,
+            sealed,
+        )
+        .map_err(|error| error.to_string())
     }
 }
 
-/// The integer of a cell.
-#[must_use]
-pub fn int(row: &Row, column: &str) -> Option<i64> {
-    match row.get(column) {
-        Some(Cell::Integer(value)) => Some(*value),
-        Some(Cell::Real(value)) => Some(*value as i64),
-        Some(Cell::Text(value)) => value.parse().ok(),
-        _ => None,
-    }
+/// Open a session over the vault FILE at `path`: the clock starts at `now`, and the id sequence
+/// is named from the journal's size, so two sessions over one file never mint the same id and
+/// the same file and clock always mint the same ones.
+pub fn open_session(
+    path: &Path,
+    now: jiff::civil::DateTime,
+    me: &str,
+    flags: Flags,
+) -> Result<Session, String> {
+    let clock = SetClock::at(millis_of(now));
+    // A probe handle reads the journal size, which names this session's id sequence.
+    let probe = Handle::open(path, clock.clone(), "nativetools:probe")?;
+    let count = World::load(&probe)?.entity_count;
+    drop(probe);
+    let handle = Handle::open(path, clock, &format!("nativetools:session:{count}:{now}"))?;
+    Session::with_door(Box::new(handle), now, me, flags)
 }

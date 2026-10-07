@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use centraid_nativetools::{Flags, Session, dates, seed};
+use centraid_nativetools::{Flags, Session, dates, seed, vaultio};
 use serde_json::{Value, json};
 
 pub const FIXTURE: &str = include_str!("../fixtures/world.json");
@@ -52,7 +52,7 @@ impl World {
 
     #[must_use]
     pub fn session_with(&self, today: &str, flags: Flags) -> Session {
-        Session::open(
+        vaultio::open_session(
             &self.path,
             dates::parse_now(today).expect("a date"),
             "",

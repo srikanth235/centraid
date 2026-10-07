@@ -11,7 +11,9 @@
 //! (`session`, `act`), to read the plain yes that confirms a write over the cap (`act`), to read a retraction that
 //! ends the turn (`phrases::is_retraction`), and to
 //! fill a slot a read leaves out from a few words the SPEC names (`ground::Defaults`). It
-//! never writes SQL: reads go through the app kit's paged door and writes through `Vault::execute`.
+//! never writes SQL and holds no vault: it reaches one only through a [`Door`] (`door`), whose
+//! reads are the app kit's paged reads and whose writes are typed commands. The harness opens a
+//! vault file behind a `Door` (`centraid_nativetools::vaultio`); the phone's core implements one.
 //!
 //! `compile` turns the slots of a v3 trace into the call the runtime executes (`compile`), and
 //! `think` is the same compile step with no vault, reading a think's text (the decoder's and the
@@ -26,6 +28,7 @@ pub mod compile;
 mod compose;
 pub mod dates;
 mod dates_ctx;
+pub mod door;
 mod failsoft;
 mod follow;
 pub mod ground;
@@ -43,8 +46,8 @@ pub mod session;
 pub mod think;
 pub mod trace;
 pub mod values;
-pub mod vaultio;
 pub mod whr;
 pub mod world;
 
+pub use door::{Door, Ran};
 pub use session::{Flags, Session};

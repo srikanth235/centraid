@@ -129,10 +129,11 @@ fn session(path: &str, rest: &[String]) -> ExitCode {
         Ok(now) => now,
         Err(error) => return fail(&error),
     };
-    let mut session = match Session::open(Path::new(path), now, &me, flags) {
-        Ok(session) => session,
-        Err(error) => return fail(&error),
-    };
+    let mut session =
+        match centraid_nativetools::vaultio::open_session(Path::new(path), now, &me, flags) {
+            Ok(session) => session,
+            Err(error) => return fail(&error),
+        };
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout().lock();
     for line in stdin.lock().lines() {

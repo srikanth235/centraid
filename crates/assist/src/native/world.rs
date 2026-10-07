@@ -9,8 +9,8 @@ use centraid_apps_kit::row::Row as VaultRow;
 use centraid_apps_tally::queries::TallyData;
 
 use crate::native::dates::Stamp;
+use crate::native::door::{Door, int, text};
 use crate::native::meta::{Field, FieldType, Kind, Via};
-use crate::native::vaultio::{Handle, int, text};
 
 pub const FLAGS_SCHEME: &str = "https://centraid.dev/schemes/flags";
 pub const FOLDER_SCHEME: &str = "https://centraid.dev/schemes/folders";
@@ -246,9 +246,9 @@ impl World {
     }
 
     /// Load everything.
-    pub fn load(handle: &Handle) -> Result<Self, String> {
+    pub fn load(door: &dyn Door) -> Result<Self, String> {
         let mut world = Self::default();
-        let vault = handle.table(
+        let vault = door.table(
             "core_vault",
             "vault_id, self_party_id, base_currency, created_at",
             "created_at",
@@ -257,7 +257,7 @@ impl World {
         let vault = vault.first().ok_or("the vault has not been founded")?;
         world.me = text(vault, "self_party_id").unwrap_or_default();
         world.currency = text(vault, "base_currency").unwrap_or_else(|| "USD".to_owned());
-        world.calendar = handle
+        world.calendar = door
             .table(
                 "schedule_calendar",
                 "calendar_id, created_at",
@@ -267,7 +267,7 @@ impl World {
             .first()
             .and_then(|row| text(row, "calendar_id"))
             .unwrap_or_default();
-        world.entity_count = handle
+        world.entity_count = door
             .table(
                 "agent_command_invocation",
                 "invocation_id, requested_at",
@@ -276,20 +276,20 @@ impl World {
             )?
             .len();
 
-        let concepts = Concepts::load(handle)?;
+        let concepts = Concepts::load(door)?;
         world.root_folder = concepts.root_folder.clone();
-        world.load_people(handle, &concepts)?;
-        world.load_groups(handle)?;
-        world.load_events(handle)?;
-        world.load_tasks(handle)?;
+        world.load_people(door, &concepts)?;
+        world.load_groups(door)?;
+        world.load_events(door)?;
+        world.load_tasks(door)?;
         // Photos before collections: an album's entries are edges to them.
-        world.load_photos(handle, &concepts)?;
-        world.load_notes_and_collections(handle)?;
-        world.load_documents(handle, &concepts)?;
-        world.load_debts(handle)?;
-        world.load_locker(handle, &concepts)?;
-        world.load_links(handle)?;
-        world.tally = handle.tally()?;
+        world.load_photos(door, &concepts)?;
+        world.load_notes_and_collections(door)?;
+        world.load_documents(door, &concepts)?;
+        world.load_debts(door)?;
+        world.load_locker(door, &concepts)?;
+        world.load_links(door)?;
+        world.tally = door.tally()?;
         world.edges.sort();
         world.edges.dedup();
         Ok(world)
@@ -310,14 +310,14 @@ impl World {
         }
     }
 
-    fn load_people(&mut self, handle: &Handle, concepts: &Concepts) -> Result<(), String> {
-        let parties = handle.table(
+    fn load_people(&mut self, door: &dyn Door, concepts: &Concepts) -> Result<(), String> {
+        let parties = door.table(
             "core_party",
             "party_id, kind, display_name, created_at, updated_at",
             "created_at",
             "party_id",
         )?;
-        let profiles = handle.table(
+        let profiles = door.table(
             "people_profile",
             "profile_id, party_id, role, nickname, cadence_days, last_contacted_at, met, \
              created_at, updated_at, deleted_at",
@@ -373,20 +373,20 @@ impl World {
         Ok(())
     }
 
-    fn load_groups(&mut self, handle: &Handle) -> Result<(), String> {
-        let groups = handle.table(
+    fn load_groups(&mut self, door: &dyn Door) -> Result<(), String> {
+        let groups = door.table(
             "tally_group",
             "group_id, circle_id, currency, archived_at, created_at, updated_at",
             "created_at",
             "group_id",
         )?;
-        let circles = handle.table(
+        let circles = door.table(
             "social_circle",
             "circle_id, name, created_at",
             "created_at",
             "circle_id",
         )?;
-        let members = handle.table(
+        let members = door.table(
             "social_circle_member",
             "member_id, circle_id, party_id, added_at",
             "added_at",
@@ -435,8 +435,8 @@ impl World {
         Ok(())
     }
 
-    fn load_events(&mut self, handle: &Handle) -> Result<(), String> {
-        let events = handle.table(
+    fn load_events(&mut self, door: &dyn Door) -> Result<(), String> {
+        let events = door.table(
             "core_event",
             "event_id, summary, description, dtstart, dtend, status, created_at, updated_at, \
              deleted_at",
@@ -487,7 +487,7 @@ impl World {
                 extra: BTreeMap::new(),
             });
         }
-        let attendees = handle.table(
+        let attendees = door.table(
             "schedule_attendee",
             "attendee_id, event_id, party_id, created_at",
             "created_at",
@@ -508,8 +508,8 @@ impl World {
         Ok(())
     }
 
-    fn load_tasks(&mut self, handle: &Handle) -> Result<(), String> {
-        let projects = handle.table(
+    fn load_tasks(&mut self, door: &dyn Door) -> Result<(), String> {
+        let projects = door.table(
             "schedule_project",
             "project_id, name, area, archived_at, created_at, updated_at",
             "created_at",
@@ -530,7 +530,7 @@ impl World {
                 extra: BTreeMap::new(),
             });
         }
-        let tasks = handle.table(
+        let tasks = door.table(
             "schedule_task",
             "task_id, title, description, status, priority, due_at, completed_at, effort_min, \
              parent_task_id, project_id, created_at, updated_at, deleted_at",
@@ -599,8 +599,8 @@ impl World {
         Ok(())
     }
 
-    fn load_notes_and_collections(&mut self, handle: &Handle) -> Result<(), String> {
-        let texts = handle.table(
+    fn load_notes_and_collections(&mut self, door: &dyn Door) -> Result<(), String> {
+        let texts = door.table(
             "core_content_text",
             "content_id, body_text, created_at",
             "created_at",
@@ -610,7 +610,7 @@ impl World {
             .iter()
             .filter_map(|row| Some((text(row, "content_id")?, text(row, "body_text")?)))
             .collect();
-        let notes = handle.table(
+        let notes = door.table(
             "knowledge_note",
             "note_id, title, body_content_id, pinned, created_at, updated_at, deleted_at",
             "created_at",
@@ -640,7 +640,7 @@ impl World {
         // executed `media.create_album` / `knowledge.create_notebook`
         // invocation naming that id is the answer. Failing that, what the
         // collection holds; failing that, a notebook.
-        let invocations = handle.table(
+        let invocations = door.table(
             "agent_command_invocation",
             "invocation_id, command_id, input_json, status, requested_at",
             "requested_at",
@@ -664,7 +664,7 @@ impl World {
                 roles.insert(id.to_owned(), kind);
             }
         }
-        let entries = handle.table(
+        let entries = door.table(
             "core_collection_entry",
             "entry_id, collection_id, target_type, target_id, added_at",
             "added_at",
@@ -683,7 +683,7 @@ impl World {
             };
             roles.entry(collection).or_insert(role);
         }
-        let collections = handle.table(
+        let collections = door.table(
             "core_collection",
             "collection_id, name, created_at, updated_at",
             "created_at",
@@ -731,7 +731,7 @@ impl World {
         Ok(())
     }
 
-    fn load_documents(&mut self, handle: &Handle, concepts: &Concepts) -> Result<(), String> {
+    fn load_documents(&mut self, door: &dyn Door, concepts: &Concepts) -> Result<(), String> {
         for (id, label, created, updated) in &concepts.folders {
             self.insert(Row {
                 kind: Kind::Folder,
@@ -745,7 +745,7 @@ impl World {
                 extra: BTreeMap::new(),
             });
         }
-        let documents = handle.table(
+        let documents = door.table(
             "core_document",
             "document_id, title, created_at, updated_at, deleted_at",
             "created_at",
@@ -779,8 +779,8 @@ impl World {
         Ok(())
     }
 
-    fn load_photos(&mut self, handle: &Handle, concepts: &Concepts) -> Result<(), String> {
-        let assets = handle.table(
+    fn load_photos(&mut self, door: &dyn Door, concepts: &Concepts) -> Result<(), String> {
+        let assets = door.table(
             "media_asset",
             "asset_id, kind, title, captured_at, created_at, updated_at, deleted_at",
             "created_at",
@@ -810,8 +810,8 @@ impl World {
         Ok(())
     }
 
-    fn load_debts(&mut self, handle: &Handle) -> Result<(), String> {
-        let debts = handle.table(
+    fn load_debts(&mut self, door: &dyn Door) -> Result<(), String> {
+        let debts = door.table(
             "tally_obligation",
             "obligation_id, from_party, to_party, amount_minor, currency, reason, incurred_on, \
              settled_at, created_at, updated_at, deleted_at",
@@ -860,8 +860,8 @@ impl World {
         Ok(())
     }
 
-    fn load_locker(&mut self, handle: &Handle, concepts: &Concepts) -> Result<(), String> {
-        let items = handle.table(
+    fn load_locker(&mut self, door: &dyn Door, concepts: &Concepts) -> Result<(), String> {
+        let items = door.table(
             "locker_item",
             "item_id, type, title, username, url, notes, created_at, updated_at, deleted_at, \
              key_id, password, otp_seed, card_number, cvv, content, cardholder, expiry, brand, \
@@ -920,8 +920,8 @@ impl World {
         Ok(())
     }
 
-    fn load_links(&mut self, handle: &Handle) -> Result<(), String> {
-        let links = handle.table(
+    fn load_links(&mut self, door: &dyn Door) -> Result<(), String> {
+        let links = door.table(
             "core_link",
             "link_id, from_type, from_id, to_type, to_id, valid_from, valid_to",
             "valid_from",
@@ -974,8 +974,8 @@ struct Concepts {
 }
 
 impl Concepts {
-    fn load(handle: &Handle) -> Result<Self, String> {
-        let schemes = handle.table(
+    fn load(door: &dyn Door) -> Result<Self, String> {
+        let schemes = door.table(
             "core_concept_scheme",
             "scheme_id, uri, created_at",
             "created_at",
@@ -989,7 +989,7 @@ impl Concepts {
         };
         let flags = scheme_of(FLAGS_SCHEME);
         let folders_scheme = scheme_of(FOLDER_SCHEME);
-        let concepts = handle.table(
+        let concepts = door.table(
             "core_concept",
             "concept_id, scheme_id, notation, pref_label, created_at, updated_at",
             "created_at",
@@ -1020,7 +1020,7 @@ impl Concepts {
                 }
             }
         }
-        let tags = handle.table(
+        let tags = door.table(
             "core_tag",
             "tag_id, target_type, target_id, concept_id, tagged_at",
             "tagged_at",
