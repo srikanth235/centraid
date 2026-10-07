@@ -19,6 +19,10 @@
 //! `think` is the same compile step with no vault, reading a think's text (the decoder's and the
 //! data builders' compiler, and the v3.1 to v4 rewrite of a think).
 //!
+//! The Locker is a policy of the session (`Flags::locker`): on for the harness, where every run and
+//! the model's training have it, off on the phone, where the world holds no Locker row and a call
+//! that names a Locker kind or `reveal` ends in `decline sealed_egress` (R-1088-3, R-1088-10).
+//!
 //! The trainer drives this runtime through the `nativetools` binary (`crates/nativetools`, JSON
 //! lines), which also seeds worlds and writes the export; the phone links it from here.
 

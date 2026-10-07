@@ -1672,7 +1672,7 @@ impl Session {
         if let Some(created) = &created {
             touched.push(created.clone());
         }
-        self.world = World::load(&*self.door)?;
+        self.world = World::load_with(&*self.door, self.flags.locker)?;
         let mut diff = diff(&before, &self.world);
         // A SETTLEMENT MOVES A BALANCE, not a row field: the diff carries the
         // person's balance in the settled group (positive = they owe me),
@@ -3463,7 +3463,7 @@ impl Session {
                     self.door.advance();
                     let _ = self.door.step(delete, json!({ id_param(kind): id }));
                 }
-                self.world = World::load(&*self.door)?;
+                self.world = World::load_with(&*self.door, self.flags.locker)?;
                 return Err(error);
             }
         }
@@ -3533,7 +3533,7 @@ impl Session {
                 touched.push(inverse.key.clone());
             }
         }
-        self.world = World::load(&*self.door)?;
+        self.world = World::load_with(&*self.door, self.flags.locker)?;
         let mut diff = diff(&before, &self.world);
         // A SETTLEMENT MOVES A BALANCE, not a row field: the diff carries the
         // person's balance in the settled group (positive = they owe me),

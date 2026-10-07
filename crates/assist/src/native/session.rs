@@ -37,6 +37,13 @@ pub struct Flags {
     /// the model used to answer (`ambiguous:`, `0 … called …`, `error: … was refused`), for
     /// comparison runs (`--no-compose`). `undo` is not behind it.
     pub compose: bool,
+    /// Whether the Locker is reachable (#1088, R-1088-3). On (the default, and what the model was
+    /// trained on and every harness run uses), the runtime loads Locker items, seals what a
+    /// `create` or an edit puts in one and opens what a `reveal` asks for. Off (the phone), it
+    /// reads no Locker table and no sealed column, and a call that names a Locker kind or the
+    /// `reveal` verb ends the turn in `decline sealed_egress` (`Session::locker_off_decline`). The
+    /// kind card and the prompt are the same either way (R-1088-10).
+    pub locker: bool,
 }
 
 impl Default for Flags {
@@ -48,6 +55,7 @@ impl Default for Flags {
             defaults: crate::native::ground::Defaults::default(),
             normalize: true,
             compose: true,
+            locker: true,
         }
     }
 }
@@ -564,7 +572,7 @@ impl Session {
         me: &str,
         flags: Flags,
     ) -> Result<Self, String> {
-        let world = World::load(&*door)?;
+        let world = World::load_with(&*door, flags.locker)?;
         let me_name = if me.is_empty() {
             world
                 .row(&world.me_key())
@@ -2519,6 +2527,11 @@ impl Session {
                 ));
             }
         }
+        if !self.flags.locker
+            && let Some(outcome) = self.locker_off_decline(tool, args)
+        {
+            return outcome;
+        }
         // A CALL THE RUNTIME CAN FIX WITHOUT A GUESS RUNS FIXED (nt12 R1, R2): the corrected call
         // is run in the same step and the reply carries one `note:` line for what was used. A
         // fix that fails too is the first error, with the call to send (`error_with_call`). Like
@@ -2795,6 +2808,38 @@ impl Session {
         }
         *options = candidates;
         true
+    }
+
+    /// WITH THE LOCKER OFF (`Flags::locker`), A CALL THAT NAMES A LOCKER KIND OR THE `reveal` VERB
+    /// ends the turn in the model's own decline, `declined: sealed_egress`, before anything is
+    /// read or run: the runtime holds no Locker row and no sealed cell to answer from. The effect
+    /// is the decline's plus `locker_off: true`, so a run can be audited for it.
+    fn locker_off_decline(&mut self, tool: &str, args: &Map<String, Value>) -> Option<Outcome> {
+        if tool == "decline" || tool == "ask" {
+            return None;
+        }
+        let kind_named = args
+            .get("kind")
+            .and_then(Value::as_str)
+            .is_some_and(|kinds| {
+                kinds.split(',').any(|part| {
+                    meta::Kind::parse(part) == Some(Kind::LockerItem)
+                        || part.to_lowercase().contains("locker")
+                })
+            });
+        let reveal = tool == "act"
+            && args
+                .get("verb")
+                .and_then(Value::as_str)
+                .is_some_and(|verb| meta::Verb::parse(verb) == Some(meta::Verb::Reveal));
+        if !kind_named && !reveal {
+            return None;
+        }
+        let mut reason = Map::new();
+        reason.insert("reason".to_owned(), json!("sealed_egress"));
+        let mut outcome = self.decline(&reason).ok()?;
+        outcome.effect.insert("locker_off".to_owned(), json!(true));
+        Some(outcome)
     }
 
     fn decline(&mut self, args: &Map<String, Value>) -> Result<Outcome, String> {

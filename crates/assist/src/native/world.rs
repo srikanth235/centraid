@@ -245,8 +245,14 @@ impl World {
             .map(|edge| edge.from.clone())
     }
 
-    /// Load everything.
+    /// Load everything, the Locker included.
     pub fn load(door: &dyn Door) -> Result<Self, String> {
+        Self::load_with(door, true)
+    }
+
+    /// Load everything. With `locker` false (`Flags::locker`) no Locker table and no sealed
+    /// column is read, and the world holds no Locker item.
+    pub fn load_with(door: &dyn Door, locker: bool) -> Result<Self, String> {
         let mut world = Self::default();
         let vault = door.table(
             "core_vault",
@@ -287,7 +293,9 @@ impl World {
         world.load_notes_and_collections(door)?;
         world.load_documents(door, &concepts)?;
         world.load_debts(door)?;
-        world.load_locker(door, &concepts)?;
+        if locker {
+            world.load_locker(door, &concepts)?;
+        }
         world.load_links(door)?;
         world.tally = door.tally()?;
         world.edges.sort();
