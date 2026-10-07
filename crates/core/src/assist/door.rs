@@ -23,14 +23,20 @@
 //! command, as every other path in the core does. A turn that waits on the model
 //! for seconds holds nothing a screen needs.
 //!
-//! # WRITES ARE REFUSED UNTIL PARKING LANDS
+//! # WRITES ARE A CONFIRMED CARD'S, KEYED
 //!
-//! A write the model makes must park behind a confirm card (R-1088-2). Until the
-//! runtime can park, [`CoreDoor::run`] answers every command with a refusal
-//! value ([`WRITES_OFF`]) and does not touch the vault. The switch is
-//! [`CoreDoor::allow_writes`]; nothing but a test sets it today.
+//! A write the model makes parks behind a confirm card (R-1088-2), so the runtime reaches
+//! [`Door::run_keyed`] only when the member taps, once per step, under `<pending id>:<step>`. That
+//! is the one way this door writes. A bare [`Door::run`] is refused: nothing legitimate on the
+//! phone issues one, so a path around the card finds a closed door and the vault untouched.
+//!
+//! The vault keeps no ledger of `invoke_key`s ([`crate::api::invoke`] requires one and runs the
+//! command), so the door keeps its own: a key it has already run successfully answers the same
+//! [`Ran`] and runs nothing. That is what makes a confirm delivered twice write once; it lives as
+//! long as the session that holds the door, which is as long as a pending write can be confirmed.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use centraid_api_proto::core_v1 as wire;
@@ -38,22 +44,23 @@ use centraid_apps_kit::reads::{FanOutBound, read_pages};
 use centraid_apps_kit::row::Row;
 use centraid_apps_kit::statement::{PageOrder, PageQuery};
 use centraid_apps_tally::queries::{TallyData, load_tally};
+use centraid_assist::native::door::Occurrence;
 use centraid_assist::native::{Door, Ran};
 use centraid_search::Target;
 use centraid_vault::commands::{CommandStatus, Registry};
+use centraid_vault::time::zone::FireZone;
 use centraid_vault::{Principal, Vault};
 use serde_json::Value;
 
 use crate::app_query::VaultDoor;
 use crate::events::{ChangeFeed, EventQueue};
 
-/// The vault's reason for a refused write while parking is not built. The
-/// predicate rides as `authority`: the caller is not allowed to write yet.
-pub const WRITES_OFF: &str = "the chat cannot change the vault yet";
+/// Why a bare `run` is refused: a write is made by confirming a card, and only that.
+pub const WRITES_OFF: &str = "the chat writes only through a confirmed card";
 
-/// The predicate [`WRITES_OFF`] rides under. `authority`, the id the runtime
-/// already reads as "this caller may not", so it never mistakes the refusal for
-/// a rule of the vault it could ask the member about (`Session::refusal`).
+/// The predicate [`WRITES_OFF`] rides under. `authority`, the id the runtime already reads as "this
+/// caller may not", so it never mistakes the refusal for a rule of the vault it could ask the
+/// member about (`Session::refusal`).
 pub const WRITES_OFF_PREDICATE: &str = "authority";
 
 /// The page ceiling of one table read, as the harness's door and the app
@@ -67,10 +74,8 @@ pub struct CoreDoor {
     registry: Arc<Registry>,
     events: Arc<EventQueue>,
     owner: Principal,
-    writes: AtomicBool,
-    /// Names this door's `invoke_key`s so two doors (two chats, one before a
-    /// reopen and one after) never replay each other's.
-    nonce: String,
+    /// What each key has already run, so a step confirmed twice runs once.
+    done: Mutex<BTreeMap<String, Ran>>,
     calls: AtomicU64,
 }
 
@@ -81,26 +86,14 @@ impl CoreDoor {
         events: Arc<EventQueue>,
         owner: Principal,
     ) -> Self {
-        let nonce = {
-            let held = vault.lock().unwrap_or_else(PoisonError::into_inner);
-            held.as_ref()
-                .map_or_else(|| "closed".to_owned(), |vault| vault.ids().next())
-        };
         Self {
             vault,
             registry,
             events,
             owner,
-            writes: AtomicBool::new(false),
-            nonce,
+            done: Mutex::new(BTreeMap::new()),
             calls: AtomicU64::new(0),
         }
-    }
-
-    /// Let [`Door::run`] reach the vault. Off by default, and off in production
-    /// until a write can park behind a confirm card (R-1088-2).
-    pub fn allow_writes(&self, on: bool) {
-        self.writes.store(on, Ordering::SeqCst);
     }
 
     /// Run a body with the vault the handle holds, for one query or one command.
@@ -167,24 +160,25 @@ impl Door for CoreDoor {
         })
     }
 
-    fn run(&self, command: &str, input: Value) -> Result<Ran, String> {
-        if !self.writes.load(Ordering::SeqCst) {
-            return Ok(Ran {
-                ok: false,
-                output: Value::Null,
-                reason: Some(WRITES_OFF.to_owned()),
-                predicate: Some(WRITES_OFF_PREDICATE.to_owned()),
-            });
+    fn run(&self, _command: &str, _input: Value) -> Result<Ran, String> {
+        Ok(Ran {
+            ok: false,
+            output: Value::Null,
+            reason: Some(WRITES_OFF.to_owned()),
+            predicate: Some(WRITES_OFF_PREDICATE.to_owned()),
+        })
+    }
+
+    fn run_keyed(&self, key: &str, command: &str, input: Value) -> Result<Ran, String> {
+        let mut done = self.done.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(earlier) = done.get(key) {
+            return Ok(earlier.clone());
         }
         let request = wire::Command {
             name: command.to_owned(),
             input: serde_json::to_vec(&input)
                 .map_err(|error| format!("{command}: the input is not JSON: {error}"))?,
-            invoke_key: format!(
-                "assist.native:{}:{}",
-                self.nonce,
-                self.calls.fetch_add(1, Ordering::SeqCst)
-            ),
+            invoke_key: key.to_owned(),
             ..wire::Command::default()
         };
         let changes = ChangeFeed::new(Arc::clone(&self.events));
@@ -192,11 +186,35 @@ impl Door for CoreDoor {
             crate::api::invoke_raw(vault, &self.registry, &self.owner, &request, &changes)
                 .map_err(|error| format!("{command}: {error}"))
         })?;
-        Ok(Ran {
+        let ran = Ran {
             ok: outcome.status == CommandStatus::Executed,
             output: outcome.output,
             reason: outcome.reason,
             predicate: outcome.predicate,
+        };
+        // only a step that landed is remembered: a refused one may be asked again
+        if ran.ok {
+            done.insert(key.to_owned(), ran.clone());
+        }
+        Ok(ran)
+    }
+
+    fn events(&self, from_day: &str, to_day: &str, tz: &str) -> Result<Vec<Occurrence>, String> {
+        let zone = FireZone::named(tz).map_err(|_| format!("{tz} is not a time zone"))?;
+        self.with(|vault| {
+            let door = VaultDoor::new(vault);
+            let now = vault.clock().now_text();
+            let read = centraid_apps_agenda::occurrences(&door, from_day, to_day, &now, &zone);
+            if let Some(failure) = door.take_failure() {
+                return Err(format!("reading the events: {failure}"));
+            }
+            match read {
+                Ok((rows, None)) => Ok(rows),
+                Ok((_, Some(denial))) => Err(denial
+                    .message
+                    .unwrap_or_else(|| "the events are refused".to_owned())),
+                Err(error) => Err(format!("reading the events: {error}")),
+            }
         })
     }
 

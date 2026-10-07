@@ -133,76 +133,122 @@ fn a_read_through_the_core_door_returns_the_rows_the_harness_door_returns() {
     assert!(core.search("core.party", "!!", 5).unwrap().is_empty());
 }
 
-#[test]
-fn the_door_refuses_a_write_until_writes_are_allowed_and_then_writes_through_the_change_feed() {
-    let pair = pair();
-    let door = pair.core.assist_door();
-    let before = door
-        .table(
-            "schedule_project",
-            "project_id, name",
-            "project_id",
-            "project_id",
-        )
-        .unwrap()
-        .len();
-    let input = serde_json::json!({"name": "Door test"});
+fn project_names(door: &dyn Door) -> Vec<String> {
+    door.table(
+        "schedule_project",
+        "project_id, name",
+        "project_id",
+        "project_id",
+    )
+    .unwrap()
+    .iter()
+    .filter_map(|row| centraid_assist::native::door::text(row, "name"))
+    .collect()
+}
 
-    // REFUSED, as a value, and the vault untouched.
-    let ran = door.run("schedule.save_project", input.clone()).unwrap();
-    assert!(!ran.ok);
-    assert_eq!(ran.predicate.as_deref(), Some(WRITES_OFF_PREDICATE));
-    assert_eq!(
-        door.table(
-            "schedule_project",
-            "project_id, name",
-            "project_id",
-            "project_id"
-        )
-        .unwrap()
-        .len(),
-        before
-    );
-    let mut changes = 0;
-    while let Ok(Some(event)) = pair.core.next_event(std::time::Duration::from_millis(1)) {
-        if matches!(event.kind, Some(wire::event::Kind::Change(_))) {
-            changes += 1;
-        }
-    }
-    let quiet = changes;
-
-    // ALLOWED: through `api::invoke`, so the feed fires and a screen would refresh.
-    door.allow_writes(true);
-    let ran = door.run("schedule.save_project", input).unwrap();
-    assert!(ran.ok, "{:?}", ran.reason);
-    assert_eq!(
-        door.table(
-            "schedule_project",
-            "project_id, name",
-            "project_id",
-            "project_id"
-        )
-        .unwrap()
-        .len(),
-        before + 1
-    );
+fn change_tables(pair: &Pair) -> Vec<String> {
     let mut tables = Vec::new();
     while let Ok(Some(event)) = pair.core.next_event(std::time::Duration::from_millis(1)) {
         if let Some(wire::event::Kind::Change(change)) = event.kind {
             tables.push(change.table);
         }
     }
+    tables
+}
+
+#[test]
+fn a_bare_run_is_refused_and_a_keyed_run_writes_once_through_the_change_feed() {
+    let pair = pair();
+    let door = pair.core.assist_door();
+    let before = project_names(&door).len();
+    let input = serde_json::json!({"name": "Door test"});
+    let _ = change_tables(&pair);
+
+    // A BARE RUN IS REFUSED, as a value, and the vault is untouched: a card's confirm is the only
+    // way the phone's chat writes.
+    let ran = door.run("schedule.save_project", input.clone()).unwrap();
+    assert!(!ran.ok);
+    assert_eq!(ran.predicate.as_deref(), Some(WRITES_OFF_PREDICATE));
+    assert_eq!(project_names(&door).len(), before);
+    assert!(change_tables(&pair).is_empty());
+
+    // A KEYED RUN goes through `api::invoke`: the row lands and the feed names its table.
+    let ran = door
+        .run_keyed("pending-1:0", "schedule.save_project", input.clone())
+        .unwrap();
+    assert!(ran.ok, "{:?}", ran.reason);
+    assert_eq!(project_names(&door).len(), before + 1);
     assert!(
-        tables.iter().any(|table| table == "schedule_project"),
-        "the write announced its table: {tables:?} (before: {quiet})"
+        change_tables(&pair)
+            .iter()
+            .any(|table| table == "schedule_project")
     );
 
-    // A command the vault refuses is a value with its predicate, never an Err.
+    // THE SAME KEY AGAIN writes nothing and answers what it answered; a new key writes.
+    let again = door
+        .run_keyed("pending-1:0", "schedule.save_project", input.clone())
+        .unwrap();
+    assert!(again.ok);
+    assert_eq!(again.output, ran.output);
+    assert_eq!(project_names(&door).len(), before + 1);
+    assert!(
+        change_tables(&pair).is_empty(),
+        "a replay announces nothing"
+    );
+    door.run_keyed("pending-1:1", "schedule.save_project", input)
+        .unwrap();
+    assert_eq!(project_names(&door).len(), before + 2);
+
+    // A command the vault refuses is a value with its predicate, never an Err, and is not
+    // remembered: the same key may be asked again.
+    let bad = serde_json::json!({"nope": 1});
     let ran = door
-        .run("schedule.save_project", serde_json::json!({"nope": 1}))
+        .run_keyed("pending-2:0", "schedule.save_project", bad.clone())
         .unwrap();
     assert!(!ran.ok);
     assert_eq!(ran.predicate.as_deref(), Some("schema"));
+    assert!(
+        !door
+            .run_keyed("pending-2:0", "schedule.save_project", bad)
+            .unwrap()
+            .ok
+    );
+}
+
+#[test]
+fn events_on_the_core_door_are_the_ones_the_harness_door_reads_in_every_zone() {
+    let pair = pair();
+    let core = pair.core.assist_door();
+    let now = core.now_ms();
+    let harness = Harness::open(&pair.copy, SetClock::at(now), "door-test").unwrap();
+    /// `YYYY-MM-DD` of a day count since 1970-01-01 (Hinnant's civil-from-days).
+    fn ymd(days: i64) -> String {
+        let z = days + 719_468;
+        let era = z.div_euclid(146_097);
+        let doe = z.rem_euclid(146_097);
+        let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let day = doy - (153 * mp + 2) / 5 + 1;
+        let month = if mp < 10 { mp + 3 } else { mp - 9 };
+        let year = yoe + era * 400 + i64::from(month <= 2);
+        format!("{year:04}-{month:02}-{day:02}")
+    }
+    let today = now.div_euclid(86_400_000);
+    // the window the runtime reads: 31 days back, 120 ahead
+    let (from, to) = (ymd(today - 31), ymd(today + 120));
+    for tz in ["Etc/UTC", "America/Los_Angeles", "Pacific/Auckland"] {
+        let a = core
+            .events(&from, &to, tz)
+            .unwrap_or_else(|e| panic!("{tz}: {e}"));
+        let b = harness.events(&from, &to, tz).unwrap();
+        assert!(!a.is_empty(), "{tz}: the sample holds events in the window");
+        assert_eq!(format!("{a:?}"), format!("{b:?}"), "{tz}");
+    }
+    assert!(
+        core.events("2026-10-01", "2026-10-02", "Not/AZone")
+            .is_err()
+    );
 }
 
 #[test]
