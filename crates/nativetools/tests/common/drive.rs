@@ -5,7 +5,7 @@ use centraid_nativetools::Session;
 use centraid_nativetools::meta::Kind;
 use serde_json::{Value, json};
 
-use super::{call, number, numbers, settled, trashed_number};
+use super::{number, numbers, settled, trashed_number};
 
 /// The measured call: the one whose journal delta is checked.
 pub type Measure<'a> = &'a mut dyn FnMut(&mut Session, Value) -> Value;
